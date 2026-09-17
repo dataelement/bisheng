@@ -82,16 +82,16 @@ async def _run(args: argparse.Namespace) -> int:
                     select(KnowledgeSpaceSharedStorageRouting).where(
                         KnowledgeSpaceSharedStorageRouting.tenant_id
                         == args.tenant_id,
-                        KnowledgeSpaceSharedStorageRouting.shared_enabled.is_(True),
                     )
                 )
             ).scalar_one_or_none()
-            if not conf.enabled or routing is None:
+            if (routing is None or not routing.collection_name or not routing.index_name
+                    or not routing.embedding_model_id or not routing.schema_fingerprint):
                 print(
                     json.dumps(
                         {
                             "tenant_id": args.tenant_id,
-                            "error": "shared storage routing is not enabled",
+                            "error": "shared storage target is not initialized",
                         },
                         ensure_ascii=False,
                     )

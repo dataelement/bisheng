@@ -6,7 +6,7 @@ from langchain_elasticsearch import AsyncElasticsearchStore, ElasticsearchStore
 from langchain_milvus import Milvus
 
 from bisheng.common.errcode.http_error import NotFoundError
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.rag.elasticsearch_factory import ElasticsearchFactory
 from bisheng.knowledge.rag.milvus_factory import MilvusFactory
 from bisheng.llm.domain import LLMService
@@ -108,10 +108,22 @@ class KnowledgeRag:
                 raise NotFoundError.http_exception()
         return knowledge
 
+    @staticmethod
+    def _require_per_knowledge_storage(knowledge: Knowledge, *, allow_legacy_space: bool = False) -> None:
+        # SPACE 不能通过通用旧适配器访问历史索引。例外仅用于显式离线迁移。
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value and not allow_legacy_space:
+            from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+                "SPACE requires the shared storage API; per-space storage is migration-only",
+                tenant_id=int(knowledge.tenant_id or 1),
+            )
+
     @classmethod
     async def init_knowledge_milvus_vectorstore(cls, invoke_user_id: int, knowledge: Knowledge = None,
                                                 knowledge_id: int = None, embeddings=None, **kwargs) -> Milvus:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
+        cls._require_per_knowledge_storage(knowledge, allow_legacy_space=kwargs.pop("allow_legacy_space", False))
         if embeddings is None:
             embeddings = await LLMService.get_bisheng_knowledge_embedding(model_id=int(knowledge.model),
                                                                           invoke_user_id=invoke_user_id)
@@ -121,6 +133,7 @@ class KnowledgeRag:
     def init_knowledge_milvus_vectorstore_sync(cls, invoke_user_id: int, knowledge: Knowledge = None,
                                                knowledge_id: int = None, embeddings=None, **kwargs) -> Milvus:
         knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
+        cls._require_per_knowledge_storage(knowledge, allow_legacy_space=kwargs.pop("allow_legacy_space", False))
         if embeddings is None:
             embeddings = LLMService.get_bisheng_knowledge_embedding_sync(model_id=int(knowledge.model),
                                                                          invoke_user_id=invoke_user_id)
@@ -130,12 +143,14 @@ class KnowledgeRag:
     async def init_knowledge_es_vectorstore(cls, knowledge: Knowledge = None, knowledge_id: int = None,
                                             **kwargs) -> AsyncElasticsearchStore:
         knowledge = await cls._get_knowledge(knowledge, knowledge_id)
+        cls._require_per_knowledge_storage(knowledge, allow_legacy_space=kwargs.pop("allow_legacy_space", False))
         return await ElasticsearchFactory.ainit_vectorstore(knowledge.index_name, **kwargs)
 
     @classmethod
     def init_knowledge_es_vectorstore_sync(cls, knowledge: Knowledge = None, knowledge_id: int = None,
                                            **kwargs) -> ElasticsearchStore:
         knowledge = cls._get_knowledge_sync(knowledge, knowledge_id)
+        cls._require_per_knowledge_storage(knowledge, allow_legacy_space=kwargs.pop("allow_legacy_space", False))
         return cls.init_es_vectorstore_sync(knowledge.index_name, **kwargs)
 
     @classmethod

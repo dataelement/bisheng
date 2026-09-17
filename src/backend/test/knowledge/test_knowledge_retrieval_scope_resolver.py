@@ -61,7 +61,6 @@ V1 = 501
 V2 = 502
 
 ENABLED_SETTINGS = RetrievalScopeResolverSettings(
-    enabled=True,
     routing_version=1,
     overfetch_factor=2,
     max_overfetch_rounds=4,
@@ -449,22 +448,16 @@ async def test_resolve_request_rejects_inactive_entry_ref():
     assert exc_info.value.code == SharedStorageErrorCode.ENTRY_REF_NOT_RESOLVABLE
 
 
-async def test_resolver_fails_closed_when_feature_disabled():
-    resolver, _, _, _ = make_resolver(settings=RetrievalScopeResolverSettings(enabled=False))
+async def test_resolver_ignores_old_global_enable_switch():
+    from types import SimpleNamespace
 
-    for action in (
-        resolver.resolve_request(
-            user_id=USER, tenant_id=TenantId(TENANT), space_ids=[SpaceId(20)]
-        ),
-        resolver.map_and_authorize_hits(make_scope(), [hit()]),
-    ):
-        with pytest.raises(SharedStorageContractError) as exc_info:
-            await action
-        assert exc_info.value.code == SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED
-
-    with pytest.raises(SharedStorageContractError) as exc_info:
-        resolver.build_backend_filter(make_scope())
-    assert exc_info.value.code == SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED
+    settings = RetrievalScopeResolverSettings.from_global_settings(
+        SimpleNamespace(knowledge_space_shared_storage=SimpleNamespace(enabled=False))
+    )
+    resolver, _, _, _ = make_resolver(settings=settings)
+    scope = await resolver.resolve_request(user_id=USER, tenant_id=TenantId(TENANT), space_ids=[SpaceId(20)])
+    assert scope.requested_space_ids == (SpaceId(20),)
+    assert resolver.build_backend_filter(scope).requested_space_ids == (SpaceId(20),)
 
 
 # ---------------------------------------------------------------------------
@@ -915,7 +908,7 @@ async def test_overfetch_respects_max_rounds():
         make_entry(100, space_id=10, entry_type=KnowledgeFileEntryType.MANAGER.value),
     ]
     settings = RetrievalScopeResolverSettings(
-        enabled=True, routing_version=1, overfetch_factor=1, max_overfetch_rounds=1
+        routing_version=1, overfetch_factor=1, max_overfetch_rounds=1
     )
     resolver, _, _, _ = make_resolver(entries=entries, documents=[make_document()], settings=settings)
 

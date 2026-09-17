@@ -97,42 +97,29 @@ def retrieve_knowledge_space_documents_sync(
 def is_shared_storage_active_for_knowledge_ids(
     knowledge_base_ids: list[int],
 ) -> bool:
-    """B2: Check whether the given knowledge bases are routed to shared storage.
-
-    Returns True when ALL requested bases are SPACE-type and the tenant has
-    ``shared_enabled=True``. This is a sync helper for workflow nodes that
-    need to decide between legacy per-space retrieval and shared-store paths.
-
-    If the check cannot be performed (e.g. no event loop), returns False.
-    """
+    """工作流按知识库类型选路，初始化失败不能退回旧 SPACE 索引。"""
     if not knowledge_base_ids:
         return False
-    import asyncio
-
-    from bisheng.core.database import get_async_db_session
-    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
     from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
 
-    async def _check() -> bool:
-        async with get_async_db_session() as session:
-            for kb_id in knowledge_base_ids:
-                space = await KnowledgeDao.aquery_by_id(kb_id)
-                if space is None:
-                    return False
-                snapshot = resolve_space_shared_routing(
-                    int(getattr(space, 'tenant_id', None) or 1),
-                    getattr(space, 'type', None),
-                )
-                if snapshot is None or not snapshot.shared_enabled:
-                    return False
-            return True
-
-    try:
-        asyncio.get_running_loop()
+    spaces = KnowledgeDao.get_list_by_ids(knowledge_base_ids)
+    if {int(space.id) for space in spaces} != set(knowledge_base_ids):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.SCOPE_SPACE_NOT_VISIBLE, "requested knowledge base is unavailable",
+        )
+    kinds = [int(space.type) == KnowledgeTypeEnum.SPACE.value for space in spaces]
+    if any(kinds) and not all(kinds):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
+            "SPACE and non-SPACE knowledge must be retrieved separately",
+        )
+    if not any(kinds):
         return False
-    except RuntimeError:
-        from bisheng.worker._asyncio_utils import run_async_task
-        return run_async_task(_check)
+    for space in spaces:
+        resolve_space_shared_routing(int(space.tenant_id or 1), space.type)
+    return True
 
 
 class ConditionOne(BaseModel):

@@ -246,7 +246,7 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
     captured_kwargs = {'milvus': [], 'es': []}
 
     async def _split_ids(**_kwargs):
-        return [], [7101]
+        return [7101], []
 
     knowledge = SimpleNamespace(
         id=7101,
@@ -311,7 +311,7 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=[7101]),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[7101]),
         max_token=15000,
         login_user=_login_user(),
         file_ids_by_space={7101: [9001]},
@@ -326,11 +326,11 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
 
 
 @pytest.mark.asyncio
-async def test_query_chunks_skips_spaces_missing_file_filter_when_file_scope(monkeypatch):
+async def test_query_chunks_skips_organization_knowledge_missing_file_filter_when_file_scope(monkeypatch):
     queried_kbs = []
 
     async def _split_ids(**_kwargs):
-        return [], [7101, 7102]
+        return [7101, 7102], []
 
     knowledge_rows = [
         SimpleNamespace(
@@ -406,7 +406,7 @@ async def test_query_chunks_skips_spaces_missing_file_filter_when_file_scope(mon
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=[7101, 7102]),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[7101, 7102]),
         max_token=15000,
         login_user=_login_user(),
         file_ids_by_space={7101: [9001]},
@@ -742,7 +742,7 @@ async def test_probe_reuses_one_query_embedding_for_spaces_with_same_model(monke
 
 
 @pytest.mark.asyncio
-async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
+async def test_query_only_deep_retrieves_top_twenty_probe_organization_knowledge(monkeypatch):
     knowledge_rows = [
         SimpleNamespace(id=kb_id, name=f'知识库{kb_id}')
         for kb_id in range(1, 26)
@@ -774,7 +774,7 @@ async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
     monkeypatch.setattr(
         workstation_service.WorkStationService,
         '_split_retrieval_knowledge_ids_by_type',
-        AsyncMock(return_value=([], list(range(1, 26)))),
+        AsyncMock(return_value=(list(range(1, 26)), [])),
     )
     monkeypatch.setattr(
         workstation_service.WorkStationService,
@@ -799,7 +799,7 @@ async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=list(range(1, 26))),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=list(range(1, 26))),
         max_token=100000,
         login_user=_login_user(),
     )

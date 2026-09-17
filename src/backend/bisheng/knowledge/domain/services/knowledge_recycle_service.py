@@ -801,17 +801,13 @@ class KnowledgeRecycleService:
                         )
                     )
 
-            # Cross-space embedding check
+            # 同租户 SPACE 共用目标模型，不再比较历史的逐空间 model 字段。
             if int(item.original_knowledge_id) != int(target_kid):
                 source = await KnowledgeDao.aquery_by_id(item.original_knowledge_id)
-                if source and target_space and getattr(source, "model", None) != getattr(target_space, "model", None):
-                    blockers.append(
-                        RecycleConflict(
-                            code="EMBEDDING_MISMATCH",
-                            message="跨空间还原失败：embedding 模型不一致",
-                            item_ids=[int(item.id)],
-                        )
-                    )
+                if source and target_space and int(source.tenant_id or 1) != int(target_space.tenant_id or 1):
+                    blockers.append(RecycleConflict(
+                        code="CROSS_TENANT", message="不支持跨租户还原", item_ids=[int(item.id)],
+                    ))
 
         ok = not blockers and not need_merge and not need_overwrite
         return RecycleRestorePreviewResponse(
@@ -839,6 +835,9 @@ class KnowledgeRecycleService:
                 raise KnowledgeRecycleCrossSpaceError(msg=preview.blockers[0].message)
             raise KnowledgeRecycleTargetPathNotFoundError()
 
+        from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+
+        await aresolve_space_shared_routing(int(self.login_user.tenant_id), KnowledgeTypeEnum.SPACE.value)
         items = await self._load_list_items(req.item_ids)
         restored = 0
         restored_file_ids: list[int] = []
@@ -862,10 +861,9 @@ class KnowledgeRecycleService:
                 else:
                     await self._overwrite_conflicts(item, target_kid)
 
-            vector_file_ids = batch_file_ids
             async with get_async_db_session() as session:
                 if merge_into_id is not None:
-                    vector_file_ids = await self._restore_folder_merged(
+                    await self._restore_folder_merged(
                         session,
                         item=item,
                         target_kid=target_kid,
@@ -910,10 +908,24 @@ class KnowledgeRecycleService:
                     ],
                     trigger_type="recycle_restored",
                 )
+                from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import KnowledgeFileRepositoryImpl
+
+                repository = KnowledgeFileRepositoryImpl(session)
+                projection_ids = []
+                for record in restored_files:
+                    if record.reference_document_id:
+                        record.desired_entry_generation += 1
+                        session.add(record)
+                        await session.flush()
+                        await repository.request_projection_rebuild(int(record.id))
+                        projection_ids.append(int(record.id))
                 await session.commit()
 
-            if cross:
-                await self._copy_vectors_cross_space(item.original_knowledge_id, target_kid, vector_file_ids)
+            from bisheng.worker.knowledge.document_projection import enqueue_document_projection_entries
+
+            enqueue_document_projection_entries(
+                tenant_id=int(self.login_user.tenant_id), entry_ids=projection_ids,
+            )
 
             restored_file_ids.extend(batch_file_ids)
             restored += 1
@@ -1076,25 +1088,6 @@ class KnowledgeRecycleService:
                 )
             out[int(rid)] = tags
         return out
-
-    async def _copy_vectors_cross_space(self, source_kid: int, target_kid: int, file_ids: list[int]) -> None:
-        from bisheng.api.services.knowledge_imp import delete_vector_files
-        from bisheng.worker.knowledge.file_worker import copy_vector
-
-        source = await KnowledgeDao.aquery_by_id(source_kid)
-        target = await KnowledgeDao.aquery_by_id(target_kid)
-        if not source or not target:
-            raise KnowledgeRecycleCrossSpaceError()
-        for fid in file_ids:
-            try:
-                copy_vector(source, target, fid, fid)
-            except Exception:
-                logger.exception("copy_vector failed file_id=%s", fid)
-                raise KnowledgeRecycleCrossSpaceError()
-        try:
-            delete_vector_files(file_ids, source)
-        except Exception:
-            logger.exception("delete source vectors failed after cross-space restore")
 
     async def _load_list_items(self, item_ids: Sequence[int]) -> list[KnowledgeRecycleItem]:
         if not item_ids:

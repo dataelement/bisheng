@@ -113,14 +113,8 @@ _DEFAULT_MAX_OVERFETCH_ROUNDS = 4
 
 @dataclass(frozen=True)
 class RetrievalScopeResolverSettings:
-    """Runtime knobs for the scope resolver.
+    """共享范围解析参数；不再提供启用开关。"""
 
-    ``from_global_settings`` reads the F1 shared-storage config block with
-    defensive ``getattr`` so this module keeps working while F1 lands; a
-    missing block means the feature is OFF (fail closed).
-    """
-
-    enabled: bool = False
     routing_version: int = 1
     overfetch_factor: int = _DEFAULT_OVERFETCH_FACTOR
     max_overfetch_rounds: int = _DEFAULT_MAX_OVERFETCH_ROUNDS
@@ -136,21 +130,20 @@ class RetrievalScopeResolverSettings:
                 settings = global_settings
             block = getattr(settings, "knowledge_space_shared_storage", None)
             if block is None:
-                return cls(enabled=False)
+                return cls()
 
             def _get(name: str, default: Any) -> Any:
                 value = getattr(block, name, None)
                 return default if value is None else value
 
             return cls(
-                enabled=bool(_get("enabled", False)),
                 routing_version=int(_get("routing_version", 1) or 1),
                 overfetch_factor=max(1, int(_get("retrieval_overfetch_factor", _DEFAULT_OVERFETCH_FACTOR))),
                 max_overfetch_rounds=max(1, int(_get("retrieval_max_overfetch_rounds", _DEFAULT_MAX_OVERFETCH_ROUNDS))),
             )
         except Exception:
-            logger.exception("failed to read shared storage settings; treating as disabled")
-            return cls(enabled=False)
+            logger.exception("failed to read shared retrieval parameters; using defaults")
+            return cls()
 
 
 class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
@@ -185,7 +178,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         entry_refs: Sequence[EntryRef] | None = None,
         authorize_spaces: bool = True,
     ) -> RetrievalScope:
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         if not user_id:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.SCOPE_SPACE_NOT_VISIBLE,
@@ -318,7 +311,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         canonical_version_ids: Sequence[CanonicalVersionId] | None = None,
         generation_constraints: Sequence[CanonicalGenerationConstraint] | None = None,
     ) -> BackendQueryFilter:
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         if int(scope.routing_version) != settings.routing_version:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
@@ -347,7 +340,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         canonical_document_ids: Sequence[CanonicalDocumentId],
     ) -> tuple[CanonicalGenerationConstraint, ...]:
         """Resolve exact current shared projection identities for Top-K candidates."""
-        self._require_enabled()
+        self._resolver_settings()
         document_ids = sorted({int(item) for item in canonical_document_ids if int(item) > 0})
         if not document_ids:
             return ()
@@ -416,7 +409,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         never come from the client (spec 8.1-4). Returns ``(None, None)``
         when the scope has no explicit refs (whole-space retrieval).
         """
-        self._require_enabled()
+        self._resolver_settings()
         if not scope.explicit_entry_ids_by_space:
             return None, None
         entry_ids = sorted(
@@ -476,7 +469,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         context=None,
     ) -> Sequence[MappedEntryHit]:
         """映射并授权；门户可放宽同步进度，实际命中的版本和代次仍须一致。"""
-        self._require_enabled()
+        self._resolver_settings()
         if not hits:
             return []
 
@@ -522,7 +515,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         context=None,
     ) -> list[Sequence[MappedEntryHit]]:
         """同一次请求的多路命中共用批量读取，各路仍按自己的范围映射。"""
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         if not batches:
             return []
         first_scope = batches[0][0]
@@ -938,7 +931,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         """
         if top_k <= 0:
             raise ValueError("top_k must be a positive integer")
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         factor = max(1, int(overfetch_factor or settings.overfetch_factor))
         page_limit = max(top_k * factor, top_k)
         query_filter = self.build_backend_filter(scope)
@@ -964,14 +957,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         return collected[:top_k]
 
     # ------------------------------------------------------------------
-    def _require_enabled(self) -> RetrievalScopeResolverSettings:
-        settings = self._settings_provider()
-        if not settings.enabled:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "shared space storage retrieval is not enabled for this deployment",
-            )
-        return settings
+    def _resolver_settings(self) -> RetrievalScopeResolverSettings:
+        return self._settings_provider()
 
 
 def _dedupe_optional(

@@ -7,7 +7,7 @@ from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -45,6 +45,25 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
             knowledge_id,
             [KnowledgeFileStatus.SUCCESS.value, KnowledgeFileStatus.REBUILDING.value]
         )
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+            from bisheng.worker._asyncio_utils import run_async_task
+
+            route = resolve_space_shared_routing(int(knowledge.tenant_id or 1), knowledge.type)
+            if int(new_model_id) != int(route.embedding_model_id):
+                raise ValueError("SPACE embedding model must match the tenant shared target")
+            rebuilt_documents = set()
+            for file in files:
+                document_id = file.reference_document_id
+                if (not document_id or document_id in rebuilt_documents
+                        or file.entry_status != "active" or file.deleted_at is not None):
+                    continue
+                run_async_task(lambda file=file: _rebuild_shared_file(file))
+                rebuilt_documents.add(document_id)
+            knowledge.state = KnowledgeState.PUBLISHED.value
+            KnowledgeDao.update_one(knowledge)
+            return f"knowledge {knowledge_id} shared rebuild completed"
+
         # 2. According to thecollection_namewentmilvusDelete Vector Store in
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
 
@@ -297,6 +316,10 @@ def _rebuild_knowledge_file_chunk(
     metadata_overrides: dict | None = None,
 ):
     db_knowledge = KnowledgeDao.query_by_id(db_file.knowledge_id)
+    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        from bisheng.worker._asyncio_utils import run_async_task
+
+        return run_async_task(lambda: _rebuild_shared_file(db_file))
     milvus_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(db_file.user_id, knowledge=db_knowledge)
     es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(db_knowledge)
 
@@ -376,3 +399,31 @@ def _rebuild_knowledge_file_chunk(
     es_client.add_texts(texts=texts, metadatas=metadatas)
 
     logger.info(f"rebuild_knowledge_file_chunk completed successfully for file_id={db_file.id}")
+
+
+async def _rebuild_shared_file(db_file: KnowledgeFile) -> None:
+    """从原文件重建规范文档，禁止逐空间删除或复制分块。"""
+    import uuid
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import KnowledgeDocumentRepositoryImpl
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import KnowledgeDocumentVersionRepositoryImpl
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import KnowledgeFileRepositoryImpl
+    from bisheng.worker.knowledge.document_projection import _build_document_projection_service
+
+    async with get_async_db_session() as session:
+        repository = KnowledgeFileRepositoryImpl(session)
+        service = await _build_document_projection_service(
+            session, file_repository=repository,
+            document_repository=KnowledgeDocumentRepositoryImpl(session),
+            version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+            tenant_id=int(db_file.tenant_id or 1),
+        )
+        await repository.request_projection_rebuild(int(db_file.id))
+        await session.commit()
+        result = await service.process_entry(
+            tenant_id=int(db_file.tenant_id or 1), entry_id=int(db_file.id),
+            lease_owner=f"rebuild:{uuid.uuid4()}", force_content_upsert=True,
+        )
+        if result.status != "ready":
+            raise RuntimeError(f"shared projection rebuild did not converge: {result.status}")

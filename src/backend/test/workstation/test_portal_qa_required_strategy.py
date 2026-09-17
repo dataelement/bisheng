@@ -27,7 +27,6 @@ from bisheng.core.config.settings import KnowledgeRetrievalRuntimeConf
 async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(monkeypatch, case):
     from bisheng.common.services.config_service import settings
     from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
-    from bisheng.knowledge.domain.services import shared_space_projection_support as projection
     from bisheng.knowledge.rag import shared_space_storage as storage
     from bisheng.workstation.domain.services import chat_service
 
@@ -66,9 +65,6 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
     elif case in {"empty", "plain_chat"}:
         selected = []
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=selected))
-    monkeypatch.setattr(
-        projection, "resolve_shared_space_storage_enabled", AsyncMock(return_value=case != "storage_off")
-    )
     monkeypatch.setattr(
         storage,
         "aresolve_space_shared_routing",
@@ -126,4 +122,4 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
     else:
         old_scope.assert_not_awaited()
         old_retrieve.assert_not_awaited()
-        assert unified.await_count == (1 if case in {"default_off", "unlisted", "empty"} else 0)
+        assert unified.await_count == (1 if case in {"default_off", "unlisted", "empty", "disabled_route", "storage_off"} else 0)

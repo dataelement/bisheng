@@ -337,7 +337,7 @@ class PortalGlobalSearchRetriever:
             space_read_checker=no_implicit_authorization,
             entry_view_checker=no_implicit_authorization,
             settings_provider=lambda: RetrievalScopeResolverSettings(
-                enabled=True, routing_version=self.snapshot.routing_version
+                routing_version=self.snapshot.routing_version
             ),
         )
 

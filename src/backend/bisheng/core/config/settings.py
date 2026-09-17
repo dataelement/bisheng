@@ -819,19 +819,8 @@ class KnowledgeConf(BaseModel):
 
 
 class KnowledgeSpaceSharedStorageConf(BaseModel):
-    """知识空间统一共享存储（SPACE shared storage）配置。
+    """SPACE 唯一存储链路的参数；旧 enabled 配置不再生效。"""
 
-    总开关语义（重构方案 §7.4 镜像级回退前提）：``enabled=False`` 时所有
-    共享存储新逻辑（租户路由、共享 collection/index bootstrap、共享写
-    入/检索、删库保护）完全不生效，行为与旧版本一致。租户级灰度由
-    ``knowledge_space_shared_storage_routing`` 路由表的 ``shared_enabled``
-    单行原子切换控制（方案 §6.2：租户路由状态以 SQL 路由表为单一真相源）。
-    """
-
-    enabled: bool = Field(
-        default=False,
-        description="共享存储总开关；False 时所有新逻辑零行为变化",
-    )
     collection_prefix: str = Field(
         default="col_space_shared",
         description="租户共享 Milvus collection 前缀，实际名称为 {prefix}_{tenant_id}",

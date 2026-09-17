@@ -1648,91 +1648,90 @@ class WorkStationService(BaseService):
                 )
 
                 shared_service = KnowledgeSpaceChatService(request, login_user)
-                if await shared_service._is_shared_storage_active(space_ids):
-                    if request is None:
-                        raise SharedStorageContractError(
-                            SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                            "shared SPACE retrieval requires request context",
-                        )
-                    shared_service.department_file_view_access_service = (
-                        department_file_view_access_service
+                if request is None:
+                    raise SharedStorageContractError(
+                        SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
+                        "shared SPACE retrieval requires request context",
                     )
-                    kb_filters = None
-                    if file_ids_by_space is not None:
-                        kb_filters = {
-                            space_id: {
-                                "file_ids": cls._get_allowed_file_ids_for_space(
-                                    file_ids_by_space,
-                                    space_id,
-                                )
-                                or []
-                            }
-                            for space_id in space_ids
-                        }
-                    async with get_async_db_session() as session:
-                        shared_service.file_repo = (
-                            file_repositories.KnowledgeFileRepositoryImpl(session)
-                        )
-                        shared_service.doc_repo = (
-                            document_repositories.KnowledgeDocumentRepositoryImpl(session)
-                        )
-                        shared_service.version_repo = (
-                            version_repositories.KnowledgeDocumentVersionRepositoryImpl(
-                                session
+                shared_service.department_file_view_access_service = (
+                    department_file_view_access_service
+                )
+                kb_filters = None
+                if file_ids_by_space is not None:
+                    kb_filters = {
+                        space_id: {
+                            "file_ids": cls._get_allowed_file_ids_for_space(
+                                file_ids_by_space,
+                                space_id,
                             )
-                        )
-                        shared_chunks = await shared_service.aretrieve_chunks(
-                            query=question,
-                            knowledge_base_ids=space_ids,
-                            kb_filters=kb_filters,
-                            top_k=cls._KB_CANDIDATE_LIMIT,
-                            max_content=max_token,
-                        )
-
-                    shared_docs: list[Document] = []
-                    for _, doc in shared_chunks:
-                        metadata = doc.metadata or {}
-                        doc.metadata = metadata
-                        metadata['retrieval_source'] = 'shared_space'
-                        metadata['retrieval_score'] = float(metadata.get('score', 0.0) or 0.0)
-                        shared_docs.append(doc)
-
-                    rank_lists = [(shared_docs, 1.0)]
-                    if organization_ids:
-                        _, organization_docs, organization_failures = await cls.queryChunksFromDB(
-                            question=question,
-                            use_knowledge_param=UseKnowledgeBaseParam(
-                                knowledge_space_ids=[],
-                                organization_knowledge_ids=organization_ids,
-                            ),
-                            max_token=max_token,
-                            login_user=login_user,
-                            request=request,
-                            department_file_view_access_service=(
-                                department_file_view_access_service
-                            ),
-                        )
-                        failures.extend(organization_failures)
-                        rank_lists.append((list(organization_docs or []), 1.0))
-
-                    candidates = cls._global_rrf_merge(
-                        rank_lists,
-                        limit=cls._KB_CANDIDATE_LIMIT,
+                            or []
+                        }
+                        for space_id in space_ids
+                    }
+                async with get_async_db_session() as session:
+                    shared_service.file_repo = (
+                        file_repositories.KnowledgeFileRepositoryImpl(session)
                     )
-                    ranked_docs = await cls._rerank_retrieval_candidates(
+                    shared_service.doc_repo = (
+                        document_repositories.KnowledgeDocumentRepositoryImpl(session)
+                    )
+                    shared_service.version_repo = (
+                        version_repositories.KnowledgeDocumentVersionRepositoryImpl(
+                            session
+                        )
+                    )
+                    shared_chunks = await shared_service.aretrieve_chunks(
+                        query=question,
+                        knowledge_base_ids=space_ids,
+                        kb_filters=kb_filters,
+                        top_k=cls._KB_CANDIDATE_LIMIT,
+                        max_content=max_token,
+                    )
+
+                shared_docs: list[Document] = []
+                for _, doc in shared_chunks:
+                    metadata = doc.metadata or {}
+                    doc.metadata = metadata
+                    metadata['retrieval_source'] = 'shared_space'
+                    metadata['retrieval_score'] = float(metadata.get('score', 0.0) or 0.0)
+                    shared_docs.append(doc)
+
+                rank_lists = [(shared_docs, 1.0)]
+                if organization_ids:
+                    _, organization_docs, organization_failures = await cls.queryChunksFromDB(
                         question=question,
-                        candidates=candidates,
+                        use_knowledge_param=UseKnowledgeBaseParam(
+                            knowledge_space_ids=[],
+                            organization_knowledge_ids=organization_ids,
+                        ),
+                        max_token=max_token,
                         login_user=login_user,
+                        request=request,
+                        department_file_view_access_service=(
+                            department_file_view_access_service
+                        ),
                     )
-                    formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
-                        ranked_docs,
-                        max_token,
-                    )
-                    return (
-                        formatted_results,
-                        finally_docs,
-                        cls._deduplicate_knowledge_failures(failures),
-                    )
+                    failures.extend(organization_failures)
+                    rank_lists.append((list(organization_docs or []), 1.0))
+
+                candidates = cls._global_rrf_merge(
+                    rank_lists,
+                    limit=cls._KB_CANDIDATE_LIMIT,
+                )
+                ranked_docs = await cls._rerank_retrieval_candidates(
+                    question=question,
+                    candidates=candidates,
+                    login_user=login_user,
+                )
+                formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
+                    ranked_docs,
+                    max_token,
+                )
+                return (
+                    formatted_results,
+                    finally_docs,
+                    cls._deduplicate_knowledge_failures(failures),
+                )
             knowledge_rows = await cls._load_retrieval_knowledge_rows(
                 organization_ids=organization_ids,
                 space_ids=space_ids,

@@ -36,6 +36,8 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
 from bisheng.knowledge.rag.shared_space_storage import (
     es_routing_value,
     get_shared_storage_conf,
+    TenantRoutingSnapshot,
+    require_initialized_shared_routing,
 )
 from bisheng.user.domain.models.user import User
 
@@ -183,8 +185,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
     ) -> KnowledgeFulltextChunkSource | None:
         conf = get_shared_storage_conf()
         if (
-            conf.enabled
-            and snapshot.knowledge_type is not None
+            snapshot.knowledge_type is not None
             and int(snapshot.knowledge_type) == KnowledgeTypeEnum.SPACE.value
         ):
             result = await self._execute(
@@ -194,30 +195,33 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 )
             )
             routing = result.scalars().first()
-            if routing is not None and routing.shared_enabled:
-                if (
-                    not routing.index_name
-                    or snapshot.logical_document_id is None
-                    or snapshot.document_version_id is None
-                ):
-                    return None
-                return KnowledgeFulltextChunkSource(
-                    index_name=str(routing.index_name),
-                    file_id=int(snapshot.file_id),
-                    knowledge_id=int(snapshot.knowledge_id),
-                    tenant_id=int(snapshot.tenant_id),
-                    canonical_document_id=int(snapshot.logical_document_id),
-                    canonical_version_id=int(snapshot.document_version_id),
-                    content_generation=int(snapshot.content_generation),
-                    routing=(
-                        es_routing_value(
-                            int(snapshot.tenant_id),
-                            int(snapshot.logical_document_id),
-                        )
-                        if conf.es_routing_enabled
-                        else None
-                    ),
-                )
+            require_initialized_shared_routing(
+                int(snapshot.tenant_id),
+                TenantRoutingSnapshot.from_row(routing) if routing is not None else None,
+            )
+            if (
+                not routing.index_name
+                or snapshot.logical_document_id is None
+                or snapshot.document_version_id is None
+            ):
+                return None
+            return KnowledgeFulltextChunkSource(
+                index_name=str(routing.index_name),
+                file_id=int(snapshot.file_id),
+                knowledge_id=int(snapshot.knowledge_id),
+                tenant_id=int(snapshot.tenant_id),
+                canonical_document_id=int(snapshot.logical_document_id),
+                canonical_version_id=int(snapshot.document_version_id),
+                content_generation=int(snapshot.content_generation),
+                routing=(
+                    es_routing_value(
+                        int(snapshot.tenant_id),
+                        int(snapshot.logical_document_id),
+                    )
+                    if conf.es_routing_enabled
+                    else None
+                ),
+            )
 
         index_name = await self.get_knowledge_index_name(snapshot.knowledge_id)
         if not index_name:

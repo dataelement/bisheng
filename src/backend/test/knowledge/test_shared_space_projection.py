@@ -7,7 +7,8 @@ over the async SQLite fixtures.
 """
 from __future__ import annotations
 
-import sys
+
+import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -51,7 +52,6 @@ from bisheng.knowledge.domain.services.knowledge_version_service import (
 from bisheng.knowledge.domain.services.shared_space_projection_support import (
     aggregate_active_knowledge_ids,
     load_shared_content_chunks_from_legacy,
-    resolve_shared_space_storage_enabled,
 )
 from test.fakes.shared_storage_fakes import FakeSharedSpaceStorageWriter
 
@@ -160,20 +160,14 @@ def _service(
     session: AsyncSession,
     writer: FakeSharedSpaceStorageWriter,
     *,
-    enabled: bool = True,
     chunk_loader=None,
-    legacy_writer=None,
-    cleaner=None,
 ) -> KnowledgeDocumentProjectionService:
     return KnowledgeDocumentProjectionService(
         session=session,
         file_repository=KnowledgeFileRepositoryImpl(session),
         document_repository=KnowledgeDocumentRepositoryImpl(session),
         version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
-        projection_writer=legacy_writer or AsyncMock(),
-        projection_cleaner=cleaner or AsyncMock(),
         shared_storage_writer=writer,
-        shared_storage_enabled=enabled,
         shared_content_chunk_loader=chunk_loader,
         shared_embedding_model_id="4",
         lease_seconds=30,
@@ -269,7 +263,8 @@ async def test_chunk_loader_falls_back_to_original_space_after_publish_move():
         10: SimpleNamespace(id=10),
     }
 
-    def vector_store(_user_id, *, knowledge):
+    def vector_store(_user_id, *, knowledge, allow_legacy_space=False):
+        assert allow_legacy_space is True
         collection = (
             current_collection
             if knowledge.id == 20
@@ -496,17 +491,13 @@ class TestSharedDualProjection:
             return _two_chunks() if int(source_file.id) == 101 else []
 
         service = _service(async_db_session, writer, chunk_loader=loader)
-        result = await service.process_entry(
-            tenant_id=TENANT,
-            entry_id=101,
-            lease_owner="fulltext-repair-fallback",
-            force_content_upsert=True,
-        )
-
-        assert result.status == "ready"
-        assert loaded == [CONTENT_FILE_ID, 101]
-        assert writer.calls == ["upsert_content", "update_membership"]
-        assert writer.chunk_count(TENANT, DOCUMENT_ID) == 2
+        with pytest.raises(RuntimeError, match="received no chunks"):
+            await service.process_entry(
+                tenant_id=TENANT, entry_id=101,
+                lease_owner="fulltext-repair-original-missing", force_content_upsert=True,
+            )
+        assert loaded == [CONTENT_FILE_ID]
+        assert writer.calls == []
 
     async def test_share_withdraw_reaggregates_membership_without_content(
         self, async_db_session: AsyncSession
@@ -642,40 +633,6 @@ class TestEmptyAggregationTombstone:
 # ---------------------------------------------------------------------------
 
 
-class TestLegacyGating:
-    async def test_shared_writer_ignored_when_switch_off(
-        self, async_db_session: AsyncSession
-    ):
-        await _seed_shared_world(async_db_session)
-        writer = FakeSharedSpaceStorageWriter()
-        legacy_writer = AsyncMock()
-        service = _service(
-            async_db_session,
-            writer,
-            enabled=False,
-            legacy_writer=legacy_writer,
-        )
-
-        result = await service.process_entry(
-            tenant_id=TENANT, entry_id=101, lease_owner="w7"
-        )
-
-        assert result.status == "ready"
-        assert writer.calls == []
-        legacy_writer.assert_awaited_once()
-
-    async def test_config_resolution_defaults_to_disabled(self):
-        assert await resolve_shared_space_storage_enabled() is False
-
-    async def test_config_resolution_reads_top_level_shared_storage_block(self):
-        settings = SimpleNamespace(
-            knowledge_space_shared_storage=SimpleNamespace(enabled=True)
-        )
-        config_module = sys.modules[
-            "bisheng.common.services.config_service"
-        ]
-        with patch.object(config_module, "settings", settings):
-            assert await resolve_shared_space_storage_enabled() is True
 
 
 # ---------------------------------------------------------------------------
@@ -964,15 +921,3 @@ class TestPrimarySwitchInheritance:
             assert entry.projection_status == (
                 KnowledgeFileProjectionStatus.PENDING.value
             )
-
-    async def test_switch_helper_disabled_without_config(
-        self, async_db_session: AsyncSession
-    ):
-        await self._seed_version_world(async_db_session)
-        service = self._version_service(async_db_session)
-        assert await service._shared_space_projection_enabled() is False
-
-        document = await KnowledgeDocumentRepositoryImpl(
-            async_db_session
-        ).find_by_id(DOCUMENT_ID)
-        assert document.content_generation == 4

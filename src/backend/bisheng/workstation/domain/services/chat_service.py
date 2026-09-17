@@ -1426,23 +1426,12 @@ async def _agent_stream_chat_completion(
                     raise ValueError('Portal QA requires shared knowledge spaces')
                 elif space_ids:
                     from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
-                    from bisheng.knowledge.domain.services.shared_space_projection_support import resolve_shared_space_storage_enabled
                     async def require_shared_route():
-                        if not await resolve_shared_space_storage_enabled():
-                            raise SharedStorageContractError(
-                                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                                'Portal QA shared storage is disabled', tenant_id=int(login_user.tenant_id),
-                            )
                         route = await aresolve_space_shared_routing(int(login_user.tenant_id), int(knowledge_bases_info[0]['type']))
                         if route is None:
                             raise SharedStorageContractError(
                                 SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
                                 'Portal QA shared routing is missing', tenant_id=int(login_user.tenant_id),
-                            )
-                        if not route.shared_enabled:
-                            raise SharedStorageContractError(
-                                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                                'Portal QA shared routing is disabled', tenant_id=int(login_user.tenant_id),
                             )
                     try:
                         await asyncio.wait_for(require_shared_route(), max(0, retrieval_deadline - time.monotonic()))

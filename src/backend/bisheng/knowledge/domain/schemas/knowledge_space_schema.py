@@ -491,6 +491,7 @@ class ShougangPortalDomainBindableSpacesResp(BaseModel):
 
 
 class ShougangPortalFileBrowseReq(BaseModel):
+    filter_tag: str | None = Field(default=None, description="Additional tag intersected before deduplication")
     discovery_scope: Literal[
         "legacy",
         "public",
@@ -795,6 +796,7 @@ class ShougangPortalFileItemResp(BaseModel):
 
 class ShougangPortalFileSearchResp(BaseModel):
     data: list[ShougangPortalFileItemResp] = Field(default_factory=list)
+    total: int | None = None
     has_more: bool = False
     next_cursor: str | None = None
     discovery_snapshot: str = ""

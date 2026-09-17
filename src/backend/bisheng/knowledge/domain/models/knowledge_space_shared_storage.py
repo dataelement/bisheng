@@ -39,6 +39,7 @@ class KnowledgeSpaceSharedStorageRoutingBase(SQLModelSerializable):
             comment="Tenant ID (one row per tenant)",
         ),
     )
+    # 历史兼容列，运行时不再用作路由开关。
     shared_enabled: bool = Field(
         default=False,
         sa_column=Column(
@@ -199,23 +200,6 @@ class KnowledgeSpaceSharedStorageRoutingDao:
                     embedding_model_id=int(embedding_model_id),
                     schema_fingerprint=schema_fingerprint,
                     migration_state=migration_state,
-                )
-            )
-            result = session.exec(statement)
-            session.commit()
-            return bool(result.rowcount)
-
-    @classmethod
-    def switch_to_legacy(cls, tenant_id: int) -> bool:
-        """Atomically route a tenant back to per-space storage (rollback path,
-        only valid before TENANT_WRITE_RESUMED - spec 7.4)."""
-        with get_sync_db_session() as session:
-            statement = (
-                update(KnowledgeSpaceSharedStorageRouting)
-                .where(KnowledgeSpaceSharedStorageRouting.tenant_id == int(tenant_id))
-                .values(
-                    shared_enabled=False,
-                    routing_version=KnowledgeSpaceSharedStorageRouting.routing_version + 1,
                 )
             )
             result = session.exec(statement)

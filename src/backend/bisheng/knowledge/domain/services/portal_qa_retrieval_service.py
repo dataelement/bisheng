@@ -331,7 +331,7 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
         await aresolve_space_shared_routing(tenant, kind)
         for tenant, kind in sorted({(int(space.tenant_id or 1), int(space.type)) for space in spaces})
     ]
-    if not snapshots or any(snapshot is None or not snapshot.shared_enabled for snapshot in snapshots):
+    if not snapshots or any(snapshot is None for snapshot in snapshots):
         raise RuntimeError("shared retrieval routing unavailable")
     snapshot = snapshots[0]
     if any(
@@ -369,7 +369,7 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
                 space_read_checker=space_read,
                 entry_view_checker=unused_entry_check,
                 settings_provider=lambda: RetrievalScopeResolverSettings(
-                    enabled=True, routing_version=int(snapshot.routing_version)
+                    routing_version=int(snapshot.routing_version)
                 ),
             )
             refs = (

@@ -136,69 +136,20 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     """Delete vector data andesDATA"""
     if not file_ids:
         return True
-    # F1.7: protect the shared targets from legacy document_id deletes. Spaces
-    # migrated in place may still keep independent per-space stores as the
-    # parse/projection staging source, so routing alone is not proof that a
-    # concrete collection or index is shared.
-    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-    from bisheng.knowledge.rag.shared_space_storage import (
-        resolve_space_shared_routing,
-        shared_collection_name,
-        shared_index_name,
-    )
-
-    tenant_id = int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
-    routing = resolve_space_shared_routing(tenant_id, knowledge.type)
-    shared_collection = None
-    shared_index = None
-    if routing is not None:
-        shared_collection = routing.collection_name or shared_collection_name(tenant_id)
-        shared_index = routing.index_name or shared_index_name(tenant_id)
-    uses_shared_collection = shared_collection is not None and knowledge.collection_name == shared_collection
-    knowledge_index = knowledge.index_name or knowledge.collection_name
-    uses_shared_index = shared_index is not None and knowledge_index == shared_index
-    if uses_shared_collection and uses_shared_index:
-        logger.info(
-            "act=skip_legacy_vector_delete file_ids={} knowledge_id={} "
-            "(both storage targets are shared; projection cleanup applies)",
-            file_ids,
-            knowledge.id,
-        )
+    # SPACE 的内容删除由 canonical 投影负责，不清理历史每空间索引。
+    if knowledge.type == KnowledgeTypeEnum.SPACE.value:
         return True
-    logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
-    if uses_shared_collection:
-        logger.info(
-            "act=skip_shared_milvus_delete file_ids={} knowledge_id={} collection={}",
-            file_ids,
-            knowledge.id,
-            knowledge.collection_name,
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        0, knowledge=knowledge, embeddings=FakeEmbeddings()
+    )
+    if vector_client.col:
+        vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
+    knowledge_index = knowledge.index_name or knowledge.collection_name
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+    if es_client.client.indices.exists(index=knowledge_index):
+        es_client.client.delete_by_query(
+            index=knowledge_index, query={"terms": {"metadata.document_id": file_ids}},
         )
-    else:
-        logger.info("start init Milvus")
-        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            0, knowledge=knowledge, embeddings=FakeEmbeddings()
-        )
-        if vector_client.col:
-            vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
-        logger.info(f"delete_milvus file_ids={file_ids}")
-
-    if uses_shared_index:
-        logger.info(
-            "act=skip_shared_es_delete file_ids={} knowledge_id={} index={}",
-            file_ids,
-            knowledge.id,
-            knowledge_index,
-        )
-    else:
-        logger.info("start init ES")
-        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
-        if es_client.client.indices.exists(index=knowledge_index):
-            res = es_client.client.delete_by_query(
-                index=knowledge_index,
-                query={"terms": {"metadata.document_id": file_ids}},
-            )
-            logger.info(f"act=delete_es file_ids={file_ids} res={res}")
-
     return True
 
 

@@ -167,19 +167,22 @@ async def _run_with_facade(action) -> list[AwardOutcome]:
 def _resolve_award_queue() -> str:
     """解析发分投递队列名。
 
-    默认 points_award_celery；POINTS_AWARD_CELERY_QUEUE 非空时覆盖（压测隔离）。
+    默认 celery；旧发分队列名自动回落默认队列，其他非空值用于压测隔离。
     """
     import os
 
-    from bisheng.core.config.celery_queues import POINTS_AWARD_QUEUE
+    from bisheng.core.config.celery_queues import DEFAULT_CELERY_QUEUE
 
-    return (os.environ.get("POINTS_AWARD_CELERY_QUEUE") or "").strip() or POINTS_AWARD_QUEUE
+    configured_queue = (os.environ.get("POINTS_AWARD_CELERY_QUEUE") or "").strip()
+    if not configured_queue or configured_queue == "points_award_celery":
+        return DEFAULT_CELERY_QUEUE
+    return configured_queue
 
 
 def _enqueue_award_event(body: dict[str, Any]) -> None:
     """投递 Celery 发分任务；抽出以便单测 patch，避开 conftest 对 worker 包的 mock。
 
-    默认投递到 points_award_celery（见 celery_queues.POINTS_AWARD_QUEUE）。
+    默认投递到 celery，与其他默认队列任务共享 Worker。
     """
     from bisheng.worker.points.tasks import process_points_award_event
 

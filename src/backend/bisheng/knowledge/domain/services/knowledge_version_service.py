@@ -159,21 +159,6 @@ class KnowledgeVersionService:
             raise SpacePermissionDeniedError()
         return resolved
 
-    async def _shared_space_projection_enabled(self) -> bool:
-        """Defensively resolve the shared-storage switch (F1 config block).
-
-        Missing block / config error => False => legacy behaviour unchanged.
-        """
-        try:
-            from bisheng.knowledge.domain.services.shared_space_projection_support import (
-                resolve_shared_space_storage_enabled,
-            )
-
-            return await resolve_shared_space_storage_enabled()
-        except Exception:
-            logger.exception("shared-space projection switch resolution failed")
-            return False
-
     async def _bump_shared_content_generation_for_primary_switch(
         self,
         *,
@@ -741,17 +726,14 @@ class KnowledgeVersionService:
             )
             await KnowledgeSpaceContentStat.enqueue_file_stat_async([target_kf.id, current_manager.id])
 
-            # F2.8: shared-store primary switch only when the new routing
-            # switch is on - content_generation +1, entries re-project so the
-            # new primary chunks inherit the canonical knowledge_ids.
-            if await self._shared_space_projection_enabled():
-                await self._bump_shared_content_generation_for_primary_switch(
-                    document_id=int(document.id),
-                )
-                await self._enqueue_document_distribution_projection(
-                    tenant_id=int(self.login_user.tenant_id),
-                    entry_ids=None,
-                )
+            # 主版本切换始终推进共享内容代次。
+            await self._bump_shared_content_generation_for_primary_switch(
+                document_id=int(document.id),
+            )
+            await self._enqueue_document_distribution_projection(
+                tenant_id=int(self.login_user.tenant_id),
+                entry_ids=None,
+            )
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user,
@@ -1306,6 +1288,35 @@ class KnowledgeVersionService:
             return {}
         from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.core.search.elasticsearch.manager import get_es_connection
+            from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+
+            route = await aresolve_space_shared_routing(int(knowledge.tenant_id or 1), knowledge.type)
+            try:
+                client = await get_es_connection()
+                response = await client.search(
+                    index=route.index_name,
+                    size=10000,
+                    query={"bool": {"filter": [
+                        {"terms": {"metadata.content_file_id": file_ids}},
+                        {"term": {"metadata.knowledge_ids": int(knowledge.id)}},
+                    ]}},
+                    _source=["text", "metadata.content_file_id"],
+                )
+            except Exception as exc:
+                logger.warning(f"act=tfidf_fetch_shared_chunk_texts knowledge_id={knowledge.id} error={exc}")
+                return {}
+            parts: dict[int, list[str]] = {}
+            for hit in response.get("hits", {}).get("hits", []):
+                source = hit.get("_source", {})
+                fid = int((source.get("metadata") or {}).get("content_file_id") or 0)
+                if fid in file_ids:
+                    parts.setdefault(fid, []).append(source.get("text") or "")
+            return {fid: "\n".join(chunks) for fid, chunks in parts.items()}
 
         parts: dict[int, list[str]] = {}
         es_client = None

@@ -745,7 +745,7 @@ async def test_invalid_projection_cleanup_failure_remains_retryable(
         file_repository=repository,
         document_repository=KnowledgeDocumentRepositoryImpl(async_db_session),
         version_repository=KnowledgeDocumentVersionRepositoryImpl(async_db_session),
-        projection_cleaner=cleaner,
+        shared_storage_writer=AsyncMock(update_membership=cleaner),
         deleting_entry_finalizer=finalizer,
     )
     started = datetime.now()

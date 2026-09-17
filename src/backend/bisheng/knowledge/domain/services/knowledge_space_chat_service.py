@@ -211,23 +211,18 @@ class KnowledgeSpaceChatService:
         else:
             session = session[0]
 
-        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
-        vector_retriever = milvus_vector.as_retriever(
-            search_kwargs={"k": 100, "param": {"ef": 110}, "expr": f"document_id == {file_id}"}
-        )
-        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        es_retriever = es_vector.as_retriever(search_kwargs={"filter": [{"term": {"metadata.document_id": file_id}}]})
         has_answer = False
         question_id = generate_uuid()
         async for one in self.space_rag(
             session,
-            vector_retriever,
-            es_retriever,
+            None,
+            None,
             query,
             model_id,
             None,
             knowledge_id=knowledge_id,
             preauthorized_file_ids={int(file_id)},
+            target_file_ids=[int(file_id)],
         ):
             if not isinstance(one, StreamRetryEvent):
                 has_answer = True
@@ -298,6 +293,7 @@ class KnowledgeSpaceChatService:
         *,
         knowledge_id: int | None = None,
         preauthorized_file_ids: set[int] | None = None,
+        target_file_ids: list[int] | None = None,
     ) -> AsyncIterator[ChatResponse | StreamRetryEvent]:
         try:
             llm, space_conf = await self.get_space_llm_config(model_id=model_id)
@@ -305,15 +301,24 @@ class KnowledgeSpaceChatService:
             raise StreamStageError(error, stage="config") from error
 
         try:
-            finally_docs = await self._retrieve_visible_documents(
-                query=query,
-                vector_retriever=vector_retriever,
-                es_retriever=es_retriever,
-                max_content=space_conf.max_chunk_size,
-                sort_by_source_and_index=True,
-                knowledge_id=knowledge_id,
-                preauthorized_file_ids=preauthorized_file_ids,
-            )
+            if knowledge_id is not None:
+                chunks = await self.aretrieve_chunks(
+                    query=query, knowledge_base_ids=[knowledge_id],
+                    kb_filters={knowledge_id: {"file_ids": target_file_ids}} if target_file_ids is not None else None,
+                    top_k=100, max_content=space_conf.max_chunk_size,
+                    preauthorized_file_ids=preauthorized_file_ids,
+                )
+                finally_docs = [document for _, document in chunks]
+            else:
+                finally_docs = await self._retrieve_visible_documents(
+                    query=query,
+                    vector_retriever=vector_retriever,
+                    es_retriever=es_retriever,
+                    max_content=space_conf.max_chunk_size,
+                    sort_by_source_and_index=True,
+                    knowledge_id=knowledge_id,
+                    preauthorized_file_ids=preauthorized_file_ids,
+                )
         except Exception as error:
             raise StreamStageError(error, stage="retrieval") from error
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
@@ -660,28 +665,15 @@ class KnowledgeSpaceChatService:
             else:
                 target_file_ids = tag_file_ids
 
-        vector_retriever, es_retriever = None, None
-
-        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(knowledge_id, target_file_ids)
-
-        if milvus_kwargs is not None and es_kwargs is not None:
-            # Build retrievers only when there are matching files to query.
-            milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
-                self.login_user.user_id, knowledge=space
-            )
-            es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-            vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
-            es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
-
-        # executeQuery(vector_retriever, es_retriever, query)
         async for one in self.space_rag(
             session,
-            vector_retriever,
-            es_retriever,
+            None,
+            None,
             query,
             model_id,
             tags,
             knowledge_id=knowledge_id,
+            target_file_ids=target_file_ids,
         ):
             yield one
 
@@ -744,6 +736,7 @@ class KnowledgeSpaceChatService:
         top_k: int = 10,
         max_content: int = 15000,
         skip_unauthorized: bool = False,
+        preauthorized_file_ids: set[int] | None = None,
     ) -> list[tuple[int, Document]]:
         """Retrieve chunks across one or more knowledge bases without LLM generation.
 
@@ -798,6 +791,7 @@ class KnowledgeSpaceChatService:
                     kb_filters=filters_by_kb or None,
                     top_k=top_k,
                     max_content=max_content,
+                    preauthorized_file_ids=preauthorized_file_ids,
                 )
             except SharedStorageContractError as exc:
                 if exc.code == SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE:
@@ -858,43 +852,29 @@ class KnowledgeSpaceChatService:
         self,
         knowledge_base_ids: list[int],
     ) -> bool:
-        """B1: Check whether the tenant is routed to shared SPACE storage.
-
-        Returns True when ALL of the requested knowledge bases are SPACE-type
-        and belong to a tenant with ``shared_enabled=True``. A mixed routing
-        snapshot fails closed instead of reading part of the request from the
-        stale per-space indexes.
-        """
-        from bisheng.knowledge.domain.contracts.errors import (
-            SharedStorageContractError,
-            SharedStorageErrorCode,
-        )
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-        from bisheng.knowledge.domain.services.shared_space_projection_support import (
-            resolve_shared_space_storage_enabled,
-        )
+        """SPACE 强制共享；混合类型不允许整批退回独立索引。"""
+        from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
         from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
 
         if not knowledge_base_ids:
             return False
-        if not await resolve_shared_space_storage_enabled():
-            return False
         spaces = await KnowledgeDao.aget_list_by_ids(knowledge_base_ids)
-        if not spaces or len(spaces) != len(knowledge_base_ids):
-            return False
-        routed: list[bool] = []
-        for space in spaces:
-            snapshot = await aresolve_space_shared_routing(
-                int(getattr(space, 'tenant_id', None) or 1),
-                getattr(space, 'type', None),
+        if {int(space.id) for space in spaces} != set(knowledge_base_ids):
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.SCOPE_SPACE_NOT_VISIBLE, "requested knowledge base is unavailable",
             )
-            routed.append(bool(snapshot is not None and snapshot.shared_enabled))
-        if any(routed) and not all(routed):
+        space_types = [int(space.type) == KnowledgeTypeEnum.SPACE.value for space in spaces]
+        if any(space_types) and not all(space_types):
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
-                "requested knowledge spaces resolve to mixed shared/legacy routing",
+                "SPACE and non-SPACE knowledge must be retrieved separately",
             )
-        return all(routed)
+        if not any(space_types):
+            return False
+        for space in spaces:
+            await aresolve_space_shared_routing(int(space.tenant_id or 1), space.type)
+        return True
 
     async def _aretrieve_chunks_shared(
         self,
@@ -904,6 +884,7 @@ class KnowledgeSpaceChatService:
         kb_filters: dict[int, dict[str, Any]] | None,
         top_k: int,
         max_content: int,
+        preauthorized_file_ids: set[int] | None = None,
     ) -> list[tuple[int, Document]]:
         """B1: Retrieve chunks via the shared store reader + scope resolver.
 
@@ -969,6 +950,10 @@ class KnowledgeSpaceChatService:
         permission_service = self._permission_service()
 
         async def _space_read_checker(_tenant_id, _user_id, space_id):
+            # 文件问答沿用已校验的文件授权，只允许精确限定到这些文件。
+            explicit_ids = set(((kb_filters or {}).get(int(space_id)) or {}).get("file_ids") or [])
+            if explicit_ids and explicit_ids <= (preauthorized_file_ids or set()):
+                return True
             # 与选库、目录浏览共用业务权限并保留公共库和管理员的查看规则。
             try:
                 await permission_service._require_read_permission(int(space_id))
@@ -997,7 +982,6 @@ class KnowledgeSpaceChatService:
             space_read_checker=_space_read_checker,
             entry_view_checker=_entry_view_checker,
             settings_provider=lambda: RetrievalScopeResolverSettings(
-                enabled=True,
                 routing_version=int(snapshot.routing_version),
             ),
         )
@@ -1210,6 +1194,11 @@ class KnowledgeSpaceChatService:
         space = await KnowledgeDao.aquery_by_id(kb_id)
         if not space:
             raise NotFoundError(msg=f"Knowledge base {kb_id} not found")
+
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+
+        if getattr(space, "type", None) == KnowledgeTypeEnum.SPACE.value:
+            raise RuntimeError("SPACE retrieval requires the shared reader")
 
         target_file_ids = await self._resolve_kb_target_file_ids(kb_id, tag_names)
         if tag_names and not target_file_ids:

@@ -323,18 +323,15 @@ async def test_shared_service_integration_rechecks_before_external_content(monke
     reader.search_es.assert_awaited_once()
 
 
-@pytest.mark.parametrize("profile,enabled", [("legacy", True), ("portal_global_shared", False)])
-async def test_service_keeps_legacy_route_when_not_selected_or_disabled(monkeypatch, profile, enabled):
+@pytest.mark.parametrize("profile", ["legacy", "portal_global_shared"])
+async def test_service_always_requires_shared_route(monkeypatch, profile):
     engine, owner, _, _ = setup_search(monkeypatch)
     engine.req.retrieval_profile = profile
-    route = AsyncMock(return_value=engine.snapshot if enabled else None)
+    route = AsyncMock(side_effect=RuntimeError("shared storage not initialized"))
     monkeypatch.setattr(subject, "aresolve_space_shared_routing", route)
-    owner._recall_portal_configured_search_sources = AsyncMock(return_value=([], []))
-    owner._filter_and_dedupe_portal_search_chunks = AsyncMock(return_value=[])
-    result = await owner._semantic_search_shougang_portal_files(req=engine.req, spaces=engine.spaces, tag_file_ids=None)
-    assert result["data"] == []
-    owner._recall_portal_configured_search_sources.assert_awaited_once()
-    assert route.await_count == (0 if profile == "legacy" else 1)
+    with pytest.raises(RuntimeError, match="shared storage not initialized"):
+        await owner._semantic_search_shougang_portal_files(req=engine.req, spaces=engine.spaces, tag_file_ids=None)
+    route.assert_awaited_once()
 
 
 async def test_count_preserves_shared_profile_and_strips_it_for_advanced():

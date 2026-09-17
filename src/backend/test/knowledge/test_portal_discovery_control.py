@@ -1083,11 +1083,8 @@ async def test_portal_counts_keep_grant_only_parent_at_exact_file_scope() -> Non
             new_callable=AsyncMock,
             return_value={"PM": 3},
         ) as count_domains,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
-            new_callable=AsyncMock,
-            return_value={"STD": 2},
-        ) as count_categories,
+        patch.object(service, "count_shougang_portal_files", new_callable=AsyncMock,
+                     return_value={"total": 2}) as count_categories,
     ):
         domain_result = await service.count_shougang_portal_domain_files(
             [ShougangPortalDomainFileCountItem(code="PM", space_ids=[10, 20, 30])],
@@ -1104,10 +1101,11 @@ async def test_portal_counts_keep_grant_only_parent_at_exact_file_scope() -> Non
         {"PM": {10, 20}},
         {"PM": {3101}},
     )
-    count_categories.assert_awaited_once_with(
-        {"STD": {10, 20}},
-        {"STD": {3101}},
-    )
+    count_categories.assert_awaited_once()
+    category_req = count_categories.await_args.args[0]
+    assert category_req.space_ids == [10, 20, 30]
+    assert category_req.discovery_scope == "portal_configured"
+    assert category_req.document_type == "STD"
 
 
 @pytest.mark.asyncio
@@ -1137,11 +1135,7 @@ async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
             new_callable=AsyncMock,
             return_value={"PM": 0},
         ) as count_domains,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
-            new_callable=AsyncMock,
-            return_value={"STD": 0},
-        ) as count_categories,
+        patch.object(service, "count_shougang_portal_files", new_callable=AsyncMock) as count_categories,
     ):
         await service.count_shougang_portal_domain_files(
             [ShougangPortalDomainFileCountItem(code="PM", space_ids=[])],
@@ -1153,7 +1147,7 @@ async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
         )
 
     count_domains.assert_awaited_once_with({"PM": set()}, {"PM": set()})
-    count_categories.assert_awaited_once_with({"STD": set()}, {"STD": set()})
+    count_categories.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1183,16 +1177,11 @@ async def test_portal_enabled_counts_use_database_without_fulltext_and_ignore_ca
             new_callable=AsyncMock,
             return_value={"PM": 4},
         ) as count_domains,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
-            new_callable=AsyncMock,
-            return_value={"STD": 3},
-        ) as count_categories,
         patch.object(
             service,
             "count_shougang_portal_files",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("fulltext unavailable"),
+            return_value={"total": 3},
         ) as count_list,
     ):
         domain_result = await service.count_shougang_portal_domain_files(
@@ -1207,8 +1196,11 @@ async def test_portal_enabled_counts_use_database_without_fulltext_and_ignore_ca
     assert domain_result == {"PM": 4}
     assert category_result == {"STD": 3}
     count_domains.assert_awaited_once_with({"PM": {10, 20}})
-    count_categories.assert_awaited_once_with({"STD": {10, 20}})
-    count_list.assert_not_awaited()
+    count_list.assert_awaited_once()
+    category_req = count_list.await_args.args[0]
+    assert category_req.space_ids == []
+    assert category_req.discovery_scope == "portal_enabled"
+    assert category_req.document_type == "STD"
 
 
 @pytest.mark.asyncio
@@ -1245,9 +1237,9 @@ async def test_portal_file_count_uses_full_space_and_grant_only_scope_without_n_
             side_effect=([1001, 2001, 3101], [2001, 3101]),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_portal_files",
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters_cursor",
             new_callable=AsyncMock,
-            return_value=7,
+            return_value=[],
         ) as count_files,
     ):
         result = await service.count_shougang_portal_files(
@@ -1264,7 +1256,7 @@ async def test_portal_file_count_uses_full_space_and_grant_only_scope_without_n_
             )
         )
 
-    assert result == {"total": 7, "discovery_snapshot": "snapshot-count"}
+    assert result == {"total": 0, "discovery_snapshot": "snapshot-count"}
     count_files.assert_awaited_once_with(
         knowledge_ids=[10, 20, 30],
         status=[KnowledgeFileStatus.SUCCESS.value],
@@ -1275,6 +1267,8 @@ async def test_portal_file_count_uses_full_space_and_grant_only_scope_without_n_
         business_domain_code="PM",
         full_space_ids=[10, 20],
         explicit_file_ids=[3101],
+        file_name=None, extra_file_ids=None, order_sort="desc", cursor=None,
+        limit=500, deduplicate_documents=False,
     )
 
 
