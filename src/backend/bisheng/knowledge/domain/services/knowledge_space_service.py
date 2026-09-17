@@ -3809,6 +3809,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         return effective_permissions
 
+    async def batch_qa_file_view_permissions(self, files: list[KnowledgeFile]) -> dict[int, bool]:
+        """候选阶段复用已加载入口和业务权限上下文，不重查全部所选空间。"""
+        if not files:
+            return {}
+        if not hasattr(self, "_qa_permission_context"):
+            subjects = await self._get_current_user_subject_strings()
+            bindings = await self._get_relation_bindings()
+            paths = await self._get_binding_department_paths(bindings)
+            models = await self._get_relation_models_map()
+            members = await SpaceChannelMemberDao.async_get_user_space_members(self.login_user.user_id)
+            self._qa_permission_context = {
+                "models": models, "bindings": bindings, "binding_department_paths": paths,
+                "user_subject_strings": subjects, "tuple_cache": {}, "tuple_department_paths": {},
+            }
+            self._qa_memberships = {
+                int(member.business_id): default_permission_ids_for_relation(
+                    _SPACE_MEMBER_ROLE_TO_RELATION.get(member.user_role, ""))
+                for member in members if member.is_active
+            }
+        decisions = {}
+        # 复用已加载入口路径和祖先 tuple；隐式业务权限仍由原服务判断。
+        for file in files:
+            permissions, matched = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                self.login_user, "knowledge_file", int(file.id),
+                lineage=self._build_item_lineage(file, int(file.knowledge_id)),
+                nearest_binding_wins=True, return_match_metadata=True,
+                use_permission_level_fallback=False, **self._qa_permission_context)
+            if not matched:
+                permissions.update(self._qa_memberships.get(int(file.knowledge_id), set()))
+            decisions[int(file.id)] = "view_file" in permissions
+        return decisions
+
     async def _space_user_can_view_all_statuses(self, space_id: int) -> bool:
         """Managers (owner / can_manage, incl. global admin & space creator) see
         files in any status; regular members only see restricted-status files
@@ -7598,6 +7630,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_refs: list,
         max_files: int | None = None,
         subtree_page_size: int | None = None,
+        defer_authorization: bool = False,
     ) -> dict[int, list[int]]:
         """解析门户问答知识范围。
 
@@ -7611,6 +7644,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         async def can_read_space(space_id: int) -> bool:
             nonlocal denied_space_count
+            if defer_authorization:
+                return True
             if space_id in readable_spaces:
                 return readable_spaces[space_id]
             try:
@@ -7629,6 +7664,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             candidates = [file for file in files if self._is_qa_scope_file(file, space_id)]
             if not candidates:
                 return []
+            if defer_authorization:
+                return candidates
 
             excluded_ids: set[int] = set()
             if self.version_repo is not None:
@@ -7680,7 +7717,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             tenant_id=int(self.login_user.tenant_id),
                             requested_space_id=space_id,
                             durable_file_id=file_id,
-                            require_view_permission=True,
+                            require_view_permission=not defer_authorization,
                         )
                     except KnowledgeDocumentEntryResolutionError:
                         denied_resource_count += 1
@@ -7690,12 +7727,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not self._is_qa_scope_file(file, space_id):
                     continue
                 try:
-                    await self._require_permission_id(
-                        "knowledge_file",
-                        file_id,
-                        "view_file",
-                        space_id=space_id,
-                    )
+                    if not defer_authorization:
+                        await self._require_permission_id(
+                            "knowledge_file", file_id, "view_file", space_id=space_id,
+                        )
                 except SpacePermissionDeniedError:
                     denied_resource_count += 1
                     continue
@@ -7718,12 +7753,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not self._is_qa_scope_folder(folder, space_id):
                     continue
                 try:
-                    await self._require_permission_id(
-                        "folder",
-                        folder_id,
-                        "view_folder",
-                        space_id=space_id,
-                    )
+                    if not defer_authorization:
+                        await self._require_permission_id(
+                            "folder", folder_id, "view_folder", space_id=space_id,
+                        )
                 except SpacePermissionDeniedError:
                     denied_resource_count += 1
                     continue
@@ -8260,7 +8293,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         _set_portal_search_stage("resolve_tag")
         space_ids = [int(space.id) for space in spaces]
-        tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
+        if req.retrieval_profile == "portal_global_shared" and req.tag:
+            tag_file_ids = await self.knowledge_file_repo.find_portal_tag_file_ids(space_ids, req.tag)
+        else:
+            tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
         if req.tag and not tag_file_ids:
             return self._build_shougang_portal_search_response([])
 
@@ -9722,146 +9758,155 @@ class KnowledgeSpaceService(KnowledgeUtils):
         metadata_only_files: list[KnowledgeFile] = []
         shared_snapshot = None
         shared_retriever = None
-        if req.retrieval_profile == "portal_global_shared":
-            from bisheng.knowledge.domain.services.portal_global_search_retrieval import (
-                PortalGlobalSearchRetriever,
-                resolve_portal_shared_snapshot,
-            )
-            shared_snapshot = await resolve_portal_shared_snapshot(self, spaces)
-        if shared_snapshot is not None:
-            shared_retriever = PortalGlobalSearchRetriever(owner=self, req=req, spaces=spaces, snapshot=shared_snapshot)
-            recalled = await shared_retriever.retrieve(tag_file_ids=tag_file_ids)
-            es_chunks = [chunk for chunk in recalled.chunks if chunk.retriever == "es"]
-            vector_chunks = [chunk for chunk in recalled.chunks if chunk.retriever == "vector"]
-            metadata_only_files = await self._search_portal_metadata_files(
-                req=req, space_ids=recalled.metadata_space_ids, keyword=keyword, tag_file_ids=tag_file_ids)
-        elif req.discovery_scope == "portal_configured":
-            recalled_chunks, metadata_only_files = await self._recall_portal_configured_search_sources(
-                req=req,
-                spaces=spaces,
-                keyword=keyword,
-                tag_file_ids=tag_file_ids,
-            )
-            es_chunks = [chunk for chunk in recalled_chunks if chunk.retriever == "es"]
-            vector_chunks = [chunk for chunk in recalled_chunks if chunk.retriever == "vector"]
-        else:
-            es_chunks, vector_chunks = await asyncio.gather(
-                self._search_shougang_portal_es_chunks(
+        try:
+            if req.retrieval_profile == "portal_global_shared":
+                from bisheng.knowledge.domain.services.portal_global_search_retrieval import (
+                    PortalGlobalSearchRetriever,
+                    resolve_portal_shared_snapshot,
+                )
+                shared_snapshot = await resolve_portal_shared_snapshot(self, spaces)
+            if shared_snapshot is not None:
+                shared_retriever = PortalGlobalSearchRetriever(owner=self, req=req, spaces=spaces, snapshot=shared_snapshot)
+                recalled = await shared_retriever.retrieve(tag_file_ids=tag_file_ids)
+                es_chunks = [chunk for chunk in recalled.chunks if chunk.retriever == "es"]
+                vector_chunks = [chunk for chunk in recalled.chunks if chunk.retriever == "vector"]
+                metadata_only_files = await self._search_portal_metadata_files(
+                    req=req, space_ids=recalled.metadata_space_ids, keyword=keyword, tag_file_ids=tag_file_ids)
+                shared_retriever.context.seed("files", {int(file.id): file for file in metadata_only_files})
+            elif req.discovery_scope == "portal_configured":
+                recalled_chunks, metadata_only_files = await self._recall_portal_configured_search_sources(
+                    req=req,
                     spaces=spaces,
                     keyword=keyword,
-                    filter_file_ids=tag_file_ids,
-                    limit=PORTAL_SEARCH_ES_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR,
-                ),
-                self._search_shougang_portal_vector_chunks(
+                    tag_file_ids=tag_file_ids,
+                )
+                es_chunks = [chunk for chunk in recalled_chunks if chunk.retriever == "es"]
+                vector_chunks = [chunk for chunk in recalled_chunks if chunk.retriever == "vector"]
+            else:
+                es_chunks, vector_chunks = await asyncio.gather(
+                    self._search_shougang_portal_es_chunks(
+                        spaces=spaces,
+                        keyword=keyword,
+                        filter_file_ids=tag_file_ids,
+                        limit=PORTAL_SEARCH_ES_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR,
+                    ),
+                    self._search_shougang_portal_vector_chunks(
+                        spaces=spaces,
+                        keyword=keyword,
+                        filter_file_ids=tag_file_ids,
+                        limit=PORTAL_SEARCH_VECTOR_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR,
+                    ),
+                )
+            if perf is not None:
+                perf.es_chunk_count = len(es_chunks)
+                perf.vector_chunk_count = len(vector_chunks)
+            # 共享片段已通过 canonical/成员代次校验，不套用旧入口片段字段契约。
+            safe_chunks = es_chunks + vector_chunks if shared_retriever is not None else (
+                await self._filter_and_dedupe_portal_search_chunks(
+                    chunks=es_chunks + vector_chunks,
                     spaces=spaces,
-                    keyword=keyword,
-                    filter_file_ids=tag_file_ids,
-                    limit=PORTAL_SEARCH_VECTOR_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR,
-                ),
-            )
-        if perf is not None:
-            perf.es_chunk_count = len(es_chunks)
-            perf.vector_chunk_count = len(vector_chunks)
-        # 共享片段已通过 canonical/成员代次校验，不套用旧入口片段字段契约。
-        safe_chunks = es_chunks + vector_chunks if shared_retriever is not None else (
-            await self._filter_and_dedupe_portal_search_chunks(
-                chunks=es_chunks + vector_chunks,
-                spaces=spaces,
-                defer_department_access=req.discovery_scope in {"public_and_department", "portal_enabled"},
-            )
-        )
-        candidates = self._group_shougang_portal_chunks_by_file(safe_chunks)
-        ranked_candidates = self._score_shougang_portal_file_candidates(candidates)
-        metadata_candidates: list[PortalFileCandidate] = []
-        shared_document_ids = {candidate.canonical_document_id for candidate in candidates.values()}
-        for file in metadata_only_files:
-            file_id = int(file.id)
-            if file_id in candidates:
-                continue
-            canonical_id = int(file.reference_document_id or file_id)
-            if shared_retriever is not None:
-                if canonical_id in shared_document_ids:
-                    continue
-                shared_document_ids.add(canonical_id)
-            metadata_candidates.append(
-                PortalFileCandidate(
-                    file_id=file_id,
-                    knowledge_id=int(file.knowledge_id),
-                    canonical_document_id=int(file.reference_document_id or file_id),
+                    defer_department_access=req.discovery_scope in {"public_and_department", "portal_enabled"},
                 )
             )
-        # 无权文件只能由文件名匹配产生，优先进入候选权限复核，
-        # 避免被语义召回数量截断后完全不可发现。
-        ranked_candidates = metadata_candidates + ranked_candidates
-        _increment_portal_search_perf("candidate_count", len(ranked_candidates))
-        if not ranked_candidates:
-            return self._build_shougang_portal_search_response([])
+            candidates = self._group_shougang_portal_chunks_by_file(safe_chunks)
+            ranked_candidates = self._score_shougang_portal_file_candidates(candidates)
+            metadata_candidates: list[PortalFileCandidate] = []
+            shared_document_ids = {candidate.canonical_document_id for candidate in candidates.values()}
+            for file in metadata_only_files:
+                file_id = int(file.id)
+                if file_id in candidates:
+                    continue
+                canonical_id = int(file.reference_document_id or file_id)
+                if shared_retriever is not None:
+                    if canonical_id in shared_document_ids:
+                        continue
+                    shared_document_ids.add(canonical_id)
+                metadata_candidates.append(
+                    PortalFileCandidate(
+                        file_id=file_id,
+                        knowledge_id=int(file.knowledge_id),
+                        canonical_document_id=int(file.reference_document_id or file_id),
+                    )
+                )
+            # 无权文件只能由文件名匹配产生，优先进入候选权限复核，
+            # 避免被语义召回数量截断后完全不可发现。
+            ranked_candidates = metadata_candidates + ranked_candidates
+            _increment_portal_search_perf("candidate_count", len(ranked_candidates))
+            if not ranked_candidates:
+                return self._build_shougang_portal_search_response([])
 
-        visible_candidates, visible_file_map = await self._collect_visible_shougang_portal_semantic_candidates(
-            ranked_candidates=ranked_candidates,
-            spaces=spaces,
-            tag_file_ids=tag_file_ids,
-            file_ext=req.file_ext,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            business_domain_code=req.business_domain_code,
-            sort=req.sort,
-            defer_department_access=req.discovery_scope == "public_and_department",
-        )
-        if not visible_candidates:
-            return self._build_shougang_portal_search_response([])
-        if shared_retriever is not None:
-            visible_candidates = await shared_retriever.recheck_content_candidates(visible_candidates, visible_file_map)
-        if perf is not None:
-            perf.visible_candidate_count = len(visible_candidates)
+            visible_candidates, visible_file_map = await self._collect_visible_shougang_portal_semantic_candidates(
+                ranked_candidates=ranked_candidates,
+                spaces=spaces,
+                tag_file_ids=tag_file_ids,
+                file_ext=req.file_ext,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                business_domain_code=req.business_domain_code,
+                sort=req.sort,
+                defer_department_access=req.discovery_scope == "public_and_department",
+                **({"shared_retriever": shared_retriever} if shared_retriever is not None else {}),
+            )
+            if not visible_candidates:
+                return self._build_shougang_portal_search_response([])
+            if (shared_retriever is not None and not self._is_shougang_portal_updated_at_sort(req.sort)
+                    and self._resolve_shougang_portal_rerank_model_id(
+                        req.rerank_model_id, request_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"))):
+                visible_candidates = await shared_retriever.recheck_content_candidates(visible_candidates, visible_file_map, phase="before_rerank")
+            if perf is not None:
+                perf.visible_candidate_count = len(visible_candidates)
 
-        if not self._is_shougang_portal_updated_at_sort(req.sort):
-            self._score_shougang_portal_candidate_title_matches(
-                keyword=keyword,
+            if not self._is_shougang_portal_updated_at_sort(req.sort):
+                self._score_shougang_portal_candidate_title_matches(
+                    keyword=keyword,
+                    candidates=visible_candidates,
+                    file_map=visible_file_map,
+                )
+                visible_candidates = await self._rerank_shougang_portal_file_candidates(
+                    keyword=keyword,
+                    candidates=visible_candidates,
+                    file_map=visible_file_map,
+                    rerank_model_id=req.rerank_model_id,
+                    rerank_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"),
+                )
+            visible_candidates = self._sort_shougang_portal_semantic_candidates(
+                candidates=visible_candidates,
+                sort=req.sort,
+                file_map=visible_file_map,
+            )[:PORTAL_SEARCH_FINAL_LIMIT]
+            if shared_retriever is not None:
+                visible_candidates = await shared_retriever.recheck_content_candidates(visible_candidates, visible_file_map)
+            page_candidates, has_more, next_cursor = self._paginate_shougang_portal_semantic_candidates(
                 candidates=visible_candidates,
                 file_map=visible_file_map,
+                req=req,
+                space_ids=[int(space.id) for space in spaces],
             )
-            visible_candidates = await self._rerank_shougang_portal_file_candidates(
-                keyword=keyword,
-                candidates=visible_candidates,
+            if perf is not None:
+                perf.final_count = len(page_candidates)
+                self._set_shougang_portal_search_top_result_debug(
+                    page_candidates,
+                    visible_file_map,
+                )
+            items = await self._map_shougang_portal_candidate_items(
+                candidates=page_candidates,
                 file_map=visible_file_map,
-                rerank_model_id=req.rerank_model_id,
-                rerank_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"),
+                spaces=spaces,
+                file_ext=req.file_ext,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                business_domain_code=req.business_domain_code,
+                **({"search_context": shared_retriever.context} if shared_retriever is not None else {}),
             )
-        visible_candidates = self._sort_shougang_portal_semantic_candidates(
-            candidates=visible_candidates,
-            sort=req.sort,
-            file_map=visible_file_map,
-        )[:PORTAL_SEARCH_FINAL_LIMIT]
-        if shared_retriever is not None:
-            visible_candidates = await shared_retriever.recheck_content_candidates(visible_candidates, visible_file_map)
-        page_candidates, has_more, next_cursor = self._paginate_shougang_portal_semantic_candidates(
-            candidates=visible_candidates,
-            file_map=visible_file_map,
-            req=req,
-            space_ids=[int(space.id) for space in spaces],
-        )
-        if perf is not None:
-            perf.final_count = len(page_candidates)
-            self._set_shougang_portal_search_top_result_debug(
-                page_candidates,
-                visible_file_map,
+            return self._build_shougang_portal_search_response(
+                items,
+                limit=len(page_candidates),
+                has_more=has_more,
+                next_cursor=next_cursor,
             )
-        items = await self._map_shougang_portal_candidate_items(
-            candidates=page_candidates,
-            file_map=visible_file_map,
-            spaces=spaces,
-            file_ext=req.file_ext,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            business_domain_code=req.business_domain_code,
-        )
-        return self._build_shougang_portal_search_response(
-            items,
-            limit=len(page_candidates),
-            has_more=has_more,
-            next_cursor=next_cursor,
-        )
+        finally:
+            if shared_retriever is not None:
+                await shared_retriever.context.close()
 
     async def _recall_portal_configured_search_sources(
         self,
@@ -9973,7 +10018,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         business_domain_code: str | None,
         sort: str,
         defer_department_access: bool = False,
+        shared_retriever=None,
     ) -> tuple[list[PortalFileCandidate], dict[int, KnowledgeFile]]:
+        if shared_retriever is not None:
+            return await shared_retriever.collect_candidates(ranked_candidates)
         if self._is_shougang_portal_updated_at_sort(sort):
             return await self._collect_visible_shougang_portal_updated_at_candidates(
                 ranked_candidates=ranked_candidates,
@@ -11052,6 +11100,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         document_type: str | None,
         file_subcategory_code: str | None,
         business_domain_code: str | None,
+        search_context=None,
     ) -> list[ShougangPortalFileItemResp]:
         ordered_files = [file_map[candidate.file_id] for candidate in candidates if candidate.file_id in file_map]
         if not ordered_files:
@@ -11064,8 +11113,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return []
         ordered_file_ids = {int(file.id) for file in ordered_files if file.id is not None}
         space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
-        enriched_items = await self._handle_file_folder_extra_info(ordered_files)
-        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(enriched_items)
+        enriched_items = await self._handle_file_folder_extra_info(
+            ordered_files, **({"search_context": search_context} if search_context is not None else {}),
+        )
+        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(
+            enriched_items, **({"search_context": search_context} if search_context is not None else {}))
         item_map: dict[int, ShougangPortalFileItemResp] = {}
         for item in enriched_items:
             space_id = int(item.get("knowledge_id") or 0)
@@ -11774,7 +11826,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         files: list[KnowledgeFile],
         *,
         spaces: list[Knowledge] | None = None,
+        search_context=None,
     ) -> list[KnowledgeFile]:
+        if search_context is not None:
+            return await search_context.filter_visible(self, files)
         grouped_files: dict[int, list[KnowledgeFile]] = {}
         for file in files:
             grouped_files.setdefault(int(file.knowledge_id), []).append(file)
@@ -11788,7 +11843,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         guarded_space_ids = department_space_ids | {
             space_id for space_id in grouped_files if portal_space_kind_map.get(space_id) in {"department", "clinic"}
         }
-        visible_files: list[KnowledgeFile] = []
         for space_id, items in grouped_files.items():
             if space_id in getattr(self, "_portal_grant_parent_space_ids", set()):
                 discovery = getattr(self, "_portal_discovery_result", None)
@@ -11803,8 +11857,41 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     items = [
                         item for item in items if int(item.id) in getattr(self, "_portal_explicit_file_ids", set())
                     ]
-                    if not items:
-                        continue
+                    grouped_files[space_id] = items
+        guarded_files = [
+            file
+            for space_id, items in grouped_files.items()
+            if space_id in guarded_space_ids and space_id not in public_space_ids
+            for file in items
+        ]
+        decisions = {}
+        if guarded_files:
+            access_service = self.department_file_view_access_service
+            if access_service is None:
+                logger.error("department file access service missing for portal batch")
+            else:
+                try:
+                    decisions = await access_service.evaluate_files(login_user=self.login_user, files=guarded_files)
+                except Exception as exc:
+                    logger.warning("retry department portal access by space after batch failure: error={}", exc)
+                    # 异常时恢复原来的逐库隔离，避免一个库失败影响其他库。
+                    for space_id, items in grouped_files.items():
+                        if not items or space_id not in guarded_space_ids or space_id in public_space_ids:
+                            continue
+                        try:
+                            decisions.update(
+                                await access_service.evaluate_files(login_user=self.login_user, files=items)
+                            )
+                        except Exception as space_exc:
+                            logger.warning(
+                                "skip department portal files after access failure: space_id={} error={}",
+                                space_id,
+                                space_exc,
+                            )
+        visible_files: list[KnowledgeFile] = []
+        for space_id, items in grouped_files.items():
+            if not items:
+                continue
             if space_id in public_space_ids:
                 visible_files.extend(items)
                 _increment_portal_search_perf("fast_path_public_space_count", len(items))
@@ -11815,25 +11902,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     self._portal_file_download_map[int(_pf.id)] = public_can_download
                 continue
             if space_id in guarded_space_ids:
-                access_service = self.department_file_view_access_service
-                if access_service is None:
-                    logger.error(
-                        "department file access service missing: space_id={}",
-                        space_id,
-                    )
-                    continue
-                try:
-                    decisions = await access_service.evaluate_files(
-                        login_user=self.login_user,
-                        files=items,
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "skip department portal files after access failure: space_id={} error={}",
-                        space_id,
-                        exc,
-                    )
-                    continue
                 for file in items:
                     decision = decisions.get(int(file.id))
                     if decision is None or decision.status not in {
@@ -11925,6 +11993,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_ids: list[int],
         *,
         spaces: list[Knowledge] | None = None,
+        search_context=None,
     ) -> set[int]:
         unique_space_ids = list(dict.fromkeys(int(space_id) for space_id in space_ids if int(space_id) > 0))
         if not unique_space_ids:
@@ -11945,7 +12014,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         if unresolved:
             try:
-                scopes = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(list(unresolved))
+                scopes = (await search_context.ensure("scopes", unresolved) if search_context is not None
+                          else await KnowledgeSpaceScopeDao.aget_map_by_space_ids(list(unresolved)))
             except Exception as exc:
                 logger.warning("skip shougang portal public fast path scope lookup: error={}", exc)
                 return public_space_ids
@@ -14322,7 +14392,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_path_map, _ = await self._resolve_shougang_portal_source_paths(items)
         return folder_path_map
 
-    async def _resolve_shougang_portal_source_metadata(self, items: list[dict]) -> dict[int, dict]:
+    async def _resolve_shougang_portal_source_metadata(self, items: list[dict], *, search_context=None) -> dict[int, dict]:
         """Resolve source locations without changing an entry's local placement.
 
         Published files are usually flattened to the root of the public space
@@ -14396,6 +14466,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 explicit_source_file_ids.add(int(source_file_id))
 
         source_files = (
+            await search_context.rows("files", explicit_source_file_ids) if search_context is not None else
             await KnowledgeFileDao.aget_file_by_ids(list(explicit_source_file_ids)) if explicit_source_file_ids else []
         )
         source_file_map = {int(f.id): f for f in source_files}
@@ -14427,7 +14498,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item_id for item_id in current_source_by_item if item_id not in share_source_file_by_item
         ]
         if document_candidate_ids and self.version_repo and self.doc_repo:
-            versions = await self.version_repo.find_primary_versions_by_file_ids(document_candidate_ids)
+            versions = (await search_context.rows("primary_versions", document_candidate_ids)
+                        if search_context is not None else
+                        await self.version_repo.find_primary_versions_by_file_ids(document_candidate_ids))
             version_by_file = {
                 int(version.knowledge_file_id): version
                 for version in versions
@@ -14440,7 +14513,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     if getattr(version, "document_id", None) is not None
                 }
             )
-            documents = await self.doc_repo.find_by_ids(document_ids) if document_ids else []
+            documents = (await search_context.rows("documents", document_ids) if search_context is not None else
+                         await self.doc_repo.find_by_ids(document_ids) if document_ids else [])
             document_map = {
                 int(document.id): document for document in documents if getattr(document, "id", None) is not None
             }
@@ -14493,7 +14567,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         folder_name_map: dict[int, str] = {}
         if folder_ids:
-            folders = await KnowledgeFileDao.aget_file_by_ids(list(folder_ids))
+            folders = (await search_context.rows("files", folder_ids) if search_context is not None else
+                       await KnowledgeFileDao.aget_file_by_ids(list(folder_ids)))
             folder_name_map = {
                 int(f.id): str(f.file_name or "") for f in folders if int(f.file_type) == FileType.DIR.value
             }
@@ -14504,7 +14579,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         source_department_display_name_map: dict[int, str] = {}
         if source_space_ids:
             if shared_source_by_item:
-                space_metadata = await KnowledgeDao.async_get_space_source_metadata_by_ids(list(source_space_ids))
+                space_metadata = (await search_context.source_metadata(source_space_ids)
+                                  if search_context is not None else
+                                  await KnowledgeDao.async_get_space_source_metadata_by_ids(list(source_space_ids)))
                 space_name_map = {
                     int(space_id): str(metadata[0] or space_id) for space_id, metadata in space_metadata.items()
                 }
@@ -14519,7 +14596,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     for space_id, metadata in space_metadata.items()
                 }
             else:
-                source_spaces = await KnowledgeDao.async_get_spaces_by_ids(list(source_space_ids))
+                source_spaces = (await search_context.rows("spaces", source_space_ids) if search_context is not None else
+                                 await KnowledgeDao.async_get_spaces_by_ids(list(source_space_ids)))
                 space_name_map = {int(space.id): str(space.name or space.id) for space in source_spaces}
 
         for item_id, (knowledge_id, file_level_path, file_name) in source_record_by_item.items():
@@ -14555,9 +14633,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         return resolved_metadata
 
-    async def _resolve_shougang_portal_source_paths(self, items: list[dict]) -> tuple[dict[int, str], dict[int, str]]:
+    async def _resolve_shougang_portal_source_paths(self, items: list[dict], *, search_context=None) -> tuple[dict[int, str], dict[int, str]]:
         """Resolve readable source folder and document paths for portal files."""
-        metadata = await self._resolve_shougang_portal_source_metadata(items)
+        metadata = await self._resolve_shougang_portal_source_metadata(
+            items, **({"search_context": search_context} if search_context is not None else {}))
         folder_path_map = {item_id: str(item.get("source_folder_path") or "") for item_id, item in metadata.items()}
         source_path_map = {item_id: str(item.get("source_path") or "") for item_id, item in metadata.items()}
         return folder_path_map, source_path_map
@@ -14961,6 +15040,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _load_document_distribution_info(
         self,
         files: list[KnowledgeFile],
+        *,
+        search_context=None,
     ) -> dict[int, dict]:
         from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
             KnowledgeDocumentEntryResolver,
@@ -14970,12 +15051,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         document_ids = sorted(
             {int(item.reference_document_id) for item in file_items if item.reference_document_id is not None}
         )
-        documents = await self.doc_repo.find_by_ids(document_ids) if self.doc_repo is not None and document_ids else []
+        documents = (list((await search_context.ensure("documents", document_ids)).values()) if search_context is not None
+                     else await self.doc_repo.find_by_ids(document_ids) if self.doc_repo is not None and document_ids else [])
         document_map = {int(document.id): document for document in documents}
         primary_version_ids = sorted(
             {int(document.primary_version_id) for document in documents if document.primary_version_id is not None}
         )
-        primary_versions = (
+        primary_versions = list((await search_context.ensure("versions", primary_version_ids)).values()) if search_context is not None else (
             await self.version_repo.find_by_ids(primary_version_ids)
             if self.version_repo is not None and primary_version_ids
             else []
@@ -14984,7 +15066,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         primary_file_ids = sorted(
             {int(version.knowledge_file_id) for version in primary_versions if version.knowledge_file_id is not None}
         )
-        primary_files = await KnowledgeFileDao.aget_file_by_ids(primary_file_ids) if primary_file_ids else []
+        primary_files = (list((await search_context.ensure("files", primary_file_ids)).values()) if search_context is not None
+                         else await KnowledgeFileDao.aget_file_by_ids(primary_file_ids) if primary_file_ids else [])
         primary_file_map = {int(file.id): file for file in primary_files}
 
         distributed_entry_types = {
@@ -15019,6 +15102,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         distribution_space_ids = sorted(set(original_knowledge_ids) | set(invalid_manager_space_ids))
         original_users, original_spaces = await asyncio.gather(
             UserDao.aget_user_by_ids(original_uploader_ids) if original_uploader_ids else asyncio.sleep(0, result=[]),
+            search_context.rows("spaces", distribution_space_ids) if search_context is not None else
             KnowledgeDao.async_get_spaces_by_ids(distribution_space_ids)
             if distribution_space_ids
             else asyncio.sleep(0, result=[]),
@@ -15030,6 +15114,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         info: dict[int, dict] = {}
         for item in file_items:
             permission_ids = self._entry_permission_ids_by_file.get(int(item.id))
+            if permission_ids is None and search_context is not None:
+                permission_ids = await search_context.display_permissions(self, item)
             if permission_ids is None:
                 permission_ids = await self._get_effective_permission_ids(
                     "knowledge_file",
@@ -15146,7 +15232,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             info[int(item.id)] = item_info
         return info
 
-    async def _find_pending_publish_approval_file_ids(self, res: list[KnowledgeFile]) -> set[int]:
+    async def _find_pending_publish_approval_file_ids(self, res: list[KnowledgeFile], *, search_context=None) -> set[int]:
         """Return ids of files that have at least one active publish approval.
 
         A publish approval instance keys its business resource as
@@ -15162,9 +15248,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         prefix_to_file_ids: dict[str, set[int]] = {}
         doc_by_file: dict[int, int] = {}
         if self.version_repo:
-            primary_versions = await self.version_repo.find_primary_versions_by_file_ids(
-                [int(one.id) for one in file_items]
-            )
+            primary_versions = (await search_context.rows("primary_versions", [int(one.id) for one in file_items])
+                                if search_context is not None else
+                                await self.version_repo.find_primary_versions_by_file_ids([int(one.id) for one in file_items]))
             doc_by_file = {int(version.knowledge_file_id): int(version.document_id) for version in primary_versions}
         for one in file_items:
             document_id = doc_by_file.get(int(one.id))
@@ -15202,6 +15288,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_counts_override: dict[int, dict[str, int]] | None = None,
         enrich_files: bool = True,
         folder_count_mode: str = "deep",
+        search_context=None,
     ) -> list[dict]:
         perf_start = time.perf_counter()
         folder_ids = []
@@ -15226,7 +15313,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     folder_counts = await self._load_folder_stat_counts(folders)
             folder_counts_ms = (time.perf_counter() - folder_counts_start) * 1000
 
-        distribution_info = await self._load_document_distribution_info(res) if enrich_files and file_ids else {}
+        distribution_info = await self._load_document_distribution_info(
+            res, **({"search_context": search_context} if search_context is not None else {}),
+        ) if enrich_files and file_ids else {}
         # 标签属于 canonical current primary；逻辑入口只复用展示，不复制标签关系。
         tag_source_by_file_id = {
             file_id: int(
@@ -15246,7 +15335,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         pending_publish_start = time.perf_counter()
         pending_publish_file_ids = (
-            await self._find_pending_publish_approval_file_ids(res) if enrich_files and file_ids else set()
+            await self._find_pending_publish_approval_file_ids(
+                res, **({"search_context": search_context} if search_context is not None else {}),
+            ) if enrich_files and file_ids else set()
         )
         pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
 
@@ -15297,7 +15388,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if item.get("entry_type") == KnowledgeFileEntryType.SHARE.value and item.get("share_source_file_id")
         ]
         if share_items:
-            source_metadata = await self._resolve_shougang_portal_source_metadata(share_items)
+            source_metadata = await self._resolve_shougang_portal_source_metadata(
+                share_items, **({"search_context": search_context} if search_context is not None else {}))
             for item in share_items:
                 item.update(source_metadata.get(int(item.get("id") or 0), {}))
 

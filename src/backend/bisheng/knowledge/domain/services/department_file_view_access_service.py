@@ -112,6 +112,7 @@ class DepartmentFileViewAccessService:
         permission_resolver: PermissionResolver | None = None,
         approver_resolver: ApproverResolver | None = None,
         persist_stale_grant_revalidation: bool = False,
+        permission_read_context=None,
     ):
         self.grant_repository = grant_repository
         self.session = session
@@ -119,6 +120,7 @@ class DepartmentFileViewAccessService:
         self.permission_resolver = permission_resolver or self._resolve_permission_ids
         self.approver_resolver = approver_resolver or self._resolve_approvers
         self.persist_stale_grant_revalidation = persist_stale_grant_revalidation
+        self.permission_read_context = permission_read_context
 
     @staticmethod
     def classify_applicable_scope(
@@ -176,16 +178,29 @@ class DepartmentFileViewAccessService:
             for resource in valid_resources.values()
             if resource.department_id is not None
         }
-        permission_map = await self.permission_resolver(
-            login_user,
-            normalized_files,
-        )
-        approver_map = await self.approver_resolver(department_ids)
-        grant_map = await self.grant_repository.list_active_by_user_and_files(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            resources=grant_resources,
-        )
+
+        async def load_database_access():
+            # 审批人与授权记录共用会话，不能并发查询该会话。
+            approvers = await self.approver_resolver(department_ids)
+            grants = await self.grant_repository.list_active_by_user_and_files(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                resources=grant_resources,
+            )
+            return approvers, grants
+
+        tasks = [
+            asyncio.create_task(self.permission_resolver(login_user, normalized_files)),
+            asyncio.create_task(load_database_access()),
+        ]
+        try:
+            permission_map, (approver_map, grant_map) = await asyncio.gather(*tasks)
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            # 主异常继续传播；等待同批任务清理完成，避免泄漏后台查询。
+            await asyncio.gather(*tasks, return_exceptions=True)
         if self.persist_stale_grant_revalidation:
             await self._invalidate_stale_grants(
                 tenant_id=tenant_id,
@@ -193,9 +208,18 @@ class DepartmentFileViewAccessService:
                 resources=grant_resources,
             )
 
+        return self.evaluate_prepared(
+            login_user=login_user, files=normalized_files, resources=resources,
+            permission_map=permission_map, approver_map=approver_map, grant_map=grant_map,
+        )
+
+    @staticmethod
+    def evaluate_prepared(*, login_user, files, resources, permission_map, approver_map, grant_map):
+        """Evaluate existing business rules without any database or FGA access."""
+        user_id = int(login_user.user_id)
         is_admin = bool(callable(getattr(login_user, "is_admin", None)) and login_user.is_admin())
         decisions: dict[int, DepartmentFileAccessDecision] = {}
-        for file in normalized_files:
+        for file in files:
             file_id = int(file.id)
             space_id = int(file.knowledge_id)
             resource = resources.get(file_id)
@@ -328,6 +352,13 @@ class DepartmentFileViewAccessService:
         )
         departments = {int(row.id): row for row in department_result.scalars().all()}
 
+        return self.build_resources(files, spaces, scopes, binding_rows_by_space, departments)
+
+    @classmethod
+    def build_resources(cls, files, spaces, scopes, binding_rows_by_space, departments):
+        """预加载资料与原数据库路径共用同一资源有效性规则。"""
+        bindings = {sid: rows[0] for sid, rows in binding_rows_by_space.items() if len(rows) == 1}
+
         resources: dict[int, DepartmentFileResource] = {}
         for file in files:
             file_id = int(file.id)
@@ -335,7 +366,7 @@ class DepartmentFileViewAccessService:
             space = spaces.get(space_id)
             scope = scopes.get(space_id)
             binding = bindings.get(space_id)
-            scope_kind = self.classify_applicable_scope(scope, binding)
+            scope_kind = cls.classify_applicable_scope(scope, binding)
             if scope_kind is None:
                 resources[file_id] = DepartmentFileResource(
                     file=file,
@@ -388,26 +419,20 @@ class DepartmentFileViewAccessService:
         files: list[Any],
     ) -> dict[int, set[str]]:
         file_ids = [int(file.id) for file in files]
-        view_ids, download_ids = await asyncio.gather(
-            FineGrainedPermissionService.filter_object_ids_by_permission_async(
-                login_user,
-                "knowledge_file",
-                file_ids,
-                "view_file",
-            ),
-            FineGrainedPermissionService.filter_object_ids_by_permission_async(
-                login_user,
-                "knowledge_file",
-                file_ids,
-                "download_file",
-            ),
+        lineages = {
+            str(file.id): [("folder" if file.file_type == FileType.DIR.value else "knowledge_file", str(file.id))]
+            + [("folder", part) for part in reversed((getattr(file, "file_level_path", None) or "").split("/")) if part]
+            + [("knowledge_space", str(file.knowledge_id))]
+            for file in files
+        }
+        permissions = await FineGrainedPermissionService.get_effective_permission_ids_batch_async(
+            login_user,
+            "knowledge_file",
+            file_ids,
+            lineages=lineages,
+            **({"read_context": self.permission_read_context} if self.permission_read_context is not None else {}),
         )
-        result = {file_id: set() for file_id in file_ids}
-        for file_id in view_ids:
-            result[int(file_id)].add("view_file")
-        for file_id in download_ids:
-            result[int(file_id)].add("download_file")
-        return result
+        return {file_id: permissions.get(str(file_id), set()) & {"view_file", "download_file"} for file_id in file_ids}
 
     async def _resolve_approvers(
         self,
@@ -421,8 +446,19 @@ class DepartmentFileViewAccessService:
             select(Department).where(Department.id.in_(sorted(department_ids)))
         )
         departments = {int(row.id): row for row in department_result.scalars().all()}
+        hierarchy_by_department = self.department_hierarchy(department_ids, departments)
+        all_hierarchy_ids = {item for ids in hierarchy_by_department.values() for item in ids}
+
+        grants_result = await self.session.execute(
+            select(DepartmentAdminGrant).where(DepartmentAdminGrant.department_id.in_(sorted(all_hierarchy_ids)))
+        )
+        admins_result = await self.session.execute(select(UserRole).where(UserRole.role_id == AdminRole))
+        return self.approvers_from_rows(hierarchy_by_department, grants_result.scalars().all(), admins_result.scalars().all())
+
+    @staticmethod
+    def department_hierarchy(department_ids, departments):
+        """数据库与请求上下文共用审批部门的祖先顺序。"""
         hierarchy_by_department: dict[int, list[int]] = {}
-        all_hierarchy_ids: set[int] = set()
         for department_id in department_ids:
             department = departments.get(department_id)
             hierarchy: list[int] = []
@@ -434,19 +470,17 @@ class DepartmentFileViewAccessService:
             if department_id not in hierarchy:
                 hierarchy.append(department_id)
             hierarchy_by_department[department_id] = hierarchy
-            all_hierarchy_ids.update(hierarchy)
+        return hierarchy_by_department
 
-        grants_result = await self.session.execute(
-            select(DepartmentAdminGrant).where(DepartmentAdminGrant.department_id.in_(sorted(all_hierarchy_ids)))
-        )
-        admins_result = await self.session.execute(select(UserRole).where(UserRole.role_id == AdminRole))
+    @staticmethod
+    def approvers_from_rows(hierarchy_by_department, grants, admins):
         admin_ids_by_department: dict[int, set[int]] = {}
-        for row in grants_result.scalars().all():
+        for row in grants:
             admin_ids_by_department.setdefault(
                 int(row.department_id),
                 set(),
             ).add(int(row.user_id))
-        system_admin_ids = {int(row.user_id) for row in admins_result.scalars().all()}
+        system_admin_ids = {int(row.user_id) for row in admins}
 
         result: dict[int, set[int]] = {}
         for department_id, hierarchy in hierarchy_by_department.items():

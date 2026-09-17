@@ -557,8 +557,9 @@ async def test_portal_qa_inaccessible_space_returns_empty_scope(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("paged", [False, True])
+@pytest.mark.parametrize("deferred", [False, True])
 async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
-    monkeypatch, paged,
+    monkeypatch, paged, deferred,
 ):
     service = svc_mod.KnowledgeSpaceService(
         request=SimpleNamespace(headers={}),
@@ -613,15 +614,16 @@ async def test_portal_qa_folder_scope_filters_to_authorized_department_files(
         file_refs=[],
         max_files=20,
         subtree_page_size=200 if paged else None,
+        defer_authorization=deferred,
     )
 
-    assert result == {7103: [9301]}
-    service._require_permission_id.assert_awaited_once_with(
-        "folder",
-        3001,
-        "view_folder",
-        space_id=7103,
-    )
+    assert result == {7103: [9301, 9302] if deferred else [9301]}
+    if deferred:
+        service._require_read_permission.assert_not_called()
+        service._require_permission_id.assert_not_called()
+        service._filter_visible_child_items.assert_not_called()
+    else:
+        service._require_permission_id.assert_awaited_once_with("folder", 3001, "view_folder", space_id=7103)
 
     if paged:
         assert [call.kwargs["after_id"] for call in service.knowledge_file_repo.list_qa_subtree_page.await_args_list] == [0, 9302]

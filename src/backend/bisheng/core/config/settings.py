@@ -752,6 +752,8 @@ class KnowledgeRetrievalRuntimeConf(BaseModel):
     portal_qa_candidate_limit: int = Field(default=300, ge=1, le=300)
     portal_qa_max_rounds: int = Field(default=3, ge=1, le=3)
     portal_qa_pool_limit: int = Field(default=1600, ge=1, le=1600)
+    portal_qa_cursor_source_limit: int = Field(default=800, ge=1, le=800)
+    portal_qa_cursor_scan_limit: int = Field(default=1600, ge=1, le=1600)
     portal_qa_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
     portal_qa_heartbeat_seconds: float = Field(default=10, gt=0, le=30)
     embedding_timeout_seconds: float = Field(default=15, gt=0, le=300)

@@ -122,6 +122,12 @@ class AsyncRetrievalRuntime:
             )
             self._loaded_collections.add(collection_name)
 
+    def create_search_cursor(self, **search_args: Any) -> Any:
+        from bisheng.knowledge.rag.shared_search_cursor import MilvusSearchCursor
+
+        return MilvusSearchCursor(self.connection_args, search_args, self._milvus_semaphore,
+                                  self.config.milvus_timeout_seconds)
+
     async def search_milvus(
         self,
         *,

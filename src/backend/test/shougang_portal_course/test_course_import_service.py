@@ -6,7 +6,7 @@ from io import BytesIO
 import openpyxl
 import pytest
 
-from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import CatalogCreate
+from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import CatalogCreate, CourseUpdate
 from bisheng.shougang_portal_course.domain.services.catalog_service import (
     PortalCourseCatalogService,
 )
@@ -112,7 +112,14 @@ async def test_import_creates_and_upserts_by_external_id(course_session):
     assert course.catalog_id == leaf.id
     assert course.cover_url == "https://example.com/cover.jpg"
     assert course.enabled is True
+    assert course.show_on_home is True
     assert course.source_updated_at == datetime(2025, 4, 8)
+
+    await PortalCourseService(course_session).update_course(
+        tenant_id=1,
+        course_id=course.id,
+        payload=CourseUpdate(show_on_home=False),
+    )
 
     updated = await service.import_excel(
         tenant_id=1,
@@ -141,6 +148,7 @@ async def test_import_creates_and_upserts_by_external_id(course_session):
     assert courses[0].name == "财务报告进阶"
     assert courses[0].catalog_id is None
     assert "财务" in courses[0].tags_json
+    assert courses[0].show_on_home is False
 
 
 async def test_preview_flags_missing_catalog_and_force_uncategorizes(course_session):
@@ -175,6 +183,7 @@ async def test_preview_flags_missing_catalog_and_force_uncategorizes(course_sess
     )
     assert courses[0].catalog_id is None
     assert courses[0].external_id == "A1"
+    assert courses[0].show_on_home is True
 
 
 async def test_import_rejects_missing_name(course_session):

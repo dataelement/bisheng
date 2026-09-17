@@ -26,6 +26,7 @@ def setup_search(monkeypatch, ids=(10,), *, explicit=None, discoverable=None, gr
         entry.status = 2
         entry.file_type = 1
     resolver, repo, _, _ = make_resolver(entries=entries, documents=[make_document()])
+    repo.find_active_entries_for_documents_any_space = AsyncMock(wraps=repo.find_active_entries_for_documents_any_space)
     owner = object.__new__(KnowledgeSpaceService)
     owner.login_user = SimpleNamespace(tenant_id=TENANT, user_id=42)
     owner.knowledge_file_repo = repo
@@ -44,7 +45,36 @@ def setup_search(monkeypatch, ids=(10,), *, explicit=None, discoverable=None, gr
     )
     owner._get_shougang_portal_public_space_ids = AsyncMock(return_value=set())
     owner._filter_shougang_portal_visible_files = AsyncMock(side_effect=lambda files, **kw: files)
-    spaces = [SimpleNamespace(id=i, tenant_id=TENANT, type=KnowledgeTypeEnum.SPACE.value) for i in ids]
+    spaces = [SimpleNamespace(id=i, name=f"空间{i}", tenant_id=TENANT, type=KnowledgeTypeEnum.SPACE.value) for i in ids]
+    from bisheng.knowledge.domain.repositories.implementations import (
+        portal_search_context_repository_impl as context_repo_module,
+    )
+
+    async def load_context(kind, wanted):
+        if kind == "files":
+            return {int(row.id): row for row in await repo.find_by_ids(wanted)}
+        if kind == "documents":
+            return {int(row.id): row for row in await owner.doc_repo.find_by_ids(wanted)}
+        if kind == "entries":
+            rows = await repo.find_active_entries_for_documents_any_space(tenant_id=TENANT, document_ids=wanted)
+            return {doc: [row for row in rows if row.reference_document_id == doc] for doc in wanted}
+        if kind == "spaces":
+            return {int(space.id): space for space in spaces if int(space.id) in wanted}
+        if kind == "scopes":
+            return {
+                sid: SimpleNamespace(
+                    space_id=sid, level="department", owner_type="department", owner_id=1, tenant_id=TENANT
+                )
+                for sid in wanted
+            }
+        if kind == "bindings":
+            return {sid: [SimpleNamespace(space_id=sid, department_id=1, tenant_id=TENANT)] for sid in wanted}
+        if kind == "departments":
+            return {sid: SimpleNamespace(id=sid, status="active", is_deleted=0, tenant_id=TENANT) for sid in wanted}
+        return {}
+
+    context_repo = SimpleNamespace(load=AsyncMock(side_effect=load_context))
+    monkeypatch.setattr(context_repo_module, "PortalSearchContextRepositoryImpl", lambda user_id: context_repo)
     snapshot = SimpleNamespace(
         tenant_id=TENANT,
         shared_enabled=True,
@@ -86,7 +116,30 @@ async def test_whole_scope_queries_once_per_backend(monkeypatch, count):
     assert reader.search_es.call_args.kwargs["limit"] == 240
     assert reader.search_milvus.call_args.kwargs["limit"] == 72
     runtime.embed_query.assert_awaited_once()
-    assert owner.knowledge_file_repo.mapping_calls
+    owner.knowledge_file_repo.find_active_entries_for_documents_any_space.assert_awaited_once()
+
+
+async def test_overlapping_lanes_load_mapping_once_and_keep_lane_text(monkeypatch):
+    engine, owner, reader, _ = setup_search(monkeypatch)
+    owner.doc_repo.find_by_ids = AsyncMock(wraps=owner.doc_repo.find_by_ids)
+    from dataclasses import replace
+
+    reader.search_es.return_value = [replace(hit(), text="ES 正文")]
+    reader.search_milvus.return_value = [replace(hit(), text="向量正文")]
+    result = await engine.retrieve(tag_file_ids=None)
+    assert {(c.retriever, c.content) for c in result.chunks} == {("es", "ES 正文"), ("vector", "向量正文")}
+    owner.doc_repo.find_by_ids.assert_awaited_once()
+    owner.knowledge_file_repo.find_active_entries_for_documents_any_space.assert_awaited_once()
+
+
+async def test_shared_mapping_does_not_accept_stale_lane_via_fresh_lane(monkeypatch):
+    from dataclasses import replace
+
+    engine, _, reader, _ = setup_search(monkeypatch)
+    reader.search_es.return_value = [replace(hit(), text="旧正文", content_generation=999)]
+    reader.search_milvus.return_value = [replace(hit(), text="当前正文")]
+    result = await engine.retrieve(tag_file_ids=None)
+    assert [(chunk.retriever, chunk.content) for chunk in result.chunks] == [("vector", "当前正文")]
 
 
 async def test_explicit_grant_and_metadata_are_not_whole_space_access(monkeypatch):
@@ -115,21 +168,45 @@ async def test_tag_selects_matching_shared_entry_not_out_of_scope_manager(monkey
     assert {chunk.file_id for chunk in result.chunks} == {202}
 
 
-@pytest.mark.parametrize("reason", ["denied", "old_version", "generation", "unready", "deleted"])
+@pytest.mark.parametrize("reason", ["denied", "old_version", "generation", "content_generation", "deleted"])
 async def test_invalid_or_unauthorized_content_dropped(monkeypatch, reason):
     entry = make_entry(101, space_id=10, entry_type="share")
     engine, owner, reader, _ = setup_search(monkeypatch, entries=[entry])
+    # 放宽同步状态也不能接受实际过期命中或无权内容。
+    entry.projection_status = "pending"
     if reason == "denied":
         owner._portal_file_access_decision_map[101] = SimpleNamespace(status="approval_required")
     elif reason == "old_version":
         reader.search_es.return_value = reader.search_milvus.return_value = [hit(version_id=999)]
     elif reason == "generation":
         reader.search_es.return_value = reader.search_milvus.return_value = [hit(membership_generation=99)]
-    elif reason == "unready":
-        entry.projection_status = "pending"
+    elif reason == "content_generation":
+        reader.search_es.return_value = reader.search_milvus.return_value = [hit(content_generation=99)]
     else:
         engine.owner.doc_repo.documents[0].lifecycle_status = "deleted"
     assert (await engine.retrieve(tag_file_ids=None)).chunks == []
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+@pytest.mark.parametrize("lag", ["pending", "failed", "entry", "content"])
+async def test_current_hits_survive_projection_progress_lag(monkeypatch, caplog, explicit, lag):
+    entry = make_entry(101, space_id=10, entry_type="share")
+    engine, _, _, _ = setup_search(
+        monkeypatch,
+        entries=[entry],
+        explicit=[] if explicit else [10],
+        grants={101: 10} if explicit else {},
+    )
+    if lag in {"pending", "failed"}:
+        entry.projection_status = lag
+    elif lag == "entry":
+        entry.applied_entry_generation = 0
+    else:
+        entry.applied_content_generation = 0
+    result = await engine.retrieve(tag_file_ids=None)
+    assert {chunk.file_id for chunk in result.chunks} == {101}
+    assert {chunk.retriever for chunk in result.chunks} == {"es", "vector"}
+    assert "projection progress ignored for current hit" in caplog.text
 
 
 async def test_empty_tag_scope_does_not_query_all(monkeypatch):
@@ -193,31 +270,31 @@ async def test_shared_service_integration_rechecks_before_external_content(monke
     owner._filter_shougang_portal_visible_files = KnowledgeSpaceService._filter_shougang_portal_visible_files.__get__(
         owner
     )
+    current_decisions = {}
     owner.department_file_view_access_service = SimpleNamespace(
         evaluate_files=AsyncMock(
             side_effect=lambda **kw: {
-                int(entry.id): owner._portal_file_access_decision_map.get(
-                    int(entry.id), SimpleNamespace(status="allowed", can_download=False)
+                int(entry.id): current_decisions.get(
+                    int(entry.id), SimpleNamespace(status="allowed", can_download=False, source="grant")
                 )
                 for entry in kw["files"]
             }
         )
     )
     engine.req.retrieval_profile = "portal_global_shared"
+    engine.req.rerank_model_id = "1"
     monkeypatch.setattr(subject, "get_async_retrieval_runtime", AsyncMock(return_value=runtime))
     monkeypatch.setattr(subject, "SharedSpaceStorageReader", lambda **kw: reader)
     monkeypatch.setattr(subject, "aresolve_space_shared_routing", AsyncMock(return_value=engine.snapshot))
     owner._recall_portal_configured_search_sources = AsyncMock(side_effect=AssertionError("不得读旧索引"))
     owner._filter_and_dedupe_portal_search_chunks = AsyncMock(side_effect=AssertionError("不得套旧入口代次"))
     owner._search_portal_metadata_files = AsyncMock(return_value=[])
-    entry = (await owner.knowledge_file_repo.find_by_ids([101]))[0]
 
     async def collect(**kwargs):
+        result = await KnowledgeSpaceService._collect_visible_shougang_portal_semantic_candidates(owner, **kwargs)
         if revoke_at == "rerank":
-            owner._portal_file_access_decision_map[101] = SimpleNamespace(
-                status="approval_required", can_download=False
-            )
-        return kwargs["ranked_candidates"], {101: entry}
+            current_decisions[101] = SimpleNamespace(status="approval_required", can_download=False)
+        return result
 
     async def rerank(**kwargs):
         if revoke_at == "rerank":
@@ -226,17 +303,22 @@ async def test_shared_service_integration_rechecks_before_external_content(monke
             assert {c.file_id for c in kwargs["candidates"]} == {101}
             assert all(c.chunks for c in kwargs["candidates"])
         if revoke_at == "response":
-            owner._portal_file_access_decision_map[101] = SimpleNamespace(
-                status="approval_required", can_download=False
-            )
+            current_decisions[101] = SimpleNamespace(status="approval_required", can_download=False)
         return kwargs["candidates"]
 
     owner._collect_visible_shougang_portal_semantic_candidates = AsyncMock(side_effect=collect)
     owner._rerank_shougang_portal_file_candidates = AsyncMock(side_effect=rerank)
-    owner._map_shougang_portal_candidate_items = AsyncMock(return_value=[])
-    await owner._semantic_search_shougang_portal_files(req=engine.req, spaces=engine.spaces, tag_file_ids=None)
+    owner._handle_file_folder_extra_info = AsyncMock(
+        side_effect=lambda files, **kw: [file.model_dump() for file in files]
+    )
+    owner._resolve_shougang_portal_source_paths = AsyncMock(return_value=({}, {}))
+    owner._map_shougang_portal_candidate_items = AsyncMock(wraps=owner._map_shougang_portal_candidate_items)
+    response = await owner._semantic_search_shougang_portal_files(
+        req=engine.req, spaces=engine.spaces, tag_file_ids=None
+    )
     returned = owner._map_shougang_portal_candidate_items.call_args.kwargs["candidates"]
     assert len(returned) == (1 if revoke_at is None else 0)
+    assert len(response["data"]) == len(returned)
     owner._recall_portal_configured_search_sources.assert_not_awaited()
     reader.search_es.assert_awaited_once()
 

@@ -1431,6 +1431,44 @@ class SharedSpaceStorageReader:
             )
         return hits
 
+    async def open_milvus_cursor(self, filter_: Any, *, vector: Sequence[float], batch_size: int, limit: int) -> Any:
+        from bisheng.knowledge.rag.shared_search_cursor import MappedSearchCursor
+
+        await self._assert_readable()
+        runtime = await self._get_milvus_runtime()
+        cursor = runtime.create_search_cursor(
+            collection_name=self.collection_name, data=[list(vector)],
+            batch_size=batch_size, limit=limit, filter=self._full_expr(filter_),
+            anns_field=SHARED_MILVUS_VECTOR_FIELD,
+            search_params={"metric_type": "L2", "params": {"ef": max(64, limit + 1)}},
+            output_fields=list(_READER_OUTPUT_FIELDS),
+        )
+        return MappedSearchCursor(cursor, self._to_hits, self._assert_readable)
+
+    async def open_es_cursor(self, filter_: Any, *, query_text: str, batch_size: int, limit: int) -> Any:
+        from bisheng.knowledge.rag.shared_search_cursor import ElasticsearchSearchCursor, MappedSearchCursor
+
+        snapshot = await self._assert_readable()
+        client = await self._get_es_client()
+        def convert(rows):
+            hits = []
+            for row in rows:
+                source = row.get("_source", {})
+                meta = source.get("metadata", {})
+                hits.append(CanonicalChunkHit(
+                    canonical_document_id=CanonicalDocumentId(int(meta["canonical_document_id"])),
+                    canonical_version_id=CanonicalVersionId(int(meta["canonical_version_id"])),
+                    chunk_index=int(meta.get("chunk_index", 0)), score=float(row.get("_score") or 0),
+                    text=source.get("text"), content_generation=int(meta.get("content_generation", 0)),
+                    membership_generation=int(meta.get("membership_generation", 0)),
+                ))
+            return hits
+        cursor = ElasticsearchSearchCursor(
+            client, snapshot.index_name or shared_index_name(self.tenant_id),
+            {"bool": {"must": [{"match": {"text": query_text}}],
+                      "filter": self._es_bool_filter(filter_)}}, batch_size, limit, convert)
+        return MappedSearchCursor(cursor, lambda rows: rows, self._assert_readable)
+
     async def search_milvus(
         self,
         filter_: Any,

@@ -14,6 +14,8 @@ from bisheng.knowledge.domain.contracts.qa_retrieval import (
 
 
 class UnifiedSharedRetriever:
+    """两路固定批量续取；同一请求内保留排名和已授权候选。"""
+
     def __init__(
         self,
         *,
@@ -21,156 +23,260 @@ class UnifiedSharedRetriever:
         reader,
         candidate_limit=300,
         initial_limit=200,
-        max_rounds=3,
+        max_rounds=None,
         pool_limit=1600,
         search_timeout=30,
         batch_authorizer=None,
+        source_limit=800,
+        scan_limit=1600,
+        context=None,
     ):
-        self.resolver = resolver
-        self.reader = reader
-        self.candidate_limit = candidate_limit
-        self.initial_limit = initial_limit
-        self.max_rounds = max_rounds
-        self.pool_limit = pool_limit
-        self.search_timeout = search_timeout
+        self.resolver, self.reader = resolver, reader
+        self.candidate_limit, self.initial_limit = candidate_limit, initial_limit
+        self.pool_limit, self.search_timeout = pool_limit, search_timeout
         self.batch_authorizer = batch_authorizer
+        self.source_limit, self.scan_limit = source_limit, scan_limit
+        self.context = context
 
-    async def retrieve(self, *, scope, query, vector, backend_filter=None):
+    async def retrieve(self, *, scope, query, vector, backend_filter=None, finalize=None):
+        from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError
+
         result = QaRetrievalResult()
-        started = time.monotonic()
+        result.scope_complete = False
         backend_filter = backend_filter or self.resolver.build_backend_filter(scope)
-        for round_index in range(self.max_rounds):
-            # 每轮替换 Top-K 快照，不累加已被新结果挤出的旧片段。
-            ranks = [{}, {}]
-            raw = {}
-            limit = min(self.initial_limit * (2**round_index), 800)
+        cursors, exhausted, failed = [None, None], [False, False], [False, False]
+        stagnant_pages = [0, 0]
+        ranks, counts, raw, mapped, rejected = [{}, {}], [0, 0], {}, {}, set()
+        names = ["vector", "keyword"]
 
-            async def timed_search(name, call):
-                search_started = time.monotonic()
+        async def fetch(source, size):
+            if cursors[source] is None:
+                if source == 0:
+                    if vector is None:
+                        raise RuntimeError("embedding unavailable")
+                    cursors[source] = await self.reader.open_milvus_cursor(
+                        filter_=backend_filter, vector=vector, batch_size=size, limit=self.source_limit
+                    )
+                else:
+                    cursors[source] = await self.reader.open_es_cursor(
+                        filter_=backend_filter, query_text=query, batch_size=size, limit=self.source_limit
+                    )
+            return await cursors[source].next_batch()
+
+        try:
+            while True:
+                remaining = self.scan_limit - sum(counts)
+                active = [i for i in range(2) if not exhausted[i] and not failed[i] and counts[i] < self.source_limit]
+                calls = []
+                sources = []
+                # 每路固定批量，剩余预算不足整批时不发起新的读取。
+                for i in active:
+                    size = min(self.initial_limit, self.source_limit - counts[i])
+                    if remaining < size:
+                        continue
+                    remaining -= size
+                    sources.append(i)
+                    calls.append(asyncio.create_task(asyncio.wait_for(fetch(i, size), self.search_timeout)))
+                if not calls:
+                    break
+                batch_started = time.monotonic()
                 try:
-                    return await asyncio.wait_for(call, self.search_timeout)
+                    responses = await asyncio.gather(*calls, return_exceptions=True)
                 finally:
+                    for task in calls:
+                        if not task.done():
+                            task.cancel()
+                    await asyncio.gather(*calls, return_exceptions=True)
+                logger.info(
+                    "portal_qa_stage stage=cursor_read elapsed_ms={} sources={}",
+                    int((time.monotonic() - batch_started) * 1000),
+                    len(sources),
+                )
+                new_hits = {}
+                for i, response in zip(sources, responses):
+                    if isinstance(response, (asyncio.CancelledError, SharedStorageContractError)):
+                        raise response
+                    if isinstance(response, BaseException):
+                        failed[i] = True
+                        result.degraded_reasons.append(names[i] + "_unavailable")
+                        continue
+                    if not response:
+                        exhausted[i] = True
+                        continue
+                    if len(response) > min(self.initial_limit, self.source_limit - counts[i]):
+                        raise RuntimeError("retrieval cursor exceeded batch budget")
+                    previous_count = counts[i]
+                    counts[i] += len(response)
+                    progress = False
+                    for rank, hit in enumerate(response, previous_count + 1):
+                        key = canonical_key(hit)
+                        if key not in ranks[i]:
+                            ranks[i][key] = rank
+                            progress = True
+                        if key not in raw and len(raw) < self.pool_limit:
+                            raw[key] = hit
+                            new_hits[key] = hit
+                    stagnant_pages[i] = 0 if progress else stagnant_pages[i] + 1
+                    if stagnant_pages[i] >= 2:
+                        failed[i] = True
+                        result.degraded_reasons.append(names[i] + "_cursor_no_progress")
+                if all(failed) and not raw:
+                    raise QaRetrievalError(QaRetrievalErrorKind.BACKENDS, "retrieval backends unavailable")
+                if new_hits:
+                    authorization_started = time.monotonic()
+                    accepted = await self.resolver.map_and_authorize_hits(
+                        scope,
+                        list(new_hits.values()),
+                        entry_batch_checker=self.batch_authorizer,
+                        strict_explicit=True,
+                        skip_unready=True,
+                        **({"context": self.context} if self.context is not None else {}),
+                    )
                     logger.info(
-                        "portal_qa_stage stage={} elapsed_ms={} limit={}",
-                        name,
-                        int((time.monotonic() - search_started) * 1000),
-                        limit,
+                        "portal_qa_stage stage=authorize elapsed_ms={} raw={} dropped={}",
+                        int((time.monotonic() - authorization_started) * 1000),
+                        len(new_hits),
+                        len(new_hits) - len(accepted),
                     )
-
-            async def dense():
-                if vector is None:
-                    raise RuntimeError("embedding unavailable")
-                return await self.reader.search_milvus(filter_=backend_filter, vector=vector, limit=limit)
-
-            calls = [
-                asyncio.create_task(timed_search("vector", dense())),
-                asyncio.create_task(
-                    timed_search(
-                        "keyword", self.reader.search_es(filter_=backend_filter, query_text=query, limit=limit)
+                    mapped.update((canonical_key(hit), hit) for hit in accepted)
+                ordered = sorted(
+                    (key for key in mapped if key not in rejected),
+                    key=lambda key: (-sum(1 / (60 + source[key]) for source in ranks if key in source), key),
+                )
+                selected = ordered[: self.candidate_limit]
+                result.hits = [mapped[key] for key in selected]
+                result.raw_hits = {key: raw[key] for key in ordered}
+                result.rounds += 1
+                enough = len(selected) >= self.candidate_limit
+                done = all(exhausted[i] or failed[i] or counts[i] >= self.source_limit for i in range(2))
+                done = done or sum(counts) >= self.scan_limit or len(raw) >= self.pool_limit
+                if not done:
+                    done = not any(
+                        not exhausted[i]
+                        and not failed[i]
+                        and counts[i] < self.source_limit
+                        and self.scan_limit - sum(counts) >= min(self.initial_limit, self.source_limit - counts[i])
+                        for i in range(2)
                     )
-                ),
-            ]
-            try:
-                responses = await asyncio.gather(*calls, return_exceptions=True)
-            finally:
-                for task in calls:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*calls, return_exceptions=True)
-            from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError
+                result.scope_complete = (enough or all(exhausted)) and not result.degraded_reasons
+                logger.info(
+                    "portal_qa_cursor batch={} scanned={} unique={} authorized={}",
+                    result.rounds,
+                    sum(counts),
+                    len(raw),
+                    len(selected),
+                )
+                if enough or done:
+                    if finalize and result.hits:
+                        changed = False
+                        while result.hits:
+                            previous = {canonical_key(hit) for hit in result.hits}
+                            denied = set(await finalize(result)) & previous
+                            if not denied:
+                                break
+                            changed = True
+                            rejected.update(denied)
+                            # 先使用当前候选池补位，避免还有备用候选时额外读取存储。
+                            selected = [key for key in ordered if key not in rejected][: self.candidate_limit]
+                            result.hits = [mapped[key] for key in selected]
+                            if not (set(selected) - previous):
+                                break
+                        if changed and len(result.hits) < self.candidate_limit:
+                            result.scope_complete = False
+                            if not done:
+                                continue
+                            result.degraded_reasons.append("final_scope_changed")
+                    break
+            if not result.scope_complete and not result.hits:
+                raise QaRetrievalError(
+                    QaRetrievalErrorKind.INCOMPLETE,
+                    "retrieval incomplete without authorized candidates or scope changed",
+                )
+            return result
+        finally:
+            from bisheng.knowledge.rag.shared_search_cursor import finish_inflight
 
-            for response in responses:
-                if isinstance(response, (asyncio.CancelledError, SharedStorageContractError)):
-                    raise response
-            if all(isinstance(response, BaseException) for response in responses):
-                raise QaRetrievalError(QaRetrievalErrorKind.BACKENDS, "retrieval backends unavailable")
-            exhausted = True
-            for source, response in enumerate(responses):
-                if isinstance(response, BaseException):
-                    reason = "vector_unavailable" if source == 0 else "keyword_unavailable"
-                    if reason not in result.degraded_reasons:
-                        result.degraded_reasons.append(reason)
-                    continue
-                exhausted = exhausted and len(response) < limit
-                for rank, hit in enumerate(response, 1):
-                    key = canonical_key(hit)
-                    raw[key] = hit
-                    ranks[source][key] = min(rank, ranks[source].get(key, rank))
-            scores = {key: sum(1 / (60 + rank_list[key]) for rank_list in ranks if key in rank_list) for key in raw}
-            ordered = sorted(raw, key=lambda key: (-scores[key], key))
-            truncated = len(ordered) > self.pool_limit
-            ordered = ordered[: self.pool_limit]
-            raw = {key: raw[key] for key in ordered}
-            hits = [raw[key] for key in ordered]
-            authorization_started = time.monotonic()
-            mapped = await self.resolver.map_and_authorize_hits(
-                scope,
-                hits,
-                entry_batch_checker=self.batch_authorizer,
-                strict_explicit=True,
-                skip_unready=True,
-            )
-            logger.info(
-                "portal_qa_stage stage=authorize elapsed_ms={} raw={} dropped={}",
-                int((time.monotonic() - authorization_started) * 1000),
-                len(hits),
-                len(hits) - len(mapped),
-            )
-            mapped_by_key = {canonical_key(hit): hit for hit in mapped}
-            result.hits = [mapped_by_key[key] for key in ordered if key in mapped_by_key][: self.candidate_limit]
-            result.raw_hits = {key: raw[key] for key in ordered if key in mapped_by_key}
-            result.rounds = round_index + 1
-            enough = len(result.hits) >= self.candidate_limit
-            result.scope_complete = (enough or exhausted) and not truncated and not result.degraded_reasons
-            logger.info(
-                "portal_qa_recall round={} spaces={} raw={} authorized={} elapsed_ms={}",
-                result.rounds,
-                len(getattr(scope, "requested_space_ids", ())),
-                len(hits),
-                len(mapped),
-                int((time.monotonic() - started) * 1000),
-            )
-            if enough or exhausted or truncated:
-                break
-        if not result.scope_complete and not result.hits:
-            raise QaRetrievalError(
-                QaRetrievalErrorKind.INCOMPLETE, "retrieval incomplete without authorized candidates"
-            )
-        return result
+            async def close_all():
+                for cursor in cursors:
+                    if cursor is None:
+                        continue
+                    try:
+                        await cursor.close()
+                    except Exception:
+                        logger.exception("portal_qa_cursor_close_failed")
+
+            await finish_inflight(asyncio.create_task(close_all()))
 
 
 class PortalEntryAuthorizer:
     """一次授权阶段内按唯一入口复用决策，最终阶段使用新实例。"""
 
-    def __init__(self, owner):
+    def __init__(self, owner, *, space_repository=None, context=None):
         self.owner = owner
+        self.context = context
         self.decisions = {}
+        self.space_repository = space_repository
+        self.spaces = {}
 
     async def __call__(self, entries):
+        if self.context is not None:
+            await self.context.prepare_entries(self.owner, entries)
+            return self.context.evaluate_entries(entries)
+
         from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNotFoundError
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
         from bisheng.knowledge.domain.services.department_file_view_access_service import DepartmentFileAccessStatus
 
         pending = [entry for entry in entries if int(entry.id) not in self.decisions]
-        valid = [entry for entry in pending if int(entry.status) == KnowledgeFileStatus.SUCCESS.value]
+        valid = [
+            entry
+            for entry in pending
+            if int(entry.status) == KnowledgeFileStatus.SUCCESS.value and getattr(entry, "deleted_at", None) is None
+        ]
         for entry in pending:
             self.decisions[int(entry.id)] = False
+        if self.space_repository is not None and valid:
+            missing = {int(entry.knowledge_id) for entry in valid} - self.spaces.keys()
+            if missing:
+                self.spaces.update(dict.fromkeys(missing))
+                rows = await self.space_repository.find_qa_spaces_by_ids(list(missing))
+                for space, level in rows:
+                    if int(space.tenant_id or 1) == int(self.owner.login_user.tenant_id):
+                        self.spaces[int(space.id)] = level or "private"
+            other = []
+            for entry in valid:
+                if int(getattr(entry, "tenant_id", self.owner.login_user.tenant_id) or 1) != int(
+                    self.owner.login_user.tenant_id
+                ):
+                    continue
+                level = self.spaces.get(int(entry.knowledge_id))
+                if level == "public":
+                    self.decisions[int(entry.id)] = True
+                elif level is not None:
+                    other.append(entry)
+            valid = other
         if valid:
             access = self.owner.department_file_view_access_service
             if access is None:
                 raise RuntimeError("portal authorization service unavailable")
             decisions = await access.evaluate_files(login_user=self.owner.login_user, files=valid)
-            # 保留普通文件原有 can_read 与 view_file 两层校验，只按唯一入口调用。
+            ordinary = []
             for entry in valid:
                 decision = decisions[int(entry.id)]
                 if decision.status == DepartmentFileAccessStatus.ALLOWED:
                     self.decisions[int(entry.id)] = True
                 elif decision.status == DepartmentFileAccessStatus.NOT_APPLICABLE:
+                    if self.space_repository is not None:
+                        ordinary.append(entry)
+                        continue
                     try:
                         await self.owner._require_file_view_permission(int(entry.knowledge_id), int(entry.id))
                     except (SpacePermissionDeniedError, SpaceFileNotFoundError):
                         continue
                     self.decisions[int(entry.id)] = True
+            if ordinary:
+                permissions = await self.owner._permission_service().batch_qa_file_view_permissions(ordinary)
+                self.decisions.update({int(entry.id): permissions.get(int(entry.id), False) for entry in ordinary})
         logger.info("portal_qa_authorize unique_entries={} new_entries={}", len(self.decisions), len(pending))
         return {int(entry.id): self.decisions[int(entry.id)] for entry in entries}
 
@@ -180,6 +286,10 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
     from contextlib import asynccontextmanager
     from langchain_core.documents import Document
     from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.portal_search_context_repository_impl import (
+        PortalSearchContextRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.portal_qa_context import PortalQaContext
     from bisheng.knowledge.domain.contracts.retrieval_scope import EntryRef
     from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
         KnowledgeFileRepositoryImpl,
@@ -238,7 +348,7 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
     )
 
     @asynccontextmanager
-    async def resources():
+    async def resources(phase="candidates"):
         async with get_async_db_session() as session:
             owner = KnowledgeSpaceChatService(request, user)
             owner.department_file_view_access_service = DepartmentFileViewAccessService(
@@ -248,8 +358,7 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
             )
 
             async def space_read(tenant, uid, sid):
-                await owner._permission_service()._require_read_permission(int(sid))
-                return True
+                raise RuntimeError("portal QA must authorize candidates after retrieval")
 
             async def unused_entry_check(*args):
                 raise RuntimeError("batch entry authorization required")
@@ -279,9 +388,24 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
                 tenant_id=int(user.tenant_id),
                 space_ids=list(plan.space_ids),
                 entry_refs=refs,
+                authorize_spaces=False,
             )
             logger.info("portal_qa_stage stage=scope elapsed_ms={}", int((time.monotonic() - scope_started) * 1000))
-            yield resolver, scope, PortalEntryAuthorizer(owner)
+            context = PortalQaContext(
+                tenant_id=int(user.tenant_id), user_id=int(user.user_id),
+                routing_version=int(snapshot.routing_version), space_ids=list(plan.space_ids),
+                repository=PortalSearchContextRepositoryImpl(user.user_id, session_factory=get_async_db_session),
+                phase=phase,
+            )
+            context.bind_scope(scope)
+            if phase == "candidates":
+                context.seed("spaces", {int(space.id): space for space in spaces})
+            try:
+                yield resolver, scope, PortalEntryAuthorizer(owner, context=context)
+            finally:
+                from bisheng.knowledge.rag.shared_search_cursor import finish_inflight
+
+                await finish_inflight(asyncio.create_task(context.close()))
 
     runtime = await get_async_retrieval_runtime()
     vector = None
@@ -303,20 +427,6 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
         es_client=await get_es_connection(),
         expected_routing_version=snapshot.routing_version,
     )
-    async with resources() as (resolver, scope, authorizer):
-        ids, versions = await resolver.resolve_explicit_canonical_constraints(scope)
-        query_filter = resolver.build_backend_filter(scope, canonical_document_ids=ids, canonical_version_ids=versions)
-        engine = UnifiedSharedRetriever(
-            resolver=resolver,
-            reader=reader,
-            candidate_limit=config.portal_qa_candidate_limit,
-            initial_limit=config.portal_qa_initial_limit,
-            max_rounds=config.portal_qa_max_rounds,
-            pool_limit=config.portal_qa_pool_limit,
-            search_timeout=max(config.milvus_timeout_seconds, config.elasticsearch_timeout_seconds),
-            batch_authorizer=authorizer,
-        )
-        result = await engine.retrieve(scope=scope, query=query, vector=vector, backend_filter=query_filter)
 
     def to_document(hit):
         return Document(
@@ -333,47 +443,68 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
             },
         )
 
-    documents = [to_document(hit) for hit in result.hits]
-    phase_started = time.monotonic()
-    documents = await WorkStationService._rerank_retrieval_candidates(
-        question=query, candidates=documents, login_user=user, degraded_reasons=result.degraded_reasons
-    )
-    logger.info(
-        "portal_qa_stage stage=rerank elapsed_ms={} candidates={}",
-        int((time.monotonic() - phase_started) * 1000),
-        len(documents),
-    )
-    # 在有界排序候选内复核并补齐，失效的前序片段不挤占上下文预算。
-    keys = [
-        (
-            int(doc.metadata["canonical_document_id"]),
-            int(doc.metadata["canonical_version_id"]),
-            int(doc.metadata["chunk_index"]),
+    final_documents = []
+
+    async def finalize(result):
+        nonlocal final_documents
+        documents = [to_document(hit) for hit in result.hits]
+        phase_started = time.monotonic()
+        documents = await WorkStationService._rerank_retrieval_candidates(
+            question=query, candidates=documents, login_user=user, degraded_reasons=result.degraded_reasons
         )
-        for doc in documents
-    ]
-    phase_started = time.monotonic()
+        logger.info(
+            "portal_qa_stage stage=rerank elapsed_ms={} candidates={}",
+            int((time.monotonic() - phase_started) * 1000),
+            len(documents),
+        )
+        # 在有界排序候选内复核并补齐，失效的前序片段不挤占上下文预算。
+        keys = [
+            (
+                int(doc.metadata["canonical_document_id"]),
+                int(doc.metadata["canonical_version_id"]),
+                int(doc.metadata["chunk_index"]),
+            )
+            for doc in documents
+        ]
+        phase_started = time.monotonic()
+        async with resources("final") as (resolver, scope, authorizer):
+            checked = await resolver.map_and_authorize_hits(
+                scope,
+                [result.raw_hits[key] for key in keys],
+                entry_batch_checker=authorizer,
+                strict_explicit=True,
+                skip_unready=True,
+                context=authorizer.context,
+            )
+        logger.info(
+            "portal_qa_stage stage=final_check elapsed_ms={} candidates={} retained={}",
+            int((time.monotonic() - phase_started) * 1000),
+            len(keys),
+            len(checked),
+        )
+        mapped = {canonical_key(hit): hit for hit in checked}
+        final_documents = [to_document(mapped[key]) for key in keys if key in mapped]
+        return set(keys) - set(mapped)
+
     async with resources() as (resolver, scope, authorizer):
-        checked = await resolver.map_and_authorize_hits(
-            scope,
-            [result.raw_hits[key] for key in keys],
-            entry_batch_checker=authorizer,
-            strict_explicit=True,
-            skip_unready=True,
+        ids, versions = await resolver.resolve_explicit_canonical_constraints(scope)
+        query_filter = resolver.build_backend_filter(scope, canonical_document_ids=ids, canonical_version_ids=versions)
+        engine = UnifiedSharedRetriever(
+            resolver=resolver,
+            reader=reader,
+            candidate_limit=config.portal_qa_candidate_limit,
+            initial_limit=config.portal_qa_initial_limit,
+            source_limit=config.portal_qa_cursor_source_limit,
+            scan_limit=config.portal_qa_cursor_scan_limit,
+            pool_limit=config.portal_qa_pool_limit,
+            search_timeout=max(config.milvus_timeout_seconds, config.elasticsearch_timeout_seconds),
+            batch_authorizer=authorizer,
+            context=authorizer.context,
         )
-    logger.info(
-        "portal_qa_stage stage=final_check elapsed_ms={} candidates={} retained={}",
-        int((time.monotonic() - phase_started) * 1000),
-        len(keys),
-        len(checked),
-    )
-    mapped = {canonical_key(hit): hit for hit in checked}
-    if len(mapped) < len(keys):
-        result.scope_complete = False
-        result.degraded_reasons.append("final_scope_changed")
-    if keys and not mapped:
-        raise QaRetrievalError(QaRetrievalErrorKind.SCOPE_CHANGED, "authorized retrieval scope changed")
-    final_documents = [to_document(mapped[key]) for key in keys if key in mapped]
+        result = await engine.retrieve(
+            scope=scope, query=query, vector=vector, backend_filter=query_filter, finalize=finalize
+        )
+
     _, final_documents = WorkStationService._truncate_ranked_documents_by_chars(final_documents, max_chars)
     return final_documents, result
 
@@ -415,7 +546,8 @@ async def build_portal_qa_plan(*, request, user, knowledge_base, department_acce
         service.doc_repo = KnowledgeDocumentRepositoryImpl(session)
 
         async def permission_loader(fid, sid):
-            return await service._get_effective_permission_ids("knowledge_file", fid, space_id=sid)
+            # 此处只解析 durable reference，授权在候选阶段统一进行。
+            return set()
 
         entry_resolver = KnowledgeDocumentEntryResolver(
             document_repository=service.doc_repo,
@@ -435,5 +567,6 @@ async def build_portal_qa_plan(*, request, user, knowledge_base, department_acce
             file_refs=list(scope.file_refs or []),
             max_files=None,
             subtree_page_size=200,
+            defer_authorization=True,
         )
     return QaRetrievalPlan(tuple(sorted(filters)), filters)

@@ -107,3 +107,16 @@ class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepos
             )
         )
         return result.scalar_one_or_none()
+
+    async def find_qa_spaces_by_ids(self, space_ids: list[int]) -> list[tuple[Knowledge, str | None]]:
+        rows = []
+        ids = sorted(set(space_ids))
+        for start in range(0, len(ids), 500):
+            result = await self.session.execute(
+                select(Knowledge, KnowledgeSpaceScope.level)
+                .outerjoin(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+                .where(col(Knowledge.id).in_(ids[start:start + 500]),
+                       Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                       Knowledge.state != KnowledgeState.DELETING.value))
+            rows.extend((row[0], getattr(row[1], "value", row[1])) for row in result.all())
+        return rows

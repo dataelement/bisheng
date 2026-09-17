@@ -24,8 +24,9 @@ from test.knowledge.test_knowledge_retrieval_scope_resolver import (
 async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkeypatch, revoke):
     from bisheng.core import database
     from bisheng.core.search.elasticsearch import manager
-    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
     from bisheng.knowledge.domain.repositories.implementations import (
+        portal_search_context_repository_impl as context_repo,
         knowledge_file_repository_impl as files,
         knowledge_document_repository_impl as docs,
         knowledge_document_version_repository_impl as versions,
@@ -56,29 +57,38 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
     entry = make_entry(1, space_id=10, entry_type="manager")
     entry.status = KnowledgeFileStatus.SUCCESS.value
     monkeypatch.setattr(files, "KnowledgeFileRepositoryImpl", lambda session: StubFileRepository([entry]))
+    from test.knowledge.test_portal_qa_context import ContextRepository
+
+    data = {
+        "documents": {91: make_document()},
+        "entries": {91: [entry]},
+        "spaces": {10: SimpleNamespace(id=10, tenant_id=7, type=KnowledgeTypeEnum.SPACE.value, user_id=8)},
+        "scopes": {10: SimpleNamespace(tenant_id=7, level="department", owner_type="department", owner_id=20)},
+        "bindings": {10: [SimpleNamespace(tenant_id=7, department_id=20)]},
+        "departments": {20: SimpleNamespace(tenant_id=7, path="/20")},
+    }
+    monkeypatch.setattr(context_repo, "PortalSearchContextRepositoryImpl", lambda *args, **kw: ContextRepository(data))
     monkeypatch.setattr(
         docs, "KnowledgeDocumentRepositoryImpl", lambda session: StubDocumentRepository([make_document()])
     )
     monkeypatch.setattr(versions, "KnowledgeDocumentVersionRepositoryImpl", lambda session: StubVersionRepository([]))
     monkeypatch.setattr(grants, "DepartmentFileViewGrantRepositoryImpl", lambda session: object())
 
-    def access_service(**kwargs):
-        async def evaluate_files(*, login_user, files):
-            checks.append((kwargs["session"], [f.id for f in files]))
-            allowed = not (revoke and kwargs["session"] == 1)
-            return {f.id: SimpleNamespace(status="allowed" if allowed else "approval_required") for f in files}
+    async def permission_ids(self, login_user, files):
+        phase = len(sessions) - 1
+        checks.append((phase, [f.id for f in files]))
+        allowed = not (revoke and phase == 1)
+        return {f.id: {"view_file"} if allowed else set() for f in files}
 
-        return SimpleNamespace(evaluate_files=evaluate_files)
-
-    monkeypatch.setattr(access, "DepartmentFileViewAccessService", access_service)
+    monkeypatch.setattr(access.DepartmentFileViewAccessService, "_resolve_permission_ids", permission_ids)
     monkeypatch.setattr(
         KnowledgeSpaceChatService,
         "_permission_service",
-        lambda self: SimpleNamespace(_require_read_permission=AsyncMock()),
+        lambda self: SimpleNamespace(
+            _require_read_permission=AsyncMock(side_effect=AssertionError("no space permission preflight"))
+        ),
     )
-    monkeypatch.setattr(
-        KnowledgeDao, "aget_list_by_ids", AsyncMock(return_value=[SimpleNamespace(id=10, tenant_id=7, type=2)])
-    )
+    monkeypatch.setattr(KnowledgeDao, "aget_list_by_ids", AsyncMock(return_value=list(data["spaces"].values())))
     monkeypatch.setattr(
         storage,
         "aresolve_space_shared_routing",
@@ -92,8 +102,23 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
     monkeypatch.setattr(manager, "get_es_connection", AsyncMock(return_value=object()))
     monkeypatch.setattr(LLMService, "aget_knowledge_default_embedding", AsyncMock(return_value=object()))
     dense, sparse = AsyncMock(return_value=[hit(), hit(chunk_index=1)]), AsyncMock(return_value=[])
-    monkeypatch.setattr(storage.SharedSpaceStorageReader, "search_milvus", dense)
-    monkeypatch.setattr(storage.SharedSpaceStorageReader, "search_es", sparse)
+
+    class Cursor:
+        def __init__(self, search):
+            self.search, self.used = search, False
+
+        async def next_batch(self):
+            if self.used:
+                return []
+            self.used = True
+            return await self.search()
+
+        async def close(self):
+            pass
+
+    dense_open = AsyncMock(return_value=Cursor(dense))
+    monkeypatch.setattr(storage.SharedSpaceStorageReader, "open_milvus_cursor", dense_open)
+    monkeypatch.setattr(storage.SharedSpaceStorageReader, "open_es_cursor", AsyncMock(return_value=Cursor(sparse)))
 
     async def rerank(**kwargs):
         assert checks == [(0, [1])]
@@ -120,9 +145,10 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
         assert len(documents) == 2 and result.scope_complete
         assert all(doc.metadata["entry_file_id"] == 1 for doc in documents)
     assert checks == [(0, [1]), (1, [1])]
-    assert sessions == closed == [0, 1]
+    assert sessions == [0, 1]
+    assert closed == [1, 0]
     assert dense.await_count == sparse.await_count == 1
-    assert dense.await_args.kwargs["filter_"].requested_space_ids == (10,)
+    assert dense_open.await_args.kwargs["filter_"].requested_space_ids == (10,)
 
 
 @pytest.mark.parametrize("filters", [{}, {10: []}])

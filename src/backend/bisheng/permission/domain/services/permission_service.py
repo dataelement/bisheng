@@ -948,6 +948,7 @@ class PermissionService:
         object_type: str,
         object_id: str,
         login_user=None,
+        read_context=None,
     ) -> Optional[str]:
         """Get user's highest permission level on a resource (AD-04).
 
@@ -972,6 +973,7 @@ class PermissionService:
             if fga is None:
                 return await cls._get_implicit_permission_level_after_gate(
                     user_id, object_type, object_id,
+                    **({"read_context": read_context} if read_context is not None else {}),
                 )
 
             # Batch check all 4 levels
@@ -979,7 +981,9 @@ class PermissionService:
                 {'user': f'user:{user_id}', 'relation': level.value, 'object': f'{object_type}:{object_id}'}
                 for level in PermissionLevel
             ]
-            results = await fga.batch_check(checks)
+            results = await (read_context.read(("level_checks", object_type, object_id),
+                                               lambda: fga.batch_check(checks), io=True)
+                             if read_context is not None else fga.batch_check(checks))
 
             # Return highest level that is True
             for level, allowed in zip(PermissionLevel, results):
@@ -998,6 +1002,7 @@ class PermissionService:
 
             return await cls._get_implicit_permission_level_after_gate(
                 user_id, object_type, object_id,
+                **({"read_context": read_context} if read_context is not None else {}),
             )
 
         except FGAConnectionError as e:
@@ -1123,6 +1128,7 @@ class PermissionService:
         object_type: str,
         object_id: str,
         login_user=None,
+        read_context=None,
     ) -> Optional[str]:
         """Resolve non-tuple permission sources only.
 
@@ -1148,6 +1154,7 @@ class PermissionService:
 
         return await cls._get_implicit_permission_level_after_gate(
             user_id, object_type, object_id,
+            **({"read_context": read_context} if read_context is not None else {}),
         )
 
     @classmethod
@@ -1193,9 +1200,12 @@ class PermissionService:
         user_id: int,
         object_type: str,
         object_id: str,
+        read_context=None,
     ) -> Optional[str]:
         try:
-            creator_id = await cls._get_resource_creator(object_type, object_id)
+            loaded, creator_id = read_context.creator(object_type, object_id) if read_context is not None else (False, None)
+            if not loaded:
+                creator_id = await cls._get_resource_creator(object_type, object_id)
             if creator_id is not None and creator_id == user_id:
                 return PermissionLevel.owner.value
             department_space_level = await cls._implicit_department_space_member_level(

@@ -197,6 +197,7 @@ class PortalCourseImportService:
                     description=description,
                     tags=tags,
                     enabled=enabled,
+                    show_on_home=True,
                     catalog_id=catalog_id,
                     course_type="external",
                     external_url=external_url,
