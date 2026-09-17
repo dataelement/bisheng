@@ -7079,6 +7079,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 pass
             _portal_search_perf_var.reset(perf_token)
 
+    async def _can_read_qa_category_space(self, space_id: int) -> bool:
+        """Isolate stale picker entries without masking permission-service failures."""
+        try:
+            await self._require_read_permission(space_id)
+        except (SpaceNotFoundError, SpacePermissionDeniedError) as exc:
+            logger.info("qa_category_space_excluded space_id={} code={}", space_id, exc.Code)
+            return False
+        return True
+
     async def _load_qa_category_files(
         self, req: ShougangPortalQaCategoryFilesReq
     ) -> tuple[list[KnowledgeFile], dict[int, str]]:
@@ -7090,12 +7099,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_level=None,
             discovery_scope=req.discovery_scope,
         )
+        if req.discovery_scope == "legacy":
+            spaces = [space for space in spaces if await self._can_read_qa_category_space(int(space.id))]
         space_ids = [int(space.id) for space in spaces]
         if not space_ids:
             return [], {}
-        if req.discovery_scope == "legacy":
-            for space_id in space_ids:
-                await self._require_read_permission(space_id)
 
         excluded_ids: set[int] = set()
         if self.version_repo is not None:
@@ -7148,6 +7156,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
 
         checked_spaces: set[int] = set()
+        denied_spaces: set[int] = set()
         excluded_ids: set[int] = set()
         visible: list[KnowledgeFile] = []
         before_id = int(req.cursor) if req.cursor else None
@@ -7174,9 +7183,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 by_space.setdefault(int(file.knowledge_id), []).append(file)
             allowed: list[KnowledgeFile] = []
             for space_id, files in by_space.items():
+                if space_id in denied_spaces:
+                    continue
                 if space_id not in checked_spaces:
-                    if req.discovery_scope == "legacy":
-                        await self._require_read_permission(space_id)
+                    if req.discovery_scope == "legacy" and not await self._can_read_qa_category_space(space_id):
+                        denied_spaces.add(space_id)
+                        continue
                     if self.version_repo is not None:
                         excluded_ids.update(
                             await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or []
