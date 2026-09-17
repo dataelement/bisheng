@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
   readonly VITE_ENABLE_LOGGER: string;
   readonly VITE_LOGGER_FILTER: string;
+  /** "false" turns off every frosted-glass surface (see `~/utils/frostedGlass`). Default on. */
+  readonly VITE_FROSTED_GLASS: string;
   // Add other env variables here
 }
 
