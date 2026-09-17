@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
@@ -40,6 +40,13 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
+
+# Sort keys the space-file listing accepts. Kept in sync with
+# ``SpaceFileDao.ORDER_FIELDS`` / ``ORDER_SORTS``, which build a raw ORDER BY
+# fragment from these values.
+OrderField = Literal["file_name", "file_type", "file_size", "update_time"]
+OrderSort = Literal["asc", "desc"]
+
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 
@@ -342,8 +349,8 @@ async def list_space_children(
     space_id: int,
     parent_id: int | None = None,
     file_ids: list[int] = Query(default=None, description="精确文件ID列表"),
-    order_field: str = "file_type",
-    order_sort: str = "asc",
+    order_field: OrderField = "file_type",
+    order_sort: OrderSort = "asc",
     file_status: list[int] = Query(default=None, description="文件状态列表"),
     page_size: int = 20,
     cursor: str | None = Query(
@@ -379,8 +386,8 @@ async def search_space_children(
     parent_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
-    order_field: str = "file_type",
-    order_sort: str = "asc",
+    order_field: OrderField = "file_type",
+    order_sort: OrderSort = "asc",
     tag_ids: list[int] = Query(default=None, description="标签ID列表"),
     file_status: list[int] = Query(default=None, description="文件状态列表"),
     keyword: str | None = None,
