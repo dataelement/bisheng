@@ -487,13 +487,17 @@ class KnowledgeRecycleService:
         page: int = 1,
         page_size: int = 20,
         keyword: str | None = None,
+        name_keyword: str | None = None,
         knowledge_id: int | None = None,
         space_level: str | None = None,
         file_type: int | None = None,
     ) -> PageData[RecycleItemResponse]:
         self._require_admin()
+        name_keyword = (name_keyword or "").strip()
         async with get_async_db_session() as session:
             stmt = select(KnowledgeRecycleItem).where(KnowledgeRecycleItem.is_list_entry.is_(True))
+            if name_keyword:
+                stmt = stmt.where(col(KnowledgeRecycleItem.display_name).contains(name_keyword, autoescape=True))
             if knowledge_id is not None:
                 stmt = stmt.where(KnowledgeRecycleItem.knowledge_id == knowledge_id)
             if file_type is not None:
@@ -536,6 +540,10 @@ class KnowledgeRecycleService:
                 .select_from(KnowledgeRecycleItem)
                 .where(KnowledgeRecycleItem.is_list_entry.is_(True))
             )
+            if name_keyword:
+                total_stmt = total_stmt.where(
+                    col(KnowledgeRecycleItem.display_name).contains(name_keyword, autoescape=True)
+                )
             if knowledge_id is not None:
                 total_stmt = total_stmt.where(KnowledgeRecycleItem.knowledge_id == knowledge_id)
             if file_type is not None:
