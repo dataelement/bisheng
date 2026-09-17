@@ -153,9 +153,14 @@ async def test_resolve_user_kb_file_filters_uses_knowledge_space_service(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_portal_context_uses_portal_authorized_scope_resolver(
-    monkeypatch,
+@pytest.mark.parametrize("selection", ["file", "folder"])
+async def test_portal_plan_resolves_files_and_folders_without_preflight_permissions(
+    monkeypatch, selection,
 ):
+    from contextlib import asynccontextmanager
+    from bisheng.core import database
+    from bisheng.knowledge.domain.services import knowledge_space_service
+    from bisheng.knowledge.domain.services.portal_qa_retrieval_service import build_portal_qa_plan
     data = APIChatCompletion(
         clientTimestamp="2026-07-23T10:00:00",
         model="10",
@@ -174,7 +179,18 @@ async def test_portal_context_uses_portal_authorized_scope_resolver(
             },
         ),
     )
+    if selection == "folder":
+        data.use_knowledge_base.knowledge_scope.file_refs = []
+        data.use_knowledge_base.knowledge_scope.folder_refs = [
+            SimpleNamespace(knowledge_space_id=7103, folder_id=3001)
+        ]
     access_service = SimpleNamespace()
+
+    @asynccontextmanager
+    async def session():
+        yield MagicMock()
+
+    monkeypatch.setattr(database, "get_async_db_session", session)
 
     class _FakeKnowledgeSpaceService:
         def __init__(self, request, login_user):
@@ -190,31 +206,39 @@ async def test_portal_context_uses_portal_authorized_scope_resolver(
             folder_refs,
             file_refs,
             max_files,
+            subtree_page_size,
+            defer_authorization,
         ):
             assert self.department_file_view_access_service is access_service
             assert mode == "files"
             assert knowledge_space_ids == [7103]
-            assert file_refs[0].file_id == 9301
-            assert folder_refs == []
+            if selection == "file":
+                assert file_refs[0].file_id == 9301
+                assert folder_refs == []
+            else:
+                assert folder_refs[0].folder_id == 3001
+                assert file_refs == []
             assert max_files is None
+            assert subtree_page_size == 200
+            assert defer_authorization is True
             return {7103: [9301]}
 
     monkeypatch.setattr(
-        chat_service,
+        knowledge_space_service,
         "KnowledgeSpaceService",
         _FakeKnowledgeSpaceService,
         raising=False,
     )
 
-    result = await chat_service._resolve_user_kb_file_filters(
+    result = await build_portal_qa_plan(
         request=SimpleNamespace(),
-        data=data,
-        login_user=_login_user(),
-        portal_context=True,
-        department_file_view_access_service=access_service,
+        knowledge_base=data.use_knowledge_base,
+        user=_login_user(),
+        department_access=access_service,
     )
 
-    assert result == {7103: [9301]}
+    assert result.space_ids == (7103,)
+    assert result.file_ids_by_space == {7103: [9301]}
 
 
 @pytest.mark.asyncio

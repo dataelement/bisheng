@@ -42,11 +42,3 @@ class QaRetrievalResult:
 
 def canonical_key(hit) -> tuple[int, int, int]:
     return (int(hit.canonical_document_id), int(hit.canonical_version_id), int(hit.chunk_index))
-
-
-def unified_qa_enabled(config, user) -> bool:
-    return (
-        config.portal_unified_qa_enabled is True
-        and int(user.tenant_id) in config.portal_unified_qa_tenant_ids
-        and (not config.portal_unified_qa_user_ids or int(user.user_id) in config.portal_unified_qa_user_ids)
-    )

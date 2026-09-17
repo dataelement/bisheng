@@ -907,7 +907,6 @@ async def _retrieve_selected_knowledge_context(
     citation_collector: CitationRegistryCollector,
     file_ids_by_space: dict[int, list[int]] | None = None,
     request: Request | None = None,
-    department_file_view_access_service=None,
 ) -> str:
     """调用模型前先检索用户选择的知识库内容。
 
@@ -940,9 +939,6 @@ async def _retrieve_selected_knowledge_context(
             login_user=login_user,
             file_ids_by_space=file_ids_by_space,
             request=request,
-            department_file_view_access_service=(
-                department_file_view_access_service
-            ),
         )
     except Exception as exc:
         logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
@@ -1018,55 +1014,18 @@ async def _resolve_user_kb_file_filters(
         request: Request,
         data: APIChatCompletion,
         login_user: UserPayload,
-        *,
-        portal_context: bool = False,
-        department_file_view_access_service=None,
 ) -> dict[int, list[int]] | None:
+    """Resolve explicit file scopes for non-portal workstation requests."""
     ukb = data.use_knowledge_base
     scope = getattr(ukb, 'knowledge_scope', None) if ukb else None
-    if not scope:
-        if (
-            not portal_context
-            or not ukb
-            or not list(ukb.knowledge_space_ids or [])
-        ):
-            return None
-        scope_mode = 'knowledge_space'
-        folder_refs = []
-        file_refs = []
-    else:
-        scope_mode = scope.mode
-        folder_refs = list(scope.folder_refs or [])
-        file_refs = list(scope.file_refs or [])
-    if not portal_context and scope_mode != 'files':
+    if not scope or scope.mode != 'files':
         return None
-    if portal_context and scope_mode not in {'files', 'knowledge_space'}:
-        return None
-
+    folder_refs = list(scope.folder_refs or [])
+    file_refs = list(scope.file_refs or [])
     if not folder_refs and not file_refs:
-        if not portal_context or scope_mode == 'files':
-            raise ValueError('请选择可用于问答的文件。')
+        raise ValueError('请选择可用于问答的文件。')
 
     service = KnowledgeSpaceService(request, login_user)
-    if portal_context:
-        service.department_file_view_access_service = (
-            department_file_view_access_service
-        )
-        selected_space_ids = list(ukb.knowledge_space_ids or [])
-        if (
-            scope is not None
-            and scope_mode == 'knowledge_space'
-            and int(scope.knowledge_space_id or 0) > 0
-            and int(scope.knowledge_space_id) not in selected_space_ids
-        ):
-            selected_space_ids.append(int(scope.knowledge_space_id))
-        return await service.resolve_shougang_portal_qa_scope_file_ids(
-            mode=scope_mode,
-            knowledge_space_ids=selected_space_ids,
-            folder_refs=folder_refs,
-            file_refs=file_refs,
-            max_files=None,
-        )
     return await service.resolve_qa_scope_file_ids(
         folder_refs=folder_refs,
         file_refs=file_refs,
@@ -1080,6 +1039,9 @@ async def _unified_portal_context(request, data, login_user, department_access, 
     async def retrieve():
         plan = await build_portal_qa_plan(request=request, user=login_user,
             knowledge_base=data.use_knowledge_base, department_access=department_access)
+        if not plan.space_ids:
+            from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalResult
+            return '', QaRetrievalResult()
         documents, result = await retrieve_portal_qa(request=request, user=login_user,
             plan=plan, query=data.text or '', config=config[0], max_chars=config[1])
         documents = annotate_rag_documents_with_citations(documents)
@@ -1354,10 +1316,8 @@ async def _agent_stream_chat_completion(
         unified_config = None
         if portal_context:
             from bisheng.common.services.config_service import settings as config_settings
-            from bisheng.knowledge.domain.contracts.qa_retrieval import unified_qa_enabled
-            runtime_config = (await asyncio.wait_for(config_settings.async_get_knowledge(), 30)).retrieval
-            if unified_qa_enabled(runtime_config, login_user):
-                unified_config = runtime_config
+            unified_config = (await asyncio.wait_for(config_settings.async_get_knowledge(), 30)).retrieval
+            logger.info('portal_qa_strategy strategy=unified_shared')
         if unified_config is None:
             initialized_chat = await _agent_initialize_chat(data, login_user)
     except (BaseErrorCode, ValueError) as exc:
@@ -1458,29 +1418,41 @@ async def _agent_stream_chat_completion(
                     raise RuntimeError('retrieval budget exhausted') from exc
             else:
                 knowledge_bases_info = await _resolve_user_kb_selection(data)
-            use_unified = unified_config is not None
-            # 旧存储与组织知识库保留原入口，不切换物理存储作为降级。
-            if use_unified:
+            # Portal requests must never fall back to pre-retrieval expansion.
+            if portal_context:
+                from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
                 space_ids, org_ids = _split_selected_knowledge_ids(knowledge_bases_info)
                 if org_ids:
-                    use_unified = False
+                    raise ValueError('Portal QA requires shared knowledge spaces')
                 elif space_ids:
                     from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
                     from bisheng.knowledge.domain.services.shared_space_projection_support import resolve_shared_space_storage_enabled
-                    async def shared_route_enabled():
+                    async def require_shared_route():
                         if not await resolve_shared_space_storage_enabled():
-                            return False
-                        return await aresolve_space_shared_routing(int(login_user.tenant_id), int(knowledge_bases_info[0]['type'])) is not None
+                            raise SharedStorageContractError(
+                                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
+                                'Portal QA shared storage is disabled', tenant_id=int(login_user.tenant_id),
+                            )
+                        route = await aresolve_space_shared_routing(int(login_user.tenant_id), int(knowledge_bases_info[0]['type']))
+                        if route is None:
+                            raise SharedStorageContractError(
+                                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+                                'Portal QA shared routing is missing', tenant_id=int(login_user.tenant_id),
+                            )
+                        if not route.shared_enabled:
+                            raise SharedStorageContractError(
+                                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
+                                'Portal QA shared routing is disabled', tenant_id=int(login_user.tenant_id),
+                            )
                     try:
-                        use_unified = await asyncio.wait_for(shared_route_enabled(), max(0, retrieval_deadline - time.monotonic()))
+                        await asyncio.wait_for(require_shared_route(), max(0, retrieval_deadline - time.monotonic()))
                     except asyncio.TimeoutError as exc:
                         raise RuntimeError('retrieval budget exhausted') from exc
             file_ids_by_space = None
-            if not use_unified:
+            if not portal_context:
                 stream_stage['deadline'] = None
                 file_ids_by_space = await _resolve_user_kb_file_filters(
-                    request, data, login_user, portal_context=portal_context,
-                    department_file_view_access_service=department_file_view_access_service,
+                    request, data, login_user,
                 )
 
             # ---- Step 2: assemble LangChain tools ----
@@ -1526,7 +1498,7 @@ async def _agent_stream_chat_completion(
 
             # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
             failure_stage = 'retrieval'
-            if use_unified:
+            if portal_context:
                 retrieved_knowledge_context, retrieval_result = await _unified_portal_context(
                     request, data, login_user, department_file_view_access_service,
                     (unified_config, getattr(ws_config, 'maxTokens', 15000) or 15000), citation_collector, deadline=retrieval_deadline,
@@ -1541,8 +1513,7 @@ async def _agent_stream_chat_completion(
                     question=data.text or '', knowledge_bases_info=knowledge_bases_info,
                     login_user=login_user, max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
                     citation_collector=citation_collector, file_ids_by_space=file_ids_by_space,
-                    request=request, department_file_view_access_service=(
-                        department_file_view_access_service if portal_context else None),
+                    request=request,
                 )
             stream_stage['value'] = 'model'
             stream_stage['deadline'] = None

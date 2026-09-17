@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.core.config.settings import KnowledgeRetrievalRuntimeConf
-from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalPlan, QaRetrievalError, unified_qa_enabled
+from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalPlan, QaRetrievalError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.services.portal_qa_retrieval_service import retrieve_portal_qa
 from test.knowledge.test_knowledge_retrieval_scope_resolver import (
@@ -20,8 +20,8 @@ from test.knowledge.test_knowledge_retrieval_scope_resolver import (
 )
 
 
-@pytest.mark.parametrize("revoke", [False, True])
-async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkeypatch, revoke):
+@pytest.mark.parametrize("case", ["normal", "revoke", "es_init_failure", "embedding_failure"])
+async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkeypatch, case):
     from bisheng.core import database
     from bisheng.core.search.elasticsearch import manager
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
@@ -77,7 +77,7 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
     async def permission_ids(self, login_user, files):
         phase = len(sessions) - 1
         checks.append((phase, [f.id for f in files]))
-        allowed = not (revoke and phase == 1)
+        allowed = not (case == "revoke" and phase == 1)
         return {f.id: {"view_file"} if allowed else set() for f in files}
 
     monkeypatch.setattr(access.DepartmentFileViewAccessService, "_resolve_permission_ids", permission_ids)
@@ -99,9 +99,17 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
         "get_async_retrieval_runtime",
         AsyncMock(return_value=SimpleNamespace(embed_query=AsyncMock(return_value=[0.1]))),
     )
-    monkeypatch.setattr(manager, "get_es_connection", AsyncMock(return_value=object()))
-    monkeypatch.setattr(LLMService, "aget_knowledge_default_embedding", AsyncMock(return_value=object()))
-    dense, sparse = AsyncMock(return_value=[hit(), hit(chunk_index=1)]), AsyncMock(return_value=[])
+    es_client = AsyncMock(return_value=object())
+    if case == "es_init_failure":
+        es_client.side_effect = RuntimeError("ES client initialization failed")
+        monkeypatch.setattr(storage.SharedSpaceStorageReader, "_assert_readable", AsyncMock())
+    monkeypatch.setattr(manager, "get_es_connection", es_client)
+    embedding_model = AsyncMock(return_value=object())
+    if case == "embedding_failure":
+        embedding_model.side_effect = RuntimeError("embedding model unavailable")
+    monkeypatch.setattr(LLMService, "aget_knowledge_default_embedding", embedding_model)
+    dense = AsyncMock(return_value=[hit(), hit(chunk_index=1)])
+    sparse = AsyncMock(return_value=[hit(), hit(chunk_index=1)] if case == "embedding_failure" else [])
 
     class Cursor:
         def __init__(self, search):
@@ -118,7 +126,8 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
 
     dense_open = AsyncMock(return_value=Cursor(dense))
     monkeypatch.setattr(storage.SharedSpaceStorageReader, "open_milvus_cursor", dense_open)
-    monkeypatch.setattr(storage.SharedSpaceStorageReader, "open_es_cursor", AsyncMock(return_value=Cursor(sparse)))
+    if case != "es_init_failure":
+        monkeypatch.setattr(storage.SharedSpaceStorageReader, "open_es_cursor", AsyncMock(return_value=Cursor(sparse)))
 
     async def rerank(**kwargs):
         assert checks == [(0, [1])]
@@ -137,18 +146,25 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
             max_chars=1000,
         )
 
-    if revoke:
+    if case == "revoke":
         with pytest.raises(QaRetrievalError, match="scope changed"):
             await run()
     else:
         documents, result = await run()
-        assert len(documents) == 2 and result.scope_complete
+        assert len(documents) == 2
+        assert result.scope_complete == (case == "normal")
+        assert bool(result.degraded_reasons) == (case != "normal")
         assert all(doc.metadata["entry_file_id"] == 1 for doc in documents)
     assert checks == [(0, [1]), (1, [1])]
     assert sessions == [0, 1]
     assert closed == [1, 0]
-    assert dense.await_count == sparse.await_count == 1
-    assert dense_open.await_args.kwargs["filter_"].requested_space_ids == (10,)
+    assert dense.await_count == (0 if case == "embedding_failure" else 1)
+    assert sparse.await_count == (0 if case == "es_init_failure" else 1)
+    if case == "es_init_failure":
+        es_client.assert_awaited_once()
+        assert "keyword_unavailable" in result.degraded_reasons
+    if case != "embedding_failure":
+        assert dense_open.await_args.kwargs["filter_"].requested_space_ids == (10,)
 
 
 @pytest.mark.parametrize("filters", [{}, {10: []}])
@@ -157,17 +173,3 @@ async def test_explicit_empty_never_calls_storage(filters):
         request=None, user=None, plan=QaRetrievalPlan((10,), filters), query="q", config=None, max_chars=10
     )
     assert documents == [] and result.scope_complete
-
-
-def test_gate_requires_enabled_tenant_and_optional_user():
-    config = KnowledgeRetrievalRuntimeConf()
-    user = SimpleNamespace(user_id=42, tenant_id=7)
-    assert not unified_qa_enabled(config, user)
-    config.portal_unified_qa_enabled = True
-    assert not unified_qa_enabled(config, user)
-    config.portal_unified_qa_tenant_ids = [7]
-    assert unified_qa_enabled(config, user)
-    config.portal_unified_qa_user_ids = [43]
-    assert not unified_qa_enabled(config, user)
-    config.portal_unified_qa_user_ids = [42]
-    assert unified_qa_enabled(config, user)

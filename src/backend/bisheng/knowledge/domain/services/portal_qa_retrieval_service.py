@@ -315,7 +315,6 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
         shared_collection_name,
     )
     from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
-    from bisheng.core.search.elasticsearch.manager import get_es_connection
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
     from bisheng.llm.domain import LLMService
     from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -424,7 +423,7 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
         tenant_id=int(user.tenant_id),
         collection_name=snapshot.collection_name or shared_collection_name(int(user.tenant_id)),
         milvus_runtime=runtime,
-        es_client=await get_es_connection(),
+        # Initialize ES inside its cursor's timeout/failure boundary so dense retrieval remains available.
         expected_routing_version=snapshot.routing_version,
     )
 

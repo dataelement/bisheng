@@ -745,9 +745,10 @@ class KnowledgeRetrievalRuntimeConf(BaseModel):
     """知识检索读链路的超时与进程级并发保护。"""
 
     total_timeout_seconds: float = Field(default=60, gt=0, le=300)
-    portal_unified_qa_enabled: bool = False
-    portal_unified_qa_tenant_ids: list[int] = Field(default_factory=list)
-    portal_unified_qa_user_ids: list[int] = Field(default_factory=list)
+    # Accepted for persisted config compatibility; portal QA always uses shared retrieval.
+    portal_unified_qa_enabled: bool = Field(default=False, description="Deprecated; ignored by portal QA")
+    portal_unified_qa_tenant_ids: list[int] = Field(default_factory=list, description="Deprecated; ignored by portal QA")
+    portal_unified_qa_user_ids: list[int] = Field(default_factory=list, description="Deprecated; ignored by portal QA")
     portal_qa_initial_limit: int = Field(default=200, ge=1, le=800)
     portal_qa_candidate_limit: int = Field(default=300, ge=1, le=300)
     portal_qa_max_rounds: int = Field(default=3, ge=1, le=3)
