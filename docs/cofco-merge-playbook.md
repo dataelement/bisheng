@@ -359,9 +359,56 @@ F054 的 v4**。
 
 ---
 
+### 3.21 ⚠️ 自动合并会把「只有 909 有」的配置当成「已删除」(测试测不到)
+
+**文件**:`docker/bisheng/config/config.yaml`,以及任何只存在于 909 的配置段。
+
+**根因**:三方合并里,「主线从来没有这一段」和「这一段被删掉了」长得一模一样。
+主线那版 `config.yaml` 没有 909 的定制配置段,合并就按「删除」处理,**而且不冲突**
+—— 你不会看到冲突标记,也就不会去看它。
+
+**已发生**:2026-09-17,`knowledge_space_read_bypass`(`5cb130f98` 加的空间读权限
+白名单绕过)在合进 923 时整段消失。加它的提交**在**分支历史里,`settings.py` 的
+配置类和 `knowledge_space_service.py` 的逻辑也都完好 —— 少的只有 yaml 里那六行。
+
+**为什么所有门禁都拦不住**:`KnowledgeSpaceReadBypassConf` 默认
+`enabled=False` + 空 id 集合,所以代码路径完整、类型正确、测试全绿,
+只是那个白名单空间**悄悄开始被权限挡住**,没有异常、没有日志。
+lint / tsc / 后端全套 / 前端全套 / vite build —— 一个都发现不了。
+这是本手册记录的静默问题里唯一**连测试都测不到**的一类。
+
+**处理方式**:合并解完冲突之后,**额外做一次全量比对**,专门找被静默抹掉的定制:
+
+```bash
+# 配置文件逐行比(忽略注释与空行)
+diff <(git show origin/<上一条909分支>:docker/bisheng/config/config.yaml) \
+     docker/bisheng/config/config.yaml | grep "^<" | grep -vE "^< *#|^< *$"
+
+# 整棵文件树,看有没有整个文件消失
+diff <(git ls-tree -r --name-only origin/<上一条909分支>) \
+     <(git ls-tree -r --name-only HEAD) | grep "^<"
+```
+
+文件树那条会报出一些**上游有意删掉**的文件,别直接补回来 ——
+先确认它在「下一批」那条线上还在不在,不在就是上游删的,与本次合并无关。
+
+---
+
 ## 4. 合并后验证清单
 
 按顺序跑,**一项都不能省**:
+
+**⓪ 先查「被静默抹掉的定制」(见 §3.21)**
+
+这一步要排在跑测试之前,因为**测试发现不了它**。解完冲突、跑任何门禁之前,
+先把配置和文件树跟上一条 909 分支全量比一遍:
+
+```bash
+diff <(git show origin/<上一条909分支>:docker/bisheng/config/config.yaml) \
+     docker/bisheng/config/config.yaml | grep "^<" | grep -vE "^< *#|^< *$"
+```
+
+有输出就逐条确认:是主线有意删的,还是 909 的定制被当成删除抹掉了。
 
 **① 建基线 worktree(不要用 `git stash`)**
 
