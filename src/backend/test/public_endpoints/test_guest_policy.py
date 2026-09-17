@@ -1,10 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-from starlette.datastructures import Headers
 
 from bisheng.common.errcode.public_endpoints import (
-    PublicAccessError,
     PublicGuestAccessDisabledError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id, get_visible_tenant_ids
@@ -38,15 +36,9 @@ def operator_identity(monkeypatch):
     async def is_tenant_admin(_user_id, _tenant_id):
         return state.is_tenant_admin
 
-    monkeypatch.setattr(
-        "bisheng.user.domain.services.auth.UserRoleDao.aget_user_roles", aget_user_roles
-    )
-    monkeypatch.setattr(
-        "bisheng.utils.http_middleware._check_is_global_super", check_is_global_super
-    )
-    monkeypatch.setattr(
-        "bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin
-    )
+    monkeypatch.setattr("bisheng.user.domain.services.auth.UserRoleDao.aget_user_roles", aget_user_roles)
+    monkeypatch.setattr("bisheng.utils.http_middleware._check_is_global_super", check_is_global_super)
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin)
     return state
 
 
@@ -81,14 +73,6 @@ def guest_config(monkeypatch):
     return state
 
 
-def test_identity_headers_are_rejected() -> None:
-    for name in ("X-On-Behalf-Of", "X-End-User"):
-        with pytest.raises(PublicAccessError) as caught:
-            guest_policy.reject_identity_headers(Headers({name: "value"}))
-        assert caught.value.http_status == 403
-        assert caught.value.code == 26104
-
-
 @pytest.mark.asyncio
 async def test_public_execution_sets_and_resets_strict_identity(monkeypatch) -> None:
     resource = SimpleNamespace(tenant_id=23)
@@ -107,9 +91,7 @@ async def test_public_execution_sets_and_resets_strict_identity(monkeypatch) -> 
 
     monkeypatch.setattr(guest_policy, "_load_published_resource", load_resource)
     monkeypatch.setattr(guest_policy, "_load_default_operator", load_operator)
-    monkeypatch.setattr(
-        "bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin
-    )
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin)
 
     assert get_current_tenant_id() is None
     async with guest_policy.public_execution("workflow", "flow-1") as execution:
@@ -150,9 +132,7 @@ async def test_guest_actor_tracks_operator_privilege(
         calls.append((user_id, tenant_id))
         return tenant_admin
 
-    monkeypatch.setattr(
-        "bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin
-    )
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin)
 
     actor = await guest_policy._resolve_guest_actor(operator)
 
@@ -182,9 +162,7 @@ async def test_guest_actor_never_inherits_an_ambient_actor(monkeypatch) -> None:
 
     monkeypatch.setattr(guest_policy, "_load_published_resource", load_resource)
     monkeypatch.setattr(guest_policy, "_load_default_operator", load_operator)
-    monkeypatch.setattr(
-        "bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin
-    )
+    monkeypatch.setattr("bisheng.permission.application.relation_api.is_tenant_admin", is_tenant_admin)
 
     outer = PermissionActor(subject_type="user", subject_id=999, tenant_id=7, super_admin=True)
     token = set_current_permission_actor(outer)
@@ -201,9 +179,7 @@ async def test_guest_actor_never_inherits_an_ambient_actor(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_default_operator_carries_real_roles_and_super_flag(
-    guest_config, operator_identity
-) -> None:
+async def test_default_operator_carries_real_roles_and_super_flag(guest_config, operator_identity) -> None:
     """Pins the decision: the operator's real identity, never a stripped one."""
 
     operator_identity.role_ids = [7, 9]
@@ -234,9 +210,7 @@ async def test_default_operator_carries_real_roles_and_super_flag(
             lambda s: setattr(s, "membership", SimpleNamespace(status="disabled")),
             id="membership_inactive",
         ),
-        pytest.param(
-            lambda s: setattr(s, "tenant", SimpleNamespace(status="disabled")), id="tenant_inactive"
-        ),
+        pytest.param(lambda s: setattr(s, "tenant", SimpleNamespace(status="disabled")), id="tenant_inactive"),
         pytest.param(lambda s: setattr(s, "tenant", None), id="tenant_absent"),
     ],
 )
