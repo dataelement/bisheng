@@ -146,7 +146,11 @@ async def test_v2_list_returns_inherited_children_and_filters_custom_children(fo
             for target in targets
         }
 
-    async def enrich(rows, *, file_change_excluded_ids):
+    async def enrich(rows, *, file_change_excluded_ids, space_creator_user_id=None):
+        # space_creator_user_id arrived with the space-children read optimisation:
+        # the folder rollup reports 存在异常 to the space creator only. This test is
+        # about the file-change exclusion, so it just has to accept the argument.
+        del space_creator_user_id
         assert file_change_excluded_ids == excluded_ids
         return [{"id": row.id} for row in rows]
 

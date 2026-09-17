@@ -23,6 +23,7 @@ from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_repository,
     get_knowledge_document_version_repository,
+    get_knowledge_file_repository,
 )
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
@@ -37,6 +38,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_reposit
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
 )
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -129,13 +131,18 @@ def _build_space_service(
     login_user,
     version_repo: KnowledgeDocumentVersionRepository | None = None,
     doc_repo: KnowledgeDocumentRepository | None = None,
+    knowledge_file_repo: KnowledgeFileRepository | None = None,
 ) -> KnowledgeSpaceService:
     """Build a KnowledgeSpaceService bound to the resolved acting identity.
 
     Mirrors the v1 DI factory but uses the F030 resolved operator (default
     operator or 代用户) instead of a JWT login. Repos are request-scoped Depends.
     """
-    svc = KnowledgeSpaceService(request=request, login_user=login_user)
+    svc = KnowledgeSpaceService(
+        request=request,
+        login_user=login_user,
+        knowledge_file_repo=knowledge_file_repo,
+    )
     svc.version_repo = version_repo
     svc.doc_repo = doc_repo
     return svc
@@ -450,6 +457,7 @@ async def get_filelist(
     cursor: str | None = Query(default=None),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
+    knowledge_file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ):
     """List files of a knowledge resource (F030 cursor pagination, dispatch by row.type).
 
@@ -465,7 +473,7 @@ async def get_filelist(
     _require_resolved_tenant(login_user, db_knowledge)
 
     if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
-        space_svc = _build_space_service(request, login_user, version_repo, doc_repo)
+        space_svc = _build_space_service(request, login_user, version_repo, doc_repo, knowledge_file_repo)
         if keyword:
             # Keyword search over the space → offset-based search adapted to cursor.
             page = await space_svc.asearch_space_children_cursor(

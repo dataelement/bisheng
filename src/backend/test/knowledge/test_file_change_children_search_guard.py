@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy.dialects import mysql, sqlite
 
 from bisheng.core.context.tenant import (
     current_tenant_id,
@@ -203,7 +201,20 @@ async def test_status_alone_does_not_hide_pre_cutover_rename_move_delete_resourc
 
 @pytest.mark.asyncio
 async def test_folder_counts_exclude_file_change_hidden_descendants():
+    """Files hidden by file-change approval must not make their folder look abnormal.
+
+    The rollup itself is upstream's (one CASE aggregate per prefix group, boolean
+    flags, no counts). 909 only adds the exclusion: the hidden ids are handed to
+    the aggregate so those rows are never counted in the first place.
+    """
     service = KnowledgeSpaceService(request=None, login_user=_User())
+    calls = []
+
+    async def _flags(knowledge_id, folder_prefixes, excluded_file_ids=None):
+        calls.append((knowledge_id, folder_prefixes, excluded_file_ids))
+        return {}
+
+    service.knowledge_file_repo = SimpleNamespace(find_folder_descendant_status_flags=_flags)
     folder = KnowledgeFile(
         id=30,
         tenant_id=11,
@@ -214,60 +225,26 @@ async def test_folder_counts_exclude_file_change_hidden_descendants():
         status=KnowledgeFileStatus.SUCCESS.value,
         file_level_path="",
     )
-    statements = []
-
-    class _Rows:
-        def __init__(self, rows):
-            self._rows = rows
-
-        def all(self):
-            return self._rows
-
-    class _Session:
-        async def exec(self, statement):
-            statements.append(statement)
-            if len(statements) == 1:
-                return _Rows(
-                    [
-                        (30, KnowledgeFileStatus.WAITING.value, 1),
-                        (30, KnowledgeFileStatus.SUCCESS.value, 1),
-                    ]
-                )
-            if len(statements) == 2:
-                return _Rows([(31, 1, KnowledgeFileStatus.WAITING.value, "/30")])
-            return _Rows([])
-
-    @asynccontextmanager
-    async def session_factory():
-        yield _Session()
+    hidden_ids = set(range(31, 532))
 
     tenant_token = set_current_tenant_id(11)
     try:
-        with (
-            patch("bisheng.core.database.get_async_db_session", new=session_factory),
-            patch.object(service, "_load_file_change_approval_matches", AsyncMock(return_value=[])),
-        ):
+        with patch.object(service, "_load_file_change_approval_matches", AsyncMock(return_value=[])):
             result = await service._handle_file_folder_extra_info(
                 [folder],
-                file_change_excluded_ids=set(range(31, 532)),
+                space_creator_user_id=7,
+                file_change_excluded_ids=hidden_ids,
             )
     finally:
         current_tenant_id.reset(tenant_token)
 
-    for dialect in (sqlite.dialect(), mysql.dialect()):
-        compiled = [
-            statement.compile(
-                dialect=dialect,
-                compile_kwargs={"render_postcompile": True},
-            )
-            for statement in statements
-        ]
-        assert all("knowledgefile.tenant_id" in str(statement) for statement in compiled)
-        assert all("knowledgefile.id NOT IN" not in str(statement) for statement in compiled)
-    assert len(statements) == 3
-    assert result[0]["success_file_num"] == 1
-    assert result[0]["processing_file_num"] == 0
+    assert calls == [(1, {30: "/30"}, hidden_ids)]
+    assert result[0]["has_abnormal_files"] is False
     assert result[0]["has_failed_files"] is False
+    assert result[0]["has_processing_files"] is False
+    # Counts were dropped upstream along with the per-folder UNION query.
+    assert "success_file_num" not in result[0]
+    assert "processing_file_num" not in result[0]
 
 
 @pytest.mark.asyncio
@@ -306,12 +283,12 @@ async def test_formal_list_enriches_root_and_inherited_children_with_one_batch_l
     match = SimpleNamespace(
         request=SimpleNamespace(
             id=71,
-                resource_id=60,
-                applicant_user_id=8,
-                action="delete",
-                approval_instance_id=81,
-                execution_state="not_started",
-            ),
+            resource_id=60,
+            applicant_user_id=8,
+            action="delete",
+            approval_instance_id=81,
+            execution_state="not_started",
+        ),
         instance=SimpleNamespace(id=81, status="pending"),
         path_root="/60/",
         lock_scope="subtree",

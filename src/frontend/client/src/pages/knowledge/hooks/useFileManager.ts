@@ -3,6 +3,7 @@ import {
     FileStatus,
     KnowledgeFile,
     KnowledgeSpace,
+    SPACE_CHILDREN_DEFAULT_PAGE_SIZE,
     SortDirection,
     SortType,
     fileStatusToNumber,
@@ -61,7 +62,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const localize = useLocalize();
     const [files, setFiles] = useState<KnowledgeFile[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize] = useState(80);
+    const [pageSize] = useState(SPACE_CHILDREN_DEFAULT_PAGE_SIZE);
     const [total, setTotal] = useState(0);
     // F027: cursor-based pagination for the non-search path. `nextCursor`
     // holds the token to fetch the next page; null/undefined means "no

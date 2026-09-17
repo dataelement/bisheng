@@ -154,6 +154,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+        KnowledgeFileRepository,
+    )
     from bisheng.message.domain.services.message_service import MessageService
 
 # Folder depth cap: product rule is "10 层". UI 第1层 = level 0, so the deepest
@@ -231,6 +234,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         f048_file_delivery=None,
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
+        knowledge_file_repo: "KnowledgeFileRepository | None" = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -240,6 +244,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.f048_file_delivery = f048_file_delivery
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
+        self.knowledge_file_repo = knowledge_file_repo
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -1668,6 +1673,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # 909 only. The download button here is offered to everyone and the server
+        # decides, because deciding per file costs 43-124ms a page for a permission
+        # nearly everyone holds. That trade stops making sense once the action is
+        # switched off in the Catalog: then nobody can download, and the button is
+        # an invitation to a guaranteed refusal. One Catalog read answers it for the
+        # whole page, so the affordance can hide without paying the per-file cost.
+        # Only for a caller who holds the space, for the same reason `actions` is:
+        # the square preview answers without the permission runtime on purpose and
+        # must not be made to depend on one. A previewer cannot download anyway.
+        if has_content_permission:
+            runtime = await get_f048_runtime()
+            result.download_action_enabled = "download" in await runtime.effective_actions("knowledge_file")
         # The share link has to tell "already has access" from "may only preview
         # and apply", and `user_role` cannot: it is absent for a non-member, and
         # the client maps an absent role to MEMBER — the same value a real member
@@ -2483,174 +2500,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         res: list[KnowledgeFile],
         *,
+        space_creator_user_id: int | None = None,
         file_change_excluded_ids: set[int] | None = None,
     ) -> list[dict]:
-        folder_ids = []
+        folder_prefix_groups: dict[tuple[int, int], dict[int, str]] = {}
         file_ids = []
         for one in res:
             if one.file_type == FileType.DIR:
-                folder_ids.append(one.id)
+                folder_prefix = f"{one.file_level_path or ''}/{one.id}"
+                group_key = (int(one.knowledge_id), folder_prefix.count("/"))
+                folder_prefix_groups.setdefault(group_key, {})[int(one.id)] = folder_prefix
             else:
                 file_ids.append(one.id)
 
-        # folder need find all success file num and all file num
-        folder_counts = {}
-        if folder_ids:
-            from sqlalchemy import func, literal, or_, union_all
-            from sqlmodel import col, select
-
-            from bisheng.core.database import get_async_db_session
-
-            effective_tenant_id = self._file_change_visibility_service().require_explicit_tenant()
-
-            folders = [f for f in res if f.file_type == FileType.DIR]
-            folder_scopes = {
-                int(folder.id): (
-                    int(folder.knowledge_id),
-                    f"{folder.file_level_path or ''}/{folder.id}",
-                )
-                for folder in folders
-            }
-            aggregate_queries = [
-                select(
-                    literal(folder_id).label("folder_id"),
-                    KnowledgeFile.status,
-                    func.count(KnowledgeFile.id).label("file_count"),
-                )
-                .where(
-                    KnowledgeFile.tenant_id == effective_tenant_id,
-                    KnowledgeFile.knowledge_id == knowledge_id,
-                    KnowledgeFile.file_type == FileType.FILE.value,
-                    or_(
-                        col(KnowledgeFile.file_level_path) == prefix,
-                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                    ),
-                )
-                .group_by(KnowledgeFile.status)
-                for folder_id, (knowledge_id, prefix) in folder_scopes.items()
-            ]
-            async with get_async_db_session() as session:
-                aggregate_rows = []
-                for offset in range(0, len(aggregate_queries), _FOLDER_COUNT_UNION_CHUNK_SIZE):
-                    aggregate_stmt = union_all(
-                        *aggregate_queries[offset : offset + _FOLDER_COUNT_UNION_CHUNK_SIZE],
+        # Prefixes at the same depth cannot contain one another. Children pages
+        # therefore use one query, while search results split parent/child hits.
+        folder_states = {}
+        if folder_prefix_groups:
+            if self.knowledge_file_repo is None:
+                raise RuntimeError("KnowledgeFileRepository is required for folder enrichment")
+            for (knowledge_id, _depth), folder_prefixes in sorted(folder_prefix_groups.items()):
+                folder_states.update(
+                    await self.knowledge_file_repo.find_folder_descendant_status_flags(
+                        knowledge_id,
+                        folder_prefixes,
+                        # F046: files awaiting file-change approval are missing from the
+                        # listing, so they must not make their parent folder look abnormal.
+                        excluded_file_ids=file_change_excluded_ids,
                     )
-                    aggregate_rows.extend((await session.exec(aggregate_stmt)).all())
-
-                hidden_rows = []
-                hidden_ids = sorted(file_change_excluded_ids or set())
-                for offset in range(0, len(hidden_ids), 500):
-                    hidden_chunk = hidden_ids[offset : offset + 500]
-                    hidden_stmt = select(
-                        KnowledgeFile.id,
-                        KnowledgeFile.knowledge_id,
-                        KnowledgeFile.status,
-                        KnowledgeFile.file_level_path,
-                    ).where(
-                        KnowledgeFile.tenant_id == effective_tenant_id,
-                        KnowledgeFile.knowledge_id.in_(
-                            sorted({scope[0] for scope in folder_scopes.values()}),
-                        ),
-                        KnowledgeFile.file_type == FileType.FILE.value,
-                        col(KnowledgeFile.id).in_(hidden_chunk),
-                    )
-                    hidden_rows.extend((await session.exec(hidden_stmt)).all())
-
-            in_progress_statuses = {
-                KnowledgeFileStatus.PROCESSING.value,
-                KnowledgeFileStatus.WAITING.value,
-                KnowledgeFileStatus.REBUILDING.value,
-            }
-            # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
-            retryable_statuses = {
-                KnowledgeFileStatus.FAILED.value,
-                KnowledgeFileStatus.VIOLATION.value,
-            }
-            # What the folder rollup calls "存在异常" — everything needing the user to step in.
-            # Deliberately wider than retryable_statuses: a timed-out file is an anomaly the
-            # folder must surface, but batch retry does not act on it, so the display signal and
-            # the retry signal stay separate instead of one doing double duty.
-            abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
-            raw_counts = {
-                folder_id: {"success": 0, "processing": 0, "failed": 0, "abnormal": 0} for folder_id in folder_scopes
-            }
-            for folder_id, status, count in aggregate_rows:
-                normalized_folder_id = int(folder_id)
-                if status == KnowledgeFileStatus.SUCCESS.value:
-                    raw_counts[normalized_folder_id]["success"] += int(count)
-                elif status in in_progress_statuses:
-                    raw_counts[normalized_folder_id]["processing"] += int(count)
-                if status in retryable_statuses:
-                    raw_counts[normalized_folder_id]["failed"] += int(count)
-                # Not an elif: the abnormal set overlaps retryable rather than excluding it.
-                if status in abnormal_statuses:
-                    raw_counts[normalized_folder_id]["abnormal"] += int(count)
-
-            for _file_id, row_knowledge_id, status, file_level_path in hidden_rows:
-                normalized_path = str(file_level_path or "")
-                for folder_id, (knowledge_id, prefix) in folder_scopes.items():
-                    if int(row_knowledge_id) != knowledge_id:
-                        continue
-                    if normalized_path != prefix and not normalized_path.startswith(f"{prefix}/"):
-                        continue
-                    counters = []
-                    if status == KnowledgeFileStatus.SUCCESS.value:
-                        counters.append("success")
-                    elif status in in_progress_statuses:
-                        counters.append("processing")
-                    if status in retryable_statuses:
-                        counters.append("failed")
-                    if status in abnormal_statuses:
-                        counters.append("abnormal")
-                    if not counters:
-                        continue
-                    for counter in counters:
-                        raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
-
-            # 存在异常 only counts files the *current user* may see. A viewer or editor
-            # cannot see other people's failed uploads in the listing, so a folder must
-            # not light up over files that are invisible to them. The check reuses the
-            # listing's own visibility rule (_filter_visible_child_items) so both agree;
-            # the permission context is built once per space and shared across folders.
-            # The aggregate above says whether anything abnormal exists at all; only then
-            # is this (dearer) visibility pass worth running.
-            permission_contexts: dict[int, dict] = {}
-            hidden_ids = set(file_change_excluded_ids or set())
-
-            async def visible_abnormal_exists(knowledge_id: int, prefix: str) -> bool:
-                candidates_stmt = select(KnowledgeFile).where(
-                    KnowledgeFile.tenant_id == effective_tenant_id,
-                    KnowledgeFile.knowledge_id == knowledge_id,
-                    KnowledgeFile.file_type == FileType.FILE.value,
-                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
-                    or_(
-                        col(KnowledgeFile.file_level_path) == prefix,
-                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                    ),
                 )
-                async with get_async_db_session() as session:
-                    candidates = [
-                        row for row in (await session.exec(candidates_stmt)).all() if row.id not in hidden_ids
-                    ]
-                if not candidates:
-                    return False
-                if knowledge_id not in permission_contexts:
-                    permission_contexts[knowledge_id] = await self._build_child_permission_context(knowledge_id)
-                visible = await self._filter_visible_child_items(
-                    candidates, space_id=knowledge_id, context=permission_contexts[knowledge_id]
-                )
-                return bool(visible)
-
-            for folder_id, (knowledge_id, prefix) in folder_scopes.items():
-                counts = raw_counts[folder_id]
-                has_abnormal = counts["abnormal"] > 0 and await visible_abnormal_exists(knowledge_id, prefix)
-                folder_counts[folder_id] = {
-                    "has_failed_files": counts["failed"] > 0,
-                    # Drives the folder's 存在异常 pill; see abnormal_statuses above.
-                    "has_abnormal_files": has_abnormal,
-                    "success_file_num": counts["success"],
-                    "processing_file_num": counts["processing"],
-                }
+        is_space_creator = space_creator_user_id is not None and int(space_creator_user_id) == int(
+            self.login_user.user_id
+        )
 
         # file need find all tags
         file_tags = {}
@@ -2667,16 +2548,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for one in res:
             item = one.model_dump()
             if one.file_type == FileType.DIR:
-                counts = folder_counts.get(
-                    one.id,
+                state = folder_states.get(one.id)
+                has_abnormal = state.has_abnormal_files if state is not None else False
+                item.update(
                     {
-                        "has_failed_files": False,
-                        "has_abnormal_files": False,
-                        "success_file_num": 0,
-                        "processing_file_num": 0,
-                    },
+                        "has_failed_files": has_abnormal,
+                        "has_abnormal_files": is_space_creator and has_abnormal,
+                        "has_processing_files": state.has_processing_files if state is not None else False,
+                    }
                 )
-                item.update(counts)
             else:
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
@@ -2859,6 +2739,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
+        candidate_batch_size = min(max(page_size + 1, 1), _CHILD_PERMISSION_SCAN_BATCH_SIZE)
         scan_started_at = perf_counter()
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         if permission_context is not None and verified_space is not None:
@@ -2919,7 +2800,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 order_sort=order_sort,
                 file_status=file_status,
                 page=0,  # cursor mode bypasses OFFSET
-                page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
+                page_size=candidate_batch_size,
                 file_type=file_type,
                 exclude_file_ids=exclude_file_ids,
                 cursor=batch_cursor,
@@ -2955,7 +2836,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             last_db = batch_items[-1]
             batch_cursor = candidate_cursor(last_db)
 
-            if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
+            if len(batch_items) < candidate_batch_size:
                 break
 
         emit_scan_metric(has_more=False)
@@ -3043,7 +2924,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_sort: str = "asc",
         file_status: list[int] | None = None,
         cursor: str | None = None,
-        page_size: int = 20,
+        page_size: int = 40,
         file_type: int | None = None,
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
@@ -3151,8 +3032,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             stage = "extra_info"
             stage_started_at = perf_counter()
+            space_creator_user_id = getattr(verified_space, "user_id", None)
             data = await self._handle_file_folder_extra_info(
                 visible_page_items,
+                space_creator_user_id=space_creator_user_id,
                 file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
             )
             stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
@@ -3303,6 +3186,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         data = await self._handle_file_folder_extra_info(
             page_items,
+            space_creator_user_id=space.user_id,
             file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
         )
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
@@ -4746,10 +4630,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
         all_file_level_path = set()
-        retryable_status = {
-            KnowledgeFileStatus.FAILED.value,
-            KnowledgeFileStatus.VIOLATION.value,
-        }
+        retryable_status = KnowledgeFileStatus.abnormal_values()
         for file in retry_files:
             if file.knowledge_id != space_id:
                 continue

@@ -203,9 +203,11 @@ async def test_candidate_scan_refills_page_and_tracks_last_scanned_candidate(
     service = KnowledgeSpaceService(request=None, login_user=_User())
     candidates = [_item(file_id) for file_id in range(1, 251)]
     fetch_cursors: list[list | None] = []
+    fetch_sizes: list[int] = []
 
     async def _fetch(*_args, cursor=None, page_size=100, **_kwargs):
         fetch_cursors.append(cursor)
+        fetch_sizes.append(page_size)
         start_id = int(cursor[-1]) + 1 if cursor else 1
         return [row for row in candidates if row.id >= start_id][:page_size]
 
@@ -233,6 +235,7 @@ async def test_candidate_scan_refills_page_and_tracks_last_scanned_candidate(
     assert has_more is expected_has_more
     assert (scan_cursor[-1] if scan_cursor else None) == expected_cursor_id
     assert all(cursor is None or len(cursor) == 4 for cursor in fetch_cursors)
+    assert set(fetch_sizes) == {min(page_size + 1, 100)}
     metric.assert_called_once()
     assert metric.call_args.kwargs["scanned_candidates"] >= len(rows)
     assert metric.call_args.kwargs["returned_items"] == len(rows)

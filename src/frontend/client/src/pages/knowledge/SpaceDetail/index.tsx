@@ -37,6 +37,7 @@ import {
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
+    isKnowledgeItemRetryable,
     isKnowledgeItemUnderReview,
     isKnowledgeItemUploading,
     PENDING_REVIEW_FILTER,
@@ -64,7 +65,6 @@ import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 import { FilePreviewDrawer } from "../FilePreview/FilePreviewDrawer";
 import {
-    checkResourceAction,
     getMyResourcePermissions,
 } from "~/api/permission";
 import {
@@ -474,8 +474,14 @@ export function KnowledgeSpaceContent({
      *  for a permission nearly everyone holds.
      *
      *  So the affordance is unconditional and a denial arrives as a toast from
-     *  the download call itself, which checks the same permission anyway. */
-    const OFFER_DOWNLOAD_TO_EVERYONE = true;
+     *  the download call itself, which checks the same permission anyway.
+     *
+     *  The one thing that trade cannot absorb is the action being switched off
+     *  in the Permission Catalog: then nobody can download, and offering the
+     *  button promises something that will always be refused. That is a single
+     *  Catalog fact, not a per-file decision, so the server reports it once with
+     *  the space and the button hides without paying the per-page cost. */
+    const offerDownload = space.downloadActionEnabled !== false;
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.pendingUploadApproval && !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -513,28 +519,22 @@ export function KnowledgeSpaceContent({
         const objectType = currentFolderId ? "folder" : "knowledge_space";
         const objectId = currentFolderId || space.id;
 
-        Promise.allSettled([
-            checkResourceAction(
-                { resource_type: objectType, resource_id: objectId, action: "create_folder" },
-                { signal: controller.signal },
-            ),
-            checkResourceAction(
-                { resource_type: objectType, resource_id: objectId, action: "upload_file" },
-                { signal: controller.signal },
-            ),
-        ]).then(([createFolderResult, uploadFileResult]) => {
-            if (cancelled) return;
-            setCanCreateFolder(
-                createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
-            );
-            setCanUploadFile(
-                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
-            );
-            const canPlaceInTarget =
-                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed);
-            setCanMoveFile(canPlaceInTarget);
-            setCanMoveFolder(canPlaceInTarget);
-        }).catch(() => {
+        // Ask what this user holds here, the way the per-file menu does, instead
+        // of asserting each action separately. A per-action probe treats an
+        // action the Catalog has switched off as an error, so disabling
+        // upload_file made every visit pop "Action upload_file is unavailable
+        // for knowledge_space" beside an upload button that was already hidden.
+        // A held-actions list just leaves the action out. One request, not two.
+        getMyResourcePermissions(objectType, String(objectId), { signal: controller.signal })
+            .then((summary) => {
+                if (cancelled) return;
+                const held = new Set(summary?.actions ?? []);
+                setCanCreateFolder(held.has("create_folder"));
+                const canPlaceInTarget = held.has("upload_file");
+                setCanUploadFile(canPlaceInTarget);
+                setCanMoveFile(canPlaceInTarget);
+                setCanMoveFolder(canPlaceInTarget);
+            }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
                 setCanUploadFile(false);
@@ -1286,13 +1286,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchRetry = async () => {
-        // Find selected files/folders that have FAILED status or partial failures
-        const retryIds = getReviewedSelection()
-            .filter(f => (
-                f.status === FileStatus.FAILED ||
-                f.status === FileStatus.VIOLATION ||
-                (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-            ))
+        // Find selected files/folders that have an abnormal status or descendant.
+        const retryIds = displayFiles
+            .filter(f => selectedFiles.has(f.id) && isKnowledgeItemRetryable(f))
             .map(f => Number(f.id));
 
         if (retryIds.length === 0) return;
@@ -1352,11 +1348,7 @@ export function KnowledgeSpaceContent({
         canWithdrawPendingUpload(f.pendingUploadApproval, user?.id)
     );
     const reviewedSelectedList = selectedList.filter((f) => !f.pendingUploadApproval);
-    const hasFailedFiles = reviewedSelectedList.some(f =>
-        f.status === FileStatus.FAILED ||
-        f.status === FileStatus.VIOLATION ||
-        (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-    );
+    const hasFailedFiles = reviewedSelectedList.some(isKnowledgeItemRetryable);
     const hasFoldersSelected = reviewedSelectedList.some(f => f.type === FileType.FOLDER);
     const selectionHasFile = reviewedSelectedList.some((f) => f.type !== FileType.FOLDER);
     // Batch move requires the matching move permission for every kind in the
@@ -1371,7 +1363,7 @@ export function KnowledgeSpaceContent({
     const canBatchDelete = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
-    const canBatchDownload = reviewedSelectedList.length > 0 && OFFER_DOWNLOAD_TO_EVERYONE;
+    const canBatchDownload = reviewedSelectedList.length > 0 && offerDownload;
     // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
     // appears whenever ANY selected file is a pending similar document. The dialog is then
     // scoped to exactly the selected files (see handleProcessSimilar).
@@ -1837,7 +1829,7 @@ export function KnowledgeSpaceContent({
                                             canManageMembers={canManageMembers}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
-                                            canDownload={OFFER_DOWNLOAD_TO_EVERYONE}
+                                            canDownload={offerDownload}
                                             mobileListMode={isH5}
                                             highlightedTagIds={searchTagIds}
                                             highlightKeyword={searchQuery}

@@ -18,7 +18,7 @@ import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemRetryable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { canDecidePendingUpload, canWithdrawPendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
@@ -314,9 +314,7 @@ export function FileCard({
             // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
             return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
         }
-        // Folder rollup: 存在异常 is not an admin-only signal — anyone who can see the files
-        // needs to know their folder holds one that needs attention. Checked before the
-        // isAdmin gate that guards the per-file status tags.
+        // The backend returns this folder anomaly signal only to the space creator.
         if (isFolder) {
             if (file.hasAbnormalFiles !== true) return null;
             const pill = (
@@ -464,13 +462,7 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
-    const hasRetryOption = Boolean(
-        onRetry && (
-            file.status === FileStatus.FAILED ||
-            file.status === FileStatus.VIOLATION ||
-            (isFolder && file.hasFailedFiles === true)
-        )
-    );
+    const hasRetryOption = Boolean(onRetry && isKnowledgeItemRetryable(file));
     // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
@@ -858,7 +850,7 @@ export function FileCard({
                                         <Button
                                             variant="outline"
                                             size="icon"
-                                            className="w-5 h-5 rounded-md shrink-0"
+                                            className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />

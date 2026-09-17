@@ -149,6 +149,8 @@ export interface KnowledgeSpace {
     departmentId?: number;
     departmentName?: string;
     approvalEnabled?: boolean;
+    /** 909 only: the Catalog still has the download action switched on. */
+    downloadActionEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
     actions?: string[];
     initialPermissionResult?: InitialPermissionResult;
@@ -199,14 +201,12 @@ export interface KnowledgeFile {
     thumbnail?: string;
     errorMessage?: string;
     sensitiveCheck?: KnowledgeFileSensitiveCheck;
-    /** Number of successfully parsed files (folders only) */
-    successFileNum?: number;
-    /** Whether the folder contains at least one FAILED/VIOLATION child (folders only) — drives batch retry */
+    /** Whether the folder contains at least one abnormal descendant (folders only) — drives batch retry */
     hasFailedFiles?: boolean;
-    /** Whether the folder's subtree holds any FAILED/TIMEOUT/VIOLATION file (folders only) — drives the 存在异常 pill */
+    /** Creator-only signal that the folder contains an abnormal descendant */
     hasAbnormalFiles?: boolean;
-    /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
-    processingFileNum?: number;
+    /** Whether the folder contains a PROCESSING/WAITING/REBUILDING descendant */
+    hasProcessingFiles?: boolean;
     /** Source of the file, e.g. 'channel' for subscription channel files */
     fileSource?: string;
     /** Path of the existing duplicate file (when status is DUPLICATE) */
@@ -244,6 +244,8 @@ export interface KnowledgeFile {
 
 interface RawKnowledgeSpace {
     id: number;
+    /** 909 only: absent before the Catalog download switch was reported. */
+    download_action_enabled?: boolean;
     name: string;
     description?: string;
     icon?: string;
@@ -333,9 +335,7 @@ interface RawKnowledgeFile {
     update_time?: string;
     remark?: string;
     thumbnails?: string | null;
-    success_file_num?: number;
     file_num?: number;
-    processing_file_num?: number;
     tags?: Array<{ id: number; name: string }>;
 }
 
@@ -618,6 +618,9 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).sensitive_check_enabled !== undefined
                 ? Boolean((raw as any).sensitive_check_enabled)
                 : undefined,
+        // 909 only: absent on older backends, and "download is on" is the safe
+        // default there because that is how this line behaved before the flag.
+        downloadActionEnabled: raw.download_action_enabled !== false,
         actions: Array.isArray(raw.actions) ? raw.actions : [],
     };
 }
@@ -907,10 +910,9 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
-        successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         hasFailedFiles: raw?.has_failed_files !== undefined ? Boolean(raw.has_failed_files) : undefined,
         hasAbnormalFiles: raw?.has_abnormal_files !== undefined ? Boolean(raw.has_abnormal_files) : undefined,
-        processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
+        hasProcessingFiles: raw?.has_processing_files !== undefined ? Boolean(raw.has_processing_files) : undefined,
         fileSource: raw?.file_source,
         oldFileLevelPath: raw?.old_file_level_path,
         approvalRequestId: raw?.approval_request_id !== undefined ? Number(raw.approval_request_id) : undefined,
@@ -990,6 +992,7 @@ export function fileStatusToNumber(status: FileStatus): number {
 
 /** Backend `/children` filter: SUCCESS (2) only. Used for 广场预览 when user is not an active space member. */
 export const SPACE_CHILDREN_STATUS_SUCCESS_ONLY: number[] = [2];
+export const SPACE_CHILDREN_DEFAULT_PAGE_SIZE = 40;
 
 /** Map a raw knowledge file record to the frontend KnowledgeFile model */
 function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
@@ -1009,8 +1012,6 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         thumbnail: raw.thumbnails || undefined,
         errorMessage: extractKnowledgeFileError(raw),
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
-        successFileNum: raw.success_file_num,
-        processingFileNum: raw.processing_file_num,
     };
 }
 
@@ -1579,7 +1580,12 @@ export async function getSpaceChildrenApi(params: {
 }): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) {
-        return { data: [], page_size: queryParams.page_size ?? 20, has_more: false, next_cursor: null };
+        return {
+            data: [],
+            page_size: queryParams.page_size ?? SPACE_CHILDREN_DEFAULT_PAGE_SIZE,
+            has_more: false,
+            next_cursor: null,
+        };
     }
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${space_id}/children`,
@@ -1599,7 +1605,7 @@ export async function getSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
-        page_size: Number(payload?.page_size ?? queryParams.page_size ?? 20),
+        page_size: Number(payload?.page_size ?? queryParams.page_size ?? SPACE_CHILDREN_DEFAULT_PAGE_SIZE),
         has_more: !!payload?.has_more,
         next_cursor: payload?.next_cursor ?? null,
     };
