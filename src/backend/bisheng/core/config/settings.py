@@ -819,7 +819,9 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    jwt_secret: str = "secret_cF2kD4lW9wY4zL7eX1zX9vS1fA7eW4lQ"
+    # F068: no shipped default. Empty means "generate once and keep in the config
+    # table" — see ``bisheng.user.domain.services.jwt_secret``.
+    jwt_secret: str = ""
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}
