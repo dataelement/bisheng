@@ -53,6 +53,7 @@ metadata:
 | `BISHENG_APP_HEALTH_PATH` | 健康探测路径(默认 `/`) | `/` |
 | `BISHENG_APP_ID` / `BISHENG_APP_SLUG` / `BISHENG_APP_VERSION` | 平台侧标识 | 可不用 |
 | `BISHENG_PLATFORM_API_BASE` | 平台 API 基址(调用平台能力时用) | 可不用 |
+| `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`(及小写同名) | 出站代理,访问外网只能经过它(见 §2 `egress.domains`);应用自带的同名值会被覆盖 | 不设 |
 
 读法永远是「读环境变量,取不到用本地默认」,例如:
 `PORT = int(os.environ.get("PORT") or os.environ.get("BISHENG_APP_PORT") or 8080)`。
@@ -136,7 +137,19 @@ port: 8080                   # 必填,应用监听的端口
   (类型、可空、默认值任一变化)都算破坏性变更,平台会拒(错误码 16229)并要求显式确认——终端上 `bisheng deploy`
   会打印变更清单后问你;非终端或脚本里要先看清清单、确认后带 `--confirm-schema-change` 重发同一个包。
   只加表 / 加列不用确认。**没有终端不等于默认同意**,不要为了跳过提问而无脑加这个 flag。
-- `egress.domains:`(出站域名白名单)本轮只做格式检查,不做拦截。
+- `egress.domains:`(出站域名白名单)**平台会真的拦截**:应用上线后默认连不上任何外网地址,只放行平台自身和这里列出的域名。
+  **本地 `python main.py` 不受限,上线后才拦**——这是少数本地验不出来的差别,所以应用要访问的每个外部接口都要列上:
+  ```yaml
+  egress:
+    domains:
+      - api.github.com        # 只写主机名,不带 https:// 和路径
+      - "*.example.com"       # 覆盖所有子域名,也覆盖 example.com 本身
+      - data.example.org:8443 # 默认只放行 80/443,别的端口写成 host:port
+  ```
+  直连 IP、UDP 一律不通;解析到内网地址的域名写进来也不通(要访问企业内网服务,找平台管理员在平台侧放行)。
+  外网请求经平台注入的 `HTTPS_PROXY` 出去:Python 的 `urllib` / `requests` / `httpx` 默认就读它;`aiohttp` 要传 `trust_env=True`;
+  Node 自带的 `fetch` 默认不读,要显式配代理(如 `undici` 的 `EnvHttpProxyAgent`)。不走代理的请求拿不到任何响应,只会超时或报网络不可达。
+  漏写域名的表现是请求被拒:`403 Forbidden`(Python 里是 `Tunnel connection failed: 403 Forbidden`),不是超时。
 
 ---
 
@@ -226,6 +239,7 @@ bisheng deploy . --wait               # --wait-timeout 秒数,默认 1800
 - [ ] **没有用 WebSocket**(本版握手会被关闭);需要服务端推送的地方用的是 SSE 或轮询。
 - [ ] `bisheng-app.yaml` 有 `name`/`runtime`(`python3.11` / `node20` / `static` 之一)/`port`;没有 `health`/`command` 等未知字段;`capabilities` 为空。
 - [ ] 没有硬编码密钥/连接串/自建登录页。
+- [ ] 应用要访问的外网地址都写进了 `egress.domains`;发请求的 HTTP 客户端会读 `HTTPS_PROXY`。
 - [ ] 依赖尽量少;`requirements.txt`(或 `package.json` 的 `dependencies`)里没有的包不要 import;纯标准库时留空。
 - [ ] `static` 应用:`index.html` 在包根目录,或已在 `.bishengignore` 里 `!dist/` 取回构建产物。
 

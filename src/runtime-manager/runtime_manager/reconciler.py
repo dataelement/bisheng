@@ -38,7 +38,16 @@ Two properties are asserted as loudly as the recovery itself:
   that reasons in terms of "not in my desired state" instead of "mine, and not
   in my desired state" is a data-loss incident waiting for a deploy.
 
-One pass does a second, unrelated thing: it reclaims **approval-time previews**
+A pass also keeps serving instances in line with the **egress layer** (D12 /
+AC-16). The proxy variables are fixed when a container is created, the layer is
+a property of the deployment, and the two drift apart the moment an operator
+switches it on: the L3 rules cover the whole subnet at once, and every instance
+created before that has no proxy to go through. That is not a hypothetical —
+it cut an application on 114 off the internet the evening the layer went live,
+silently, until a user noticed the numbers had stopped moving. The fix is a
+blue-green replacement at the next generation, one application per pass.
+
+One pass does a further, unrelated thing: it reclaims **approval-time previews**
 whose deadline has passed (F055 AC-28). They are deliberately outside
 everything above — ``bisheng.managed=preview``, no desired-state record — so
 the sweep reads their own label and touches nothing else. It rides this loop
@@ -51,7 +60,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -68,8 +77,21 @@ from runtime_manager.desired_state import (
     phase_for,
 )
 from runtime_manager.docker_backend import DockerBackend, get_docker_backend
-from runtime_manager.egress import ENV_EGRESS_TOKEN, register_principal, runtime_destinations
-from runtime_manager.lifecycle import Prober, build_container_payload, start_period_seconds
+from runtime_manager.egress import (
+    ENV_EGRESS_TOKEN,
+    egress_drift,
+    get_policy_store,
+    realign_egress_env,
+    register_principal,
+    runtime_destinations,
+)
+from runtime_manager.lifecycle import (
+    Prober,
+    ThreadScheduler,
+    build_container_payload,
+    container_name,
+    start_period_seconds,
+)
 from runtime_manager.observability import log_rebuild, log_reconcile
 
 logger = logging.getLogger(__name__)
@@ -85,6 +107,18 @@ UNHEALTHY_ROUNDS_BEFORE_REBUILD = 2
 
 #: AC-20 / NFR-6 — the promise the budget below has to fit inside.
 RECOVERY_BUDGET_SECONDS = 300
+
+#: Egress realignments started per pass. Each one is a blue-green switch whose
+#: previous instance keeps running through the retirement grace window, so
+#: realigning a whole host in one pass would briefly run every application
+#: twice — on exactly the kind of host whose capacity gate already bites.
+REALIGNMENTS_PER_PASS = 1
+
+#: Back-off after a realigned instance fails its readiness gate. The attempt
+#: holds this loop for up to a probe timeout, and the instance it would have
+#: replaced is still serving, so retrying every 15 s would buy nothing and slow
+#: recovery for every other application on the host.
+REALIGN_RETRY_SECONDS = 600
 
 
 def recovery_budget_seconds(config: Config) -> int:
@@ -115,18 +149,28 @@ class ReconcileReport:
     rebuilt: list[str] = field(default_factory=list)
     stopped: list[str] = field(default_factory=list)
     reclaimed: list[str] = field(default_factory=list)
+    realigned: list[str] = field(default_factory=list)
     healthy: list[str] = field(default_factory=list)
     failures: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def acted(self) -> bool:
-        return bool(self.recovered or self.recreated or self.started or self.rebuilt or self.stopped or self.reclaimed)
+        return bool(
+            self.recovered
+            or self.recreated
+            or self.started
+            or self.rebuilt
+            or self.stopped
+            or self.reclaimed
+            or self.realigned
+        )
 
     def summary(self) -> str:
         return (
             f"recovered={len(self.recovered)} recreated={len(self.recreated)} "
             f"started={len(self.started)} rebuilt={len(self.rebuilt)} "
             f"stopped={len(self.stopped)} reclaimed={len(self.reclaimed)} "
+            f"realigned={len(self.realigned)} "
             f"healthy={len(self.healthy)} failures={len(self.failures)}"
         )
 
@@ -140,6 +184,7 @@ class ReconcileReport:
             "rebuilt": len(self.rebuilt),
             "stopped": len(self.stopped),
             "reclaimed": len(self.reclaimed),
+            "realigned": len(self.realigned),
             "failures": len(self.failures),
         }
 
@@ -154,12 +199,19 @@ class Reconciler:
         store=None,
         prober: Prober | None = None,
         clock: Any | None = None,
+        scheduler: Any | None = None,
     ) -> None:
         self._config = config
         self._docker = docker or get_docker_backend()
         self._store = store if store is not None else get_store(config)
         self._prober = prober
         self._clock = clock
+        self._scheduler = scheduler or ThreadScheduler()
+        #: app_id → monotonic time before which a failed realignment is not
+        #: retried. In memory on purpose: a manager restart is a reasonable
+        #: moment to try again.
+        self._realign_retry_at: dict[str, float] = {}
+        self._realigned_this_pass = 0
 
     # -- entry points ------------------------------------------------------
     def startup_align(self) -> ReconcileReport:
@@ -197,6 +249,7 @@ class Reconciler:
         # One read, then act on exactly what was read: recomputing the count at
         # the end would report a number the pass never worked from.
         records = self._store.list()
+        self._realigned_this_pass = 0
         for record in records:
             try:
                 self._reconcile_one(record, actual, report)
@@ -329,6 +382,8 @@ class Reconciler:
             restart_count=max(record.restart_count, 0),
         )
         report.healthy.append(record.app_id)
+        if phase == PHASE_RUNNING:
+            self._align_egress(record, report)
 
     def _recreate(self, record: InstanceRecord, report: ReconcileReport) -> None:
         """Desired state says running and the daemon has nothing at that name."""
@@ -339,9 +394,10 @@ class Reconciler:
             record.generation,
         )
         self._ensure_absent(record.container_name)
-        container_id = self._create_and_start(record, generation=record.generation)
+        env = self._aligned_env(record)
+        container_id = self._create_and_start(replace(record, env=env), generation=record.generation)
         report.recreated.append(record.app_id)
-        self._settle(record, report, container_id=container_id, generation=record.generation)
+        self._settle(record, report, container_id=container_id, generation=record.generation, env=env)
 
     def _rebuild(self, record: InstanceRecord, report: ReconcileReport) -> None:
         """The unhealthy-but-alive fix: stop → rm → run. The volume never moves.
@@ -359,9 +415,10 @@ class Reconciler:
             unhealthy_rounds=UNHEALTHY_ROUNDS_BEFORE_REBUILD,
         )
         self._ensure_absent(record.container_name)
-        container_id = self._create_and_start(record, generation=generation)
+        env = self._aligned_env(record)
+        container_id = self._create_and_start(replace(record, env=env), generation=generation)
         report.rebuilt.append(record.app_id)
-        self._settle(record, report, container_id=container_id, generation=generation)
+        self._settle(record, report, container_id=container_id, generation=generation, env=env)
 
     def _settle(
         self,
@@ -370,11 +427,16 @@ class Reconciler:
         *,
         container_id: str,
         generation: int,
+        env: dict[str, str],
     ) -> None:
         outcome = self._probe(record, container_id)
         changes: dict[str, Any] = {
             "container_id": container_id,
             "generation": generation,
+            # What the new instance was actually handed — a recovery that
+            # realigned the proxy variables must not leave the record saying
+            # otherwise, or the next pass would "realign" it again.
+            "env": env,
             "restart_count": record.restart_count + 1,
             "unhealthy_rounds": 0,
             "started_at": _now(),
@@ -391,6 +453,133 @@ class Reconciler:
             report.failures.append((record.app_id, outcome.reason or "did not become ready"))
             logger.error("app %s did not become ready after recovery: %s", record.app_id, outcome.reason)
         self._store.mutate(record.app_id, **changes)
+
+    # -- egress (D12 / AC-16) ----------------------------------------------
+    def _align_egress(self, record: InstanceRecord, report: ReconcileReport) -> None:
+        """Keep a serving instance's policy entry and proxy variables current.
+
+        Two halves with very different costs. The policy entry is a file the
+        proxy re-reads, so a stale or missing one (``RTM_EGRESS_ALLOW`` edited,
+        the policy file lost) is fixed in place. The variables live inside the
+        container, so drift there means a new instance.
+        """
+        if self._store.get(record.app_id) is not record:
+            # A deploy / destroy replaced the record during this pass; acting on
+            # the copy read at the start would write yesterday's policy over it.
+            return
+        token = self._ensure_principal(record)
+        if not egress_drift(self._config, principal=record.app_id, env=record.env):
+            return
+        if self._realigned_this_pass >= REALIGNMENTS_PER_PASS:
+            return
+        if self._monotonic() < self._realign_retry_at.get(record.app_id, float("-inf")):
+            return
+        self._realigned_this_pass += 1
+        self._realign(record, token, report)
+
+    def _ensure_principal(self, record: InstanceRecord) -> str:
+        """Put the instance's egress policy on file when missing or stale; return its credential.
+
+        Written only on a difference: every write bumps the file's mtime, and the
+        proxy reloads on that — once per pass per application would be a reload
+        storm for a file that almost never changes.
+        """
+        config = self._config
+        if not config.egress_enabled:
+            return ""
+        destinations = runtime_destinations(
+            config,
+            platform_api_base=record.env.get("BISHENG_PLATFORM_API_BASE", ""),
+            declared=record.egress_domains,
+            injected_env=record.env,
+        )
+        token = record.env.get(ENV_EGRESS_TOKEN) or ""
+        existing = get_policy_store(config).get(record.app_id)
+        if existing is not None and existing.destinations == destinations:
+            if token and existing.authenticates(token):
+                return token
+            if not token and existing.token:
+                return existing.token
+        # The container's own credential wins over whatever is on file: it is
+        # the one the running instance presents.
+        return register_principal(config, principal=record.app_id, destinations=destinations, token=token or None)
+
+    def _aligned_env(self, record: InstanceRecord) -> dict[str, str]:
+        """The environment a (re)created instance should get under the current layer."""
+        token = self._ensure_principal(record)
+        if not egress_drift(self._config, principal=record.app_id, env=record.env):
+            return record.env
+        return realign_egress_env(self._config, principal=record.app_id, env=record.env, token=token)
+
+    def _realign(self, record: InstanceRecord, token: str, report: ReconcileReport) -> None:
+        """Replace a healthy instance whose proxy variables are stale, blue-green.
+
+        Same shape as a redeploy of the same version (AC-21): the replacement is
+        created beside the serving instance at the next generation, the route
+        switches only after it passes the readiness gate, and the old one is
+        retired after the grace window. A failure leaves the old instance
+        serving — cut off from the internet, but no worse than before.
+        """
+        generation = record.generation + 1
+        name = container_name(record.slug, record.version_id, generation)
+        if self._inspect(name) is not None:
+            # Only a deploy of this same version puts something there, and it is
+            # mid-probe: its instance gets current variables anyway, and removing
+            # it would fail that deploy.
+            return
+        env = realign_egress_env(self._config, principal=record.app_id, env=record.env, token=token)
+        logger.warning(
+            "app %s: proxy variables do not match the egress layer; replacing %s with generation %s",
+            record.app_id,
+            record.container_name,
+            generation,
+        )
+        container_id = self._create_and_start(replace(record, env=env, container_name=name), generation=generation)
+        outcome = self._probe(record, container_id)
+        if not outcome.ready:
+            self._force_remove(container_id)
+            self._realign_retry_at[record.app_id] = self._monotonic() + REALIGN_RETRY_SECONDS
+            reason = outcome.reason or "did not become ready"
+            report.failures.append((record.app_id, f"egress realignment: {reason}"))
+            logger.error(
+                "app %s: realigned instance did not become ready (%s); %s keeps serving, retry in %ss",
+                record.app_id,
+                reason,
+                record.container_name,
+                REALIGN_RETRY_SECONDS,
+            )
+            return
+        if self._store.get(record.app_id) is not record:
+            # Replaced while we probed — that deploy's instance is the current one.
+            self._force_remove(container_id)
+            return
+        self._realign_retry_at.pop(record.app_id, None)
+        previous = record.container_name
+        self._store.mutate(
+            record.app_id,
+            container_name=name,
+            container_id=container_id,
+            env=env,
+            generation=generation,
+            phase=PHASE_RUNNING,
+            health="healthy",
+            unhealthy_rounds=0,
+            started_at=_now(),
+            last_probe_at=_now(),
+            retiring=[*record.retiring, previous],
+        )
+        self._scheduler.schedule(self._config.retire_grace_seconds, self._retire, record.app_id, previous)
+        report.realigned.append(record.app_id)
+
+    def _retire(self, app_id: str, name: str) -> None:
+        """Mirror of ``LifecycleService._retire`` for the instance a realignment replaced."""
+        self._force_remove(name)
+        record = self._store.get(app_id)
+        if record is not None and name in record.retiring:
+            self._store.mutate(app_id, retiring=[c for c in record.retiring if c != name])
+
+    def _monotonic(self) -> float:
+        return self._clock.monotonic() if self._clock is not None else time.monotonic()
 
     # -- orphans -----------------------------------------------------------
     def _reclaim_orphans(self, actual: dict[str, dict[str, Any]], report: ReconcileReport) -> None:
@@ -451,23 +640,10 @@ class Reconciler:
     def _create_and_start(self, record: InstanceRecord, *, generation: int) -> str:
         tier = Tier(cpu=record.tier_cpu, mem_mb=record.tier_mem_mb)
         self._config.app_data_dir(record.app_id).mkdir(parents=True, exist_ok=True)
-        # Re-assert the egress policy with the credential the record already
-        # carries (it is in ``record.env``). The recreated instance keeps that
-        # value, so re-minting one here would hand the container a credential the
-        # policy file has never seen — and the recovery path this method also
-        # serves is exactly the one where the policy file may be the thing that
-        # went missing.
-        register_principal(
-            self._config,
-            principal=record.app_id,
-            destinations=runtime_destinations(
-                self._config,
-                platform_api_base=record.env.get("BISHENG_PLATFORM_API_BASE", ""),
-                declared=record.egress_domains,
-                injected_env=record.env,
-            ),
-            token=record.env.get(ENV_EGRESS_TOKEN) or None,
-        )
+        # The egress policy is the caller's job (``_aligned_env`` / ``_align_egress``):
+        # it has to be on file *before* the variables that name it are chosen.
+        # Registering here, after the fact, is how a recreated instance once got a
+        # freshly minted credential on the policy file and none in its environment.
         payload = build_container_payload(
             self._config,
             app_id=record.app_id,

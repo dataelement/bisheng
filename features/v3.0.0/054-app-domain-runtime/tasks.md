@@ -654,6 +654,8 @@
   6. **（小）`test_socket_proxy.py` 两个 `@pytest.mark.docker` 用例打 `127.0.0.1:2375`**——compose 形态下这个端口**从不发布**（这正是 D2-B 的要点），curl 会「连接被拒」而测试把它当通过。改成 `docker exec bisheng-runtime-manager` 从管理器视角问，交付说明里的 114 命令同理。
   7. **（小）compose 里 egress-proxy 不再拿 `RTM_HMAC_SECRET`**：它不提供 API、不碰编排面，给它编排凭据是纯粹的权限扩散——和 systemd 单元里「不要给它 docker 组」同一条理由。原来给它只是为了满足 `verify_app_runtime_compose.py` 的 `REQUIRED_ENV` 反向校验；改成脚本按**进程角色**覆盖必填集（`REQUIRED_ENV_OVERRIDE`），代理只需 `RTM_DATA_ROOT` / `RTM_EGRESS_LISTEN` / `RTM_EGRESS_PROXY` 三项。
 
+  **114 上线后补修（2026-09-17，真缺陷）：开启出站白名单时，已在线的实例被整体断网**。L3 规则一下发就覆盖整个网段，而代理变量和策略条目只在**创建容器时**发放——开层之前创建的实例既没有 `HTTP_PROXY`、策略文件里也没有它，直连被丢、代理又不认。114 当晚 18:00 起，一个按小时采集两个公网站点的应用（manifest 早已声明域名）全部报超时，直到第二天有人发现数据不动了才被察觉；`resume` 一次即恢复。**修法**：reconciler 每轮对在跑且健康的实例比对「注入的代理变量 vs 当前层配置」（`egress.egress_drift`：开层后缺凭据、代理地址 / `NO_PROXY` 变了、关层后还带着平台凭据，都算漂移），漂移就**蓝绿替换**——在下一代次起新容器、探活通过才切期望态、旧容器按宽限期退役，与同版本重发布同形；每轮至多一个应用（避免整机实例瞬间翻倍），探活失败保留旧实例并退避 600s。策略条目缺失或过期（`RTM_EGRESS_ALLOW` 改了、策略文件丢了）则**原地补写**、不动容器，且只在有差异时写（代理按 mtime 重读）。顺带修掉同源的潜伏缺陷：reconciler 重建实例时会给策略文件登记一把新凭据、却不注入容器。新增 12 例（`test_egress.py` 「instances that predate a change to the layer」一节），在旧 reconciler 上 11 例失败。
+
 - [x] **T078**: `[MVP-114]` docker-socket-proxy 端点白名单（D2-B）
   **文件**: `src/runtime-manager/runtime_manager/docker_backend.py`, `docker/docker-compose.yml`, `src/runtime-manager/tests/test_socket_proxy.py`（新）
   **逻辑**: 把 root 等价权限收成端点级（`/build`、`/containers/create|start|stop|remove`、`/images`、`/networks`）；对 manager 代码只是**换一个 base URL**、不构成返工；代理端口绝不对外暴露。

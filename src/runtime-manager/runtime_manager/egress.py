@@ -661,6 +661,61 @@ def egress_env(config: Config, *, principal: str, token: str, no_proxy: object =
     }
 
 
+#: Every name :func:`egress_env` writes. Platform-owned while the layer is on
+#: (the injection overwrites an application's own value), which is what lets
+#: :func:`realign_egress_env` drop all of them before re-deriving the set.
+EGRESS_ENV_NAMES: tuple[str, ...] = (
+    ENV_EGRESS_TOKEN,
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+)
+
+
+def egress_drift(config: Config, *, principal: str, env: dict[str, str]) -> bool:
+    """Whether an instance's proxy variables disagree with this deployment's egress layer.
+
+    The variables are fixed when a container is created, but the layer is a
+    property of the deployment and changes underneath running instances. The
+    case that made this function necessary: switching the layer on installs the
+    L3 rules for the whole subnet at once, so every instance created before that
+    moment has no ``HTTP_PROXY``, no credential on the policy file, and no route
+    out — the application that polled two public sites went dark on 114 the
+    evening the layer was enabled, and nothing reported it.
+
+    Turning the layer *off* is the mirror image (every instance keeps dialling
+    a proxy that is no longer there), and moving the proxy or the manager's
+    address is the same problem with a different value.
+
+    With the layer off, only a credential proves the variables are ours: an
+    application is free to ship its own ``HTTP_PROXY`` then, and that must not
+    read as drift.
+    """
+    token = env.get(ENV_EGRESS_TOKEN) or ""
+    if not config.egress_enabled:
+        return bool(token)
+    if not token:
+        return True
+    expected = egress_env(config, principal=principal, token=token)
+    return any(env.get(name) != value for name, value in expected.items())
+
+
+def realign_egress_env(config: Config, *, principal: str, env: dict[str, str], token: str) -> dict[str, str]:
+    """``env`` with the proxy variables re-derived from the current layer.
+
+    ``token`` is the credential already on the policy file (``""`` with the
+    layer off). All of :data:`EGRESS_ENV_NAMES` go first — including an
+    application's own ``HTTP_PROXY`` left over from before the layer existed,
+    which is exactly what the injection would have overwritten at deploy time.
+    """
+    aligned = {key: value for key, value in env.items() if key not in EGRESS_ENV_NAMES}
+    aligned.update(egress_env(config, principal=principal, token=token))
+    return aligned
+
+
 def _no_proxy_hosts(config: Config, extra: object = ()) -> list[str]:
     """Destinations on the application network itself — reachable without a hop.
 

@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +30,7 @@ import pytest
 from runtime_manager.api.schemas import DeployRequest, HealthIn, TierIn
 from runtime_manager.builder import BuildService
 from runtime_manager.config import LABEL_EGRESS_DOMAINS, Config
-from runtime_manager.desired_state import InstanceRecord
+from runtime_manager.desired_state import InstanceRecord, get_store
 from runtime_manager.egress import (
     BACKEND_IPTABLES,
     BACKEND_NFTABLES,
@@ -40,6 +41,7 @@ from runtime_manager.egress import (
     DENY_PRIVATE_ADDRESS,
     DENY_UDP,
     DENY_UNKNOWN_PRINCIPAL,
+    EGRESS_ENV_NAMES,
     ENV_EGRESS_TOKEN,
     PRINCIPAL_BUILD,
     PROTO_UDP,
@@ -49,6 +51,7 @@ from runtime_manager.egress import (
     build_proxy_buildargs,
     decide,
     detect_firewall_backend,
+    egress_drift,
     egress_env,
     egress_preflight,
     firewall_rules,
@@ -64,7 +67,15 @@ from runtime_manager.egress import (
 )
 from runtime_manager.egress_proxy import EgressProxy
 from runtime_manager.lifecycle import LifecycleService
-from tests.fakes import FakeDockerBackend, FakeHostProbe, ImmediateScheduler
+from runtime_manager.reconciler import REALIGN_RETRY_SECONDS, Reconciler
+from tests.fakes import (
+    FakeClock,
+    FakeDockerBackend,
+    FakeDockerError,
+    FakeHostProbe,
+    ImmediateScheduler,
+    RecordingScheduler,
+)
 
 PROXY_ADDRESS = "egress-proxy:3128"
 PLATFORM = "http://platform.example.com:7860"
@@ -879,6 +890,250 @@ def test_stopping_a_preview_takes_its_credential_with_it(egress_config: Config, 
     )
     service.stop("session-0001")
     assert get_policy_store(egress_config).get(preview_principal("session-0001")) is None
+
+
+# ---------------------------------------------------------------------------
+# instances that predate a change to the layer — the reconciler realigns them
+# ---------------------------------------------------------------------------
+#
+# The layer's L3 rules cover the whole subnet the moment they are applied, but
+# the proxy variables and the policy entry are handed out at container creation.
+# On 114 that gap cut an already-online application off the internet for a
+# night: no ``HTTP_PROXY``, no entry on the policy file, no route.
+
+
+def _env_of(payload: dict) -> dict[str, str]:
+    return dict(item.split("=", 1) for item in payload["Env"])
+
+
+def _reconciler(config: Config, docker: FakeDockerBackend, *, prober=None, clock=None, scheduler=None) -> Reconciler:
+    return Reconciler(
+        config,
+        docker=docker,
+        store=get_store(config),
+        prober=prober or _ReadyProber(),
+        clock=clock or FakeClock(),
+        scheduler=scheduler or ImmediateScheduler(),
+    )
+
+
+class _FailingProber:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def wait_ready(self, container, port, health_path, timeout=None):
+        self.calls += 1
+        return SimpleNamespace(ready=False, reason="timeout after 90s")
+
+
+def test_drift_is_judged_against_the_layer_as_it_is_configured_now(rtm_config: Config, egress_config: Config):
+    token = "t" * 43
+    injected = egress_env(egress_config, principal="app-1", token=token)
+    assert set(injected) == set(EGRESS_ENV_NAMES)
+
+    assert not egress_drift(egress_config, principal="app-1", env={"PORT": "8080", **injected})
+    assert egress_drift(egress_config, principal="app-1", env={"PORT": "8080"})
+    moved = egress_config.with_overrides(egress_proxy="172.22.0.1:3128")
+    assert egress_drift(moved, principal="app-1", env=injected)
+    # With the layer off, an application's own proxy is its own business…
+    assert not egress_drift(rtm_config, principal="app-1", env={"HTTP_PROXY": "http://corp-proxy:8080"})
+    # …but variables carrying our credential point at a proxy that is gone.
+    assert egress_drift(rtm_config, principal="app-1", env=injected)
+
+
+def test_an_instance_from_before_the_layer_is_replaced_by_one_that_uses_the_proxy(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(rtm_config, fake_docker).deploy(_deploy_request())
+    legacy = get_store(rtm_config).get("app-1")
+    old_name, old_generation, old_env = legacy.container_name, legacy.generation, dict(legacy.env)
+    assert "HTTP_PROXY" not in old_env
+
+    report = _reconciler(egress_config, fake_docker).reconcile_once()
+
+    assert report.realigned == ["app-1"]
+    record = get_store(egress_config).get("app-1")
+    assert record.generation == old_generation + 1
+    created = fake_docker.last_call("create_container")
+    assert created["name"] == record.container_name != old_name
+    env = _env_of(created["payload"])
+    assert env["HTTP_PROXY"].startswith("http://app-1:")
+    assert env["HTTP_PROXY"].endswith(f"@{PROXY_ADDRESS}")
+    assert record.env == env
+    policy = get_policy_store(egress_config).get("app-1")
+    assert policy.authenticates(env[ENV_EGRESS_TOKEN])
+    assert "api.openai.com" in {d.host for d in policy.destinations}
+    # Nothing but the proxy half changed.
+    assert {k: v for k, v in env.items() if k not in EGRESS_ENV_NAMES} == old_env
+    # The instance it replaced is retired, and the next pass has nothing to do.
+    with pytest.raises(FakeDockerError):
+        fake_docker.get(old_name)
+    assert record.retiring == []
+    assert _reconciler(egress_config, fake_docker).reconcile_once().realigned == []
+
+
+def test_an_applications_own_proxy_from_before_the_layer_does_not_survive_the_realignment(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(rtm_config, fake_docker).deploy(_deploy_request(env={"HTTPS_PROXY": "http://corp-proxy:8080"}))
+
+    _reconciler(egress_config, fake_docker).reconcile_once()
+
+    env = _env_of(fake_docker.last_call("create_container")["payload"])
+    assert env["HTTPS_PROXY"].endswith(f"@{PROXY_ADDRESS}")
+
+
+def test_the_old_instance_serves_until_its_replacement_has_passed_the_gate(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(rtm_config, fake_docker).deploy(_deploy_request())
+    old_name = get_store(rtm_config).get("app-1").container_name
+    scheduler = RecordingScheduler()
+
+    report = _reconciler(egress_config, fake_docker, scheduler=scheduler).reconcile_once()
+
+    # Switched, but the previous instance is inside its grace window — and the
+    # orphan sweep of the very same pass must not take it.
+    assert report.reclaimed == []
+    assert fake_docker.get(old_name).running is True
+    assert get_store(egress_config).get("app-1").retiring == [old_name]
+    assert [delay for delay, _ in scheduler.scheduled] == [egress_config.retire_grace_seconds]
+
+    scheduler.run_all()
+    with pytest.raises(FakeDockerError):
+        fake_docker.get(old_name)
+    assert get_store(egress_config).get("app-1").retiring == []
+
+
+def test_a_replacement_that_fails_its_gate_leaves_the_old_instance_serving_and_backs_off(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(rtm_config, fake_docker).deploy(_deploy_request())
+    record = get_store(rtm_config).get("app-1")
+    old_name, old_generation = record.container_name, record.generation
+    clock, prober = FakeClock(), _FailingProber()
+    reconciler = _reconciler(egress_config, fake_docker, prober=prober, clock=clock)
+
+    first = reconciler.reconcile_once()
+
+    assert first.realigned == []
+    assert [app_id for app_id, _ in first.failures] == ["app-1"]
+    assert (record.container_name, record.generation) == (old_name, old_generation)
+    assert "HTTP_PROXY" not in record.env
+    assert [c.name for c in fake_docker.containers.values()] == [old_name]
+    assert fake_docker.get(old_name).running is True
+
+    # A probe can hold the loop for 90 s; every 15 s would stall the whole host.
+    reconciler.reconcile_once()
+    assert prober.calls == 1
+    clock.advance(REALIGN_RETRY_SECONDS)
+    reconciler.reconcile_once()
+    assert prober.calls == 2
+
+
+def test_a_host_full_of_old_instances_is_realigned_one_application_per_pass(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    service = _service(rtm_config, fake_docker)
+    service.deploy(_deploy_request())
+    service.deploy(
+        _deploy_request(app_id="app-2", slug="other", version_id="w" * 32, image_ref="bisheng-app/other:1-wwwwwwww")
+    )
+    reconciler = _reconciler(egress_config, fake_docker)
+
+    first, second, third = (reconciler.reconcile_once() for _ in range(3))
+
+    assert len(first.realigned) == 1
+    assert len(second.realigned) == 1
+    assert sorted(first.realigned + second.realigned) == ["app-1", "app-2"]
+    assert third.realigned == []
+
+
+def test_switching_the_layer_off_takes_the_proxy_variables_out_again(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(egress_config, fake_docker).deploy(_deploy_request())
+
+    report = _reconciler(rtm_config, fake_docker).reconcile_once()
+
+    assert report.realigned == ["app-1"]
+    env = _env_of(fake_docker.last_call("create_container")["payload"])
+    assert not set(EGRESS_ENV_NAMES) & set(env)
+
+
+def test_an_aligned_instance_is_left_alone_and_the_policy_file_is_not_rewritten(egress_config: Config, fake_docker):
+    _service(egress_config, fake_docker).deploy(_deploy_request())
+    path = get_policy_store(egress_config).path
+    before = (path.stat().st_ino, path.stat().st_mtime_ns)
+    creates = fake_docker.call_count("create_container")
+
+    report = _reconciler(egress_config, fake_docker).reconcile_once()
+
+    assert report.realigned == []
+    assert fake_docker.call_count("create_container") == creates
+    # The proxy reloads on every mtime change; a write per pass is a reload storm.
+    assert (path.stat().st_ino, path.stat().st_mtime_ns) == before
+
+
+def test_a_lost_policy_entry_is_put_back_with_the_credential_the_container_holds(egress_config: Config, fake_docker):
+    _service(egress_config, fake_docker).deploy(_deploy_request())
+    token = get_store(egress_config).get("app-1").env[ENV_EGRESS_TOKEN]
+    forget_principal(egress_config, "app-1")
+    creates = fake_docker.call_count("create_container")
+
+    report = _reconciler(egress_config, fake_docker).reconcile_once()
+
+    assert report.realigned == []
+    assert fake_docker.call_count("create_container") == creates
+    assert get_policy_store(egress_config).get("app-1").authenticates(token)
+
+
+def test_an_allow_list_edited_after_deploy_reaches_running_instances_without_a_restart(
+    egress_config: Config, fake_docker
+):
+    _service(egress_config, fake_docker).deploy(_deploy_request())
+    widened = egress_config.with_overrides(egress_allow=("models.internal.example",))
+    creates = fake_docker.call_count("create_container")
+
+    report = _reconciler(widened, fake_docker).reconcile_once()
+
+    assert report.realigned == []
+    assert fake_docker.call_count("create_container") == creates
+    assert "models.internal.example" in {d.host for d in get_policy_store(widened).get("app-1").destinations}
+
+
+def test_an_instance_recreated_under_the_layer_is_handed_the_credential_it_was_registered_with(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    """Recovery used to register a freshly minted credential and inject none of it."""
+    _service(rtm_config, fake_docker).deploy(_deploy_request())
+    fake_docker.containers.clear()
+
+    report = _reconciler(egress_config, fake_docker).reconcile_once()
+
+    assert report.recreated == ["app-1"]
+    env = _env_of(fake_docker.last_call("create_container")["payload"])
+    assert get_policy_store(egress_config).get("app-1").authenticates(env[ENV_EGRESS_TOKEN])
+    assert get_store(egress_config).get("app-1").env == env
+
+
+def test_a_deploy_that_lands_while_the_replacement_is_probed_wins(
+    rtm_config: Config, egress_config: Config, fake_docker
+):
+    _service(rtm_config, fake_docker).deploy(_deploy_request())
+    store = get_store(egress_config)
+
+    class _DeployDuringProbe:
+        def wait_ready(self, container, port, health_path, timeout=None):
+            store.put(replace(store.get("app-1"), container_name="bisheng-app-demo-deployed", generation=9))
+            return SimpleNamespace(ready=True, reason="")
+
+    report = _reconciler(egress_config, fake_docker, prober=_DeployDuringProbe()).reconcile_once()
+
+    assert report.realigned == []
+    assert store.get("app-1").container_name == "bisheng-app-demo-deployed"
+    with pytest.raises(FakeDockerError):
+        fake_docker.get(fake_docker.last_call("create_container")["name"])
 
 
 # ---------------------------------------------------------------------------
