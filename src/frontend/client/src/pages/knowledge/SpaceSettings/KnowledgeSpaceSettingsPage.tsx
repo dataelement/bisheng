@@ -88,7 +88,7 @@ export function KnowledgeSpaceSettingsPage() {
       modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
       // Same source the backend reports for this row once the space exists, so
-      // the roster shows the「创建者」tag in create mode too. Display-only: this
+      // the roster shows the creator tag in create mode too. Display-only: this
       // row never enters the draft diff.
       sourceType: "creator",
       protected: true,

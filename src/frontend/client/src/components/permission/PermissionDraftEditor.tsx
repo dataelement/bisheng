@@ -78,7 +78,8 @@ export function PermissionDraftEditor({
           capabilities.relationModels.find((model) => model.id === activeModelId)?.name
           ?? row.modelName
           ?? row.modelKey;
-        // Meta line under the name. A protected row no longer prints「受保护」—
+        // Meta line under the name. A protected row no longer prints the
+        // protected tag —
         // the frozen relation label on the right already says it can't change —
         // so only these three can put something on the line.
         const showReadOnly =
