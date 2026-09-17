@@ -317,7 +317,7 @@ async def upload_file(
     separator: list[str] | None = Form(
         default=None, description="Split text rule, If not passed on, it is the default"
     ),
-    separator_rule: list[str] | None = Form(
+    separator_rule: list[Literal["before", "after"]] | None = Form(
         default=None, description="Segmentation before or after the segmentation rule;before/after"
     ),
     chunk_size: int | None = Form(default=None, description="Split text length, default if not passed"),
@@ -329,10 +329,10 @@ async def upload_file(
     file_url: str | None = Form(default=None, description="File URL"),
     file: UploadFile | None = File(default=None, description="Upload file"),
     background_tasks: BackgroundTasks = None,
-    retain_images: int | None = Form(default=1, description="Keep document image"),
-    force_ocr: int | None = Form(default=0, description="EnableOCR"),
-    enable_formula: int | None = Form(default=1, description="latexFormula Recognition"),
-    filter_page_header_footer: int | None = Form(default=0, description="Filter Header Footer"),
+    retain_images: int | None = Form(default=1, ge=0, le=1, description="Keep document image: 0 or 1"),
+    force_ocr: int | None = Form(default=0, ge=0, le=1, description="Enable OCR: 0 or 1"),
+    enable_formula: int | None = Form(default=1, ge=0, le=1, description="LaTeX formula recognition: 0 or 1"),
+    filter_page_header_footer: int | None = Form(default=0, ge=0, le=1, description="Filter header/footer: 0 or 1"),
     excel_rule: ExcelRule | None = Form(default={}, description="excel rule"),
     parent_id: int | None = Form(
         default=None, description="Target folder id; knowledge-space only, must exist. Ignored for knowledge bases."
