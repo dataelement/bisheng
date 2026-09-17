@@ -131,7 +131,7 @@ export default function Conversation({
             setTitleInput(title);
             showToast({
               message: "Failed to rename conversation",
-              severity: NotificationSeverity.ERROR,
+              severity: NotificationSeverity.WARNING,
               showIcon: true,
             });
           },

@@ -23,6 +23,7 @@ import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
+import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
@@ -592,7 +593,9 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled || isStreaming || isParsingMedia}
+                        // Media parsing only has to block a second send, not typing:
+                        // the send button below stays disabled while `isParsingMedia`.
+                        disabled={disabled || isStreaming}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"
@@ -724,6 +727,14 @@ const AiChatInput = memo(
 
                         {/* Send / Stop / Voice — 固定宽度列，不参与挤压 */}
                         <div className="flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
+                            {/* Media parsing hint — sits left of the model select so the
+                                send button's disabled state has a visible reason. */}
+                            {(isParsingMedia || filesParsing) && (
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-primary">
+                                    <Outlined.Loading className="size-3.5 animate-spin" />
+                                    {localize('com_chat.media_parsing')}
+                                </span>
+                            )}
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
@@ -792,11 +803,6 @@ const AiChatInput = memo(
                             )}
                         </div>
                     </div>
-                    {(isParsingMedia || filesParsing) && (
-                        <p className="px-4 pb-1 text-center text-xs text-primary">
-                            {localize('com_chat.media_parsing')}
-                        </p>
-                    )}
                 </div>
             </div>
         );

@@ -218,7 +218,7 @@ export function KnowledgeSpaceSidebar({
         ])),
         [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
     );
-    const { actions: spaceActions, ensureSpaceActions } = useKnowledgeSpaceActions(permissionSpaceIds);
+    const { actions: spaceActions, ensureSpaceActions, isSpaceActionsPending } = useKnowledgeSpaceActions(permissionSpaceIds);
 
     const getItemPermissions = (space: KnowledgeSpace) => {
         const canEditSpace = hasKnowledgeSpaceAction(
@@ -236,7 +236,8 @@ export function KnowledgeSpaceSidebar({
             space.id,
             "manage_permission",
         );
-        return { canEditSpace, canDeleteSpace, canManageMembers };
+        const permissionsLoading = isSpaceActionsPending(space.id);
+        return { canEditSpace, canDeleteSpace, canManageMembers, permissionsLoading };
     };
 
     // CRUD operations with optimistic updates (mirrors useChannelActions)

@@ -19,7 +19,7 @@ import { PermissionEmptyState } from "./PermissionEmptyState";
 import { useGrantUserTree } from "./useGrantUserTree";
 
 /**
- * F038 (中粮定制化): department-tree user picker. Departments are pure
+ * F038 (COFCO customization): department-tree user picker. Departments are pure
  * navigation (no checkbox); users are leaves under their primary department
  * and support multi-select. Search matches by username and keeps the full
  * ancestor department path so results stay locatable in the tree. Shares the

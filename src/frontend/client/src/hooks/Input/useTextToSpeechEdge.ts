@@ -51,7 +51,7 @@ function useTextToSpeechEdge({
         console.error('Error fetching voices:', error);
         showToast({
           message: localize('com_nav_voices_fetch_error'),
-          status: 'error',
+          status: 'warning',
         });
       });
   }, [showToast, localize]);
@@ -69,7 +69,7 @@ function useTextToSpeechEdge({
           console.error('Error initializing TTS:', error);
           showToast({
             message: localize('com_nav_tts_init_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
         });
     } else if (voices.length > 0) {
@@ -79,7 +79,7 @@ function useTextToSpeechEdge({
           console.error('Error initializing TTS:', error);
           showToast({
             message: localize('com_nav_tts_init_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
         });
     }
@@ -99,7 +99,7 @@ function useTextToSpeechEdge({
           console.error('Error appending buffer:', error);
           showToast({
             message: localize('com_nav_buffer_append_error'),
-            status: 'error',
+            status: 'warning',
           });
           pendingBuffers.current.unshift(nextBuffer);
         }
@@ -116,7 +116,7 @@ function useTextToSpeechEdge({
         console.error('Error adding source buffer:', error);
         showToast({
           message: localize('com_nav_source_buffer_error'),
-          status: 'error',
+          status: 'warning',
         });
       }
     }
@@ -170,7 +170,7 @@ function useTextToSpeechEdge({
           console.error('Error generating speech:', error);
           showToast({
             message: localize('com_nav_audio_play_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
           setIsSpeaking(false);
         }
@@ -196,7 +196,7 @@ function useTextToSpeechEdge({
       console.error('Error cancelling speech:', error);
       showToast({
         message: localize('com_nav_speech_cancel_error'),
-        status: 'error',
+        status: 'warning',
       });
     }
   }, [setIsSpeaking, showToast, localize]);

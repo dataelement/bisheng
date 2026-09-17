@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useState } from "react";
 import { getResourcePermissionContext } from "~/api/permission";
 import type {
@@ -171,7 +171,7 @@ export function PermissionDialog({
               className="flex min-h-56 flex-1 items-center justify-center gap-2 text-sm text-[#818181]"
               role="status"
             >
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              <Outlined.Loading aria-hidden="true" className="size-4 animate-spin" />
               {localize("f048_permission.dialog.loading")}
             </div>
           )}
@@ -181,7 +181,7 @@ export function PermissionDialog({
               className="mx-5 flex min-h-32 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700 max-[768px]:mx-4"
               role="alert"
             >
-              <AlertTriangle aria-hidden="true" className="size-4" />
+              <Outlined.Attention aria-hidden="true" className="size-4" />
               {localize("f048_permission.dialog.load_failed")}
             </div>
           )}

@@ -183,7 +183,7 @@ export function ChannelSettingsPage() {
         if (!extractApiStatusCode(error)) {
           showToast({
             message: settings.localize("com_subscription.update_failed_retry"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
           });
         }
       }
@@ -279,7 +279,7 @@ export function ChannelSettingsPage() {
           message: settings.isEditMode
             ? settings.localize("com_subscription.update_failed_retry")
             : settings.localize("com_subscription.create_channel_failed_retry"),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     }

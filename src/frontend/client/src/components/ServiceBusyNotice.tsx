@@ -218,11 +218,23 @@ export function ServiceBusyNotice({
             className={cn('my-2 rounded-2xl border border-border bg-bg-page p-4 text-sm', className)}
         >
             <div className="flex items-start gap-2.5">
-                {icon === 'attention' ? (
-                    <Outlined.Attention size={16} className="mt-0.5 shrink-0 text-text-3" />
-                ) : (
-                    <BusyGaugeIcon size={16} className="mt-0.5 shrink-0 text-text-3" />
-                )}
+                {/* The icon sits in a box exactly one line high, so it centers on
+                    the FIRST line of whatever is beside it: the 20px title line, or
+                    the relaxed (1.625 × 14px) description line when there is no
+                    title. A fixed top offset only ever fit one of the two. Same
+                    trick as the toast spec uses for wrapped copy. */}
+                <span
+                    className={cn(
+                        'flex shrink-0 items-center',
+                        title ? 'h-5' : 'h-[1.625em]',
+                    )}
+                >
+                    {icon === 'attention' ? (
+                        <Outlined.Attention size={16} className="text-text-3" />
+                    ) : (
+                        <BusyGaugeIcon size={16} className="text-text-3" />
+                    )}
+                </span>
                 <div className="min-w-0 flex-1">
                     {displayTitle && <div className="font-medium text-text-2">{displayTitle}</div>}
                     {/* No detail disclosure → the actions share the description's

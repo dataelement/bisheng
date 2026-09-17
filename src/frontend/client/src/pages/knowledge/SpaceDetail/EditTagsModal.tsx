@@ -64,7 +64,7 @@ export function EditTagsModal({
         getSpaceTagsApi(spaceId)
             .then(setSpaceTags)
             .catch(() => {
-                showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "error" });
+                showToast({ message: localize("com_knowledge.fetch_tags_failed"), status: "warning" });
             });
     }, [isOpen, spaceId]);
 
@@ -76,7 +76,7 @@ export function EditTagsModal({
                 next.delete(tag.id);
             } else {
                 if (next.size >= 10) {
-                    showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+                    showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "warning" });
                     return prev;
                 }
                 next.add(tag.id);
@@ -97,12 +97,12 @@ export function EditTagsModal({
         if (!trimmed) return { ok: true };
 
         if (getFullWidthLength(trimmed) > 8) {
-            showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
+            showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "warning" });
             return { ok: false };
         }
 
         if (selectedTagIds.size >= 10) {
-            showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
+            showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "warning" });
             return { ok: false };
         }
 
@@ -116,7 +116,7 @@ export function EditTagsModal({
         }
 
         if (spaceTags.length >= 50) {
-            showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
+            showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "warning" });
             return { ok: false };
         }
 
@@ -124,7 +124,7 @@ export function EditTagsModal({
         try {
             const newTag = await addSpaceTagApi(spaceId, trimmed);
             if (!newTag || newTag.id === undefined || newTag.id === null) {
-                showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "error" });
+                showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "warning" });
                 return { ok: false };
             }
             setSpaceTags((prev) => [...prev, newTag]);
@@ -134,7 +134,7 @@ export function EditTagsModal({
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             return { ok: true, tagId: newTag.id };
         } catch {
-            showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.create_tag_failed"), status: "warning" });
             return { ok: false };
         }
     };
@@ -177,7 +177,7 @@ export function EditTagsModal({
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             onClose(true);
         } catch {
-            showToast({ message: localize("com_knowledge.tag_save_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.tag_save_failed"), status: "warning" });
         } finally {
             setLoading(false);
         }
@@ -197,7 +197,7 @@ export function EditTagsModal({
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             showToast({ message: localize("com_knowledge.delete_tag_success"), status: "success" });
         } catch {
-            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.delete_tag_failed"), status: "warning" });
         } finally {
             setDeletingTagId(null);
         }

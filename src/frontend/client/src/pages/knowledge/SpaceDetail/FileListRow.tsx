@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import { Checkbox, DropdownMenu, DropdownMenuTrigger } from "~/components";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -196,6 +196,9 @@ export interface FileListRowProps {
     isAdmin: boolean;
     /** F040: lazily resolve this file's action permissions when its menu opens. */
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
+    /** True while that lookup is in flight — the menu shows a loading row instead
+     *  of the fail-closed item set so items don't pop in after it opens. */
+    permissionsLoading?: boolean;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -250,6 +253,7 @@ export function FileListRow({
     index,
     isAdmin,
     onEnsureFilePermissions,
+    permissionsLoading = false,
     isSelected,
     onSelect,
     onDownload,
@@ -360,7 +364,9 @@ export function FileListRow({
         || showMoveItem || showVersionManagement || showVersionHistory
     );
 
-    const moreMenuItems = (
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : (
         <>
             {isAdmin && !isFolder && (
                 <ActionMenuItem

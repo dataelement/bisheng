@@ -192,9 +192,11 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
                     });
                 } else {
                     showToast({
+                        // 909 keeps the server's own reason when it has one; 923 moved
+                        // every front-of-house error toast down to warning. Both apply.
                         message: results.invalid[0]?.errorMessage
                             || localize('com_linsight.saveToKnowledgeFailed'),
-                        severity: NotificationSeverity.ERROR,
+                        severity: NotificationSeverity.WARNING,
                     });
                 }
             } catch (e) {
@@ -205,7 +207,7 @@ export function useSaveArtifactToKnowledge(file: ArtifactFile, versionId: string
                     // artifact fetch would otherwise surface raw English.
                     message: (error?.localized && error.message)
                         || localize('com_linsight.saveToKnowledgeFailed'),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
             } finally {
                 refreshQuota();

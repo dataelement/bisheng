@@ -508,7 +508,7 @@ export default function CitationReferencesDrawer({
     if (!fileUrl) {
       // Nothing to download (the backend withholds file URLs from viewers who
       // lack view_file) — say so rather than letting the click do nothing.
-      showToast({ message: localize('com_citation.no_download_url'), status: 'error' });
+      showToast({ message: localize('com_citation.no_download_url'), status: 'warning' });
       return;
     }
 

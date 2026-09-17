@@ -103,7 +103,7 @@ export default function ActionsInput({
       showToast({
         message:
           (error as Error | undefined)?.message ?? localize('com_assistants_update_actions_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

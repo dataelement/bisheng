@@ -3243,3 +3243,12 @@ html[data-bs-font-size] [data-radix-popper-content-wrapper] > * {
   zoom: var(--bs-fs-popper-unzoom, 1);
 }
 
+
+/* Frosted glass — the ONLY place `backdrop-filter` may appear (root AGENTS.md §4).
+   Opt-in via `FROSTED_GLASS_CLASS` from `~/utils/frostedGlass`, which is gated by
+   `FROSTED_GLASS_ENABLED` so a deployment can switch every instance off at once.
+   Reserved for full-screen overlays with at most one instance at a time. */
+.bs-frosted-glass {
+  -webkit-backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
+  backdrop-filter: blur(var(--bs-frosted-glass-blur, 16px));
+}

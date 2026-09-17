@@ -182,7 +182,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 }
                 showToast({ message: localize("com_knowledge.move_undone"), status: "success" });
             } catch (err) {
-                showToast({ message: resolveErrorMessage(err), status: "error" });
+                showToast({ message: resolveErrorMessage(err), status: "warning" });
             }
             onMoved();
         },
@@ -218,7 +218,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             try {
                 result = await runMove(mutableItems, targetSpaceId, targetFolderId, false);
             } catch (err) {
-                showToast({ message: resolveErrorMessage(err), status: "error" });
+                showToast({ message: resolveErrorMessage(err), status: "warning" });
                 throw err;
             }
 
@@ -235,7 +235,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 try {
                     result = await runMove(mutableItems, targetSpaceId, targetFolderId, true);
                 } catch (err) {
-                    showToast({ message: resolveErrorMessage(err), status: "error" });
+                    showToast({ message: resolveErrorMessage(err), status: "warning" });
                     throw err;
                 }
             }

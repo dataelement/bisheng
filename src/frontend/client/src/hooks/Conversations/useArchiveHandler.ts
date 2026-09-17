@@ -41,7 +41,7 @@ export default function useArchiveHandler(
         onError: () => {
           showToast({
             message: localize(label),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
             showIcon: true,
           });
         },

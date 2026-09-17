@@ -63,7 +63,7 @@ function ConvoOptions({
     onError: () => {
       showToast({
         message: localize('com_ui_duplication_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

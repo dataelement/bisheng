@@ -92,7 +92,7 @@ export default function MenuUnavailablePage() {
         : localize('com_menu_unavailable_apply_failed');
       showToast({
         message: errMsg,
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     } finally {
       setSubmitting(false);

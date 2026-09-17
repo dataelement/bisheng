@@ -153,7 +153,7 @@ export default function ExplorePlaza() {
         } catch {
             showToast?.({
                 message: localize('com_app_share_link_copy_failed'),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
         }
     }

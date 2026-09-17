@@ -127,7 +127,7 @@ export function useAppCenter() {
       } catch {
         showToast?.({
           message: shouldPin ? localize('com_app_pin_failed') : localize('com_app_unpin_failed'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     },
@@ -183,7 +183,7 @@ export function useAppCenter() {
         await copyText(url);
         showToast?.({ message: localize('com_app_share_link_copied'), severity: NotificationSeverity.SUCCESS });
       } catch {
-        showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.ERROR });
+        showToast?.({ message: localize('com_app_share_link_copy_failed'), severity: NotificationSeverity.WARNING });
       }
     },
     [localize, showToast],

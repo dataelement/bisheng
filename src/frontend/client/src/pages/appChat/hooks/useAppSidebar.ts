@@ -71,7 +71,7 @@ export function useAppSidebar() {
       // Show toast only when user deletes all conversations (non-empty → empty),
       // not on initial load when no history exists
       if (list.length === 0 && hadConversationsRef.current) {
-        showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.ERROR });
+        showToastRef.current?.({ message: '历史会话已删除', severity: NotificationSeverity.WARNING });
       }
       hadConversationsRef.current = list.length > 0;
       return list;
@@ -133,7 +133,7 @@ export function useAppSidebar() {
       await copyText(url);
       showToast?.({ message: '已将应用链接复制到剪贴板', severity: NotificationSeverity.SUCCESS });
     } catch {
-      showToast?.({ message: '复制失败', severity: NotificationSeverity.ERROR });
+      showToast?.({ message: '复制失败', severity: NotificationSeverity.WARNING });
     }
   }, [flowId, flowType, showToast, chatState?.flow, currentApp]);
 

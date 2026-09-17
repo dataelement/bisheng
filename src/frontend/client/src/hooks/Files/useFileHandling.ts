@@ -66,7 +66,7 @@ const useFileHandling = (params?: UseFileHandling) => {
         .join('');
       showToast({
         message: errorList,
-        status: 'error',
+        status: 'warning',
         duration: 5000,
       });
     } else if (errors.length === 1) {
@@ -74,7 +74,7 @@ const useFileHandling = (params?: UseFileHandling) => {
       const message = localize(errors[0] as TranslationKeys) || errors[0];
       showToast({
         message,
-        status: 'error',
+        status: 'warning',
         duration: 5000,
       });
     }

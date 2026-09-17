@@ -11,7 +11,7 @@ import {
     DropdownMenu,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import { FileChangeActionIcon } from "./FileChangeActionIcon";
 import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
@@ -44,6 +44,9 @@ interface FileCardProps {
     userRole: SpaceRole;
     /** F040: lazily resolve this file's action permissions when its menu opens. */
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
+    /** True while that lookup is in flight — the menu shows a loading row instead
+     *  of the fail-closed item set so items don't pop in after it opens. */
+    permissionsLoading?: boolean;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -102,6 +105,7 @@ export function FileCard({
     file,
     userRole,
     onEnsureFilePermissions,
+    permissionsLoading = false,
     isSelected,
     onSelect,
     onDownload,
@@ -522,7 +526,8 @@ export function FileCard({
         </>
     );
 
-    // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
+    // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
+    // the right-click menu.
     const reviewedMenuItems = (
         <>
             {showMenuDownloadItem && (
@@ -595,7 +600,16 @@ export function FileCard({
         </>
     );
 
-    const moreMenuItems = showPendingMenuItems ? pendingMenuItems : reviewedMenuItems;
+    // While permissions are still resolving, show a single loading row so the menu
+    // does not open with a few items and then grow. Applied at the join rather than
+    // inside reviewedMenuItems, so the pending-approval menu gets it too.
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : showPendingMenuItems ? (
+        pendingMenuItems
+    ) : (
+        reviewedMenuItems
+    );
 
     const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
@@ -929,76 +943,7 @@ export function FileCard({
                                 align="end"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {showMenuDownloadItem && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                        icon={<Outlined.Download />}
-                                        label={localize("com_knowledge.download")}
-                                    />
-                                )}
-                                {onManagePermission && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                        icon={<Outlined.PeopleSafe />}
-                                        label={localize("com_permission.manage_permission")}
-                                    />
-                                )}
-                                {isAdmin && !isFolder && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                        icon={<Outlined.Tag />}
-                                        label={localize("com_knowledge.edit_tags")}
-                                    />
-                                )}
-                                {canRename && (
-                                    <ActionMenuItem
-                                        disabled={fileChangeLock.locked}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (!fileChangeLock.locked) startRenaming();
-                                        }}
-                                        icon={<Outlined.Edit />}
-                                        label={localize("com_knowledge.rename")}
-                                    />
-                                )}
-                                {showMoveItem && (
-                                    <ActionMenuItem
-                                        disabled={!canMove || isUploading || fileChangeLock.locked}
-                                        onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                        icon={<Outlined.MoveToFolder />}
-                                        label={localize("com_knowledge.move")}
-                                    />
-                                )}
-                                {isAdmin && hasRetryOption && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                        icon={<Outlined.Refresh />}
-                                        label={localize("com_knowledge.retry")}
-                                    />
-                                )}
-                                {showVersionManagement && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                        icon={<GitBranch />}
-                                        label={localize("com_knowledge.version.menu_version_management")}
-                                    />
-                                )}
-                                {showVersionHistory && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                        icon={<History />}
-                                        label={localize("com_knowledge.version.menu_version_history")}
-                                    />
-                                )}
-                                {canDelete && (
-                                    <ActionMenuItem
-                                        danger
-                                        disabled={fileChangeLock.locked}
-                                        onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
-                                        icon={<Outlined.Delete />}
-                                        label={localize("com_knowledge.delete")}
-                                    />
-                                )}
+                                {moreMenuItems}
                             </ActionMenuContent>
                         </DropdownMenu>
                     )}
