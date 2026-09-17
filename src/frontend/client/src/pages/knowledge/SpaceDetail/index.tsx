@@ -381,6 +381,9 @@ export function KnowledgeSpaceContent({
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    // File ids whose lazy permission lookup is in flight — the row/card menu shows
+    // a loading row instead of the fail-closed item set until it settles.
+    const [pendingFileIds, setPendingFileIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -466,6 +469,7 @@ export function KnowledgeSpaceContent({
         setRenameEntryIds(new Set());
         setDownloadEntryIds(new Set());
         setDeleteEntryIds(new Set());
+        setPendingFileIds(new Set());
     }, [permissionEntryProbeKey]);
 
     const ensureFilePermissions = useCallback(
@@ -474,6 +478,7 @@ export function KnowledgeSpaceContent({
             if (file.isCreating || !/^\d+$/.test(id)) return;
             if (checkedFileIdsRef.current.has(id)) return; // already resolved for this file
             checkedFileIdsRef.current.add(id);
+            setPendingFileIds((prev) => new Set(prev).add(id));
 
             const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
             try {
@@ -493,6 +498,13 @@ export function KnowledgeSpaceContent({
                 grant("delete", setDeleteEntryIds);
             } catch {
                 checkedFileIdsRef.current.delete(id);
+            } finally {
+                setPendingFileIds((prev) => {
+                    if (!prev.has(id)) return prev;
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                });
             }
         },
         [],
@@ -1395,6 +1407,7 @@ export function KnowledgeSpaceContent({
                                             file={file}
                                             userRole={space.role}
                                             onEnsureFilePermissions={ensureFilePermissions}
+                                            permissionsLoading={pendingFileIds.has(String(file.id))}
                                             isSelected={selectedFiles.has(file.id)}
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
@@ -1457,6 +1470,7 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
+                                    pendingFileIds={pendingFileIds}
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}

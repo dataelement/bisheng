@@ -11,7 +11,7 @@ import {
     DropdownMenu,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
@@ -40,6 +40,9 @@ interface FileCardProps {
     userRole: SpaceRole;
     /** F040: lazily resolve this file's action permissions when its menu opens. */
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
+    /** True while that lookup is in flight — the menu shows a loading row instead
+     *  of the fail-closed item set so items don't pop in after it opens. */
+    permissionsLoading?: boolean;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -90,6 +93,7 @@ export function FileCard({
     file,
     userRole,
     onEnsureFilePermissions,
+    permissionsLoading = false,
     isSelected,
     onSelect,
     onDownload,
@@ -386,8 +390,12 @@ export function FileCard({
         !isUploadingFolderPlaceholder &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
-    // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
+    // the right-click menu. While permissions are still resolving, show a single
+    // loading row so the menu doesn't open with a few items and then grow.
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : (
         <>
             {showMenuDownloadItem && (
                 <ActionMenuItem
@@ -780,74 +788,7 @@ export function FileCard({
                                 align="end"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {showMenuDownloadItem && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                        icon={<Outlined.Download />}
-                                        label={localize("com_knowledge.download")}
-                                    />
-                                )}
-                                {onManagePermission && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                        icon={<Outlined.PeopleSafe />}
-                                        label={localize("com_permission.manage_permission")}
-                                    />
-                                )}
-                                {isAdmin && !isFolder && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                        icon={<Outlined.Tag />}
-                                        label={localize("com_knowledge.edit_tags")}
-                                    />
-                                )}
-                                {canRename && (
-                                    <ActionMenuItem
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            startRenaming();
-                                        }}
-                                        icon={<Outlined.Edit />}
-                                        label={localize("com_knowledge.rename")}
-                                    />
-                                )}
-                                {showMoveItem && (
-                                    <ActionMenuItem
-                                        disabled={!canMove || isUploading}
-                                        onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                        icon={<Outlined.MoveToFolder />}
-                                        label={localize("com_knowledge.move")}
-                                    />
-                                )}
-                                {isAdmin && hasRetryOption && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                        icon={<Outlined.Refresh />}
-                                        label={localize("com_knowledge.retry")}
-                                    />
-                                )}
-                                {showVersionManagement && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                        icon={<GitBranch />}
-                                        label={localize("com_knowledge.version.menu_version_management")}
-                                    />
-                                )}
-                                {showVersionHistory && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                        icon={<History />}
-                                        label={localize("com_knowledge.version.menu_version_history")}
-                                    />
-                                )}
-                                {canDelete && (
-                                    <ActionMenuItem
-                                        danger
-                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                        icon={<Outlined.Delete />}
-                                        label={localize("com_knowledge.delete")}
-                                    />
-                                )}
+                                {moreMenuItems}
                             </ActionMenuContent>
                         </DropdownMenu>
                     )}
