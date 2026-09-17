@@ -235,9 +235,12 @@ function AgentTimeline({
     isStreaming,
     finalTextIdx,
     messageId,
+    compactImages,
 }: {
     events: AgentEvent[];
     isStreaming: boolean;
+    /** Passed to each intermediate Markdown block; see Markdown's prop. */
+    compactImages?: boolean;
     /** Index in `blocks` of the trailing text block to skip (rendered by the
      * main bubble Markdown). -1 if no such block. */
     finalTextIdx: number;
@@ -266,6 +269,7 @@ function AgentTimeline({
                             messageId={`${messageId}-intermediate-${i}`}
                             showCursor={false}
                             isLatestMessage={false}
+                            compactImages={compactImages}
                         />
                     );
                 }
@@ -633,6 +637,7 @@ function AssistantBubble({
                             isStreaming={Boolean(isStreaming && isLatest)}
                             finalTextIdx={finalTextIdx}
                             messageId={message.messageId}
+                            compactImages={knowledgeChatLayout}
                         />
                     </div>
                 ) : (
@@ -687,6 +692,7 @@ function AssistantBubble({
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 showCursor={showCursor}
                                 isLatestMessage={!!isLatest}
+                                compactImages={knowledgeChatLayout}
                             />
                         )}
                     </div>
