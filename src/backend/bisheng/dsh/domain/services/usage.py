@@ -8,8 +8,8 @@ class DshUsageService:
     def __init__(self, quota: QuotaRedis):
         self.quota = quota
 
-    async def check_and_start(self, event: UsageEvent) -> UsageEvent:
-        return await self.quota.check_and_start(event)
+    async def check_and_start(self, event: UsageEvent, *, monthly_token_limit: int | None = None) -> UsageEvent:
+        return await self.quota.check_and_start(event, monthly_token_limit=monthly_token_limit)
 
     async def record_usage(self, event: UsageEvent, expected_version: int) -> UsageEvent:
         # Transport failures propagate; callers query the original request, never resend upstream.

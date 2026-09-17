@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 
 
-async def test_eight_routes_use_verified_actor_and_reject_body_spoofing():
+async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
     from bisheng.dsh.api.endpoints import admin
 
     app = FastAPI()
@@ -18,7 +18,17 @@ async def test_eight_routes_use_verified_actor_and_reject_body_spoofing():
     service = SimpleNamespace(
         **{
             name: AsyncMock(return_value={"status": "PROCESSING"})
-            for name in ("users", "license", "update_policy", "command", "operation", "get_policy", "sessions")
+            for name in (
+                "users",
+                "license",
+                "update_policy",
+                "command",
+                "operation",
+                "get_policy",
+                "sessions",
+                "model_subjects",
+                "update_subject_policy",
+            )
         }
     )
     app.dependency_overrides[admin.admin_user] = lambda: SimpleNamespace(user_id=90)
@@ -27,6 +37,12 @@ async def test_eight_routes_use_verified_actor_and_reject_body_spoofing():
         routes = [
             ("GET", "/users", None),
             ("GET", "/license", None),
+            ("GET", "/models/4/subjects", None),
+            (
+                "PUT",
+                "/models/4/subjects/DEPARTMENT/8/policy",
+                {"expected_version": 0, "enabled": True, "monthly_token_limit": 200},
+            ),
             (
                 "PUT",
                 "/users/20/models/4/policy",
@@ -139,7 +155,9 @@ async def test_policy_view_survives_unavailable_quota_with_persisted_source(monk
         assert result["models"] == [{"model_id": 4, "monthly_token_limit": 100}]
         assert "monthly_token_limit" not in result
         assert "model_configs" not in result
-        assert result["usage"]["model_limits"] == {"4": 120}
+        assert result["usage"]["limit"] == 100
+        assert result["usage"]["remaining"] == 88
+        assert result["usage"]["model_limits"] == {"4": 100}
         assert result["usage"]["source"] == "persisted" and result["usage"]["quota_state"] == "unavailable"
         assert result["usage"]["models"] == {"4": 12}
         assert result["usage"]["unknown_pending"] == 2

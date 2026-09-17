@@ -46,6 +46,8 @@ class DshModelPolicyState(BaseModel):
     monthly_token_limit: int
     enabled: int
     version: int
+    # Mutation revision is independent of the effective multi-source fingerprint.
+    direct_version: int | None = None
     quota_epoch: int
     quota_sync_state: str
     pending_operation_id: str | None
@@ -63,16 +65,16 @@ class DshPolicySnapshot(BaseModel):
         return [
             DshModelQuotaConfig(model_id=r.model_id, monthly_token_limit=r.monthly_token_limit)
             for r in self.rows
-            if r.enabled
+            if r.enabled and r.monthly_token_limit > 0
         ]
 
     @property
     def allowed_model_ids(self) -> list[int]:
-        return [r.model_id for r in self.rows if r.enabled]
+        return [r.model_id for r in self.rows if r.enabled and r.monthly_token_limit > 0]
 
     @property
     def monthly_token_limit(self) -> int:
-        return sum(r.monthly_token_limit for r in self.rows if r.enabled)
+        return sum(r.monthly_token_limit for r in self.rows if r.enabled and r.monthly_token_limit > 0)
 
     @property
     def version(self) -> int:

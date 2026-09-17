@@ -1,5 +1,6 @@
 # Define a custom middleware class
 import http.cookies
+import re
 from collections.abc import Iterable
 from time import time
 
@@ -53,11 +54,21 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("GET", "/api/v1/dsh/browser-config"),
         ("GET", "/api/v1/dsh/models"),
         ("GET", "/api/v1/dsh/usage"),
+        ("GET", "/api/v1/dsh/market/capabilities"),
+        ("GET", "/api/v1/dsh/market/catalog"),
+        ("POST", "/api/v1/dsh/market/sync"),
         ("POST", "/api/v1/dsh/chat/completions"),
         ("POST", "/api/v1/internal/dsh/identity/redeem"),
         ("POST", "/api/v1/internal/dsh/identity/check"),
     }
 )
+
+
+def owns_dsh_credential(method: str, path: str) -> bool:
+    return (method, path) in DSH_CREDENTIAL_ROUTES or (
+        method == "GET"
+        and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path) is not None
+    )
 
 
 def _decode_jwt_subject(token: str) -> dict | None:
@@ -311,7 +322,7 @@ class CustomMiddleware(BaseHTTPMiddleware):
             trace_id = trace_id_generator()
         ip = get_request_ip(request)
         req_path = request.url.path
-        dsh_owned = (request.method, req_path) in DSH_CREDENTIAL_ROUTES
+        dsh_owned = owns_dsh_credential(request.method, req_path)
         path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 

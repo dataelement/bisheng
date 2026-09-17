@@ -6,7 +6,10 @@ if redis.call('HGET',KEYS[1],'epoch')~=ARGV[4] then return {'DENY','epoch_confli
 local model=ARGV[6]; local suffix=':'..model
 local owner=redis.call('HGET',KEYS[1],'operation_id'..suffix)
 local generation=redis.call('HGET',KEYS[1],'generation'..suffix) or '0'
-local current=redis.call('HGET',KEYS[1],'version'..suffix) or '0'
+-- Automatic recovery migrates production gates from SQL. Controlled legacy
+-- direct-only stores retain their original revision until their first write.
+local revision_field=redis.call('HGET',KEYS[1],'policy_revision_schema')=='2' and 'direct_version' or 'version'
+local current=redis.call('HGET',KEYS[1],revision_field..suffix) or '0'
 local reason='POLICY_SYNC:'..model..':'..ARGV[2]
 local function less(a,b) return #a<#b or (#a==#b and a<b) end
 if ARGV[1]=='block' then
@@ -28,9 +31,10 @@ if owner~=ARGV[2] or generation~=ARGV[3] then return {'DENY','stale_worker'} end
 if ARGV[1]=='install' then
   if current==ARGV[7] then
     if redis.call('HGET',KEYS[1],'policy_payload'..suffix)~=ARGV[9] then return {'DENY','payload_conflict'} end
-    return {'OK'}
+  elseif current~=ARGV[5] then
+    return {'DENY','version_conflict'}
   end
-  if current~=ARGV[5] or redis.call('SISMEMBER',KEYS[2],reason)~=1 then return {'DENY','version_conflict'} end
+  if redis.call('SISMEMBER',KEYS[2],reason)~=1 then return {'DENY','version_conflict'} end
   local function integer(s)
     return s and (s=='0' or string.match(s,'^[1-9][0-9]*$')) and (#s<19 or (#s==19 and s<='9223372036854775807'))
   end
@@ -71,8 +75,13 @@ if ARGV[1]=='install' then
   else
     redis.call('HDEL',KEYS[1],'model:'..model,'limit:'..model)
   end
-  redis.call('HINCRBY',KEYS[1],'version',1)
-  redis.call('HSET',KEYS[1],'version'..suffix,ARGV[7],'installed_version'..suffix,ARGV[7],
+  if ARGV[12] and ARGV[12]~='' then
+    redis.call('HSET',KEYS[1],'version',ARGV[12])
+  elseif current~=ARGV[7] then
+    redis.call('HINCRBY',KEYS[1],'version',1)
+  end
+  redis.call('HSET',KEYS[1],'version'..suffix,ARGV[11] or ARGV[7],
+             'direct_version'..suffix,ARGV[7],'installed_version'..suffix,ARGV[7],
              'limit',total,'policy_payload'..suffix,ARGV[9])
   return {'OK'}
 end

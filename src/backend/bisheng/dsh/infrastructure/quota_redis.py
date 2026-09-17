@@ -121,10 +121,17 @@ class QuotaRedis:
             raise QuotaRejected("request_already_started")
         return UsageEvent.model_validate_json(result[1])
 
-    async def check_and_start(self, event: UsageEvent) -> UsageEvent:
+    async def check_and_start(self, event: UsageEvent, *, monthly_token_limit: int | None = None) -> UsageEvent:
         event = UsageEvent.model_validate(event.model_dump())
         if event.status != "RUNNING" or event.event_version != 1:
             raise ValueError("Admission requires a new server-owned running event")
+        if monthly_token_limit is not None and (
+            type(monthly_token_limit) is not int or not 0 <= monthly_token_limit <= 9223372036854775807
+        ):
+            raise ValueError("Effective monthly token limit must be a nonnegative int64")
+        if monthly_token_limit is not None and getattr(self.topology, "automatic", False):
+            await self.prepare(event.tenant_id, event.user_id, event.usage_month)
+            event = event.model_copy(update={"quota_epoch": await self.ledger_epoch(event.tenant_id, event.user_id)})
         return await self._execute(
             "admit.lua",
             event,
@@ -138,6 +145,7 @@ class QuotaRedis:
                 *self.pressure_args(),
                 event.request_id,
                 str(int(event.started_at.replace(tzinfo=UTC).timestamp() * 1000)),
+                "" if monthly_token_limit is None else str(monthly_token_limit),
             ],
         )
 
@@ -282,6 +290,7 @@ class QuotaRedis:
         version: int,
         monthly_token_limit: int,
         enabled: bool,
+        effective_projection: dict | None = None,
     ):
         import json
 
@@ -290,6 +299,12 @@ class QuotaRedis:
         if version != expected_version + 1 or type(enabled) is not bool:
             raise ValueError("Invalid model policy transition")
         payload = json.dumps([version, config.model_dump(), enabled], separators=(",", ":"))
+        projection = effective_projection or {
+            "version": version,
+            "monthly_token_limit": monthly_token_limit,
+            "enabled": enabled,
+        }
+        DshModelQuotaConfig(model_id=model_id, monthly_token_limit=projection["monthly_token_limit"])
         await self._policy(
             tenant_id,
             user_id,
@@ -301,9 +316,11 @@ class QuotaRedis:
                 str(expected_version),
                 str(model_id),
                 str(version),
-                str(monthly_token_limit),
+                str(projection["monthly_token_limit"]),
                 payload,
-                "1" if enabled else "0",
+                "1" if projection["enabled"] else "0",
+                str(projection["version"]),
+                str(projection.get("aggregate_version", "")),
             ],
         )
 

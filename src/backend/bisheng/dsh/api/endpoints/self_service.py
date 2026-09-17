@@ -49,3 +49,8 @@ async def revoke(
 @router.get("/usage")
 async def usage(user=Depends(UserPayload.get_login_user), service=Depends(self_service)):
     return resp_200(data=await service.usage(user))
+
+
+@router.get("/usage-summary")
+async def usage_summary(user=Depends(UserPayload.get_login_user), service=Depends(self_service)):
+    return resp_200(data=await service.usage_summary(user))

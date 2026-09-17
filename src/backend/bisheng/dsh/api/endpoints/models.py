@@ -14,6 +14,7 @@ from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model import PreparedStream
+from bisheng.dsh.domain.services.usage_projection import apply_current_policy_limits
 from bisheng.dsh.runtime import get_model_runtime, read_persisted_usage, read_policy
 
 router = APIRouter(route_class=DshRoute)
@@ -36,6 +37,12 @@ class DshStreamingResponse(StreamingResponse):
         finally:
             # Also runs if the peer leaves before the iterator's first read.
             await asyncio.shield(self.prepared_stream.aclose())
+
+
+@router.get("/dsh/profile")
+async def profile(principal: DshPrincipal = Depends(desktop_principal), runtime: DshRuntime = Depends(get_runtime)):
+    with principal_scope(principal):
+        return await runtime.identity.profile(principal.tenant_id, principal.user_id)
 
 
 @router.get("/dsh/models")
@@ -91,11 +98,13 @@ async def usage(
     model_id = int(model.removeprefix("bisheng:")) if model else None
     selected_limit = None
     with principal_scope(principal):
-        if model_id is not None:
-            try:
-                policy = await read_policy(int(principal.user_id))
-            except Exception as exc:
+        try:
+            policy = await read_policy(int(principal.user_id))
+        except Exception as exc:
+            if model_id is not None:
                 raise DshQuotaUnavailableError() from exc
+            policy = None
+        if model_id is not None:
             selected = (
                 next((item for item in policy.model_configs if item.model_id == model_id), None) if policy else None
             )
@@ -111,11 +120,7 @@ async def usage(
             except Exception:
                 snapshot = None
         if snapshot is None:
-            try:
-                policy = await read_policy(int(principal.user_id))
-                limit = selected_limit if model_id is not None else (policy.monthly_token_limit if policy else None)
-            except Exception:
-                limit = None
+            limit = selected_limit if model_id is not None else (policy.monthly_token_limit if policy else None)
             return {
                 **period,
                 "used": None,
@@ -125,7 +130,9 @@ async def usage(
                 "as_of": None,
                 "quota_state": "unavailable",
             }
-    if model_id is not None:
+    if policy is not None:
+        snapshot = apply_current_policy_limits(snapshot, policy, model_id=model_id)
+    elif model_id is not None:
         used = (snapshot.get("models") or {}).get(str(model_id))
         limit = (snapshot.get("model_limits") or {}).get(str(model_id))
         if used is None or limit is None:

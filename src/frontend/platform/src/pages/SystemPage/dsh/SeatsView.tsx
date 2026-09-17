@@ -140,9 +140,9 @@ export function SeatsView({
     }
     return (
         <section className="space-y-4">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center justify-end gap-2">
                 <Input
-                    className="w-56"
+                    boxClassName="w-56 shrink-0"
                     aria-label={t('dsh.searchUsers')}
                     placeholder={t('dsh.searchUsers')}
                     value={keyword}
@@ -283,8 +283,10 @@ export function SeatsView({
                 </div>
             )}
             <DshPager
+                className="justify-end"
+                hideUnavailable
                 previous={cursors.length > 1}
-                next={!!data?.has_more}
+                next={!!data?.has_more && !!data.next_cursor}
                 loading={!data && !error}
                 onPrevious={() => setCursors((old) => old.slice(0, -1))}
                 onNext={() =>

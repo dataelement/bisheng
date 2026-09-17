@@ -1,0 +1,14 @@
+# 实施任务
+- T-01 后端 Domain 测试 test/dsh/test_department_access.py，覆盖 AC: AC-06, AC-07, AC-08, AC-09, AC-11。容量与保存解耦、最大值、资格、异常、租户。
+- T-02 后端 Domain services/admin.py、access_status.py，额度保存独立于容量，有界资格读取。依赖 T-01。
+- T-03 后端 API schemas/admin.py、api/endpoints/admin.py，资格与过滤参数。依赖 T-02。
+- T-04 后端 Domain user/repositories/dsh_profile.py、user/services/dsh_access.py，未分组与 ID 搜索。依赖 T-03。
+- T-05 后端 Domain dsh/admin_runtime.py，查询参数传递。依赖 T-04。
+- T-06 后端 Domain 测试 test/dsh/test_role_policy_migration.py，覆盖 AC: AC-10, AC-11。迁移最大值、重入及失败。
+- T-07 后端 Domain 迁移服务与 scripts/dsh_migrate_role_policies.py，dry-run、幂等写入、核对生效额度，沿用现有表。依赖 T-06。
+- T-08 前端 Platform 测试 ModelAccessLayout.test.tsx，覆盖 AC: AC-01, AC-02, AC-03, AC-04, AC-05。
+- T-09 前端 Platform DepartmentAccessTree.tsx、ModelAccessDialog.tsx，单树、搜索、保存。依赖 T-08。
+- T-10 前端 Platform types/dsh.ts、controllers/API/dsh.ts，接入新增可选字段。依赖 T-03。
+- T-11 前端 Platform 三语 bs.json 树表文案。依赖 T-09。
+- T-12 发布检查，覆盖 AC: AC-12。自动化、构建、迁移、增量部署与健康记录。依赖 T-05, T-07, T-10, T-11。
+- T-13（2026-09-17 完成）：万 Token 输入/展示精确换算、部门授权状态、紧凑树行和空成员占位清理，覆盖 AC-13/14/15；7 套 72 项前端测试通过。

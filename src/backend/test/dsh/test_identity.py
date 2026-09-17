@@ -43,6 +43,22 @@ async def test_snapshot_always_reads_current_identity():
     assert not (await service.check("3", "1001")).active
 
 
+async def test_desktop_profile_reads_renamed_tenant_and_blocks_inactive_or_foreign_users():
+    records = Records()
+    service = IdentityService(None, records, Intent())
+    records.record = replace(records.record, tenant_name="Original Enterprise")
+    assert (await service.profile("2", "1001"))["tenant"]["name"] == "Original Enterprise"
+    records.record = replace(records.record, tenant_name="Renamed Enterprise")
+    result = await service.profile("2", "1001")
+    assert result["tenant"] == {"id": "2", "name": "Renamed Enterprise"}
+    assert set(result) == {"user", "tenant"}
+    with pytest.raises(DshUserDisabledError):
+        await service.profile("3", "1001")
+    records.record = replace(records.record, active=False)
+    with pytest.raises(DshUserDisabledError):
+        await service.profile("2", "1001")
+
+
 @pytest.mark.parametrize("changes", [{"username": " "}, {"natural_person": False}, {"tenant_active": False}])
 async def test_inactive_identity_never_leaks_display(changes):
     records = Records()

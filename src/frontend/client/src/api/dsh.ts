@@ -3,16 +3,6 @@ import { parseDshLaunchBase } from '~/utils/dshLaunch';
 
 type Envelope<T> = { status_code: number; data: T };
 export type DshBrowserConfig = { enabled: boolean; management_enabled: boolean; download_url: string | null; launch_url: string };
-export type DshSession = {
-  session_id: string; device_label: string | null; client_version: string | null;
-  state: string; created_at: string; last_seen_at: string | null; expires_at: string;
-};
-export type DshSessionPage = { items: DshSession[]; next_cursor: string | null; has_more: boolean };
-export type DshUsage = {
-  month: string; billing_timezone: string; source: 'live' | 'persisted' | 'unavailable';
-  as_of: string | null; unknown_pending: number | null;
-  models: { model_id: number; name: string; used: number | null; limit: number | null; remaining: number | null }[];
-};
 function unwrap<T>(result: Envelope<T>): T {
   if (result.status_code !== 200) throw new Error('DSH request failed');
   return result.data;
@@ -26,12 +16,34 @@ export async function getDshBrowserConfig(signal?: AbortSignal): Promise<DshBrow
   }
   return { ...config, launch_url: parseDshLaunchBase(config.launch_url) };
 }
-export async function getDshSessions(cursor?: string | null, signal?: AbortSignal): Promise<DshSessionPage> {
-  return unwrap(await request.get<Envelope<DshSessionPage>>('/api/v1/dsh/me/sessions', { params: { cursor: cursor || undefined, limit: 20 }, signal }));
+export type DshUsageMetrics = {
+    message_count: number
+    qa_count: number
+    failed_count: number
+    cancelled_count: number
+    running_count: number
+    usage_unknown_count: number
+    recorded_usage_count: number
+    missing_usage_count: number
+    input_tokens: number | null
+    output_tokens: number | null
+    total_tokens: number | null
 }
-export async function getDshUsage(signal?: AbortSignal): Promise<DshUsage> {
-  return unwrap(await request.get<Envelope<DshUsage>>('/api/v1/dsh/me/usage', { signal }));
+
+export type DshUsageTimeBucket = DshUsageMetrics & {
+    start_at: string
+    end_at: string
 }
-export async function revokeDshSession(sessionId: string): Promise<void> {
-  unwrap(await request.post(`/api/v1/dsh/me/sessions/${encodeURIComponent(sessionId)}/revoke`, {}));
+
+export type DshUsageTimeSummary = {
+    start_at: string
+    end_at: string
+    timezone: 'Asia/Shanghai'
+    granularity: 'hour' | 'day'
+    totals: DshUsageMetrics
+    points: DshUsageTimeBucket[]
+}
+
+export async function getDshUsageSummary(signal?: AbortSignal): Promise<DshUsageTimeSummary> {
+  return unwrap(await request.get<Envelope<DshUsageTimeSummary>>('/api/v1/dsh/me/usage-summary', { signal }));
 }

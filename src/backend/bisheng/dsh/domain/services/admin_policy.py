@@ -44,6 +44,7 @@ class PolicyQuota(Protocol):
         model_id: int,
         monthly_token_limit: int,
         enabled: bool,
+        effective_projection: dict,
     ) -> None: ...
 
     async def finish_policy(
@@ -87,7 +88,13 @@ class DshAdminService:
         self.lease_seconds = lease_seconds
 
     async def update_policy(
-        self, *, user_id: int, actor_user_id: int, model_id: int, request: DshUserPolicyInput
+        self,
+        *,
+        user_id: int,
+        actor_user_id: int,
+        model_id: int,
+        request: DshUserPolicyInput,
+        seat_limit: int | None = None,
     ) -> dict:
         if not await self.authorize(actor_user_id, user_id):
             raise DshOperationConflictError()
@@ -100,6 +107,7 @@ class DshAdminService:
                 model_id=model_id,
                 monthly_token_limit=request.monthly_token_limit,
                 enabled=request.enabled,
+                seat_limit=seat_limit,
             )
             result = operation.model_dump()
         if result["status"] in {"SUCCEEDED", "FAILED"}:
@@ -178,6 +186,8 @@ class DshAdminService:
                     operation = repository.commit_update(operation_id, generation, now=self.now())
                     current = operation.model_dump()
             after = current["after_values"]
+            with self.repository_scope() as repository:
+                projection = repository.effective_projection(current["user_id"], ownership["model_id"])
             await self.quota.install_policy(
                 *subject,
                 **ownership,
@@ -185,6 +195,7 @@ class DshAdminService:
                 version=after["version"],
                 monthly_token_limit=after["monthly_token_limit"],
                 enabled=after["enabled"],
+                effective_projection=projection,
             )
             with self.repository_scope() as repository:
                 repository.mark_ready(operation_id, generation, now=self.now())

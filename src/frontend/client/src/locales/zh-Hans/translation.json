@@ -2185,5 +2185,26 @@
   "dsh_source_live": "实时用量",
   "dsh_source_persisted": "持久化快照，非实时",
   "dsh_source_unavailable": "用量暂不可用",
-  "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。"
+  "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。",
+  "dsh": {
+    "heatmapFuture": "未到时间",
+    "heatmapMessageValue": "{{value}} 条消息",
+    "heatmapOutside": "筛选范围外",
+    "heatmapTile": "{{time}} · {{tokens}} Token · {{messages}} 条消息",
+    "heatmapTokenValue": "{{exact}} Token",
+    "messageActivity": "消息活动",
+    "messageCount": "消息数",
+    "missingUsageCount": "{{count}} 条消息缺少 Token 记录，未按 0 计算。",
+    "tokenActivity": "Token 活动",
+    "tokenBreakdown": "输入 {{input}} Token · 输出 {{output}} Token",
+    "tokenUsage": "Token 用量",
+    "unavailable": "暂不可用，请稍后重试",
+    "modelUsage": "模型用量",
+    "units": {
+      "trillion": "万亿",
+      "hundredBillion": "千亿",
+      "hundredMillion": "亿",
+      "tenThousand": "万"
+    }
+  }
 }

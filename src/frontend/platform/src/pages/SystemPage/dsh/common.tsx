@@ -38,6 +38,8 @@ export function DshChoice({
     )
 }
 interface PagerProps {
+    className?: string
+    hideUnavailable?: boolean
     previous: boolean
     next: boolean
     loading?: boolean
@@ -45,6 +47,8 @@ interface PagerProps {
     onNext: () => void
 }
 export function DshPager({
+    className = '',
+    hideUnavailable = false,
     previous,
     next,
     loading,
@@ -53,21 +57,17 @@ export function DshPager({
 }: PagerProps) {
     const { t } = useTranslation()
     return (
-        <div className="flex gap-2">
-            <Button
-                variant="outline"
-                disabled={!previous || loading}
-                onClick={onPrevious}
-            >
-                {t('dsh.previous')}
-            </Button>
-            <Button
-                variant="outline"
-                disabled={!next || loading}
-                onClick={onNext}
-            >
-                {t('dsh.next')}
-            </Button>
+        <div className={`flex gap-2 ${className}`}>
+            {(!hideUnavailable || previous) && (
+                <Button variant="outline" disabled={!previous || loading} onClick={onPrevious}>
+                    {t('dsh.previous')}
+                </Button>
+            )}
+            {(!hideUnavailable || next) && (
+                <Button variant="outline" disabled={!next || loading} onClick={onNext}>
+                    {t('dsh.next')}
+                </Button>
+            )}
         </div>
     )
 }

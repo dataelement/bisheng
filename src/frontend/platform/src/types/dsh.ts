@@ -146,3 +146,113 @@ export type DshModelAccessPage = DshPage<DshModelAccessUser> & {
     tenant_id: number
     model: { id: number; name: string; is_root_shared: boolean }
 }
+
+export type DshUserPermissionSource = {
+    subject_type: 'DEPARTMENT' | 'ROLE' | 'USER'
+    subject_id: number
+    name: string
+    monthly_token_limit: number
+    inherited: boolean
+    winning: boolean
+}
+export type DshModelUserPermission = {
+    access_status?: 'UNAUTHORIZED' | 'AUTHORIZED' | 'PENDING_LOGIN' | 'SEAT_LIMIT_REACHED' | 'REVOKED' | 'LICENSE_UNAVAILABLE' | 'UNAVAILABLE' | null
+    user_id: number
+    user_name: string
+    direct_version: number
+    direct_enabled: boolean
+    direct_monthly_token_limit: number
+    direct_pending_operation_id: string | null
+    departments: Array<{ id: number; name: string; is_primary: boolean }>
+    roles: Array<{ id: number; name: string }>
+    authorized: boolean
+    monthly_token_limit: number
+    sources: DshUserPermissionSource[]
+    department_match: 'DIRECT' | 'DESCENDANT' | null
+}
+export type DshModelUserPermissionPage = DshPage<DshModelUserPermission> & {
+    tenant_id: number
+    model: { id: number; name: string; is_root_shared: boolean }
+}
+
+export type DshSubjectType = 'DEPARTMENT' | 'ROLE'
+export type DshSubjectPolicy = {
+    subject_type: DshSubjectType
+    subject_id: number
+    name: string
+    version: number
+    enabled: boolean
+    monthly_token_limit: number
+}
+export type DshDepartmentPolicy = DshSubjectPolicy & {
+    subject_type: 'DEPARTMENT'
+    parent_id: number | null
+    depth: number
+}
+export type DshRolePolicy = DshSubjectPolicy & {
+    subject_type: 'ROLE'
+    role_type: 'global' | 'tenant'
+    department_id: number | null
+}
+export type DshSubjectPolicyInventory = {
+    tenant_id: number
+    model_id: number
+    departments: DshDepartmentPolicy[]
+    roles: DshRolePolicy[]
+}
+export type DshSubjectPolicyInput = {
+    expected_version: number
+    enabled: boolean
+    monthly_token_limit: number
+}
+
+export type DshUsageMetrics = {
+    message_count: number
+    qa_count: number
+    failed_count: number
+    cancelled_count: number
+    running_count: number
+    usage_unknown_count: number
+    recorded_usage_count: number
+    missing_usage_count: number
+    input_tokens: number | null
+    output_tokens: number | null
+    total_tokens: number | null
+}
+
+export type DshUsageTimeBucket = DshUsageMetrics & {
+    start_at: string
+    end_at: string
+    demo_tokens?: number
+}
+
+export type DshUsageTimeSummary = {
+    demo?: { before: string; total_tokens: number }
+    start_at: string
+    end_at: string
+    timezone: 'Asia/Shanghai'
+    granularity: 'hour' | 'day'
+    totals: DshUsageMetrics
+    points: DshUsageTimeBucket[]
+}
+
+export type DshUsageOverviewUser = {
+    user_id: number
+    user_name: string
+    department_id: number | null
+    department_name: string | null
+    metrics: DshUsageMetrics
+}
+
+export type DshUsageOverviewPage = {
+    tenant_id: number
+    start_at: string
+    end_at: string
+    timezone: 'Asia/Shanghai'
+    department_id: number | null
+    totals: DshUsageMetrics
+    summary?: DshUsageTimeSummary | null
+    items: DshUsageOverviewUser[]
+    next_cursor: string | null
+    has_more: boolean
+}

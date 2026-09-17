@@ -12,6 +12,7 @@ from bisheng.core.context.tenant import current_tenant_id
 from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy, DshSubjectPolicyAudit
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.services.automatic_quota_recovery import AutomaticQuotaRecovery
@@ -30,16 +31,18 @@ def recovery_db(tmp_path, request):
             pytest.skip("Isolated MySQL is not configured")
         url = request.getfixturevalue("dsh_database_url")
     engine = create_engine(url)
-    tables = [DshUserPolicy.__table__, DshModelCall.__table__, DshMonthlyUsage.__table__, DshAdminOperation.__table__]
+    tables = [
+        DshUserPolicy.__table__,
+        DshSubjectPolicy.__table__,
+        DshSubjectPolicyAudit.__table__,
+        DshModelCall.__table__,
+        DshMonthlyUsage.__table__,
+        DshAdminOperation.__table__,
+    ]
     assert not any(inspect(engine).has_table(table.name) for table in tables), "Refusing existing test tables"
     SQLModel.metadata.create_all(
         engine,
-        tables=[
-            DshUserPolicy.__table__,
-            DshModelCall.__table__,
-            DshMonthlyUsage.__table__,
-            DshAdminOperation.__table__,
-        ],
+        tables=tables,
     )
     token = current_tenant_id.set(2)
     with Session(engine) as session, session.begin():
@@ -116,6 +119,37 @@ async def test_partial_loss_preserves_newer_redis_usage_and_running_calls(quota,
     assert (await quota.read_usage(2, 20, "2026-09"))["used"] == 600
     with Session(recovery_db) as session:
         assert session.scalar(select(DshMonthlyUsage)).used_tokens == 600
+
+
+@pytest.mark.parametrize("microseconds,sql_second", [(662861, 1), (662861, 0), (123456, 0)])
+async def test_sql_second_precision_recovers_exact_redis_identity(quota, recovery_db, microseconds, sql_second):
+    await erase(quota)
+    scope = connect(quota, recovery_db)
+    event = running().model_copy(update={"started_at": datetime(2026, 9, 9, microsecond=microseconds)})
+    await quota.check_and_start(event)
+    await quota.record_usage(terminal(event), 1)
+    persist(recovery_db, [terminal(event)])
+    with Session(recovery_db) as session, session.begin():
+        row = session.scalar(select(DshModelCall))
+        row.started_at = datetime(2026, 9, 9, second=sql_second)
+    await quota.redis.delete(quota.keys(event)[1])
+    assert (await quota.read_usage(2, 20, "2026-09"))["used"] == 300
+    restored = await quota.get_request(event)
+    assert restored.started_at == event.started_at.replace(tzinfo=restored.started_at.tzinfo)
+    await DshProjectionService(quota, scope, consumer="precision-test").project_batch(2, 20)
+    with Session(recovery_db) as session:
+        assert session.scalar(select(DshMonthlyUsage)).used_tokens == 300
+
+
+@pytest.mark.parametrize("changed", [{"session_id": "foreign"}, {"started_at": datetime(2026, 9, 9, second=2)}])
+async def test_recovery_preserves_identity_conflict_checks(quota, recovery_db, changed):
+    event = running()
+    await quota.check_and_start(event)
+    persist(recovery_db, [event.model_copy(update=changed)])
+    await quota.redis.delete(quota.keys(event)[1])
+    connect(quota, recovery_db)
+    with pytest.raises(ValueError, match="Conflicting request identity"):
+        await quota.read_usage(2, 20, "2026-09")
 
 
 async def test_intact_ledger_does_not_read_sql_or_reset_live_usage(quota, recovery_db):
@@ -208,7 +242,10 @@ async def test_user_scope_rejected_before_sql_or_redis_mutation(quota, recovery_
 
 
 @pytest.mark.parametrize("lose_at", [None, "install_policy", "finish_policy"])
-async def test_first_policy_and_mid_update_redis_loss_resume_same_intent(quota, recovery_db, monkeypatch, lose_at):
+@pytest.mark.parametrize("with_history", [False, True])
+async def test_first_policy_and_mid_update_redis_loss_resume_same_intent(
+    quota, recovery_db, monkeypatch, lose_at, with_history
+):
     """AC-27/29: First grant needs no approval, and committed policy updates survive cache loss."""
     from sqlalchemy import event as sql_event
 
@@ -216,10 +253,20 @@ async def test_first_policy_and_mid_update_redis_loss_resume_same_intent(quota, 
     from bisheng.dsh.domain.schemas.contracts import DshUserPolicyInput
     from bisheng.dsh.domain.services.admin_policy import DshAdminService
 
+    if with_history:
+        event = running().model_copy(update={"started_at": datetime(2026, 9, 9, microsecond=662861)})
+        await quota.check_and_start(event)
+        await quota.record_usage(terminal(event), 1)
+        persist(recovery_db, [terminal(event)])
+        with Session(recovery_db) as session, session.begin():
+            session.scalar(select(DshModelCall)).started_at = datetime(2026, 9, 9, second=1)
     with Session(recovery_db) as session, session.begin():
         for row in session.scalars(select(DshUserPolicy)):
             session.delete(row)
-    await erase(quota)
+    if with_history:
+        await quota.redis.delete(quota.keys(event)[1])
+    else:
+        await erase(quota)
     connect(quota, recovery_db)
 
     @contextmanager

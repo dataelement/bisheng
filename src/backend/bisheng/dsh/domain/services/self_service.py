@@ -66,6 +66,18 @@ class DshSelfService:
             raise DshAuthorizationUnavailableError()
         return result
 
+    async def usage_summary(self, user):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        from bisheng.dsh.admin_runtime import read_usage_time_summary
+
+        await self.identity(user)
+        end_at = datetime.now(ZoneInfo("Asia/Shanghai"))
+        start_at = end_at.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=364)
+        with profile_scope(user.tenant_id):
+            return await read_usage_time_summary(user.user_id, start_at, end_at, "day")
+
     async def usage(self, user):
         from types import SimpleNamespace
 

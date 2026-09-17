@@ -16,15 +16,13 @@ import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLL
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
-import { useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
-import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig"
-import { ModelAccessDialog, type DshAccessModel } from "./dsh/ModelAccessDialog"
 
-function CustomTableRow({ data, index, user, onModel, onCheck, onVerified, onDshAccess }) {
+function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
     const { t } = useTranslation()
     const { message } = useToast()
     const { appConfig } = useContext(locationContext)
@@ -86,7 +84,6 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified, onDsh
                             <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
                             <TableHead className="w-[180px] min-w-[140px]">{t('model.statusUpdateTime')}</TableHead>
                             <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
-                            {onDshAccess && <TableHead>{t('dsh.modelAccess')}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -122,12 +119,6 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified, onDsh
                                         onCheckedChange={(bool) => onCheck(index, bool, m.id)}
                                     />
                                 </TableCell>
-                                {onDshAccess && <TableCell>
-                                    {m.model_type === 'llm' ? <Button variant="link" size="sm" disabled={!m.online}
-                                        onClick={() => onDshAccess({ id: m.id, name: `${data.name} / ${m.model_name}` })}>
-                                        {t('dsh.modelAccess')}
-                                    </Button> : '—'}
-                                </TableCell>}
                             </TableRow>
                         ))}
                     </TableBody>
@@ -157,15 +148,14 @@ export default function Management() {
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
-    const canManageDsh = user?.role === 'admin' || !!user?.is_global_super || !!user?.is_child_admin
-    const { config: dshConfig } = useDshBrowserConfig()
-    const dshEnabled = canManageDsh && !!dshConfig?.enabled
-    const [dshModel, setDshModel] = useState<DshAccessModel | null>(null)
-    useEffect(() => { if (!dshEnabled) setDshModel(null) }, [dshEnabled])
-
     const [searchParams, setSearchParams] = useSearchParams()
+    const navigate = useNavigate()
     useEffect(() => {
         const tab = searchParams.get('systemModel')
+        if (tab === 'dsh') {
+            navigate('/dsh', { replace: true })
+            return
+        }
         // Wait for model list to load before opening SystemModelConfig — otherwise
         // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
         if (tab && data.length > 0) {
@@ -175,7 +165,7 @@ export default function Management() {
             next.delete('systemModel')
             setSearchParams(next, { replace: true })
         }
-    }, [searchParams, setSearchParams, data])
+    }, [searchParams, setSearchParams, data, navigate])
 
     const reload = async () => {
         setLoading(true)
@@ -280,7 +270,6 @@ export default function Management() {
                             onCheck={handleCheck}
                             onVerified={handleVerified}
                             onModel={setModelId}
-                            onDshAccess={canManageDsh && dshEnabled ? setDshModel : undefined}
                         />)
                     }
                 </div>
@@ -289,7 +278,6 @@ export default function Management() {
         <div className="bisheng-table-footer bg-background-login px-6">
             <p className="desc">{t('model.modelCollectionCaption')}.</p>
         </div>
-        <ModelAccessDialog model={dshModel} onClose={() => setDshModel(null)} />
     </div>
 
 }
