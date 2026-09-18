@@ -150,7 +150,7 @@ F048 的 OpenFGA 授权模型**版本号写在代码里**,两批的值不同:
 git show <branch>:src/backend/bisheng/core/openfga/authorization_model_f048.py | grep '^MODEL_VERSION'
 ```
 
-模型确实要升时的处置见合并手册文末「部署提醒」。
+模型确实要升时的处置见合并手册 §4「合并后的部署提醒」。
 
 ---
 
