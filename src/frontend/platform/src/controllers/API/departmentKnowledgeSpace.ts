@@ -5,6 +5,8 @@ export interface DepartmentKnowledgeSpaceSummary {
   name: string;
   department_id?: number | null;
   department_name?: string | null;
+  // COFCO: read-only name chain from the visible org root, joined by " / ".
+  department_path?: string | null;
   space_kind?: "normal" | "department";
   auth_type?: string;
   is_released?: boolean;

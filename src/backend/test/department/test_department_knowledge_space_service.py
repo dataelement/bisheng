@@ -466,8 +466,34 @@ async def test_get_all_department_spaces_returns_decorated_spaces():
     assert result[0].space_kind == "department"
     assert result[0].department_id == 10
     assert result[0].department_name == "财务部"
+    assert result[0].department_path == "财务部"
     assert result[0].approval_enabled is False
     assert result[0].sensitive_check_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_department_path_labels_join_visible_chain():
+    """Same-named departments are told apart by the chain from the visible root."""
+    DepartmentKnowledgeSpaceService = _load_service_class()
+    group = SimpleNamespace(id=1, name="中粮集团", path="/1/")
+    sub = SimpleNamespace(id=5, name="示例子公司", path="/1/5/")
+    head_office_dept = SimpleNamespace(id=10, name="数智化部", path="/1/10/")
+    sub_dept = SimpleNamespace(id=11, name="数智化部", path="/1/5/11/")
+    # Department 99's parent (98) is outside the caller's tenant: it is skipped.
+    hidden_parent_child = SimpleNamespace(id=99, name="人力资源部", path="/98/99/")
+
+    async def fake_get_by_ids(ids):
+        rows = {d.id: d for d in (group, sub, head_office_dept, sub_dept, hidden_parent_child)}
+        return [rows[i] for i in ids if i in rows]
+
+    with patch(f"{_SERVICE_MODULE}.DepartmentDao.aget_by_ids", side_effect=fake_get_by_ids):
+        labels = await DepartmentKnowledgeSpaceService._department_path_labels([10, 11, 99, 10])
+
+    assert labels == {
+        10: "中粮集团 / 数智化部",
+        11: "中粮集团 / 示例子公司 / 数智化部",
+        99: "人力资源部",
+    }
 
 
 @pytest.mark.asyncio

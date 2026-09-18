@@ -10,6 +10,7 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
+import { cn } from "@/utils"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
@@ -34,6 +35,8 @@ interface DepartmentUsersSelectProps {
   placeholder?: string
   searchPlaceholder?: string
   className?: string
+  /** Extra classes for the dropdown panel, merged over its defaults (e.g. a wider min width). */
+  popoverClassName?: string
   /** When set, the picker only renders the subtree rooted at this department's
    * internal id (Tenant admin/member pickers). F038: the lazy tree is rooted at
    * this id instead of the scope root. */
@@ -66,6 +69,7 @@ export default function DepartmentUsersSelect({
   placeholder,
   searchPlaceholder,
   className = "",
+  popoverClassName,
   rootDeptId,
   emptyMessage,
   filterUserIds,
@@ -366,7 +370,10 @@ export default function DepartmentUsersSelect({
         align="start"
         sideOffset={4}
         collisionPadding={12}
-        className="w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[calc(var(--bs-vw,100vw)_-_2rem)] overflow-hidden p-2"
+        className={cn(
+          "w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[calc(var(--bs-vw,100vw)_-_2rem)] overflow-hidden p-2",
+          popoverClassName,
+        )}
         style={{ maxHeight: "min(520px, var(--radix-popover-content-available-height, 520px))" }}
       >
         <div

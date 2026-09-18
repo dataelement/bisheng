@@ -120,6 +120,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     department_id: int | None = Field(default=None, description="Bound department id for department spaces")
     department_name: str | None = Field(default=None, description="Bound department name for department spaces")
+    department_path: str | None = Field(
+        default=None,
+        description="Read-only name path from the visible org root to the bound department, joined by ' / '",
+    )
     approval_enabled: bool | None = Field(default=None, description="Whether department-space uploads require approval")
     sensitive_check_enabled: bool | None = Field(
         default=None,

@@ -497,7 +497,45 @@ class DepartmentKnowledgeSpaceService:
         results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
         await svc._populate_root_file_counts(results)
-        return await svc._decorate_department_metadata(results)
+        results = await svc._decorate_department_metadata(results)
+        path_map = await cls._department_path_labels(
+            [int(space.department_id) for space in results if space.department_id is not None]
+        )
+        for space in results:
+            if space.department_id is not None:
+                space.department_path = path_map.get(int(space.department_id))
+        return results
+
+    @classmethod
+    async def _department_path_labels(cls, department_ids: Sequence[int]) -> dict[int, str]:
+        """{department.id -> ``中粮集团 / 示例子公司 / 数智化部``}, display only.
+
+        Same-named departments and spaces exist across the group and its
+        subsidiaries, so the management list names the whole chain. Ancestors
+        load in one batched query; any the caller cannot see (tenant filter)
+        are skipped, so the chain starts at the visible root.
+        """
+        ids = list(dict.fromkeys(int(i) for i in department_ids))
+        if not ids:
+            return {}
+        departments = await DepartmentDao.aget_by_ids(ids) or []
+        chains = {
+            int(dept.id): [
+                int(seg) for seg in str(getattr(dept, "path", None) or "").strip("/").split("/") if seg.isdigit()
+            ]
+            for dept in departments
+        }
+        names = {int(dept.id): dept.name for dept in departments}
+        missing = {i for chain in chains.values() for i in chain if i not in names}
+        if missing:
+            for ancestor in await DepartmentDao.aget_by_ids(list(missing)) or []:
+                names[int(ancestor.id)] = ancestor.name
+        labels: dict[int, str] = {}
+        for dept_id, chain in chains.items():
+            parts = [names[i] for i in (chain or [dept_id]) if names.get(i)]
+            if parts:
+                labels[dept_id] = " / ".join(parts)
+        return labels
 
     @classmethod
     async def set_spaces_hidden(

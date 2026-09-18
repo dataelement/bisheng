@@ -23,6 +23,7 @@ import type { DepartmentTreeNode } from "@/types/api/department";
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { buildDepartmentPathLabel, collectDepartmentNames, departmentPathOrName } from "./departmentPath";
 
 interface Props {
   open: boolean;
@@ -49,6 +50,9 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
   // Names learned from the lazy tree as nodes render/toggle, so the change-preview
   // can label a pending department even when it isn't currently rendered.
   const nameRef = useRef<Map<number, string>>(new Map());
+  // COFCO: full name chain per pending department, captured when it is picked so
+  // it survives clearing the search or collapsing the tree.
+  const pathRef = useRef<Map<number, string>>(new Map());
 
   const loadBindings = useCallback(async () => {
     const spaceRes = await captureAndAlertRequestErrorHoc(
@@ -66,6 +70,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
           pendingAdmin: Boolean(item.pending_admin),
         });
         if (item.department_name) nameRef.current.set(item.department_id, item.department_name);
+        if (item.department_path) pathRef.current.set(item.department_id, item.department_path);
         if (!isHidden) visible.add(item.department_id);
       }
     }
@@ -118,10 +123,24 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
   );
 
   const nameOf = (id: number) => nameRef.current.get(id) || bindingByDept.get(id)?.name || String(id);
+  const pathOf = (id: number) => departmentPathOrName(pathRef.current.get(id), nameOf(id));
+
+  // Ancestor names come from the browse tree, or from the search forest when the
+  // node was picked from a search hit whose ancestors were never expanded.
+  const recordPath = (node: DepartmentTreeNode) => {
+    const searchNames = tree.searchMode ? collectDepartmentNames(tree.searchRoots) : null;
+    pathRef.current.set(
+      node.id,
+      buildDepartmentPathLabel(node, (id) => tree.getNode(id)?.name ?? searchNames?.get(id)),
+    );
+  };
 
   const toggleDept = (node: DepartmentTreeNode | number) => {
     const id = typeof node === "number" ? node : node.id;
-    if (typeof node !== "number") nameRef.current.set(node.id, node.name);
+    if (typeof node !== "number") {
+      nameRef.current.set(node.id, node.name);
+      if (!pathRef.current.has(node.id)) recordPath(node);
+    }
     setSelectedDeptIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -163,7 +182,10 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     // Record names of everything we touch so the preview can label them.
     for (const id of loadedSelectableIds) {
       const node = tree.getNode(id);
-      if (node) nameRef.current.set(id, node.name);
+      if (node) {
+        nameRef.current.set(id, node.name);
+        if (!pathRef.current.has(id)) recordPath(node);
+      }
     }
     setSelectedDeptIds((prev) => {
       const next = new Set(prev);
@@ -262,6 +284,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                   <span className={`size-1.5 shrink-0 rounded-full ${tone}`} />
                   <span className="truncate text-sm text-[#1D2129]">{nameOf(deptId)}</span>
                 </div>
+                <div className="mt-0.5 break-words pl-3.5 text-xs text-[#86909C]">{pathOf(deptId)}</div>
                 {withCreateFields && (
                   <>
                     <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
@@ -277,6 +300,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
                       <DepartmentUsersSelect
                         multiple={false}
                         className="min-w-0 flex-1"
+                        popoverClassName="min-w-[520px]"
                         value={adminByDept.get(deptId) ? [adminByDept.get(deptId)!] : []}
                         onChange={(users) => setDeptAdmin(deptId, users)}
                         placeholder={t("bench.departmentKnowledgeSpaceAdminSearchPlaceholder")}
