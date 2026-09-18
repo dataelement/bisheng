@@ -260,6 +260,8 @@ const AiChatInput = memo(
             mediaCoverUrl?: string;
             cover_filepath?: string;
             mediaDurationSec?: number;
+            /** Folder upload: path relative to the picked folder root. */
+            relative_path?: string;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
 
@@ -413,9 +415,28 @@ const AiChatInput = memo(
         // Skills join the knowledge spaces in the strip: both are context you
         // mount onto the conversation, not something you are about to send.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        // An uploaded FOLDER is mounted context too — the workspace rebuilds its
+        // tree and the task works against it — so its card goes to the strip
+        // beside the skills. Loose files stay inline: they are part of the
+        // message being sent. A file belongs to a folder when its
+        // relative_path still carries a directory separator.
+        const isFolderFile = (f: { relative_path?: string }) => (f?.relative_path || '').includes('/');
+        const folderUploadingFiles = uploadingFiles.filter(isFolderFile);
+        const looseUploadingFiles = uploadingFiles.filter((f) => !isFolderFile(f));
+        const folderChatFiles = (chatFiles || []).filter(isFolderFile);
+        const looseChatFiles = (chatFiles || []).filter((f) => !isFolderFile(f));
+        const hasMountedFolders = (folderChatFiles.length > 0 || folderUploadingFiles.length > 0) && !isLingsi;
         const hasMountedKbs = (!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0;
-        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
-        const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
+        const hasStripItems = hasMountedKbs || hasMountedFolders;
+        const hasInlineAttachments = (looseChatFiles.length > 0 || looseUploadingFiles.length > 0) && !isLingsi;
+        const hasSelectionTags = hasStripItems || hasInlineAttachments;
+
+        const handleRemoveAttachment = (file: { clientId?: string | number }) => {
+            // clientId, not name: a folder upload can carry the same file name in
+            // several subdirectories.
+            inputFilesRef.current?.removeByClientId?.(file.clientId);
+            setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
+        };
 
         // Tell the landing page whether the attachment bar is present so it can
         // hide/show the welcome subtitle without shifting the title or input box.
@@ -444,18 +465,19 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces and task-mode skills — a gray strip
-                    stacked ABOVE the input box (Figma 12841:47449). Attachments
-                    deliberately do not join it: files stay inline inside the box,
-                    where they read as part of what you are about to send rather
-                    than as mounted context. */}
-                {hasMountedKbs && (
+                {/* Mounted knowledge spaces, task-mode skills and uploaded
+                    folders — a gray strip stacked ABOVE the input box (Figma
+                    12841:47449). Loose files deliberately do not join it: they
+                    stay inline inside the box, where they read as part of what
+                    you are about to send rather than as mounted context. */}
+                {hasStripItems && (
                     <AttachmentBar
                         appearance="strip"
-                        uploadingFiles={[]}
-                        files={[]}
+                        uploadingFiles={folderUploadingFiles}
+                        files={folderChatFiles}
                         kbs={selectedOrgKbs || []}
                         skills={mountedSkills}
+                        onRemoveFile={handleRemoveAttachment}
                         onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
                             onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
                         } : undefined}
@@ -478,16 +500,11 @@ const AiChatInput = memo(
                 >
                     {hasInlineAttachments && (
                         <AttachmentBar
-                            uploadingFiles={uploadingFiles}
-                            files={chatFiles || []}
+                            uploadingFiles={looseUploadingFiles}
+                            files={looseChatFiles}
                             kbs={[]}
                             skills={[]}
-                            onRemoveFile={(file) => {
-                                // clientId, not name: a folder upload can carry the
-                                // same file name in several subdirectories.
-                                inputFilesRef.current?.removeByClientId?.(file.clientId);
-                                setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
-                            }}
+                            onRemoveFile={handleRemoveAttachment}
                         />
                     )}
 
