@@ -160,7 +160,7 @@ export function ErrorPage({
           {labels.screenshotHint}
         </span>
         {/* Room for the code plus its inset, so a long value never runs under it. */}
-        <div className="flex flex-col gap-4 pr-32">
+        <div className="flex flex-col gap-4 pr-[136px]">
           {rows.map((row) => (
             <DiagnosticRow key={row.label} label={row.label} value={row.value} />
           ))}
@@ -176,7 +176,7 @@ export function ErrorPage({
             — the first is the light backing plate behind the modules. */}
         <QRCodeSVG
           value={buildQrPayload(diagnostics)}
-          size={80}
+          size={120}
           level="L"
           className="absolute right-4 top-4 [&>path:last-of-type]:fill-blue-500"
         />
