@@ -32,6 +32,9 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
+import { KnowledgeHomePage } from "./KnowledgeHomePage";
+import { MODULE_HOME_FRAME, ModuleHomeHeader, ModuleViewTabs, type ModuleView } from "~/components/ModuleHome";
+import { isDemoId } from "~/mock/demo/ids";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
@@ -39,7 +42,7 @@ import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
@@ -56,16 +59,12 @@ export default function Knowledge() {
         [bishengConfig],
     );
     const isH5 = usePrefersMobileLayout();
-    // ≥1024 = desktop (sidebar expanded by default). 768–1023 = tablet: sidebar starts
-    // collapsed but keeps its expand toggle (the mobile flow only kicks in below 768).
-    const isDesktop = useMediaQuery("(min-width: 1024px)");
     const { isOverQuota } = useEffectiveQuota();
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
     // Mobile: a batch selection in the file list hides the AI dock and shows the action bar.
     const [fileSelectionActive, setFileSelectionActive] = useState(false);
@@ -156,12 +155,6 @@ export default function Knowledge() {
         if (!isH5) setSpaceListDrawerOpen(false);
     }, [isH5]);
 
-    // Tablet (768–1023): collapse the sidebar by default so the file area gets the room,
-    // while the NavToggle stays available to expand it. Desktop keeps the user's choice.
-    useEffect(() => {
-        if (!isH5 && !isDesktop) setSidebarCollapsed(true);
-    }, [isH5, isDesktop]);
-
     useEffect(() => {
         if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
     }, [showKnowledgeSquare]);
@@ -174,21 +167,18 @@ export default function Knowledge() {
         setKnowledgeSearchMode(false);
     }, [activeSpace?.id]);
 
-    // Mobile: the space list is a standalone page at /knowledge. When the URL leaves a
-    // space detail route (browser Back, or in-app navigation to /knowledge), drop the
-    // active space so the full-page list shows again. PC keeps its auto-selected space.
+    // The space list is a standalone page at /knowledge on every shell (mobile list page,
+    // desktop home). When the URL leaves a space detail route (browser Back, or in-app
+    // navigation to /knowledge), drop the active space so that page shows again.
     useEffect(() => {
-        if (!isH5) return;
         if (detailSpaceId || isShareRoute) return;
         setActiveSpace(null);
-    }, [isH5, detailSpaceId, isShareRoute]);
+    }, [detailSpaceId, isShareRoute]);
 
     // Browser Back/Forward: this tab is cached (react-activation), so the router hooks may
-    // not re-run inside it. Re-sync activeSpace with the live URL on popstate. Mobile only —
-    // desktop keeps its combined list+detail view (and auto-selects the first space).
+    // not re-run inside it. Re-sync activeSpace with the live URL on popstate.
     useEffect(() => {
         const onPop = () => {
-            if (!window.matchMedia("(max-width: 767px)").matches) return;
             if (!/\/knowledge\/space\//.test(window.location.pathname)) {
                 setActiveSpace(null);
             }
@@ -465,6 +455,11 @@ export default function Knowledge() {
             setActiveSpace(null);
             return;
         }
+        // DEV sample rows (~/mock/demo) exist only in the list response.
+        if (isDemoId(space.id)) {
+            showToast({ message: localize("com_demo_data.readonly_toast"), severity: NotificationSeverity.INFO });
+            return;
+        }
         // Clear folder context from URL so the file list re-fetches the space root.
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
@@ -571,6 +566,15 @@ export default function Knowledge() {
     }
 
     // Knowledge square view
+    const handleModuleViewChange = (view: ModuleView) => {
+        if (view === "square") {
+            setShowKnowledgeSquare(true);
+            return;
+        }
+        setShowKnowledgeSquare(false);
+        navigate("/knowledge", { replace: true });
+    };
+
     if (showKnowledgeSquare) {
         return (
             // Mobile: the MainLayout shell is h-auto/overflow-visible and html/body
@@ -578,11 +582,13 @@ export default function Knowledge() {
             // so `h-full` collapses and the square's inner scroller never scrolls.
             // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
             <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
+                {/* Same key + same slot as in the 我的 return below, so React keeps ONE
+                    switcher across the two views and its indicator slides. */}
+                {!isH5 && <ModuleViewTabs key="module-view-tabs" active="square" onChange={handleModuleViewChange} />}
                 <KnowledgeSquare
-                    onBack={() => {
-                        setShowKnowledgeSquare(false);
-                        navigate("/knowledge", { replace: true });
-                    }}
+                    // Desktop leaves the square through the switcher; the banner's back
+                    // arrow is the mobile way out.
+                    onBack={isH5 ? () => handleModuleViewChange("mine") : undefined}
                     title={localize("com_knowledge.explore_square")}
                     subtitle={localize("com_knowledge.explore_more_spaces")}
                     searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
@@ -638,6 +644,9 @@ export default function Knowledge() {
 
     return (
         <div className="relative flex h-full min-h-0">
+            {!isH5 && !activeSpace && !detailSpaceId && (
+                <ModuleViewTabs key="module-view-tabs" active="mine" onChange={handleModuleViewChange} />
+            )}
             {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
                 (single full-screen overlay, only while dragging) and is gated by the
                 global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
@@ -671,27 +680,10 @@ export default function Knowledge() {
                 </div>
             )}
 
-            {/* Sidebar — shown ≥768px. Must NOT mount on mobile (<768): its auto-select-first
-                effect would jump straight into a space and bypass the mobile list page.
-                Tablet (768–1023) keeps it (collapsed by default) so the expand toggle stays. */}
-            {!isH5 && (
-                <div className="h-full shrink-0">
-                    <KnowledgeSpaceSidebar
-                        activeSpaceId={activeSpace?.id}
-                        onSpaceSelect={handleSpaceSelect}
-                        onCreateSpace={handleCreateSpace}
-                        onSpaceSettings={handleSpaceSettings}
-                        onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                        collapsed={sidebarCollapsed}
-                        onCollapsedChange={setSidebarCollapsed}
-                        // The URL names a space on both of these routes, so the
-                        // default-pick has nothing to decide and must not race
-                        // the route effect for the address bar.
-                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
-                        hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
-                    />
-                </div>
-            )}
+            {/* No in-module space list column: the workbench sidebar is global now, so every
+                shell is list-page-first — /knowledge is the home (KnowledgeHomePage on desktop,
+                the full-page list on mobile) and a space opens as its own page. The column's
+                auto-select-first effect must not come back: it would bypass that home. */}
 
             {/* File page: the top Title ▾ opens this drawer to switch spaces (unchanged behaviour). */}
             {/* Kept mounted while a space is active and toggled via `hidden` (not unmounted) so
@@ -837,6 +829,7 @@ export default function Knowledge() {
                                 spaceId={String(activeSpace.id)}
                                 folderId={fileManager.currentFolderId}
                                 contextLabel={contextLabel}
+                                spaceName={activeSpace.name}
                             />
                         )}
                     </div>
@@ -912,14 +905,25 @@ export default function Knowledge() {
                         </>
                     )}
                 </div>
-            ) : spacesResolving ? (
-                /* PC loading state — keep the loading view up until the space lists
-                   settle so the empty state never flashes before auto-select. */
+            ) : spacesResolving || detailSpaceId ? (
+                /* PC loading state — keep the loading view up until the space lists settle,
+                   and while a /knowledge/space/:id deep link is still resolving its space,
+                   so neither the empty state nor the home flashes first. */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
                     <LoadingIcon className="size-20 text-primary" />
                 </div>
+            ) : !hasNoSpace ? (
+                <KnowledgeHomePage
+                    onSpaceSelect={handleSpaceSelect}
+                    onCreateSpace={handleCreateSpace}
+                    onSpaceSettings={handleSpaceSettings}
+                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                />
             ) : (
-                /* PC empty state when no space is selected — illustration + two actions */
+                /* PC empty state when the user has no space at all — the 我的 frame (title +
+                   switcher) stays, with the illustration + two actions centered below it. */
+                <div className={MODULE_HOME_FRAME}>
+                <ModuleHomeHeader title={menuNames.knowledge} />
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     <EmptyStateIllustration className="size-[120px]" />
                     <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
@@ -941,6 +945,7 @@ export default function Knowledge() {
                             {localize("com_knowledge.create_knowledge_space")}
                         </button>
                     </div>
+                </div>
                 </div>
             )}
 

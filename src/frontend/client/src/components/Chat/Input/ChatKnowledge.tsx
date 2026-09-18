@@ -8,9 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "~/components/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -20,6 +17,7 @@ import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hoo
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import { PlusMenuSub } from "./PlusMenuSub";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
@@ -66,6 +64,9 @@ export const ChatKnowledge = ({
   showTaskModeEntry = false,
   onEnterTaskMode,
   renderSkillSubmenu,
+  showSpaceSubmenu = false,
+  renderToolsSubmenu,
+  toolsActive = false,
   taskModeActive = false,
   skillSelected = false,
   compact = false,
@@ -91,6 +92,12 @@ export const ChatKnowledge = ({
   onEnterTaskMode?: () => void;
   /** F035: "添加 Skill" hover submenu (desktop) / drill panel (mobile); selecting a skill enters task mode. */
   renderSkillSubmenu?: (close: () => void) => ReactNode;
+  /** Desktop "+" menu also hosts 知识空间 (used when the toolbar pill is folded away). */
+  showSpaceSubmenu?: boolean;
+  /** Desktop "+" menu 工具 side panel; omit to hide the row. */
+  renderToolsSubmenu?: () => ReactNode;
+  /** Tint the 工具 icon brand once at least one tool is on. */
+  toolsActive?: boolean;
   /** When already in task mode, show the entry checked (toggle indicator). */
   taskModeActive?: boolean;
   /** F035: tint the "添加技能" icon brand-blue once at least one skill is picked. */
@@ -458,62 +465,68 @@ export const ChatKnowledge = ({
 
         {/* Org knowledge selector — moved into the "+" menu, below upload.
             Desktop: cascading submenu. Gated by KB feature flag. */}
+        {/* Desktop with the toolbar pills folded away: 知识空间 lives here as a side
+            panel, carrying the same list the pill shows. */}
+        {variant === 'plus' && !isMobile && showSpaceSubmenu && (
+          <PlusMenuSub
+            icon={<Outlined.Book size={16} className={selectedKnowledgeSpaces.length > 0 ? 'text-blue-500' : 'text-text-2'} />}
+            label={localize('com_ui_knowledge_space')}
+            panelClassName="max-h-[320px]"
+          >
+            <KnowledgeListPanel
+              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
+              keyword={spaceKeyword}
+              setKeyword={setSpaceKeyword}
+              groups={spaceListGroups}
+              selectedItems={selectedKnowledgeSpaces}
+              onToggle={(item) => handleToggle(item, 'space')}
+              isFetching={spaceFetching}
+              hasMore={false}
+              onLoadMore={() => { }}
+              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
+            />
+          </PlusMenuSub>
+        )}
+
+        {/* Org knowledge selector — desktop side panel, gated by the KB feature flag.
+            No heading inside: the panel hangs off the "组织知识库" row, which stays
+            visible next to it. The mobile drill panel keeps its own heading. */}
         {variant === 'plus' && !isMobile && config?.knowledgeBase?.enabled !== false && (
-          <DropdownMenuSub
+          <PlusMenuSub
+            // Icon turns brand-blue once an org KB is selected (no dot).
+            icon={<Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? 'text-blue-500' : 'text-text-2'} />}
+            label={localize('com_tools_org_knowledge')}
             open={openSub === 'org'}
             onOpenChange={(o) => {
               if (o) setOpenSub('org');
               else setOpenSub((cur) => (cur === 'org' ? null : cur));
             }}
           >
-            <DropdownMenuSubTrigger
-              data-sub-key="org"
-              className={cn(
-                'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
-                </div>
-                <span className="text-[14px] font-normal text-slate-700">
-                  {localize('com_tools_org_knowledge')}
-                </span>
-              </div>
-            </DropdownMenuSubTrigger>
+            <KnowledgeListPanel
+              freezeHeightOnFilter
+              placeholder={localize('com_tools_knowledge_base_search')}
+              keyword={orgKeyword}
+              setKeyword={setOrgKeyword}
+              items={sortedOrgKbs}
+              selectedItems={selectedOrgKbs}
+              onToggle={(item) => handleToggle(item, 'org')}
+              isFetching={orgFetching}
+              hasMore={hasMoreOrg}
+              onLoadMore={() => setOrgPage((p) => p + 1)}
+              emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
+            />
+          </PlusMenuSub>
+        )}
 
-            {/* `align="center"` centers the panel vertically on the trigger row
-                (same placement rule as the skill panel below). */}
-            <DropdownMenuSubContent
-              align="center"
-              collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-              style={
-                {
-                  '--tw-enter-duration': '0.35s',
-                  '--tw-enter-easing': 'ease-in-out',
-                } as React.CSSProperties
-              }
-            >
-              {/* No heading here: this panel hangs off the "组织知识库" row, which
-                  stays visible next to it. The mobile drill panel keeps its own
-                  heading — there it is the back row's label. */}
-              <KnowledgeListPanel
-                freezeHeightOnFilter
-                placeholder={localize('com_tools_knowledge_base_search')}
-                keyword={orgKeyword}
-                setKeyword={setOrgKeyword}
-                items={sortedOrgKbs}
-                selectedItems={selectedOrgKbs}
-                onToggle={(item) => handleToggle(item, 'org')}
-                isFetching={orgFetching}
-                hasMore={hasMoreOrg}
-                onLoadMore={() => setOrgPage((p) => p + 1)}
-                emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
+        {/* 工具 — desktop side panel supplied by the caller (agent tool switches). */}
+        {variant === 'plus' && !isMobile && renderToolsSubmenu && (
+          <PlusMenuSub
+            icon={<Outlined.Hammer size={16} className={toolsActive ? 'text-blue-500' : 'text-text-2'} />}
+            label={localize('com_tools_title')}
+            panelClassName="max-h-[320px] w-[200px] gap-1 overflow-y-auto pb-3"
+          >
+            {renderToolsSubmenu()}
+          </PlusMenuSub>
         )}
 
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
@@ -600,30 +613,13 @@ export const ChatKnowledge = ({
                 close 让选择器先关掉「+」菜单，避免 popover 跳位。 */}
             {renderSkillSubmenu && (
               !isMobile ? (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger
-                    className={cn(
-                      'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
-                      <span className="text-[14px] font-normal text-slate-700">
-                        {localize('com_linsight_add_skill')}
-                      </span>
-                    </div>
-                  </DropdownMenuSubTrigger>
-                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
-                      `align="center"` centers the panel vertically on the trigger row
-                      instead of aligning their top edges. */}
-                  <DropdownMenuSubContent
-                    align="center"
-                    collisionPadding={BOTTOM_GAP}
-                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-                  >
-                    {renderSkillSubmenu(() => setRootOpen(false))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <PlusMenuSub
+                  icon={<Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />}
+                  label={localize('com_linsight_add_skill')}
+                  panelClassName="w-[280px] gap-0"
+                >
+                  {renderSkillSubmenu(() => setRootOpen(false))}
+                </PlusMenuSub>
               ) : (
                 <DropdownMenuItem
                   onSelect={(e) => {

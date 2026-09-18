@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
@@ -91,6 +92,7 @@ export function KnowledgeSpaceHeader({
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const navigate = useNavigate();
     const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
 
@@ -240,22 +242,27 @@ export function KnowledgeSpaceHeader({
 
             {/* 左侧：根目录显示空间标题 + 信息；进入文件夹后显示当前文件夹名（设计稿 11772:70584） */}
             <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                {/* Desktop back button (设计稿 11772:70584). The module has no space / folder
+                    column any more, so this is the way up: folder → parent folder → space
+                    root → the 知识空间 home. Mobile keeps its own top bar and Title ▾ drawer. */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (currentPath.length === 0) {
+                            navigate("/knowledge");
+                            return;
+                        }
+                        const parent = currentPath[currentPath.length - 2];
+                        onNavigateFolder(parent?.id);
+                    }}
+                    aria-label={localize("com_ui_go_back")}
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1 max-[767px]:hidden"
+                >
+                    <Outlined.ArrowLeft className="size-4" />
+                </button>
+                <div className="mx-1 h-4 w-px shrink-0 bg-border-base max-[767px]:hidden" aria-hidden />
                 {currentPath.length > 0 ? (
                     <>
-                        {/* 返回按钮 + 分隔线先隐藏，后续可能恢复（设计稿 11772:70584）
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const parent = currentPath[currentPath.length - 2];
-                                onNavigateFolder(parent?.id);
-                            }}
-                            aria-label={localize("com_ui_go_back")}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
-                        >
-                            <Outlined.ArrowLeft className="size-4" />
-                        </button>
-                        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
-                        */}
                         <h1 className="min-w-0 truncate text-base font-normal leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                             {currentPath[currentPath.length - 1]?.name || space.name}
                         </h1>

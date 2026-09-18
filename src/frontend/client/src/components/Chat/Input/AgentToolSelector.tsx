@@ -40,6 +40,7 @@ export interface AvailableToolGroup {
 
 interface Props {
   availableTools: AvailableToolGroup[];
+  selection: AgentToolSelection;
   disabled?: boolean;
   /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
   compact?: boolean;
@@ -51,8 +52,20 @@ function iconForGroup(group: AvailableToolGroup) {
   return <Outlined.Hammer className="size-4 text-text-2" />;
 }
 
-export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
-  const localize = useLocalize();
+export interface AgentToolSelection {
+  /** At least one tool group is switched on. */
+  isActive: boolean;
+  isChecked: (id: number) => boolean;
+  toggle: (group: AvailableToolGroup) => void;
+}
+
+/**
+ * Selection state for the agent tools, separate from any UI so it keeps running
+ * while its picker is closed: the default_checked seeding below must happen on
+ * mount, not the first time a menu is opened. Call it once per input and hand the
+ * result to AgentToolSelector (toolbar pill) or AgentToolList ("+" menu panel).
+ */
+export function useAgentToolSelection(availableTools: AvailableToolGroup[] | undefined): AgentToolSelection {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
 
@@ -87,9 +100,6 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
     if (pruned.length !== selected.length) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
 
-  const activeCount = selected.length;
-  const isActive = activeCount > 0;
-
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
     if (isChecked(group.id)) {
@@ -111,6 +121,47 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       ]);
     }
   };
+
+  return { isActive: selected.length > 0, isChecked, toggle };
+}
+
+interface AgentToolListProps {
+  availableTools: AvailableToolGroup[];
+  selection: AgentToolSelection;
+  disabled?: boolean;
+}
+
+/** One switch row per tool group — the body of both the pill's panel and the "+" submenu. */
+export function AgentToolList({ availableTools, selection, disabled }: AgentToolListProps) {
+  return (
+    <>
+      {availableTools.map((group) => (
+        <div key={group.id} className="flex h-8 shrink-0 justify-between items-center rounded-lg px-2">
+          <div className="flex gap-2 items-center min-w-0">
+            {iconForGroup(group)}
+            <span
+              className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
+              title={group.description || group.name}
+            >
+              {group.name}
+            </span>
+          </div>
+          <Switch
+            variant="tool"
+            className="shrink-0"
+            disabled={disabled}
+            checked={selection.isChecked(group.id)}
+            onCheckedChange={() => selection.toggle(group)}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+export default function AgentToolSelector({ availableTools, selection, disabled, compact = false }: Props) {
+  const localize = useLocalize();
+  const isActive = selection.isActive;
 
   if (!availableTools || availableTools.length === 0) return null;
 
@@ -144,26 +195,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
         className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
-        {availableTools.map((group) => (
-          <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
-            <div className="flex gap-2 items-center min-w-0">
-              {iconForGroup(group)}
-              <span
-                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
-                title={group.description || group.name}
-              >
-                {group.name}
-              </span>
-            </div>
-            <Switch
-              variant="tool"
-              className="shrink-0"
-              disabled={disabled}
-              checked={isChecked(group.id)}
-              onCheckedChange={() => toggle(group)}
-            />
-          </div>
-        ))}
+        <AgentToolList availableTools={availableTools} selection={selection} disabled={disabled} />
       </SelectContent>
     </Select>
   );

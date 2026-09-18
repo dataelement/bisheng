@@ -17,7 +17,7 @@ import { useRecoilValue, useRecoilState } from "recoil";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
-import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
+import AgentToolSelector, { AgentToolList, useAgentToolSelection } from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
@@ -28,7 +28,7 @@ import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
+import { useContainerCompact, usePrefersMobileLayout, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import useLocalize from "~/hooks/useLocalize";
 import { useToastContext } from "~/Providers";
@@ -38,6 +38,7 @@ import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
+import type { AttachmentAsk } from "./chatAskHandoff";
 
 export interface AiChatInputFeatures {
     modelSelect?: boolean;
@@ -124,6 +125,14 @@ interface AiChatInputProps {
      */
     onSelectionPresenceChange?: (hasSelection: boolean) => void;
     /**
+     * Landing page only: a question handed over from a module page together with the
+     * file it is about (see chatAskHandoff). The input uploads the file, fills in the
+     * question and sends by itself once the file is uploaded and parsed.
+     */
+    attachmentAsk?: AttachmentAsk | null;
+    /** The ask was sent, or could not be (upload unavailable / failed). */
+    onAttachmentAskDone?: () => void;
+    /**
      * F035: toggle task mode in place (no route jump). When provided, the
      * task-mode entry / toggle / skill-pick call this instead of navigating, so
      * the daily welcome page (/c) can own task mode as local state. When absent,
@@ -161,6 +170,8 @@ const AiChatInput = memo(
         isLingsi = false,
         onSelectionPresenceChange,
         onToggleTaskMode,
+        attachmentAsk,
+        onAttachmentAskDone,
     }: AiChatInputProps) => {
         const localize = useLocalize();
         const { showToast } = useToastContext();
@@ -319,6 +330,13 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
+        // Desktop (Figma 13139:111540): the toolbar keeps only "+", the model select
+        // and send — 知识空间 and 工具 move into the "+" menu as side panels. The
+        // mobile toolbar keeps its pills: a hover side panel has no touch equivalent.
+        // Only when the "+" menu itself renders (it does not in Lingsi mode).
+        const isMobileLayout = usePrefersMobileLayout();
+        const foldPickersIntoPlus = !isMobileLayout && !isLingsi && !!onSelectedOrgKbsChange;
+        const agentToolSelection = useAgentToolSelection(agentMode ? bsConfig.tools : undefined);
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
@@ -377,6 +395,31 @@ const AiChatInput = memo(
                 textareaScrollHideTimerRef.current = null;
             }
         }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText]);
+
+        // ── Handed-over ask (chatAskHandoff): upload its file, then send unattended ──
+        const startedAskKeyRef = useRef<string | null>(null);
+        const [autoSendAskKey, setAutoSendAskKey] = useState<string | null>(null);
+        useEffect(() => {
+            if (!attachmentAsk || startedAskKeyRef.current === attachmentAsk.key) return;
+            startedAskKeyRef.current = attachmentAsk.key;
+            setText(attachmentAsk.text);
+            if (!showUpload || !inputFilesRef.current?.upload) {
+                // Uploads are switched off for this deployment: leave the question in the
+                // box for the user to send rather than sending it stripped of its subject.
+                onAttachmentAskDone?.();
+                return;
+            }
+            inputFilesRef.current.upload([attachmentAsk.file]);
+            setAutoSendAskKey(attachmentAsk.key);
+        }, [attachmentAsk, showUpload, setText, onAttachmentAskDone]);
+        useEffect(() => {
+            if (!autoSendAskKey) return;
+            const ready = (chatFiles?.length ?? 0) > 0 && uploadingFiles.length === 0 && !fileUploading && !filesParsing;
+            if (!ready || !text.trim()) return;
+            setAutoSendAskKey(null);
+            handleSend();
+            onAttachmentAskDone?.();
+        }, [autoSendAskKey, chatFiles, uploadingFiles.length, fileUploading, filesParsing, text, handleSend, onAttachmentAskDone]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -645,6 +688,15 @@ const AiChatInput = memo(
                                     onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
                                     skillSelected={taskMode && dailySkills.length > 0}
+                                    showSpaceSubmenu={foldPickersIntoPlus}
+                                    toolsActive={agentToolSelection.isActive}
+                                    renderToolsSubmenu={foldPickersIntoPlus && tools && agentMode ? () => (
+                                        <AgentToolList
+                                            availableTools={bsConfig.tools}
+                                            selection={agentToolSelection}
+                                            disabled={toolsDisabled}
+                                        />
+                                    ) : undefined}
                                     renderSkillSubmenu={showAddSkill ? () => (
                                         <SkillSelector
                                             selected={dailySkills}
@@ -668,7 +720,7 @@ const AiChatInput = memo(
                             )}
                             {/* Knowledge-space pill — separate "+"-menu sibling that
                                 hosts only the knowledge-space / org-knowledge submenus. */}
-                            {!isLingsi && onSelectedOrgKbsChange && (
+                            {!foldPickersIntoPlus && !isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
                                     variant="knowledge"
                                     config={bsConfig}
@@ -685,9 +737,10 @@ const AiChatInput = memo(
                                 />
                             )}
                             {/* Tools picker */}
-                            {tools && agentMode && (
+                            {!foldPickersIntoPlus && tools && agentMode && (
                                 <AgentToolSelector
                                     availableTools={bsConfig.tools}
+                                    selection={agentToolSelection}
                                     disabled={toolsDisabled}
                                     compact={toolbarCompact}
                                 />

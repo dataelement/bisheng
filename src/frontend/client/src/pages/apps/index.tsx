@@ -1,6 +1,7 @@
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { ModuleHomeHeader, ModuleViewTabs } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
@@ -34,6 +35,7 @@ export default function AppCenter() {
     // Mobile layout (≤767px) is when MainLayout shows its own centered top-bar
     // title, so the page must drop its inline big title to avoid a duplicate.
     const isMobileLayout = usePrefersMobileLayout();
+    const navigate = useNavigate();
     const appLastOriginKey = 'app-last-origin';
     const mainRef = useRef<HTMLElement | null>(null);
     const appGridRef = useRef<HTMLDivElement | null>(null);
@@ -187,11 +189,11 @@ export default function AppCenter() {
                 </>
             ) : (
                 <>
-                    <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
-                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-blue-500 text-[24px]">
-                            {menuNames.apps}
-                        </h1>
-                    </header>
+                    {/* Shared module-home frame (~/components/ModuleHome): title left, the
+                        我的 / 广场 switcher right — it replaces the 探索更多应用 link, which
+                        stays on mobile only. */}
+                    <ModuleViewTabs active="mine" onChange={(view) => view === 'square' && navigate('/apps/explore')} />
+                    <ModuleHomeHeader title={menuNames.apps} />
 
                     <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
@@ -202,7 +204,6 @@ export default function AppCenter() {
                                 >
                                     {recentAppsHint}
                                 </p>
-                                {exploreLink}
                             </div>
                         </div>
                         <div className="shrink-0 min-w-[120px] w-auto">

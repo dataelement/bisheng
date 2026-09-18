@@ -1666,7 +1666,8 @@
     "filter_file_status": "Filter by status",
     "sort_by_size_label": "Sort by size",
     "select_all": "Select all",
-    "folder_abnormal": "Has issues"
+    "folder_abnormal": "Has issues",
+    "ask_bar_placeholder": "Ask about this knowledge space — the answer opens in a new chat…"
   },
   "com_subscription": {
     "tab_channel": "Channels",
@@ -1926,7 +1927,12 @@
     "wechat_link_label": "WeChat article link",
     "wechat_article_link_label": "WeChat article link",
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
-    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
+    "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it",
+    "home_source_count": "{{0}} sources",
+    "ask_file_source": "Source",
+    "ask_file_link": "Original link",
+    "ask_file_published_at": "Published",
+    "ask_bar_placeholder": "Ask about this article — the answer opens in a new chat…"
   },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
@@ -2337,5 +2343,26 @@
     "status_revoked": "Revoked",
     "title": "AI assistant access",
     "verify_hint": "No AI assistant has used this key yet. Once it is set up, ask it to “search my knowledge base for…” and the time appears here. Didn’t save the key? Get a new one."
+  },
+  "com_workbench_sidebar": {
+    "home": "Back to home",
+    "projects": "Projects",
+    "conversations": "Chats",
+    "demo": {
+      "project_travel": "Travel guides",
+      "project_files": "File organizing",
+      "chat_food": "Xinjiang local food",
+      "chat_heritage": "Xinjiang cultural heritage",
+      "chat_season": "Best seasons to visit Xinjiang",
+      "chat_spots": "Top sights in Xinjiang"
+    }
+  },
+  "com_demo_data": {
+    "readonly_toast": "This is sample data for display only and cannot be opened",
+    "tag": "Sample"
+  },
+  "com_module_home": {
+    "tab_mine": "Mine",
+    "tab_square": "Square"
   }
 }

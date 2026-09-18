@@ -300,6 +300,13 @@ customAxios.interceptors.response.use(
   },
 );
 
+// DEV only, opt-in: pad the workbench module lists with sample rows (~/mock/demo).
+// The DEV guard is a build-time constant, so the branch — and the dynamic import's
+// chunk with it — is dropped from production bundles.
+if (import.meta.env.DEV) {
+  void import('~/mock/demo').then(({ installDemoData }) => installDemoData(customAxios));
+}
+
 const paramsSerializer = (params) => {
   return Object.keys(params)
     .map(key => {

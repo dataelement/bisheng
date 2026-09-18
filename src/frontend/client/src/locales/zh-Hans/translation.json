@@ -1593,7 +1593,8 @@
     "filter_file_status": "筛选文件状态",
     "sort_by_size_label": "大小",
     "select_all": "全选",
-    "folder_abnormal": "存在异常"
+    "folder_abnormal": "存在异常",
+    "ask_bar_placeholder": "基于当前知识空间提问，回答会在新对话中打开…"
   },
   "com_subscription": {
     "tab_channel": "频道",
@@ -1855,7 +1856,12 @@
     "wechat_link_label": "公众号链接",
     "wechat_article_link_label": "公众号文章链接",
     "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
-    "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
+    "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限",
+    "home_source_count": "{{0}} 个信息源",
+    "ask_file_source": "来源",
+    "ask_file_link": "原文链接",
+    "ask_file_published_at": "发布时间",
+    "ask_bar_placeholder": "针对这篇文章提问，回答会在新对话中打开…"
   },
   "com_unified_permission": {
     "access_and_share": "访问与分享",
@@ -2266,5 +2272,26 @@
     "status_revoked": "已吊销",
     "title": "AI 助手接入",
     "verify_hint": "还没有 AI 助手用过这把密钥。配置好后问它「帮我在知识库里查…」，这里会显示使用时间。没保存密钥的话，重新获取一把。"
+  },
+  "com_workbench_sidebar": {
+    "home": "返回首页",
+    "projects": "项目",
+    "conversations": "对话",
+    "demo": {
+      "project_travel": "旅游攻略",
+      "project_files": "文件整理",
+      "chat_food": "新疆特色美食",
+      "chat_heritage": "新疆文化遗产",
+      "chat_season": "新疆最佳旅游季节",
+      "chat_spots": "新疆热门景点推荐"
+    }
+  },
+  "com_demo_data": {
+    "readonly_toast": "这是示例数据，仅用于展示，无法打开",
+    "tag": "示例"
+  },
+  "com_module_home": {
+    "tab_mine": "我的",
+    "tab_square": "广场"
   }
 }

@@ -25,6 +25,8 @@ type ConversationProps = {
   retainView: () => void;
   toggleNav: () => void;
   isLatestConvo: boolean;
+  /** Workbench sidebar rows: 8px side padding and a 22px line (Figma 13139:111616). */
+  compact?: boolean;
 };
 
 export default function Conversation({
@@ -32,6 +34,7 @@ export default function Conversation({
   retainView,
   toggleNav,
   isLatestConvo,
+  compact = false,
 }: ConversationProps) {
   const params = useParams();
 
@@ -185,7 +188,11 @@ export default function Conversation({
       className={cn(
         "group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
-        isSmallScreen ? "pl-[8px] pr-[6px] py-[8px]" : "px-[12px] py-[6px]",
+        isSmallScreen
+          ? "pl-[8px] pr-[6px] py-[8px]"
+          : compact
+            ? "px-[8px] py-[5px]"
+            : "px-[12px] py-[6px]",
         isActiveConvo ? "bg-[#EEE]" : "hover:bg-fill-1",
         // Pin the hover fill while the row owns a transient UI — an open
         // options menu or the rename input — since the pointer leaves the row
@@ -257,7 +264,12 @@ export default function Conversation({
           >
             {/* F035: conversation list no longer distinguishes daily vs task
                 mode — the leading icon is removed for both (unified list). */}
-            <span className="text-[#1A1A1A] text-[14px] leading-[20px] font-normal truncate">
+            <span
+              className={cn(
+                "text-[#1A1A1A] text-[14px] font-normal truncate",
+                compact && !isSmallScreen ? "leading-[22px]" : "leading-[20px]",
+              )}
+            >
               {title}
             </span>
           </div>

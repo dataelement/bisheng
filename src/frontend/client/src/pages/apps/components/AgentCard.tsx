@@ -1,3 +1,4 @@
+import { DemoTag } from '~/mock/demo/DemoTag';
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
@@ -91,6 +92,7 @@ export function AgentCard({
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-text-1 text-[14px] truncate">
             {agent.name}
           </p>
+          <DemoTag id={agent.id} className="shrink-0" />
         </div>
 
         {isMobileCard ? (

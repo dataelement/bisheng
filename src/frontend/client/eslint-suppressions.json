@@ -2322,10 +2322,10 @@
   },
   "src/layouts/MainLayout.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 1
     },
     "no-restricted-imports": {
       "count": 1
@@ -2334,7 +2334,7 @@
       "count": 2
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/locales/i18n.ts": {
@@ -2401,7 +2401,7 @@
   },
   "src/pages/Subscription/AiChat/ArticleAiDock.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3134,9 +3134,6 @@
     }
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }

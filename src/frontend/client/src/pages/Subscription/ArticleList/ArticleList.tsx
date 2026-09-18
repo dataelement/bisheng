@@ -21,6 +21,7 @@ import { SearchInput } from "./SearchInput";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip2";
 import { CopyShareLinkButton, buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { Outlined } from "bisheng-icons";
+import { useNavigate } from "react-router-dom";
 import { cn, copyText } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
@@ -151,6 +152,7 @@ export function ArticleList({
 }: ArticleListProps) {
     const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
     const localize = useLocalize();
+    const navigate = useNavigate();
     const isH5 = usePrefersMobileLayout();
     // Browse mode (PC, no article selected): show a two-column card grid. Reading mode: single column.
     const isGridMode = !selectedArticleId && !isH5;
@@ -556,6 +558,18 @@ export function ArticleList({
                     {/* 切换频道（左，无边框按钮） + 频道名（居中） */}
                     <div className="flex items-center gap-3">
                         <div className="flex min-w-0 flex-1 items-center">
+                            {/* Back to the 频道 home (/channel). Inside a channel the 我的 / 广场
+                                switcher already reads 我的, so it cannot be the way out. Same
+                                button + hairline as the 知识空间 space header. */}
+                            <button
+                                type="button"
+                                onClick={() => navigate("/channel")}
+                                aria-label={localize("com_ui_go_back")}
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
+                            >
+                                <Outlined.ArrowLeft className="size-4" />
+                            </button>
+                            <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
                             {onChannelSelect ? (
                                 <ChannelSwitcher
                                     activeChannelId={channel.id}

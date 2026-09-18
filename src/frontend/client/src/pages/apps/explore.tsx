@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react"
 import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { ModuleViewTabs } from "~/components/ModuleHome"
 import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
@@ -161,7 +162,7 @@ export default function ExplorePlaza() {
     return (
         <div
             className={cn(
-                'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
+                'relative flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
                 // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
                 // html/body scrolling is globally disabled (WebView bottom-strip fix in
                 // index.html), so h-full/flex-1 collapse to content height and nothing can
@@ -171,6 +172,12 @@ export default function ExplorePlaza() {
                 'max-[767px]:h-[100dvh]',
             )}
         >
+            {/* Desktop only (md = the mobile-layout breakpoint): the shared 我的 / 广场 switcher. */}
+            <ModuleViewTabs
+                className="max-md:hidden"
+                active="square"
+                onChange={(view) => view === 'mine' && navigate('/apps')}
+            />
             {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
@@ -191,7 +198,9 @@ export default function ExplorePlaza() {
                         maskRepeat: "no-repeat",
                     }}
                 />
-                <div className="absolute left-4 top-4 z-10">
+                {/* Desktop leaves the square through the 我的 / 广场 switcher; the back arrow
+                    is the mobile way out. */}
+                <div className="absolute left-4 top-4 z-10 md:hidden">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
