@@ -409,6 +409,8 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 
 v2 不消费登录 JWT/Cookie 中间件的账号与租户拒绝结果；密钥校验前的服务账号查询在受控租户过滤旁路中执行，随后核对凭据租户。FastAPI 在依赖执行前解析 JSON/表单，解析异常须补跑不读取请求体的同一准入管线，确保缺密钥仍返回 `26001/401`；异常处理器不得重读已消费的请求流。`26015/26017` 仅解释日常聊天端点的能力参数。v1 沿用原异常处理器。详细审查与验证范围见 [返回码校准记录](error-status-review.md)。
 
+**上传解析参数校验（2026-09-17）**：`POST /api/v2/filelib/file/{knowledge_id}` 在 FastAPI 表单边界约束 `separator_rule` 每项仅为 `before/after`，`retain_images / force_ocr / enable_formula / filter_page_header_footer` 为 `0/1` 整数；省略参数保持原默认值。使用既有 v2 请求校验异常处理器返回 HTTP `400` 和字段错误，不允许非法值进入文件缓存、下载、处理或持久化 `split_rule`。校验对本地文件与 URL 来源一致，凭据和 scope 准入仍优先；本轮不修改同时传 `file` 与 `file_url` 时优先使用本地文件的既有行为，也不收紧 v1 共用模型。
+
 ### 6.4 数据契约
 
 | 对象 | 字段 / 变化 |
