@@ -20,14 +20,14 @@ import {
     useRef,
     useState,
 } from "react";
+import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
+import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
-import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
-import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
-import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
+import { getMediaKind, isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
 import { useLocalize } from "~/hooks";
@@ -113,29 +113,44 @@ const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
     />
 );
 
-const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
-    const fileName = file.name || file.file_name || file.filename || 'File';
-
-    if (isMediaChipFile({ ...file, name: fileName })) {
-        return (
-            <MediaAttachmentChip
-                file={{ ...file, name: fileName }}
-                onRemove={onRemove}
-                variant="bar"
-            />
-        );
+/** File-type glyph for a compact card: media get their own icons, the rest
+ *  follow the per-format mapping shared with the message bubbles. */
+const FileTypeGlyph = ({ fileName }: { fileName: string }) => {
+    if (isMediaAttachmentFile({ name: fileName })) {
+        return getMediaKind(fileName) === "video"
+            ? <Outlined.FileVideo size={16} />
+            : <Outlined.FileAudio size={16} />;
     }
+    const Icon = getFileTypeIcon(fileName);
+    return <Icon size={16} />;
+};
 
+/**
+ * One compact card per attachment — images, audio / video and documents alike
+ * are icon + name, the same 148×30 shell as a folder or knowledge space. The
+ * strip is mounted context, not a preview surface: content previews live in
+ * the sent message. An image card still opens its full-size preview on click.
+ */
+const FileCard = ({
+    file,
+    isUploading = false,
+    onRemove,
+}: {
+    file: any;
+    isUploading?: boolean;
+    onRemove?: () => void;
+}) => {
+    const fileName = file.name || file.file_name || file.filename || 'File';
     const previewUrl = resolveFilePreviewUrl(file);
     const [previewOpen, setPreviewOpen] = useState(false);
-    const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
+    const isImagePreview = !isUploading && !!previewUrl && isImageFileName(fileName);
+    const busy = isUploading || file?.parsingState === 'parsing';
 
     return (
         <>
-            <FileUploadThumbnail
-                fileName={fileName}
-                previewUrl={isImagePreview ? previewUrl : undefined}
-                variant="bar"
+            <CardShell
+                icon={busy ? <Loader2 className="size-4 animate-spin" /> : <FileTypeGlyph fileName={fileName} />}
+                label={fileName}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />
@@ -188,35 +203,6 @@ const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =
     />
 );
 
-const UploadingCard = ({
-    name,
-    file,
-    onRemove,
-}: {
-    name: string;
-    file?: any;
-    onRemove?: () => void;
-}) => {
-    if (file && isMediaAttachmentFile({ name: file.name || name })) {
-        return (
-            <MediaAttachmentChip
-                file={{ name, isUploading: true, ...file }}
-                onRemove={onRemove}
-                variant="bar"
-            />
-        );
-    }
-    return (
-        <FileUploadThumbnail
-            fileName={name}
-            previewUrl={file?.previewUrl}
-            variant="bar"
-            isUploading
-            onRemove={onRemove}
-        />
-    );
-};
-
 const ArrowButton = ({
     direction,
     onClick,
@@ -262,7 +248,8 @@ interface AttachmentBarProps {
      * `strip` is the gray band stacked ABOVE the input box (Figma 12841:47449):
      * it overlaps the box by its 16px corner radius so the white box appears to
      * emerge from it. `inline` is the plain row that sits inside the box.
-     * Knowledge spaces use the strip; attachments stay inline.
+     * The home chat mounts everything — knowledge spaces, skills, folders and
+     * files — on the strip, so nothing shows inside the box itself.
      */
     appearance?: "inline" | "strip";
     onRemoveFile?: (file: any) => void;
@@ -447,10 +434,10 @@ export const AttachmentBar = ({
                             switch (entry.kind) {
                                 case "uploading":
                                     return (
-                                        <UploadingCard
+                                        <FileCard
                                             key={entry.key}
-                                            name={entry.data.name}
                                             file={entry.data}
+                                            isUploading
                                             onRemove={
                                                 onRemoveFile
                                                     ? () => onRemoveFile(entry.data)

@@ -415,21 +415,12 @@ const AiChatInput = memo(
         // Skills join the knowledge spaces in the strip: both are context you
         // mount onto the conversation, not something you are about to send.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        // An uploaded FOLDER is mounted context too — the workspace rebuilds its
-        // tree and the task works against it — so its card goes to the strip
-        // beside the skills. Loose files stay inline: they are part of the
-        // message being sent. A file belongs to a folder when its
-        // relative_path still carries a directory separator.
-        const isFolderFile = (f: { relative_path?: string }) => (f?.relative_path || '').includes('/');
-        const folderUploadingFiles = uploadingFiles.filter(isFolderFile);
-        const looseUploadingFiles = uploadingFiles.filter((f) => !isFolderFile(f));
-        const folderChatFiles = (chatFiles || []).filter(isFolderFile);
-        const looseChatFiles = (chatFiles || []).filter((f) => !isFolderFile(f));
-        const hasMountedFolders = (folderChatFiles.length > 0 || folderUploadingFiles.length > 0) && !isLingsi;
+        // Attachments — folders, images, audio / video and documents — mount on
+        // the same strip. Nothing renders inside the input box itself, so the
+        // box stays a plain text surface no matter what is attached.
+        const hasMountedFiles = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasMountedKbs = (!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0;
-        const hasStripItems = hasMountedKbs || hasMountedFolders;
-        const hasInlineAttachments = (looseChatFiles.length > 0 || looseUploadingFiles.length > 0) && !isLingsi;
-        const hasSelectionTags = hasStripItems || hasInlineAttachments;
+        const hasSelectionTags = hasMountedKbs || hasMountedFiles;
 
         const handleRemoveAttachment = (file: { clientId?: string | number }) => {
             // clientId, not name: a folder upload can carry the same file name in
@@ -465,16 +456,14 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces, task-mode skills and uploaded
-                    folders — a gray strip stacked ABOVE the input box (Figma
-                    12841:47449). Loose files deliberately do not join it: they
-                    stay inline inside the box, where they read as part of what
-                    you are about to send rather than as mounted context. */}
-                {hasStripItems && (
+                {/* Everything mounted on the conversation — knowledge spaces,
+                    task-mode skills, folders and files — lives on one gray
+                    strip stacked ABOVE the input box (Figma 12841:47449). */}
+                {hasSelectionTags && (
                     <AttachmentBar
                         appearance="strip"
-                        uploadingFiles={folderUploadingFiles}
-                        files={folderChatFiles}
+                        uploadingFiles={uploadingFiles}
+                        files={chatFiles || []}
                         kbs={selectedOrgKbs || []}
                         skills={mountedSkills}
                         onRemoveFile={handleRemoveAttachment}
@@ -498,16 +487,6 @@ const AiChatInput = memo(
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasInlineAttachments && (
-                        <AttachmentBar
-                            uploadingFiles={looseUploadingFiles}
-                            files={looseChatFiles}
-                            kbs={[]}
-                            skills={[]}
-                            onRemoveFile={handleRemoveAttachment}
-                        />
-                    )}
-
                     {/* File upload area: file list only. Upload entry lives in the
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
