@@ -61,7 +61,7 @@ def test_errcode_value():
 # --------------------------------------------------------------------------- #
 async def test_create_dispatch_kb(monkeypatch):
     """AC-07/AC-12: type=0 → KnowledgeService; auth_type/is_released forced to default;
-    output enriched to KnowledgeRead (user_name + permission_ids)."""
+    output enriched to KnowledgeRead (user_name + actions)."""
     captured = {}
 
     async def _fake_acreate(cls, request, login_user, knowledge):
@@ -69,9 +69,7 @@ async def test_create_dispatch_kb(monkeypatch):
         return type("K", (), {"id": 1, "type": knowledge.type, "user_id": 1})()
 
     async def _fake_convert(cls, login_user, knowledge_list):
-        return [
-            {"id": 1, "type": knowledge_list[0].type, "user_name": "operator", "permission_ids": ["use_kb", "edit_kb"]}
-        ]
+        return [{"id": 1, "type": knowledge_list[0].type, "user_name": "operator", "actions": ["use_kb", "edit_kb"]}]
 
     monkeypatch.setattr(KnowledgeService, "acreate_knowledge", classmethod(_fake_acreate))
     monkeypatch.setattr(KnowledgeService, "aconvert_knowledge_read", classmethod(_fake_convert))
@@ -82,7 +80,8 @@ async def test_create_dispatch_kb(monkeypatch):
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
     assert resp.data["type"] == KnowledgeTypeEnum.NORMAL.value
     assert resp.data["user_name"] == "operator"  # enriched
-    assert resp.data["permission_ids"]  # enriched, non-empty
+    assert resp.data["actions"]  # enriched, non-empty
+    assert "permission_ids" not in resp.data
     # AC-12: KB ignores auth_type / is_released (forced to defaults before create).
     assert captured["knowledge"].auth_type == AuthTypeEnum.PUBLIC
     assert captured["knowledge"].is_released is False
