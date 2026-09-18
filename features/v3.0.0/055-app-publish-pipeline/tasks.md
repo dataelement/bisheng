@@ -885,3 +885,20 @@ T001–T007（Wave 1，可并行）
 | **F057 T043 →（承接 T058）** | `16273` 载荷带 `data.capability` 与 `data.reason`（SDK 的 `CapabilityRevokedError` 要把「哪个能力、为什么没了」原样呈现给应用，而不是一句「失败」） | ✅ **已交付**（2026-09-16 只核对未改） | `common/errcode/app_publish.py:495-527`：`AppCapabilityRevokedError(capability, kind=…, reason="revoked" \| "ambiguous" \| "unresolvable")`，三个键都进信封 `data`；`16274`（未声明）同形带 `capability` / `kind`。F057 `bisheng_sdk/_codes.py` 已按此登记 `16273` / `16274` |
 
 （2026-08-19 由收口批登记；本表不影响上方任务勾选状态。2026-09-16 由 F057 T043 追加两行。）
+
+## 2026-09-18 · 验收核查发现并修复：INV-34「不存在免审配置项」此前可被绕过
+
+**缺陷**：审批中心的分支类型 `pass`（免审，直接通过）对**所有**场景开放，`ApprovalGate.request_or_pass` 的 pass 分支也没有场景限制。租户管理员在管理后台把「应用发布」场景的分支改成 `pass`，发布即免审直接上线。而 PRD-1 三处明文承诺相反——RT-03「首发与迭代一律必审，平台**不提供任何免审配置项**」、GOV-02「不提供免审配置项」、GOV-02 规则「每次发布必审，**无免审路径与配置项**」——release-contract 的 **INV-34** 也是这么登记的。
+
+`ApprovalRegistry` 里 `app_publish_request` 的 `condition_fields=[]` 旁边原本就写着「there is no 免审 branch to select (F055 INV-34)」——**意图是对的，但 `condition_fields` 只约束条件匹配**，一条 catch-all 分支（`match_config={}`）不需要任何条件字段就能配成 `pass`，所以这道闸从来没有真正合上。
+
+**修复**（`mandatory_approval` 声明 + 两道闸）：
+
+1. `ApprovalScenarioPreset` 新增 `mandatory_approval` 字段，`app_publish_request` 置 `True`，其余三个预置场景保持 `False`。**声明写在 preset 上而不是在引擎里硬编码场景码**——审批中心是通用模块，不该认识某个业务场景的名字。
+2. `ApprovalScenarioAdminService._assert_route_type_allowed()`：`create_route` **与** `update_route` 两处都校验，必审场景配 `pass` 答 **18119**。两处都要，否则「建不了 pass 但能把已有的 flow 改成 pass」。
+3. `ApprovalGate._forbids_pass()`：匹配到的 pass 路由若属必审场景，**当作没匹配到**（落 `route_missing` 异常 + 通知管理员），既不抛错也不放行。这一道不是冗余——路由行还能从手工 UPDATE、从改动前的备份恢复进来，而对必审场景来说「静默自动通过并上线」是最坏的结果。
+4. 前端 `ApprovalPage` 对这类场景不渲染「无需审批」选项（判据是 `list_presets` 响应新增的 `mandatory_approval`），并给一句说明；编辑存量 pass 行时强制落到 `flow`，避免下拉停在一个已不存在的选项上。三语文案齐。
+
+**影响面**：只收紧 `app_publish_request`。菜单权限 / 频道订阅 / 知识空间加入三个场景的 pass 分支照常可配可用——它们一直允许免审，跟着收紧等于给存量租户一个无声的行为变更。114 实测存量 `approval_route_rule` 三行全是 `flow`，本次修复不影响任何现存配置。
+
+**测试**：`test/approval/test_mandatory_approval_scenario.py`（6 例）——create/update 两侧拒绝、同场景 flow 不受影响、**其它场景仍可配 pass**、**其它场景的 pass 仍正常放行到 APPROVED+outbox**、必审场景的 pass 落 EXCEPTION 且不建 outbox。`test/approval` 相对 HEAD 基线零新增失败（21 → 21）。`.claude/skills/approval-module/SKILL.md` 已按其维护契约同步（§2 主流程图 + 新增小节、§5 表、§7 错误码）。
