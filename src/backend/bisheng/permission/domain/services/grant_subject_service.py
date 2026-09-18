@@ -248,7 +248,9 @@ async def list_candidate_department_layer(
                 statement = statement.where(Department.parent_id == parent_id)
                 if scope.department_path is not None:
                     statement = statement.where(col(Department.path).like(f"{scope.department_path}%"))
-            rows = (await session.exec(statement.order_by(col(Department.id)))).all()
+            # Siblings follow the org's own order (E+ sync writes sort_order), then the
+            # stable id — the same contract as the org tree and the search forest.
+            rows = (await session.exec(statement.order_by(col(Department.sort_order), col(Department.id)))).all()
     return await _as_tree_nodes(rows)
 
 

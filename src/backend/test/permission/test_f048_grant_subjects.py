@@ -171,3 +171,44 @@ async def test_a_department_bound_space_reveals_nothing_outside_its_subtree(monk
         GrantSubjectScope(tenant_id=1, department_path="/2/"), dept_id=9
     )
     assert revealed["roots"] == []
+
+
+async def test_a_department_layer_follows_the_org_order(monkeypatch) -> None:
+    """Siblings come back in the org's own order (E+ sync writes sort_order), then id.
+
+    Ordered by id alone, the grant picker showed departments in creation/import
+    order while the org tree and search results followed E+ — two different
+    trees for the same organisation.
+    """
+
+    from contextlib import asynccontextmanager
+
+    from bisheng.permission.domain.services import grant_subject_service
+
+    captured = []
+
+    class _Result:
+        def all(self):
+            return []
+
+    class _Session:
+        async def exec(self, statement):
+            captured.append(statement)
+            return _Result()
+
+    @asynccontextmanager
+    async def fake_session():
+        yield _Session()
+
+    async def no_nodes(rows):
+        return list(rows)
+
+    monkeypatch.setattr(grant_subject_service, "get_async_db_session", fake_session)
+    monkeypatch.setattr(grant_subject_service, "_as_tree_nodes", no_nodes)
+
+    await grant_subject_service.list_candidate_department_layer(
+        GrantSubjectScope(tenant_id=1, department_path=None), parent_id=3
+    )
+
+    order_by = [str(clause) for clause in captured[0]._order_by_clauses]
+    assert order_by == ["department.sort_order", "department.id"]
