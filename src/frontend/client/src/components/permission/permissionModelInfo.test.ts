@@ -19,6 +19,20 @@ function groupedItemIds(resourceType: ResourceType, model: RelationModelOption) 
 }
 
 describe("permission model scope info", () => {
+  it.each(["knowledge_space", "folder", "knowledge_file"] as const)(
+    "keeps empty custom models visible without default permissions on %s",
+    (resourceType) => {
+      for (const permissionsExplicit of [true, false, undefined]) {
+        const model: RelationModelOption = {
+          id: "custom_empty", name: "空权限模型", relation: "manager",
+          permissions: [], permissions_explicit: permissionsExplicit, is_system: false,
+        };
+        expect(filterPermissionModelsWithScopeItems(resourceType, [model])).toEqual([model]);
+        expect(itemIds(resourceType, model)).toEqual([]);
+      }
+    },
+  );
+
   it("shows space grants across space, folder, and file scopes", () => {
     expect(groupedItemIds("knowledge_space", {
       id: "manager",

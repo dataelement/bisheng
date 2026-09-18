@@ -231,6 +231,33 @@ describe("PermissionGrantTab", () => {
     expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
   });
 
+  it.each(["knowledge_space", "folder", "knowledge_file"] as const)(
+    "allows granting an empty custom model on %s",
+    async (resourceType) => {
+      mockedGetGrantableRelationModels.mockResolvedValue([{
+        id: "custom_empty", name: "空权限模型", relation: "viewer",
+        permissions: [], permissions_explicit: true, is_system: false,
+      }]);
+      render(<PermissionGrantTab resourceType={resourceType} resourceId="resource-1"
+        grantSubjectScopeSpaceId="space-1" onSuccess={jest.fn()} />);
+
+      await screen.findByText("空权限模型");
+      const trigger = screen.getByRole("combobox");
+      trigger.focus();
+      fireEvent.keyDown(trigger, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 });
+      expect(await screen.findByTestId(`permission-model-help-${resourceType}-custom_empty`))
+        .toHaveAttribute("data-permission-summary", "com_permission.permission_model_no_permissions");
+      fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape", code: "Escape", keyCode: 27 });
+      fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_department" }));
+      fireEvent.click(await screen.findByText("测试部门"));
+      fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
+      await waitFor(() => expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        resourceType, "resource-1",
+        [expect.objectContaining({ model_id: "custom_empty", relation: "viewer", subject_id: 7 })], [],
+      ));
+    },
+  );
+
   it("shows file-scoped permission items on grant model help", async () => {
     mockedGetGrantableRelationModels.mockResolvedValue([
       {
