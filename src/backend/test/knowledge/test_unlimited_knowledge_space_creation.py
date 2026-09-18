@@ -12,11 +12,19 @@ class _CreateReached(RuntimeError):
 
 @pytest.fixture
 def unlimited_space_service(monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_name_guard import KnowledgeSpaceNameGuard
+
+    async def run_name_write(self, operation):
+        return await operation()
+
+    monkeypatch.setattr(KnowledgeSpaceNameGuard, "run", run_name_write)
     from bisheng.knowledge.domain.models.knowledge_space_scope import (
         KnowledgeSpaceLevelEnum,
         KnowledgeSpaceOwnerTypeEnum,
     )
     from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+
+    monkeypatch.setattr(service_module, "_require_not_write_frozen", AsyncMock())
 
     login_user = SimpleNamespace(
         user_id=11,

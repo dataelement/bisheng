@@ -8,6 +8,10 @@ from bisheng.knowledge.domain.models.knowledge import Knowledge
 class KnowledgeRepository(BaseRepository[Knowledge, int], ABC):
     """Knowledge Base Repository Interface"""
 
+    async def personal_space_name_exists_globally(self, name: str) -> bool: ...
+
+    async def find_personal_default_space_by_owner(self, owner_id: int) -> Knowledge | None: ...
+
     async def find_file_sync_spaces(
         self,
         *,

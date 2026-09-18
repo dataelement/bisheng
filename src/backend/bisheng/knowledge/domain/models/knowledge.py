@@ -802,7 +802,8 @@ class KnowledgeDao(KnowledgeBase):
             *,
             name: str,
             exclude_id: Optional[int] = None) -> Optional[Knowledge]:
-        """Query a public, department, or team knowledge space by display name."""
+        """跨租户检查非个人库名称, 缺少 scope 的异常记录也保守占名。"""
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.knowledge.domain.models.knowledge_space_scope import (
             KnowledgeSpaceLevelEnum,
             KnowledgeSpaceScope,
@@ -811,26 +812,22 @@ class KnowledgeDao(KnowledgeBase):
         normalized_name = name.strip()
         statement = (
             select(Knowledge)
-            .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+            .outerjoin(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
                 func.trim(Knowledge.name) == normalized_name,
-                KnowledgeSpaceScope.level.in_([
-                    KnowledgeSpaceLevelEnum.PUBLIC.value,
-                    KnowledgeSpaceLevelEnum.DEPARTMENT.value,
-                    KnowledgeSpaceLevelEnum.TEAM.value,
-                    KnowledgeSpaceLevelEnum.TEAM_KS.value,
-                ]),
+                or_(
+                    KnowledgeSpaceScope.level != KnowledgeSpaceLevelEnum.PERSONAL.value,
+                    KnowledgeSpaceScope.space_id.is_(None),
+                ),
             )
         )
         if exclude_id is not None:
             statement = statement.where(Knowledge.id != int(exclude_id))
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            for space in result.all():
-                if space.name.strip() == normalized_name:
-                    return space
-            return None
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(statement.limit(1))
+                return result.first()
 
     @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):

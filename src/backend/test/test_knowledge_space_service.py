@@ -5701,8 +5701,16 @@ def service():
 
 
 @pytest.fixture(autouse=True)
-def clear_portal_visible_space_cache():
+def clear_portal_visible_space_cache(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+    from bisheng.knowledge.domain.services.knowledge_space_name_guard import KnowledgeSpaceNameGuard
+
+    async def run_name_write(self, operation):
+        return await operation()
+
+    # 此文件隔离外部基础设施; 真实互斥协议由 test_global_space_name_concurrency 覆盖。
+    monkeypatch.setattr(KnowledgeSpaceNameGuard, "run", run_name_write)
+    monkeypatch.setattr(service_module, "_require_not_write_frozen", AsyncMock())
 
     async def apply_no_pins(spaces, _user_id):
         for item in spaces:

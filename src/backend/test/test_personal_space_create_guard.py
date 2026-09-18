@@ -12,6 +12,18 @@ def _svc(user_id=7):
     return svc
 
 
+@pytest.fixture(autouse=True)
+def name_guard(monkeypatch):
+    from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+    from bisheng.knowledge.domain.services.knowledge_space_name_guard import KnowledgeSpaceNameGuard
+
+    async def run_name_write(self, operation):
+        return await operation()
+
+    monkeypatch.setattr(KnowledgeSpaceNameGuard, "run", run_name_write)
+    monkeypatch.setattr(service_module, "_require_not_write_frozen", AsyncMock())
+
+
 @pytest.mark.asyncio
 async def test_user_initiated_personal_create_is_rejected():
     svc = _svc()

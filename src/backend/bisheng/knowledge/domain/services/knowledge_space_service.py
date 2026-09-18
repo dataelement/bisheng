@@ -72,6 +72,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceInvalidLevelError,
     SpaceInvalidScopeOwnerError,
+    SpaceNameAllocationBusyError,
     SpaceNameDuplicateError,
     SpaceNameSensitiveWordError,
     SpaceNotFoundError,
@@ -283,6 +284,7 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
     KnowledgeAuditTelemetryService,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_name_guard import serialize_space_name_write
 from bisheng.knowledge.domain.services.knowledge_space_pin_service import KnowledgeSpacePinService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     DEFAULT_TAG_LIBRARY_NAME,
@@ -4364,6 +4366,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return level, owner_type, owner_id
 
+    @serialize_space_name_write()
     async def create_knowledge_space(
         self,
         name: str,
@@ -4421,6 +4424,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_group_id=user_group_id,
             is_clinic=is_clinic,
         )
+        if system_managed and level == KnowledgeSpaceLevelEnum.PERSONAL and name == self.personal_default_space_name():
+            name = await self._allocate_personal_default_space_name()
         await self._ensure_space_name_unique_in_scope(
             name=name,
             level=level,
@@ -4755,7 +4760,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise
 
     def personal_default_space_name(self) -> str:
-        return f"{self.login_user.user_name}的知识库"
+        return f"{self.login_user.user_name.strip()[:196]}的知识库"
+
+    async def _allocate_personal_default_space_name(self) -> str:
+        """调用方持有全局名称锁, 按原名、账号后缀、随机数字顺序分配。"""
+        async with get_async_db_session() as session:
+            repository = KnowledgeRepositoryImpl(session)
+            name = self.personal_default_space_name()
+            if not await repository.personal_space_name_exists_globally(name):
+                return name
+            user = await UserDao.aget_user(self.login_user.user_id)
+            external_id = str(getattr(user, "external_id", None) or "").strip()
+            suffix = (external_id or str(self.login_user.user_id))[-4:]
+
+            def candidate(extra: str = "") -> str:
+                ending = f"{suffix}{extra}的知识库"
+                return f"{self.login_user.user_name.strip()[:200 - len(ending)]}{ending}"
+
+            name = candidate()
+            if not await repository.personal_space_name_exists_globally(name):
+                return name
+            for _ in range(20):
+                name = candidate(str(100000 + secrets.randbelow(900000)))
+                if not await repository.personal_space_name_exists_globally(name):
+                    return name
+        raise SpaceNameAllocationBusyError()
 
     async def _resolve_default_tag_library_id(self) -> int | None:
         """Resolve the tag library auto-bound to a newly created personal space.
@@ -4777,10 +4806,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return int(chosen.id)
 
     async def _find_personal_default_space(self) -> Knowledge | None:
-        return await KnowledgeDao.async_get_personal_space_by_owner_name(
+        existing = await KnowledgeDao.async_get_personal_space_by_owner_name(
             owner_id=self.login_user.user_id,
             name=self.personal_default_space_name(),
         )
+        if existing:
+            return existing
+        # 随机后缀、人员更名不改变库的所属人, 不能因显示名变化再创建一份。
+        async with get_async_db_session() as session:
+            return await KnowledgeRepositoryImpl(session).find_personal_default_space_by_owner(self.login_user.user_id)
 
     async def _ensure_personal_default_space(self) -> Knowledge:
         """复用已有默认库, 缺失时按租户和用户串行创建。"""
@@ -12318,6 +12352,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             raise
 
+    @serialize_space_name_write(only_when_named=True)
     async def update_knowledge_space(
         self,
         space_id: int,

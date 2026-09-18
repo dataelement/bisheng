@@ -32,6 +32,11 @@ class PersonalDefaultSpaceCreationBusyError(BaseErrorCode):
     Msg: str = "个人知识库正在创建或创建服务暂不可用, 请稍后重试"
 
 
+class SpaceNameAllocationBusyError(BaseErrorCode):
+    Code: int = 18006
+    Msg: str = "知识库名称正在分配或服务暂不可用, 请稍后重试"
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = "Folder does not exist"
