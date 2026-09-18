@@ -421,9 +421,9 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFolderUploadClick();
             }}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.FolderClose size={16} className="text-[#999]" />
+            <Outlined.FolderClose size={16} className="text-text-2" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_folder')}</span>
           </DropdownMenuItem>
         )}
