@@ -25,7 +25,7 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 | 凭据模式 | HTTP headers | 可用范围 |
 |---|---|---|
 | 服务账号自身身份（S） | `Authorization: Bearer <API_KEY>` | 由 API Key 的 `knowledge:read` / `knowledge:write` scope 决定 |
-| 服务账号委托身份（D） | 上述 header + `X-On-Behalf-Of: <external_user_id>` | 另需凭据允许委托，按被代表用户执行 |
+| 服务账号委托身份（D） | 上述 header + `X-On-Behalf-Of: <BISHENG_PLATFORM_USER_ID>` | 另需凭据允许委托，按被代表用户执行 |
 | PAT | `Authorization: Bearer <PAT>` | 仅可发现和调用 3 个 `knowledge:read` 工具 |
 
 `X-End-User: <external_user_partition>` 只用于已有 F053 终端用户分区语义，不能与
@@ -128,6 +128,9 @@ body 上限应与后端保持一致，并禁止无限请求缓冲。
 
 ## 客户端配置
 
+常见 IDE、编码助手和智能体平台的逐项配置、支持边界及排障方法见
+[第三方客户端接入 BISHENG MCP 指南](./open-mcp-third-party-clients.md)。
+
 Streamable HTTP 客户端可使用如下配置：
 
 ```json
@@ -145,7 +148,8 @@ Streamable HTTP 客户端可使用如下配置：
 ```
 
 D 模式只在受信任的客户端配置中增加
-`"X-On-Behalf-Of":"<external_user_id>"`。不要把真实凭据写进仓库、讨论区、
+`"X-On-Behalf-Of":"<BISHENG_PLATFORM_USER_ID>"`。该值必须是已配置到 Key 委托范围的
+BISHENG 平台用户 ID；不要直接填第三方系统用户 ID。不要把真实凭据写进仓库、讨论区、
 命令行参数或验证输出。
 
 ## 连通性验证
