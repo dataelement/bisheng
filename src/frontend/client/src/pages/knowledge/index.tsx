@@ -51,7 +51,12 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import {
+    SETTINGS_RETURN_STATE_KEY,
+    canOpenSharedSpace,
+    resolveUploadSizeLimits,
+    shouldNavigateOnSpaceSelect,
+} from "./knowledgeUtils";
 import { resolveSpaceInfoFailure } from "./spaceInfoError";
 export default function Knowledge() {
     const localize = useLocalize();
@@ -515,6 +520,17 @@ export default function Knowledge() {
         }
     };
 
+    // Pin / rename of the active space: merge the new fields, keep space + folder.
+    const handleActiveSpaceUpdate = (space: KnowledgeSpace) => {
+        setActiveSpace(prev => prev?.id === space.id ? { ...prev, ...space, role: prev.role } : prev);
+    };
+
+    // Hand the settings page the location being browsed, so leaving it resumes
+    // this space and folder instead of the settings' own space root.
+    const settingsEntryState = () => ({
+        [SETTINGS_RETURN_STATE_KEY]: `${location.pathname}${location.search}`,
+    });
+
     const handleCreateSpace = () => {
         (async () => {
             try {
@@ -534,7 +550,7 @@ export default function Knowledge() {
                     });
                     return;
                 }
-                navigate("/knowledge/create");
+                navigate("/knowledge/create", { state: settingsEntryState() });
             } catch {
                 // 如果校验接口失败，为避免阻塞用户操作，仍允许进入创建页面
                 // （可根据需要改成硬拦截）
@@ -551,13 +567,13 @@ export default function Knowledge() {
                     return;
                 }
 
-                navigate("/knowledge/create");
+                navigate("/knowledge/create", { state: settingsEntryState() });
             }
         })();
     };
 
     const handleSpaceSettings = (space: KnowledgeSpace) => {
-        navigate(`/knowledge/space/${space.id}/settings`);
+        navigate(`/knowledge/space/${space.id}/settings`, { state: settingsEntryState() });
     };
 
     // Delete the current space from the file-page top-bar menu, then return to the list.
@@ -745,6 +761,7 @@ export default function Knowledge() {
                     <KnowledgeSpaceSidebar
                         activeSpaceId={activeSpace?.id}
                         onSpaceSelect={handleSpaceSelect}
+                        onActiveSpaceUpdate={handleActiveSpaceUpdate}
                         onCreateSpace={handleCreateSpace}
                         onSpaceSettings={handleSpaceSettings}
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
@@ -786,6 +803,7 @@ export default function Knowledge() {
                                     handleSpaceSelect(space);
                                     setSpaceListDrawerOpen(false);
                                 }}
+                                onActiveSpaceUpdate={handleActiveSpaceUpdate}
                                 onCreateSpace={() => {
                                     handleCreateSpace();
                                     setSpaceListDrawerOpen(false);
@@ -963,6 +981,7 @@ export default function Knowledge() {
                                 <KnowledgeSpaceSidebar
                                     mobilePageMode
                                     onSpaceSelect={handleSpaceSelect}
+                                    onActiveSpaceUpdate={handleActiveSpaceUpdate}
                                     onCreateSpace={handleCreateSpace}
                                     onSpaceSettings={handleSpaceSettings}
                                     onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
