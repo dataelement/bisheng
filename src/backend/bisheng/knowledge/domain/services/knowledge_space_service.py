@@ -14546,6 +14546,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             extra_file_ids=extra_file_ids,
             file_type=FileType.FILE.value,
             exclude_file_ids=exclude_file_ids,
+            browsable_entries_only=True,
         )
 
         in_progress_statuses = {
@@ -15611,6 +15612,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_field=order_field,
             order_sort=order_sort,
             exclude_file_ids=exclude_file_ids,
+            browsable_entries_only=True,
         )
         visible_items = await self._filter_visible_child_items(res, space_id=space_id)
         total = len(visible_items)

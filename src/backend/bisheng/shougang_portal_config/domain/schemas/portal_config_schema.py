@@ -470,8 +470,17 @@ class PortalAutoPublishRuleConfig(BaseModel):
     id: str = ""
     enabled: bool = True
     document_type_code: str = ""
+    subcategory_codes: list[str] = Field(default_factory=list)
     target_space_id: int | None = None
     source_space_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("subcategory_codes")
+    @classmethod
+    def normalize_subcategory_codes(cls, values: list[str]) -> list[str]:
+        codes = [value.strip().upper() for value in values]
+        if any(not code for code in codes):
+            raise ValueError("Auto-publish subcategory code must not be blank")
+        return list(dict.fromkeys(codes))
 
 
 class PortalConfig(BaseModel):

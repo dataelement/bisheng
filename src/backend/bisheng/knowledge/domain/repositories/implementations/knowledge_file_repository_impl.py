@@ -665,6 +665,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         lease_owner: str,
         target_content_generation: int,
         target_entry_generation: int,
+        retain_cleanup_lease: bool = False,
     ) -> bool:
         target_is_current = and_(
             KnowledgeFile.desired_content_generation == target_content_generation,
@@ -677,6 +678,8 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 KnowledgeFile.projection_lease_owner == lease_owner,
                 KnowledgeFile.applied_content_generation <= target_content_generation,
                 KnowledgeFile.applied_entry_generation <= target_entry_generation,
+                # 清理不能把旧代次的完成结果用于删除新代次入口。
+                target_is_current if retain_cleanup_lease else True,
             )
             .values(
                 applied_content_generation=target_content_generation,
@@ -688,11 +691,17 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     ),
                     else_=KnowledgeFileProjectionStatus.PENDING.value,
                 ),
-                projection_retry_count=0,
+                projection_retry_count=(
+                    KnowledgeFile.projection_retry_count if retain_cleanup_lease else 0
+                ),
                 projection_next_retry_at=None,
-                projection_lease_owner=None,
-                projection_lease_until=None,
-                projection_last_error=None,
+                projection_lease_owner=(lease_owner if retain_cleanup_lease else None),
+                projection_lease_until=(
+                    KnowledgeFile.projection_lease_until if retain_cleanup_lease else None
+                ),
+                projection_last_error=(
+                    KnowledgeFile.projection_last_error if retain_cleanup_lease else None
+                ),
                 projection_previous_file_id=case(
                     (
                         and_(
@@ -708,6 +717,56 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                     ),
                     else_=KnowledgeFile.projection_previous_file_id,
                 ),
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def defer_projection_lease(
+        self, *, entry_id: int, lease_owner: str,
+        next_retry_at: datetime, error_summary: str,
+    ) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.projection_lease_owner == lease_owner,
+            )
+            .values(
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_next_retry_at=next_retry_at,
+                projection_last_error=error_summary[:4000],
+                projection_lease_owner=None,
+                projection_lease_until=None,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
+
+    async def recover_failed_projection(
+        self, *, entry_id: int, now: datetime, audit_summary: str,
+    ) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.reference_document_id.is_not(None),
+                col(KnowledgeFile.entry_status).in_([
+                    KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFileEntryStatus.DELETING.value,
+                    KnowledgeFileEntryStatus.INVALID.value,
+                ]),
+                KnowledgeFile.projection_status == KnowledgeFileProjectionStatus.FAILED.value,
+                or_(KnowledgeFile.projection_lease_until.is_(None),
+                    KnowledgeFile.projection_lease_until <= now),
+            )
+            .values(
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_retry_count=0,
+                projection_next_retry_at=None,
+                projection_lease_owner=None,
+                projection_lease_until=None,
+                projection_last_error=audit_summary[:4000],
             )
         )
         await self.session.flush()
@@ -783,12 +842,14 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         *,
         older_than: datetime,
         limit: int,
+        after_id: int = 0,
     ) -> list[KnowledgeFile]:
         if limit <= 0:
             return []
         result = await self.session.execute(
             select(KnowledgeFile)
             .where(
+                KnowledgeFile.id > after_id,
                 KnowledgeFile.reference_document_id.is_not(None),
                 col(KnowledgeFile.entry_status).in_(
                     [

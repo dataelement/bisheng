@@ -10,8 +10,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFile,
     KnowledgeFileDao,
-    KnowledgeFileEntryStatus,
-    KnowledgeFileEntryType,
     KnowledgeFileStatus,
 )
 
@@ -261,19 +259,7 @@ class SpaceFileDao(KnowledgeFileDao):
                 exact_path = f"/{parent_id}"
             path_filter = KnowledgeFile.file_level_path == exact_path
         filters = [KnowledgeFile.knowledge_id == knowledge_id, path_filter, col(KnowledgeFile.deleted_at).is_(None)]
-        filters.extend(
-            [
-                or_(
-                    KnowledgeFile.reference_document_id.is_(None),
-                    KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
-                    KnowledgeFile.entry_status == KnowledgeFileEntryStatus.INVALID.value,
-                ),
-                or_(
-                    KnowledgeFile.entry_type.is_(None),
-                    KnowledgeFile.entry_type != KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
-                ),
-            ]
-        )
+        filters.append(KnowledgeFileDao.browsable_entry_predicate())
         if file_ids:
             filters.append(KnowledgeFile.id.in_(file_ids))
         if file_type is not None:

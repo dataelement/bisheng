@@ -26,6 +26,7 @@ class AutoPublishRule:
     document_type_code: str
     target_space_id: int | None = None
     source_space_ids: list[int] = field(default_factory=list)
+    subcategory_codes: list[str] = field(default_factory=list)
 
 
 class AutoPublishConfigService:
@@ -113,6 +114,7 @@ class AutoPublishConfigService:
             document_type_code=str(data.get("document_type_code", "")),
             target_space_id=data.get("target_space_id"),
             source_space_ids=data.get("source_space_ids") or [],
+            subcategory_codes=data.get("subcategory_codes") or [],
         )
 
     @classmethod
@@ -121,6 +123,7 @@ class AutoPublishConfigService:
         rules: list[AutoPublishRule],
         source_space_id: int,
         file_category_code: str,
+        file_subcategory_code: str = "",
     ) -> AutoPublishRule | None:
         """Match a file against auto-publish rules.
 
@@ -130,6 +133,7 @@ class AutoPublishConfigService:
         1. rule.enabled is True
         2. rule.document_type_code == file_category_code (case-insensitive, stripped)
         3. source_space_id is in rule.source_space_ids
+        4. 二级分类列表为空时匹配全部，否则只匹配选中的二级分类。
         """
         if not file_category_code:
             return None
@@ -138,6 +142,10 @@ class AutoPublishConfigService:
             if not rule.enabled:
                 continue
             if rule.document_type_code.strip().upper() != normalized_code:
+                continue
+            if rule.subcategory_codes and file_subcategory_code.strip().upper() not in {
+                code.strip().upper() for code in rule.subcategory_codes
+            }:
                 continue
             if source_space_id in rule.source_space_ids:
                 return rule

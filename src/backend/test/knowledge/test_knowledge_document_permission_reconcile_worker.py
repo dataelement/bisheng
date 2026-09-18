@@ -180,3 +180,97 @@ def test_final_document_delete_waits_for_every_entry_cleanup() -> None:
         raise AssertionError(
             "final delete must not race an entry projection cleanup"
         )
+
+
+async def test_scan_visits_aged_rollback_beyond_full_deleting_page(async_db_session, monkeypatch):
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta
+
+    old = datetime.now() - timedelta(hours=1)
+    for i in range(101):
+        row = _entry(1000 + i, approval_instance_id=None, status="deleting" if i < 100 else "preparing")
+        row.entry_type = "projection_tombstone"
+        row.projection_previous_file_id = 100
+        row.projection_status = "failed"
+        row.projection_retry_count = 8
+        row.update_time = old
+        async_db_session.add(row)
+    await async_db_session.commit()
+
+    @asynccontextmanager
+    async def db():
+        yield async_db_session
+
+    monkeypatch.setattr(projection_worker, "get_async_db_session", db)
+    monkeypatch.setattr("bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf", lambda: SimpleNamespace(projection_max_retries=8))
+    task = MagicMock()
+    monkeypatch.setattr(projection_worker.reconcile_document_rollback, "apply_async", task)
+    assert await projection_worker._scan_tenant_projection_async(7) == 0
+    task.assert_called_once()
+    assert task.call_args.kwargs["kwargs"]["document_id"] == 91
+
+
+async def test_finalizer_rejects_changed_lease_before_permission_delete(async_db_session, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    import pytest
+
+    row = _entry(101, approval_instance_id=None, status="deleting")
+    row.projection_status = "ready"
+    row.projection_lease_owner = "new-worker"
+    snapshot = row.model_copy(update={"projection_lease_owner": "old-worker"})
+    async_db_session.add(row)
+    await async_db_session.commit()
+
+    @asynccontextmanager
+    async def db():
+        yield async_db_session
+
+    monkeypatch.setattr(projection_worker, "get_async_db_session", db)
+    permissions = AsyncMock()
+    monkeypatch.setattr(projection_worker, "_delete_entry_permissions", permissions)
+    with pytest.raises(RuntimeError, match="cleanup state changed"):
+        await projection_worker._finalize_deleting_entry(snapshot)
+    permissions.assert_not_awaited()
+
+
+async def test_real_finalizer_retry_deletes_only_logical_entry(async_db_session, async_db_engine, monkeypatch):
+    from contextlib import asynccontextmanager
+    from datetime import datetime, timedelta
+
+    import pytest
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from test.knowledge.test_knowledge_document_projection_service import _seed_entries, _service
+
+    await _seed_entries(async_db_session)
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    row = await repo.find_by_id(101)
+    row.entry_type = "projection_tombstone"
+    row.entry_status = "deleting"
+    await async_db_session.commit()
+
+    @asynccontextmanager
+    async def db():
+        async with AsyncSession(async_db_engine, expire_on_commit=False) as session:
+            yield session
+
+    monkeypatch.setattr(projection_worker, "get_async_db_session", db)
+    permissions = AsyncMock(side_effect=[RuntimeError("FGA unavailable"), None])
+    monkeypatch.setattr(projection_worker, "_delete_entry_permissions", permissions)
+    service = _service(async_db_session, finalizer=projection_worker._finalize_deleting_entry)
+    now = datetime.now()
+    with pytest.raises(RuntimeError, match="FGA unavailable"):
+        await service.process_entry(tenant_id=7, entry_id=101, lease_owner="first", now=now)
+    row = await repo.find_by_id(101)
+    assert row.projection_retry_count == 1
+    assert row.projection_status == "failed"
+    result = await service.process_entry(tenant_id=7, entry_id=101, lease_owner="second", now=row.projection_next_retry_at + timedelta(seconds=1))
+    assert result.status == "cleaned"
+    assert await repo.find_by_id(101) is None
+    assert (await repo.find_by_id(100)).object_name == "tenant/7/manager.pdf"
+    assert await repo.find_by_id(102) is not None
+    assert permissions.await_count == 2

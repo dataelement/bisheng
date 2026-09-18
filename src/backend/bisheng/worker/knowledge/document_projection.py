@@ -218,13 +218,33 @@ def _require_entries_ready_for_document_delete(
             KnowledgeFileEntryStatus.DELETING.value,
             KnowledgeFileEntryStatus.INVALID.value,
         }
-        or item.projection_status
-        != KnowledgeFileProjectionStatus.READY.value
+        or item.projection_status != KnowledgeFileProjectionStatus.READY.value
+        or item.applied_content_generation != item.desired_content_generation
+        or item.applied_entry_generation != item.desired_entry_generation
         for item in entries
     ):
-        raise RuntimeError(
+        from bisheng.knowledge.domain.services.knowledge_document_projection_service import ProjectionDependencyPending
+
+        raise ProjectionDependencyPending(
             "F059 final delete requires all entries to finish cleanup"
         )
+
+
+def _require_cleanup_claim(current: KnowledgeFile, expected: KnowledgeFile) -> None:
+    if (
+        current.entry_status != KnowledgeFileEntryStatus.DELETING.value
+        or current.projection_status != KnowledgeFileProjectionStatus.READY.value
+        or current.projection_lease_owner != expected.projection_lease_owner
+        or not expected.projection_lease_owner
+        or current.tenant_id != expected.tenant_id
+        or current.reference_document_id != expected.reference_document_id
+        or current.entry_type != expected.entry_type
+        or current.desired_content_generation != expected.desired_content_generation
+        or current.desired_entry_generation != expected.desired_entry_generation
+        or current.applied_content_generation != current.desired_content_generation
+        or current.applied_entry_generation != current.desired_entry_generation
+    ):
+        raise RuntimeError("F059 logical entry cleanup state changed")
 
 
 async def _finalize_document_delete(entry: KnowledgeFile) -> None:
@@ -260,6 +280,10 @@ async def _finalize_document_delete(entry: KnowledgeFile) -> None:
                 for_update=True,
             )
         )
+        current = next((item for item in entries if item.id == entry.id), None)
+        if current is None:
+            return
+        _require_cleanup_claim(current, entry)
         _require_entries_ready_for_document_delete(entries)
         await session.commit()
 
@@ -297,6 +321,10 @@ async def _finalize_document_delete(entry: KnowledgeFile) -> None:
                 for_update=True,
             )
         )
+        current = next((item for item in current_entries if item.id == entry.id), None)
+        if current is None:
+            return
+        _require_cleanup_claim(current, entry)
         _require_entries_ready_for_document_delete(current_entries)
         await session.execute(
             delete(KnowledgeFilePdfArtifact).where(
@@ -364,21 +392,14 @@ async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
     if entry.entry_type == KnowledgeFileEntryType.MANAGER.value:
         await _finalize_document_delete(entry)
         return
-    await _delete_entry_permissions(int(entry.id))
     async with get_async_db_session() as session:
         repository = KnowledgeFileRepositoryImpl(session)
         current = await repository.find_by_id_for_update(int(entry.id))
         if current is None:
             return
-        if (
-            current.entry_status
-            != KnowledgeFileEntryStatus.DELETING.value
-            or current.projection_status
-            != KnowledgeFileProjectionStatus.READY.value
-        ):
-            raise RuntimeError(
-                "F059 logical entry cleanup state changed"
-            )
+        _require_cleanup_claim(current, entry)
+        # 行锁保护最终清理, 权限写入失败会回滚并由原租约记录重试。
+        await _delete_entry_permissions(int(entry.id))
         await repository.prepare_delete_by_ids([int(entry.id)])
         await request_file_delete_intents(
             session,
@@ -658,12 +679,6 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
         entry_ids = await service.list_due_entry_ids(
             limit=SCAN_PAGE_SIZE,
         )
-        permission_candidates = (
-            await repository.find_permission_reconcile_candidates(
-                older_than=datetime.now() - timedelta(minutes=5),
-                limit=SCAN_PAGE_SIZE,
-            )
-        )
         retiring_space_ids = list(
             (
                 await session.exec(
@@ -677,27 +692,6 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
                 )
             ).all()
         )
-    preparing_count = sum(
-        1
-        for item in permission_candidates
-        if item.entry_status
-        == KnowledgeFileEntryStatus.PREPARING.value
-    )
-    deleting_count = sum(
-        1
-        for item in permission_candidates
-        if item.entry_status
-        == KnowledgeFileEntryStatus.DELETING.value
-    )
-    logger.info(
-        "F059 reconcile scan tenant_id=%s projection_due=%s "
-        "aged_preparing=%s aged_deleting=%s page_size=%s",
-        tenant_id,
-        len(entry_ids),
-        preparing_count,
-        deleting_count,
-        SCAN_PAGE_SIZE,
-    )
     for entry_id in entry_ids:
         process_document_projection.apply_async(
             kwargs={
@@ -707,14 +701,44 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
             headers={"tenant_id": int(tenant_id)},
             queue=DEFAULT_QUEUE,
         )
-    await _reconcile_permission_candidates(
-        tenant_id=tenant_id,
-        candidates=permission_candidates,
+    # 固定截止时间并按主键翻页, 陈旧 deleting 不再挡住后续 preparing。
+    cutoff = datetime.now() - timedelta(minutes=5)
+    after_id = 0
+    preparing_count = deleting_count = exhausted_count = 0
+    exhausted_sample = []
+    while True:
+        async with get_async_db_session() as session:
+            permission_candidates = await KnowledgeFileRepositoryImpl(session).find_permission_reconcile_candidates(
+                older_than=cutoff, limit=SCAN_PAGE_SIZE, after_id=after_id,
+            )
+        if not permission_candidates:
+            break
+        after_id = int(permission_candidates[-1].id)
+        preparing = [row for row in permission_candidates if row.entry_status == KnowledgeFileEntryStatus.PREPARING.value]
+        preparing_count += len(preparing)
+        deleting_count += len(permission_candidates) - len(preparing)
+        for row in permission_candidates:
+            if int(row.projection_retry_count or 0) >= service.max_retry_attempts:
+                exhausted_count += 1
+                if len(exhausted_sample) < 10:
+                    exhausted_sample.append({
+                        "entry_id": row.id, "document_id": row.reference_document_id,
+                        "error": row.projection_last_error,
+                    })
+        await _reconcile_permission_candidates(tenant_id=tenant_id, candidates=preparing)
+        await _reconcile_rollback_candidates(tenant_id=tenant_id, candidates=preparing)
+        if len(permission_candidates) < SCAN_PAGE_SIZE:
+            break
+    logger.info(
+        "F059 reconcile scan tenant_id=%s projection_due=%s aged_preparing=%s "
+        "aged_deleting=%s retry_exhausted=%s page_size=%s",
+        tenant_id, len(entry_ids), preparing_count, deleting_count, exhausted_count, SCAN_PAGE_SIZE,
     )
-    await _reconcile_rollback_candidates(
-        tenant_id=tenant_id,
-        candidates=permission_candidates,
-    )
+    if exhausted_count:
+        logger.warning(
+            "F059 cleanup requires explicit recovery tenant_id=%s exhausted_count=%s sample=%s",
+            tenant_id, exhausted_count, exhausted_sample,
+        )
     for space_id in retiring_space_ids:
         enqueue_knowledge_space_retirement(
             tenant_id=tenant_id,

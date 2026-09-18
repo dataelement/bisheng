@@ -175,8 +175,22 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         lease_owner: str,
         target_content_generation: int,
         target_entry_generation: int,
+        retain_cleanup_lease: bool = False,
     ) -> bool:
         """CAS applied generations by lease token without hiding newer work."""
+        ...
+
+    async def defer_projection_lease(
+        self, *, entry_id: int, lease_owner: str,
+        next_retry_at: datetime, error_summary: str,
+    ) -> bool:
+        """等待依赖, 释放租约但不消耗失败次数。"""
+        ...
+
+    async def recover_failed_projection(
+        self, *, entry_id: int, now: datetime, audit_summary: str,
+    ) -> bool:
+        """显式恢复失败入口; 不能抢占未过期租约。"""
         ...
 
     async def fail_projection_lease(
@@ -203,6 +217,7 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         *,
         older_than: datetime,
         limit: int,
+        after_id: int = 0,
     ) -> list[KnowledgeFile]:
         """Find aged preparing/deleting entries for permission compensation."""
         ...

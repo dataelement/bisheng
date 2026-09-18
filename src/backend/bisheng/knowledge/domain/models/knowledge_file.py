@@ -386,6 +386,23 @@ class KnowledgeFileDao(KnowledgeFileBase):
     )
 
     @staticmethod
+    def browsable_entry_predicate():
+        """列表和库内搜索共用入口规则，保留可展示的失效关联文件。"""
+        return and_(
+            or_(
+                KnowledgeFile.reference_document_id.is_(None),
+                col(KnowledgeFile.entry_status).in_([
+                    KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFileEntryStatus.INVALID.value,
+                ]),
+            ),
+            or_(
+                KnowledgeFile.entry_type.is_(None),
+                KnowledgeFile.entry_type != KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
+            ),
+        )
+
+    @staticmethod
     def active_inventory_predicate():
         """Files that represent one visible inventory item in their local space."""
         from bisheng.knowledge.domain.models.knowledge_document_version import (
@@ -1168,11 +1185,14 @@ class KnowledgeFileDao(KnowledgeFileBase):
         page: int = 0,
         page_size: int = 0,
         exclude_file_ids: list[int] | None = None,
+        browsable_entries_only: bool = False,
     ) -> list[KnowledgeFile]:
         statement = select(KnowledgeFile).where(
             KnowledgeFile.knowledge_id == knowledge_id,
             col(KnowledgeFile.deleted_at).is_(None),
         )
+        if browsable_entries_only:
+            statement = statement.where(cls.browsable_entry_predicate())
         statement = cls._build_file_filters_statement(
             statement,
             file_name,

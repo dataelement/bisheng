@@ -1,0 +1,137 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "毕昇 Citation 开放接口",
+    "version": "1.0.0",
+    "description": "根据当前本地源码整理，可作为 OpenAPI 文件导入 Apifox。导入后将环境前置 URL 设置为实际服务地址。接口使用服务端 default_operator.user 配置的用户校验知识库访问权限；当前端点未声明必填鉴权 Header。若通过网关访问，请按实际网关配置补充鉴权。示例数据仅用于说明，调试时须替换为真实 citation_id。"
+  },
+  "servers": [
+    { "url": "http://localhost:7860", "description": "本地服务示例，调试前替换为实际地址" }
+  ],
+  "tags": [
+    { "name": "Citation", "description": "知识库引用详情" }
+  ],
+  "paths": {
+    "/api/v2/citation/{citation_id}": {
+      "get": {
+        "tags": ["Citation"],
+        "summary": "获取知识库引用详情",
+        "operationId": "get_open_citation_detail",
+        "description": "根据引用 ID 查询文件信息及下载、预览地址，仅支持 RAG（知识库）引用。citation_id 使用引用结果中的 citationId，不是文件 ID。服务先查询运行时缓存，再查询持久化记录。服务端必须配置有效的 default_operator.user，且该用户须具有对应知识库访问权限。\n\n引用不存在、引用数据无效、非 RAG 引用、知识库或文件不存在、文件与知识库不匹配、无知识库访问权限，均返回 HTTP 200 且响应体 status_code=404。default_operator 未配置或用户不存在，也返回 HTTP 200 且业务码为 500。调用方应同时检查 HTTP 状态码和响应体 status_code。bbox 仅取第一个引用片段的定位信息，无片段时为 null。",
+        "parameters": [
+          {
+            "name": "citation_id",
+            "in": "path",
+            "required": true,
+            "description": "引用结果中的 citationId。知识库引用通常形如 knowledgesearch_ 加 8 位十六进制后缀；端点本身只声明字符串类型，不强制格式校验。请替换为真实引用 ID。",
+            "schema": { "type": "string" },
+            "example": "knowledgesearch_a1b2c3d4"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "正常处理或业务错误。status_code=200 为成功，404 为引用不可用，500 为默认操作用户配置错误。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/CitationSuccessResponse" },
+                    { "$ref": "#/components/schemas/CitationNotFoundResponse" },
+                    { "$ref": "#/components/schemas/OperatorConfigErrorResponse" }
+                  ]
+                },
+                "examples": {
+                  "success": {
+                    "summary": "查询成功（示例地址）",
+                    "value": {
+                      "status_code": 200,
+                      "status_message": "SUCCESS",
+                      "data": {
+                        "file_id": 123,
+                        "file_name": "知识库示例文档.pdf",
+                        "file_type": "pdf",
+                        "knowledge_name": "示例知识库",
+                        "download_url": "https://files.example.com/example.pdf",
+                        "preview_url": "https://files.example.com/example-preview.pdf",
+                        "bbox": null
+                      }
+                    }
+                  },
+                  "notFound": {
+                    "summary": "引用不存在、类型不支持或无权限",
+                    "value": {
+                      "status_code": 404,
+                      "status_message": "This resource does not exist",
+                      "data": { "exception": "This resource does not exist" }
+                    }
+                  },
+                  "operatorNotConfigured": {
+                    "summary": "默认操作用户未配置",
+                    "value": { "status_code": 500, "status_message": "Not configureddefault_operatorIIuserConfigure" }
+                  },
+                  "operatorNotFound": {
+                    "summary": "默认操作用户不存在",
+                    "value": { "status_code": 500, "status_message": "not founddefault_operatorIIuserUser Information" }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "未处理的服务端异常；status_message 为实际异常信息。",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OperatorConfigErrorResponse" } }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OpenCitationResponse": {
+        "type": "object",
+        "description": "引用文件信息；模型中所有字段均允许为空。",
+        "properties": {
+          "file_id": { "type": "integer", "nullable": true, "description": "知识库文件 ID，对应引用的 documentId。" },
+          "file_name": { "type": "string", "nullable": true, "description": "知识库文件名称。" },
+          "file_type": { "type": "string", "nullable": true, "description": "文件类型，透传引用载荷中的 fileType。" },
+          "knowledge_name": { "type": "string", "nullable": true, "description": "知识库名称。" },
+          "download_url": { "type": "string", "nullable": true, "description": "文件下载地址，可能为空；以本次返回值为准。" },
+          "preview_url": { "type": "string", "nullable": true, "description": "文件预览地址，可能为空；以本次返回值为准。" },
+          "bbox": { "type": "string", "nullable": true, "description": "第一个引用片段的定位信息。类型为字符串，可能包含序列化后的 JSON，并非直接返回 JSON 对象；无定位信息时为 null。" }
+        }
+      },
+      "CitationSuccessResponse": {
+        "type": "object",
+        "required": ["status_code", "status_message"],
+        "properties": {
+          "status_code": { "type": "integer", "enum": [200], "description": "业务状态码。" },
+          "status_message": { "type": "string", "example": "SUCCESS" },
+          "data": { "$ref": "#/components/schemas/OpenCitationResponse" }
+        }
+      },
+      "CitationNotFoundResponse": {
+        "type": "object",
+        "required": ["status_code", "status_message", "data"],
+        "properties": {
+          "status_code": { "type": "integer", "enum": [404] },
+          "status_message": { "type": "string", "example": "This resource does not exist" },
+          "data": {
+            "type": "object",
+            "required": ["exception"],
+            "properties": { "exception": { "type": "string", "example": "This resource does not exist" } }
+          }
+        }
+      },
+      "OperatorConfigErrorResponse": {
+        "type": "object",
+        "required": ["status_code", "status_message"],
+        "properties": {
+          "status_code": { "type": "integer", "enum": [500] },
+          "status_message": { "type": "string", "description": "配置错误或服务端异常信息。" }
+        }
+      }
+    }
+  }
+}

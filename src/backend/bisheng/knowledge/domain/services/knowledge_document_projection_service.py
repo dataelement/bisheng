@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -31,6 +32,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
     KnowledgeFileProjectionStatus,
+    KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
@@ -83,6 +85,10 @@ class KnowledgeDocumentProjectionError(RuntimeError):
     """Raised when one entry projection cannot safely converge."""
 
 
+class ProjectionDependencyPending(KnowledgeDocumentProjectionError):
+    """前置投影尚未完成, 不属于本入口执行失败。"""
+
+
 async def _noop_deleting_entry_finalizer(entry: KnowledgeFile) -> None:
     return None
 
@@ -128,6 +134,58 @@ class KnowledgeDocumentProjectionService:
             trigger_type="document_projection_updated",
         )
 
+    async def validate_failed_entry_recovery(
+        self,
+        entry: KnowledgeFile,
+        *,
+        tenant_id: int,
+        now: datetime,
+    ) -> None:
+        """人工重试前检查状态与直接依赖; 不写入数据或访问外部存储。"""
+        if (
+            int(entry.tenant_id or 0) != tenant_id
+            or entry.reference_document_id is None
+            or entry.entry_type not in {item.value for item in KnowledgeFileEntryType}
+            or entry.entry_status not in {
+                KnowledgeFileEntryStatus.ACTIVE.value,
+                KnowledgeFileEntryStatus.DELETING.value,
+                KnowledgeFileEntryStatus.INVALID.value,
+            }
+            or entry.projection_status != KnowledgeFileProjectionStatus.FAILED.value
+        ):
+            raise ValueError("entry is not a failed recoverable projection in the requested tenant")
+        if entry.projection_lease_until and entry.projection_lease_until > now:
+            raise ValueError("entry still has a live projection lease")
+        if self.document_repository is None or self.version_repository is None:
+            raise ValueError("recovery requires canonical repositories")
+        document = await self.document_repository.find_by_id(int(entry.reference_document_id))
+        if document is None or int(document.tenant_id or 0) != tenant_id:
+            raise ValueError("canonical document is unavailable in the requested tenant")
+        if (
+            entry.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+            and entry.entry_status != KnowledgeFileEntryStatus.DELETING.value
+        ):
+            raise ValueError("projection tombstone is not in deleting state")
+        if entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value:
+            if document.lifecycle_status != KnowledgeDocumentLifecycleStatus.ACTIVE.value:
+                raise ValueError("canonical document is not active")
+            version = await self.version_repository.find_by_id(int(document.primary_version_id or 0))
+            if version is None or int(version.document_id) != int(document.id):
+                raise ValueError("canonical primary version is unavailable")
+            physical = await self.file_repository.find_by_id(int(version.knowledge_file_id))
+            if (
+                physical is None
+                or int(physical.tenant_id or 0) != tenant_id
+                or physical.status != KnowledgeFileStatus.SUCCESS.value
+                or not physical.object_name
+                or physical.deleted_at is not None
+            ):
+                raise ValueError("canonical primary file is unavailable or not parsed successfully")
+        try:
+            await self._require_destination_manager_ready_for_cleanup(entry)
+        except ProjectionDependencyPending as exc:
+            raise ValueError(str(exc)) from exc
+
     async def _require_destination_manager_ready_for_cleanup(
         self,
         entry: KnowledgeFile,
@@ -171,7 +229,7 @@ class KnowledgeDocumentProjectionService:
             for candidate in entries
         )
         if not destination_ready:
-            raise KnowledgeDocumentProjectionError(
+            raise ProjectionDependencyPending(
                 "destination manager projection is not ready for cleanup"
             )
 
@@ -445,37 +503,6 @@ class KnowledgeDocumentProjectionService:
             or claimed.entry_type
             == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
         )
-        if (
-            not is_cleanup
-            and self.document_repository is not None
-            and self.version_repository is not None
-            and claimed.reference_document_id is not None
-        ):
-            document = await self.document_repository.find_by_id(
-                int(claimed.reference_document_id)
-            )
-            if (
-                document is None
-                or int(document.tenant_id or 0) != int(tenant_id)
-                or document.primary_version_id is None
-            ):
-                await self.session.rollback()
-                raise KnowledgeDocumentProjectionError(
-                    "projection canonical document is unavailable"
-                )
-            version = await self.version_repository.find_by_id(
-                int(document.primary_version_id)
-            )
-            if (
-                version is None
-                or int(version.document_id) != int(document.id)
-            ):
-                await self.session.rollback()
-                raise KnowledgeDocumentProjectionError(
-                    "projection canonical version is unavailable"
-                )
-            version_id = int(version.id)
-
         target = ProjectionTarget(
             tenant_id=tenant_id,
             entry_id=int(claimed.id),
@@ -486,9 +513,41 @@ class KnowledgeDocumentProjectionService:
             entry_generation=int(claimed.desired_entry_generation),
         )
         retry_count = int(claimed.projection_retry_count or 0)
+        previous_error = claimed.projection_last_error
+        needs_finalization = is_cleanup and claimed.entry_status != KnowledgeFileEntryStatus.INVALID.value
+        # 最终清理使用领取任务时的代次与租约, 不能引用被 ORM 刷新的可变状态。
+        finalization_entry = claimed.model_copy()
         await self._commit()
 
         try:
+            if (
+                not is_cleanup
+                and self.document_repository is not None
+                and self.version_repository is not None
+                and claimed.reference_document_id is not None
+            ):
+                document = await self.document_repository.find_by_id(
+                    int(claimed.reference_document_id)
+                )
+                if (
+                    document is None
+                    or int(document.tenant_id or 0) != int(tenant_id)
+                    or document.primary_version_id is None
+                ):
+                    raise KnowledgeDocumentProjectionError(
+                        "projection canonical document is unavailable"
+                    )
+                version = await self.version_repository.find_by_id(
+                    int(document.primary_version_id)
+                )
+                if (
+                    version is None
+                    or int(version.document_id) != int(document.id)
+                ):
+                    raise KnowledgeDocumentProjectionError(
+                        "projection canonical version is unavailable"
+                    )
+                target = replace(target, version_id=int(version.id))
             if self.shared_storage_writer is None:
                 raise KnowledgeDocumentProjectionError("shared projection writer is not initialized")
             if is_cleanup:
@@ -509,6 +568,7 @@ class KnowledgeDocumentProjectionService:
                 lease_owner=lease_owner,
                 target_content_generation=target.content_generation,
                 target_entry_generation=target.entry_generation,
+                retain_cleanup_lease=needs_finalization,
             )
             if applied:
                 await request_file_sync_intents(
@@ -524,6 +584,12 @@ class KnowledgeDocumentProjectionService:
                 )
             await self._commit()
             if not applied:
+                if needs_finalization:
+                    await self.file_repository.defer_projection_lease(
+                        entry_id=entry_id, lease_owner=lease_owner,
+                        next_retry_at=now, error_summary="stale_cleanup_generation",
+                    )
+                    await self._commit()
                 logger.info(
                     "F059 projection result tenant_id=%s entry_id=%s "
                     "status=stale content_generation=%s "
@@ -540,12 +606,15 @@ class KnowledgeDocumentProjectionService:
                     content_generation=target.content_generation,
                     entry_generation=target.entry_generation,
                 )
-            if (
-                is_cleanup
-                and claimed.entry_status
-                != KnowledgeFileEntryStatus.INVALID.value
-            ):
-                await self.deleting_entry_finalizer(claimed)
+            if needs_finalization:
+                await self.deleting_entry_finalizer(finalization_entry)
+                # 删除已提交时更新为零行; 保留的入口仍需释放租约。
+                await self.file_repository.apply_projection_result(
+                    entry_id=entry_id, lease_owner=lease_owner,
+                    target_content_generation=target.content_generation,
+                    target_entry_generation=target.entry_generation,
+                )
+                await self._commit()
             result_status = "ready" if not is_cleanup else "cleaned"
             logger.info(
                 "F059 projection result tenant_id=%s entry_id=%s "
@@ -575,6 +644,41 @@ class KnowledgeDocumentProjectionService:
                 content_generation=target.content_generation,
                 entry_generation=target.entry_generation,
             )
+        except ProjectionDependencyPending as exc:
+            await self.session.rollback()
+            waiting = {}
+            if previous_error and previous_error.startswith("waiting_dependency:"):
+                try:
+                    waiting = json.loads(previous_error.split(":", 1)[1])
+                except (ValueError, TypeError):
+                    # 历史等待标记格式错误只影响告警年龄, 不影响任务恢复。
+                    logger.warning("Invalid projection wait marker tenant_id=%s entry_id=%s", tenant_id, entry_id)
+            try:
+                since = datetime.fromisoformat(waiting["since"])
+                attempt = max(1, int(waiting["attempt"]) + 1)
+            except (KeyError, ValueError, TypeError):
+                since, attempt = now, 1
+            delay = min(30 * 2 ** min(attempt - 1, 4), self.max_retry_seconds)
+            summary = "waiting_dependency:" + json.dumps(
+                {"since": since.isoformat(), "attempt": attempt, "reason": str(exc)}
+            )
+            deferred = await self.file_repository.defer_projection_lease(
+                entry_id=entry_id, lease_owner=lease_owner,
+                next_retry_at=max(now, datetime.now()) + timedelta(seconds=delay),
+                error_summary=summary,
+            )
+            await self._commit()
+            age_seconds = max(0, int((now - since).total_seconds()))
+            log = logger.warning if age_seconds >= 300 else logger.info
+            log(
+                "F059 projection waiting tenant_id=%s entry_id=%s document_id=%s "
+                "wait_seconds=%s deferred=%s reason=%s",
+                tenant_id, entry_id, target.document_id, age_seconds, deferred, exc,
+            )
+            return ProjectionProcessResult(
+                entry_id=entry_id, status="waiting_dependency" if deferred else "stale",
+                content_generation=target.content_generation, entry_generation=target.entry_generation,
+            )
         except Exception as exc:
             await self.session.rollback()
             next_retry_count = retry_count + 1
@@ -592,7 +696,7 @@ class KnowledgeDocumentProjectionService:
             failed = await self.file_repository.fail_projection_lease(
                 entry_id=entry_id,
                 lease_owner=lease_owner,
-                next_retry_at=now + timedelta(seconds=retry_delay),
+                next_retry_at=max(now, datetime.now()) + timedelta(seconds=retry_delay),
                 error_summary=error_summary,
             )
             if not failed:

@@ -279,6 +279,8 @@ export default function PortalKnowledgeWorkbench() {
     searchModeRef.current = searchMode;
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
+    const [searchError, setSearchError] = useState(false);
+    const searchRequestIdRef = useRef(0);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>();
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>();
@@ -1194,6 +1196,9 @@ export default function PortalKnowledgeWorkbench() {
     loadRootTreeRef.current = loadRootTree;
 
     const reloadFiles = useCallback(async (_page?: number, background = false) => {
+        searchRequestIdRef.current += 1;
+        setSearchError(false);
+        setSearchLoading(false);
         setSearchMode(false);
         setSearchResults([]);
         const spaceId = activeSpace?.id;
@@ -1676,6 +1681,9 @@ export default function PortalKnowledgeWorkbench() {
         if (!openingDeepLinkedFileHere) {
             setSelectedFile(null);
             setSearchText("");
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             setSearchTagIds([]);
@@ -2095,6 +2103,9 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: currentFolderId ? Number(currentFolderId) : null,
                 ...(overwrite ? { overwrite: true } : {}),
             });
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             setCurrentFolderFiles((prev) => [
@@ -2163,10 +2174,15 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         if (!keyword) {
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             return;
         }
+        const requestId = ++searchRequestIdRef.current;
+        setSearchError(false);
         setSearchMode(true);
         setSearchLoading(true);
         try {
@@ -2177,14 +2193,15 @@ export default function PortalKnowledgeWorkbench() {
                 page_size: TREE_PAGE_SIZE,
                 file_status: statusFilterNumbers,
             });
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
             setSearchResults(res.data);
         } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
             setSearchResults([]);
+            setSearchError(true);
             showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR });
         } finally {
-            if (activeSpaceIdRef.current === spaceId) {
+            if (activeSpaceIdRef.current === spaceId && requestId === searchRequestIdRef.current) {
                 setSearchLoading(false);
             }
         }
@@ -2199,11 +2216,16 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         if (!keyword && params.tagIds.length === 0) {
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             setSearchTagIds([]);
             return;
         }
+        const requestId = ++searchRequestIdRef.current;
+        setSearchError(false);
         setSearchMode(true);
         setSearchLoading(true);
         try {
@@ -2218,15 +2240,16 @@ export default function PortalKnowledgeWorkbench() {
                 order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
             setSearchResults(res.data);
             setTreeRootTotal(res.total);
         } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
             setSearchResults([]);
+            setSearchError(true);
             showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR });
         } finally {
-            if (activeSpaceIdRef.current === spaceId) {
+            if (activeSpaceIdRef.current === spaceId && requestId === searchRequestIdRef.current) {
                 setSearchLoading(false);
             }
         }
@@ -2236,6 +2259,9 @@ export default function PortalKnowledgeWorkbench() {
         setStatusFilter(nextStatus);
         setSearchText("");
         setSearchTagIds([]);
+        searchRequestIdRef.current += 1;
+        setSearchError(false);
+        setSearchLoading(false);
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFile(null);
@@ -2246,6 +2272,9 @@ export default function PortalKnowledgeWorkbench() {
     const handleNativeSort = useCallback((nextSortBy: SortType | undefined, nextDirection: SortDirection | undefined) => {
         setSortBy(nextSortBy);
         setSortDirection(nextDirection);
+        searchRequestIdRef.current += 1;
+        setSearchError(false);
+        setSearchLoading(false);
         setSearchMode(false);
         setSearchResults([]);
         setSearchTagIds([]);
@@ -2260,6 +2289,9 @@ export default function PortalKnowledgeWorkbench() {
         });
         setSearchText("");
         setSearchTagIds([]);
+        searchRequestIdRef.current += 1;
+        setSearchError(false);
+        setSearchLoading(false);
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFileIds(new Set());
@@ -2449,6 +2481,9 @@ export default function PortalKnowledgeWorkbench() {
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
         // Deep-link open used to leave searchMode with a single-file result set.
+        searchRequestIdRef.current += 1;
+        setSearchError(false);
+        setSearchLoading(false);
         setSearchMode(false);
         setSearchResults([]);
         setSearchText("");
@@ -2689,6 +2724,9 @@ export default function PortalKnowledgeWorkbench() {
         if (!spaceId) return;
 
         if (!folderId) {
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             setSearchText("");
@@ -2708,6 +2746,9 @@ export default function PortalKnowledgeWorkbench() {
         navigatingFolderRef.current = folderId;
 
         try {
+            searchRequestIdRef.current += 1;
+            setSearchError(false);
+            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
             setSearchText("");
@@ -3188,6 +3229,14 @@ export default function PortalKnowledgeWorkbench() {
                                                     hasMore={currentFileListHasMore}
                                                     onPageChange={handleNativePageChange}
                                                     loading={currentFileListLoading}
+                                                    listError={searchMode && searchError ? (
+                                                        <>
+                                                            <p>搜索失败，请重试</p>
+                                                            <button type="button" className="text-[#165DFF] hover:underline" onClick={() => void handleNativeSearch({ scope: "current", keyword: searchText, tagIds: searchTagIds })}>
+                                                                重试搜索
+                                                            </button>
+                                                        </>
+                                                    ) : undefined}
                                                     canReorderFolders={!searchMode && Boolean(canReorderFoldersByParent[currentFolderId || ""])}
                                                     onSearch={(params) => void handleNativeSearch(params)}
                                                     onFilterStatus={handleNativeStatusFilter}

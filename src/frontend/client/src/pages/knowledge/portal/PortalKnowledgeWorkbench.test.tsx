@@ -6197,6 +6197,63 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("待同步.md")).not.toBeInTheDocument();
     });
 
+    test.each(["清空", "新搜索"])("过期搜索失败不覆盖%s后的界面", async (action) => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [makeFile("201", "正常文件.md")], total: 1,
+        } as any);
+        let rejectOld: (error: Error) => void = () => undefined;
+        const pending = new Promise<never>((_resolve, reject) => { rejectOld = reject; });
+        jest.mocked(searchSpaceChildrenApi).mockImplementation((params) => params.keyword === "旧搜索"
+            ? pending
+            : Promise.resolve({ data: [makeFile("202", "新结果.md")], total: 1 } as any));
+        renderWorkbench();
+        await screen.findByText("正常文件.md");
+        const input = await screen.findByPlaceholderText(/Search in current knowledge space|com_knowledge.search_in_current_space/);
+        fireEvent.change(input, { target: { value: "旧搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        await waitFor(() => expect(searchSpaceChildrenApi).toHaveBeenCalled());
+        fireEvent.change(input, { target: { value: action === "清空" ? "" : "新搜索" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        const expectedName = action === "清空" ? "正常文件.md" : "新结果.md";
+        await screen.findByText(expectedName);
+        await act(async () => { rejectOld(new Error("旧请求失败")); });
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(screen.getByText(expectedName)).toBeInTheDocument();
+    });
+
+    test("搜索失败显示重试，成功空结果才显示无匹配文件", async () => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [makeFile("201", "正常文件.md")], total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockRejectedValue(new Error("unsupported entry type"));
+        renderWorkbench();
+        await screen.findByText("正常文件.md");
+        const input = await screen.findByPlaceholderText(/Search in current knowledge space|com_knowledge.search_in_current_space/);
+        fireEvent.change(input, { target: { value: "北京" } });
+        fireEvent.keyDown(input, { key: "Enter" });
+        expect(await screen.findByRole("alert")).toHaveTextContent("搜索失败，请重试");
+        expect(screen.queryByAltText("empty")).not.toBeInTheDocument();
+        expect(screen.queryByText(/共计 0 文件/)).not.toBeInTheDocument();
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        fireEvent.click(screen.getByRole("button", { name: "重试搜索" }));
+        await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+        expect(await screen.findByAltText("empty")).toBeInTheDocument();
+        expect(input).toHaveValue("北京");
+        expect(searchSpaceChildrenApi).toHaveBeenLastCalledWith(expect.objectContaining({
+            space_id: "personal-1", keyword: "北京", tag_ids: [], page: 1,
+        }));
+        fireEvent.change(input, { target: { value: "" } });
+        expect(await screen.findByText("正常文件.md")).toBeInTheDocument();
+    });
+
     test("searches files as a flat result list and restores tree when keyword is cleared", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,

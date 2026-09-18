@@ -340,8 +340,10 @@ PYTHONPATH=./ .venv/bin/python \
 
 ### `reconcile_knowledge_document_projection.py`
 
-按 tenant 和 entry 检查或重新调度单个 F059 ES/Milvus 投影。默认仅输出代次、状态和
-重试次数；传入 `--apply` 才向 `knowledge_celery` 调度投影任务。
+按 tenant 和 entry 检查或重新调度单个 F059 ES/Milvus 投影。默认只读，输出代次、状态、
+重试次数、原错误、租约和恢复阻塞原因；传入 `--apply` 才向默认 `celery` 队列调度任务。
+普通调度不会重置耗尽次数；重置失败入口必须同时传入 `--recover-failed --apply`、
+执行人、修复说明和 JSONL 审计路径。支持失败的管理入口及待清理的发布、分享、tombstone 入口。
 
 ```bash
 PYTHONPATH=./ .venv/bin/python \
@@ -351,7 +353,29 @@ PYTHONPATH=./ .venv/bin/python \
 PYTHONPATH=./ .venv/bin/python \
   scripts/reconcile_knowledge_document_projection.py \
   --tenant-id 1 --entry-id 123 --apply
+
+# 先只读核对；不会重置次数或派发任务
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_knowledge_document_projection.py \
+  --tenant-id 1 --entry-id 123 --recover-failed
+
+# 仅在上游故障已修复、预览无阻塞且获准恢复数据后执行
+# 审计文件父目录须已存在，建议使用持久卷
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_knowledge_document_projection.py \
+  --tenant-id 1 --entry-id 123 --recover-failed --apply \
+  --operator '<执行人>' --reason '<上游故障修复说明>' \
+  --audit-file /data/audit/projection-recovery.jsonl
 ```
+
+恢复前会校验租户、失败状态、有效租约、主版本/物理文件元数据和目标管理入口是否已就绪。
+这不代表已经验证 MinIO 对象、解析服务或 ES/Milvus/OpenFGA 的实时可用性，仍须先修复上游故障。
+处理顺序是管理入口恢复并追平代次，再逐条恢复依赖它的清理入口。工具不改变入口归属、代次和文件内容。
+
+原错误和次数先以 `prepared` 审计落盘；数据库提交后追加 `committed` 审计。若提交后审计或派发失败，
+退出码为 3，并输出 `recovery_status=committed` 和 `recovery_id`。此时不可当作未执行：应先检查审计和入口，
+周期扫描会继续处理已恢复的 pending 任务。若只有 prepared 且提交结果不明，应先核对数据库及 Worker 日志。
+恢复后任务可能立即被 Worker 领取并写入外部存储，不支持仅回填原重试字段来撤销已执行的清理。
 
 ### `dedupe_department_space_documents.py`
 

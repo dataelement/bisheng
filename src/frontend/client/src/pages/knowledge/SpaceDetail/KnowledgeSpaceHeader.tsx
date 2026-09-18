@@ -103,7 +103,7 @@ interface KnowledgeSpaceHeaderProps {
     /** Mirrors member-management gating: creators + members with manage_space_relation. */
     canManageMembers?: boolean;
     /** 当前页文件总数（含子文件夹内文件数） */
-    totalFileCount?: number;
+    totalFileCount?: number | null;
 }
 
 export function KnowledgeSpaceHeader({
@@ -324,7 +324,7 @@ export function KnowledgeSpaceHeader({
                 </DropdownMenu>
             )}
 
-            {showViewModeTabs && (
+            {showViewModeTabs && totalFileCount !== null && (
                 <span className="ml-2 text-sm text-[#86909c]">
                     共计 {totalFileCount} 文件
                 </span>

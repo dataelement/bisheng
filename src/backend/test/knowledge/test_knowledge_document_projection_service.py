@@ -208,18 +208,13 @@ async def test_rollback_cleanup_waits_for_destination_manager_projection(
     await async_db_session.commit()
     cleaner = AsyncMock()
 
-    with pytest.raises(
-        KnowledgeDocumentProjectionError,
-        match="destination manager projection is not ready",
-    ):
-        await _service(
-            async_db_session,
-            cleaner=cleaner,
-        ).process_entry(
-            tenant_id=7,
-            entry_id=101,
-            lease_owner="worker-cleanup",
-        )
+    result = await _service(async_db_session, cleaner=cleaner).process_entry(
+        tenant_id=7, entry_id=101, lease_owner="worker-cleanup",
+    )
+    assert result.status == "waiting_dependency"
+    waiting = await repository.find_by_id(101)
+    assert waiting.projection_retry_count == 0
+    assert waiting.projection_next_retry_at > datetime.now()
 
     cleaner.assert_not_awaited()
 
@@ -401,3 +396,139 @@ async def test_projection_retry_cap_removes_exhausted_entry_from_due_scan(
     due = await service.list_due_entry_ids(now=datetime.now(), limit=10)
 
     assert 101 not in due
+
+
+@pytest.mark.asyncio
+async def test_dependency_wait_survives_retry_budget_and_resumes(async_db_session):
+    await _seed_entries(async_db_session)
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repo.find_by_id(100)
+    manager.projection_status = "failed"
+    manager.projection_retry_count = 8
+    entry = await repo.find_by_id(101)
+    entry.entry_type = "projection_tombstone"
+    entry.entry_status = "deleting"
+    await async_db_session.commit()
+    cleaner, finalizer = AsyncMock(), AsyncMock()
+    service = _service(async_db_session, cleaner=cleaner, finalizer=finalizer)
+    service.max_retry_attempts = 2
+    now = datetime.now()
+    for attempt in range(4):
+        result = await service.process_entry(
+            tenant_id=7, entry_id=101, lease_owner=f"wait-{attempt}", now=now,
+        )
+        assert result.status == "waiting_dependency"
+        waiting = await repo.find_by_id(101)
+        assert waiting.projection_retry_count == 0
+        assert waiting.projection_lease_owner is None
+        assert waiting.projection_next_retry_at > now
+        now = waiting.projection_next_retry_at + timedelta(seconds=1)
+    cleaner.assert_not_awaited()
+    finalizer.assert_not_awaited()
+    manager = await repo.find_by_id(100)
+    manager.projection_status = "ready"
+    await async_db_session.commit()
+    result = await service.process_entry(
+        tenant_id=7, entry_id=101, lease_owner="resumed", now=now,
+    )
+    assert result.status == "cleaned"
+    finalizer.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_finalizer_failure_is_persisted_and_retry_is_bounded(async_db_session):
+    await _seed_entries(async_db_session)
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repo.find_by_id(101)
+    entry.entry_type = "projection_tombstone"
+    entry.entry_status = "deleting"
+    await async_db_session.commit()
+    service = _service(async_db_session, finalizer=AsyncMock(side_effect=RuntimeError("FGA unavailable")))
+    service.max_retry_attempts = 2
+    now = datetime.now()
+    for attempt in range(2):
+        with pytest.raises(RuntimeError, match="FGA unavailable"):
+            await service.process_entry(tenant_id=7, entry_id=101, lease_owner=f"failure-{attempt}", now=now)
+        failed = await repo.find_by_id(101)
+        assert failed.projection_status == "failed"
+        assert failed.projection_retry_count == attempt + 1
+        assert "FGA unavailable" in failed.projection_last_error
+        assert failed.projection_next_retry_at > now
+        assert failed.projection_lease_owner is None
+        now = failed.projection_next_retry_at + timedelta(seconds=1)
+    assert 101 not in await service.list_due_entry_ids(now=now)
+
+
+@pytest.mark.asyncio
+async def test_cleanup_generation_change_does_not_finalize_newer_work(async_db_session):
+    await _seed_entries(async_db_session)
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repo.find_by_id(101)
+    entry.entry_status = "deleting"
+    await async_db_session.commit()
+
+    async def advance(*args):
+        current = await repo.find_by_id(101)
+        current.desired_entry_generation += 1
+        await async_db_session.commit()
+
+    finalizer = AsyncMock()
+    result = await _service(async_db_session, cleaner=AsyncMock(side_effect=advance), finalizer=finalizer).process_entry(
+        tenant_id=7, entry_id=101, lease_owner="old-cleanup",
+    )
+    assert result.status == "stale"
+    finalizer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_aged_reconcile_cursor_reaches_entries_after_first_page(async_db_session):
+    old = datetime.now() - timedelta(hours=1)
+    for i in range(101):
+        async_db_session.add(KnowledgeFile(
+            id=1000+i, tenant_id=7, knowledge_id=3637, file_name="cleanup.doc",
+            reference_document_id=1000+i, entry_type="projection_tombstone",
+            entry_status="deleting" if i < 100 else "preparing",
+            projection_status="failed", projection_retry_count=8, update_time=old,
+        ))
+    await async_db_session.commit()
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    first = await repo.find_permission_reconcile_candidates(older_than=old, limit=100)
+    second = await repo.find_permission_reconcile_candidates(older_than=old, limit=100, after_id=first[-1].id)
+    assert [row.id for row in second] == [1100]
+
+
+@pytest.mark.asyncio
+async def test_crash_after_projection_commit_can_resume_after_lease_expiry(async_db_session):
+    import asyncio
+
+    await _seed_entries(async_db_session)
+    repo = KnowledgeFileRepositoryImpl(async_db_session)
+    row = await repo.find_by_id(101)
+    row.entry_status = "deleting"
+    await async_db_session.commit()
+    finalizer = AsyncMock(side_effect=asyncio.CancelledError())
+    service = _service(async_db_session, finalizer=finalizer)
+    now = datetime.now()
+    with pytest.raises(asyncio.CancelledError):
+        await service.process_entry(tenant_id=7, entry_id=101, lease_owner="crashed", now=now)
+    row = await repo.find_by_id(101)
+    assert row.projection_lease_owner == "crashed"
+    assert row.projection_status == "ready"
+    assert (await service.process_entry(tenant_id=7, entry_id=101, lease_owner="too-early", now=now)).status == "not_claimed"
+    finalizer.side_effect = None
+    result = await service.process_entry(tenant_id=7, entry_id=101, lease_owner="resumed", now=now + timedelta(seconds=31))
+    assert result.status == "cleaned"
+
+
+@pytest.mark.asyncio
+async def test_missing_canonical_document_consumes_bounded_retry(async_db_session):
+    await _seed_entries(async_db_session)
+    service = _service(async_db_session)
+    service.document_repository = AsyncMock()
+    service.document_repository.find_by_id.return_value = None
+    service.version_repository = AsyncMock()
+    with pytest.raises(KnowledgeDocumentProjectionError, match="canonical document is unavailable"):
+        await service.process_entry(tenant_id=7, entry_id=101, lease_owner="missing-canonical")
+    row = await service.file_repository.find_by_id(101)
+    assert row.projection_status == "failed"
+    assert row.projection_retry_count == 1

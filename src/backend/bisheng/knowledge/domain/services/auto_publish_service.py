@@ -102,6 +102,7 @@ class AutoPublishService:
             rules,
             source_space_id=int(db_file.knowledge_id),
             file_category_code=file_category_code,
+            file_subcategory_code=file_subcategory_code,
         )
         if matched_rule is None:
             logger.debug(

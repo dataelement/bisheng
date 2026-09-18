@@ -88,6 +88,7 @@ interface KnowledgeSpaceContentProps {
     hasMore: boolean;
     onPageChange: (page: number) => void;
     loading: boolean;
+    listError?: ReactNode;
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
@@ -164,6 +165,7 @@ export function KnowledgeSpaceContent({
     hasMore,
     onPageChange,
     loading,
+    listError,
     onSearch,
     onFilterStatus,
     onSort,
@@ -1730,7 +1732,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
-                totalFileCount={totalFileCount}
+                totalFileCount={listError ? null : totalFileCount}
             />
             </div>
 
@@ -1757,7 +1759,11 @@ export function KnowledgeSpaceContent({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    {loading && displayFiles.length === 0 ? (
+                    {listError ? (
+                        <div role="alert" className="flex h-full flex-1 flex-col items-center justify-center gap-3 py-10 text-center text-[#4E5969]">
+                            {listError}
+                        </div>
+                    ) : loading && displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 items-center justify-center py-10 text-[#86909C]">
                             <Loader2 className="mr-2 size-4 animate-spin" />
                             <span className="text-[14px] leading-6">{localize("com_knowledge.loading")}</span>
