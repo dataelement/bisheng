@@ -114,6 +114,33 @@ export function SkillCenterPage() {
     />
   );
 
+  // 我的 view's tools, in the module homes' shared order: search, sort, then create.
+  const mineTools = (
+    <>
+      {searchInput}
+      <DropdownMenu>
+        <Tooltip content={localize('com_skill_center_sort')}>
+          <DropdownMenuTrigger asChild>
+            <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
+              <Outlined.Sort />
+            </Button>
+          </DropdownMenuTrigger>
+        </Tooltip>
+        <ActionMenuContent>
+          <ActionMenuCheckboxItem checked={sort === 'recent'} onCheckedChange={() => setSort('recent')}>
+            {localize('com_skill_center_sort_recent')}
+          </ActionMenuCheckboxItem>
+          <ActionMenuCheckboxItem checked={sort === 'name'} onCheckedChange={() => setSort('name')}>
+            {localize('com_skill_center_sort_name')}
+          </ActionMenuCheckboxItem>
+        </ActionMenuContent>
+      </DropdownMenu>
+      <Button disabled={!identity.data || identity.isError} onClick={handleStartUpload} className="max-[575px]:w-full">
+        <Outlined.Plus />{localize('com_skill_center_upload')}
+      </Button>
+    </>
+  );
+
   const emptyKind = keyword ? 'search' : failed ? 'failed' : view;
   const content = (
     <>
@@ -165,33 +192,14 @@ export function SkillCenterPage() {
       {view === 'mine' ? (
         <div className={cn(MODULE_HOME_FRAME, 'max-md:px-4 max-md:pt-0')}>
           {mobileTabs}
-          {/* Mobile shows the module title in the top bar instead. */}
+          {/* Desktop: the shared header row — switchers left, tools right (create last). */}
           <div className="flex w-full justify-center max-md:hidden">
-            <ModuleHomeHeader module="skills" title={localize('com_skill_center_title')} />
+            <ModuleHomeHeader title={localize('com_skill_center_title')}>{mineTools}</ModuleHomeHeader>
           </div>
           <div className={cn(MODULE_HOME_COLUMN, 'mt-4 flex shrink-0 flex-wrap items-center gap-3')}>
             <p className="min-w-0 flex-1 truncate text-body-sm text-text-3 max-[575px]:basis-full">{localize('com_skill_center_subtitle')}</p>
-            {searchInput}
-            <DropdownMenu>
-              <Tooltip content={localize('com_skill_center_sort')}>
-                <DropdownMenuTrigger asChild>
-                  <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
-                    <Outlined.Sort />
-                  </Button>
-                </DropdownMenuTrigger>
-              </Tooltip>
-              <ActionMenuContent>
-                <ActionMenuCheckboxItem checked={sort === 'recent'} onCheckedChange={() => setSort('recent')}>
-                  {localize('com_skill_center_sort_recent')}
-                </ActionMenuCheckboxItem>
-                <ActionMenuCheckboxItem checked={sort === 'name'} onCheckedChange={() => setSort('name')}>
-                  {localize('com_skill_center_sort_name')}
-                </ActionMenuCheckboxItem>
-              </ActionMenuContent>
-            </DropdownMenu>
-            <Button disabled={!identity.data || identity.isError} onClick={handleStartUpload} className="max-[575px]:w-full">
-              <Outlined.Plus />{localize('com_skill_center_upload')}
-            </Button>
+            {/* Mobile has no header row (the top bar carries the title), so the tools stay in flow. */}
+            <div className="contents md:hidden">{mineTools}</div>
           </div>
           {/* The scroll area spans the full width so its scrollbar sits at the page edge. */}
           <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">

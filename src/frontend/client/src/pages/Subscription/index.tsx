@@ -513,7 +513,7 @@ export default function Subscription() {
                     // row). Inside a channel the header is the article list's own: keep the
                     // switcher where that layout expects it, clear of the detail pane.
                     style={activeChannel && !showChannelSquare
-                        ? { right: `${detailPaneWidth + 40}px`, top: 22 }
+                        ? { left: "auto", right: `${detailPaneWidth + 40}px`, top: 22 }
                         : undefined}
                 />
             ) : null}

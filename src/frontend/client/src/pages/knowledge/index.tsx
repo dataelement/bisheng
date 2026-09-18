@@ -923,7 +923,7 @@ export default function Knowledge() {
                 /* PC empty state when the user has no space at all — the 我的 frame (title +
                    switcher) stays, with the illustration + two actions centered below it. */
                 <div className={MODULE_HOME_FRAME}>
-                <ModuleHomeHeader module="knowledge" title={menuNames.knowledge} />
+                <ModuleHomeHeader title={menuNames.knowledge} />
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     <EmptyStateIllustration className="size-[120px]" />
                     <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
