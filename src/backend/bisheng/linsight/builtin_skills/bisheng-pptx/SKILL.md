@@ -4,14 +4,14 @@ description: >-
   制作 PowerPoint 演示文稿（.pptx）时使用：从零创建企业介绍、工作汇报、项目方案、产品发布、培训课件等幻灯片；
   按用户提供的模板（.pptx/.potx）套版生成；读取或改写已有 PPT。当用户说到「PPT」「幻灯片」「演示文稿」「汇报材料」
   「宣讲材料」「课件」「deck」「slides」「pptx」，或提出「做一个介绍 X 的 PPT」「按这个模板做一版」
-  「把这份材料做成 PPT」时触发。本技能给出 BiSheng 代码执行器里可行的 python-pptx 生成路径，
+  「把这份材料做成 PPT」时触发。本技能给出当前代码执行器里可行的 python-pptx 生成路径，
   以及中文排版规范、模板套用方法、交付前自检脚本。
   如果用户明确要的是网页翻页式 HTML 演示而不是 .pptx 文件，不要用本技能。
 metadata:
-  display-name: PPT 制作（BiSheng 适配）
+  display-name: PPT 制作
 ---
 
-# 在 BiSheng 里做 PPTX
+# 制作 PPTX
 
 ## 0. 开工纪律
 
@@ -157,7 +157,7 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 **可选 · 看渲染图**：
 
 > ⚠️ 仅在你确知当前模型支持读图时才做。渲染出的 PNG 会被编成真正的 base64 图片块发给模型厂商，
-> 而 BiSheng 默认的 Qwen/dashscope 通道**已知不接收 base64 图片** —— 读图很可能直接失败，
+> 而平台默认的 Qwen/dashscope 通道**已知不接收 base64 图片** —— 读图很可能直接失败，
 > 甚至中断本次请求。拿不准就跳过，以体检结果为准。
 
 ```python
