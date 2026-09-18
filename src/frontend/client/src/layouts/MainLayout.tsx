@@ -9,7 +9,6 @@ import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
-import { ModuleHubSwitcher } from '~/components/ModuleHome';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
@@ -221,11 +220,15 @@ export default function MainLayout() {
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
   const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
+  const isSquareRoute = /^\/square(\/|$)/.test(pathname);
+  /** Pages that read their view from the query string: a page react-activation froze keeps
+   *  its old router context, so they are mounted fresh instead of cached. */
+  const isQueryDrivenRoute = isSkillsRoute || isSquareRoute;
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute || isSkillsRoute);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute || isQueryDrivenRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -410,7 +413,7 @@ export default function MainLayout() {
             className="absolute inset-0 z-[60] cursor-default bg-transparent"
           />
         ) : null}
-        {isMenuUnavailableRoute || isSkillsRoute ? (
+        {isMenuUnavailableRoute || isQueryDrivenRoute ? (
           // Bypass KeepAlive for menu-unavailable: always mount fresh so
           // useEffect fires on every navigation and re-checks pending status.
           // 技能 bypasses it too: a page react-activation froze keeps its old router
@@ -422,8 +425,8 @@ export default function MainLayout() {
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-3xl',
-              // 技能 is a fixed-height shell that scrolls inside the page, like the other module homes.
-              isSkillsRoute
+              // 技能 / 广场 are fixed-height shells that scroll inside the page, like the module homes.
+              isQueryDrivenRoute
                 ? 'h-[100dvh] min-h-0 overflow-hidden overscroll-y-none'
                 : isMobile
                   ? 'h-auto min-h-[100dvh] overflow-visible'
@@ -444,16 +447,16 @@ export default function MainLayout() {
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
-                  {isSkillsRoute ? (
+                  {isQueryDrivenRoute ? (
                     <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
-                      {localize('com_skill_center_title')}
+                      {localize(isSquareRoute ? 'com_workbench_sidebar.square' : 'com_skill_center_title')}
                     </span>
                   ) : null}
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>
               </div>
             ) : null}
-            {isSkillsRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
+            {isQueryDrivenRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
           </div>
         ) : (
         <KeepAlive
@@ -522,9 +525,6 @@ export default function MainLayout() {
           </div>
         </KeepAlive>
         )}
-        {/* One instance for every module home, outside the per-module KeepAlive trees, so
-            switching between sibling modules slides its thumb. Desktop only. */}
-        {!isMobile && <ModuleHubSwitcher />}
       </main>
       <Dialog
         open={!!systemNotice}

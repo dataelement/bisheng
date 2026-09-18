@@ -9,13 +9,8 @@ import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
 export type WorkbenchNavSection = 'home' | 'apps' | 'channel' | 'knowledge' | 'skills';
 
-/** Desktop sidebar groups: 知识资讯 (content to read and ask about) / 智能拓展 (things that do work). */
-export type WorkbenchHubId = 'knowledge' | 'ability';
-
 export interface WorkbenchNavLink {
   section: WorkbenchNavSection;
-  /** Hub the desktop sidebar folds this module into; 首页 stands alone. */
-  hub?: WorkbenchHubId;
   /** Backend `web_menu` key that grants this module. */
   plugin: string;
   to: string;
@@ -104,7 +99,6 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
       },
       {
         section: 'knowledge',
-        hub: 'knowledge',
         plugin: 'knowledge_space',
         // List-page-first on every shell: the menu always opens the module home
         // (/knowledge), never the last-visited space.
@@ -117,7 +111,6 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
       },
       {
         section: 'channel',
-        hub: 'knowledge',
         plugin: 'subscription',
         // Desktop opens the module home, like 知识空间; mobile has no channel home and
         // keeps restoring the last-visited channel.
@@ -130,7 +123,6 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
       },
       {
         section: 'apps',
-        hub: 'ability',
         plugin: 'apps',
         to: target('apps', appsSectionLinkTarget()),
         icon: <Outlined.Application />,
@@ -146,7 +138,6 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
         // 技能 has no menu key of its own yet: it rides on 首页's grant, behind the
         // deployment's preview switch.
         section: 'skills',
-        hub: 'ability',
         plugin: 'home',
         to: target('home', skillCenterPath),
         icon: <Outlined.Newspaper />,

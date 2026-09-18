@@ -26,12 +26,13 @@ import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import { canReadChannelContent } from "./channelContentAccess";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
+import { Button, Tooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
-import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
+import { subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
-import { ModuleViewTabs } from "~/components/ModuleHome";
+import { squareTypePath } from "~/pages/square/squarePaths";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
     const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
@@ -84,9 +85,6 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
-    // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
-    // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
-    const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
     // True while the H5 channel-switcher dropdown is open — greys out the persistent
     // 频道/广场 tab, matching the header's left/right action buttons.
     const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
@@ -471,8 +469,11 @@ export default function Subscription() {
     };
 
     // Channel square
+    // Desktop discovers channels in the sidebar's 广场 (~/pages/square). The in-page square
+    // remains for mobile and for the deep links that open it (`?square=1`).
     const handleChannelSquare = () => {
-        setShowChannelSquare(true);
+        if (isH5) setShowChannelSquare(true);
+        else navigate(squareTypePath("channel"));
     };
 
     // Esc to exit full screen
@@ -501,21 +502,23 @@ export default function Subscription() {
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
-            {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
-                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。
-                覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
-                加载中（channelsResolving 且非广场）暂不显示。 */}
-            {!isH5 && (showChannelSquare || !channelsResolving) ? (
-                <ModuleViewTabs
-                    active={showChannelSquare ? "square" : "mine"}
-                    onChange={(view) => (view === "square" ? handleChannelSquare() : handleSquareBack())}
-                    // 我的 home and 广场 use the shared spot (column's right edge, on the title
-                    // row). Inside a channel the header is the article list's own: keep the
-                    // switcher where that layout expects it, clear of the detail pane.
-                    style={activeChannel && !showChannelSquare
-                        ? { left: "auto", right: `${detailPaneWidth + 40}px`, top: 22 }
-                        : undefined}
-                />
+            {/* PC：`?square=1` 深链仍会在本页打开广场（分享链接失效等场景）；广场的常规入口已移到
+                侧栏「广场」，这里只留一个返回键作为出口。 */}
+            {!isH5 && showChannelSquare ? (
+                <div className="absolute left-4 top-4 z-20">
+                    <Tooltip content={localize("com_ui_go_back")}>
+                        <Button
+                            color="default"
+                            variant="outlined"
+                            size="small"
+                            iconOnly
+                            aria-label={localize("com_ui_go_back")}
+                            onClick={handleSquareBack}
+                        >
+                            <Outlined.ArrowLeft />
+                        </Button>
+                    </Tooltip>
+                </div>
             ) : null}
             {/* H5：同一个切换器常驻在两个视图之上（不随 showChannelSquare 卸载），
                 所以频道⇄广场切换时蓝色下划线平滑滑动。各视图头部不再各自渲染切换器，

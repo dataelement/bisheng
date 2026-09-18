@@ -3,7 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
 import { cloneElement, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
+import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
@@ -11,12 +11,12 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from '../UserPopMenu';
-import { useWorkbenchHubs } from '../useWorkbenchHubs';
 import { useWorkbenchNavLinks } from '../useWorkbenchNavLinks';
 import { SidebarConversationList } from './SidebarConversationList';
 import { SidebarCustomizeDialog } from './SidebarCustomizeDialog';
 import { SidebarProjects } from './SidebarProjects';
 import { useSidebarPrefs } from './sidebarPrefs';
+import { splitSidebarEntries, useSidebarEntries } from './useSidebarEntries';
 
 /** Shown next to the logo when the admin has not configured a 首页 display name. */
 const DEFAULT_BRAND_NAME = 'BISHENG';
@@ -24,9 +24,6 @@ const DEFAULT_BRAND_NAME = 'BISHENG';
 const BRAND_LINK = 'flex h-8 min-w-0 items-center gap-2.5';
 
 const NAV_ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-body text-text-1 transition-colors hover:bg-fill-1';
-
-/** One row of the module area: a hub, or a module standing on its own. */
-type SidebarEntry = { key: string; to: string; icon: ReactNode; label: string; active: boolean };
 
 interface SidebarNavRowProps {
   to: string;
@@ -50,10 +47,9 @@ function SidebarNavRow({ to, icon, label, active = false, onClick }: SidebarNavR
  * the conversation list and the account row, present on every workbench page.
  * Mobile keeps its own rail / drawers — see MainLayout.
  *
- * The module area shows hubs, not modules: 知识空间 + 频道 fold into 知识资讯, 应用 + 技能
- * into 智能拓展 (the module homes carry the switcher between siblings). What shows is the
- * user's call — 自定义侧栏 (in the always-present 更多 row) hides a hub, which moves
- * under 更多, or pins a single module.
+ * The module area lists the modules the account may open — what the user HAS — then 广场,
+ * what they can discover across all of them. The nav shows at most four rows, 新建对话
+ * included; the rest, and the entries the user hid in 管理侧边栏, are reached through 更多.
  */
 interface WorkbenchSidebarProps {
   /** Keep it mounted but out of layout (设置 swaps its own nav into this slot), so the
@@ -67,32 +63,13 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   const { data: bsConfig } = useGetBsConfig();
   const navigate = useNavigate();
   const { links, showAdminEntry } = useWorkbenchNavLinks();
-  const hubs = useWorkbenchHubs();
+  const allEntries = useSidebarEntries();
   const prefs = useSidebarPrefs();
   const startNewChat = useStartNewChat();
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const homeLink = links.find((link) => link.section === 'home');
-
-  const entries: SidebarEntry[] = [];
-  const moreEntries: SidebarEntry[] = [];
-  hubs.forEach((hub) => {
-    // A hub with one granted module is that module: its name, its icon, nothing to pin.
-    const single = hub.modules.length === 1 ? hub.modules[0] : null;
-    const pinned = single ? [] : hub.modules.filter((link) => prefs.pinnedModules.includes(link.section));
-    const hubEntry: SidebarEntry = {
-      key: `hub-${hub.id}`,
-      to: hub.landing.to,
-      icon: single ? single.icon : hub.icon,
-      label: single ? single.label : hub.label,
-      // A pinned module carries its own highlight; the hub lights up for the rest.
-      active: hub.activeModule !== undefined && !pinned.includes(hub.activeModule),
-    };
-    (prefs.hiddenHubs.includes(hub.id) ? moreEntries : entries).push(hubEntry);
-    pinned.forEach((link) => {
-      entries.push({ key: link.section, to: link.to, icon: link.icon, label: link.label, active: link.isActive });
-    });
-  });
+  const { shown: entries, more: moreEntries } = splitSidebarEntries(allEntries, prefs, homeLink !== undefined);
   const moreActive = moreEntries.some((entry) => entry.active);
   const brandName = bsConfig?.homeMenuDisplayName?.trim() || DEFAULT_BRAND_NAME;
   const logoSrc = bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : '';
@@ -152,7 +129,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
         )}
         {entries.map((entry) => (
           <SidebarNavRow
-            key={entry.key}
+            key={entry.id}
             to={entry.to}
             icon={entry.icon}
             label={entry.label}
@@ -160,8 +137,9 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
             onClick={handleSamePathClick(entry.to)}
           />
         ))}
-        {/* Always there: it holds the hidden hubs and is the way into 自定义侧栏. */}
-        {hubs.length > 0 && (
+        {/* The area's last row: 更多 while something is tucked away (管理侧边栏 is its last
+            item), else 管理侧边栏 itself. */}
+        {moreEntries.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -175,7 +153,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
             <ActionMenuContent align="start" width={216}>
               {moreEntries.map((entry) => (
                 <ActionMenuItem
-                  key={entry.key}
+                  key={entry.id}
                   icon={entry.icon}
                   label={entry.label}
                   onSelect={() => {
@@ -183,7 +161,9 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
                   }}
                 />
               ))}
-              {moreEntries.length > 0 && <ActionMenuDivider />}
+              {/* A hairline like the sidebar's own rules — the shared 1px ActionMenuDivider reads
+                  too heavy in this short menu. */}
+              <div role="separator" className="my-1.5 border-t-[0.5px] border-border-base" />
               <ActionMenuItem
                 icon={<Outlined.Setting />}
                 label={localize('com_workbench_sidebar.customize')}
@@ -191,7 +171,12 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
               />
             </ActionMenuContent>
           </DropdownMenu>
-        )}
+        ) : allEntries.length > 0 ? (
+          <button type="button" onClick={() => setCustomizeOpen(true)} className={NAV_ROW}>
+            <Outlined.Setting className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate py-px">{localize('com_workbench_sidebar.customize')}</span>
+          </button>
+        ) : null}
       </nav>
 
       {homeLink && homeGranted ? (
@@ -201,7 +186,9 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
       )}
 
       <div className="h-px w-full shrink-0 bg-border-base" />
-      <div className="flex w-full shrink-0 items-center justify-between gap-2 rounded-lg px-2 py-1">
+      {/* Two controls, one row chrome: both 32px tall with the nav rows' 8px radius and
+          fill-1 hover — the account button stretches, the admin link is the 32px square. */}
+      <div className="flex w-full shrink-0 items-center justify-between gap-1">
         <UserPopMenu variant="sidebar" />
         {showAdminEntry && (
           <Tooltip content={localize('com_nav_admin_panel')}>
@@ -210,7 +197,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
               target="_blank"
               rel="noreferrer"
               aria-label={localize('com_nav_admin_panel')}
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-text-1 transition-colors hover:bg-fill-2"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg text-text-1 outline-none transition-colors hover:bg-fill-1 focus-visible:bg-fill-1"
             >
               <Outlined.DeviceDesktopExchange className="size-4" />
             </a>

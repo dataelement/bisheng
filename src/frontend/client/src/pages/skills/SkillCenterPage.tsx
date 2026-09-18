@@ -1,19 +1,18 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
 import { Button, SearchInput, StateView, Tabs, Tooltip } from '@bisheng/ui';
 import { NotificationSeverity } from '~/common';
 import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
-import {
-  MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader, ModuleViewTabs, type ModuleView,
-} from '~/components/ModuleHome';
+import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
 import type { CenterSkill, PersonalSkill } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
-import { useLocalize } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { isDemoId } from '~/mock/demo/ids';
+import { squareTypePath } from '~/pages/square/squarePaths';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
@@ -25,13 +24,17 @@ import { SkillSquareBanner } from './SkillSquareBanner';
  *   我的  — every skill this account can use, as one list in two groups: what the user
  *           uploaded (a switch per row; update / delete in the details) and what the
  *           enterprise provides (always on).
- *   广场  — 技能广场: the enterprise skills as a card showcase, read-only.
+ *   广场  — 技能广场: the enterprise skills as a card showcase, read-only. MOBILE ONLY here:
+ *           desktop has it in the sidebar's 广场 (~/pages/square) and is redirected there.
  * The view and the open detail live in the URL (`?view=square`, `?skill=<id>`) so the
  * chat input's skill menu can deep-link here.
  */
+type ModuleView = 'mine' | 'square';
+
 export function SkillCenterPage() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
+  const isMobile = usePrefersMobileLayout();
   const { identity, platform, personal, mutation } = useSkillCenter();
   const [search, setSearch] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -101,7 +104,7 @@ export function SkillCenterPage() {
     />
   );
 
-  // Mobile has no floating switcher (see ModuleViewTabs); each view carries these tabs in flow.
+  // Mobile switches 我的技能 / 技能广场 with these in-flow tabs; desktop has no square here.
   const mobileTabs = (
     <Tabs
       className="w-full shrink-0 md:hidden"
@@ -185,10 +188,14 @@ export function SkillCenterPage() {
     </>
   );
 
+  // Old desktop deep links (`/skills?view=square[&skill=…]`) land in 广场's skills tab.
+  if (!isMobile && view === 'square') {
+    const skillId = params.get('skill');
+    return <Navigate to={`${squareTypePath('skills')}${skillId ? `&skill=${encodeURIComponent(skillId)}` : ''}`} replace />;
+  }
+
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-white">
-      {/* Rendered once above both views so switching slides one indicator. */}
-      <ModuleViewTabs className="max-md:hidden" active={view} onChange={handleViewChange} />
       {view === 'mine' ? (
         <div className={cn(MODULE_HOME_FRAME, 'max-md:px-4 max-md:pt-0')}>
           {mobileTabs}
