@@ -1,4 +1,4 @@
-# python-pptx 配方（BiSheng 环境）
+# python-pptx 配方
 
 可直接抄进 `scratch/build_deck.py`。所有片段只依赖 `python-pptx`，
 需要 XML 的几处统一走本技能包的 `pptx_helpers`。
