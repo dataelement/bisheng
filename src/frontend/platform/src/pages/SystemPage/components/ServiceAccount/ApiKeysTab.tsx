@@ -11,8 +11,15 @@ import {
 } from "@/components/bs-ui/table"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
+  Portal,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/bs-ui/tooltip"
+import {
   listOpenApiScopesApi,
-  listServiceAccountKeysApi,
+  listServiceAccountKeysPageApi,
   revokeAllServiceAccountKeysApi,
   revokeServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount"
@@ -23,9 +30,10 @@ import type {
   OpenApiScopeItem,
 } from "@/types/api/openApi"
 import { formatIsoDateTime } from "@/util/utils"
-import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
 import { KeyIssueDialog } from "./KeyIssueDialog"
 import { KeyRevealDialog } from "./KeyRevealDialog"
 
@@ -43,36 +51,29 @@ export function ApiKeysTab({
   onKeysChanged,
 }: ApiKeysTabProps) {
   const { t } = useTranslation()
-  const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [scopes, setScopes] = useState<OpenApiScopeItem[]>([])
   const [dialogOpen, setDialogOpen] = useState(initialIssueOpen)
   const [editingKey, setEditingKey] = useState<ApiKeyItem | null>(null)
   const [issuedKey, setIssuedKey] = useState<ApiKeyIssued | null>(null)
   const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
   const [loadingScopes, setLoadingScopes] = useState(true)
 
-  const loadKeys = useCallback(async () => {
-    setLoadingData(true)
-    try {
-      const rows = await captureAndAlertRequestErrorHoc(
-        listServiceAccountKeysApi(serviceAccountId),
-      )
-      if (rows) setKeys(rows)
-    } finally {
-      setLoadingData(false)
-    }
-  }, [serviceAccountId])
+  const fetchPage = useCallback((page: number, pageSize: number) =>
+    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }),
+  [serviceAccountId])
+  const list = useOpenApiList(fetchPage)
+  const keys = list.items
+  const loadKeys = list.reload
+  const loadingData = list.initialLoading
 
   useEffect(() => {
-    void loadKeys()
     setLoadingScopes(true)
     void captureAndAlertRequestErrorHoc(listOpenApiScopesApi())
       .then((catalog) => {
         if (catalog) setScopes(catalog.scopes)
       })
       .finally(() => setLoadingScopes(false))
-  }, [loadKeys])
+  }, [])
 
   const handleRevoke = (keyId: number) => {
     bsConfirm({
@@ -144,7 +145,7 @@ export function ApiKeysTab({
     return (
       <div className="flex flex-wrap gap-1">
         {key.scopes.map((code) => (
-          <span key={code} className="rounded bg-muted px-1.5 py-0.5 text-xs">
+          <span key={code} className="max-w-full break-words rounded bg-muted px-1.5 py-0.5 text-xs">
             {t(
               scopeLabelKeys.get(code) ||
                 `openApiManagement.scopes.${code.replace(":", "_")}.label`,
@@ -155,12 +156,39 @@ export function ApiKeysTab({
     )
   }
 
+  const renderDelegateScopes = (key: ApiKeyItem) => {
+    const names = key.delegate_scopes.map((scope) => {
+      const name = scope.subject_name || `${scope.subject_type}:${scope.subject_id}`
+      return scope.subject_type === "department"
+        ? t("openApiManagement.serviceAccount.departmentScope", { name })
+        : name
+    })
+    if (!names.length) return "-"
+
+    return (
+      <TooltipProvider delayDuration={100}>
+        <Tooltip>
+          <TooltipTrigger type="button" className="block w-full truncate text-left">
+            {names.join(", ")}
+          </TooltipTrigger>
+          <Portal>
+            <TooltipContent side="top" align="start" className="max-w-96">
+              <div className="max-h-64 overflow-y-auto whitespace-pre-line break-words text-left">
+                {names.join("\n")}
+              </div>
+            </TooltipContent>
+          </Portal>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"
-          disabled={loading || loadingData || !keys.some((key) => key.is_valid)}
+          disabled={loading || loadingData || !list.response?.active_count}
           onClick={handleRevokeAll}
         >
           {t("openApiManagement.actions.revokeAll")}
@@ -181,17 +209,17 @@ export function ApiKeysTab({
           {t("openApiManagement.keys.issue")}
         </Button>
       </div>
-      <Table>
+      <Table className="min-w-[1320px] table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead>{t("openApiManagement.fields.name")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.mask")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.permissions")}</TableHead>
-            <TableHead>{t("openApiManagement.keys.delegateScopes")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.lastUsed")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.expiresAt")}</TableHead>
-            <TableHead>{t("openApiManagement.fields.status")}</TableHead>
-            <TableHead className="text-right">{t("operations")}</TableHead>
+            <TableHead className="w-36">{t("openApiManagement.fields.name")}</TableHead>
+            <TableHead className="w-44">{t("openApiManagement.keys.mask")}</TableHead>
+            <TableHead className="w-48">{t("openApiManagement.keys.permissions")}</TableHead>
+            <TableHead className="w-56">{t("openApiManagement.keys.delegateScopes")}</TableHead>
+            <TableHead className="w-40">{t("openApiManagement.fields.lastUsed")}</TableHead>
+            <TableHead className="w-40">{t("openApiManagement.fields.expiresAt")}</TableHead>
+            <TableHead className="w-24">{t("openApiManagement.fields.status")}</TableHead>
+            <TableHead className="w-40 text-right">{t("operations")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -203,26 +231,12 @@ export function ApiKeysTab({
                 : "expired"
             return (
               <TableRow key={key.id}>
-                <TableCell>{key.name}</TableCell>
-                <TableCell>
+                <TableCell className="truncate" title={key.name}>{key.name}</TableCell>
+                <TableCell className="truncate">
                   <code>{key.key_mask}</code>
                 </TableCell>
-                <TableCell className="max-w-72">{renderScopes(key)}</TableCell>
-                <TableCell>
-                  {key.delegate_scopes
-                    .map((scope) => {
-                      const name =
-                        scope.subject_name ||
-                        `${scope.subject_type}:${scope.subject_id}`
-                      return scope.subject_type === "department"
-                        ? t(
-                            "openApiManagement.serviceAccount.departmentScope",
-                            { name },
-                          )
-                        : name
-                    })
-                    .join(", ") || "-"}
-                </TableCell>
+                <TableCell>{renderScopes(key)}</TableCell>
+                <TableCell>{renderDelegateScopes(key)}</TableCell>
                 <TableCell>
                   {key.last_used_at
                     ? formatIsoDateTime(key.last_used_at)
@@ -238,7 +252,7 @@ export function ApiKeysTab({
                     {t(`openApiManagement.status.${statusKey}`)}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="whitespace-nowrap text-right">
                   <Button
                     variant="link"
                     disabled={
@@ -265,17 +279,7 @@ export function ApiKeysTab({
               </TableRow>
             )
           })}
-          {loadingData ? (
-            <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center">
-                <Loader2
-                  aria-label={t("loading")}
-                  className="mx-auto size-5 animate-spin"
-                />
-              </TableCell>
-            </TableRow>
-          ) : null}
-          {!loadingData && !keys.length ? (
+          {list.isEmpty ? (
             <TableRow>
               <TableCell
                 colSpan={8}
@@ -287,6 +291,7 @@ export function ApiKeysTab({
           ) : null}
         </TableBody>
       </Table>
+      <OpenApiListFooter status={list.status} itemCount={keys.length} onLoadMore={list.loadMore} onRetry={list.retry} />
       <KeyIssueDialog
         serviceAccountId={serviceAccountId}
         scopes={scopes}

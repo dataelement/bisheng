@@ -342,7 +342,7 @@ async def list_space_children(
     order_field: str = "file_type",
     order_sort: str = "asc",
     file_status: list[int] = Query(default=None, description="文件状态列表"),
-    page_size: int = 20,
+    page_size: int = 40,
     cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "

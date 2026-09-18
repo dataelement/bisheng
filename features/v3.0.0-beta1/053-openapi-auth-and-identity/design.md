@@ -113,7 +113,7 @@
 | `/api/v2` 密钥面 | 系统集成、个人 Agent | `Authorization: Bearer bs-sak-… / bs-pat-…` | HTTP 401 `26001`；登录 JWT 不能替代 | **禁止回落** |
 | `/api/v3` 发布面 | 工作流 / 知识助手免登录访问者 | 无登录、无 API Key；由发布开关 + 资源状态准入 | 按 guest policy 返回 403 / 404 | **仅此面使用** |
 
-路由层必须物理分开：`router_rpc(prefix='/api/v2', dependencies=[verify_open_api_access])` 与 `router_public(prefix='/api/v3', dependencies=[verify_public_access])` 分别注册，不通过 path if/else 在同一个依赖里分流。
+路由层必须物理分开：`router_rpc(prefix='/api/v2', dependencies=[verify_open_api_access])` 与不挂凭据/身份头鉴权依赖的 `router_public(prefix='/api/v3')` 分别注册。v3 的资源发布准入仍由各端点调用的 guest policy 执行，不进入 v2 密钥依赖。
 
 ### 3.2 v2 密钥请求处理管线（HTTP / WebSocket 共用）
 
@@ -252,7 +252,7 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 ### 5.B 管理界面（platform）
 
-**B1：页面结构与交互。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。列表按服务端分页，展示状态、有效密钥数、委托范围摘要、资源归属人、最后调用、创建人和创建时间；零密钥、长期未调用和归属人失效均就地提示。创建账号的资源归属人使用组织用户选择器，禁止要求管理员填写 user id。启用、停用、创建、删除、签发、编辑、吊销、授权和撤权都必须在请求期间锁定触发按钮，成功给出 Toast，失败交给统一 request wrapper 展示。删除、单把/全部吊销、单项/全部撤权使用确认弹窗，并明确即时失效范围。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
+**B1：页面结构与交互。** 系统管理提供“服务账号”和“个人访问令牌”两个同级入口。服务账号详情含概览、API 密钥、资源授权；PAT 台账与开关不放进某个服务账号详情。列表按服务端分页，展示状态、有效密钥数、资源归属人、最后调用、创建人和创建时间；零密钥、长期未调用和归属人失效均就地提示。创建账号的资源归属人使用组织用户选择器，禁止要求管理员填写 user id。启用、停用、创建、删除、签发、编辑、吊销、授权和撤权都必须在请求期间锁定触发按钮，成功给出 Toast，失败交给统一 request wrapper 展示。删除、单把/全部吊销、单项/全部撤权使用确认弹窗，并明确即时失效范围。实现前以 `src/frontend/packages/ui/docs/` 当前规范和 landed 组件为准；platform 沿用自己的 Zustand、request wrapper 与 bs-ui，不混用 client 技术栈。
 
 **B2：密钥表单与列表。** 表单只有基本信息、权限位、委托配置三组，支持签发后编辑名称、有效期、权限位和委托范围并立即生效。委托用户和部门都支持多选、可混用，以可读名称回显；范围为空不能保存。原“网络”组及 IP 白名单 / 限流 / 日配额字段全部删除；`delegate` 与未部署的扩展位保持互斥。密钥列表展示掩码、权限位、委托范围、最后使用、有效期和有效/已过期/已吊销状态；明文仍只在签发后展示一次。
 
@@ -260,11 +260,17 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 **B4：API 访问文档。** `ApiAccess.tsx`、`ApiAccessFlow.tsx` 展示对接说明，恢复 F053 修改前的完整 `/api/v2` 文档，工作流事件说明抽到 `ApiWorkflowEvents.tsx`。该页面不属于免登录聊天的请求链路，不迁至 v3；v2 密钥鉴权继续生效，密钥使用说明见开放 API 文档。
 
+**B5：管理列表滚动加载（AC-R14）。** 服务账号、API 密钥、PAT 台账统一每页 20 条，使用 `useOpenApiList` 管理首次加载、追加、失败重试和结束状态；`OpenApiListFooter` 沿用知识广场的滚动祖先定位与尾部状态模式，提前 200px 触发。三个列表的滚动根节点显式占满标签页面板高度（`h-full`），避免父级 `overflow-hidden` 裁掉内容；尾部放在表格横向滚动容器之外。成功后才推进页码，按 ID 去重；请求代次隔离搜索/账号切换/刷新，锁防重复请求。失败保留已加载行、不自动重试、不重复弹 Toast；返回空页/重复页但 total 仍有剩余时进入可重试错误态。创建、编辑、吊销后从第一页重取。
+
+服务账号及 PAT 复用现有 `page/page_size` 接口。API 密钥新增只读 `GET /api/v1/service-accounts/{id}/keys/page`，参数 `page >= 1`、`1 <= page_size <= 100`（默认 20），返回 `PageData[KeyItem]` 加 `active_count`（该账号全量未撤销且未过期数量）。按 ID 倒序在数据库分页，仅补全当页委托信息；沿用管理员依赖、服务账号严格租户检查和数据库租户过滤。保留原 `/keys` 全量响应，避免影响资源授权页等现有调用方；全部吊销按钮读取全量 `active_count`，避免有效密钥不在首屏时被误禁用。不修改数据库表结构或 v2 鉴权。
+
 ### 5.C 身份传递、文件过滤与审计
 
 **C1：请求头与模式分流。** 管线只读取 `X-On-Behalf-Of` 与 `X-End-User`。旧品牌头即使单独出现也返回 400，错误信息指向新头，不做兼容别名，避免迁移期同一请求出现两个真相。OBO 值只接受用户 ID；End-User ≤128 字节且为可打印 ASCII。
 
 **C2：委托范围。** 使用独立表 `api_credential_delegate_scope`，支持 user / department 条目。编辑密钥去掉 `delegate` 时同事务清空范围。user 条目只需验证目标存在于 `User`、`delete=0` 且同租户活跃；服务账号不存在于 User，因此无需 `user_type` 判断。department 子树在调用期按物化路径展开。
+
+候选过滤与保存共用 `DelegateScopeService.filter_entries`：用户要求 `User.delete=0`、`UserTenant.status=active`、`is_active=1`，且当前归属租户等于服务账号租户；部门要求同租户、`status=active`、`is_deleted=0`。管理端先按原有权限加载可见候选，再通过 `POST /api/v1/service-accounts/{id}/delegate-candidates:filter` 批量取合法子集（请求/响应均为 `DelegateScopeInput[]`，只读，无新增存储）。该接口沿用服务账号管理员鉴权和账号可见性检查，租户取账号自身；仅签发/编辑密钥的委托选择器使用，用户的组织树浏览及姓名搜索、部门的逐层展开及搜索均过滤。保存仍重新校验，防止候选加载后用户/部门状态变化；过滤不改变多选数量、用户与部门混用及调用期特权主体限制。
 
 **C3：五道准入。** 依次检查：①凭据有 `delegate`；②目标 User 存在、启用、同租户；③目标不是超级管理员 / 租户管理员；④目标命中委托范围；⑤端点允许 D。失败分别落 `26004 / 26005 / 26007 / 26004 / 26006`。全部通过后，授权主体直接改为 `user:{target_id}`。PAT 携带 OBO 在检查 ① 前拒绝。
 
@@ -333,9 +339,11 @@ client: PersonalTokenDialog；guest 页面 apiVersion 切 v3
 
 `GET /assistant/list` 不是单个已发布资源所需能力，不进入 v3；它只保留 v2 密钥版本。
 
-**F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。任一 `X-On-Behalf-Of` / `X-End-User` 头均拒绝，防止匿名调用方伪造身份。
+**F2：guest policy。** v3 不校验 JWT 和 API Key，统一校验 `default_operator.enable_guest_access=true`、默认操作员存在且启用、目标工作流/助手处于可发布状态。初次定位资源允许在受控 bypass 中按 ID 查询，随后必须设置资源所属 tenant ContextVar 再进入业务 Service。按 2026-09-16 用户裁定，`X-On-Behalf-Of` / `X-End-User` 与 Authorization、API Key、登录 Cookie 一起忽略：既不读取为身份，也不因出现而拒绝。移除 v3 路由的身份头检查依赖。HTTP/WS 中间件对准确的 `/api/v3` 路径边界跳过调用方 JWT 解析和身份注入，避免旧登录态在 guest policy 前触发 19103/19104 或调用方租户错误；业务身份只来自默认操作员与发布资源。v2 的密钥验证和 v1 的登录检查保持独立。
 
 **F3：会话绑定。** v3 创建的会话标记 `api_subject_type='public_v3'`，并绑定资源 ID / 默认操作员；history、gen_title、WebSocket 停止和续聊都校验该来源与资源匹配。不得仅凭随机 chat_id 读取或停止其它 v1/v2 会话。
+
+**草稿兼容（2026-09-16）。** 前端先生成 `chat_id` 并查询历史，工作流会话随后才在 WebSocket 初始化时落库。`history` 必须先通过发布资源准入，再将尚不存在的会话返回为成功的 `data=[]`；已有会话继续执行来源、租户、资源和删除状态检查，不能把检查失败统一吞成空数组。`gen_title` 恢复旧 v2 的 5 秒后台生成等待：仍未落库时返回成功的 `{"title":"New Chat"}`，已落库则解析公开会话所属资源、经过发布准入和归属检查后返回标题。不存在会话的标题兜底只返回固定字符串，不读取资源数据。迁移前后各入口的其余差异见 [v3 旧行为兼容核对](v3-legacy-behavior-audit.md)。
 
 **F4：代码复用和切换。** v2/v3 endpoint 只做各自鉴权和 schema 适配，工作流/助手执行逻辑下沉到共享 domain service。client guest 模式 `apiVersion` 类型扩为 `v1 | v2 | v3` 且取 `v3`；platform 两个发布 API 访问页面恢复 F053 修改前的完整 v2 文档；商业网关中显式代理/拦截的 assistant、workflow、chat 路径同步增加 v3。现有分享链接代码、URL 参数与 header 不在此工作流修改。
 
@@ -391,11 +399,17 @@ v2 请求头只有：`Authorization: Bearer <key>`、`X-On-Behalf-Of: <user_id>`
 | v2 凭据 | 26001 缺少/非法密钥 · 26002 无效/撤销/过期 · 26003 缺权限位 · 26030 依赖不可用 · 26031 端点未登记 | 401 / 401 / 403 / 503 / 500 |
 | 身份传递 | 26004 未授予委托/不在范围 · 26005 委托目标无效 · 26006 端点不支持代表模式 · 26007 目标为特权主体 · 26010 身份头冲突 · 26016 持 delegate 漏头 · 26018 End-User 非法 · 26019 裸 `user_id` 或旧品牌头已移除 | 403 / 403 / 403 / 403 / 400 / 400 / 400 / 400 |
 | 日常模式 | 26015 异步未开放 · 26017 任务模式未开放 | 400 / 400 |
-| PAT | 26040 能力未开启 · 26041 权限位不在白名单 · 26042 有效期超上限 · 26043 持有人失效 | 403 / 400 / 400 / 401 |
+| PAT | 26040 能力未开启 · 26041 权限位不在白名单 · 26042 有效期超上限 · 26043 持有人失效 · 26044 数据范围受限 | 403 / 400 / 400 / 401 / 403 |
 | 管理面 | 26020 账号不存在 · 26021 归属人/委托目标无效 · 26022 禁止操作 · 26023 扩展位未部署 · 26024 委托配置无效 · 26025 未知权限位 · 26026 密钥不存在 · 26027 账号停用 · 26029 服务账号不能作为资源 owner | v1 信封 |
-| 预留 | 26008 / 26009 / 26011 / 26012 / 26013 / 26014 / 26028、26032～26039、26044～26049 | 不在本期复用 |
+| 预留 | 26008 / 26009 / 26011 / 26012 / 26013 / 26014 / 26028、26032～26039、26045～26049 | 不在本期复用 |
 
 三语文案只落 `src/frontend/packages/locales/src/api_errors/*.json`，生成物由脚本产生。
+
+**v2 返回路径约束（2026-09-15 PRD 校准）**：HTTP 错误统一由 `open_api/api/exception_handlers.py` 处理；响应体保留业务 `status_code`，HTTP 层独立映射。旧 `BaseErrorCode.http_exception()` 保留错误类型供 v2 映射，不能把五位业务码直接当 HTTP 状态。资源权限拒绝保留业务码并返回 403，权限评估失败（含枚举不完整、投影失败、Catalog 未就绪、模型不匹配）返回 503。服务账号停用/删除为 `26027/401`；PAT 持有人失效及对应级联撤销为 `26043/401`，普通撤销/过期仍为 `26002/401`。
+
+v2 不消费登录 JWT/Cookie 中间件的账号与租户拒绝结果；密钥校验前的服务账号查询在受控租户过滤旁路中执行，随后核对凭据租户。FastAPI 在依赖执行前解析 JSON/表单，解析异常须补跑不读取请求体的同一准入管线，确保缺密钥仍返回 `26001/401`；异常处理器不得重读已消费的请求流。`26015/26017` 仅解释日常聊天端点的能力参数。v1 沿用原异常处理器。详细审查与验证范围见 [返回码校准记录](error-status-review.md)。
+
+**上传解析参数校验（2026-09-17）**：`POST /api/v2/filelib/file/{knowledge_id}` 在 FastAPI 表单边界约束 `separator_rule` 每项仅为 `before/after`，`retain_images / force_ocr / enable_formula / filter_page_header_footer` 为 `0/1` 整数；省略参数保持原默认值。使用既有 v2 请求校验异常处理器返回 HTTP `400` 和字段错误，不允许非法值进入文件缓存、下载、处理或持久化 `split_rule`。校验对本地文件与 URL 来源一致，凭据和 scope 准入仍优先；本轮不修改同时传 `file` 与 `file_url` 时优先使用本地文件的既有行为，也不收紧 v1 共用模型。
 
 ### 6.4 数据契约
 
@@ -476,6 +490,9 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 | 16 | multipart 的废弃 `user_id` 不会进入 JSON 检查 | v2 全局依赖同时检查 query、JSON、multipart 和 urlencoded；出现即 400/26019，不能静默忽略 |
 | 17 | HTTP 内网地址不提供 `crypto.randomUUID()`；服务账号授权会在读取 `context` 后、发出写请求前抛错，弹窗无法保存关闭，修改与撤销同样受影响 | `resourceGrantUtils.createResourceGrantIdempotencyKey` 使用 HTTP 可用的 `crypto.getRandomValues()` 生成 128 位随机提交标识，新增、修改、撤销共用；此标识沿用 F048 授权变更契约，与本期排除的 v2 业务 API 幂等能力无关 |
 | 18 | 模型发布成功或 checksum 已一致，不代表旧资源已有 `service_account:*` 的模式和启用标记 | 模型发布脚本和完整对账脚本共用补齐逻辑；`already_current` 也必须写入并校验标记，失败不返回成功，不切换 Catalog；首次迁移覆盖两种主体的逐层标记 |
+| 19 | 用整块 `label` 包裹下拉按钮，会把标题及周边空白的点击转发给按钮，导致弹层外部点击关闭后又打开 | `KeyIssueDialog` 的委托用户、部门选择区域使用具名 `group` 容器，保留字段说明，仅选择器按钮触发展开 |
+| 20 | 新会话先查 history，后经 WebSocket 创建；gen_title 也可能早于后台落库完成 | v3 history 对不存在会话返回 `[]`，gen_title 在原有 5 秒等待后兜底 `New Chat`；保留已有会话归属检查，否则迁移后首次加载出现业务 404 |
+| 21 | 端点声明匿名并不能阻止全局中间件读取浏览器旧 Cookie/Bearer JWT；v3 仍可能提前返回 19103 | HTTP/WS 中间件跳过 v3 的浏览器身份，移除额外身份头拒绝；测试同时带凭据和身份头验证默认操作员不变，并验证 v1/v2 鉴权不退化 |
 
 ---
 
@@ -485,7 +502,7 @@ F048 的 Catalog active、模型 enabled、动作 active、grant level 以及资
 
 | 范围 | 关键用例 |
 |---|---|
-| 三面隔离 | v1 JWT 正常；v2 已登录但无 key 仍 401；v2 只有 key 可调用；v3 无 JWT/key 可访问已发布资源；v3 不接受身份传递头 |
+| 三面隔离 | v1 JWT 正常；v2 已登录但无 key 仍 401；v2 只有 key 可调用；v3 无论是否携带 JWT/key/身份头，均以默认操作员访问已发布资源 |
 | 独立 SA | 创建 SA 后 User/UserTenant 行数不变；两 SA id 与 user id 碰撞不串权；SA 无 admin shortcut；停用/删除 5 秒内失效 |
 | F048 | direct grant / revoke / create autogrant；owner 有权而 SA 无权仍拒；模式 D 不使用 SA grant |
 | 异步身份 | v2 SA / PAT / D 三类快照往返后 actor、tenant 不变；队列载荷无明文 key；worker 串行处理两个 tenant 后 ContextVar 不串；v3 快照不能进入 v2 分支 |
@@ -562,3 +579,6 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/v2/assistant/info/$ASSISTANT
 | 2026-09-08 | 同步 PRD v2.6：补齐服务账号 F048 技术标记与存量对账、主体侧资源选择弹窗、管理操作反馈、QA 所属知识库鉴权、知识空间列表 DTO、v2 HTTP/SSE 结果语义、multipart 废弃字段拒绝，以及 PAT 随持有人迁租户 | PRD 后续修订与验收问题 |
 | 2026-09-14 | 统一服务账号资源授权提交标识的生成方式，兼容 HTTP 内网访问，并覆盖授权、修改、撤销回归 | 测试环境保存授权时只发出 `context` 请求，`crypto.randomUUID()` 不可用导致前端中断 |
 | 2026-09-14 | 模型发布部署脚本复用服务账号存量资源标记补齐，覆盖模型不变和升级两条路径，并补充首次迁移逐层标记回归与显式维护部署说明 | 模型已更新而旧资源标记缺失，服务账号有空间授权但子目录文件列表为空 |
+| 2026-09-16 | 收紧签发和编辑 API 密钥时委托用户、部门选择器的触发区域 | 点击字段标题旁空白时，外层 `label` 的隐式激活导致下拉关闭后重新打开 |
+| 2026-09-16 | 恢复匿名聊天草稿的空历史、默认标题及标题等待行为，记录完整 v3 入口与旧 v2 的差异 | 105 新会话查询 history 返回业务 404，用户要求维持迁移前免登录链接行为 |
+| 2026-09-16 | v3 忽略调用方凭据和身份头，HTTP/WS 中间件跳过浏览器身份；v1/v2 鉴权保持 | 用户明确 v3 不参与 v2 密钥或身份传递判断；核对旧匿名 v2 后发现 v3 身份头拒绝及全局 JWT 干扰 |

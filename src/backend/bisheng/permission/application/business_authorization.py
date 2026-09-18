@@ -166,11 +166,23 @@ async def batch_check_business_actions(
         for offset in range(0, len(targets), _MAX_BATCH_CHECKS):
             batch_targets = tuple(targets[offset : offset + _MAX_BATCH_CHECKS])
             batch_ids = target_ids[offset : offset + _MAX_BATCH_CHECKS]
-            allowed = await runtime.batch_check_actions(
-                actor,
-                batch_targets,
-                action,
-            )
+            try:
+                allowed = await runtime.batch_check_actions(
+                    actor,
+                    batch_targets,
+                    action,
+                )
+            except InvalidCatalogActionError:
+                # The Catalog has this action switched off for the resource type,
+                # so nobody holds it. Asking "which actions does this caller have"
+                # must answer that by leaving the action out, the way an action the
+                # resolver already rejected above is left out. Raising instead
+                # turned one disabled action into a failure of the whole listing:
+                # every knowledge space detail returned 25001 the moment an admin
+                # disabled upload_file, and the client read that as a missing space.
+                # Executing the action still fails loudly - require_business_action
+                # and the single check keep the raise.
+                break
             for resource_id, is_allowed in zip(
                 batch_ids,
                 allowed,

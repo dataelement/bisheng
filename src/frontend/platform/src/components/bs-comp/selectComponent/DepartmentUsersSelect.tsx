@@ -10,6 +10,7 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
 import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -20,7 +21,7 @@ export type DepartmentUserOption = {
   value: number
   /** Login credential (external_id). Falls back to value (user_id) when absent. */
   external_id?: string | null
-  /** 选人时由组织树节点解析，供编辑页即时展示部门路径 */
+  /** Resolved from the organization tree for immediate display in edit forms. */
   department_path?: string
 }
 
@@ -39,6 +40,8 @@ interface DepartmentUsersSelectProps {
   rootDeptId?: number | null
   /** Optional message shown when the (sub)tree has no selectable members. */
   emptyMessage?: string
+  /** Keep only IDs accepted by the caller's save-time validation. */
+  filterUserIds?: (ids: number[], signal?: AbortSignal) => Promise<number[]>
 }
 
 type UserListItem = {
@@ -65,6 +68,7 @@ export default function DepartmentUsersSelect({
   className = "",
   rootDeptId,
   emptyMessage,
+  filterUserIds,
 }: DepartmentUsersSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -128,7 +132,12 @@ export default function DepartmentUsersSelect({
           label: u.user_name,
           external_id: u.person_id ?? null,
         }))
-        setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
+        const allowed = filterUserIds ? new Set(await filterUserIds(users.map((u) => u.value))) : null
+        setDeptUsersMap((prev) => ({ ...prev, [did]: allowed ? users.filter((u) => allowed.has(u.value)) : users }))
+      } catch (error) {
+        // Never expose unvalidated candidates or retry indefinitely from render.
+        setDeptUsersMap((prev) => ({ ...prev, [did]: [] }))
+        await captureAndAlertRequestErrorHoc(Promise.reject(error))
       } finally {
         setLoadingDeptIds((prev) => {
           const next = new Set(prev)
@@ -137,7 +146,7 @@ export default function DepartmentUsersSelect({
         })
       }
     },
-    [deptUsersMap, loadingDeptIds, rootDeptId],
+    [deptUsersMap, loadingDeptIds, rootDeptId, filterUserIds],
   )
 
   const runUserSearch = useCallback(async (q: string) => {
@@ -145,44 +154,49 @@ export default function DepartmentUsersSelect({
     const ac = new AbortController()
     searchAbortRef.current = ac
     setSearchingUsers(true)
+    setSearchedUsers([])
     try {
+      let users: UserListItem[]
       if (rootDeptId != null) {
         const res = await searchGlobalMembersApi(
           { keyword: q, page: 1, limit: 50, rootDeptId },
           { signal: ac.signal },
         )
-        if (!ac.signal.aborted) {
-          setSearchedUsers(
-            (res?.data || []).map((u) => ({
-              user_id: u.user_id,
-              user_name: u.user_name,
-              external_id: u.external_id,
-              department_path: u.primary_department_path,
-            })),
-          )
-        }
+        users = (res?.data || []).map((u) => ({
+          user_id: u.user_id,
+          user_name: u.user_name,
+          external_id: u.external_id,
+          department_path: u.primary_department_path,
+        }))
       } else {
         const res = await getUsersApi(
           { name: q, page: 1, pageSize: 200, withDepartmentPath: true },
           { signal: ac.signal },
         )
-        if (!ac.signal.aborted) setSearchedUsers((res?.data || []) as UserListItem[])
+        users = (res?.data || []) as UserListItem[]
       }
-    } catch {
-      // ignore abort / network
+      if (ac.signal.aborted) return
+      const allowed = filterUserIds
+        ? new Set(await filterUserIds(users.map((u) => u.user_id), ac.signal))
+        : null
+      if (!ac.signal.aborted) setSearchedUsers(allowed ? users.filter((u) => allowed.has(u.user_id)) : users)
+    } catch (error) {
+      if (!ac.signal.aborted) await captureAndAlertRequestErrorHoc(Promise.reject(error))
     } finally {
       if (!ac.signal.aborted) setSearchingUsers(false)
     }
-  }, [rootDeptId])
+  }, [rootDeptId, filterUserIds])
 
   const handleKeywordChange = (next: string) => {
     setKeyword(next)
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchAbortRef.current?.abort()
+    setSearchedUsers([])
     if (!next.trim()) {
-      setSearchedUsers([])
       setSearchingUsers(false)
       return
     }
+    setSearchingUsers(true)
     searchTimerRef.current = setTimeout(() => void runUserSearch(next.trim()), 300)
   }
 

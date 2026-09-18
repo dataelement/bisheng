@@ -174,7 +174,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
         } catch (e: any) {
             showToast({
                 message: e?.message || localize("com_subscription.article_load_failed"),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
             setHasMore(false);
         } finally {
@@ -219,7 +219,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 e?.response?.data?.status_message ||
                 e?.message ||
                 localize("com_subscription.subscribe_failed_retry");
-            showToast({ message: msg, severity: NotificationSeverity.ERROR });
+            showToast({ message: msg, severity: NotificationSeverity.WARNING });
         } finally {
             setSubscribing(false);
         }

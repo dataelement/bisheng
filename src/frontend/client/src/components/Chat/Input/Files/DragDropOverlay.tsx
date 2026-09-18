@@ -1,4 +1,7 @@
+import type { CSSProperties } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
 
 export const DragDropOverlayIcon = () => {
   return <svg
@@ -55,12 +58,16 @@ export const DragDropOverlayIcon = () => {
 export default function DragDropOverlay() {
   const localize = useLocalize();
 
+  // Frosted glass here is the sanctioned exception (single full-screen overlay,
+  // only while dragging) and is gated by the global switch — see ~/utils/frostedGlass.
+  // 4px matches the pre-removal look; the 85% fill does most of the work anyway.
   return (
     <div
-      className="bg-surface-primary/85 fixed inset-0 z-[9999] flex flex-col items-center justify-center
-        gap-2 text-text-primary transition-all duration-200
-        ease-in-out animate-in fade-in
-        zoom-in-95"
+      className={cn(
+        "bg-surface-primary/85 fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-2 text-text-primary transition-all duration-200 ease-in-out animate-in fade-in zoom-in-95",
+        FROSTED_GLASS_ENABLED && FROSTED_GLASS_CLASS,
+      )}
+      style={{ "--bs-frosted-glass-blur": "4px" } as CSSProperties}
     >
       <DragDropOverlayIcon />
       <h3>{localize('com_addAnything')}</h3>

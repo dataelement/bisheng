@@ -259,6 +259,27 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         liveStreams.set(streamKey(ownerId, to), stream);
     }, []);
 
+    /** Move a turn, and the view, onto the id the server just gave it.
+     *
+     *  Everything a turn owns is keyed by the conversation it started in, and
+     *  what the caller renders is the bucket of whichever id is current. So the
+     *  id can never move on its own: point the view at a fresh id without
+     *  carrying the bucket and the pane goes blank on content that is still
+     *  there, while the bucket left behind resurfaces the next time someone
+     *  opens a new chat. Both happened — this is one call so neither half can
+     *  be forgotten again.
+     */
+    const adoptConversationId = useCallback(
+        (turn: { cid: string }, next: string) => {
+            if (!next || next === turn.cid) return;
+            promoteBucket(turn.cid, next);
+            promoteStream(turn.cid, next);
+            turn.cid = next;
+            setConversationId(next);
+        },
+        [promoteBucket, promoteStream],
+    );
+
     // Every live turn belongs to the page, not to this component's lifetime —
     // but when the page really does go away, they go with it.
     useEffect(
@@ -520,7 +541,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     message: localize("com_error_file_upload_incomplete", {
                         0: stranded.map((f) => f.name || f.filename || f.file_name || "").join("、"),
                     }),
-                    status: "error",
+                    status: "warning",
                 });
                 return;
             }
@@ -642,12 +663,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     console.log('[AiChat] created:', newConvoId, mergedUser);
                     // Only update conversationId if we got a valid value
                     if (newConvoId && newConvoId !== "") {
-                        // The turn moves with the conversation: its bucket, its
-                        // registration, and the id its own writers resolve to.
-                        promoteBucket(turn.cid, newConvoId);
-                        promoteStream(turn.cid, newConvoId);
-                        turn.cid = newConvoId;
-                        setConversationId(newConvoId);
+                        adoptConversationId(turn, newConvoId);
 
                         // Only add placeholder for brand-new conversations to avoid
                         // overwriting an existing conversation's generated title.
@@ -716,7 +732,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     // turn before the worker has persisted the bot task row.
                     if (chat_id) {
                         skipLoadConvoRef.current = chat_id;
-                        setConversationId(chat_id);
+                        adoptConversationId(turn, chat_id);
                         if (wasNewConvo) {
                             const placeholderConvo = {
                                 conversationId: chat_id,
@@ -995,7 +1011,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         return msgs;
                     });
                     if (data.conversation?.conversationId) {
-                        setConversationId(data.conversation.conversationId);
+                        adoptConversationId(turn, data.conversation.conversationId);
                     }
                     // New conversation: fetch the AI-generated title. The gen_title
                     // endpoint waits until the backend's background task persists a
@@ -1174,12 +1190,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 },
                 onCreated: (newConvoId) => {
                     if (newConvoId && newConvoId !== "") {
-                        // The turn moves with the conversation: its bucket, its
-                        // registration, and the id its own writers resolve to.
-                        promoteBucket(turn.cid, newConvoId);
-                        promoteStream(turn.cid, newConvoId);
-                        turn.cid = newConvoId;
-                        setConversationId(newConvoId);
+                        adoptConversationId(turn, newConvoId);
                     }
                 },
                 onMessage: (text, messageId) => {
@@ -1230,7 +1241,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         return msgs;
                     });
                     if (data.conversation?.conversationId) {
-                        setConversationId(data.conversation.conversationId);
+                        adoptConversationId(turn, data.conversation.conversationId);
                     }
                 },
                 // Same as the send path: failure copy goes to `errorText` so a

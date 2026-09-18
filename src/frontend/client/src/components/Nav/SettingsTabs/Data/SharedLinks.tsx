@@ -90,7 +90,7 @@ export default function SharedLinks() {
       console.error('Delete error:', error);
       showToast({
         message: localize('com_ui_share_delete_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
   });
@@ -126,7 +126,7 @@ export default function SharedLinks() {
         console.error('Failed to delete shared links:', error);
         showToast({
           message: localize('com_ui_bulk_delete_error'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     },

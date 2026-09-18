@@ -91,7 +91,6 @@ services:
       - "7860:7860"
     environment:
       TZ: Asia/Shanghai
-      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'
@@ -131,7 +130,6 @@ services:
     image: dataelement/bisheng-backend:v3.0.0-beta1
     environment:
       TZ: Asia/Shanghai
-      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
       BS_MILVUS_IS_PARTITION: 'true'
       BS_MILVUS_PARTITION_SUFFIX: '1'

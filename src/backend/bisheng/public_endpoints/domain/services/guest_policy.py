@@ -14,7 +14,6 @@ from bisheng.common.errcode.public_endpoints import (
     PublicAccessError,
     PublicApplicationOfflineError,
     PublicGuestAccessDisabledError,
-    PublicIdentityHeaderRejectedError,
     PublicLinkInvalidError,
 )
 from bisheng.common.services.config_service import settings
@@ -51,14 +50,6 @@ class PublicExecution:
     operator: UserPayload
     session_subject: object
     snapshot: OpenApiExecutionSnapshot
-
-
-def reject_identity_headers(headers) -> None:
-    """Anonymous calls may not assert either v2 identity channel."""
-
-    if headers.get("x-on-behalf-of") is not None or headers.get("x-end-user") is not None:
-        logger.warning("public_api.reject reason=identity_header")
-        raise PublicIdentityHeaderRejectedError()
 
 
 async def _probe_published_resource(
@@ -263,5 +254,4 @@ __all__ = [
     "PublicationOutcome",
     "public_application_execution",
     "public_execution",
-    "reject_identity_headers",
 ]

@@ -19,7 +19,7 @@ export default function DuplicateAgent({ agent_id }: { agent_id: string }) {
       console.error(error);
       showToast({
         message: localize('com_ui_agent_duplicate_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

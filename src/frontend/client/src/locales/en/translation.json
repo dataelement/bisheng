@@ -1498,6 +1498,7 @@
     "space_deleted": "Space deleted",
     "space_desc_label": "Space description:",
     "space_invalid_or_deleted": "This knowledge space is invalid or deleted",
+    "space_load_failed": "Failed to load this knowledge space. Please try again.",
     "space_became_public_go_square": "This space has changed from approval to public. Please go to the square to join.",
     "space_name_empty": "Knowledge space name cannot be empty",
     "space_settings": "Edit space",
@@ -2305,7 +2306,7 @@
     "deleted_toast": "Deleted. The old key no longer grants your AI assistant access.",
     "disabled_notice": "An administrator turned AI assistant access off. Issued keys are paused and resume automatically when it is re-enabled. Contact your administrator if you need it.",
     "empty_description": "You do not have a key yet. Generate one and send it to your AI assistant to start searching.",
-    "entry_hint": "Let third-party AI assistants search this knowledge space",
+    "entry_hint": "Let local AI assistants search this knowledge space",
     "expires_label": "Expires on",
     "get_key": "Generate my key",
     "guide_title": "Connect an AI assistant",
@@ -2328,14 +2329,14 @@
     "scope_all": "The same as what you can see on the platform: department knowledge spaces, knowledge bases you created, and knowledge spaces shared with you.",
     "scope_own_only": "Your administrator limited the scope: only knowledge bases you created yourself, not including department knowledge spaces or knowledge spaces shared with you.",
     "scope_title": "What this key can reach",
-    "section_desc": "Let AI assistants such as WorkBuddy search the knowledge you can see on the platform. Install one retrieval skill and configure one personal key.",
+    "section_desc": "Let local AI assistants such as WorkBuddy desktop search the knowledge you can see on the platform. Install one retrieval skill and configure one personal key.",
     "status_active": "Valid",
     "status_disabled": "Disabled",
     "status_expired": "Expired",
     "status_label": "Status",
     "status_none": "Not connected",
     "status_revoked": "Revoked",
-    "title": "AI assistant access",
-    "verify_hint": "No AI assistant has used this key yet. Once it is set up, ask it to “search my knowledge base for…” and the time appears here. Didn’t save the key? Get a new one."
+    "supported_note": "Send it to an AI assistant installed on your computer, such as WorkBuddy desktop.",
+    "title": "AI assistant access"
   }
 }

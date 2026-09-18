@@ -344,7 +344,7 @@ export function VersionHistorySheet({
         onError: () => {
             showToast({
                 message: localize("com_knowledge.version.toast_set_primary_failure"),
-                status: "error",
+                status: "warning",
             });
         },
     });
@@ -362,7 +362,7 @@ export function VersionHistorySheet({
         onError: () => {
             showToast({
                 message: localize("com_knowledge.version.toast_delete_failure"),
-                status: "error",
+                status: "warning",
             });
         },
     });

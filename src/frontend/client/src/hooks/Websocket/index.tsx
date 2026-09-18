@@ -375,7 +375,7 @@ export const useLinsightWebSocket = (versionId) => {
                             },
                             status: SopStatus.Stoped
                         })
-                        // showToast({ message: taskData.data.error, status: 'error' });
+                        // showToast({ message: taskData.data.error, status: 'warning' });
                     }
             }
         };

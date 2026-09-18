@@ -64,7 +64,7 @@ const AdminSettings = () => {
       showToast({ status: 'success', message: localize('com_ui_saved') });
     },
     onError: () => {
-      showToast({ status: 'error', message: localize('com_ui_error_save_admin_settings') });
+      showToast({ status: 'warning', message: localize('com_ui_error_save_admin_settings') });
     },
   });
 

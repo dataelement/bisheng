@@ -30,10 +30,10 @@ function ImportConversations() {
       if (error?.toString().includes('Unsupported import type') === true) {
         showToast({
           message: localize('com_ui_import_conversation_file_type_error'),
-          status: 'error',
+          status: 'warning',
         });
       } else {
-        showToast({ message: localize('com_ui_import_conversation_error'), status: 'error' });
+        showToast({ message: localize('com_ui_import_conversation_error'), status: 'warning' });
       }
     },
     onMutate: () => {

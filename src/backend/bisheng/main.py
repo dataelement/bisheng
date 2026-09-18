@@ -26,23 +26,15 @@ from bisheng.utils.threadpool import thread_pool
 
 
 def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
-    is_v2 = req.url.path.startswith("/api/v2")
     http_status = status.HTTP_200_OK
     if isinstance(exc, HTTPException):
         msg = {
             "status_code": exc.status_code,
             "status_message": exc.detail["error"] if isinstance(exc.detail, dict) else exc.detail,
         }
-        if is_v2:
-            http_status = exc.status_code
     elif isinstance(exc, BaseErrorCode):
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
-        if is_v2:
-            from bisheng.open_api.api.exception_handlers import mark_open_api_error, open_api_http_status
-
-            mark_open_api_error(req, exc)
-            http_status = open_api_http_status(exc)
     else:
         logger.exception("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
@@ -52,28 +44,6 @@ def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
 
 
 def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
-    if req.url.path.startswith("/api/v2"):
-        body = exc.body if isinstance(exc.body, dict) else {}
-        from bisheng.common.errcode.open_api import (
-            OpenApiAsyncUnsupportedError,
-            OpenApiTaskModeUnsupportedError,
-        )
-
-        if body.get("task_mode") is True or (
-            "run_mode" in body and body.get("run_mode") != "daily"
-        ):
-            error = OpenApiTaskModeUnsupportedError(msg="Task mode is not available: run_mode/task_mode")
-            req.scope["open_api_error_code"] = error.code
-            return JSONResponse(status_code=400, content=error.to_dict())
-        if body.get("execution") not in (None, "sync") or body.get("background") is True:
-            error = OpenApiAsyncUnsupportedError(msg="Asynchronous execution is not available: execution")
-            req.scope["open_api_error_code"] = error.code
-            return JSONResponse(status_code=400, content=error.to_dict())
-        msg = {
-            "status_code": status.HTTP_400_BAD_REQUEST,
-            "status_message": exc.errors(),
-        }
-        return JSONResponse(status_code=400, content=msg)
     msg = {"status_code": status.HTTP_422_UNPROCESSABLE_ENTITY, "status_message": exc.errors()}
     logger.error(f"{req.method} {req.url} {str(exc.errors())[:100]}")
     return JSONResponse(content=msg)

@@ -194,7 +194,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                 }
                 showToast({ message: localize("com_subscription.image_copy_failed_url_copied"), severity: NotificationSeverity.WARNING });
             } catch {
-                showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.WARNING });
             }
         }
     };

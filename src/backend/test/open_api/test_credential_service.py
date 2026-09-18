@@ -85,13 +85,12 @@ async def test_removing_delegate_scope_clears_entries_atomically(
     fake_redis,
     monkeypatch,
 ):
-    async def active_user(user_id):
-        return SimpleNamespace(user_id=user_id, tenant_id=1)
+    async def active_users(user_ids):
+        return {user_id: SimpleNamespace(user_id=user_id, tenant_id=1) for user_id in user_ids}
 
     monkeypatch.setattr(
-        "bisheng.open_api.domain.services.delegate_scope_service."
-        "OwnerRepository.get_active_natural_person",
-        active_user,
+        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_people",
+        active_users,
     )
     issued = await CredentialService.issue(
         tenant_id=1,
