@@ -75,6 +75,21 @@
 **防护**:守卫测试 `src/backend/test/cofco/test_cofco_config_customizations.py`,
 加上 §3 第 ⓪ 步的全量比对。
 
+**前端代码同理,而且不一定发生在合并里。** 普通提交也会顺手「整文件取主线」:2026-09-18 发现
+知识空间 AI dock 的引用条(勾选文件 → 输入框上方灰条、勾选即问答范围)被一个后端 fix 连带换成了
+主线版本,主线从没有这段,等于直接删掉。
+
+**别指望比对分支发现它。** 试过三种比对都不成立:拿上一条中粮分支当基准,它自己可能早已丢了
+(这次 909 末端就已经和主线一致);拿「不在主线上的提交」当基准,中粮线和 3.0 主线血统不同,
+命中几百个文件全是噪音。类型检查也未必兜得住:上游仍给被删的 prop 传值会报 TS2322,但调用方常带
+`@ts-strict-ignore`,`pnpm typecheck` 看不见。
+
+**只能按功能守护。** 必须保留的中粮前端定制,每项配一个能直接判断「还在不在」的检查(新增定制时同步加):
+
+| 定制 | 检查(合并后在仓库根目录跑,无输出即丢了) |
+|---|---|
+| 知识空间 AI dock 引用条 | `grep -l selectedContent src/frontend/client/src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiBottomDock.tsx` |
+
 ### 2.4 Alembic 迁移分叉(每次合主线都要检查)
 
 **症状**:合并本身可能零冲突,但 `alembic heads` 输出两行。后端启动时发现多个 head 会
