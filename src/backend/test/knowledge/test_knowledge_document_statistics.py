@@ -62,7 +62,14 @@ def _compile_sql(statement) -> str:
 
 
 @pytest.mark.asyncio
-async def test_domain_statistics_dedupe_entries_by_canonical_document():
+@pytest.mark.parametrize(
+    ("method_name", "code"),
+    [
+        ("async_count_files_by_domain_scopes", "QM"),
+        ("async_count_files_by_category_scopes", "RPT"),
+    ],
+)
+async def test_navigation_statistics_dedupe_entries_by_canonical_document(method_name, code):
     session = _Session(
         [
             (10, 100, 1, "SGGF-RPT-QM-20260700000001"),
@@ -74,9 +81,9 @@ async def test_domain_statistics_dedupe_entries_by_canonical_document():
         "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
         return_value=session,
     ):
-        counts = await KnowledgeFileDao.async_count_files_by_domain_scopes({"QM": {1, 2}})
+        counts = await getattr(KnowledgeFileDao, method_name)({code: {1, 2}})
 
-    assert counts == {"QM": 2}
+    assert counts == {code: 2}
     sql = _compile_sql(session.statement)
     assert "entry_status = 'active'" in sql
     assert "knowledge_document_version.is_primary IS 0" in sql

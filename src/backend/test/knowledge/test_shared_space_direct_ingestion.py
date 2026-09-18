@@ -188,8 +188,8 @@ def test_routed_parse_failure_does_not_fallback_to_legacy_stores(monkeypatch):
 
 @pytest.mark.parametrize(
     "knowledge_type",
-    [KnowledgeTypeEnum.SPACE.value, KnowledgeTypeEnum.NORMAL.value],
-    ids=["space-not-routed", "non-space"],
+    [KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.PRIVATE.value, KnowledgeTypeEnum.QA.value],
+    ids=["normal", "private", "qa"],
 )
 def test_non_shared_routes_keep_legacy_ingestion(monkeypatch, knowledge_type):
     space, pipeline_calls = _install_common_fakes(monkeypatch, routed=False)
@@ -372,21 +372,12 @@ async def test_normal_projection_worker_does_not_attach_legacy_chunk_loader(
     import sys
     from pathlib import Path
 
-    from bisheng.knowledge.domain.services import (
-        shared_space_projection_support,
-    )
-
     backend_root = Path(__file__).resolve().parents[2]
     sys.modules["bisheng.worker"].__path__ = [str(backend_root / "bisheng/worker")]
     sys.modules["bisheng.worker.knowledge"].__path__ = [str(backend_root / "bisheng/worker/knowledge")]
     document_projection = importlib.import_module("bisheng.worker.knowledge.document_projection")
 
     writer = SimpleNamespace(schema_spec=SimpleNamespace(embedding_model_id=7))
-    monkeypatch.setattr(
-        shared_space_projection_support,
-        "resolve_shared_space_storage_enabled",
-        AsyncMock(return_value=True),
-    )
     monkeypatch.setattr(
         document_projection,
         "shared_storage_writer_factory",
@@ -405,5 +396,5 @@ async def test_normal_projection_worker_does_not_attach_legacy_chunk_loader(
         tenant_id=1,
     )
 
-    assert service.shared_storage_enabled is True
-    assert service.shared_content_chunk_loader is None
+    assert service.shared_storage_writer is writer
+    assert service.shared_content_chunk_loader.__name__ == "load_shared_content_from_original"

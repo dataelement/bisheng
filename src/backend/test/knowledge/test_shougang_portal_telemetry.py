@@ -136,9 +136,7 @@ async def test_portal_home_event_counts(monkeypatch):
     class FakeEsClient:
         async def search(self, **kwargs):
             if kwargs["index"] == "mid_realtime_qa_question_fact":
-                assert kwargs["body"]["query"]["bool"]["filter"] == [
-                    {"terms": {"qa_type": ["expert", "smart"]}},
-                ]
+                assert "query" not in kwargs["body"]
                 return {"aggregations": {"qa_count": {"value": 8}}}
 
             query = kwargs["body"]["query"]["bool"]
@@ -148,7 +146,6 @@ async def test_portal_home_event_counts(monkeypatch):
                         "event_type": [
                             "portal_document_read",
                             "portal_favorite",
-                            "portal_qa",
                         ]
                     }
                 }
@@ -163,14 +160,7 @@ async def test_portal_home_event_counts(monkeypatch):
                 "event_data.portal_document_read_content_stat_schema_version",
                 "event_data.portal_favorite_content_stat_schema_version",
             }
-            assert {
-                "bool": {
-                    "filter": [
-                        {"term": {"event_type": "portal_qa"}},
-                        {"term": {"event_data.portal_qa_scene": "smart_qa"}},
-                    ]
-                }
-            } in must_not
+            assert len(must_not) == 2
             return {
                 "aggregations": {
                     "by_event_type": {
@@ -190,11 +180,15 @@ async def test_portal_home_event_counts(monkeypatch):
         "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
         fake_get_statistics_es_connection,
     )
+    monkeypatch.setattr(
+        "bisheng.common.telemetry.portal_event_service.get_es_connection",
+        fake_get_statistics_es_connection,
+    )
 
     assert await PortalTelemetryEventService.count_home_events() == {
         "read_count": 11,
         "favorite_count": 3,
-        "qa_count": 13,
+        "qa_count": 8,
     }
 
 

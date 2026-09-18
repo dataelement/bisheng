@@ -167,11 +167,18 @@ export function hasPermissionModelScopeItems(
   return groups === null || groups.length > 0;
 }
 
+function isEmptyCustomModel(model: RelationModelOption) {
+  return model.is_system === false
+    && Array.isArray(model.permissions)
+    && model.permissions.length === 0;
+}
+
 export function filterPermissionModelsWithScopeItems(
   resourceType: ResourceType,
   models: RelationModelOption[],
 ) {
-  return models.filter((model) => hasPermissionModelScopeItems(resourceType, model));
+  return models.filter((model) =>
+    isEmptyCustomModel(model) || hasPermissionModelScopeItems(resourceType, model));
 }
 
 interface PermissionModelHelpIconProps {
@@ -188,16 +195,17 @@ export function PermissionModelHelpIcon({
   className,
 }: PermissionModelHelpIconProps) {
   const groups = getPermissionModelScopeGroups(resourceType, model);
-  if (groups === null || groups.length === 0) return null;
+  if (groups === null || (groups.length === 0 && !isEmptyCustomModel(model))) return null;
 
   const localizedGroups = groups.map((group) => ({
     ...group,
     label: localize(group.labelKey),
     itemLabels: group.items.map((item) => localize(item.labelKey)),
   }));
-  const summary = localizedGroups
+  const noPermissions = localize("com_permission.permission_model_no_permissions");
+  const summary = localizedGroups.length ? localizedGroups
     .map((group) => `${group.label}：${group.itemLabels.join("、")}`)
-    .join("；");
+    .join("；") : noPermissions;
   const title = localize("com_permission.permission_model_help_title");
 
   return (
@@ -230,6 +238,9 @@ export function PermissionModelHelpIcon({
         <div className="space-y-3 text-left">
           <p className="text-[13px] font-medium leading-5 text-[#1D2129]">{title}</p>
           <div className="space-y-2.5">
+            {localizedGroups.length === 0 ? (
+              <p className="text-[12px] leading-5 text-[#4E5969]">{noPermissions}</p>
+            ) : null}
             {localizedGroups.map((group) => (
               <div key={group.scope} className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
                 <span className="pt-px text-[12px] font-medium leading-5 text-[#4E5969]">

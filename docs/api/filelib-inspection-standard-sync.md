@@ -149,16 +149,16 @@ CREATE_DEPT_ID = DEPT-B
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `start_time` | string | 是 | 本次推送数据的**开始时间**。ISO 8601，推荐 `YYYY-MM-DDTHH:mm:ss` 或 `YYYY-MM-DD HH:mm:ss`。 |
-| `end_time` | string | 是 | 本次推送数据的**结束时间**。格式同 `start_time`，须 `end_time >= start_time`。 |
-| `data` | object | 是 | 点检业务数据，见 §3.2。 |
+| `start_time` | string | 否 | 本次推送数据的**开始时间**。ISO 8601，推荐 `YYYY-MM-DDTHH:mm:ss` 或 `YYYY-MM-DD HH:mm:ss`。可省略 / 空字符串；空值由业务校验拒绝。 |
+| `end_time` | string | 否 | 本次推送数据的**结束时间**。格式同 `start_time`，须 `end_time >= start_time`。可省略 / 空字符串；空值由业务校验拒绝。 |
+| `data` | object | 否 | 点检业务数据，见 §3.2。可省略，默认空对象。 |
 
 ### 3.2 `data` 对象
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---:|---|
-| `check_standards` | array | 是 | 点检标准列表，对应 Excel Sheet `点检标准`。至少 1 条。 |
-| `check_standard_items` | array | 是 | 标准项次列表，对应 Excel Sheet `标准项次 `。至少 1 条。 |
+| `check_standards` | array | 否 | 点检标准列表，对应 Excel Sheet `点检标准`。可省略 / 空数组；空数据由业务校验拒绝。 |
+| `check_standard_items` | array | 否 | 标准项次列表，对应 Excel Sheet `标准项次 `。可省略 / 空数组；空数据由业务校验拒绝。 |
 
 ---
 
@@ -166,47 +166,49 @@ CREATE_DEPT_ID = DEPT-B
 
 ### 4.1 `data.check_standards[]` — 点检标准
 
-JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺序与下表一致）：
+JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺序与下表一致）。**Schema 层全部可选**：可省略、`null` 或空字符串，`min_length=0`；`null` / 空白会规范成 `""`。分组所需的 `CREATE_DEPT_ID` 空值仍由 §5 业务校验拒绝。
 
 | JSON 字段 | 中文名 | 类型 | 长度 | 必填 | 说明 |
 |---|---|---|---:|---:|---|
-| `CREATE_DEPT_ID` | 设备所属单位 | string | 128 | **是** | 分组 key；决定入库子目录名。 |
-| `CHECK_STANDARD_ID` | 点检标准编号 | string | 12 | 是 | 长度 12；全请求内不可重复。 |
-| `DEVICE_NAME` | 分部设备中文名称 | string | 100 | 是 | 与设备 9 位码中文名称一致。 |
-| `STANDARD_TYPE` | 标准类别 | string | 32 | 是 | 小代码，如 `01-常规点检`、`02-精密点检`。 |
+| `CREATE_DEPT_ID` | 设备所属单位 | string | 128 | 否 | 分组 key；决定入库子目录名。空值由业务校验拒绝。 |
+| `CHECK_STANDARD_ID` | 点检标准编号 | string | 12 | 否 | 建议长度 12；全请求内不可重复。 |
+| `DEVICE_NAME` | 分部设备中文名称 | string | 100 | 否 | 与设备 9 位码中文名称一致。 |
+| `STANDARD_TYPE` | 标准类别 | string | 32 | 否 | 小代码，如 `01-常规点检`、`02-精密点检`。 |
 | `OIL_PART_NO` | 油脂料号 | string | 20 | 否 | 标准类别为补充油/更换油时可选。 |
-| `CHECK_ITEM_NAME` | 点检项目名称 | string | 50 | 是 | 对应项次的检测点/部位/项目。 |
-| `DEVICE_STATUS` | 设备状态 | string | 16 | 是 | 小代码：`0-不限定`、`1-运转`、`2-停止`。 |
-| `ENFORCE_CODE` | 实施方 | string | 16 | 是 | 小代码，如 `1-点检`。 |
-| `SAFETY_BOARD` | 安全挂牌 | string | 8 | 是 | `N-否` / `Y-是`。 |
-| `CHECK_PERIOD` | 实施周期 | string | 32 | 是 | 文本数字；非周期填 `"0"`。JSON 传 number 时服务端自动转为 string。 |
-| `PERIOD_UNIT` | 周期单位 | string | 8 | 是 | 小代码：`H/S/D/W/M/Y/N/F` 等。 |
-| `INTERFACE_SYSTEM` | 系统接口 | string | 16 | 是 | 小代码，如 `1-智能点检系统`。 |
-| `NEXT_SCHE_DATE` | 下次排程日期 | string | 100 | 是 | 建议 `YYYY-MM-DD`；服务端不做格式校验。 |
-| `MAINTAIN_REASON` | 维护原因 | string | 50 | 是 | 如 `初始建立`。 |
-| `DEVICE_MAINTAIN_JOB_ID` | 点检员岗号 | string | 10 | 是 | |
-| `REC_CREATOR` | 点检员工号 | string | 10 | 是 | |
-| `REC_CREATOR_NAME` | 点检员姓名 | string | 10 | 是 | |
+| `CHECK_ITEM_NAME` | 点检项目名称 | string | 50 | 否 | 对应项次的检测点/部位/项目。 |
+| `DEVICE_STATUS` | 设备状态 | string | 16 | 否 | 小代码：`0-不限定`、`1-运转`、`2-停止`。 |
+| `ENFORCE_CODE` | 实施方 | string | 16 | 否 | 小代码，如 `1-点检`。 |
+| `SAFETY_BOARD` | 安全挂牌 | string | 8 | 否 | `N-否` / `Y-是`。 |
+| `CHECK_PERIOD` | 实施周期 | string | 32 | 否 | 文本数字；非周期填 `"0"`。JSON 传 number 时服务端自动转为 string。 |
+| `PERIOD_UNIT` | 周期单位 | string | 8 | 否 | 小代码：`H/S/D/W/M/Y/N/F` 等。 |
+| `INTERFACE_SYSTEM` | 系统接口 | string | 16 | 否 | 小代码，如 `1-智能点检系统`。 |
+| `NEXT_SCHE_DATE` | 下次排程日期 | string | 100 | 否 | 建议 `YYYY-MM-DD`；服务端不做格式校验。 |
+| `MAINTAIN_REASON` | 维护原因 | string | 50 | 否 | 如 `初始建立`。 |
+| `DEVICE_MAINTAIN_JOB_ID` | 点检员岗号 | string | 10 | 否 | |
+| `REC_CREATOR` | 点检员工号 | string | 10 | 否 | |
+| `REC_CREATOR_NAME` | 点检员姓名 | string | 10 | 否 | |
 
 ### 4.2 `data.check_standard_items[]` — 标准项次
 
+**Schema 层全部可选**：可省略、`null` 或空字符串。项次仍通过 `CHECK_STANDARD_ID` 归组，空编号无法匹配标准时由 §5 业务校验拒绝。
+
 | JSON 字段 | 中文名 | 类型 | 长度 | 必填 | 说明 |
 |---|---|---|---:|---:|---|
-| `CHECK_STANDARD_ID` | 点检标准编号 | string | 12 | 是 | 必须存在于 `check_standards` 中，通过该字段归入对应 `CREATE_DEPT_ID` 分组。 |
-| `CHECK_STANDARD_SEQ_NO` | 点检标准项次 | string | 100 | 是 | 同一标准下唯一；服务端不做格式校验。 |
-| `CONTENT` | 内容 | string | 50 | 是 | 项次描述。 |
-| `CHECK_WAY` | 点检方法 | string | 16 | 是 | 小代码，如 `1-五感`。 |
-| `LUBRIC_WAY` | 润滑方式 | string | 16 | 是 | 小代码，如 `0-无`。 |
-| `LUBRIC_POINT` | 润滑点数 | string | 32 | 否 | 润滑标准时必填，如 `"1"`～`"100"`。JSON 传 number 时服务端自动转为 string。 |
-| `MANAGE_CONTROL_MODE` | 管理控别 | string | 16 | 是 | 小代码，如 `0-无`。 |
+| `CHECK_STANDARD_ID` | 点检标准编号 | string | 12 | 否 | 应对应 `check_standards` 中的编号，通过该字段归入对应 `CREATE_DEPT_ID` 分组。 |
+| `CHECK_STANDARD_SEQ_NO` | 点检标准项次 | string | 100 | 否 | 同一标准下唯一；服务端不做格式校验。 |
+| `CONTENT` | 内容 | string | 50 | 否 | 项次描述。 |
+| `CHECK_WAY` | 点检方法 | string | 16 | 否 | 小代码，如 `1-五感`。 |
+| `LUBRIC_WAY` | 润滑方式 | string | 16 | 否 | 小代码，如 `0-无`。 |
+| `LUBRIC_POINT` | 润滑点数 | string | 32 | 否 | 润滑标准时可填，如 `"1"`～`"100"`。JSON 传 number 时服务端自动转为 string。 |
+| `MANAGE_CONTROL_MODE` | 管理控别 | string | 16 | 否 | 小代码，如 `0-无`。 |
 | `MANAGE_TYPE` | 管理类别 | string | 16 | 否 | 小代码。 |
-| `DATA_TYPE` | 数据类别 | string | 16 | 是 | `10-定性` / `20-定量` / `30-定量做倾向分析`。 |
-| `CRITERI` | 标准 | string | 100 | 是 | 模板列名为 `CRITERI`（非 CRITERIA）。 |
-| `UOM` | 计量单位 | string | 8 | 条件 | 定量时必填。 |
-| `QLTY_TOP` | 上限 | string | 32 | 条件 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
-| `QLTY_BOTTOM` | 下限 | string | 32 | 条件 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
+| `DATA_TYPE` | 数据类别 | string | 16 | 否 | `10-定性` / `20-定量` / `30-定量做倾向分析`。 |
+| `CRITERI` | 标准 | string | 100 | 否 | 模板列名为 `CRITERI`（非 CRITERIA）。 |
+| `UOM` | 计量单位 | string | 8 | 否 | 定量时可填。 |
+| `QLTY_TOP` | 上限 | string | 32 | 否 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
+| `QLTY_BOTTOM` | 下限 | string | 32 | 否 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
 | `ALARM_SETTINGS` | 报警设置 | string | 100 | 否 | |
-| `STATUTORY_REQ` | 法定要求 | string | 16 | 是 | 小代码，如 `0-无`。 |
+| `STATUTORY_REQ` | 法定要求 | string | 16 | 否 | 小代码，如 `0-无`。 |
 | `EQUIPMENT_NAME` | 装置名称 | string | 100 | 否 | |
 | `LUBRIC_PART` | 润滑部位 | string | 100 | 否 | |
 | `DISTRIBUTOR_NO` | 分配器编号 | string | 32 | 否 | |
@@ -232,15 +234,15 @@ JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺
 | 规则 | 说明 |
 |---|---|
 | Token 规则 | 业务域、目标空间均为 `fixed`，且目标目录已配置（§1.3）。 |
-| 时间窗口 | `start_time`、`end_time` 可解析且 `end_time >= start_time`。 |
-| `CREATE_DEPT_ID` 必填 | 每条 `check_standards` 均须非空；缺失或纯空白返回 `19916`。 |
-| 标准编号唯一 | 全请求内 `CHECK_STANDARD_ID` 不可重复。 |
+| 时间窗口 | `start_time`、`end_time` 可解析且 `end_time >= start_time`；空值返回时间校验错误。 |
+| `CREATE_DEPT_ID` | Schema 允许空；业务上每条 `check_standards` 均须非空，缺失或纯空白返回 `19916`。 |
+| 标准编号唯一 | 全请求内 `CHECK_STANDARD_ID` 不可重复（含空字符串之间的重复）。 |
 | 项次关联 | 每条 `check_standard_items.CHECK_STANDARD_ID` 须出现在 `check_standards` 中。 |
 | 项次分组一致 | 项次仅通过 `CHECK_STANDARD_ID` 归入对应标准所在 `CREATE_DEPT_ID` 分组；不允许孤儿项次。 |
 | 项次序号唯一 | 同一 `CHECK_STANDARD_ID` 下 `CHECK_STANDARD_SEQ_NO` 不可重复。 |
 | 字段类型 | `check_standards`、`check_standard_items` 中所有业务字段均为 **string**；为兼容历史对接，JSON 中的 integer/number 会在入库前自动转为 string（如 `CHECK_PERIOD: 1` → `"1"`）。 |
 | 定量字段 | `DATA_TYPE` 为 `20-定量` 或 `30-定量做倾向分析` 时，建议校验 `UOM` 及上下限（`QLTY_TOP` / `QLTY_BOTTOM` 字符串）至少一项有值。 |
-| 数组非空 | `check_standards`、`check_standard_items` 均至少 1 条；每个 `CREATE_DEPT_ID` 分组内两项均非空。 |
+| 数组非空 | Schema 允许空数组；业务上 `check_standards`、`check_standard_items` 均至少 1 条，且每个 `CREATE_DEPT_ID` 分组内两项均非空。 |
 | 目录名合法 | `CREATE_DEPT_ID` 不得包含 `/`、`\` 等路径分隔符。 |
 
 设备九位码、小代码枚举等深度校验可按对接阶段逐步启用；初版至少保证分组、结构与关联关系正确。

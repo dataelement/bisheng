@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
@@ -59,12 +58,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class ProjectionSource:
-    space_id: int
-    file_id: int
-
-
-@dataclass(frozen=True)
 class ProjectionTarget:
     tenant_id: int
     entry_id: int
@@ -83,85 +76,11 @@ class ProjectionProcessResult:
     entry_generation: int
 
 
-ProjectionWriter = Callable[
-    [ProjectionSource, KnowledgeFile, ProjectionTarget],
-    Awaitable[None],
-]
-ProjectionCleaner = Callable[[int, list[int]], Awaitable[None]]
 DeletingEntryFinalizer = Callable[[KnowledgeFile], Awaitable[None]]
 
 
 class KnowledgeDocumentProjectionError(RuntimeError):
     """Raised when one entry projection cannot safely converge."""
-
-
-async def _default_projection_writer(
-    source: ProjectionSource,
-    entry: KnowledgeFile,
-    target: ProjectionTarget,
-) -> None:
-    def _write() -> None:
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-        from bisheng.worker.knowledge.file_worker import copy_vector
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
-            _rebuild_knowledge_file_chunk,
-        )
-
-        metadata_overrides = {
-            "canonical_document_id": int(target.document_id),
-            "canonical_version_id": int(target.version_id),
-            "entry_type": target.entry_type,
-            "content_generation": int(target.content_generation),
-            "entry_generation": int(target.entry_generation),
-            "document_name": entry.file_name,
-            "abstract": entry.abstract,
-            "updater": entry.updater_name,
-            "update_time": (
-                int(entry.update_time.timestamp())
-                if entry.update_time is not None
-                else 0
-            ),
-        }
-        if (
-            source.space_id == int(entry.knowledge_id)
-            and source.file_id == int(entry.id)
-        ):
-            _rebuild_knowledge_file_chunk(
-                entry,
-                metadata_overrides=metadata_overrides,
-            )
-            return
-        source_space = KnowledgeDao.query_by_id(source.space_id)
-        target_space = KnowledgeDao.query_by_id(int(entry.knowledge_id))
-        if source_space is None or target_space is None:
-            raise KnowledgeDocumentProjectionError(
-                "projection source or target space does not exist"
-            )
-        copy_vector(
-            source_space,
-            target_space,
-            source.file_id,
-            int(entry.id),
-            metadata_overrides=metadata_overrides,
-        )
-
-    await asyncio.to_thread(_write)
-
-
-async def _default_projection_cleaner(
-    space_id: int,
-    file_ids: list[int],
-) -> None:
-    def _clean() -> None:
-        from bisheng.api.services.knowledge_imp import delete_vector_files
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-
-        knowledge = KnowledgeDao.query_by_id(space_id)
-        if knowledge is None:
-            return
-        delete_vector_files(sorted(set(file_ids)), knowledge)
-
-    await asyncio.to_thread(_clean)
 
 
 async def _noop_deleting_entry_finalizer(entry: KnowledgeFile) -> None:
@@ -176,13 +95,10 @@ class KnowledgeDocumentProjectionService:
         file_repository: KnowledgeFileRepository,
         document_repository: KnowledgeDocumentRepository | None = None,
         version_repository: KnowledgeDocumentVersionRepository | None = None,
-        projection_writer: ProjectionWriter = _default_projection_writer,
-        projection_cleaner: ProjectionCleaner = _default_projection_cleaner,
         deleting_entry_finalizer: DeletingEntryFinalizer = (
             _noop_deleting_entry_finalizer
         ),
         shared_storage_writer: SharedSpaceStorageWriter | None = None,
-        shared_storage_enabled: bool = False,
         shared_content_chunk_loader: SharedContentChunkLoader | None = None,
         shared_embedding_model_id: str | int | None = None,
         lease_seconds: int = 120,
@@ -193,11 +109,8 @@ class KnowledgeDocumentProjectionService:
         self.file_repository = file_repository
         self.document_repository = document_repository
         self.version_repository = version_repository
-        self.projection_writer = projection_writer
-        self.projection_cleaner = projection_cleaner
         self.deleting_entry_finalizer = deleting_entry_finalizer
         self.shared_storage_writer = shared_storage_writer
-        self.shared_storage_enabled = bool(shared_storage_enabled)
         self.shared_content_chunk_loader = shared_content_chunk_loader
         self.shared_embedding_model_id = (
             str(shared_embedding_model_id)
@@ -214,172 +127,6 @@ class KnowledgeDocumentProjectionService:
             self.session,
             trigger_type="document_projection_updated",
         )
-
-    @property
-    def _use_shared_projection(self) -> bool:
-        """Shared dual-projection mode gate (spec 3.7).
-
-        Off (default): legacy per-entry projection with copy_vector. On: the
-        primary content is written once via ``upsert_content`` and entry moves
-        only rewrite ``knowledge_ids`` via ``update_membership`` - non-local
-        entries never call ``copy_vector`` (F2.5).
-        """
-        return self.shared_storage_enabled and self.shared_storage_writer is not None
-
-    async def _resolve_source(
-        self,
-        entry: KnowledgeFile,
-    ) -> ProjectionSource:
-        entries = (
-            await self.file_repository.find_distribution_entries_by_document_id(
-                int(entry.reference_document_id),
-            )
-        )
-        if entry.entry_type == KnowledgeFileEntryType.MANAGER.value:
-            previous = (
-                await self.file_repository.find_by_id(
-                    int(entry.projection_previous_file_id)
-                )
-                if entry.projection_previous_file_id is not None
-                else None
-            )
-            if (
-                previous is not None
-                and previous.entry_type
-                == KnowledgeFileEntryType.PUBLISH.value
-                and previous.entry_status
-                in {
-                    KnowledgeFileEntryStatus.ACTIVE.value,
-                    KnowledgeFileEntryStatus.DELETING.value,
-                }
-            ):
-                if (
-                    previous.applied_content_generation
-                    >= entry.desired_content_generation
-                ):
-                    return ProjectionSource(
-                        space_id=int(previous.knowledge_id),
-                        file_id=int(previous.id),
-                    )
-                rollback_tombstone = next(
-                    (
-                        candidate
-                        for candidate in entries
-                        if candidate.entry_type
-                        == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
-                        and candidate.entry_status
-                        in {
-                            KnowledgeFileEntryStatus.PREPARING.value,
-                            KnowledgeFileEntryStatus.DELETING.value,
-                        }
-                        and int(
-                            candidate.projection_previous_file_id or 0
-                        )
-                        == int(entry.id)
-                    ),
-                    None,
-                )
-                if rollback_tombstone is not None:
-                    return ProjectionSource(
-                        space_id=int(rollback_tombstone.knowledge_id),
-                        file_id=int(entry.id),
-                    )
-                if previous.projection_previous_file_id is not None:
-                    return ProjectionSource(
-                        space_id=int(previous.knowledge_id),
-                        file_id=int(
-                            previous.projection_previous_file_id
-                        ),
-                    )
-                return ProjectionSource(
-                    space_id=int(previous.knowledge_id),
-                    file_id=int(previous.id),
-                )
-            return ProjectionSource(
-                space_id=int(entry.knowledge_id),
-                file_id=int(entry.id),
-            )
-        if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            if entry.projection_previous_file_id is not None:
-                return ProjectionSource(
-                    space_id=int(entry.knowledge_id),
-                    file_id=int(entry.projection_previous_file_id),
-                )
-
-        if entry.projection_previous_file_id is not None:
-            previous = await self.file_repository.find_by_id(
-                int(entry.projection_previous_file_id)
-            )
-            if (
-                previous is not None
-                and previous.entry_type
-                == KnowledgeFileEntryType.PUBLISH.value
-            ):
-                return ProjectionSource(
-                    space_id=int(entry.knowledge_id),
-                    file_id=int(previous.id),
-                )
-
-        ready_entries = [
-            candidate
-            for candidate in entries
-            if int(candidate.id) != int(entry.id)
-            and candidate.entry_status
-            == KnowledgeFileEntryStatus.ACTIVE.value
-            and candidate.projection_status
-            == KnowledgeFileProjectionStatus.READY.value
-            and candidate.applied_content_generation
-            >= entry.desired_content_generation
-        ]
-        if ready_entries:
-            ready_entries.sort(
-                key=lambda candidate: (
-                    0
-                    if candidate.entry_type
-                    == KnowledgeFileEntryType.MANAGER.value
-                    else 1,
-                    int(candidate.id),
-                )
-            )
-            source = ready_entries[0]
-            return ProjectionSource(
-                space_id=int(source.knowledge_id),
-                file_id=int(source.id),
-            )
-
-        previous_sources = [
-            candidate
-            for candidate in entries
-            if candidate.projection_previous_file_id is not None
-            and candidate.entry_status
-            in {
-                KnowledgeFileEntryStatus.ACTIVE.value,
-                KnowledgeFileEntryStatus.DELETING.value,
-            }
-        ]
-        if previous_sources:
-            previous_sources.sort(key=lambda candidate: int(candidate.id))
-            source = previous_sources[0]
-            return ProjectionSource(
-                space_id=int(source.knowledge_id),
-                file_id=int(source.projection_previous_file_id),
-            )
-
-        if entry.applied_content_generation > 0:
-            return ProjectionSource(
-                space_id=int(entry.knowledge_id),
-                file_id=int(entry.id),
-            )
-        raise KnowledgeDocumentProjectionError(
-            "no ready canonical projection source is available"
-        )
-
-    @staticmethod
-    def _cleanup_file_ids(entry: KnowledgeFile) -> list[int]:
-        ids = [int(entry.id)]
-        if entry.projection_previous_file_id is not None:
-            ids.append(int(entry.projection_previous_file_id))
-        return sorted(set(ids))
 
     async def _require_destination_manager_ready_for_cleanup(
         self,
@@ -511,44 +258,6 @@ class KnowledgeDocumentProjectionService:
                 "shared content chunk loader is unavailable"
             )
         chunks = await self.shared_content_chunk_loader(content_file)
-        if not chunks:
-            tried_file_ids = {int(content_file.id)}
-            original_knowledge_id = int(
-                content_file.original_knowledge_id or 0
-            )
-            entry_type_priority = {
-                KnowledgeFileEntryType.PUBLISH.value: 0,
-                KnowledgeFileEntryType.MANAGER.value: 1,
-                KnowledgeFileEntryType.SHARE.value: 2,
-            }
-            candidates = sorted(
-                entries,
-                key=lambda candidate: (
-                    0
-                    if original_knowledge_id
-                    and int(candidate.knowledge_id) == original_knowledge_id
-                    else 1,
-                    entry_type_priority.get(str(candidate.entry_type), 99),
-                    int(candidate.id),
-                ),
-            )
-            for candidate in candidates:
-                candidate_id = int(candidate.id)
-                if candidate_id in tried_file_ids:
-                    continue
-                tried_file_ids.add(candidate_id)
-                chunks = await self.shared_content_chunk_loader(candidate)
-                if chunks:
-                    logger.info(
-                        "shared content projection recovered chunks from active entry "
-                        "tenant_id=%s document_id=%s content_file_id=%s "
-                        "source_entry_id=%s",
-                        target.tenant_id,
-                        target.document_id,
-                        content_file.id,
-                        candidate_id,
-                    )
-                    break
         if not chunks:
             raise KnowledgeDocumentProjectionError(
                 "shared content projection received no chunks "
@@ -780,37 +489,20 @@ class KnowledgeDocumentProjectionService:
         await self._commit()
 
         try:
+            if self.shared_storage_writer is None:
+                raise KnowledgeDocumentProjectionError("shared projection writer is not initialized")
             if is_cleanup:
                 await self._require_destination_manager_ready_for_cleanup(
                     claimed
                 )
-                if self._use_shared_projection:
-                    await self._process_shared_cleanup(claimed, target)
-                else:
-                    await self.projection_cleaner(
-                        int(claimed.knowledge_id),
-                        self._cleanup_file_ids(claimed),
-                    )
+                await self._process_shared_cleanup(claimed, target)
                 if claimed.entry_status == KnowledgeFileEntryStatus.INVALID.value:
                     # 权限清理必须在 CAS 完成前成功，否则保留失败态供扫描重试。
                     await self.deleting_entry_finalizer(claimed)
             else:
-                if self._use_shared_projection:
-                    # 共享库双投影：primary 内容单份写入 + knowledge_ids
-                    # metadata 重写；非本地 entry 不再 copy_vector（F2.5）。
-                    await self._process_shared_projection(
-                        claimed,
-                        target,
-                        force_content_upsert=force_content_upsert,
-                    )
-                else:
-                    source = await self._resolve_source(claimed)
-                    await self.projection_writer(source, claimed, target)
-                if claimed.projection_previous_file_id is not None:
-                    await self.projection_cleaner(
-                        int(claimed.knowledge_id),
-                        [int(claimed.projection_previous_file_id)],
-                    )
+                await self._process_shared_projection(
+                    claimed, target, force_content_upsert=force_content_upsert,
+                )
 
             applied = await self.file_repository.apply_projection_result(
                 entry_id=entry_id,

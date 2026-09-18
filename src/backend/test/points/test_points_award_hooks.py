@@ -1,11 +1,12 @@
 """积分旁路 hooks：同步路径、异步投递与 enqueue fallback。"""
 
+import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bisheng.core.config.celery_queues import POINTS_AWARD_QUEUE
+from bisheng.core.config.celery_queues import DEFAULT_CELERY_QUEUE
 from bisheng.points.domain.services import points_award_hooks as hooks
 
 
@@ -122,16 +123,32 @@ async def test_dispatch_falls_back_to_sync_when_enqueue_fails():
     assert sync.await_args.args[0]["question_id"] == 9
 
 
-def test_resolve_award_queue_defaults_to_points_award_celery(monkeypatch):
-    """未设 POINTS_AWARD_CELERY_QUEUE 时解析为正式发分队列。"""
-    monkeypatch.delenv("POINTS_AWARD_CELERY_QUEUE", raising=False)
-    assert hooks._resolve_award_queue() == POINTS_AWARD_QUEUE
+@pytest.mark.parametrize(
+    ("configured_queue", "expected_queue"),
+    [
+        (None, DEFAULT_CELERY_QUEUE),
+        ("  ", DEFAULT_CELERY_QUEUE),
+        (" points_award_celery ", DEFAULT_CELERY_QUEUE),
+        ("points_award_local", "points_award_local"),
+    ],
+)
+def test_enqueue_award_event_uses_default_or_explicit_test_queue(monkeypatch, configured_queue, expected_queue):
+    """默认及旧发分配置进入 celery，显式压测队列保持隔离。"""
+    if configured_queue is None:
+        monkeypatch.delenv("POINTS_AWARD_CELERY_QUEUE", raising=False)
+    else:
+        monkeypatch.setenv("POINTS_AWARD_CELERY_QUEUE", configured_queue)
+    task = SimpleNamespace(apply_async=MagicMock())
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.worker.points.tasks",
+        SimpleNamespace(process_points_award_event=task),
+    )
+    body = {"event_type": "answer_adopted", "tenant_id": 1}
 
+    hooks._enqueue_award_event(body)
 
-def test_resolve_award_queue_respects_env_override(monkeypatch):
-    """POINTS_AWARD_CELERY_QUEUE 可覆盖正式队列名（压测隔离）。"""
-    monkeypatch.setenv("POINTS_AWARD_CELERY_QUEUE", "points_award_local")
-    assert hooks._resolve_award_queue() == "points_award_local"
+    task.apply_async.assert_called_once_with(args=[body], queue=expected_queue)
 
 
 @pytest.mark.asyncio

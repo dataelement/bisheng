@@ -23,6 +23,15 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
 
+@pytest.fixture(autouse=True)
+def isolate_storage_migration_guard(monkeypatch):
+    # 改绑用例隔离存储迁移检查, 避免模拟配置触发真实数据库连接。
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+        AsyncMock(),
+    )
+
+
 class _UnauthorizedTestError(Exception):
     def __init__(self, msg: str) -> None:
         super().__init__(msg)

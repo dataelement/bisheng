@@ -16,10 +16,10 @@
         "PERIOD_UNIT": "W-周",
         "INTERFACE_SYSTEM": "1-智能点检系统",
         "NEXT_SCHE_DATE": "2026-05-06",
-        "MAINTAIN_REASON": "初始建立",
+        "MAINTAIN_REASON": "",
         "DEVICE_MAINTAIN_JOB_ID": "JOB001",
-        "REC_CREATOR": "E001",
-        "REC_CREATOR_NAME": "张三"
+        "REC_CREATOR": "",
+        "REC_CREATOR_NAME": ""
       }
     ],
     "check_standard_items": [
@@ -28,7 +28,7 @@
         "CHECK_STANDARD_SEQ_NO": "001",
         "CONTENT": "操作按钮、手柄灵活性及定位",
         "CHECK_WAY": "1-五感",
-        "LUBRIC_WAY": "0-无",
+        "LUBRIC_WAY": "",
         "MANAGE_CONTROL_MODE": "0-无",
         "MANAGE_TYPE": "0-无",
         "DATA_TYPE": "10-定性",

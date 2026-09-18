@@ -236,7 +236,7 @@ export function PortalUploadDialog({
                                     <small>支持 {supportedFormatsLabel}，单文件最大 {maxFileSizeMB}MB</small>
                                     {/* Excel 合并单元格会导致解析错乱，上传前先提示用户取消合并 */}
                                     <small className={s.uploadExcelTip} data-testid="upload-excel-merge-tip">
-                                        对于excel文档建议取消合并单元格
+                                        对于excel文档建议取消合并单元格，请勿上传加密文件
                                     </small>
                                     <div className={s.uploadPickActions}>
                                         <button

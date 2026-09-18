@@ -548,7 +548,7 @@ class DataQueryService(BaseModel):
             all_time_filters.extend(self.time_filters)
         if (
             not all_time_filters
-            and self.dataset_code in REALTIME_TEMPORAL_DATASETS
+            and self.dataset_code == "mid_user_daily_participation"
         ):
             all_time_filters.append(
                 TimeFilter(

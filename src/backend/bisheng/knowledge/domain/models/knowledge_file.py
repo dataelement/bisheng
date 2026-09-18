@@ -1206,6 +1206,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
         order_field: str = None,
         order_sort: str = "desc",
         match_file_encoding: bool = False,
+        *,
+        active_inventory_only: bool = False,
     ) -> list[KnowledgeFile]:
         unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
         if not unique_knowledge_ids:
@@ -1215,6 +1217,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
             KnowledgeFile.file_type == FileType.FILE.value,
             col(KnowledgeFile.deleted_at).is_(None),
         )
+        if active_inventory_only:
+            statement = statement.where(cls.active_inventory_predicate())
         statement = cls._build_file_filters_statement(
             statement,
             file_name,
@@ -1253,6 +1257,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         cursor: list[Any] | None = None,
         limit: int = 20,
         match_file_encoding: bool = False,
+        deduplicate_documents: bool = True,
     ) -> list[KnowledgeFile]:
         unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
         if not unique_knowledge_ids:
@@ -1280,10 +1285,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
             partition_by=canonical_document_id,
             order_by=(space_priority.asc(), entry_priority.asc(), KnowledgeFile.id.asc()),
         ).label("canonical_rank")
-        ranked_statement = select(
-            KnowledgeFile.id.label("file_id"),
-            canonical_rank,
-        ).where(
+        selected_columns = [KnowledgeFile.id.label("file_id")]
+        if deduplicate_documents:
+            selected_columns.append(canonical_rank)
+        ranked_statement = select(*selected_columns).where(
             KnowledgeFile.knowledge_id.in_(unique_knowledge_ids),
             KnowledgeFile.file_type == FileType.FILE.value,
             cls.active_inventory_predicate(),
@@ -1340,7 +1345,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
         statement = select(KnowledgeFile).join(
             ranked_files,
             KnowledgeFile.id == ranked_files.c.file_id,
-        ).where(ranked_files.c.canonical_rank == 1)
+        )
+        if deduplicate_documents:
+            statement = statement.where(ranked_files.c.canonical_rank == 1)
 
         normalized_order_sort = "asc" if str(order_sort or "").lower() == "asc" else "desc"
         if cursor and len(cursor) >= 2:

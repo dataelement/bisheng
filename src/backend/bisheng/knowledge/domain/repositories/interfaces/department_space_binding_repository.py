@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from bisheng.common.repositories.interfaces.base_repository import BaseRepository
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 
 
 @dataclass(frozen=True)
@@ -26,6 +27,17 @@ class DepartmentSpaceBindingRepository(BaseRepository[DepartmentKnowledgeSpace, 
         self,
         space_ids: list[int],
     ) -> list[DepartmentKnowledgeSpace]: ...
+
+    @abstractmethod
+    async def prepare_clinic_update(
+        self,
+        *,
+        space: Knowledge,
+        department_id: int,
+        expected_department_id: int,
+        portal_discovery_enabled: bool | None = None,
+    ) -> None:
+        """锁定科室绑定并暂存编辑, 保留空间层级和所有者, 由调用方提交或回滚。"""
 
     @abstractmethod
     async def rebind_department(

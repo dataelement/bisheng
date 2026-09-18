@@ -8,6 +8,9 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
+from bisheng.database.models.group_resource import ResourceTypeEnum
+from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
+from bisheng.knowledge.domain.models.knowledge_tag_library_link import KnowledgeTagLibraryLink
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -36,6 +39,59 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     def __init__(self, session: AsyncSession):
         super().__init__(session, KnowledgeFile)
         track_fulltext_file_changes(session)
+
+    async def find_portal_tag_file_ids(self, space_ids: list[int], tag_name: str) -> list[int]:
+        ids = sorted({int(item) for item in space_ids if int(item) > 0})
+        name = (tag_name or "").strip()
+        if not ids or not name:
+            return []
+        libraries = (
+            await self.session.exec(
+                select(KnowledgeTagLibraryLink.tag_library_id)
+                .where(KnowledgeTagLibraryLink.knowledge_id.in_(ids))
+                .distinct()
+            )
+        ).all()
+        conditions = [
+            and_(
+                Tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE.value,
+                Tag.business_id.in_([str(item) for item in ids]),
+            )
+        ]
+        if libraries:
+            conditions.append(
+                and_(
+                    Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    Tag.business_id.in_([str(item) for item in libraries]),
+                )
+            )
+        tag_ids = (await self.session.exec(select(Tag.id).where(Tag.name == name, or_(*conditions)))).all()
+        if not tag_ids:
+            return []
+        resources = (
+            await self.session.exec(
+                select(TagLink.resource_id)
+                .where(
+                    TagLink.tag_id.in_(tag_ids),
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                )
+                .distinct()
+            )
+        ).all()
+        return sorted({int(item) for item in resources if str(item).isdigit()})
+
+    async def list_qa_subtree_page(self, *, space_id: int, prefix: str,
+                                   after_id: int, limit: int) -> list[KnowledgeFile]:
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == space_id,
+            KnowledgeFile.id > after_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+            or_(KnowledgeFile.file_level_path == prefix,
+                col(KnowledgeFile.file_level_path).startswith(prefix + '/', autoescape=True)),
+        ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
+        return list((await self.session.exec(statement)).all())
 
     async def list_qa_category_candidates(
         self,

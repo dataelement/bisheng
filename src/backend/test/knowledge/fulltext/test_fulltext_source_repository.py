@@ -109,6 +109,7 @@ async def test_legacy_success_file_snapshot_is_not_hidden_by_default_tenant_filt
 
 
 async def test_historical_physical_version_snapshot_is_deleted(async_db_session, monkeypatch):
+    await async_db_session.exec(text("ALTER TABLE knowledge_space_scope ADD COLUMN portal_discovery_enabled INTEGER NOT NULL DEFAULT 0"))
     await async_db_session.exec(
         text(
             """
@@ -221,8 +222,8 @@ async def test_shared_space_chunk_source_uses_current_canonical_generation(
             """
             INSERT INTO knowledge_space_shared_storage_routing (
                 tenant_id, shared_enabled, routing_version, write_frozen,
-                index_name
-            ) VALUES (1, 1, 5, 0, 'idx_space_shared_1')
+                index_name, collection_name, embedding_model_id, schema_fingerprint
+            ) VALUES (1, 0, 5, 0, 'idx_space_shared_1', 'col_space_shared_1', 7, 'fp')
             """
         )
     )

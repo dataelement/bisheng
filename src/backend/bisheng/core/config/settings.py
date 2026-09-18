@@ -110,6 +110,9 @@ class ElasticsearchConf(BaseModel):
         if isinstance(self.ssl_verify, str):
             self.ssl_verify = ast.literal_eval(self.ssl_verify)
 
+        if isinstance(self.ssl_verify, dict):
+            self.ssl_verify.setdefault("request_timeout", 30.0)
+
         return self
 
 
@@ -269,6 +272,11 @@ class CeleryConf(BaseModel):
             self.beat_schedule["scan_department_transfer_permission_cleanup"] = {
                 "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
                 "schedule": 30.0,
+            }
+        if "fanout_shared_storage_reconcile" not in self.beat_schedule:
+            self.beat_schedule["fanout_shared_storage_reconcile"] = {
+                "task": "bisheng.worker.knowledge.shared_storage_reconcile.fanout_shared_storage_reconcile",
+                "schedule": crontab(hour=2, minute=0),
             }
         if "fanout_document_projection_scan" not in self.beat_schedule:
             self.beat_schedule["fanout_document_projection_scan"] = {
@@ -742,9 +750,21 @@ class KnowledgeRetrievalRuntimeConf(BaseModel):
     """知识检索读链路的超时与进程级并发保护。"""
 
     total_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    # Accepted for persisted config compatibility; portal QA always uses shared retrieval.
+    portal_unified_qa_enabled: bool = Field(default=False, description="Deprecated; ignored by portal QA")
+    portal_unified_qa_tenant_ids: list[int] = Field(default_factory=list, description="Deprecated; ignored by portal QA")
+    portal_unified_qa_user_ids: list[int] = Field(default_factory=list, description="Deprecated; ignored by portal QA")
+    portal_qa_initial_limit: int = Field(default=200, ge=1, le=800)
+    portal_qa_candidate_limit: int = Field(default=300, ge=1, le=300)
+    portal_qa_max_rounds: int = Field(default=3, ge=1, le=3)
+    portal_qa_pool_limit: int = Field(default=1600, ge=1, le=1600)
+    portal_qa_cursor_source_limit: int = Field(default=800, ge=1, le=800)
+    portal_qa_cursor_scan_limit: int = Field(default=1600, ge=1, le=1600)
+    portal_qa_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
+    portal_qa_heartbeat_seconds: float = Field(default=10, gt=0, le=30)
     embedding_timeout_seconds: float = Field(default=15, gt=0, le=300)
     milvus_timeout_seconds: float = Field(default=15, gt=0, le=300)
-    elasticsearch_timeout_seconds: float = Field(default=15, gt=0, le=300)
+    elasticsearch_timeout_seconds: float = Field(default=30, gt=0, le=300)
     source_link_timeout_seconds: float = Field(default=8, gt=0, le=300)
     max_knowledge_base_concurrency: int = Field(default=8, ge=1, le=32)
     max_embedding_concurrency: int = Field(default=16, ge=1, le=64)
@@ -804,19 +824,8 @@ class KnowledgeConf(BaseModel):
 
 
 class KnowledgeSpaceSharedStorageConf(BaseModel):
-    """知识空间统一共享存储（SPACE shared storage）配置。
+    """SPACE 唯一存储链路的参数；旧 enabled 配置不再生效。"""
 
-    总开关语义（重构方案 §7.4 镜像级回退前提）：``enabled=False`` 时所有
-    共享存储新逻辑（租户路由、共享 collection/index bootstrap、共享写
-    入/检索、删库保护）完全不生效，行为与旧版本一致。租户级灰度由
-    ``knowledge_space_shared_storage_routing`` 路由表的 ``shared_enabled``
-    单行原子切换控制（方案 §6.2：租户路由状态以 SQL 路由表为单一真相源）。
-    """
-
-    enabled: bool = Field(
-        default=False,
-        description="共享存储总开关；False 时所有新逻辑零行为变化",
-    )
     collection_prefix: str = Field(
         default="col_space_shared",
         description="租户共享 Milvus collection 前缀，实际名称为 {prefix}_{tenant_id}",

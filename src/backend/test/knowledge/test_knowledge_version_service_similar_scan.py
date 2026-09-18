@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
-from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -78,7 +78,7 @@ async def test_fetch_chunk_texts_closes_es_client(async_db_session, monkeypatch)
     )
 
     svc = _build_svc(async_db_session)
-    texts = await svc._fetch_chunk_texts(SimpleNamespace(id=1, index_name="idx"), [100])
+    texts = await svc._fetch_chunk_texts(SimpleNamespace(id=1, index_name="idx", type=KnowledgeTypeEnum.NORMAL.value), [100])
 
     assert texts == {100: "hello"}
     close.assert_awaited_once()

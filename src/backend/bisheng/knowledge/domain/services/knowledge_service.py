@@ -853,21 +853,10 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def _space_shared_routing_for_create(cls, db_knowledge: Knowledge, tenant_id: int):
-        """F1.6: resolve shared routing for a SPACE knowledge base creation.
-
-        Returns the routing snapshot when the tenant's SPACE storage is routed
-        to the shared store, else None (old per-space behavior unchanged).
-        """
+        """SPACE 必须配置共享目标，初始化异常直接向上传播。"""
         from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
 
-        try:
-            return resolve_space_shared_routing(tenant_id, db_knowledge.type)
-        except Exception:
-            # Routing table unavailable must not break creation with the
-            # switch off; with the switch on a routing error would surface on
-            # first write anyway (fail-closed there).
-            logger.exception("act=resolve_space_shared_routing_error tenant=%s", tenant_id)
-            return None
+        return resolve_space_shared_routing(tenant_id, db_knowledge.type)
 
     @classmethod
     def create_knowledge_base(
@@ -883,13 +872,9 @@ class KnowledgeService(KnowledgeUtils):
         # shared store; bootstrap happens on the admin path only.
         shared_routing = cls._space_shared_routing_for_create(db_knowledge, login_user.tenant_id)
         if shared_routing is not None:
-            from bisheng.knowledge.rag.shared_space_storage import (
-                shared_collection_name,
-                shared_index_name,
-            )
-
-            db_knowledge.index_name = shared_index_name(login_user.tenant_id)
-            db_knowledge.collection_name = shared_collection_name(login_user.tenant_id)
+            db_knowledge.index_name = shared_routing.index_name
+            db_knowledge.collection_name = shared_routing.collection_name
+            db_knowledge.model = str(shared_routing.embedding_model_id)
             initialize_indices = False
         else:
             # generate index_name and collection_name
@@ -940,13 +925,9 @@ class KnowledgeService(KnowledgeUtils):
         # F1.6 (async variant): shared-routed SPACE skips per-space store creation.
         shared_routing = cls._space_shared_routing_for_create(db_knowledge, login_user.tenant_id)
         if shared_routing is not None:
-            from bisheng.knowledge.rag.shared_space_storage import (
-                shared_collection_name,
-                shared_index_name,
-            )
-
-            db_knowledge.index_name = shared_index_name(login_user.tenant_id)
-            db_knowledge.collection_name = shared_collection_name(login_user.tenant_id)
+            db_knowledge.index_name = shared_routing.index_name
+            db_knowledge.collection_name = shared_routing.collection_name
+            db_knowledge.model = str(shared_routing.embedding_model_id)
             initialize_indices = False
         else:
             db_knowledge.index_name = generate_knowledge_index_name()

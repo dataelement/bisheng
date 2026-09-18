@@ -907,7 +907,6 @@ async def _retrieve_selected_knowledge_context(
     citation_collector: CitationRegistryCollector,
     file_ids_by_space: dict[int, list[int]] | None = None,
     request: Request | None = None,
-    department_file_view_access_service=None,
 ) -> str:
     """调用模型前先检索用户选择的知识库内容。
 
@@ -940,9 +939,6 @@ async def _retrieve_selected_knowledge_context(
             login_user=login_user,
             file_ids_by_space=file_ids_by_space,
             request=request,
-            department_file_view_access_service=(
-                department_file_view_access_service
-            ),
         )
     except Exception as exc:
         logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
@@ -1018,60 +1014,50 @@ async def _resolve_user_kb_file_filters(
         request: Request,
         data: APIChatCompletion,
         login_user: UserPayload,
-        *,
-        portal_context: bool = False,
-        department_file_view_access_service=None,
 ) -> dict[int, list[int]] | None:
+    """Resolve explicit file scopes for non-portal workstation requests."""
     ukb = data.use_knowledge_base
     scope = getattr(ukb, 'knowledge_scope', None) if ukb else None
-    if not scope:
-        if (
-            not portal_context
-            or not ukb
-            or not list(ukb.knowledge_space_ids or [])
-        ):
-            return None
-        scope_mode = 'knowledge_space'
-        folder_refs = []
-        file_refs = []
-    else:
-        scope_mode = scope.mode
-        folder_refs = list(scope.folder_refs or [])
-        file_refs = list(scope.file_refs or [])
-    if not portal_context and scope_mode != 'files':
+    if not scope or scope.mode != 'files':
         return None
-    if portal_context and scope_mode not in {'files', 'knowledge_space'}:
-        return None
-
+    folder_refs = list(scope.folder_refs or [])
+    file_refs = list(scope.file_refs or [])
     if not folder_refs and not file_refs:
-        if not portal_context or scope_mode == 'files':
-            raise ValueError('请选择可用于问答的文件。')
+        raise ValueError('请选择可用于问答的文件。')
 
     service = KnowledgeSpaceService(request, login_user)
-    if portal_context:
-        service.department_file_view_access_service = (
-            department_file_view_access_service
-        )
-        selected_space_ids = list(ukb.knowledge_space_ids or [])
-        if (
-            scope is not None
-            and scope_mode == 'knowledge_space'
-            and int(scope.knowledge_space_id or 0) > 0
-            and int(scope.knowledge_space_id) not in selected_space_ids
-        ):
-            selected_space_ids.append(int(scope.knowledge_space_id))
-        return await service.resolve_shougang_portal_qa_scope_file_ids(
-            mode=scope_mode,
-            knowledge_space_ids=selected_space_ids,
-            folder_refs=folder_refs,
-            file_refs=file_refs,
-            max_files=None,
-        )
     return await service.resolve_qa_scope_file_ids(
         folder_refs=folder_refs,
         file_refs=file_refs,
         max_files=None,
     )
+
+
+async def _unified_portal_context(request, data, login_user, department_access, config, collector, *, deadline=None):
+    from bisheng.knowledge.domain.services.portal_qa_retrieval_service import build_portal_qa_plan, retrieve_portal_qa
+
+    async def retrieve():
+        plan = await build_portal_qa_plan(request=request, user=login_user,
+            knowledge_base=data.use_knowledge_base, department_access=department_access)
+        if not plan.space_ids:
+            from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalResult
+            return '', QaRetrievalResult()
+        documents, result = await retrieve_portal_qa(request=request, user=login_user,
+            plan=plan, query=data.text or '', config=config[0], max_chars=config[1])
+        documents = annotate_rag_documents_with_citations(documents)
+        blocks, documents = WorkStationService._truncate_ranked_documents_by_chars(documents, config[1])
+        citations = collect_rag_citation_registry_items(documents)
+        await cache_citation_registry_items(citations)
+        collector.extend(citations)
+        return _join_retrieval_blocks_with_limit(blocks, config[1]) or '没有找到相关内容。', result
+
+    # 范围、召回、授权、重排、最终复核共享同一期限。
+    try:
+        remaining = config[0].total_timeout_seconds if deadline is None else max(0, deadline - time.monotonic())
+        return await asyncio.wait_for(retrieve(), timeout=remaining)
+    except asyncio.TimeoutError as exc:
+        from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalError, QaRetrievalErrorKind
+        raise QaRetrievalError(QaRetrievalErrorKind.DEADLINE, 'retrieval budget exhausted') from exc
 
 
 async def _prepare_tools(
@@ -1324,10 +1310,16 @@ async def _agent_stream_chat_completion(
          order. Frontend renders this array directly.
     """
     start_time = time.time()
+    request_started = time.monotonic()
+    initialized_chat = None
     try:
-        ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = \
-            await _agent_initialize_chat(data, login_user)
-        conversation_id = conversation.chat_id
+        unified_config = None
+        if portal_context:
+            from bisheng.common.services.config_service import settings as config_settings
+            unified_config = (await asyncio.wait_for(config_settings.async_get_knowledge(), 30)).retrieval
+            logger.info('portal_qa_strategy strategy=unified_shared')
+        if unified_config is None:
+            initialized_chat = await _agent_initialize_chat(data, login_user)
     except (BaseErrorCode, ValueError) as exc:
         logger.exception('Agent chat setup rejected')
         stage = 'system' if isinstance(exc, BaseErrorCode) else 'config'
@@ -1342,7 +1334,17 @@ async def _agent_stream_chat_completion(
             media_type='text/event-stream',
         )
 
+    stream_stage = {'value': 'retrieval', 'had_output': False, 'deadline': None}
+
     async def _agent_event_stream_impl():
+        try:
+            ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = (
+                initialized_chat if initialized_chat is not None else await _agent_initialize_chat(data, login_user)
+            )
+            conversation_id = conversation.chat_id
+        except Exception as exc:
+            yield stream_error_sse(exc, stage='config' if isinstance(exc, ValueError) else 'system')
+            return
         # Single ordered event log — one entry per thinking segment or tool
         # call, in arrival order. The frontend renders this array directly;
         # parallel arrays + `segment_idx`/`after_segment` cross-references
@@ -1367,6 +1369,7 @@ async def _agent_stream_chat_completion(
         error_msg = ''
         failure_stage = 'system'
         citation_collector = CitationRegistryCollector()
+        retrieval_status = None
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
@@ -1405,16 +1408,41 @@ async def _agent_stream_chat_completion(
         try:
             # ---- Step 1: resolve user-selected KBs ----
             failure_stage = 'retrieval'
-            knowledge_bases_info = await _resolve_user_kb_selection(data)
-            file_ids_by_space = await _resolve_user_kb_file_filters(
-                request,
-                data,
-                login_user,
-                portal_context=portal_context,
-                department_file_view_access_service=(
-                    department_file_view_access_service
-                ),
-            )
+            retrieval_deadline = time.monotonic() + unified_config.total_timeout_seconds if unified_config else None
+            stream_stage['deadline'] = retrieval_deadline
+            if unified_config:
+                yield 'event: retrieval_status\ndata: {"stage":"retrieval","scope_complete":true}\n\n'
+                try:
+                    knowledge_bases_info = await asyncio.wait_for(_resolve_user_kb_selection(data), max(0, retrieval_deadline - time.monotonic()))
+                except asyncio.TimeoutError as exc:
+                    raise RuntimeError('retrieval budget exhausted') from exc
+            else:
+                knowledge_bases_info = await _resolve_user_kb_selection(data)
+            # Portal requests must never fall back to pre-retrieval expansion.
+            if portal_context:
+                from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
+                space_ids, org_ids = _split_selected_knowledge_ids(knowledge_bases_info)
+                if org_ids:
+                    raise ValueError('Portal QA requires shared knowledge spaces')
+                elif space_ids:
+                    from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+                    async def require_shared_route():
+                        route = await aresolve_space_shared_routing(int(login_user.tenant_id), int(knowledge_bases_info[0]['type']))
+                        if route is None:
+                            raise SharedStorageContractError(
+                                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+                                'Portal QA shared routing is missing', tenant_id=int(login_user.tenant_id),
+                            )
+                    try:
+                        await asyncio.wait_for(require_shared_route(), max(0, retrieval_deadline - time.monotonic()))
+                    except asyncio.TimeoutError as exc:
+                        raise RuntimeError('retrieval budget exhausted') from exc
+            file_ids_by_space = None
+            if not portal_context:
+                stream_stage['deadline'] = None
+                file_ids_by_space = await _resolve_user_kb_file_filters(
+                    request, data, login_user,
+                )
 
             # ---- Step 2: assemble LangChain tools ----
             tool_payloads = [t.model_dump() for t in (data.tools or [])]
@@ -1459,20 +1487,25 @@ async def _agent_stream_chat_completion(
 
             # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
             failure_stage = 'retrieval'
-            retrieved_knowledge_context = await _retrieve_selected_knowledge_context(
-                question=data.text or '',
-                knowledge_bases_info=knowledge_bases_info,
-                login_user=login_user,
-                max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
-                citation_collector=citation_collector,
-                file_ids_by_space=file_ids_by_space,
-                request=request,
-                department_file_view_access_service=(
-                    department_file_view_access_service
-                    if portal_context
-                    else None
-                ),
-            )
+            if portal_context:
+                retrieved_knowledge_context, retrieval_result = await _unified_portal_context(
+                    request, data, login_user, department_file_view_access_service,
+                    (unified_config, getattr(ws_config, 'maxTokens', 15000) or 15000), citation_collector, deadline=retrieval_deadline,
+                )
+                retrieval_status = {
+                    'stage': 'model', 'scope_complete': retrieval_result.scope_complete,
+                    'degraded': bool(retrieval_result.degraded_reasons),
+                }
+                yield 'event: retrieval_status\ndata: ' + json.dumps(retrieval_status) + '\n\n'
+            else:
+                retrieved_knowledge_context = await _retrieve_selected_knowledge_context(
+                    question=data.text or '', knowledge_bases_info=knowledge_bases_info,
+                    login_user=login_user, max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
+                    citation_collector=citation_collector, file_ids_by_space=file_ids_by_space,
+                    request=request,
+                )
+            stream_stage['value'] = 'model'
+            stream_stage['deadline'] = None
             user_text = _build_user_content(
                 question=data.text or '',
                 file_context=file_context,
@@ -1582,6 +1615,7 @@ async def _agent_stream_chat_completion(
 
             # ---- Step 5: execute ----
             failure_stage = 'model'
+            stream_stage['model_started'] = time.monotonic()
             if langchain_tools:
                 from langgraph.prebuilt import create_react_agent
                 from langchain_core.runnables import RunnableConfig
@@ -1844,6 +1878,8 @@ async def _agent_stream_chat_completion(
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
         db_content: dict = {'msg': final_msg, 'events': events}
+        if retrieval_status is not None:
+            db_content['retrieval_status'] = retrieval_status
 
         resp_msg = await ChatMessageDao.ainsert_one(
             ChatMessage(
@@ -1896,7 +1932,7 @@ async def _agent_stream_chat_completion(
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
-    async def event_stream():
+    async def owned_event_stream():
         dept_flow_slot: Optional[int] = None
         flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
         if flow_lim > 0 and flow_dept is not None:
@@ -1908,16 +1944,48 @@ async def _agent_stream_chat_completion(
                 yield stream_error_sse(error, stage='rate_limit')
                 return
             dept_flow_slot = flow_dept
+        source = _agent_event_stream_impl()
         try:
-            async for chunk in _agent_event_stream_impl():
+            async for chunk in source:
                 yield chunk
         finally:
+            await source.aclose()
             if dept_flow_slot is not None:
                 await DepartmentFlowService.release_daily_chat_slot(
                     dept_flow_slot, login_user.user_id,
                 )
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream')
+    async def event_stream():
+        if unified_config is None:
+            async for chunk in owned_event_stream():
+                yield chunk
+            return
+        from .portal_qa_stream import bounded_qa_stream
+        try:
+            async for chunk in bounded_qa_stream(owned_event_stream(),
+                    timeout=max(0, unified_config.portal_qa_request_timeout_seconds - (time.monotonic() - request_started)),
+                    heartbeat=unified_config.portal_qa_heartbeat_seconds,
+                    phase_deadline=lambda: stream_stage['deadline']):
+                payload_lines = [line[5:].strip() for line in chunk.splitlines() if line.startswith('data:')]
+                try:
+                    payload = json.loads('\n'.join(payload_lines)) if payload_lines else {}
+                except (TypeError, ValueError):
+                    payload = {}
+                if payload.get('category') == 'agent_answer' and payload.get('message') and not stream_stage['had_output']:
+                    stream_stage['had_output'] = True
+                    logger.info('portal_qa_first_answer elapsed_ms={}', int((time.monotonic() - request_started) * 1000))
+                    logger.info('portal_qa_stage stage=model_first_answer elapsed_ms={}',
+                                int((time.monotonic() - stream_stage.get('model_started', request_started)) * 1000))
+                yield chunk
+        except asyncio.TimeoutError:
+            yield stream_error_sse(RuntimeError('question budget exhausted'),
+                                   stage=stream_stage['value'], had_output=stream_stage['had_output'])
+        finally:
+            logger.info('portal_qa_total elapsed_ms={} stage={}',
+                        int((time.monotonic() - request_started) * 1000), stream_stage['value'])
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
 
 async def stream_chat_completion(

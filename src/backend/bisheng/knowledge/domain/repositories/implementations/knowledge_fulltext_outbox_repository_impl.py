@@ -113,6 +113,7 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
         tenant_id: int,
         max_retries: int,
         knowledge_id: int | None = None,
+        notify_after_commit: bool = True,
     ) -> KnowledgeFulltextOutbox:
         if self.session.bind is not None and self.session.bind.dialect.name == "mysql":
             row = await self._request_sync_mysql(
@@ -165,7 +166,8 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
             self.session.add(row)
             await self.session.flush()
             await self.session.refresh(row)
-        track_outbox_after_commit(self.session, row)
+        if notify_after_commit:
+            track_outbox_after_commit(self.session, row)
         return row
 
     async def _request_sync_mysql(

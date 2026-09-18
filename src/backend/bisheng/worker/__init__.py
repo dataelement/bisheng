@@ -19,6 +19,10 @@ from bisheng.worker.knowledge.document_projection import (
     process_document_projection,
     scan_tenant_document_projections,
 )
+from bisheng.worker.knowledge.shared_storage_reconcile import (
+    fanout_shared_storage_reconcile,
+    reconcile_tenant_shared_storage,
+)
 from bisheng.worker.knowledge.favorite_notification import (
     send_favorite_change_notifications,
 )
@@ -45,6 +49,12 @@ from bisheng.worker.knowledge.fulltext_index import (
     consume_knowledge_fulltext_outbox,
     dispatch_knowledge_fulltext_outbox,
     repair_knowledge_fulltext_source,
+)
+from bisheng.worker.knowledge.fulltext_reconcile import (
+    start_fulltext_reconcile,
+    resume_fulltext_reconcile,
+    reparse_fulltext_file,
+    rebuild_fulltext_projection,
 )
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,

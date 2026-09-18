@@ -60,12 +60,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_QUEUE = "celery"
 SCAN_PAGE_SIZE = 100
 
-#: Optional shared-storage writer provider (F1 wiring). ``factory(tenant_id)``
-#: returns a per-tenant SharedSpaceStorageWriter or None when shared routing
-#: is not available for the tenant. Tests override this hook; production uses
-#: the default F1 builder (``build_shared_space_components_for_tenant``),
-#: which returns None whenever the switch/routing row is off - in that case
-#: the projection service keeps the legacy per-entry behaviour.
+# 测试可注入 writer；生产始终要求已初始化的共享目标。
 shared_storage_writer_factory = None
 
 
@@ -86,53 +81,30 @@ async def _build_document_projection_service(
     version_repository,
     deleting_entry_finalizer=None,
     tenant_id: int | None = None,
-    allow_legacy_content_loader: bool = False,
 ):
     from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
         KnowledgeDocumentProjectionService,
     )
-    from bisheng.knowledge.domain.services.shared_space_projection_support import (
-        resolve_shared_space_storage_enabled,
-    )
+    from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
     from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 
-    shared_conf = get_shared_storage_conf()
+    if tenant_id is None:
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_NOT_CONFIGURED, "projection requires a tenant shared target",
+        )
+    factory = shared_storage_writer_factory or _default_shared_storage_writer_factory
+    writer = factory(tenant_id=int(tenant_id))
+    if writer is None:
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_NOT_CONFIGURED, "shared projection writer is unavailable", tenant_id=int(tenant_id),
+        )
     kwargs = {
-        "max_retry_attempts": int(shared_conf.projection_max_retries),
+        "shared_storage_writer": writer,
+        "shared_embedding_model_id": writer.schema_spec.embedding_model_id,
+        "max_retry_attempts": int(get_shared_storage_conf().projection_max_retries),
     }
-    if await resolve_shared_space_storage_enabled():
-        writer = None
-        factory = shared_storage_writer_factory or _default_shared_storage_writer_factory
-        if tenant_id is not None:
-            try:
-                writer = factory(tenant_id=int(tenant_id))
-            except TypeError:
-                writer = factory(session=session)
-        if writer is not None:
-            kwargs = {
-                "shared_storage_writer": writer,
-                "shared_storage_enabled": True,
-                "shared_embedding_model_id": writer.schema_spec.embedding_model_id,
-                "max_retry_attempts": int(shared_conf.projection_max_retries),
-            }
-            if allow_legacy_content_loader:
-                from bisheng.knowledge.domain.services.shared_space_projection_support import (
-                    load_shared_content_chunks_from_legacy,
-                )
-
-                kwargs["shared_content_chunk_loader"] = (
-                    load_shared_content_chunks_from_legacy
-                )
-            logger.info(
-                "F059 projection using shared mode legacy_content_loader=%s",
-                allow_legacy_content_loader,
-            )
-        elif tenant_id is not None:
-            # no routing row / switch off for this tenant: legacy projection
-            logger.debug(
-                "shared storage not routed for tenant %s; legacy projection",
-                tenant_id,
-            )
+    from bisheng.knowledge.domain.services.shared_space_content_loader import load_shared_content_from_original
+    kwargs["shared_content_chunk_loader"] = load_shared_content_from_original
     if deleting_entry_finalizer is not None:
         kwargs["deleting_entry_finalizer"] = deleting_entry_finalizer
     return KnowledgeDocumentProjectionService(

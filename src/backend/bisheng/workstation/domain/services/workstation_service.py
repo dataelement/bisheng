@@ -1436,6 +1436,8 @@ class WorkStationService(BaseService):
         *,
         question: str,
         candidates: list[Document],
+        login_user: UserPayload | None = None,
+        degraded_reasons: list[str] | None = None,
     ) -> list[Document]:
         if not candidates:
             return []
@@ -1445,7 +1447,15 @@ class WorkStationService(BaseService):
             if not model_id:
                 logger.info('[queryChunksFromDB] no rerank model configured, using global RRF')
                 return candidates
-            rerank_model = await LLMService.get_bisheng_rerank(model_id=int(model_id))
+            from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+            if login_user is None:
+                raise RuntimeError('rerank invocation requires user context')
+            rerank_model = await LLMService.get_bisheng_rerank(
+                model_id=int(model_id), user_id=int(login_user.user_id),
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+            )
             rerank_head = candidates[:cls._KB_RERANK_LIMIT]
             batches = [
                 rerank_head[index:index + cls._KB_RERANK_BATCH_SIZE]
@@ -1462,14 +1472,21 @@ class WorkStationService(BaseService):
                         )
                     )
 
-            reranked_batches = await asyncio.gather(
-                *[_rerank_batch(batch) for batch in batches]
-            )
+            tasks = [asyncio.create_task(_rerank_batch(batch)) for batch in batches]
+            try:
+                reranked_batches = await asyncio.gather(*tasks)
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
             scored_docs: list[Document] = []
             for batch in reranked_batches:
                 for doc in batch:
                     try:
-                        float((doc.metadata or {}).get('relevance_score'))
+                        import math
+                        if not math.isfinite(float((doc.metadata or {}).get('relevance_score'))):
+                            continue
                     except (TypeError, ValueError):
                         continue
                     scored_docs.append(doc)
@@ -1484,6 +1501,8 @@ class WorkStationService(BaseService):
                 doc for doc in rerank_head
                 if cls._retrieval_document_key(doc) not in scored_keys
             ]
+            if missing_head and degraded_reasons is not None:
+                degraded_reasons.append('rerank_partial')
             logger.info(
                 f'[queryChunksFromDB] semantic rerank model={model_id}'
                 f' candidates={len(rerank_head)} batches={len(batches)}'
@@ -1496,8 +1515,10 @@ class WorkStationService(BaseService):
                 timeout=cls._KB_RERANK_TIMEOUT_SECONDS,
             )
         except Exception as exc:
+            if degraded_reasons is not None:
+                degraded_reasons.append('rerank_unavailable')
             logger.warning(
-                f'[queryChunksFromDB] rerank unavailable, falling back to global RRF: {exc}'
+                f'[queryChunksFromDB] rerank unavailable, falling back to global RRF: {type(exc).__name__}'
             )
             return candidates
 
@@ -1627,90 +1648,90 @@ class WorkStationService(BaseService):
                 )
 
                 shared_service = KnowledgeSpaceChatService(request, login_user)
-                if await shared_service._is_shared_storage_active(space_ids):
-                    if request is None:
-                        raise SharedStorageContractError(
-                            SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
-                            "shared SPACE retrieval requires request context",
-                        )
-                    shared_service.department_file_view_access_service = (
-                        department_file_view_access_service
+                if request is None:
+                    raise SharedStorageContractError(
+                        SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
+                        "shared SPACE retrieval requires request context",
                     )
-                    kb_filters = None
-                    if file_ids_by_space is not None:
-                        kb_filters = {
-                            space_id: {
-                                "file_ids": cls._get_allowed_file_ids_for_space(
-                                    file_ids_by_space,
-                                    space_id,
-                                )
-                                or []
-                            }
-                            for space_id in space_ids
-                        }
-                    async with get_async_db_session() as session:
-                        shared_service.file_repo = (
-                            file_repositories.KnowledgeFileRepositoryImpl(session)
-                        )
-                        shared_service.doc_repo = (
-                            document_repositories.KnowledgeDocumentRepositoryImpl(session)
-                        )
-                        shared_service.version_repo = (
-                            version_repositories.KnowledgeDocumentVersionRepositoryImpl(
-                                session
+                shared_service.department_file_view_access_service = (
+                    department_file_view_access_service
+                )
+                kb_filters = None
+                if file_ids_by_space is not None:
+                    kb_filters = {
+                        space_id: {
+                            "file_ids": cls._get_allowed_file_ids_for_space(
+                                file_ids_by_space,
+                                space_id,
                             )
-                        )
-                        shared_chunks = await shared_service.aretrieve_chunks(
-                            query=question,
-                            knowledge_base_ids=space_ids,
-                            kb_filters=kb_filters,
-                            top_k=cls._KB_CANDIDATE_LIMIT,
-                            max_content=max_token,
-                        )
-
-                    shared_docs: list[Document] = []
-                    for _, doc in shared_chunks:
-                        metadata = doc.metadata or {}
-                        doc.metadata = metadata
-                        metadata['retrieval_source'] = 'shared_space'
-                        metadata['retrieval_score'] = float(metadata.get('score', 0.0) or 0.0)
-                        shared_docs.append(doc)
-
-                    rank_lists = [(shared_docs, 1.0)]
-                    if organization_ids:
-                        _, organization_docs, organization_failures = await cls.queryChunksFromDB(
-                            question=question,
-                            use_knowledge_param=UseKnowledgeBaseParam(
-                                knowledge_space_ids=[],
-                                organization_knowledge_ids=organization_ids,
-                            ),
-                            max_token=max_token,
-                            login_user=login_user,
-                            request=request,
-                            department_file_view_access_service=(
-                                department_file_view_access_service
-                            ),
-                        )
-                        failures.extend(organization_failures)
-                        rank_lists.append((list(organization_docs or []), 1.0))
-
-                    candidates = cls._global_rrf_merge(
-                        rank_lists,
-                        limit=cls._KB_CANDIDATE_LIMIT,
+                            or []
+                        }
+                        for space_id in space_ids
+                    }
+                async with get_async_db_session() as session:
+                    shared_service.file_repo = (
+                        file_repositories.KnowledgeFileRepositoryImpl(session)
                     )
-                    ranked_docs = await cls._rerank_retrieval_candidates(
+                    shared_service.doc_repo = (
+                        document_repositories.KnowledgeDocumentRepositoryImpl(session)
+                    )
+                    shared_service.version_repo = (
+                        version_repositories.KnowledgeDocumentVersionRepositoryImpl(
+                            session
+                        )
+                    )
+                    shared_chunks = await shared_service.aretrieve_chunks(
+                        query=question,
+                        knowledge_base_ids=space_ids,
+                        kb_filters=kb_filters,
+                        top_k=cls._KB_CANDIDATE_LIMIT,
+                        max_content=max_token,
+                    )
+
+                shared_docs: list[Document] = []
+                for _, doc in shared_chunks:
+                    metadata = doc.metadata or {}
+                    doc.metadata = metadata
+                    metadata['retrieval_source'] = 'shared_space'
+                    metadata['retrieval_score'] = float(metadata.get('score', 0.0) or 0.0)
+                    shared_docs.append(doc)
+
+                rank_lists = [(shared_docs, 1.0)]
+                if organization_ids:
+                    _, organization_docs, organization_failures = await cls.queryChunksFromDB(
                         question=question,
-                        candidates=candidates,
+                        use_knowledge_param=UseKnowledgeBaseParam(
+                            knowledge_space_ids=[],
+                            organization_knowledge_ids=organization_ids,
+                        ),
+                        max_token=max_token,
+                        login_user=login_user,
+                        request=request,
+                        department_file_view_access_service=(
+                            department_file_view_access_service
+                        ),
                     )
-                    formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
-                        ranked_docs,
-                        max_token,
-                    )
-                    return (
-                        formatted_results,
-                        finally_docs,
-                        cls._deduplicate_knowledge_failures(failures),
-                    )
+                    failures.extend(organization_failures)
+                    rank_lists.append((list(organization_docs or []), 1.0))
+
+                candidates = cls._global_rrf_merge(
+                    rank_lists,
+                    limit=cls._KB_CANDIDATE_LIMIT,
+                )
+                ranked_docs = await cls._rerank_retrieval_candidates(
+                    question=question,
+                    candidates=candidates,
+                    login_user=login_user,
+                )
+                formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(
+                    ranked_docs,
+                    max_token,
+                )
+                return (
+                    formatted_results,
+                    finally_docs,
+                    cls._deduplicate_knowledge_failures(failures),
+                )
             knowledge_rows = await cls._load_retrieval_knowledge_rows(
                 organization_ids=organization_ids,
                 space_ids=space_ids,
@@ -1758,6 +1779,7 @@ class WorkStationService(BaseService):
             ranked_docs = await cls._rerank_retrieval_candidates(
                 question=question,
                 candidates=candidates,
+                login_user=login_user,
             )
             rerank_ms = int((time.monotonic() - rerank_started_at) * 1000)
             formatted_results, finally_docs = cls._truncate_ranked_documents_by_chars(

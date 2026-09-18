@@ -60,3 +60,36 @@ async def test_denied_candidates_have_bounded_work_and_a_progressing_cursor():
     assert result["has_more"] is True
     assert int(result["next_cursor"]) < 10000
     assert service.knowledge_file_repo.list_qa_category_candidates.await_count == 5
+
+
+async def test_revoked_space_page_does_not_block_later_readable_space():
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+
+    service = make_service()
+    service._get_shougang_portal_request_spaces = AsyncMock(return_value=[
+        SimpleNamespace(id=20, name="revoked"), SimpleNamespace(id=10, name="readable"),
+    ])
+
+    async def readable(sid):
+        if sid == 20:
+            raise SpacePermissionDeniedError()
+
+    service._require_read_permission = AsyncMock(side_effect=readable)
+    def row(fid, sid):
+        return SimpleNamespace(id=fid, knowledge_id=sid, file_encoding="SG-ZC-A-001", file_subcategory_code="A")
+    service.knowledge_file_repo.list_qa_category_candidates = AsyncMock(side_effect=[
+        [row(fid, 20) for fid in range(100, 50, -1)],
+        [row(50, 20), row(49, 10), row(48, 10)],
+    ])
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_recycle_service.KnowledgeRecycleService.list_recycled_file_ids",
+        AsyncMock(return_value=[]),
+    ):
+        result = await service.get_shougang_portal_qa_category_files(
+            ShougangPortalQaCategoryFilesReq(space_ids=[20, 10], document_type="ZC", page_size=1)
+        )
+    assert [item['id'] for item in result['data']] == [49]
+    assert result['has_more'] is True and result['next_cursor'] == '49'
+    assert [call.args[0] for call in service._require_read_permission.await_args_list] == [20, 10]
+    assert service.knowledge_file_repo.list_qa_category_candidates.await_args.kwargs['before_id'] == 51
+    assert all(call.kwargs['space_id'] == 10 for call in service._filter_visible_child_items.await_args_list)

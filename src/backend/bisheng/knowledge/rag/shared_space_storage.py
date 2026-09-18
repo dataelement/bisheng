@@ -13,10 +13,8 @@ collection / ES index:
 - the real ``SharedSpaceStorageWriter`` implementation of the frozen M0
   contract in :mod:`bisheng.knowledge.domain.contracts.shared_space_storage`.
 
-Everything here is gated behind ``settings.knowledge_space_shared_storage.enabled``
-plus the per-tenant routing table row (``shared_enabled``): with either off,
-callers get ``SHARED_STORAGE_NOT_ENABLED`` / ``ROUTING_NOT_CONFIGURED`` and
-existing behavior is untouched.
+SPACE 始终使用已初始化的租户共享目标，历史启用标记不参与路由。
+其他类型知识库继续使用其现有存储。
 """
 from __future__ import annotations
 
@@ -92,7 +90,7 @@ def get_shared_storage_conf():
     """Return the ``knowledge_space_shared_storage`` settings block.
 
     Tolerant of test settings mocks that predate this field (returns a
-    default-disabled block instead of raising).
+    default parameter block instead of raising).
     """
     from bisheng.common.services.config_service import settings
 
@@ -175,6 +173,33 @@ async def aload_tenant_routing_snapshot(tenant_id: int) -> TenantRoutingSnapshot
     return TenantRoutingSnapshot.from_row(row) if row is not None else None
 
 
+def require_initialized_shared_routing(
+    tenant_id: int, snapshot: TenantRoutingSnapshot | None
+) -> TenantRoutingSnapshot:
+    """SPACE 只允许已初始化的共享目标，历史启用标记不参与路由。"""
+    if snapshot is None:
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+            "shared SPACE storage is not initialized; run the explicit migration/bootstrap first",
+            tenant_id=int(tenant_id),
+        )
+    if int(snapshot.tenant_id) != int(tenant_id):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
+            "shared route belongs to another tenant", tenant_id=int(tenant_id),
+        )
+    if not (
+        snapshot.collection_name and snapshot.index_name
+        and snapshot.embedding_model_id and snapshot.schema_fingerprint
+    ):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+            "shared SPACE targets, embedding model and schema fingerprint must be initialized",
+            tenant_id=int(tenant_id),
+        )
+    return snapshot
+
+
 def resolve_space_shared_routing(
     tenant_id: int,
     knowledge_type: int | None,
@@ -182,26 +207,11 @@ def resolve_space_shared_routing(
     conf=None,
     routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
 ) -> TenantRoutingSnapshot | None:
-    """Decide whether a knowledge base of ``knowledge_type`` in ``tenant_id``
-    must be routed to the shared store.
-
-    Returns the routing snapshot when **all** of these hold (otherwise None,
-    which means "behave exactly like the old code"):
-
-    - the global switch ``knowledge_space_shared_storage.enabled`` is on;
-    - the knowledge type is SPACE;
-    - the tenant has a routing row with ``shared_enabled=True``.
-    """
-    conf = conf or get_shared_storage_conf()
-    if not conf.enabled:
-        return None
+    """非 SPACE 保留原存储；SPACE 缺少初始化时失败，禁止回退。"""
     if knowledge_type is None or int(knowledge_type) != KnowledgeTypeEnum.SPACE.value:
         return None
     provider = routing_provider or load_tenant_routing_snapshot
-    snapshot = provider(int(tenant_id))
-    if snapshot is None or not snapshot.shared_enabled:
-        return None
-    return snapshot
+    return require_initialized_shared_routing(tenant_id, provider(int(tenant_id)))
 
 
 async def aresolve_space_shared_routing(
@@ -210,16 +220,11 @@ async def aresolve_space_shared_routing(
     *,
     conf=None,
 ) -> TenantRoutingSnapshot | None:
-    """异步解析读取链路应使用的共享存储路由。"""
-    conf = conf or get_shared_storage_conf()
-    if not conf.enabled:
-        return None
+    """异步读取 SPACE 必需的共享目标。"""
     if knowledge_type is None or int(knowledge_type) != KnowledgeTypeEnum.SPACE.value:
         return None
     snapshot = await aload_tenant_routing_snapshot(int(tenant_id))
-    if snapshot is None or not snapshot.shared_enabled:
-        return None
-    return snapshot
+    return require_initialized_shared_routing(tenant_id, snapshot)
 
 
 def freeze_tenant_writes(tenant_id: int) -> bool:
@@ -589,7 +594,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
     Semantics (contract docstrings are normative):
 
     - ``upsert_content``: writes the new ``content_generation`` first and
-      deletes older generations of the same canonical version afterwards
+      deletes older generations of the canonical document afterwards
       (Milvus ``auto_id=True`` makes ARRAY updates a rewrite). Before the
       insert it also removes leftovers of the *same* generation from a
       crashed earlier attempt, which keeps retries idempotent without ever
@@ -637,13 +642,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         return self.conf or get_shared_storage_conf()
 
     def _routing_snapshot(self) -> TenantRoutingSnapshot:
-        conf = self._conf()
-        if not conf.enabled:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "knowledge_space_shared_storage.enabled is off",
-                tenant_id=self.tenant_id,
-            )
         snapshot = self._routing_provider(self.tenant_id)
         if snapshot is None:
             raise SharedStorageContractError(
@@ -657,12 +655,8 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         self, *, embedding_model_id: str | int | None = None
     ) -> TenantRoutingSnapshot:
         snapshot = self._routing_snapshot()
-        if not snapshot.shared_enabled and not self._migration_mode:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "tenant is not routed to the shared store",
-                tenant_id=self.tenant_id,
-            )
+        if not self._migration_mode:
+            require_initialized_shared_routing(self.tenant_id, snapshot)
         if int(snapshot.routing_version) != self.expected_routing_version:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
@@ -897,7 +891,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         older_gen_expr = self._doc_expr(
             tenant_id=identity.tenant_id,
             canonical_document_id=identity.canonical_document_id,
-            canonical_version_id=identity.canonical_version_id,
             content_generation=identity.content_generation,
             generation_cmp="<",
         )
@@ -962,7 +955,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             query=stale_same_gen_query,
         )
 
-        # 3) delete the old generation now that the new one is durable
+        # 规范文档仅保留当前主版本，清理范围含其他版本的旧代次。
         await self._run_milvus("delete", expr=older_gen_expr)
         await self._run_es(
             "delete_by_query",
@@ -970,7 +963,6 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             query=self._es_doc_query(
                 tenant_id=identity.tenant_id,
                 canonical_document_id=identity.canonical_document_id,
-                canonical_version_id=identity.canonical_version_id,
                 content_generation=identity.content_generation,
                 generation_lt=True,
             ),
@@ -1140,11 +1132,10 @@ def build_shared_space_components_for_tenant(
     embedding_dimension: int | None = None,
     conf=None,
     routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
-) -> tuple[MilvusEsSharedSpaceStorageWriter, SharedSpaceStorageReader] | None:
+) -> tuple[MilvusEsSharedSpaceStorageWriter, SharedSpaceStorageReader]:
     """Build the per-tenant writer+reader pair when the tenant is routed.
 
-    Returns None when the tenant is not routed to the shared store (switch
-    off / no row) so callers keep legacy behaviour. The shared collection
+    Missing initialization raises; there is no per-space fallback. The shared collection
     must already exist - this factory never bootstraps (admin path only).
 
     ``embedding_dimension`` must be provided by the caller (the dimension of
@@ -1153,12 +1144,8 @@ def build_shared_space_components_for_tenant(
     fails closed with ``SCHEMA_FINGERPRINT_MISMATCH``.
     """
     conf = conf or get_shared_storage_conf()
-    if not conf.enabled:
-        return None
     provider = routing_provider or load_tenant_routing_snapshot
-    snapshot = provider(int(tenant_id))
-    if snapshot is None or not snapshot.shared_enabled:
-        return None
+    snapshot = require_initialized_shared_routing(tenant_id, provider(int(tenant_id)))
     if embedding_dimension is None and not snapshot.schema_fingerprint:
         raise SharedStorageContractError(
             SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
@@ -1264,28 +1251,10 @@ class SharedSpaceStorageReader:
         self._routing_provider = routing_provider or aload_tenant_routing_snapshot
 
     async def _assert_readable(self) -> TenantRoutingSnapshot:
-        conf = self.conf or get_shared_storage_conf()
-        if not conf.enabled:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "knowledge_space_shared_storage.enabled is off",
-                tenant_id=self.tenant_id,
-            )
         snapshot = self._routing_provider(self.tenant_id)
         if inspect.isawaitable(snapshot):
             snapshot = await snapshot
-        if snapshot is None:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
-                "no routing row for tenant",
-                tenant_id=self.tenant_id,
-            )
-        if not snapshot.shared_enabled:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "tenant is not routed to the shared store",
-                tenant_id=self.tenant_id,
-            )
+        snapshot = require_initialized_shared_routing(self.tenant_id, snapshot)
         if int(snapshot.routing_version) != self.expected_routing_version:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
@@ -1431,6 +1400,44 @@ class SharedSpaceStorageReader:
             )
         return hits
 
+    async def open_milvus_cursor(self, filter_: Any, *, vector: Sequence[float], batch_size: int, limit: int) -> Any:
+        from bisheng.knowledge.rag.shared_search_cursor import MappedSearchCursor
+
+        await self._assert_readable()
+        runtime = await self._get_milvus_runtime()
+        cursor = runtime.create_search_cursor(
+            collection_name=self.collection_name, data=[list(vector)],
+            batch_size=batch_size, limit=limit, filter=self._full_expr(filter_),
+            anns_field=SHARED_MILVUS_VECTOR_FIELD,
+            search_params={"metric_type": "L2", "params": {"ef": max(64, limit + 1)}},
+            output_fields=list(_READER_OUTPUT_FIELDS),
+        )
+        return MappedSearchCursor(cursor, self._to_hits, self._assert_readable)
+
+    async def open_es_cursor(self, filter_: Any, *, query_text: str, batch_size: int, limit: int) -> Any:
+        from bisheng.knowledge.rag.shared_search_cursor import ElasticsearchSearchCursor, MappedSearchCursor
+
+        snapshot = await self._assert_readable()
+        client = await self._get_es_client()
+        def convert(rows):
+            hits = []
+            for row in rows:
+                source = row.get("_source", {})
+                meta = source.get("metadata", {})
+                hits.append(CanonicalChunkHit(
+                    canonical_document_id=CanonicalDocumentId(int(meta["canonical_document_id"])),
+                    canonical_version_id=CanonicalVersionId(int(meta["canonical_version_id"])),
+                    chunk_index=int(meta.get("chunk_index", 0)), score=float(row.get("_score") or 0),
+                    text=source.get("text"), content_generation=int(meta.get("content_generation", 0)),
+                    membership_generation=int(meta.get("membership_generation", 0)),
+                ))
+            return hits
+        cursor = ElasticsearchSearchCursor(
+            client, snapshot.index_name or shared_index_name(self.tenant_id),
+            {"bool": {"must": [{"match": {"text": query_text}}],
+                      "filter": self._es_bool_filter(filter_)}}, batch_size, limit, convert)
+        return MappedSearchCursor(cursor, lambda rows: rows, self._assert_readable)
+
     async def search_milvus(
         self,
         filter_: Any,
@@ -1471,14 +1478,21 @@ class SharedSpaceStorageReader:
         *,
         query_text: str,
         limit: int,
+        phrase_boost: float | None = None,
     ) -> list[CanonicalChunkHit]:
         """BM25 search on the shared index with membership pre-filter."""
         snapshot = await self._assert_readable()
+        text_query: dict[str, Any] = {"match": {"text": query_text}}
+        if phrase_boost is not None:
+            text_query = {"bool": {"should": [
+                {"match": {"text": {"query": query_text, "boost": 1.0}}},
+                {"match_phrase": {"text": {"query": query_text, "boost": phrase_boost}}},
+            ], "minimum_should_match": 1}}
         body = {
             "size": int(limit),
             "query": {
                 "bool": {
-                    "must": [{"match": {"text": query_text}}],
+                    "must": [text_query],
                     "filter": self._es_bool_filter(filter_),
                 }
             },

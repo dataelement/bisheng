@@ -2110,6 +2110,7 @@
     "list_empty_for_subject": "No entries for this subject type",
     "manage_permission": "Manage Permissions",
     "permission_model_help_title": "Available after authorization",
+    "permission_model_no_permissions": "No permissions (none configured for this model)",
     "permission_scope_file": "File",
     "permission_scope_folder": "Folder",
     "permission_scope_space": "Knowledge base",

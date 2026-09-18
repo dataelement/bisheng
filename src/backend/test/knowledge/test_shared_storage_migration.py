@@ -86,48 +86,12 @@ class TestSharedStorageMigrationCoordinator:
             1, "TENANT_MIGRATION_FAILED"
         )
 
-    async def test_reverse_copy_failure_keeps_shared_route_frozen(self):
-        coordinator = SharedStorageMigrationCoordinator()
-        with (
-            patch(
-                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.freeze_tenant_writes",
-                return_value=True,
-            ),
-            patch(
-                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.unfreeze_tenant_writes",
-                return_value=True,
-            ) as unfreeze,
-            patch.object(
-                coordinator,
-                "_phase_reverse_copy",
-                AsyncMock(side_effect=RuntimeError("reverse copy failed")),
-            ),
-            patch(
-                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.KnowledgeSpaceSharedStorageRoutingDao"
-            ) as routing_dao,
-        ):
-            with pytest.raises(RuntimeError, match="reverse copy failed"):
-                await coordinator.reverse_migrate_tenant(1)
-        routing_dao.switch_to_legacy.assert_not_called()
-        unfreeze.assert_not_called()
+    def test_reverse_command_is_unavailable(self):
+        from scripts.migrate_shared_storage import _build_parser
 
-    async def test_rollback_clears_frozen_and_switches_to_legacy(self):
-        coordinator = SharedStorageMigrationCoordinator()
-        calls = []
-        with (
-            patch(
-                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.unfreeze_tenant_writes",
-                side_effect=lambda tenant_id: calls.append("unfreeze") or True,
-            ),
-            patch(
-                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.KnowledgeSpaceSharedStorageRoutingDao"
-            ) as mock_dao,
-        ):
-            mock_dao.switch_to_legacy = lambda tenant_id: calls.append("switch") or True
-            progress = await coordinator.rollback_tenant(1)
-        assert calls == ["switch", "unfreeze"]
-        assert progress.phase == "TENANT_MIGRATION_FAILED"
-        assert progress.completed_at is not None
+        with pytest.raises(SystemExit) as error:
+            _build_parser().parse_args(["reverse", "--tenant-id", "1"])
+        assert error.value.code == 2
 
     async def test_phase_transitions(self):
         progress = SharedStorageMigrationProgress(tenant_id=1)

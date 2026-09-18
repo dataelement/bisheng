@@ -22,7 +22,6 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
-    PortalDiscoveryResult,
 )
 
 
@@ -117,27 +116,24 @@ async def test_advanced_search_uses_fulltext_es_without_legacy_database_search()
 
 
 @pytest.mark.asyncio
-async def test_keyword_search_defers_department_access_during_recall():
+async def test_keyword_search_uses_shared_recall_without_legacy_profile(monkeypatch):
+    from bisheng.knowledge.domain.services import portal_global_search_retrieval as shared
+
     service = object.__new__(KnowledgeSpaceService)
-    service._search_shougang_portal_es_chunks = AsyncMock(return_value=[])
-    service._search_shougang_portal_vector_chunks = AsyncMock(return_value=[])
-    service._filter_and_dedupe_portal_search_chunks = AsyncMock(return_value=[])
-
-    result = await service._semantic_search_shougang_portal_files(
-        req=ShougangPortalFileSearchReq(
-            q="轧机振动",
-            discovery_scope="public_and_department",
-        ),
-        spaces=[SimpleNamespace(id=12)],
-        tag_file_ids=None,
+    service._search_portal_metadata_files = AsyncMock(return_value=[])
+    retriever = SimpleNamespace(
+        retrieve=AsyncMock(return_value=SimpleNamespace(chunks=[], metadata_space_ids=[])),
+        context=SimpleNamespace(seed=MagicMock(), close=AsyncMock()),
     )
-
-    service._filter_and_dedupe_portal_search_chunks.assert_awaited_once_with(
-        chunks=[],
-        spaces=[SimpleNamespace(id=12)],
-        defer_department_access=True,
+    monkeypatch.setattr(shared, "resolve_portal_shared_snapshot", AsyncMock(return_value=object()))
+    monkeypatch.setattr(shared, "PortalGlobalSearchRetriever", lambda **_: retriever)
+    result = await service._semantic_search_shougang_portal_files(
+        req=ShougangPortalFileSearchReq(q="轧机振动", discovery_scope="public_and_department"),
+        spaces=[SimpleNamespace(id=12)], tag_file_ids=None,
     )
     assert result["data"] == []
+    retriever.retrieve.assert_awaited_once_with(tag_file_ids=None)
+    retriever.context.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -190,64 +186,18 @@ def test_unchecked_department_search_result_keeps_metadata_and_requires_click_ch
 
 
 @pytest.mark.asyncio
-async def test_portal_configured_semantic_search_never_recalls_unauthorized_content():
+async def test_metadata_only_search_uses_filename_for_discoverable_spaces():
     service = object.__new__(KnowledgeSpaceService)
-    public_space = SimpleNamespace(id=10, index_name="public")
-    explicit_space = SimpleNamespace(id=20, index_name="explicit")
-    metadata_only_space = SimpleNamespace(id=30, index_name="metadata-only")
-    grant_parent_space = SimpleNamespace(id=31, index_name="grant-parent")
-    spaces = [public_space, explicit_space, metadata_only_space, grant_parent_space]
-    service._portal_discovery_result = PortalDiscoveryResult(
-        discoverable_space_ids=[10, 20, 30],
-        explicitly_visible_space_ids=[20],
-        explicitly_visible_file_ids=[3101],
-        explicit_file_space_by_id={3101: 31},
-        grant_parent_space_ids=[31],
-        query_space_ids=[10, 20, 30, 31],
-        space_kind_by_id={10: "public", 20: "department", 30: "clinic", 31: "department"},
-        snapshot="snapshot",
-    )
-    service._portal_explicit_file_ids = {3101}
-    service._portal_grant_parent_space_ids = {31}
-    service._get_shougang_portal_public_space_ids = AsyncMock(return_value={10})
-    service._search_shougang_portal_es_chunks = AsyncMock(return_value=[])
-    service._search_shougang_portal_vector_chunks = AsyncMock(return_value=[])
-
-    metadata_file = SimpleNamespace(
-        id=3001,
-        knowledge_id=30,
-        file_name="轧机振动检修规程.pdf",
-        reference_document_id=None,
-    )
-    with patch.object(
-        KnowledgeFileDao,
-        "aget_file_by_space_filters_cursor",
-        new=AsyncMock(return_value=[metadata_file]),
-    ) as metadata_search:
-        chunks, metadata_files = await service._recall_portal_configured_search_sources(
+    metadata_file = SimpleNamespace(id=3001, knowledge_id=30, file_name="轧机振动.pdf", reference_document_id=None)
+    with patch.object(KnowledgeFileDao, "aget_file_by_space_filters_cursor",
+                      new=AsyncMock(return_value=[metadata_file])) as search:
+        files = await service._search_portal_metadata_files(
             req=ShougangPortalFileSearchReq(q="轧机振动", discovery_scope="portal_configured"),
-            spaces=spaces,
-            keyword="轧机振动",
-            tag_file_ids=None,
+            space_ids=[30], keyword="轧机振动", tag_file_ids=None,
         )
-
-    assert chunks == []
-    assert metadata_files == [metadata_file]
-    assert [
-        [space.id for space in call.kwargs["spaces"]]
-        for call in service._search_shougang_portal_es_chunks.await_args_list
-    ] == [[10, 20], [31]]
-    assert [
-        call.kwargs["filter_file_ids"]
-        for call in service._search_shougang_portal_es_chunks.await_args_list
-    ] == [None, [3101]]
-    assert [
-        [space.id for space in call.kwargs["spaces"]]
-        for call in service._search_shougang_portal_vector_chunks.await_args_list
-    ] == [[10, 20], [31]]
-    metadata_search.assert_awaited_once()
-    assert metadata_search.await_args.kwargs["knowledge_ids"] == [30]
-    assert metadata_search.await_args.kwargs["file_name"] == "轧机振动"
+    assert files == [metadata_file]
+    assert search.await_args.kwargs["knowledge_ids"] == [30]
+    assert search.await_args.kwargs["file_name"] == "轧机振动"
 
 
 def test_unauthorized_portal_item_serializes_only_safe_allowlist():

@@ -18,6 +18,10 @@ dedicated writer thread. The default path is
 ``./reparse_reports/reparse-{run_id}.jsonl``; use ``--report-file`` to select
 another new path. Existing report files are never overwritten.
 
+Failed parses and files that crash mid-run are recorded in
+``./reparse_reports/reparse-skip.json`` and skipped on later runs. Pass
+``--retry-skipped`` to process them again.
+
 Usage:
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply
@@ -29,6 +33,7 @@ Usage:
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --status failed --status waiting
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --include-inflight
     PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --only-inflight
+    PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --retry-skipped
 """
 
 from __future__ import annotations
@@ -93,8 +98,20 @@ IN_FLIGHT_STATUSES: tuple[int, ...] = (
 SPACE_LEVEL_CHOICES: tuple[str, ...] = tuple(level.value for level in KnowledgeSpaceLevelEnum)
 STATUS_NAME_TO_VALUE: dict[str, int] = {status.name.lower(): status.value for status in KnowledgeFileStatus}
 REPORT_SCHEMA_VERSION = 1
+SKIP_LEDGER_SCHEMA_VERSION = 1
 DEFAULT_REPORT_DIR = Path("reparse_reports")
+DEFAULT_SKIP_LEDGER = DEFAULT_REPORT_DIR / "reparse-skip.json"
 _REPORT_STOP = object()
+ELIGIBILITY_SKIP_ERRORS = frozenset(
+    {
+        "file not found",
+        "file is soft-deleted",
+        "record is not a file",
+        "file is in-flight",
+        "status is not eligible",
+        "knowledge is not a space",
+    }
+)
 
 
 def _utc_now() -> str:
@@ -225,6 +242,8 @@ class SelectionReport:
     skipped_space_level_records: int = 0
     skipped_status_records: int = 0
     skipped_deleted_records: int = 0
+    skipped_previously_failed_records: int = 0
+    skipped_previously_crashed_records: int = 0
     duplicate_records: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -244,6 +263,8 @@ class SelectionReport:
             + self.skipped_space_level_records
             + self.skipped_status_records
             + self.skipped_deleted_records
+            + self.skipped_previously_failed_records
+            + self.skipped_previously_crashed_records
             + self.duplicate_records
         )
 
@@ -270,6 +291,154 @@ class RunReport:
     started_at: str = ""
     finished_at: str = ""
     duration_seconds: float = 0.0
+
+
+def classify_reparse_outcome(result: FileReparseResult) -> str:
+    if result.success:
+        return "success"
+    if result.final_status is None:
+        return "crashed"
+    if result.error in ELIGIBILITY_SKIP_ERRORS:
+        return "ignored"
+    return "failed"
+
+
+def _entry_ids(payload: dict[str, Any], key: str) -> dict[int, dict[str, Any]]:
+    raw = payload.get(key) or {}
+    if not isinstance(raw, dict):
+        return {}
+    entries: dict[int, dict[str, Any]] = {}
+    for item_key, value in raw.items():
+        try:
+            file_id = int(item_key)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(value, dict):
+            entries[file_id] = dict(value)
+            entries[file_id]["file_id"] = file_id
+    return entries
+
+
+def _format_id_preview(file_ids: Sequence[int], *, limit: int = 20) -> str:
+    values = sorted(int(file_id) for file_id in file_ids)
+    if len(values) <= limit:
+        return str(values)
+    remaining = len(values) - limit
+    return f"{values[:limit]} ... (+{remaining} more)"
+
+
+class SkipLedgerStore:
+    """Persist failed and crashed file IDs so later runs can skip them."""
+
+    def __init__(self, path: Path | str) -> None:
+        self.path = Path(path)
+        self._lock = threading.Lock()
+        self.failed: dict[int, dict[str, Any]] = {}
+        self.crashed: dict[int, dict[str, Any]] = {}
+
+    @property
+    def skipped_ids(self) -> set[int]:
+        return set(self.failed) | set(self.crashed)
+
+    def load(self) -> SkipLedgerStore:
+        if not self.path.exists():
+            return self
+        payload = json.loads(self.path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"skip ledger is not a JSON object: {self.path}")
+        self.failed = _entry_ids(payload, "failed")
+        self.crashed = _entry_ids(payload, "crashed")
+        return self
+
+    def _payload(self) -> dict[str, Any]:
+        return {
+            "schema_version": SKIP_LEDGER_SCHEMA_VERSION,
+            "failed": {str(file_id): entry for file_id, entry in sorted(self.failed.items())},
+            "crashed": {str(file_id): entry for file_id, entry in sorted(self.crashed.items())},
+        }
+
+    def _save_unlocked(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_name(f"{self.path.name}.tmp")
+        tmp_path.write_text(json.dumps(self._payload(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp_path.replace(self.path)
+
+    def _record(self, result: FileReparseResult, *, error: str) -> dict[str, Any]:
+        return {
+            "file_id": result.file_id,
+            "knowledge_id": result.knowledge_id,
+            "file_name": result.file_name,
+            "error": error,
+            "recorded_at": _utc_now(),
+        }
+
+    def mark_started(self, file_id: int, knowledge_id: int | None, file_name: str) -> None:
+        with self._lock:
+            self.failed.pop(file_id, None)
+            self.crashed[file_id] = {
+                "file_id": file_id,
+                "knowledge_id": knowledge_id,
+                "file_name": file_name,
+                "error": "in progress or process crashed",
+                "recorded_at": _utc_now(),
+            }
+            self._save_unlocked()
+
+    def record_result(self, result: FileReparseResult) -> None:
+        outcome = classify_reparse_outcome(result)
+        with self._lock:
+            if outcome in {"success", "ignored"}:
+                self.failed.pop(result.file_id, None)
+                self.crashed.pop(result.file_id, None)
+            elif outcome == "failed":
+                self.crashed.pop(result.file_id, None)
+                self.failed[result.file_id] = self._record(result, error=result.error)
+            else:
+                self.failed.pop(result.file_id, None)
+                self.crashed[result.file_id] = self._record(result, error=result.error or "crashed")
+            self._save_unlocked()
+
+
+def apply_skip_ledger(
+    selection: SelectionReport,
+    store: SkipLedgerStore | None,
+    *,
+    retry_skipped: bool,
+) -> SelectionReport:
+    if store is None or retry_skipped:
+        return selection
+    failed_ids = set(store.failed)
+    crashed_ids = set(store.crashed)
+    if not failed_ids and not crashed_ids:
+        return selection
+    kept: list[KnowledgeFile] = []
+    skipped_failed: list[int] = []
+    skipped_crashed: list[int] = []
+    for record in selection.selected_files:
+        if record.id is None:
+            continue
+        file_id = int(record.id)
+        if file_id in failed_ids:
+            skipped_failed.append(file_id)
+            continue
+        if file_id in crashed_ids:
+            skipped_crashed.append(file_id)
+            continue
+        kept.append(record)
+    selection.selected_files = kept
+    selection.skipped_previously_failed_records += len(skipped_failed)
+    selection.skipped_previously_crashed_records += len(skipped_crashed)
+    if skipped_failed:
+        selection.warnings.append(f"skipped previously failed file IDs: {_format_id_preview(skipped_failed)}")
+    if skipped_crashed:
+        selection.warnings.append(f"skipped previously crashed file IDs: {_format_id_preview(skipped_crashed)}")
+    return selection
+
+
+def resolve_skip_ledger_path(skip_ledger: str | None) -> Path:
+    if skip_ledger:
+        return Path(skip_ledger)
+    return DEFAULT_SKIP_LEDGER
 
 
 def _positive_int(value: str) -> int:
@@ -353,9 +522,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "skipping SUCCESS/FAILED/TIMEOUT/VIOLATION files"
         ),
     )
+    parser.add_argument(
+        "--skip-ledger",
+        default=None,
+        help="JSON ledger of failed/crashed file IDs; default: ./reparse_reports/reparse-skip.json",
+    )
+    parser.add_argument(
+        "--retry-skipped",
+        action="store_true",
+        help="reparse files recorded as failed or crashed in the skip ledger",
+    )
+    parser.add_argument(
+        "--no-skip-ledger",
+        action="store_true",
+        help="do not read or write the skip ledger",
+    )
     args = parser.parse_args(argv)
     if args.statuses and (args.include_inflight or args.only_inflight):
         parser.error("--status cannot be combined with --include-inflight or --only-inflight")
+    if args.no_skip_ledger and args.retry_skipped:
+        parser.error("--no-skip-ledger cannot be combined with --retry-skipped")
+    if args.no_skip_ledger and args.skip_ledger:
+        parser.error("--no-skip-ledger cannot be combined with --skip-ledger")
     return args
 
 
@@ -735,6 +923,7 @@ async def run_reparse_files(
     concurrency: int,
     reparse_func: Callable[[int], FileReparseResult] = reparse_one_file,
     event_sink: Callable[[str, dict[str, Any]], None] | None = None,
+    skip_ledger: SkipLedgerStore | None = None,
 ) -> RunReport:
     executable_files = [db_file for db_file in files if db_file.id is not None]
     semaphore = asyncio.Semaphore(concurrency)
@@ -781,6 +970,14 @@ async def run_reparse_files(
                 },
             )
             print(f"[START] file_id={db_file.id} file_name={db_file.file_name} started={started_count}/{report.total}")
+            if skip_ledger is not None:
+                try:
+                    skip_ledger.mark_started(int(db_file.id), db_file.knowledge_id, db_file.file_name)
+                except Exception as exc:
+                    print(
+                        f"[WARN] unable to record skip-ledger start for file_id={db_file.id}: {exc}",
+                        file=sys.stderr,
+                    )
             try:
                 result = await asyncio.to_thread(reparse_func, int(db_file.id))
             except Exception as exc:  # pragma: no cover - defensive guard
@@ -792,6 +989,14 @@ async def run_reparse_files(
                     None,
                     "".join(traceback.format_exception_only(type(exc), exc)).strip(),
                 )
+            if skip_ledger is not None:
+                try:
+                    skip_ledger.record_result(result)
+                except Exception as exc:
+                    print(
+                        f"[WARN] unable to record skip-ledger result for file_id={result.file_id}: {exc}",
+                        file=sys.stderr,
+                    )
             finished_at = _utc_now()
             return replace(
                 result,
@@ -858,6 +1063,8 @@ def print_selection_report(report: SelectionReport) -> None:
         f"space_level={report.skipped_space_level_records} "
         f"ineligible_status={report.skipped_status_records} "
         f"soft_deleted={report.skipped_deleted_records} "
+        f"previously_failed={report.skipped_previously_failed_records} "
+        f"previously_crashed={report.skipped_previously_crashed_records} "
         f"duplicates={report.duplicate_records}"
     )
     for warning in report.warnings:
@@ -884,6 +1091,8 @@ def _selection_report_payload(report: SelectionReport) -> dict[str, int]:
         "space_level": report.skipped_space_level_records,
         "ineligible_status": report.skipped_status_records,
         "soft_deleted": report.skipped_deleted_records,
+        "previously_failed": report.skipped_previously_failed_records,
+        "previously_crashed": report.skipped_previously_crashed_records,
         "duplicates": report.duplicate_records,
     }
 
@@ -900,6 +1109,9 @@ def _arguments_payload(args: argparse.Namespace) -> dict[str, Any]:
         "statuses": list(args.statuses),
         "include_inflight": bool(args.include_inflight),
         "only_inflight": bool(args.only_inflight),
+        "skip_ledger": args.skip_ledger,
+        "retry_skipped": bool(args.retry_skipped),
+        "no_skip_ledger": bool(args.no_skip_ledger),
     }
 
 
@@ -924,6 +1136,18 @@ async def run(args: argparse.Namespace) -> int:
     run_report = RunReport()
 
     try:
+        skip_store: SkipLedgerStore | None = None
+        if not args.no_skip_ledger:
+            skip_path = resolve_skip_ledger_path(args.skip_ledger)
+            try:
+                skip_store = SkipLedgerStore(skip_path).load()
+            except Exception as exc:
+                print(f"[SKIP LEDGER FAILED] unable to read {skip_path}: {exc}", file=sys.stderr)
+                return 3
+            print(f"[INFO] skip ledger: {skip_path} failed={len(skip_store.failed)} crashed={len(skip_store.crashed)}")
+            if args.retry_skipped:
+                print("[INFO] --retry-skipped is active: previously failed/crashed files will be processed.")
+
         if args.apply:
             report_path = resolve_report_path(args.report_file, run_id)
             try:
@@ -953,6 +1177,7 @@ async def run(args: argparse.Namespace) -> int:
                         space_level=args.space_level,
                         eligible_statuses=effective_statuses,
                     )
+            apply_skip_ledger(selection, skip_store, retry_skipped=bool(args.retry_skipped))
             selection_finished_at = _utc_now()
             selection_duration_seconds = max(
                 0.0,
@@ -996,6 +1221,7 @@ async def run(args: argparse.Namespace) -> int:
                     concurrency=args.concurrency,
                     reparse_func=reparse_func,
                     event_sink=writer.emit if writer is not None else None,
+                    skip_ledger=skip_store,
                 )
                 print_run_report(run_report)
                 exit_code = 2 if run_report.failed else 0

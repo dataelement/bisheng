@@ -3,7 +3,6 @@ from typing import Any
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.telemetry import (
-    HOME_STATS_EXTRA_QA_TYPES,
     KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
     KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS,
     REALTIME_QA_QUESTION_FACT_INDEX,
@@ -17,7 +16,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
 )
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
-from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection
+from bisheng.core.search.elasticsearch.manager import get_es_connection, get_statistics_es_connection
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,6 @@ PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE = 10000
 PORTAL_HOME_EVENT_TYPES = (
     BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
     BaseTelemetryTypeEnum.PORTAL_FAVORITE,
-    BaseTelemetryTypeEnum.PORTAL_QA,
 )
 
 
@@ -209,8 +207,7 @@ class PortalTelemetryEventService:
     async def count_home_events() -> dict[str, int]:
         """首页阅读/收藏/问答计数.
 
-        问答 = 现有 portal_qa 事件(剔除已投影为智能问答的 smart_qa) + 看板事实表 expert/smart.
-        智能问答已写入 portal_qa, 剔除后再按事实表加回, 避免双计.
+        阅读、收藏沿用原始事件口径；问答使用看板事实表的历史累计总量。
         """
         event_values = [event_type.value for event_type in PORTAL_HOME_EVENT_TYPES]
         body = {
@@ -247,22 +244,6 @@ class PortalTelemetryEventService:
                                 ]
                             }
                         },
-                        {
-                            "bool": {
-                                "filter": [
-                                    {
-                                        "term": {
-                                            "event_type": BaseTelemetryTypeEnum.PORTAL_QA.value,
-                                        }
-                                    },
-                                    {
-                                        "term": {
-                                            "event_data.portal_qa_scene": "smart_qa",
-                                        }
-                                    },
-                                ]
-                            }
-                        },
                     ],
                 }
             },
@@ -283,30 +264,21 @@ class PortalTelemetryEventService:
             key = str(bucket.get("key") or "")
             if key in counts:
                 counts[key] = int(bucket.get("doc_count") or 0)
-        extra_qa_count = await PortalTelemetryEventService.count_dashboard_qa_by_types(HOME_STATS_EXTRA_QA_TYPES)
+        qa_count = await PortalTelemetryEventService.count_dashboard_qa()
         return {
             "read_count": counts[BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value],
             "favorite_count": counts[BaseTelemetryTypeEnum.PORTAL_FAVORITE.value],
-            "qa_count": counts[BaseTelemetryTypeEnum.PORTAL_QA.value] + extra_qa_count,
+            "qa_count": qa_count,
         }
 
     @staticmethod
-    async def count_dashboard_qa_by_types(qa_types: tuple[str, ...]) -> int:
-        """按看板事实表统计指定 qa_type 的提问数, 口径与问答总数相同 (question_id value_count)."""
-        if not qa_types:
-            return 0
-        es_client = await get_statistics_es_connection()
+    async def count_dashboard_qa() -> int:
+        """使用看板的 ES 连接，按 question_id 统计全部历史问答记录。"""
+        es_client = await get_es_connection()
         response = await es_client.search(
             index=REALTIME_QA_QUESTION_FACT_INDEX,
             body={
                 "size": 0,
-                "query": {
-                    "bool": {
-                        "filter": [
-                            {"terms": {"qa_type": list(qa_types)}},
-                        ]
-                    }
-                },
                 "aggs": {
                     "qa_count": {
                         "value_count": {

@@ -86,15 +86,22 @@ def _service(
     cleaner=AsyncMock(),
     finalizer=AsyncMock(),
 ) -> KnowledgeDocumentProjectionService:
-    return KnowledgeDocumentProjectionService(
+    service = KnowledgeDocumentProjectionService(
         session=session,
         file_repository=KnowledgeFileRepositoryImpl(session),
-        projection_writer=writer,
-        projection_cleaner=cleaner,
+        shared_storage_writer=AsyncMock(),
         deleting_entry_finalizer=finalizer,
         lease_seconds=30,
         max_retry_seconds=60,
     )
+    # 此处只验证租约/CAS状态机；共享物理写入在 shared_space_projection 中验证。
+    async def project(entry, target, **kwargs):
+        await writer(entry, target)
+    async def cleanup(entry, target):
+        await cleaner(int(entry.knowledge_id), [int(entry.id)])
+    service._process_shared_projection = project
+    service._process_shared_cleanup = cleanup
+    return service
 
 
 @pytest.mark.asyncio
@@ -120,16 +127,14 @@ async def test_projection_claims_short_lease_and_applies_both_generations(
     entry = await KnowledgeFileRepositoryImpl(
         async_db_session
     ).find_by_id(101)
-    source = writer.await_args.args[0]
-    assert source.space_id == 10
-    assert source.file_id == 100
+    assert writer.await_args.args[0].id == 101
     assert result.status == "ready"
     assert entry.applied_content_generation == 4
     assert entry.applied_entry_generation == 1
     assert entry.projection_status == KnowledgeFileProjectionStatus.READY.value
     assert entry.projection_lease_owner is None
     assert entry.projection_previous_file_id is None
-    cleaner.assert_awaited_once_with(10, [100])
+    cleaner.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -158,9 +163,8 @@ async def test_projection_rebuild_reopens_ready_share_without_changing_file_stat
     )
 
     refreshed = await repository.find_by_id(102)
-    source = writer.await_args.args[0]
     assert result.status == "ready"
-    assert source.file_id == 100
+    assert writer.await_args.args[0].id == 102
     assert refreshed.status == KnowledgeFileStatus.SUCCESS.value
     assert refreshed.object_name is None
     assert refreshed.projection_status == KnowledgeFileProjectionStatus.READY.value
@@ -186,33 +190,6 @@ async def test_projection_rebuild_reopens_failed_manager_and_resets_retry_state(
     assert reopened.projection_last_error is None
 
 
-@pytest.mark.asyncio
-async def test_cross_space_manager_uses_publish_source_anchor(
-    async_db_session: AsyncSession,
-):
-    await _seed_entries(async_db_session)
-    repository = KnowledgeFileRepositoryImpl(async_db_session)
-    manager = await repository.find_by_id(100)
-    manager.projection_previous_file_id = 101
-    manager.projection_status = KnowledgeFileProjectionStatus.PENDING.value
-    async_db_session.add(manager)
-    await async_db_session.commit()
-
-    service = _service(async_db_session)
-    source_before_publish_ready = await service._resolve_source(manager)
-    assert source_before_publish_ready.space_id == 10
-    assert source_before_publish_ready.file_id == 100
-
-    publish = await repository.find_by_id(101)
-    publish.applied_content_generation = 4
-    publish.applied_entry_generation = 1
-    publish.projection_status = KnowledgeFileProjectionStatus.READY.value
-    async_db_session.add(publish)
-    await async_db_session.commit()
-
-    source_after_publish_ready = await service._resolve_source(manager)
-    assert source_after_publish_ready.space_id == 10
-    assert source_after_publish_ready.file_id == 101
 
 
 @pytest.mark.asyncio

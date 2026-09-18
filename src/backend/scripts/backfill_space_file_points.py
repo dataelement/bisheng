@@ -4,11 +4,12 @@
 核心特性：
 1. 目标库类型：支持 public/department/team/team_ks 及中文别名。
 2. 主文件判定：排除目录(file_type=0)、回收站(deleted_at is not null)、分享引用(entry_type='share')及多版本文档中的历史非主版本。
-3. 受让人判定：优先 original_uploader_id，为空回退 user_id。
-4. 管理员默认过滤：默认自动识别并排除「系统超级管理员」(AdminRole)与「部门管理员」(DepartmentAdminGrant)，不予发分。
+3. 受让人判定：优先 original_uploader_id，为空回退 user_id；受让人在用户表中不存在时跳过。
+4. 默认过滤系统超级管理员，以及文件所在知识库的所有者、有效管理员；其他库中的角色不影响本库发分。
 5. 忽略账号：匹配 user.user_name，额外支持传入自定义需忽略的账号。
 6. 积分规则：突破单日 15 分 daily_cap 限制全额累加，按文件 ID 生成强幂等键防重跑。
-7. 支持 --dry-run 演练预览模式。
+7. 支持 --dry-run 演练预览，按积分记账年月输出每月汇总及用户明细。
+8. 业务发生时间：早于北京时间 2026-08-01 的上传统一记为该日零点，其余保留上传时间。
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import asyncio
 import logging
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,12 +36,17 @@ for parent in _FILE_PATH.parents:
             sys.path.insert(0, str(backend_dir))
         break
 
-from sqlalchemy import or_
 from sqlmodel import col, select
 
+from bisheng.common.models.space_channel_member import (
+    BusinessTypeEnum,
+    MembershipStatusEnum,
+    SpaceChannelMember,
+    UserRoleEnum,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import AdminRole
-from bisheng.database.models.department_admin_grant import DepartmentAdminGrant
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
     KnowledgeDocumentLifecycleStatus,
@@ -64,6 +71,7 @@ from bisheng.user.domain.models.user import User
 from bisheng.user.domain.models.user_role import UserRole
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
+BACKFILL_TIME_FLOOR = datetime(2026, 8, 1)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -111,12 +119,24 @@ class BackfillSummary:
     excluded_history_versions: int = 0
     ignored_user_files: int = 0
     excluded_system_admin_files: int = 0
-    excluded_dept_admin_files: int = 0
+    excluded_space_owner_files: int = 0
+    excluded_space_admin_files: int = 0
     excluded_custom_ignore_files: int = 0
+    excluded_missing_user_files: int = 0
     awarded_files: int = 0
     replayed_files: int = 0
     total_points_awarded: int = 0
     users_affected: dict[int, dict[str, Any]] = field(default_factory=dict)
+    monthly_users: dict[str, dict[int, dict[str, Any]]] = field(default_factory=dict)
+
+
+def resolve_backfill_time(uploaded_at: datetime | None) -> datetime:
+    """预览和正式记账共用上海时区、八月一日下限及缺失时间兜底规则。"""
+    if uploaded_at is None:
+        uploaded_at = datetime.now(SHANGHAI).replace(tzinfo=None)
+    elif uploaded_at.tzinfo is not None:
+        uploaded_at = uploaded_at.astimezone(SHANGHAI).replace(tzinfo=None)
+    return max(uploaded_at, BACKFILL_TIME_FLOOR)
 
 
 def resolve_space_level(level_raw: str) -> str:
@@ -153,16 +173,39 @@ async def fetch_system_admin_user_ids(session) -> set[int]:
     return admin_ids
 
 
-async def fetch_dept_admin_user_ids(session) -> set[int]:
-    """查询所有部门管理员 user_ids (基于 DepartmentAdminGrant 表)。"""
-    stmt = select(DepartmentAdminGrant.user_id).distinct()
-    result = await session.exec(stmt)
-    dept_admin_ids: set[int] = set()
-    for row in result.all():
-        uid = row[0] if isinstance(row, (tuple, list)) else row
-        if uid is not None:
-            dept_admin_ids.add(int(uid))
-    return dept_admin_ids
+async def fetch_space_privileged_user_ids(
+    session, tenant_id: int, space_ids: list[int]
+) -> tuple[dict[int, set[int]], dict[int, set[int]]]:
+    """按库收集所有者和有效管理员，不把部门管理员身份扩散到其他库。"""
+    if not space_ids:
+        return {}, {}
+
+    result = await session.exec(
+        select(Knowledge.id, Knowledge.user_id).where(
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.id.in_(space_ids),
+        )
+    )
+    owners: dict[int, set[int]] = {}
+    admins: dict[int, set[int]] = {}
+    for space_id, user_id in result.all():
+        # 创建人即所有者，即使缺少成员镜像记录也应排除。
+        owners[int(space_id)] = {int(user_id)} if user_id is not None else set()
+
+    if not owners:
+        return owners, admins
+    result = await session.exec(
+        select(SpaceChannelMember.business_id, SpaceChannelMember.user_id, SpaceChannelMember.user_role).where(
+            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+            SpaceChannelMember.business_id.in_([str(space_id) for space_id in owners]),
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+            SpaceChannelMember.user_role.in_([UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]),
+        )
+    )
+    for space_id, user_id, role in result.all():
+        target = owners if role == UserRoleEnum.CREATOR else admins
+        target.setdefault(int(space_id), set()).add(int(user_id))
+    return owners, admins
 
 
 async def fetch_custom_ignore_user_ids(
@@ -290,11 +333,12 @@ async def load_user_names(session, user_ids: set[int]) -> dict[int, str]:
 def group_files_by_payee(
     files: list[KnowledgeFile],
     system_admin_user_ids: set[int],
-    dept_admin_user_ids: set[int],
+    space_owner_user_ids: dict[int, set[int]],
+    space_admin_user_ids: dict[int, set[int]],
     custom_ignore_user_ids: set[int],
     summary: BackfillSummary,
 ) -> dict[int, list[KnowledgeFile]]:
-    """按受让人分组文件，并按系统超管/部门管理员/自定义忽略名单依次过滤。
+    """按受让人分组，并按系统超管/本库所有者/本库管理员/自定义忽略名单过滤。
 
     受让人规则：优先 original_uploader_id，为空时使用 user_id。
     """
@@ -316,9 +360,14 @@ def group_files_by_payee(
             summary.ignored_user_files += 1
             continue
 
-        # 2. 部门管理员过滤
-        if payee_id in dept_admin_user_ids:
-            summary.excluded_dept_admin_files += 1
+        # 2. 仅排除文件所在库的所有者、管理员。
+        space_id = int(f.knowledge_id)
+        if payee_id in space_owner_user_ids.get(space_id, set()):
+            summary.excluded_space_owner_files += 1
+            summary.ignored_user_files += 1
+            continue
+        if payee_id in space_admin_user_ids.get(space_id, set()):
+            summary.excluded_space_admin_files += 1
             summary.ignored_user_files += 1
             continue
 
@@ -339,7 +388,7 @@ class BackfillPointsLedger:
     功能特性：
     1. 强幂等防重跑：基于 idempotency_key 检查，重复文件自动跳过并标记 replayed=True；
     2. 全额突破单日上限：不设 daily_cap 截断，所有有效文件全额累加；
-    3. 业务发生时间继承：将 occurred_at 精确记录为文件上传/创建时间（若已有且更新则推进 last_earned_at）；
+    3. 业务发生时间：上传时间按上海时区处理，早于 2026-08-01 的归到该日零点；
     4. 悲观锁并发安全：行锁保护 user_point_account，版本号递增；
     5. 外箱同步：写入 PointSyncOutbox，确保与现有积分异步通知机制完全兼容。
     """
@@ -381,11 +430,8 @@ class BackfillPointsLedger:
         account.balance = balance
         account.version += 1
 
-        # 4. 时间戳处理（默认或使用文件上传时间）
-        if occurred_at is None:
-            occurred_at = datetime.now(SHANGHAI).replace(tzinfo=None)
-        elif occurred_at.tzinfo is not None:
-            occurred_at = occurred_at.astimezone(SHANGHAI).replace(tzinfo=None)
+        # 4. 缺少上传时间沿用当前时间兜底；旧上传时间统一归到八月一日。
+        occurred_at = resolve_backfill_time(occurred_at)
 
         if delta > 0:
             account.lifetime_earned += delta
@@ -437,7 +483,7 @@ async def execute_backfill(
     batch_size: int = 100,
     summary: BackfillSummary,
 ) -> None:
-    """执行批量加分。若 dry_run=True 则仅统计。"""
+    """过滤不存在的受让人后执行批量加分；dry_run=True 时仅统计。"""
     rule_code = earn_rule_for_space_level(space_level) or "G1"
     space_title = SPACE_LEVEL_TITLES.get(space_level, "知识库")
     log_title = f"{space_title}文件补发积分"
@@ -447,11 +493,25 @@ async def execute_backfill(
     all_user_ids = set(payee_files.keys())
     user_names = await load_user_names(session, all_user_ids)
 
+    # 查不到用户记录时不能用占位名继续补分，否则会为已删除用户创建孤立积分账户。
+    existing_payee_files: dict[int, list[KnowledgeFile]] = {}
+    for uid, ufiles in payee_files.items():
+        if uid not in user_names:
+            summary.excluded_missing_user_files += len(ufiles)
+            summary.ignored_user_files += len(ufiles)
+            logger.warning("受让人 user_id=%s 不存在，跳过其 %d 个文件", uid, len(ufiles))
+            continue
+        existing_payee_files[uid] = ufiles
+    payee_files = existing_payee_files
+    if not payee_files:
+        logger.info("过滤后无待加分文件。")
+        return
+
     # 预填统计明细
     for uid, ufiles in payee_files.items():
         summary.users_affected[uid] = {
             "user_id": uid,
-            "user_name": user_names.get(uid, f"User_{uid}"),
+            "user_name": user_names[uid],
             "file_count": len(ufiles),
             "expected_points": len(ufiles) * score_per_file,
             "actual_awarded_points": 0,
@@ -459,6 +519,20 @@ async def execute_backfill(
         }
 
     if dry_run:
+        # 固定本次预览的兜底时间，避免缺失上传时间的文件在跨月运行时被拆分。
+        preview_time = datetime.now(SHANGHAI)
+        for uid, ufiles in payee_files.items():
+            for file in ufiles:
+                month = resolve_backfill_time(getattr(file, "create_time", None) or preview_time).strftime("%Y-%m")
+                users = summary.monthly_users.setdefault(month, {})
+                user = users.setdefault(uid, {
+                    "user_id": uid,
+                    "user_name": user_names[uid],
+                    "file_count": 0,
+                    "expected_points": 0,
+                })
+                user["file_count"] += 1
+                user["expected_points"] += score_per_file
         logger.info("[Dry-run] 演练模式：跳过数据库写入。")
         return
 
@@ -511,6 +585,7 @@ def print_report(summary: BackfillSummary, dry_run: bool) -> None:
     print("=" * 60)
     print(f"目标库类型:            {summary.target_level}")
     print(f"每个文件分值:          {summary.score_per_file} 分")
+    print("积分业务时间:          早于北京时间 2026-08-01 的上传记为该日零点，其余保留上传时间")
     print(f"匹配的目标库空间数:    {len(summary.space_ids)}")
     print(f"库中扫描文件总数:      {summary.total_files_scanned}")
     print(f" - 排除文件夹目录:     {summary.excluded_dirs}")
@@ -519,8 +594,10 @@ def print_report(summary: BackfillSummary, dry_run: bool) -> None:
     print(f"有效主文件数:          {summary.eligible_main_files}")
     print(f" - 命中忽略与过滤跳过: {summary.ignored_user_files}")
     print(f"    * 系统管理员文件:  {summary.excluded_system_admin_files}")
-    print(f"    * 部门管理员文件:  {summary.excluded_dept_admin_files}")
+    print(f"    * 本库所有者文件:  {summary.excluded_space_owner_files}")
+    print(f"    * 本库管理员文件:  {summary.excluded_space_admin_files}")
     print(f"    * 自定义忽略文件:  {summary.excluded_custom_ignore_files}")
+    print(f"    * 不存在用户文件:  {summary.excluded_missing_user_files}")
     print("-" * 60)
     if dry_run:
         total_pred = sum(u["expected_points"] for u in summary.users_affected.values())
@@ -532,6 +609,24 @@ def print_report(summary: BackfillSummary, dry_run: bool) -> None:
         print(f"实际发放总积分:        {summary.total_points_awarded} 分")
         print(f"受影响用户总数:        {len(summary.users_affected)}")
     print("-" * 60)
+    if dry_run:
+        print("按积分记账月份分组（北京时间）:")
+        print("同一用户可出现在多个月份；总用户数按用户 ID 去重。")
+        if not summary.monthly_users:
+            print("无待发分文件。")
+        for month, users in sorted(summary.monthly_users.items()):
+            file_count = sum(user["file_count"] for user in users.values())
+            expected_points = sum(user["expected_points"] for user in users.values())
+            print(f"\n月份: {month}")
+            print(f"待发分文件数: {file_count} | 预计获得积分用户数: {len(users)} | 预计发放总积分: {expected_points} 分")
+            print(f"{'用户ID':<10} {'账号/用户名':<20} {'文件数':<8} {'预计分值':<10}")
+            for user in sorted(users.values(), key=lambda item: (-item["file_count"], item["user_id"])):
+                print(
+                    f"{user['user_id']:<10} {user['user_name']:<20} "
+                    f"{user['file_count']:<8} {user['expected_points']:<10}"
+                )
+        print("=" * 60 + "\n")
+        return
     print("用户明细清单:")
     print(f"{'用户ID':<10} {'账号/用户名':<20} {'文件数':<8} {'预计分值':<10} {'实际增加':<10} {'已跳过(幂等)':<10}")
     for uid, u in sorted(summary.users_affected.items(), key=lambda x: x[1]["file_count"], reverse=True):
@@ -579,10 +674,15 @@ async def run(args: argparse.Namespace) -> int:
 
         logger.info("找到 %d 个目标知识库空间: %s", len(space_ids), space_ids[:10])
 
-        # 2. 默认查询系统管理员与部门管理员
+        # 2. 查询系统管理员，以及按目标库隔离的所有者、管理员名单。
         system_admin_ids = await fetch_system_admin_user_ids(session)
-        dept_admin_ids = await fetch_dept_admin_user_ids(session)
-        logger.info("默认识别管理员: 系统超管数=%d, 部门管理员数=%d", len(system_admin_ids), len(dept_admin_ids))
+        space_owner_ids, space_admin_ids = await fetch_space_privileged_user_ids(session, args.tenant_id, space_ids)
+        logger.info(
+            "默认识别角色: 系统超管数=%d, 库所有者关系数=%d, 库管理员关系数=%d",
+            len(system_admin_ids),
+            sum(len(ids) for ids in space_owner_ids.values()),
+            sum(len(ids) for ids in space_admin_ids.values()),
+        )
 
         # 3. 查自定义忽略账号的 user_ids
         custom_ignore_ids = await fetch_custom_ignore_user_ids(session, custom_ignore_accounts)
@@ -599,15 +699,17 @@ async def run(args: argparse.Namespace) -> int:
         payee_files = group_files_by_payee(
             eligible_files,
             system_admin_user_ids=system_admin_ids,
-            dept_admin_user_ids=dept_admin_ids,
+            space_owner_user_ids=space_owner_ids,
+            space_admin_user_ids=space_admin_ids,
             custom_ignore_user_ids=custom_ignore_ids,
             summary=summary,
         )
         logger.info(
-            "受让人分组完成: 待发分用户数=%d (跳过超管文件=%d, 跳过部门管理员文件=%d, 跳过自定义忽略文件=%d)",
+            "受让人分组完成: 待发分用户数=%d (超管文件=%d, 本库所有者文件=%d, 本库管理员文件=%d, 自定义忽略文件=%d)",
             len(payee_files),
             summary.excluded_system_admin_files,
-            summary.excluded_dept_admin_files,
+            summary.excluded_space_owner_files,
+            summary.excluded_space_admin_files,
             summary.excluded_custom_ignore_files,
         )
 
@@ -640,7 +742,7 @@ async def run(args: argparse.Namespace) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="根据目标类型库下所有有效主文件给原始上传人批量增加指定积分 (默认过滤系统管理员与部门管理员)",
+        description="根据目标类型库下所有有效主文件给原始上传人批量增加指定积分 (默认过滤系统管理员、本库所有者及管理员)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(

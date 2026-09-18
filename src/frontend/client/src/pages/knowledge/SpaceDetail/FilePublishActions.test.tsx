@@ -288,7 +288,7 @@ describe("普通知识空间文件发布入口", () => {
         );
 
         expect(screen.getByText("上传人")).toBeInTheDocument();
-        expect(screen.getByText("原始上传人")).toBeInTheDocument();
+        expect(screen.queryByText("原始上传人")).not.toBeInTheDocument();
         expect(screen.getByText("更新人")).toBeInTheDocument();
 
         const folderRow = screen.getByText("制度文件夹").closest("tr")!;
@@ -297,11 +297,11 @@ describe("普通知识空间文件发布入口", () => {
 
         const fileRow = screen.getByText(baseFile.name).closest("tr")!;
         expect(within(fileRow).getByText("张三")).toBeInTheDocument();
-        expect(within(fileRow).getByText("原始张三")).toBeInTheDocument();
+        expect(within(fileRow).queryByText("原始张三")).not.toBeInTheDocument();
         expect(within(fileRow).getByText("李四")).toBeInTheDocument();
 
         const fallbackRow = screen.getByText("更新人兜底.pdf").closest("tr")!;
-        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(3);
+        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(2);
     });
 
     test("卡片更多菜单展示发布并触发发布回调", () => {

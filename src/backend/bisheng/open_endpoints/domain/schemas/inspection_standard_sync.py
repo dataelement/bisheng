@@ -6,29 +6,33 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncResponseData
 
-MAX_INSPECTION_STANDARD_FIELD_LENGTH = 100
+MAX_INSPECTION_STANDARD_FIELD_LENGTH = 1000
+
+
+def _opt_text(**kwargs: Any) -> Any:
+    return Field(default="", min_length=0, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH, **kwargs)
 
 
 class InspectionStandardRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    CREATE_DEPT_ID: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CHECK_STANDARD_ID: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    DEVICE_NAME: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    STANDARD_TYPE: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    OIL_PART_NO: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CHECK_ITEM_NAME: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    DEVICE_STATUS: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    ENFORCE_CODE: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    SAFETY_BOARD: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CHECK_PERIOD: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    PERIOD_UNIT: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    INTERFACE_SYSTEM: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    NEXT_SCHE_DATE: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    MAINTAIN_REASON: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    DEVICE_MAINTAIN_JOB_ID: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    REC_CREATOR: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    REC_CREATOR_NAME: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
+    CREATE_DEPT_ID: str = _opt_text()
+    CHECK_STANDARD_ID: str = _opt_text()
+    DEVICE_NAME: str = _opt_text()
+    STANDARD_TYPE: str = _opt_text()
+    OIL_PART_NO: str = _opt_text()
+    CHECK_ITEM_NAME: str = _opt_text()
+    DEVICE_STATUS: str = _opt_text()
+    ENFORCE_CODE: str = _opt_text()
+    SAFETY_BOARD: str = _opt_text()
+    CHECK_PERIOD: str = _opt_text()
+    PERIOD_UNIT: str = _opt_text()
+    INTERFACE_SYSTEM: str = _opt_text()
+    NEXT_SCHE_DATE: str = _opt_text()
+    MAINTAIN_REASON: str = _opt_text()
+    DEVICE_MAINTAIN_JOB_ID: str = _opt_text()
+    REC_CREATOR: str = _opt_text()
+    REC_CREATOR_NAME: str = _opt_text()
 
     @field_validator(
         "CREATE_DEPT_ID",
@@ -51,49 +55,49 @@ class InspectionStandardRecord(BaseModel):
         mode="before",
     )
     @classmethod
-    def normalize_text(cls, value: Any) -> Any:
+    def normalize_text(cls, value: Any) -> str:
         if value is None:
-            return value
+            return ""
         if isinstance(value, (int, float)):
             return str(value)
         if isinstance(value, str):
             return value.strip()
-        return value
+        return str(value)
 
 
 class InspectionStandardItemRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    CHECK_STANDARD_ID: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CHECK_STANDARD_SEQ_NO: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CONTENT: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CHECK_WAY: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_WAY: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_POINT: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    MANAGE_CONTROL_MODE: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    MANAGE_TYPE: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    DATA_TYPE: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    CRITERI: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    UOM: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    QLTY_TOP: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    QLTY_BOTTOM: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    ALARM_SETTINGS: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    STATUTORY_REQ: str = Field(min_length=1, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    EQUIPMENT_NAME: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_PART: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    DISTRIBUTOR_NO: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    ENTRY_OINT_NO: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_POINT_MARK: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    NOZZLE_SPECIFICATION: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    FUELING_TOOLS: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    OIL_NO: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    SINGLE_INJECTION_VOLUME: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    TOTAL_INJECTION_VOLUME: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_EFFECT_JUDGE_CRITERIA: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    TECH_MAJOR_PIC: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    RESPONSIBILITY_TEAM: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    LUBRIC_PIC: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
-    OIL_PROPERTY: str | None = Field(default=None, max_length=MAX_INSPECTION_STANDARD_FIELD_LENGTH)
+    CHECK_STANDARD_ID: str = _opt_text()
+    CHECK_STANDARD_SEQ_NO: str = _opt_text()
+    CONTENT: str = _opt_text()
+    CHECK_WAY: str = _opt_text()
+    LUBRIC_WAY: str = _opt_text()
+    LUBRIC_POINT: str = _opt_text()
+    MANAGE_CONTROL_MODE: str = _opt_text()
+    MANAGE_TYPE: str = _opt_text()
+    DATA_TYPE: str = _opt_text()
+    CRITERI: str = _opt_text()
+    UOM: str = _opt_text()
+    QLTY_TOP: str = _opt_text()
+    QLTY_BOTTOM: str = _opt_text()
+    ALARM_SETTINGS: str = _opt_text()
+    STATUTORY_REQ: str = _opt_text()
+    EQUIPMENT_NAME: str = _opt_text()
+    LUBRIC_PART: str = _opt_text()
+    DISTRIBUTOR_NO: str = _opt_text()
+    ENTRY_OINT_NO: str = _opt_text()
+    LUBRIC_POINT_MARK: str = _opt_text()
+    NOZZLE_SPECIFICATION: str = _opt_text()
+    FUELING_TOOLS: str = _opt_text()
+    OIL_NO: str = _opt_text()
+    SINGLE_INJECTION_VOLUME: str = _opt_text()
+    TOTAL_INJECTION_VOLUME: str = _opt_text()
+    LUBRIC_EFFECT_JUDGE_CRITERIA: str = _opt_text()
+    TECH_MAJOR_PIC: str = _opt_text()
+    RESPONSIBILITY_TEAM: str = _opt_text()
+    LUBRIC_PIC: str = _opt_text()
+    OIL_PROPERTY: str = _opt_text()
 
     @field_validator(
         "CHECK_STANDARD_ID",
@@ -129,29 +133,29 @@ class InspectionStandardItemRecord(BaseModel):
         mode="before",
     )
     @classmethod
-    def normalize_text(cls, value: Any) -> Any:
+    def normalize_text(cls, value: Any) -> str:
         if value is None:
-            return value
+            return ""
         if isinstance(value, (int, float)):
             return str(value)
         if isinstance(value, str):
             return value.strip()
-        return value
+        return str(value)
 
 
 class InspectionStandardSyncData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    check_standards: list[InspectionStandardRecord] = Field(min_length=1)
-    check_standard_items: list[InspectionStandardItemRecord] = Field(min_length=1)
+    check_standards: list[InspectionStandardRecord] = Field(default_factory=list, min_length=0)
+    check_standard_items: list[InspectionStandardItemRecord] = Field(default_factory=list, min_length=0)
 
 
 class InspectionStandardSyncRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    start_time: str = Field(min_length=1)
-    end_time: str = Field(min_length=1)
-    data: InspectionStandardSyncData
+    start_time: str = Field(default="", min_length=0)
+    end_time: str = Field(default="", min_length=0)
+    data: InspectionStandardSyncData = Field(default_factory=InspectionStandardSyncData)
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod

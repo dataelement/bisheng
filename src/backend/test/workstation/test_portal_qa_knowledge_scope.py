@@ -153,9 +153,14 @@ async def test_resolve_user_kb_file_filters_uses_knowledge_space_service(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_portal_context_uses_portal_authorized_scope_resolver(
-    monkeypatch,
+@pytest.mark.parametrize("selection", ["file", "folder"])
+async def test_portal_plan_resolves_files_and_folders_without_preflight_permissions(
+    monkeypatch, selection,
 ):
+    from contextlib import asynccontextmanager
+    from bisheng.core import database
+    from bisheng.knowledge.domain.services import knowledge_space_service
+    from bisheng.knowledge.domain.services.portal_qa_retrieval_service import build_portal_qa_plan
     data = APIChatCompletion(
         clientTimestamp="2026-07-23T10:00:00",
         model="10",
@@ -174,7 +179,18 @@ async def test_portal_context_uses_portal_authorized_scope_resolver(
             },
         ),
     )
+    if selection == "folder":
+        data.use_knowledge_base.knowledge_scope.file_refs = []
+        data.use_knowledge_base.knowledge_scope.folder_refs = [
+            SimpleNamespace(knowledge_space_id=7103, folder_id=3001)
+        ]
     access_service = SimpleNamespace()
+
+    @asynccontextmanager
+    async def session():
+        yield MagicMock()
+
+    monkeypatch.setattr(database, "get_async_db_session", session)
 
     class _FakeKnowledgeSpaceService:
         def __init__(self, request, login_user):
@@ -190,31 +206,39 @@ async def test_portal_context_uses_portal_authorized_scope_resolver(
             folder_refs,
             file_refs,
             max_files,
+            subtree_page_size,
+            defer_authorization,
         ):
             assert self.department_file_view_access_service is access_service
             assert mode == "files"
             assert knowledge_space_ids == [7103]
-            assert file_refs[0].file_id == 9301
-            assert folder_refs == []
+            if selection == "file":
+                assert file_refs[0].file_id == 9301
+                assert folder_refs == []
+            else:
+                assert folder_refs[0].folder_id == 3001
+                assert file_refs == []
             assert max_files is None
+            assert subtree_page_size == 200
+            assert defer_authorization is True
             return {7103: [9301]}
 
     monkeypatch.setattr(
-        chat_service,
+        knowledge_space_service,
         "KnowledgeSpaceService",
         _FakeKnowledgeSpaceService,
         raising=False,
     )
 
-    result = await chat_service._resolve_user_kb_file_filters(
+    result = await build_portal_qa_plan(
         request=SimpleNamespace(),
-        data=data,
-        login_user=_login_user(),
-        portal_context=True,
-        department_file_view_access_service=access_service,
+        knowledge_base=data.use_knowledge_base,
+        user=_login_user(),
+        department_access=access_service,
     )
 
-    assert result == {7103: [9301]}
+    assert result.space_ids == (7103,)
+    assert result.file_ids_by_space == {7103: [9301]}
 
 
 @pytest.mark.asyncio
@@ -222,7 +246,7 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
     captured_kwargs = {'milvus': [], 'es': []}
 
     async def _split_ids(**_kwargs):
-        return [], [7101]
+        return [7101], []
 
     knowledge = SimpleNamespace(
         id=7101,
@@ -287,7 +311,7 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=[7101]),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[7101]),
         max_token=15000,
         login_user=_login_user(),
         file_ids_by_space={7101: [9001]},
@@ -302,11 +326,11 @@ async def test_query_chunks_applies_file_filter_to_vector_and_es_and_post_filter
 
 
 @pytest.mark.asyncio
-async def test_query_chunks_skips_spaces_missing_file_filter_when_file_scope(monkeypatch):
+async def test_query_chunks_skips_organization_knowledge_missing_file_filter_when_file_scope(monkeypatch):
     queried_kbs = []
 
     async def _split_ids(**_kwargs):
-        return [], [7101, 7102]
+        return [7101, 7102], []
 
     knowledge_rows = [
         SimpleNamespace(
@@ -382,7 +406,7 @@ async def test_query_chunks_skips_spaces_missing_file_filter_when_file_scope(mon
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=[7101, 7102]),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[7101, 7102]),
         max_token=15000,
         login_user=_login_user(),
         file_ids_by_space={7101: [9001]},
@@ -609,10 +633,15 @@ async def test_configured_rerank_batches_candidates_and_merges_scores(monkeypatc
     result = await workstation_service.WorkStationService._rerank_retrieval_candidates(
         question='问题',
         candidates=docs,
+        login_user=SimpleNamespace(user_id=7),
     )
 
     assert [doc.page_content for doc in result[:3]] == ['39', '38', '37']
-    rerank_factory.assert_awaited_once_with(model_id=99)
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    rerank_factory.assert_awaited_once_with(
+        model_id=99, user_id=7, app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_name=ApplicationTypeEnum.DAILY_CHAT.value, app_type=ApplicationTypeEnum.DAILY_CHAT,
+    )
 
 
 @pytest.mark.asyncio
@@ -640,6 +669,7 @@ async def test_rerank_error_falls_back_to_global_rrf_order(monkeypatch):
     result = await workstation_service.WorkStationService._rerank_retrieval_candidates(
         question='问题',
         candidates=docs,
+        login_user=SimpleNamespace(user_id=7),
     )
 
     assert result == docs
@@ -712,7 +742,7 @@ async def test_probe_reuses_one_query_embedding_for_spaces_with_same_model(monke
 
 
 @pytest.mark.asyncio
-async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
+async def test_query_only_deep_retrieves_top_twenty_probe_organization_knowledge(monkeypatch):
     knowledge_rows = [
         SimpleNamespace(id=kb_id, name=f'知识库{kb_id}')
         for kb_id in range(1, 26)
@@ -744,7 +774,7 @@ async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
     monkeypatch.setattr(
         workstation_service.WorkStationService,
         '_split_retrieval_knowledge_ids_by_type',
-        AsyncMock(return_value=([], list(range(1, 26)))),
+        AsyncMock(return_value=(list(range(1, 26)), [])),
     )
     monkeypatch.setattr(
         workstation_service.WorkStationService,
@@ -769,7 +799,7 @@ async def test_query_only_deep_retrieves_top_twenty_probe_spaces(monkeypatch):
 
     _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
         question='流程',
-        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=list(range(1, 26))),
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=list(range(1, 26))),
         max_token=100000,
         login_user=_login_user(),
     )

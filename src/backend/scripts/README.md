@@ -4,6 +4,64 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `unset_admin.py`
+
+指定已有用户 ID, 撤销平台超级管理员: 删除 `AdminRole=1` 和 OpenFGA
+`system:global#super_admin` 关系, 保留其他业务角色、部门/租户管理员权限, 缺少时补充
+`DefaultRole=2`。不修改账号禁用状态、密码、部门归属或资源所有权。
+
+从后端根目录执行, 默认只读预览, 输出 JSON 审计行:
+
+```bash
+.venv/bin/python scripts/unset_admin.py 123
+.venv/bin/python scripts/unset_admin.py 123 --apply
+# 指定配置文件, 参数含义与 execute_sql.py 相同
+.venv/bin/python scripts/unset_admin.py 123 --config config_3002.yaml
+```
+
+- `--apply` 才写入。正式执行前需保留至少一个其他未禁用的数据库超级管理员。
+- OpenFGA、Redis 必须可用。脚本只使用已有的存储和模型, 不自动创建; 存储名重复时需配置
+  `openfga.store_id`。OpenFGA 关闭时会拒绝执行, 避免遗漏残留关系。
+- 使用权限补偿 Worker 的 Redis 锁并续期; 锁占用时直接退出。请在维护窗口运行,
+  停止对目标账号的并发授权和手工队列重放。既有 Worker 锁租期为 60 秒, 若发现超时仍在执行的
+  旧补偿任务, 应先停止该任务再运行脚本; 不要强行删除正在使用的锁。
+- 仅将目标超级管理员关系的待处理 `write` 补偿记录标记为 `dead`, 保留审计记录,
+  并在角色变更同一事务中保存 `delete` 补偿。其他用户和其他关系不受影响。
+- 数据库与 OpenFGA 不具有跨系统事务。出现 `database_committed` 后失败, 说明数据库变更已提交,
+  OpenFGA 或缓存可能尚未处理完; 脚本返回非零, 不自动恢复超级管理员, 可用同一命令重试。
+  不要手动复活本脚本取消的授权重试记录。
+- 成功以退出码 0 且出现 `phase=verified` 为准; 默认预览退出 0 不代表已撤权。
+  撤权会提升 `token_version` 并清除该用户所有租户的权限缓存, 用户需要重新登录。
+  已经开始执行的请求不会被中途终止。
+- 如需恢复超级管理员, 必须另行明确授权并同时恢复数据库角色和 OpenFGA 关系。
+
+### `clear_user_points.py`
+
+清空指定用户在指定租户下的积分, 默认账号 `wenruli`、租户 `1`。默认只读预览;
+`--apply` 会将待删除的完整记录保存至 `./points-backups/*.json` (权限 0600),
+再在同一事务内删除积分同步记录、补扣记录、排行榜快照、流水及积分账户。
+账号按 `user_name / external_id / external_code` 精确匹配, 无匹配或不唯一时中止。
+增加 `--all-users` 可清空指定租户下全部用户积分, 并同时清空该租户的收藏奖励档位。
+`--all-users` 与 `--account` 互斥; 所有模式都保留其他租户数据。
+
+```bash
+# 在 src/backend 目录执行
+.venv/bin/python scripts/clear_user_points.py
+.venv/bin/python scripts/clear_user_points.py --apply
+# 预览 / 清空租户 1 的全部用户积分
+.venv/bin/python scripts/clear_user_points.py --tenant-id 1 --all-users
+.venv/bin/python scripts/clear_user_points.py --tenant-id 1 --all-users --apply
+# 指定其他配置; 配置加载方式与 execute_sql.py 一致
+.venv/bin/python scripts/clear_user_points.py --config config_3002.yaml --apply
+```
+
+执行前暂停相关积分写入、发奖、补扣、同步和刷榜任务; 本脚本不清理 Celery 队列。
+保留登录账号、积分规则、文案和站内信; 文件收藏奖励档位仅在单账号模式下保留。
+流水删除会移除对应幂等记录, 重放历史任务可能重新发分; 榜单其他用户名次待刷新重算,
+管理概览缓存最长 300 秒。备份是删除前快照, 不代表删除已提交; 提交后恢复需用备份单独处理。
+以退出码 0 且 JSON 中 `status` 为 `已提交` 或 `无需清理` 判断写入命令成功。
+不要把备份提交到 Git。
+
 ### `execute_sql.py`
 
 连接 BiSheng 当前配置文件中的关系数据库并执行一条 SQL。脚本复用项目的
@@ -91,6 +149,80 @@ PYTHONPATH=./ .venv/bin/python scripts/backfill_department_short_names.py \
 执行前数据库备份或经过审核的更新记录，禁止盲目批量清空简称。
 
 ## Knowledge Space Scripts
+
+### `report_portal_knowledge_counts.py`
+
+只读统计指定租户下全部门户知识空间, 按公共库、部门库、团队库、科室库、个人库分组导出 JSON。
+个人库合并为一个组, 其他库逐库列出 ID、名称、首页获取标记、总数及两套独立的一级分类/业务域统计。
+
+在 `src/backend` 目录执行:
+
+```bash
+.venv/bin/python scripts/report_portal_knowledge_counts.py \
+  --output /tmp/portal_knowledge_counts.json
+
+# 可指定配置和租户; 多租户模式必须明确指定租户, 每次只统计一个租户
+.venv/bin/python scripts/report_portal_knowledge_counts.py \
+  --config config.yaml --tenant-id 1 --page-size 500 \
+  --output /tmp/portal_knowledge_counts_tenant1.json
+```
+
+- 使用现有数据库配置和租户过滤, 只初始化数据库连接。无需启动应用、ES、OpenFGA 或首页缓存,
+  不创建表、不提交事务、不写业务数据。没有 `--apply` 参数。
+- 输出目录必须存在, 目标文件必须不存在; 完整生成后再落地, 不覆盖已有文件。
+- 范围为 `Knowledge.type=SPACE` 且未退役的全部库, 包括未开启首页获取的库和个人收藏库。
+  这是一份租户库存报表, 不受某个登录用户的库访问权限限制。
+- 只统计 `SUCCESS` 状态的有效文件入口。排除文件夹、回收站、历史版本、失效入口、失效逻辑文档。
+  发布和共享入口保留, 按其**当前所在库**计数, 不按原始上传库归属。
+- 库内按逻辑文档去重。优先使用 `reference_document_id`, 无引用时使用当前版本归属的文档 ID;
+  二者冲突时排除并记录异常。旧文件没有文档关系时使用独立的文件 ID 身份, 不按文件名或 MD5 合并。
+- 一级分类及业务域优先取 `split_rule` 内的结构化编码, 缺失时解析 `file_encoding`。
+  `by_category`、`by_business_domain` 是两个独立维度, 不是交叉分组。
+- 两个维度的每个统计项同时输出 `code` 和 `name`, 覆盖全局、大类及单库。
+  分类名称优先取当前租户门户的文件分类字典, 其次是分类卡片、系统文件编码配置、内置字典;
+  业务域名称优先取当前租户门户业务域配置, 其次是内置字典。停用项仍可用于历史知识的名称映射。
+  未知编码显示 `未知分类 (CODE)` 或 `未知业务域 (CODE)`, 不丢失原编码和数量。
+- 科室库兼容 `team_ks` 以及绑定部门的旧版用户所有 `team` 库。缺失空间分类进入 `unassigned`,
+  无效部门绑定进入异常记录, 不因此隐藏库或丢弃其有效知识。空库仍列出。
+- `portal_discovery_enabled` 是数据库原始开关; `portal_discovery_only` 表示按空间类型、有效部门绑定和
+  开关共同判断后是否纳入首页获取范围。该字段用于标记, 不用于缩小本次统计范围。
+
+JSON 结构:
+
+| 字段 | 含义 |
+| --- | --- |
+| `schema_version` / `tenant_id` | 报表格式版本、统计租户 |
+| `started_at` / `generated_at` | 开始和结束时间, 含时区 |
+| `counting_rules` | 数据源、去重、分类和一致性说明 |
+| `summary.space_count` / `summary.counts` | 全部库数量、全局知识汇总 |
+| `groups[].counts` | 当前大类汇总 |
+| `groups[].spaces[]` | 单库明细; 个人库组固定为空数组, 不展开个人信息 |
+| `groups[].space_count` | 该大类实际库数量, 包括合并前的个人库数量 |
+| `portal_enabled_space_count` / `portal_discovery_space_count` | 大类内开关开启库数、实际纳入首页的库数 |
+| `counts.summed_count` | 各库内部去重后相加, 同一文档在两个库各计一次 |
+| `counts.distinct_count` | 当前组内跨库去重后的文档数量 |
+| `counts.by_category` / `counts.by_business_domain` | 每项包含 `code`、`name`、`summed_count` 和 `distinct_count` |
+| `anomalies` | 异常原因、数量及最多 20 个样本 ID, 不是全部排除文件的逐条清单 |
+
+例如同一逻辑文档分别在公共库、部门库中出现, 两库各计 1, 全局结果为:
+
+```json
+{
+  "summed_count": 2,
+  "distinct_count": 1,
+  "by_category": [{"kind": "value", "code": "POL", "name": "政策制度", "summed_count": 2, "distinct_count": 1}],
+  "by_business_domain": [{"kind": "value", "code": "PP", "name": "生产", "summed_count": 2, "distinct_count": 1}]
+}
+```
+
+维度中 `kind=value` 表示正常编码, `unclassified` 表示未分类, `conflict` 表示同一文档在当前组内的
+入口维度不一致, 包括一处有编码而另一处缺失。冲突文档在该组统一归入冲突项, 并附最多 20 个
+`document_samples`。同一维度的两种计数分别与组内总数相等; 跨库去重数不能直接累加子组。
+有分类冲突时, 父组会将对应分类转入冲突项, 所以父子组的同名分类数也不一定直接相加。
+
+报表是数据库库存口径, 不保证等于依赖 ES 索引和缓存的首页数字。查询使用单个只读会话事务及
+数据库默认隔离级别; 扫描期间的并发修改可能影响结果。文件分批读取, 去重集合仍占用与有效
+文档/库组合数量成比例的内存。MySQL/DM8 使用相同 ORM 查询, DM8 实机验证需在 Linux 环境完成。
 
 ### `rebuild_knowledge_space_content_stat.py`
 
@@ -697,6 +829,7 @@ PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply 
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --file-id 101 --file-id 102
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level public
 PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --space-level department --status failed --status waiting --status violation
+PYTHONPATH=./ .venv/bin/python scripts/reparse_knowledge_space_files.py --apply --retry-skipped
 
 bash scripts/reparse_knowledge_space_files.sh
 bash scripts/reparse_knowledge_space_files.sh --apply --concurrency 4
@@ -726,8 +859,9 @@ Progress and report:
 - 报告由独立线程通过共享队列串行写入并逐行刷新；运行期间可以直接读取已完成的 JSON 行
 - 指定的报告文件已存在时脚本会拒绝覆盖；目录创建、序列化或写入失败会导致脚本非零退出
 - 单文件普通 Python 异常会被独立记录，其他文件继续执行；原生崩溃、解释器退出和永久阻塞不在隔离范围内
+- `--apply` 会把解析失败的文件和执行中崩溃的文件写入 `./reparse_reports/reparse-skip.json`（可用 `--skip-ledger` 改路径）。开始处理某个文件时先记为崩溃中，成功后删除，失败则改记为 failed。进程中途退出时该文件会留在 crashed 里。下次运行默认跳过这些 ID；需要重试时加 `--retry-skipped`，完全关闭该机制用 `--no-skip-ledger`
 - 提高 `--concurrency` 会同时增加数据库、Milvus、Elasticsearch、MinIO 和解析服务压力，应按环境容量设置
-- dry-run 不创建 JSONL 报告，也不会执行文件解析
+- dry-run 不创建 JSONL 报告，也不会执行文件解析；仍会读取 skip ledger 并在候选结果里排除已失败/已崩溃文件
 
 ### `enqueue_reparse_knowledge_space_files.py`
 
@@ -933,6 +1067,47 @@ python scripts/move_department_files_to_personal.py --folder-name 待整理 --ap
 - 报告默认在 `migration_reports/department_to_personal/move-<run_id>.json`，apply 另有 JSONL。`reparse_file_ids` 列出最终仍存在的待解析文件 ID；`completed_with_reparse` 表示有迁入内容需要重新解析，`completed_with_skips` 表示有跳过项。权限、旧索引或对象残留需按审计单独处理，重新解析不能替代权限恢复或旧对象回收。
 - 退出码 `0`：预览或处理完成（可有待解析/跳过）；`2`：入口失败；`3`：执行失败；`130`：中断。Ctrl+C 等当前单元结束后停止；重跑重新扫描已剩余内容。
 - 必须停写、串行执行并事先备份。事务只覆盖关系数据库，跨系统没有全局事务；强杀后检查 `record_merge_committed` 和权限审计，不能直接假定回滚成功。被覆盖的旧版本链无法靠重新解析或普通重跑恢复。
+
+### `diagnose_department_to_personal_impact.py`
+
+只读核对门户首页文档数口径，并归类 `move_department_files_to_personal.py` 标成「迁移完成，需重新解析」的原因。不写业务数据。对比三项：MySQL 里首页可计入的成功文件、统计 ES `mid_knowledge_space_content_stat` 的首页聚合、以及 remark 带迁后失败标记的文件。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py \
+  --output /tmp/diagnose-department-to-personal.json
+PYTHONPATH=./ .venv/bin/python scripts/diagnose_department_to_personal_impact.py --skip-es
+```
+
+- `conclusion.likely_causes` 用中文写判断：迁后解析失败、ES 快照落后、或 `space_level=unknown`。
+- `migration_marks.by_primary_reason` 区分模型不一致、源索引读不到、ES 无向量、读写超时、源库清理、覆盖清理、统计刷新等。
+- `--sample-limit` 控制每种原因保留的文件 ID 数量，默认 20，最大 200。
+- 统计 ES 不可用时加 `--skip-es`，仍输出 MySQL 与迁后失败归类。
+
+### `repair_department_to_personal_es_write.py`
+
+针对 `move_department_files_to_personal.py` 标成 `write_es_failed` 的文件：检查当前个人库 Milvus 是否已有向量，必要时从 Milvus 回写 ES，并把 `status` 恢复为成功。默认只读抽样，不重解析，不删 MinIO。
+
+```bash
+# 默认抽 20 个，只统计 Milvus / ES chunk 数
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py
+
+# 指定诊断里的样例 ID
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py \
+  --file-id 110858 --file-id 110883 --probe-error
+
+# 抽样 20 个确认可修后再写入
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py --sample 20 --apply
+
+# 处理全部 write_es_failed
+PYTHONPATH=./ .venv/bin/python scripts/repair_department_to_personal_es_write.py --all --apply
+```
+
+- `milvus_ready_es_missing` / `milvus_ready_es_partial` / `both_present`：Milvus 已有向量，`--apply` 会回写 ES 并恢复 `status=2`，然后入队首页统计刷新。
+- `milvus_missing`：个人库没有向量，不能靠这个脚本恢复，应走 `reparse_knowledge_space_files.py`。
+- `--probe-error` 会用清洗后的一条文档试写 ES，保留 mapper/BulkIndexError 原文，便于确认是向量字段污染还是 mapping 冲突。
+- 个人库若还没有 ES 索引（新建后从未成功解析过），`--apply` 会按正常解析路径创建索引再写入，而不是报 `es index missing` 后跳过。
+- 回写前会按 `document_id` 删除该文件在目标 ES 中的旧 chunk，避免半写入残留。
 
 ### `move_knowledge_space_files.py`
 
@@ -1602,9 +1777,12 @@ PYTHONPATH=./ .venv/bin/python scripts/report_original_knowledge_file_counts.py 
 - 目标库类型：支持 `public` / `department` / `team` / `team_ks` 以及中文别名（如“公共知识库”、“部门库”、“科室库”）。
 - 主文件判定：排除目录 (`file_type=0`)、回收站已删除文件 (`deleted_at is not null`)、跨库分享引用 (`entry_type='share'`) 以及多版本文档中的历史非主版本物理文件。
 - 受让人判定：优先使用文件记录的原始上传人 `original_uploader_id`，若为空则回退到 `user_id`。
-- 忽略账号：支持通过 `--ignore-accounts` 过滤系统管理员账号（如默认 `admin`），命中账号的文件不发放积分。
+- 用户存在性：受让人 ID 在用户表中不存在时，演练统计和正式补分均跳过，并报告“不存在用户文件”数量。原始上传人 ID 非空但用户已不存在时，不转发给当前上传人；用户名为空或为数字不作为排除依据。已产生的历史积分不在本脚本中清理。
+- 默认排除系统管理员，以及文件所在知识库的所有者和有效管理员；同一用户在其他库作为普通上传人时仍可得分。所有者取知识库创建人及有效 `creator` 成员，管理员取有效 `admin` 成员；不再仅凭部门管理员身份排除。
+- 忽略账号：额外支持通过 `--ignore-accounts` 过滤指定账号（默认 `admin`），命中账号的文件不发放积分。
+- 积分业务时间：按北京时间，早于 `2026-08-01 00:00:00` 上传的文件统一记录为该时刻；从该时刻起上传的文件保留上传时间。缺少上传时间时沿用当前时间兜底。该规则影响新流水的 `occurred_at` 和账户最近获分时间，不修改文件上传时间或已入账流水。
 - 积分规则：显式绕过单日积分上限限制进行全额累加，并生成按文件 ID 强绑定的幂等键（`backfill:<level>:<file_id>`），保证重复执行不重复发分。
-- 演练预览：支持 `--dry-run` 模式，仅输出统计分析报告，不进行任何数据库写入。
+- 演练预览：`--dry-run` 保留全局汇总，并按积分记账年月（`YYYY-MM`）升序输出每月文件数、用户数、预计积分及用户明细。八月之前上传的文件归入 `2026-08`；同一用户跨月分别列出，总用户数仍按用户 ID 去重。不进行任何数据库写入，预计积分仍未扣除已补发流水。
 
 Usage:
 

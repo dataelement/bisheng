@@ -34,6 +34,7 @@ class KnowledgeFulltextOutboxRepository(ABC):
         tenant_id: int,
         max_retries: int,
         knowledge_id: int | None = None,
+        notify_after_commit: bool = True,
     ) -> KnowledgeFulltextOutbox: ...
 
     @abstractmethod

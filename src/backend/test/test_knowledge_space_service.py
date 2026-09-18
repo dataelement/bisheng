@@ -964,6 +964,7 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
     svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
     svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    svc._grant_default_scope_permissions = AsyncMock()
     created_space = _make_space(
         space_id=11,
         user_id=7,
@@ -1052,6 +1053,11 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
         )
 
     assert result.id == 11
+    svc._grant_default_scope_permissions.assert_awaited_once_with(
+        level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        owner_id=99,
+        space_id=11,
+    )
     mock_scope_create.assert_awaited_once_with(
         tenant_id=1,
         space_id=11,
@@ -1075,6 +1081,7 @@ async def test_update_clinic_space_rebinds_department():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7, is_admin=False)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc.department_space_binding_repo = AsyncMock()
     space = _make_space(space_id=11, user_id=7, space_level=KnowledgeSpaceLevelEnum.TEAM)
     scope = SimpleNamespace(
         id=1,
@@ -1142,9 +1149,8 @@ async def test_update_clinic_space_rebinds_department():
             new_callable=AsyncMock,
             return_value=space,
         ),
-        patch.object(
-            DepartmentKnowledgeSpaceDao,
-            "aupdate",
+        patch(
+            "bisheng.knowledge.domain.services.clinic_space_binding_service.update_clinic_space_binding",
             new_callable=AsyncMock,
         ) as mock_binding_update,
     ):
@@ -1155,8 +1161,13 @@ async def test_update_clinic_space_rebinds_department():
         )
 
     assert result.id == 11
-    assert binding.department_id == 100
-    mock_binding_update.assert_awaited_once()
+    mock_binding_update.assert_awaited_once_with(
+        repository=svc.department_space_binding_repo,
+        space=space,
+        old_department_id=99,
+        department_id=100,
+        portal_discovery_enabled=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -3510,128 +3521,8 @@ async def test_shougang_portal_visible_search_spaces_uses_short_ttl_cache(servic
         cache.clear()
 
 
-@pytest.mark.asyncio
-async def test_shougang_portal_vector_search_reuses_embedding_for_spaces_with_same_model(service):
-    spaces = [
-        _make_space(space_id=12, user_id=7),
-        _make_space(space_id=18, user_id=7),
-    ]
-    for space in spaces:
-        space.model = "42"
-        space.collection_name = f"col_{space.id}"
-
-    embedding_calls = []
-    text_search_calls = []
-    vector_search_calls = []
-
-    class FakeEmbedding:
-        def embed_query(self, text):
-            embedding_calls.append(text)
-            return [0.1, 0.2, 0.3]
-
-    fake_embedding = FakeEmbedding()
-
-    class FakeVectorStore:
-        def __init__(self, collection_name, embedding):
-            self.collection_name = collection_name
-            self.embedding_func = embedding
-
-        async def asimilarity_search_with_relevance_scores(self, query, **kwargs):
-            text_search_calls.append((self.collection_name, query, kwargs))
-            self.embedding_func.embed_query(query)
-            return self._results()
-
-        async def asimilarity_search_with_score_by_vector(self, embedding, **kwargs):
-            vector_search_calls.append((self.collection_name, embedding, kwargs))
-            return self._results()
-
-        async def asimilarity_search_with_relevance_scores_by_vector(self, embedding, **kwargs):
-            vector_search_calls.append((self.collection_name, embedding, kwargs))
-            return self._results()
-
-        def _results(self):
-            if self.collection_name == "col_12":
-                return [
-                    (
-                        SimpleNamespace(
-                            page_content="精轧机振动纹治理案例",
-                            metadata={"document_id": 1580, "knowledge_id": 12},
-                        ),
-                        0.78,
-                    )
-                ]
-            return [
-                (
-                    SimpleNamespace(
-                        page_content="板面缺陷与振动纹关联分析",
-                        metadata={"document_id": 1801, "knowledge_id": 18},
-                    ),
-                    0.91,
-                )
-            ]
-
-    def fake_init_vectorstore(collection_name, embeddings, **_):
-        return FakeVectorStore(collection_name, embeddings)
-
-    with (
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_knowledge_embedding",
-            new_callable=AsyncMock,
-            return_value=fake_embedding,
-        ) as mock_get_embedding,
-        patch(
-            "bisheng.knowledge.rag.milvus_factory.MilvusFactory.init_vectorstore",
-            side_effect=fake_init_vectorstore,
-        ),
-    ):
-        chunks = await service._search_shougang_portal_vector_chunks(
-            spaces=spaces,
-            keyword="热轧振动纹",
-            filter_file_ids=[1580, 1801],
-            limit=24,
-        )
-
-    assert mock_get_embedding.await_count == 1
-    assert embedding_calls == ["热轧振动纹"]
-    assert text_search_calls == []
-    assert [call[0] for call in vector_search_calls] == ["col_12", "col_18"]
-    assert all(call[2]["expr"] == "document_id in [1580, 1801]" for call in vector_search_calls)
-    assert [chunk.file_id for chunk in chunks] == [1801, 1580]
-
-
-@pytest.mark.asyncio
-async def test_shougang_portal_es_search_boosts_phrase_matches(service):
-    space = _make_space(space_id=12, user_id=7)
-    space.index_name = "idx_12"
-    captured_body = {}
-
-    class FakeEsClient:
-        async def search(self, index, body):
-            captured_body["index"] = index
-            captured_body["body"] = body
-            return {"hits": {"hits": []}}
-
-    fake_es_vector = SimpleNamespace(client=FakeEsClient())
-
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeRag.init_knowledge_es_vectorstore",
-        new_callable=AsyncMock,
-        return_value=fake_es_vector,
-    ):
-        chunks = await service._search_shougang_portal_es_chunks(
-            spaces=[space],
-            keyword="热轧振动纹治理",
-            filter_file_ids=None,
-            limit=12,
-        )
-
-    assert chunks == []
-    assert captured_body["index"] == ["idx_12"]
-    text_query = captured_body["body"]["query"]["bool"]["must"][0]["bool"]
-    assert text_query["minimum_should_match"] == 1
-    should_clauses = text_query["should"]
-    assert should_clauses[0]["match"]["text"]["query"] == "热轧振动纹治理"
-    assert should_clauses[1]["match_phrase"]["text"]["boost"] == 3.0
+# 共享召回的批量查询、embedding 复用与筛选契约在
+# test/knowledge/test_portal_global_search_shared_retrieval.py 中覆盖。
 
 
 @pytest.mark.asyncio

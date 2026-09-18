@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
 """F4: Shared-storage migration CLI entry point.
 
-Forward migration (per-space → shared) and reverse migration (shared → per-space,
-for rollback). Run from the backend root::
+仅保留旧空间存储到共享存储的正向迁移；不会切回旧路由。
+从 backend 根目录运行，先预览：
 
-    cd src/backend/
-
-    # Forward migration
-    bash scripts/migrate_shared_storage.sh migrate --tenant-id 1
     bash scripts/migrate_shared_storage.sh migrate --tenant-id 1 --dry-run
-
-    # Reverse migration (rollback data copy)
-    bash scripts/migrate_shared_storage.sh reverse --tenant-id 1
-    bash scripts/migrate_shared_storage.sh reverse --tenant-id 1 --dry-run
-
-    # Show current routing status
+    bash scripts/migrate_shared_storage.sh migrate --tenant-id 1
     bash scripts/migrate_shared_storage.sh status --tenant-id 1
+
+代码回退应使用旧版本及其迁移工具，本版本不提供 reverse 操作。
 """
 from __future__ import annotations
 
@@ -38,7 +31,7 @@ logger = logging.getLogger("migrate_shared_storage")
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Shared-storage migration CLI (forward + reverse)",
+        description="Shared-storage forward migration CLI",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -49,11 +42,6 @@ def _build_parser() -> argparse.ArgumentParser:
     migrate_parser.add_argument("--collection-name", type=str, default=None)
     migrate_parser.add_argument("--index-name", type=str, default=None)
     migrate_parser.add_argument("--embedding-model-id", type=int, default=None)
-
-    # reverse
-    reverse_parser = sub.add_parser("reverse", help="Reverse migration (shared → per-space)")
-    reverse_parser.add_argument("--tenant-id", type=int, required=True)
-    reverse_parser.add_argument("--dry-run", action="store_true", default=False)
 
     # status
     status_parser = sub.add_parser("status", help="Show tenant routing status")
@@ -91,32 +79,6 @@ async def _cmd_migrate(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _cmd_reverse(args: argparse.Namespace) -> int:
-    from bisheng.knowledge.domain.services.file_migration.shared_storage_migration import (
-        SharedStorageMigrationCoordinator,
-    )
-
-    coordinator = SharedStorageMigrationCoordinator()
-    progress = await coordinator.reverse_migrate_tenant(
-        tenant_id=args.tenant_id,
-        dry_run=args.dry_run,
-    )
-    logger.info(
-        "reverse done tenant=%s phase=%s copied=%d/%d failed=%d dry_run=%s",
-        progress.tenant_id,
-        progress.phase,
-        progress.migrated_spaces,
-        progress.total_spaces,
-        progress.failed_spaces,
-        args.dry_run,
-    )
-    if progress.errors:
-        for err in progress.errors:
-            logger.error("  %s", err)
-        return 1
-    return 0
-
-
 async def _cmd_status(args: argparse.Namespace) -> int:
     from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
         KnowledgeSpaceSharedStorageRoutingDao,
@@ -127,7 +89,7 @@ async def _cmd_status(args: argparse.Namespace) -> int:
         logger.info("tenant=%s: no routing row (not configured)", args.tenant_id)
         return 0
     logger.info(
-        "tenant=%s: shared_enabled=%s write_frozen=%s routing_version=%s "
+        "tenant=%s: legacy_shared_enabled_ignored=%s write_frozen=%s routing_version=%s "
         "migration_state=%s collection=%s index=%s",
         args.tenant_id,
         row.shared_enabled,
@@ -146,8 +108,6 @@ async def main() -> int:
 
     if args.command == "migrate":
         return await _cmd_migrate(args)
-    if args.command == "reverse":
-        return await _cmd_reverse(args)
     if args.command == "status":
         return await _cmd_status(args)
     return 1

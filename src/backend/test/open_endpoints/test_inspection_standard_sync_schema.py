@@ -65,7 +65,7 @@ def test_standard_record_coerces_numeric_check_period():
 
 def test_item_record_fields_are_strings():
     record = InspectionStandardItemRecord.model_validate(_minimal_item_payload())
-    assert record.LUBRIC_POINT is None
+    assert record.LUBRIC_POINT == ""
     assert record.QLTY_TOP == "27"
     assert record.QLTY_BOTTOM == "18"
     assert isinstance(record.QLTY_TOP, str)
@@ -84,6 +84,39 @@ def test_standard_record_accepts_free_form_next_sche_date():
         _minimal_standard_payload(NEXT_SCHE_DATE="20260506"),
     )
     assert record.NEXT_SCHE_DATE == "20260506"
+
+
+def test_standard_record_allows_omitted_null_and_empty_fields():
+    record = InspectionStandardRecord.model_validate({})
+    assert record.CREATE_DEPT_ID == ""
+    assert record.CHECK_STANDARD_ID == ""
+    record = InspectionStandardRecord.model_validate(
+        {
+            "DEVICE_NAME": "",
+            "CHECK_ITEM_NAME": None,
+            "MAINTAIN_REASON": "  ",
+        },
+    )
+    assert record.DEVICE_NAME == ""
+    assert record.CHECK_ITEM_NAME == ""
+    assert record.MAINTAIN_REASON == ""
+
+
+def test_item_record_allows_omitted_null_and_empty_fields():
+    record = InspectionStandardItemRecord.model_validate({})
+    assert record.CONTENT == ""
+    assert record.LUBRIC_WAY == ""
+    record = InspectionStandardItemRecord.model_validate({"CHECK_WAY": None, "CRITERI": ""})
+    assert record.CHECK_WAY == ""
+    assert record.CRITERI == ""
+
+
+def test_sync_request_allows_empty_times_and_lists_at_schema_layer():
+    request = InspectionStandardSyncRequest.model_validate({})
+    assert request.start_time == ""
+    assert request.end_time == ""
+    assert request.data.check_standards == []
+    assert request.data.check_standard_items == []
 
 
 def test_item_record_coerces_numeric_optional_fields():

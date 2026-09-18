@@ -63,6 +63,12 @@ from bisheng.qa_expert.domain.capability import (
     CapabilitySnapshot,
     is_expert_library_admin,
 )
+from bisheng.qa_expert.domain.dictionary_options import (
+    CAREER_FIELD_TO_TYPE,
+    FILTER_FIELD_TO_TYPE,
+    canonical_dict_options,
+    dict_filter_aliases,
+)
 from bisheng.qa_expert.domain.identity import (
     IdentityService,
     copy_stored_anonymous_flags,
@@ -298,13 +304,16 @@ class ExpertService:
                 for expert_id, department in display_departments.items()
                 if department is not None and str(department.id) == department_id.strip()
             ]
-        experts, total = await self.repository.list_all(
-            keyword=keyword,
-            department_id=None,
+        career_filters = await self._expand_career_filters(
             job_family=job_family,
             job_category=job_category,
             position=position,
             major=major,
+        )
+        experts, total = await self.repository.list_all(
+            keyword=keyword,
+            department_id=None,
+            **career_filters,
             sort_by=sort_by,
             sort_order=sort_order,
             skip=0 if sort_by_department else skip,
@@ -337,9 +346,7 @@ class ExpertService:
         sources = await self.repository.list_department_sources()
         display_departments = await self._load_expert_display_departments(sources)
         departments = {
-            department.id: department
-            for department in display_departments.values()
-            if department is not None
+            department.id: department for department in display_departments.values() if department is not None
         }
         department_options = []
         for department in departments.values():
@@ -362,47 +369,60 @@ class ExpertService:
                 str(item["id"]),
             ),
         )
-        # 职业维度字段对应系统字典表中的 type code
-        field_to_type = {
-            "job_families": "expert_job_family",
-            "job_categories": "expert_job_category",
-            "positions": "expert_position",
-            "majors": "expert_major",
-        }
 
         async def _build_dict_options(keys: list[str], dict_type: str) -> list[dict[str, str]]:
-            """将字典键列表转换为 dict_key / dict_value 键值对列表。"""
+            """将字典键列表转换为去重后的 dict_key / dict_value 键值对列表。"""
             if not keys:
                 return []
             async with get_async_db_session() as session:
                 dict_repository = SystemDictionaryRepositoryImpl(session)
                 dict_items = await dict_repository.find_all_for_export(dict_type=dict_type, is_enabled=True)
-            key_to_value = {item.dict_key: item.dict_value for item in dict_items}
-            return [{"dict_key": key, "dict_value": key_to_value.get(key, key)} for key in keys]
+            return canonical_dict_options(keys, dict_items)
 
         return {
             "departments": department_options,
-            "job_families": await _build_dict_options(options.get("job_families", []), field_to_type["job_families"]),
-            "job_categories": await _build_dict_options(
-                options.get("job_categories", []), field_to_type["job_categories"]
+            "job_families": await _build_dict_options(
+                options.get("job_families", []), FILTER_FIELD_TO_TYPE["job_families"]
             ),
-            "positions": await _build_dict_options(options.get("positions", []), field_to_type["positions"]),
-            "majors": await _build_dict_options(options.get("majors", []), field_to_type["majors"]),
+            "job_categories": await _build_dict_options(
+                options.get("job_categories", []), FILTER_FIELD_TO_TYPE["job_categories"]
+            ),
+            "positions": await _build_dict_options(options.get("positions", []), FILTER_FIELD_TO_TYPE["positions"]),
+            "majors": await _build_dict_options(options.get("majors", []), FILTER_FIELD_TO_TYPE["majors"]),
         }
+
+    async def _expand_career_filters(self, **fields: str | None) -> dict[str, str | list[str] | None]:
+        """Expand career filters so dict_key and dict_value match the same option."""
+        needed = {name: value.strip() for name, value in fields.items() if value and str(value).strip()}
+        if not needed:
+            return dict.fromkeys(fields)
+        items_by_type: dict[str, list] = {}
+        async with get_async_db_session() as session:
+            dict_repository = SystemDictionaryRepositoryImpl(session)
+            for dict_type in {CAREER_FIELD_TO_TYPE[name] for name in needed}:
+                items_by_type[dict_type] = await dict_repository.find_all_for_export(
+                    dict_type=dict_type, is_enabled=True
+                )
+        expanded: dict[str, str | list[str] | None] = {}
+        for name, value in fields.items():
+            trimmed = str(value or "").strip()
+            if not trimmed:
+                expanded[name] = None
+                continue
+            aliases = dict_filter_aliases(trimmed, items_by_type[CAREER_FIELD_TO_TYPE[name]])
+            if len(aliases) > 1:
+                expanded[name] = aliases
+            else:
+                expanded[name] = aliases[0] if aliases else trimmed
+        return expanded
 
     async def _build_dict_key_maps(self, keys_by_field: dict[str, set[str]]) -> dict[str, dict[str, str]]:
         """查询系统字典表,按字段构建 dict_key -> dict_value 映射。"""
-        field_to_type = {
-            "job_family": "expert_job_family",
-            "job_category": "expert_job_category",
-            "position": "expert_position",
-            "major": "expert_major",
-        }
         result: dict[str, dict[str, str]] = {}
         async with get_async_db_session() as session:
             dict_repository = SystemDictionaryRepositoryImpl(session)
             for field, keys in keys_by_field.items():
-                dict_type = field_to_type.get(field)
+                dict_type = CAREER_FIELD_TO_TYPE.get(field)
                 if not dict_type or not keys:
                     result[field] = {}
                     continue
@@ -431,9 +451,7 @@ class ExpertService:
 
         memberships = await UserDepartmentDao.aget_by_user_ids(sorted(set(user_ids)))
         primary_department_ids = {
-            membership.user_id: membership.department_id
-            for membership in memberships
-            if membership.is_primary == 1
+            membership.user_id: membership.department_id for membership in memberships if membership.is_primary == 1
         }
         department_ids.update(primary_department_ids.values())
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
@@ -446,7 +464,9 @@ class ExpertService:
         }
         if ancestor_ids:
             ancestors = await DepartmentDao.aget_by_ids(sorted(ancestor_ids))
-            department_map.update({int(department.id): department for department in ancestors if department.id is not None})
+            department_map.update(
+                {int(department.id): department for department in ancestors if department.id is not None}
+            )
 
         return {
             expert.id: self._resolve_list_display_department(

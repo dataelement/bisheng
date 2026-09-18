@@ -9,13 +9,13 @@ DEFAULT_CELERY_QUEUE = "celery"
 KNOWLEDGE_PARSE_QUEUE = "knowledge_celery"
 KNOWLEDGE_PDF_QUEUE = "knowledge_pdf_celery"
 WORKFLOW_CELERY_QUEUE = "workflow_celery"
-POINTS_AWARD_QUEUE = "points_award_celery"
 
 KNOWLEDGE_PARSE_TASKS = frozenset(
     {
         "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
         "bisheng.worker.knowledge.fulltext_index.repair_source",
+        "bisheng.worker.knowledge.fulltext_reconcile.reparse_file",
     }
 )
 KNOWLEDGE_PARSE_COMPAT_TASKS = frozenset(
@@ -65,8 +65,8 @@ def build_celery_task_routes(configured_routes: Mapping[str, Any] | None) -> dic
         routes[task_pattern] = _normalize_configured_route(route)
 
     routes[PDF_ARTIFACT_TASK] = {"queue": KNOWLEDGE_PDF_QUEUE}
-    # 异步发分专用队列：避免共享 Broker 上远端 default Worker 抢走未注册任务。
-    routes[POINTS_AWARD_TASK] = {"queue": POINTS_AWARD_QUEUE}
+    # Keep award events on the default queue even with legacy configured routes.
+    routes[POINTS_AWARD_TASK] = {"queue": DEFAULT_CELERY_QUEUE}
     routes.update(
         {task_name: {"queue": KNOWLEDGE_PARSE_QUEUE} for task_name in sorted(KNOWLEDGE_PARSE_ROUTED_TASKS)}
     )

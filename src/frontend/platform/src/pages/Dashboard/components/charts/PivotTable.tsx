@@ -184,7 +184,8 @@ export const PivotTable = memo(function PivotTable({
             </tr>
           ))}
         </thead>
-        <tbody>
+        {/* Keep frozen body cells below the sticky header and totals. */}
+        <tbody className="relative z-0">
           {displayRows.map((entry, rowIndex) => {
             if (entry.kind === "subtotal") {
               const { group } = entry

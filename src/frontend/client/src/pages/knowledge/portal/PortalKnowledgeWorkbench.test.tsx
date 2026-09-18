@@ -324,7 +324,7 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                             joinPolicy: "review",
                             publishToSquare: "no",
                             spaceLevel: initialSpaceLevel,
-                            departmentId: editingSpace?.spaceLevel === "department" ? 12 : undefined,
+                            departmentId: canEditDepartmentBinding && (editingSpace?.isClinic || editingSpace?.spaceLevel === "department") ? 12 : undefined,
                             autoTagEnabled: false,
                             autoTagLibraryIds: [],
                         });
@@ -438,6 +438,7 @@ jest.mock("~/api/knowledge", () => ({
         APPROVAL: "approval",
     },
     isPendingReviewTagStatus: (reviewStatus?: number | null) => reviewStatus === 0,
+    isWebLinkKnowledgeFile: jest.requireActual("~/api/knowledge").isWebLinkKnowledgeFile,
     getGroupedSpacesApi: jest.fn(),
     getKnowledgeParseQueuePositionsApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
@@ -1845,6 +1846,41 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("mode:edit");
             expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("editing:团队空间详情");
         });
+    });
+
+    test.each([
+        ["系统管理员", { role: "admin" }, true],
+        ["部门管理员", { role: "user", is_department_admin: true }, true],
+        ["普通编辑者", { role: "user", is_department_admin: false }, false],
+    ])("%s 编辑科室库时按授权开放改绑并提交组织", async (_label, user, canRebind) => {
+        const clinic = makeSpace("clinic-1", "科室资料库", {
+            spaceLevel: SpaceLevel.TEAM,
+            isClinic: true,
+            departmentId: 9,
+            departmentName: "原科室",
+        });
+        mockUseKnowledgeSpaceActionPermissions.mockReturnValue({
+            permissions: { "clinic-1": ["edit_space"] },
+            loading: false,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [clinic], personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(clinic as any);
+        jest.mocked(updateSpaceApi).mockResolvedValue({ ...clinic, departmentId: canRebind ? 12 : 9 } as any);
+        renderWorkbench("/knowledge-portal", user);
+        fireEvent.click(await screen.findByRole("button", { name: "展开团队/科室知识库" }));
+        const row = await screen.findByTestId("space-row-clinic-1");
+        fireEvent.click(within(row).getByRole("button", { name: "空间设置" }));
+        expect(await screen.findByTestId("create-space-drawer")).toHaveTextContent(`canEditDepartmentBinding:${canRebind}`);
+        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("editingDepartment:9");
+        fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
+        await waitFor(() => expect(updateSpaceApi).toHaveBeenCalledTimes(1));
+        if (canRebind) {
+            expect(jest.mocked(updateSpaceApi).mock.calls[0][1]).toHaveProperty("department_id", 12);
+        } else {
+            expect(jest.mocked(updateSpaceApi).mock.calls[0][1]).not.toHaveProperty("department_id");
+        }
     });
 
     test("系统管理员保存部门知识库设置时使用权威更新响应回显新部门", async () => {
@@ -4508,8 +4544,8 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(drawer).toHaveTextContent("分享文件");
         expect(drawer).toHaveTextContent("来源知识库");
         expect(drawer).toHaveTextContent("来源知识库>源目录/共享制度.pdf");
-        expect(drawer).toHaveTextContent("原始上传人");
-        expect(drawer).toHaveTextContent("最初上传人张三");
+        expect(drawer).not.toHaveTextContent("原始上传人");
+        expect(drawer).not.toHaveTextContent("最初上传人张三");
         expect(drawer).toHaveTextContent("原始上传知识库");
         expect(drawer).toHaveTextContent("最初个人知识库");
         expect(getSpaceInfoApi).not.toHaveBeenCalledWith("source-space");

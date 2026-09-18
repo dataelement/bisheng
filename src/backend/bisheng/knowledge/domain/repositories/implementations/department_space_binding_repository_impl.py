@@ -14,6 +14,7 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
@@ -23,6 +24,7 @@ from bisheng.knowledge.domain.repositories.interfaces.department_space_binding_r
     DepartmentSpaceBindingRepository,
     DepartmentSpaceRebindPlan,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import request_knowledge_intent
 
 
 class DepartmentSpaceBindingRepositoryImpl(
@@ -65,6 +67,55 @@ class DepartmentSpaceBindingRepositoryImpl(
             revoke_old_department_viewer=True,
         )
         return await self.commit_prepared_rebind()
+
+    async def prepare_clinic_update(
+        self,
+        *,
+        space: Knowledge,
+        department_id: int,
+        expected_department_id: int,
+        portal_discovery_enabled: bool | None = None,
+    ) -> None:
+        try:
+            scope_result = await self.session.exec(
+                select(KnowledgeSpaceScope)
+                .where(KnowledgeSpaceScope.space_id == space.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            scope = scope_result.first()
+            binding_result = await self.session.exec(
+                select(DepartmentKnowledgeSpace)
+                .where(DepartmentKnowledgeSpace.space_id == space.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            binding = binding_result.first()
+            if (
+                scope is None
+                or not KnowledgeSpaceLevelEnum.is_team_level(scope.level)
+                or scope.owner_type != KnowledgeSpaceOwnerTypeEnum.USER
+                or binding is None
+                or int(binding.department_id) != expected_department_id
+            ):
+                raise SpaceInvalidScopeOwnerError(msg="科室绑定已变化, 请刷新后重试")
+            binding.department_id = department_id
+            self.session.add(binding)
+            self.session.add(space)
+            if portal_discovery_enabled is not None:
+                scope.portal_discovery_enabled = portal_discovery_enabled
+                self.session.add(scope)
+            await request_knowledge_intent(
+                self.session,
+                knowledge_id=int(space.id),
+                tenant_id=int(scope.tenant_id or 1),
+                trigger_type="knowledge_scope_updated",
+            )
+            await self.session.flush()
+            self._prepared_binding = binding
+        except Exception:
+            await self.rollback_prepared_rebind()
+            raise
 
     async def prepare_rebind_department(
         self,

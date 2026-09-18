@@ -163,6 +163,33 @@ class FineGrainedPermissionService:
         )
 
     @classmethod
+    async def get_explicitly_bound_tuple_users(
+        cls,
+        *,
+        object_type: str,
+        object_id: str | int,
+        relation: str,
+        tuple_users: set[str],
+    ) -> set[str]:
+        """找出受手工授权保护的组织元组, 包含上级组织对子树的授权。"""
+        bindings = [
+            binding for binding in await _get_bindings()
+            if binding.get('resource_type') == object_type
+            and str(binding.get('resource_id')) == str(object_id)
+            and binding.get('relation') == relation
+        ]
+        if not bindings:
+            return set()
+        paths = await cls.get_binding_department_paths(bindings)
+        tuple_paths: dict[int, str] = {}
+        return {
+            user for user in tuple_users
+            if await cls._resolve_binding_for_tuple(
+                object_type, object_id, user, relation, bindings, paths, tuple_paths,
+            ) is not None
+        }
+
+    @classmethod
     async def filter_object_ids_by_explicit_binding_async(
         cls,
         login_user: UserPayload,
@@ -293,8 +320,10 @@ class FineGrainedPermissionService:
         user_subject_strings: set[str],
         *,
         nearest_binding_wins: bool,
+        user_department_paths: dict[int, str] | None = None,
     ) -> tuple[set[str], bool, bool]:
-        user_department_paths = await cls.get_current_user_department_paths(user_subject_strings)
+        if user_department_paths is None:
+            user_department_paths = await cls.get_current_user_department_paths(user_subject_strings)
         effective_permissions: set[str] = set()
         matched_lineage_binding = False
         saw_bound_model = False
@@ -479,7 +508,15 @@ class FineGrainedPermissionService:
         tuple_cache: dict[str, list[dict]] | None = None,
         tuple_department_paths: dict[int, str] | None = None,
         precomputed_permission_level=_LEVEL_UNSET,
+        read_context=None,
     ) -> set[str]:
+        if read_context is not None:
+            if read_context.identity != (int(login_user.tenant_id), int(login_user.user_id)):
+                raise ValueError("权限上下文身份不一致")
+            models, bindings, user_subject_strings, binding_department_paths = await cls.load_read_context(
+                login_user, read_context,
+            )
+            tuple_department_paths = dict(binding_department_paths)
         if models is None:
             models = await cls.get_relation_models_map()
         if bindings is None:
@@ -506,7 +543,13 @@ class FineGrainedPermissionService:
                         if tuple_cache is not None and tuple_object in tuple_cache:
                             tuples = tuple_cache[tuple_object]
                         else:
-                            tuples = await fga.read_tuples(object=tuple_object)
+                            if read_context is None:
+                                tuples = await fga.read_tuples(object=tuple_object)
+                            else:
+                                tuples = await read_context.read(
+                                    ("tuples", tuple_object),
+                                    lambda: fga.read_tuples(object=tuple_object), io=True,
+                                )
                             if tuple_cache is not None:
                                 tuple_cache[tuple_object] = tuples
                         binding_resource_type = (
@@ -562,6 +605,11 @@ class FineGrainedPermissionService:
                     binding_department_paths,
                     user_subject_strings,
                     nearest_binding_wins=nearest_binding_wins,
+                    **({"user_department_paths": {
+                        int(subject.split(":", 1)[1].split("#", 1)[0]): binding_department_paths.get(
+                            int(subject.split(":", 1)[1].split("#", 1)[0]), "")
+                        for subject in user_subject_strings if subject.startswith("department:")
+                    }} if read_context is not None else {}),
                 )
                 effective_permissions.update(binding_permissions)
                 matched_lineage_binding = matched_lineage_binding or binding_matched
@@ -572,14 +620,16 @@ class FineGrainedPermissionService:
             object_type=object_type,
             object_id=str(object_id),
             login_user=login_user,
+            **({"read_context": read_context} if read_context is not None else {}),
         )
         implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
         effective_permissions.update(
             cls.default_permission_ids_for_relation(object_type, implicit_relation or ''),
         )
-        effective_permissions.update(
-            await cls._public_knowledge_space_viewer_permission_ids(lineage),
-        )
+        public_permissions = read_context.public_permissions(lineage) if read_context is not None else None
+        if public_permissions is None:
+            public_permissions = await cls._public_knowledge_space_viewer_permission_ids(lineage)
+        effective_permissions.update(public_permissions)
         if effective_permissions or saw_bound_model_tuple or saw_legacy_subscription_viewer_tuple:
             if return_match_metadata:
                 return effective_permissions, matched_lineage_binding
@@ -594,6 +644,7 @@ class FineGrainedPermissionService:
                     object_type=object_type,
                     object_id=str(object_id),
                     login_user=login_user,
+                    **({"read_context": read_context} if read_context is not None else {}),
                 )
             relation = _PERMISSION_LEVEL_TO_RELATION.get(level or '')
             effective_permissions = cls.default_permission_ids_for_relation(object_type, relation or '')
@@ -618,6 +669,73 @@ class FineGrainedPermissionService:
             object_id,
         )
         return bool(required_permissions & effective_permissions)
+
+    @classmethod
+    async def load_read_context(cls, login_user, context):
+        """同阶段共用规则资料；回收与并发去重由请求上下文负责。"""
+        models = await context.read("models", cls.get_relation_models_map)
+        bindings = await context.read("bindings", _get_bindings)
+        subjects = await context.read("subjects", lambda: cls.get_current_user_subject_strings(login_user))
+        paths = await context.read("binding_paths", lambda: context.department_paths(bindings, subjects))
+        return models, bindings, subjects, paths
+
+    @classmethod
+    async def get_effective_permission_ids_batch_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_ids: list[str | int],
+        *,
+        lineages: dict[str, list[tuple[str, str | int]]] | None = None,
+        read_context=None,
+    ) -> dict[str, set[str]]:
+        """复用一份权限上下文，按有界并发计算每个对象的完整权限。"""
+        ids = list(dict.fromkeys(str(item) for item in object_ids))
+        if not ids:
+            return {}
+        context_tasks = [
+            asyncio.create_task(read_context.read("models", cls.get_relation_models_map)
+                                if read_context is not None else cls.get_relation_models_map()),
+            asyncio.create_task(read_context.read("bindings", _get_bindings)
+                                if read_context is not None else _get_bindings()),
+            asyncio.create_task(read_context.read("subjects", lambda: cls.get_current_user_subject_strings(login_user))
+                                if read_context is not None else cls.get_current_user_subject_strings(login_user)),
+        ]
+        try:
+            models, bindings, subjects = await asyncio.gather(*context_tasks)
+        finally:
+            for task in context_tasks:
+                if not task.done():
+                    task.cancel()
+            # 主异常继续传播；这里只回收已结束或已取消的同批任务。
+            await asyncio.gather(*context_tasks, return_exceptions=True)
+        department_paths = await (read_context.read("binding_paths", lambda: read_context.department_paths(bindings, subjects))
+                                  if read_context is not None else cls.get_binding_department_paths(bindings))
+        semaphore = asyncio.Semaphore(16)
+
+        async def resolve(object_id: str) -> set[str]:
+            async with semaphore:
+                return await cls.get_effective_permission_ids_async(
+                    login_user,
+                    object_type,
+                    object_id,
+                    models=models,
+                    bindings=bindings,
+                    binding_department_paths=department_paths,
+                    user_subject_strings=subjects,
+                    lineage=lineages.get(object_id) if lineages is not None else None,
+                    **({"read_context": read_context} if read_context is not None else {}),
+                )
+
+        tasks = [asyncio.create_task(resolve(object_id)) for object_id in ids]
+        try:
+            return dict(zip(ids, await asyncio.gather(*tasks)))
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            # 主异常继续传播，避免请求结束后仍有权限请求在后台运行。
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     @classmethod
     async def filter_object_ids_by_permission_async(

@@ -64,6 +64,8 @@ def _make_service(user_id: int = 42) -> KnowledgeSpaceChatService:
     svc.doc_repo.find_by_ids = AsyncMock(return_value=[])
     svc._require_space_view_permission = AsyncMock()
     svc.retrieval_runtime = _retrieval_runtime()
+    # 旧分库聚合测试限定于非 SPACE；共享选路由独立契约测试覆盖。
+    svc._is_shared_storage_active = AsyncMock(return_value=False)
     return svc
 
 

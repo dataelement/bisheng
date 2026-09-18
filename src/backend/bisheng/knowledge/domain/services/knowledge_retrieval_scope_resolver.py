@@ -113,14 +113,8 @@ _DEFAULT_MAX_OVERFETCH_ROUNDS = 4
 
 @dataclass(frozen=True)
 class RetrievalScopeResolverSettings:
-    """Runtime knobs for the scope resolver.
+    """共享范围解析参数；不再提供启用开关。"""
 
-    ``from_global_settings`` reads the F1 shared-storage config block with
-    defensive ``getattr`` so this module keeps working while F1 lands; a
-    missing block means the feature is OFF (fail closed).
-    """
-
-    enabled: bool = False
     routing_version: int = 1
     overfetch_factor: int = _DEFAULT_OVERFETCH_FACTOR
     max_overfetch_rounds: int = _DEFAULT_MAX_OVERFETCH_ROUNDS
@@ -136,21 +130,20 @@ class RetrievalScopeResolverSettings:
                 settings = global_settings
             block = getattr(settings, "knowledge_space_shared_storage", None)
             if block is None:
-                return cls(enabled=False)
+                return cls()
 
             def _get(name: str, default: Any) -> Any:
                 value = getattr(block, name, None)
                 return default if value is None else value
 
             return cls(
-                enabled=bool(_get("enabled", False)),
                 routing_version=int(_get("routing_version", 1) or 1),
                 overfetch_factor=max(1, int(_get("retrieval_overfetch_factor", _DEFAULT_OVERFETCH_FACTOR))),
                 max_overfetch_rounds=max(1, int(_get("retrieval_max_overfetch_rounds", _DEFAULT_MAX_OVERFETCH_ROUNDS))),
             )
         except Exception:
-            logger.exception("failed to read shared storage settings; treating as disabled")
-            return cls(enabled=False)
+            logger.exception("failed to read shared retrieval parameters; using defaults")
+            return cls()
 
 
 class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
@@ -183,8 +176,9 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         tenant_id: TenantId,
         space_ids: Sequence[SpaceId],
         entry_refs: Sequence[EntryRef] | None = None,
+        authorize_spaces: bool = True,
     ) -> RetrievalScope:
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         if not user_id:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.SCOPE_SPACE_NOT_VISIBLE,
@@ -199,7 +193,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 tenant_id=int(tenant_id),
             )
 
-        for space_id in requested:
+        # 门户 QA 在候选阶段校验内容权限；其他入口仍保留前置空间校验。
+        for space_id in requested if authorize_spaces else ():
             allowed = await self._check_space_read(tenant_id, user_id, space_id)
             if not allowed:
                 raise SharedStorageContractError(
@@ -316,7 +311,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         canonical_version_ids: Sequence[CanonicalVersionId] | None = None,
         generation_constraints: Sequence[CanonicalGenerationConstraint] | None = None,
     ) -> BackendQueryFilter:
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         if int(scope.routing_version) != settings.routing_version:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
@@ -345,7 +340,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         canonical_document_ids: Sequence[CanonicalDocumentId],
     ) -> tuple[CanonicalGenerationConstraint, ...]:
         """Resolve exact current shared projection identities for Top-K candidates."""
-        self._require_enabled()
+        self._resolver_settings()
         document_ids = sorted({int(item) for item in canonical_document_ids if int(item) > 0})
         if not document_ids:
             return ()
@@ -403,6 +398,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
     async def resolve_explicit_canonical_constraints(
         self,
         scope: RetrievalScope,
+        *,
+        context=None,
     ) -> tuple[tuple[CanonicalDocumentId, ...] | None, tuple[CanonicalVersionId, ...] | None]:
         """Expand a scope's explicit entry refs into canonical document/version ids.
 
@@ -412,13 +409,16 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         never come from the client (spec 8.1-4). Returns ``(None, None)``
         when the scope has no explicit refs (whole-space retrieval).
         """
-        self._require_enabled()
+        self._resolver_settings()
         if not scope.explicit_entry_ids_by_space:
             return None, None
         entry_ids = sorted(
             {int(entry_id) for ids in scope.explicit_entry_ids_by_space.values() for entry_id in ids}
         )
-        rows = {int(row.id): row for row in await self.file_repository.find_by_ids(entry_ids)}
+        if context is None:
+            rows = {int(row.id): row for row in await self.file_repository.find_by_ids(entry_ids)}
+        else:
+            rows = await context.ensure("files", entry_ids)
 
         document_ids: list[int] = []
         for entry_id in entry_ids:
@@ -435,7 +435,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 )
             document_ids.append(int(version.document_id))
 
-        documents = await self._load_documents(int(scope.tenant_id), sorted(set(document_ids)))
+        documents = (await self._load_documents(int(scope.tenant_id), sorted(set(document_ids)))
+                     if context is None else await context.ensure("documents", document_ids))
         resolved_docs: list[int] = []
         version_ids: list[int] = []
         for document_id in sorted(set(document_ids)):
@@ -460,32 +461,129 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         self,
         scope: RetrievalScope,
         hits: Sequence[CanonicalChunkHit],
+        *,
+        entry_batch_checker=None,
+        strict_explicit: bool = False,
+        skip_unready: bool = False,
+        require_projection_ready: bool = True,
+        context=None,
     ) -> Sequence[MappedEntryHit]:
-        self._require_enabled()
+        """映射并授权；门户可放宽同步进度，实际命中的版本和代次仍须一致。"""
+        self._resolver_settings()
         if not hits:
             return []
 
         space_order = {int(space): idx for idx, space in enumerate(scope.requested_space_ids)}
-        explicit_entries = {
-            int(entry_id)
-            for ids in scope.explicit_entry_ids_by_space.values()
-            for entry_id in ids
-        }
 
         document_ids = sorted({int(hit.canonical_document_id) for hit in hits})
-        documents = await self._load_documents(int(scope.tenant_id), document_ids)
-        entries_by_document = await self._load_scope_entries(
-            tenant_id=int(scope.tenant_id),
-            document_ids=document_ids,
-            space_ids=list(space_order),
+        if context is None:
+            documents = await self._load_documents(int(scope.tenant_id), document_ids)
+            entries_by_document = await self._load_scope_entries(
+                tenant_id=int(scope.tenant_id), document_ids=document_ids, space_ids=list(space_order),
+            )
+            all_entries_by_document = await self._load_all_active_entries(
+                tenant_id=int(scope.tenant_id), document_ids=document_ids,
+            )
+        else:
+            context.bind_scope(scope)
+            documents = await context.ensure("documents", document_ids)
+            all_entries_by_document = await context.ensure("entries", document_ids)
+            entries_by_document = {
+                doc: [entry for entry in rows if int(entry.knowledge_id) in space_order]
+                for doc, rows in all_entries_by_document.items()
+            }
+
+        return await self._map_loaded_hits(
+            scope,
+            hits,
+            documents,
+            entries_by_document,
+            all_entries_by_document,
+            entry_batch_checker=entry_batch_checker,
+            strict_explicit=strict_explicit,
+            skip_unready=skip_unready,
+            require_projection_ready=require_projection_ready,
         )
-        all_entries_by_document = await self._load_all_active_entries(
-            tenant_id=int(scope.tenant_id),
-            document_ids=document_ids,
-        )
+
+    async def map_and_authorize_hit_batches(
+        self,
+        batches: Sequence[tuple[RetrievalScope, Sequence[CanonicalChunkHit]]],
+        *,
+        entry_batch_checker=None,
+        strict_explicit: bool = False,
+        require_projection_ready: bool = True,
+        context=None,
+    ) -> list[Sequence[MappedEntryHit]]:
+        """同一次请求的多路命中共用批量读取，各路仍按自己的范围映射。"""
+        settings = self._resolver_settings()
+        if not batches:
+            return []
+        first_scope = batches[0][0]
+        identity = (first_scope.tenant_id, first_scope.user_id, first_scope.routing_version)
+        for scope, _ in batches:
+            if (
+                scope.tenant_id,
+                scope.user_id,
+                scope.routing_version,
+            ) != identity or scope.routing_version != settings.routing_version:
+                raise SharedStorageContractError(
+                    SharedStorageErrorCode.SCOPE_SPACE_NOT_VISIBLE,
+                    "mapping batches must share request identity",
+                )
+        document_ids = sorted({int(hit.canonical_document_id) for _, hits in batches for hit in hits})
+        if not document_ids:
+            return [[] for _ in batches]
+        # 两个 Repository 使用同一会话，串行读取；上下文只活在本次调用。
+        if context is None:
+            documents = await self._load_documents(int(first_scope.tenant_id), document_ids)
+            all_entries = await self._load_all_active_entries(
+                tenant_id=int(first_scope.tenant_id), document_ids=document_ids
+            )
+        else:
+            context.require_identity(tenant_id=first_scope.tenant_id, user_id=first_scope.user_id,
+                                     routing_version=first_scope.routing_version)
+            documents = await context.ensure("documents", document_ids)
+            all_entries = await context.ensure("entries", document_ids)
+            context.seed("files", {int(entry.id): entry for rows in all_entries.values() for entry in rows})
+        results = []
+        for scope, hits in batches:
+            spaces = set(scope.requested_space_ids)
+            entries = {
+                doc: [entry for entry in rows if int(entry.knowledge_id) in spaces] for doc, rows in all_entries.items()
+            }
+            results.append(
+                await self._map_loaded_hits(
+                    scope,
+                    hits,
+                    documents,
+                    entries,
+                    all_entries,
+                    entry_batch_checker=entry_batch_checker,
+                    strict_explicit=strict_explicit,
+                    require_projection_ready=require_projection_ready,
+                )
+            )
+        return results
+
+    async def _map_loaded_hits(
+        self,
+        scope: RetrievalScope,
+        hits: Sequence[CanonicalChunkHit],
+        documents: dict[int, KnowledgeDocument],
+        entries_by_document: dict[int, list[KnowledgeFile]],
+        all_entries_by_document: dict[int, list[KnowledgeFile]],
+        *,
+        entry_batch_checker=None,
+        strict_explicit: bool = False,
+        skip_unready: bool = False,
+        require_projection_ready: bool = True,
+    ) -> Sequence[MappedEntryHit]:
+        space_order = {int(space): idx for idx, space in enumerate(scope.requested_space_ids)}
+        explicit_entries = {int(entry_id) for ids in scope.explicit_entry_ids_by_space.values() for entry_id in ids}
 
         mapped: list[MappedEntryHit] = []
         seen_chunks: set[tuple[int, int]] = set()
+        prepared = []
         for hit in hits:
             document_id = int(hit.canonical_document_id)
             chunk_key = (document_id, int(hit.chunk_index))
@@ -493,12 +591,30 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 # Same canonical chunk hitting several requested spaces keeps
                 # exactly one mapped hit (spec 3.5 rule 6).
                 continue
+            entries = entries_by_document.get(document_id, [])
+            if strict_explicit and explicit_entries:
+                entries = [entry for entry in entries if int(entry.id) in explicit_entries]
+            if require_projection_ready and skip_unready:
+                ready_entries = []
+                for entry in entries:
+                    try:
+                        self._require_projection_ready(entry)
+                    except SharedStorageContractError as exc:
+                        if exc.code not in {
+                            SharedStorageErrorCode.MEMBERSHIP_PROJECTION_NOT_READY,
+                            SharedStorageErrorCode.CONTENT_PROJECTION_NOT_READY,
+                        }:
+                            raise
+                        continue
+                    ready_entries.append(entry)
+                entries = ready_entries
             candidates = self._final_document_check(
                 documents.get(document_id),
                 hit,
-                entries_by_document.get(document_id, []),
+                entries,
                 all_entries=all_entries_by_document.get(document_id, []),
                 space_ids=space_order,
+                require_projection_ready=require_projection_ready,
             )
             if not candidates:
                 # Dirty member (revoked share / deleted entry / stale version):
@@ -510,16 +626,44 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                     int(hit.chunk_index),
                 )
                 continue
+            prepared.append((hit, candidates))
+
+        permissions = None
+        if entry_batch_checker is not None and prepared:
+            unique_entries = {int(entry.id): entry for _, entries in prepared for entry in entries}
+            permissions = await entry_batch_checker(list(unique_entries.values()))
+        logged_projection_entries: set[int] = set()
+        for hit, candidates in prepared:
+            chunk_key = (int(hit.canonical_document_id), int(hit.chunk_index))
+            if chunk_key in seen_chunks:
+                continue
             chosen = await self._select_and_authorize_entry(
                 scope,
                 hit,
                 candidates,
                 space_order=space_order,
                 explicit_entries=explicit_entries,
+                entry_permissions=permissions,
+                require_projection_ready=require_projection_ready,
             )
             if chosen is None:
                 continue
-            mapped_hit, _ = chosen
+            mapped_hit, entry = chosen
+            if not require_projection_ready and int(entry.id) not in logged_projection_entries:
+                logged_projection_entries.add(int(entry.id))
+                try:
+                    self._require_projection_ready(entry)
+                except SharedStorageContractError as exc:
+                    if exc.code not in {
+                        SharedStorageErrorCode.MEMBERSHIP_PROJECTION_NOT_READY,
+                        SharedStorageErrorCode.CONTENT_PROJECTION_NOT_READY,
+                    }:
+                        raise
+                    # 只记录通过实际命中与权限检查的入口，不记录正文。
+                    logger.warning(
+                        "projection progress ignored for current hit: tenant=%s entry=%s code=%s",
+                        int(scope.tenant_id), int(entry.id), exc.code.value,
+                    )
             seen_chunks.add(chunk_key)
             mapped.append(mapped_hit)
         return mapped
@@ -587,6 +731,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         all_entries: list[KnowledgeFile],
         space_ids: dict[int, int],
+        require_projection_ready: bool = True,
     ) -> list[KnowledgeFile]:
         """Structural F059 checks on document + entry rows.
 
@@ -616,8 +761,9 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             and entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
             and entry.entry_type in _ENTRY_TYPE_PRIORITY
         ]
-        for entry in candidates:
-            self._require_projection_ready(entry)
+        if require_projection_ready:
+            for entry in candidates:
+                self._require_projection_ready(entry)
         current_membership_generation = max(
             [int(document.content_generation or 0)]
             + [int(entry.desired_entry_generation or 0) for entry in all_entries]
@@ -637,6 +783,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         space_order: dict[int, int],
         explicit_entries: set[int],
+        entry_permissions: dict[int, bool] | None = None,
+        require_projection_ready: bool = True,
     ) -> tuple[MappedEntryHit, KnowledgeFile] | None:
         ranked = sorted(
             candidates,
@@ -649,13 +797,15 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             )
 
         for entry in ranked:
-            self._require_projection_ready(entry)
-            allowed = await self._check_entry_view(
-                int(scope.tenant_id),
-                scope.user_id,
-                int(entry.knowledge_id),
-                int(entry.id),
-            )
+            if require_projection_ready:
+                self._require_projection_ready(entry)
+            if entry_permissions is None:
+                allowed = await self._check_entry_view(
+                    int(scope.tenant_id), scope.user_id,
+                    int(entry.knowledge_id), int(entry.id),
+                )
+            else:
+                allowed = entry_permissions.get(int(entry.id), False)
             if not allowed:
                 # OpenFGA file-level final check denied this entry; try the
                 # next visible candidate of another requested space.
@@ -781,7 +931,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         """
         if top_k <= 0:
             raise ValueError("top_k must be a positive integer")
-        settings = self._require_enabled()
+        settings = self._resolver_settings()
         factor = max(1, int(overfetch_factor or settings.overfetch_factor))
         page_limit = max(top_k * factor, top_k)
         query_filter = self.build_backend_filter(scope)
@@ -807,14 +957,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         return collected[:top_k]
 
     # ------------------------------------------------------------------
-    def _require_enabled(self) -> RetrievalScopeResolverSettings:
-        settings = self._settings_provider()
-        if not settings.enabled:
-            raise SharedStorageContractError(
-                SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
-                "shared space storage retrieval is not enabled for this deployment",
-            )
-        return settings
+    def _resolver_settings(self) -> RetrievalScopeResolverSettings:
+        return self._settings_provider()
 
 
 def _dedupe_optional(

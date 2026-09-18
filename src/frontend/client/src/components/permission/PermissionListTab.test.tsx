@@ -414,6 +414,33 @@ describe("Client PermissionListTab", () => {
     expect(screen.queryByRole("button", { name: "com_permission.level_owner" })).not.toBeInTheDocument();
   });
 
+  it.each(["knowledge_space", "folder", "knowledge_file"] as const)(
+    "allows changing a member to an empty custom model on %s",
+    async (resourceType) => {
+      mockedGetGrantableRelationModels.mockResolvedValue([{
+        id: "viewer", name: "Viewer", relation: "viewer",
+        permissions: [], permissions_explicit: false, is_system: true,
+      }, {
+        id: "custom_empty", name: "空权限模型", relation: "viewer",
+        permissions: [], permissions_explicit: true, is_system: false,
+      }]);
+      mockedGetResourcePermissions.mockResolvedValue([{
+        subject_type: "user", subject_id: 2, subject_name: "Alice",
+        relation: "viewer", model_id: "viewer", model_name: "Viewer",
+      }]);
+      render(<PermissionListTab resourceType={resourceType} resourceId="resource-1"
+        refreshKey={0} fixedSubjectType="user" />);
+      expect(await screen.findByTestId(`permission-model-help-${resourceType}-custom_empty`))
+        .toHaveAttribute("data-permission-summary", "com_permission.permission_model_no_permissions");
+      fireEvent.click(screen.getByRole("button", { name: /空权限模型/ }));
+      await waitFor(() => expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        resourceType, "resource-1",
+        [{ subject_type: "user", subject_id: 2, relation: "viewer", model_id: "custom_empty" }],
+        [{ subject_type: "user", subject_id: 2, relation: "viewer" }],
+      ));
+    },
+  );
+
   it("shows folder and descendant-file permission groups on modify model help", async () => {
     mockedGetGrantableRelationModels.mockResolvedValue([
       {

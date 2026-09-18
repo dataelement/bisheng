@@ -3,8 +3,6 @@
 This module owns the pieces of the shared-storage projection that must stay
 free of infrastructure imports:
 
-- defensive resolution of the ``knowledge_space_shared_storage`` config block
-  (owned by F1; may not exist yet, missing/off => legacy behaviour, spec 6.2);
 - pure re-aggregation of ``knowledge_ids`` from SQL active entries (spec 3.4:
   blind add/remove on the previous array is forbidden);
 - the chunk-loader callable type used to build ``ContentUpsertRequest`` payloads.
@@ -44,54 +42,10 @@ MEMBERSHIP_ENTRY_TYPES = frozenset(
 )
 
 
-def shared_space_block_enabled(block: object | None) -> bool:
-    """Interpret one ``knowledge_space_shared_storage`` config block value.
-
-    Accepts a bool, an object with ``enabled``, or a mapping/dict with an
-    ``enabled`` key. Anything else (including None) means disabled.
-    """
-    if block is None:
-        return False
-    if isinstance(block, bool):
-        return block
-    enabled = getattr(block, "enabled", None)
-    if enabled is None and isinstance(block, dict):
-        enabled = block.get("enabled")
-    return enabled if isinstance(enabled, bool) else False
-
-
-async def resolve_shared_space_storage_enabled() -> bool:
-    """Defensively resolve the shared-storage switch; missing/off => False.
-
-    F1 owns the ``knowledge_space_shared_storage`` config block; until it lands
-    (or on any config/DB error) this returns False so every caller keeps the
-    legacy behaviour. Never imports F1 symbols.
-    """
-    try:
-        from bisheng.common.services.config_service import settings as bisheng_settings
-    except Exception:
-        return False
-    try:
-        return shared_space_block_enabled(
-            getattr(bisheng_settings, "knowledge_space_shared_storage", None)
-        )
-    except Exception:
-        logger.debug(
-            "shared-space storage config present but unreadable; treating as disabled",
-            exc_info=True,
-        )
-        return False
-
-
 async def load_shared_content_chunks_from_legacy(
     content_file: KnowledgeFile,
 ) -> Sequence[SharedContentChunk]:
-    """Load the physical file's existing chunks from its legacy collection.
-
-    Projection workers already have durable vectors in the per-space store;
-    shared projection must copy those vectors instead of silently producing an
-    empty content projection or embedding them again.
-    """
+    """仅供离线正向迁移读取旧向量；运行时投影从规范版本原文件生成内容。"""
     from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
@@ -115,7 +69,7 @@ async def load_shared_content_chunks_from_legacy(
     def _load() -> list[SharedContentChunk]:
         for knowledge in source_spaces:
             vector_store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-                0, knowledge=knowledge
+                0, knowledge=knowledge, allow_legacy_space=True
             )
             collection = vector_store.col
             output_fields = [field.name for field in collection.schema.fields]
