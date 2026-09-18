@@ -29,6 +29,56 @@ Options:
 - `--include-deleted`: 包含已删除会话
 - `--full-session`: 只要会话在时间窗口内活跃，就导出该会话的全部消息
 
+## Verification Scripts
+
+### `verify_open_mcp.py`
+
+Verify the F067 Streamable HTTP MCP endpoint with the official MCP client. The
+script initializes the connection, lists the tools visible to the supplied API
+key or PAT, compares them with an explicit expected profile in both directions, and can
+optionally invoke one of the three read-only tools. It never prints the
+credential and does not expose write or destructive calls.
+
+Run from `src/backend/`:
+
+```bash
+export BISHENG_MCP_URL=https://bisheng.example.com/api/v2/mcp
+export BISHENG_API_KEY='<full-scope-api-key>'
+.venv/bin/python scripts/verify_open_mcp.py --expected-profile full
+```
+
+Optional read-only smoke calls:
+
+```bash
+.venv/bin/python scripts/verify_open_mcp.py \
+  --expected-profile full \
+  --call-tool bisheng_knowledge_list \
+  --arguments-json '{"type":0,"page_size":1}'
+
+.venv/bin/python scripts/verify_open_mcp.py \
+  --expected-profile full \
+  --call-tool bisheng_knowledge_file_list \
+  --arguments-json '{"knowledge_id":123,"page_size":1}'
+```
+
+Use `--expected-profile pat` for a PAT, which must expose exactly the three
+read-only tools. `--expected-profile scope-filtered` is diagnostic-only for an
+intentionally restricted API key: it still rejects tools outside the F067
+allowlist, but does not prove that all ten release tools are present.
+
+```bash
+export BISHENG_API_KEY='<personal-access-token>'
+.venv/bin/python scripts/verify_open_mcp.py --expected-profile pat
+```
+
+For delegated service-account mode, add `--on-behalf-of <external-user-id>`.
+Use `--end-user <partition>` only for the existing end-user partition mode;
+the two headers are mutually exclusive. To keep secrets out of shell history
+and process arguments, the credential is accepted only through the environment
+variable named by `--api-key-env` (default `BISHENG_API_KEY`). Exit codes are
+`0` for success, `2` for missing/invalid local configuration, `3` for a
+connection/protocol failure, and `4` for an allowlist or tool-call failure.
+
 ## Permission Scripts
 
 For an existing F048 installation, run the model publisher below in the release

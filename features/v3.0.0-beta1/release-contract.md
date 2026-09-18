@@ -9,8 +9,8 @@
 > 是本版本的 P0 权限架构升级 Feature；F049 在遵守 C4 系统身份策略与 OpenFGA 最终可见性语义的前提下，
 > 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性；F051 将知识库列表的非筛选动作
 > 改为打开单行操作菜单后按资源查询，保持 F048 最终动作判定与 F027 列表筛选契约；F052 为工作流
-> 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F067 将 F053 正式开放的业务能力
-> 以统一远程 MCP 服务交付，且不建立第二套身份与权限合同；F068 在文件/目录删除或跨空间移出后，
+> 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F067 仅将中粮 SeedMind Apifox
+> 文档确认的 10 项知识资源/文件 API 以统一远程 MCP 服务交付，不随 F053 其他开放能力自动扩围，且不建立第二套身份与权限合同；F068 在文件/目录删除或跨空间移出后，
 > 将仍存在的知识空间问答历史保留到原空间根目录。
 
 ---
@@ -46,12 +46,12 @@
 | —（无新增） | F052-workflow-session-auto-rerun | 只增加系统级统一开关和工作流独立会话打开时的一次性自动重新运行行为；复用既有工作流会话与手动重新运行能力，不新增领域对象、表或错误码 |
 | **ApiCredential**（平台自签发凭据底座：服务账号密钥 `bs-sak-` + 个人访问令牌 `bs-pat-`；同一张表、同一条校验路径、同一套哈希 / 撤销 / 租户隔离语义；P2 属性 IP 白名单 / 限流 / 日配额同表） | **F053-openapi-auth-and-identity** | 拥有凭据的生成、哈希存储、校验、权限位清单（含三扩展位登记，beta1 不建其消费面）、过期、软撤销与批量撤销、最后使用时间；`delegate` 位与委托范围（`api_credential_delegate_scope`）随同一 Feature 的身份传递工作流追加。代码底座自 `3.0-vibe` 移植（PRD §4.2 / §4.10） |
 | **ServiceAccount**（不可登录的服务账号主体：`user.user_type='service'` + 伴生表 + 租户归属直写 + 资源归属人 + 登录守卫 + 选人排除 + 主体侧授权页） | **F053-openapi-auth-and-identity** | PRD R4 / R6。不拥有 `User` 表本身（自然人侧行为不变、仅加 `user_type` 列）。服务账号不得被授予管理员身份 / 角色、不得加入用户组 / 部门 |
-| **OpenApiCallLog**（开放 API 逐调用审计：actor 凭据 · subject 被代表用户 · 外部标识 · 端点 · 状态 · IP · 耗时） | **F053-openapi-auth-and-identity** | PRD R7 / §4.4.5 双归属。独立于 `audit_log` 操作审计表；批量落库、按保留期清理 |
+| —（无新增领域对象；开放 API 逐调用审计复用既有 `AuditLog`） | **F053-openapi-auth-and-identity** | PRD R7 / §4.4.5 双归属。`audit_log.action='open_api.call'`，actor / subject / 外部标识 / 端点 / 状态 / IP / 耗时写公共列与 `metadata`；经既有有界队列批量落库并跟随统一审计保留策略，不建 `open_api_call_log` |
 | **OpenApiTenantSetting**（租户级 PAT 开关与默认有效期） | **F053-openapi-auth-and-identity** | PRD §4.10.7 闸门一的租户级半边；部署级半边在进程 Settings |
 | **ShareLink**（既有对象；本版增量 = `share_scope` 列 + 撤销写入 + 有效期强制生效 + share-token 会话执行主体） | **F053-openapi-auth-and-identity** | 两个免登录分享页改走 share_link 通道；只拥有本版对该对象的写行为增量，不拥有既有创建 / 读取 |
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
 | **OpenApiTenantSetting**（既有对象，本体归 F053；**本增量 = `pat_data_scope` 数据范围列 + 租户策略变更操作审计写入**） | **F066-pat-data-scope-and-ai-access** | PRD v2.9 §4.10.7 闸门一之二（D21）。只拥有该列与策略审计的写行为增量；开关 + 默认有效期的既有写行为仍归 F053 |
-| —（无新增领域对象） | **F067-unified-remote-mcp-service** | 将 F053 正式公开合同中的本期业务能力投影为统一远程 MCP 服务；复用 ApiCredential、OpenApiCallLog、身份、资源权限、PAT 数据范围与业务 Service，不建立第二套凭据、授权、审计或业务对象 |
+| —（无新增领域对象） | **F067-unified-remote-mcp-service** | 仅将中粮 SeedMind Apifox 范围基线确认的 10 项知识资源/文件 API 一对一投影为统一远程 MCP 工具；复用 ApiCredential、`audit_log` 的 `open_api.call` 事件、身份、资源权限、PAT 数据范围与业务 Service，不建立第二套凭据、授权、审计或业务对象，也不随 F053 其他路由或 Apifox 后续变更自动扩围 |
 | **MessageSession**（既有对象；本增量 = nullable `entry_flow_id` 展示入口覆盖列） | **F068-knowledge-space-chat-history-retention**（列） | null 时入口沿用原 `flow_id`；文件/目录删除或跨空间移出后写原空间根目录 flow，拥有 sticky root 与存量恢复语义；不改写原 `flow_id`、ChatMessage 或 MessageCitation，session `update_time` 沿用既有元数据更新机制 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
@@ -96,9 +96,9 @@
 | INV-30 | **平台自签发凭据统一底座**：服务账号密钥与个人访问令牌必须密码学随机生成、服务端仅存单向哈希、明文仅签发时一次性展示、此后只见掩码、撤销为软撤销并保留审计、撤销 / 停用 / 编辑生效上界 5 秒（主动清缓存，不依赖 TTL）；有效性判据唯一 = 未撤销且未过期，不引入可独立漂移的状态枚举列；不留第二类不受治理的令牌形态 | ApiCredential | F053 |
 | INV-31 | **服务账号主体不可登录、不进任何选人场景、授权只走主体侧**：租户归属声明式写入、任何以部门树为真相的对账结构性跳过它；不计入用户数配额；不出现在任何面向人的选人场景（含资源侧授权选人框，「已授权对象列表」仅可显示），排除做在数据访问层、失败方向是"看不到"而非"泄漏"；资源授权唯一入口在其详情页主体侧；不得被授予管理员身份 / 角色、不得加入用户组 / 部门 | ServiceAccount | F053 |
 | INV-32 | **开放面权限评估 fail-closed**（INV-19 在开放 API 上的加强）：权限引擎不可用、评估失败或结果不可判定时返回错误，**绝不返回未过滤或部分过滤的结果集**；不存在"缺身份即降级返回某个子集"的路径；P2 的限流 / 配额 / 幂等在 Redis 不可用时同样拒绝 | ApiCredential, PermissionGrant | F053 |
-| INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-Bisheng-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
+| INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
 | INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 5 秒内级联失效（**换租户不失效、随人迁移**——PRD v2.6 D19，原「离开租户级联失效」表述作废）；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤），**且「短路照常」仅在默认数据范围（all_visible）下成立——租户级数据范围收窄（PRD v2.9 D21）优先于管理员短路，对含管理员在内的全体持有人一致生效**；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；数据范围同为调用期准入检查、不写凭据行、可逆；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053、F066 |
-| INV-35 | **统一远程 MCP 是正式开放业务能力的等价访问面**：其工具发现和每次执行都必须使用平台既有凭据，并遵守与对应开放 API 相同的服务账号 S/D、PAT、租户与数据范围、资源动作、业务状态、审计、结果和错误语义；业务参数不得选择执行主体，任何认证或授权结果不可判定时失败关闭；不得开放正式合同已排除或延后的能力 | ApiCredential, OpenApiCallLog, PermissionGrant | F067、F053、F066 |
+| INV-35 | **统一远程 MCP 只承载已确认的 10 项 API allowlist，既有 API 接口逻辑冻结**：每个指定 API 必须恰好对应一个可调用工具，工具发现不得返回 allowlist 之外的 BISHENG 业务工具，API/Apifox 后续变化不得自动扩围；工具发现和每次执行都必须使用平台既有凭据，并遵守与对应开放 API 相同的服务账号 S/D、PAT、租户与数据范围、资源动作、业务状态、`audit_log` 逐调用审计、结果与错误含义；F067 不得修改已有 API 的校验、分支、调用顺序、副作用、入参、出参或错误处理，协议形态不能原样复用时只允许在 MCP 工具 schema/adapter 内作显式兼容；MCP 成功输出遵循逐工具 `outputSchema`，工具错误遵循 `isError` 并返回明确 `code/message`，不复制 HTTP 状态信封；业务参数不得选择执行主体，任何认证或授权结果不可判定时失败关闭 | ApiCredential, AuditLog, PermissionGrant | F067、F053、F066 |
 | INV-36 | **知识空间问答历史归原空间所有**：关联文件/目录删除或跨空间移出后，未被用户主动删除且仍存在的会话与消息必须通过 `MessageSession.entry_flow_id` 在原空间根目录可见并可按全空间范围继续问答，目标空间不得继承；回收不得改写原 `flow_id`、消息/引用内容及其时间，不得改变会话所有者或绕过原空间权限；session `update_time` 可按既有元数据更新机制变化，但不作为知识空间会话排序或最后消息时间；必须覆盖子树、批量、并发与存量失联历史，保持幂等且回收后不自动回绑，同空间移动不触发 | MessageSession, ChatMessage, MessageCitation, Knowledge | F068 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
@@ -127,7 +127,7 @@
 | F052-workflow-session-auto-rerun | 既有工作流独立会话与手动重新运行能力 | 系统统一开关只影响免登录/需登录独立工作流会话的打开行为；不改变工作流执行、权限或其他会话入口 |
 | F053-openapi-auth-and-identity | F048（`authorize_created` / `grants:mutate` / 主体校验 / 系统级放行谓词）；既有 `share_link`、`workstation` 日常模式链路、`knowledge` 检索与文件可见性服务 | 代码底座自 `3.0-vibe` 移植；工作流 A（底座 + 端点接入）与 C（身份传递）须同版发布；B / D / E / F / G 可后续合入。内部工作流依赖见 `053-openapi-auth-and-identity/design.md` §4 |
 | F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、失效态、匿名收紧、临时文件停发角标（导出烘焙不在本 Feature，归 F047 Phase 2）。**与 F053 有一处待对齐**：F053 把免登录分享页改走 share_link 通道并引入 share-token 会话执行主体，本 Feature AC-14「无已登录用户即不返回来源详情」的判据需与之对齐（见 spec §2.4 待澄清）。灵思任务模式不在本 Feature，归 F047 |
-| F067-unified-remote-mcp-service | F053、F066 | 只为 F053 正式公开合同与 0923 PRD §3 的交集业务能力增加统一 MCP 访问面；凭据、S/D 身份、PAT 数据范围、资源授权、审计和业务语义仍由既有 Feature 定义 |
+| F067-unified-remote-mcp-service | F053、F066 | 只为中粮 SeedMind Apifox 范围基线明确列出的 10 项知识资源/文件 API 增加统一 MCP 访问面；凭据、S/D 身份、PAT 数据范围、资源授权、审计和业务语义仍由既有 Feature 定义；F053 其他开放路由不在本期范围 |
 | F068-knowledge-space-chat-history-retention | v2.6.0 F034、F048、既有知识空间问答 | 在文件/文件夹删除及跨空间移动的既有成功语义上增加源空间历史保留；权限继续走 F048，其他会话类型不受影响 |
 
 ---
@@ -148,7 +148,7 @@
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
-| F053 / F066 开放 API 凭据、身份与数据范围 | F067 增加统一 MCP 访问面，但不改变开放 API 的地址、参数、凭据治理、S/D 身份、PAT 能力与数据范围合同；MCP 工具发现和执行不得成为绕过调用期授权的旁路 |
+| F053 / F066 开放 API 凭据、身份与数据范围 | F067 仅为指定 10 项知识资源/文件 API 增加统一 MCP 访问面，不改变开放 API 的地址、参数、凭据治理、S/D 身份、PAT 能力与数据范围合同，也不自动暴露 F053 其他能力；MCP 工具发现和执行不得成为绕过调用期授权的旁路 |
 | v2.6.0 F034 与既有知识空间问答 | F068 使删除或跨空间移出的文件/目录关联历史回收到源空间根目录并可继续问答；同空间移动、资源重命名、目标空间历史和其他会话类型保持原合同 |
 
 ---
@@ -189,7 +189,11 @@
 | 2026-08-20 | 澄清 INV-19 的决策与写入边界：资源权限投影非 CURRENT 时冻结新的权限配置写，但不暂停普通资源鉴权；具体 action/visible 继续使用 higher-consistency OpenFGA，OpenFGA/Catalog/model/verified identity 不可用时仍 fail closed，SQL 不兜底 ALLOW | F048 |
 | 2026-08-25 | 登记 F051 知识库列表动作权限懒加载：文档/QA 列表只承担可见/可用筛选，不为列表行预计算设置、删除和权限管理动作；单资源菜单按需读取当前动作，保持执行时最终鉴权与失败关闭 | F051、F027、F048 |
 | 2026-08-27 | 登记 F052 工作流会话打开时自动重新运行：由系统级统一开关控制免登录与需登录独立会话；首次进入或切换历史会话时，若目标会话已经结束则至多自动重新运行一次，打开后的后续结束或中断不自动重试 | F052、既有工作流独立会话 |
-| 2026-08-31 | 登记 F053 开放 API 鉴权与身份传递（全量 P0+P1+P2，代码底座自 `3.0-vibe` 移植、需求以 PRD v2.4 为准）：新增 ApiCredential / ServiceAccount / OpenApiCallLog / OpenApiTenantSetting 领域对象与 ShareLink、MessageSession 增量；新增 INV-29～34；分配错误码模块 260；登记对既有 `/api/v2`、分享页、`user` 表与 F048 `authorize_created` 的影响 | F053、F048、既有开放 API 与分享页 |
+| 2026-08-31 | 登记 F053 开放 API 鉴权与身份传递（全量 P0+P1+P2，代码底座自 `3.0-vibe` 移植、需求以 PRD v2.4 为准）：新增 ApiCredential / ServiceAccount / OpenApiTenantSetting 领域对象与 ShareLink、MessageSession 增量；新增 INV-29～34；分配错误码模块 260；登记对既有 `/api/v2`、分享页、`user` 表与 F048 `authorize_created` 的影响。早期曾登记独立 OpenApiCallLog，最终 F053 设计已作废该专表并复用 `audit_log` |
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
-| 2026-09-15 | 登记 0923 PRD §3 / §10：F067 以统一远程 MCP 服务交付正式开放业务能力，新增 INV-35；F068 新增 KnowledgeChatScope 作用域投影，将删除或跨空间移出后的知识空间问答历史保留到原空间根目录，新增 INV-36；两项均不新增错误码 | F067、F068、F053、F066、F034、F048、既有知识空间问答 |
+| 2026-09-15 | 登记 0923 PRD §3 / §10：F067 以统一远程 MCP 服务交付开放业务能力，新增 INV-35；F068 新增 KnowledgeChatScope 作用域投影，将删除或跨空间移出后的知识空间问答历史保留到原空间根目录，新增 INV-36；两项均不新增错误码 | F067、F068、F053、F066、F034、F048、既有知识空间问答 |
 | 2026-09-15 | 修订 F068 数据设计：取消 KnowledgeChatScope 新表，改由既有 MessageSession 的 nullable `entry_flow_id` 覆盖展示入口；原 flow 与消息链不变，会话元数据更新时间沿用既有更新机制 | F068、既有知识空间问答 |
+| 2026-09-15 | 按中粮 SeedMind Apifox 范围基线收缩 F067：仅保留 6 项知识资源 API 与 4 项文件 API 的 10 工具 allowlist；F053 其他开放能力和 Apifox 后续变化不自动进入本期范围 | F067、F053、F066 |
+| 2026-09-18 | 清理 F053/F067 审计合同残留：删除 OpenApiCallLog 领域对象引用，统一为既有 `audit_log` 的 `open_api.call` 事件；不新增审计表、清理任务或保留期策略 | F053、F067 |
+| 2026-09-18 | 订正 INV-33 的外部使用者请求头名称为代码、测试及 F053 API 合同实际使用的 `X-End-User`；仅修正文档残留，不改变 API 行为 | F053、F067 |
+| 2026-09-18 | 明确 F067 单向兼容边界：现有 API 的校验、分支、调用顺序、副作用、入参、出参与错误处理全部冻结；无法与 MCP 线格式完全一致的部分只在 MCP 工具 schema/adapter 内兼容，成功与错误分别遵循 MCP structured output 和 error 规范 | F067 |
