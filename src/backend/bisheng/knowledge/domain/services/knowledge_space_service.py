@@ -328,6 +328,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             actions=actions,
         )
 
+    async def _has_joined_visibility(
+        self,
+        space_id: int,
+        *,
+        has_content_permission: bool,
+    ) -> bool:
+        if not has_content_permission:
+            return False
+
+        actor = await self._permission_actor()
+        if not actor.super_admin:
+            return True
+
+        # A full-scope super admin may open every space without an actual grant.
+        # The joined state, unlike access authorization, must reflect OpenFGA
+        # visibility so it stays aligned with the square and /joined list.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=[space_id],
+            actor=actor,
+        )
+        return visible_map.get(str(space_id), False)
+
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
         space_tid = space.tenant_id
@@ -384,6 +408,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
                 return SpaceSubscriptionStatusEnum.REJECTED
         return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_effective_subscription_status(
+        subscription_status: SpaceSubscriptionStatusEnum,
+        *,
+        has_visible: bool,
+    ) -> SpaceSubscriptionStatusEnum:
+        """Treat effective visibility as joined without hiding workflow states."""
+        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        return subscription_status
 
     @staticmethod
     def _apply_subscription_flags(
@@ -1522,14 +1557,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
+            has_joined_visibility = await self._has_joined_visibility(
+                space_id,
+                has_content_permission=has_content_permission,
+            )
+            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
                 user_id=self.login_user.user_id,
             )
             if member_info:
-                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=has_joined_visibility,
+            )
+            self._apply_subscription_flags(result, subscription_status)
             if result.user_role is None and has_content_permission:
                 result.user_role = (
                     UserRoleEnum.ADMIN
@@ -1553,9 +1598,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # who has none would both cost a lookup and require a runtime the preview
         # path does not depend on. No actions is the honest answer there.
         result.actions = (
-            sorted(await self._get_effective_actions("knowledge_space", space_id))
-            if has_content_permission
-            else []
+            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
         )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
@@ -2212,11 +2255,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if (
-                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and visible_map.get(str(space.id), False)
-            ):
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=visible_map.get(str(space.id), False),
+            )
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -2455,10 +2497,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 action="visible",
             )
-            performance["target_build_elapsed_ms"] = performance.get(
-                "target_build_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - target_started_at) * 1000
+            performance["target_build_elapsed_ms"] = (
+                performance.get(
+                    "target_build_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - target_started_at) * 1000
+            )
             performance["verified_target_count"] = performance.get(
                 "verified_target_count",
                 0,
@@ -2469,16 +2514,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 targets=targets,
             )
-            performance["decision_elapsed_ms"] = performance.get(
-                "decision_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - decision_started_at) * 1000
+            performance["decision_elapsed_ms"] = (
+                performance.get(
+                    "decision_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - decision_started_at) * 1000
+            )
             for resource_type, resource_ids in by_type.items():
                 for resource_id in resource_ids:
                     permissions[(resource_type, str(resource_id))] = (
-                        {"visible"}
-                        if visible_map.get((resource_type, str(resource_id)), False)
-                        else set()
+                        {"visible"} if visible_map.get((resource_type, str(resource_id)), False) else set()
                     )
         else:
             # Compatibility path for callers that have only ids. The children
@@ -2550,11 +2596,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if await self._can_manage_space_cached(space_id):
             return items
         user_id = self.login_user.user_id
-        hidden = {
-            int(item.id)
-            for item in failed_items
-            if getattr(item, "user_id", None) != user_id
-        }
+        hidden = {int(item.id) for item in failed_items if getattr(item, "user_id", None) != user_id}
         if not hidden:
             return items
         return [item for item in items if int(item.id) not in hidden]
@@ -2624,9 +2666,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 permission_decision_elapsed_ms=(permission_context or {})
                 .get("performance", {})
                 .get("decision_elapsed_ms", 0.0),
-                verified_target_count=(permission_context or {})
-                .get("performance", {})
-                .get("verified_target_count", 0),
+                verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
@@ -2860,9 +2900,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids = (
                     await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
                 )
-            stage_elapsed_ms["version_filter_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "scan_visible"
             stage_started_at = perf_counter()
@@ -2885,9 +2923,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             stage = "version_enrich"
             stage_started_at = perf_counter()
             await self._enrich_with_version_info(visible_page_items)
-            stage_elapsed_ms["version_enrich_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "extra_info"
             stage_started_at = perf_counter()
