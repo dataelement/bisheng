@@ -219,11 +219,12 @@ export default function MainLayout() {
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
+  const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute || isSkillsRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -408,9 +409,11 @@ export default function MainLayout() {
             className="absolute inset-0 z-[60] cursor-default bg-transparent"
           />
         ) : null}
-        {pathname.startsWith('/menu-unavailable') ? (
+        {isMenuUnavailableRoute || isSkillsRoute ? (
           // Bypass KeepAlive for menu-unavailable: always mount fresh so
           // useEffect fires on every navigation and re-checks pending status.
+          // 技能 bypasses it too: a page react-activation froze keeps its old router
+          // context, so `useSearchParams` stops seeing `?skill=` / `?view=` after a return.
           <div
             className={cn(
               'flex flex-col bg-white',
@@ -418,9 +421,12 @@ export default function MainLayout() {
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-3xl',
-              isMobile
-                ? 'h-auto min-h-[100dvh] overflow-visible'
-                : 'scrollbar-os h-[100dvh] overflow-y-auto overscroll-y-none',
+              // 技能 is a fixed-height shell that scrolls inside the page, like the other module homes.
+              isSkillsRoute
+                ? 'h-[100dvh] min-h-0 overflow-hidden overscroll-y-none'
+                : isMobile
+                  ? 'h-auto min-h-[100dvh] overflow-visible'
+                  : 'scrollbar-os h-[100dvh] overflow-y-auto overscroll-y-none',
               systemMenuRevealing && 'overflow-hidden',
             )}
           >
@@ -437,11 +443,16 @@ export default function MainLayout() {
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
+                  {isSkillsRoute ? (
+                    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+                      {localize('com_skill_center_title')}
+                    </span>
+                  ) : null}
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>
               </div>
             ) : null}
-            {outlet}
+            {isSkillsRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
           </div>
         ) : (
         <KeepAlive

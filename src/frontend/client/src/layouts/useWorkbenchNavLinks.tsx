@@ -2,11 +2,12 @@ import { Filled, Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { matchPath, useLocation } from 'react-router-dom';
-import { useAuthContext, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
+import { skillCenterPath, skillCenterPreviewEnabled } from '~/components/Skills/types';
+import { useAuthContext, useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
-export type WorkbenchNavSection = 'home' | 'apps' | 'channel' | 'knowledge';
+export type WorkbenchNavSection = 'home' | 'apps' | 'channel' | 'knowledge' | 'skills';
 
 export interface WorkbenchNavLink {
   section: WorkbenchNavSection;
@@ -38,6 +39,8 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
   const { pathname, search } = useLocation();
   const { user } = useAuthContext();
   const menuNames = useWorkbenchMenuNames();
+  const localize = useLocalize();
+  const skillCenterLabel = localize('com_skill_center_title');
   const isMobile = usePrefersMobileLayout();
   const workbenchUser = user as (typeof user & WorkbenchUser) | undefined;
 
@@ -131,11 +134,23 @@ export function useWorkbenchNavLinks(): { links: WorkbenchNavLink[]; showAdminEn
           menuUnavailablePlugin === 'apps',
         closeDrawerOnNavigate: true,
       },
+      {
+        // 技能 has no menu key of its own yet: it rides on 首页's grant, behind the
+        // deployment's preview switch.
+        section: 'skills',
+        plugin: 'home',
+        to: target('home', skillCenterPath),
+        icon: <Outlined.Newspaper />,
+        activeIcon: <Outlined.Newspaper />,
+        label: skillCenterLabel,
+        isActive: pathname.startsWith(skillCenterPath),
+        closeDrawerOnNavigate: true,
+      },
     ];
-    return all.filter((link) => canShow(link.plugin));
+    return all.filter((link) => canShow(link.plugin) && (link.section !== 'skills' || skillCenterPreviewEnabled));
     // Menu names are read field-by-field: the hook returns a fresh object each render.
   }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, menuApprovalMode, pluginsKey,
-    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps]);
+    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, skillCenterLabel]);
 
   return { links, showAdminEntry };
 }

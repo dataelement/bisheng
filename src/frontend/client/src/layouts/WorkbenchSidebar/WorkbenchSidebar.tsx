@@ -18,7 +18,7 @@ import { SidebarProjectsPlaceholder } from './SidebarProjectsPlaceholder';
 const DEFAULT_BRAND_NAME = 'BISHENG';
 
 /** Module order in the design (Figma 13139:111436); 首页 is the 新建对话 row above them. */
-const MODULE_ORDER: WorkbenchNavSection[] = ['knowledge', 'apps', 'channel'];
+const MODULE_ORDER: WorkbenchNavSection[] = ['knowledge', 'apps', 'channel', 'skills'];
 
 const BRAND_ROW = 'flex h-8 max-w-full shrink-0 items-center gap-2.5 self-start px-2';
 
