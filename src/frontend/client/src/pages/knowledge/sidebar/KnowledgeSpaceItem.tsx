@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace } from "~/api/knowledge";
@@ -93,6 +93,17 @@ export default function KnowledgeSpaceItem({
     // In compact mode (mobile switcher) there's no folder tree to take over the
     // active styling, so the space row stays highlighted even inside a sub-folder.
     const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
+
+    // The URL points into a folder of this space (e.g. back from space settings,
+    // after the list remounted collapsed): expand so the selected folder shows.
+    // Keyed on the folder id, so a manual collapse sticks until the folder changes.
+    // Matched on the URL's space, not `isActive`: jumping to another space's folder
+    // updates the URL before the active space follows, and `isActive` would expand
+    // the previous space for that instant.
+    const urlFolderInThisSpace = !!urlFolderId && spaceId === String(space.id);
+    useEffect(() => {
+        if (urlFolderInThisSpace) setExpanded(true);
+    }, [urlFolderInThisSpace, urlFolderId]);
 
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {
