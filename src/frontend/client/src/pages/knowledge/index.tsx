@@ -33,7 +33,8 @@ import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeHomePage } from "./KnowledgeHomePage";
-import { MODULE_HOME_FRAME, ModuleHomeHeader, ModuleViewTabs, type ModuleView } from "~/components/ModuleHome";
+import { MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
+import { squareTypePath } from "~/pages/square/squarePaths";
 import { isDemoId } from "~/mock/demo/ids";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
@@ -565,14 +566,16 @@ export default function Knowledge() {
         return null;
     }
 
-    // Knowledge square view
-    const handleModuleViewChange = (view: ModuleView) => {
-        if (view === "square") {
-            setShowKnowledgeSquare(true);
-            return;
-        }
+    // Knowledge square view. Desktop discovers spaces in the sidebar's 广场 (~/pages/square);
+    // the in-page square below remains for mobile and for the deep links that open it
+    // (`?square=1`, `?previewSpace=`, notification events) — those keep a back arrow.
+    const handleLeaveSquare = () => {
         setShowKnowledgeSquare(false);
         navigate("/knowledge", { replace: true });
+    };
+    const handleOpenSquare = () => {
+        if (isH5) setShowKnowledgeSquare(true);
+        else navigate(squareTypePath("knowledge"));
     };
 
     if (showKnowledgeSquare) {
@@ -582,13 +585,8 @@ export default function Knowledge() {
             // so `h-full` collapses and the square's inner scroller never scrolls.
             // Pin the wrapper to 100dvh on mobile so the inner overflow-y-auto works.
             <div className="relative flex h-full min-h-0 max-[767px]:h-[100dvh]">
-                {/* Same key + same slot as in the 我的 return below, so React keeps ONE
-                    switcher across the two views and its indicator slides. */}
-                {!isH5 && <ModuleViewTabs key="module-view-tabs" active="square" onChange={handleModuleViewChange} />}
                 <KnowledgeSquare
-                    // Desktop leaves the square through the switcher; the banner's back
-                    // arrow is the mobile way out.
-                    onBack={isH5 ? () => handleModuleViewChange("mine") : undefined}
+                    onBack={handleLeaveSquare}
                     title={localize("com_knowledge.explore_square")}
                     subtitle={localize("com_knowledge.explore_more_spaces")}
                     searchPlaceholder={localize("com_knowledge.search_space_placeholder")}
@@ -644,9 +642,6 @@ export default function Knowledge() {
 
     return (
         <div className="relative flex h-full min-h-0">
-            {!isH5 && !activeSpace && !detailSpaceId && (
-                <ModuleViewTabs key="module-view-tabs" active="mine" onChange={handleModuleViewChange} />
-            )}
             {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
                 (single full-screen overlay, only while dragging) and is gated by the
                 global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
@@ -810,7 +805,7 @@ export default function Knowledge() {
                             uploadingFolder={fileUpload.uploadingFolder}
                             onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                             onCreateSpace={handleCreateSpace}
-                            onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                            onGoKnowledgeSquare={handleOpenSquare}
                             onOpenSystemMenu={() => setSystemMenuOpen(true)}
                             onToggleSpaceList={() => setSpaceListDrawerOpen((o) => !o)}
                             spaceListOpen={spaceListDrawerOpen}
@@ -866,7 +861,7 @@ export default function Knowledge() {
                             <div className="mt-5 flex items-center gap-4">
                                 <button
                                     type="button"
-                                    onClick={() => setShowKnowledgeSquare(true)}
+                                    onClick={handleOpenSquare}
                                     className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors active:border-blue-500 active:text-blue-500"
                                 >
                                     {localize("com_knowledge.go_to_square")}
@@ -888,14 +883,14 @@ export default function Knowledge() {
                                     onSpaceSelect={handleSpaceSelect}
                                     onCreateSpace={handleCreateSpace}
                                     onSpaceSettings={handleSpaceSettings}
-                                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                    onKnowledgeSquare={handleOpenSquare}
                                 />
                             </div>
                             {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
                             <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
                                 <Button
                                     variant="secondary"
-                                    onClick={() => setShowKnowledgeSquare(true)}
+                                    onClick={handleOpenSquare}
                                     className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                                 >
                                     <Outlined.BlocksAndArrows className="size-4" />
@@ -917,7 +912,7 @@ export default function Knowledge() {
                     onSpaceSelect={handleSpaceSelect}
                     onCreateSpace={handleCreateSpace}
                     onSpaceSettings={handleSpaceSettings}
-                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                    onKnowledgeSquare={handleOpenSquare}
                 />
             ) : (
                 /* PC empty state when the user has no space at all — the 我的 frame (title +
@@ -932,7 +927,7 @@ export default function Knowledge() {
                     <div className="mt-5 flex items-center gap-4">
                         <button
                             type="button"
-                            onClick={() => setShowKnowledgeSquare(true)}
+                            onClick={handleOpenSquare}
                             className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
                         >
                             {localize("com_knowledge.go_to_square")}

@@ -71,7 +71,8 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
         return (
             <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+                // Same row chrome as the sidebar's nav rows: 32px tall, 8px radius, fill-1 on hover.
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-fill-1 focus-visible:bg-fill-1"
                 onClick={openSettings}
             >
                 {withUnreadDot(<Avatar className="h-6 w-6">{avatarInner}</Avatar>)}

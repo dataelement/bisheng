@@ -2,7 +2,6 @@ import { ArrowLeft } from "lucide-react"
 import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ModuleViewTabs } from "~/components/ModuleHome"
 import { useToastContext } from "~/Providers"
 import { getChatOnlineApi, getUncategorized } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
@@ -172,12 +171,6 @@ export default function ExplorePlaza() {
                 'max-[767px]:h-[100dvh]',
             )}
         >
-            {/* Desktop only (md = the mobile-layout breakpoint): the shared 我的 / 广场 switcher. */}
-            <ModuleViewTabs
-                className="max-md:hidden"
-                active="square"
-                onChange={(view) => view === 'mine' && navigate('/apps')}
-            />
             {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
@@ -198,8 +191,8 @@ export default function ExplorePlaza() {
                         maskRepeat: "no-repeat",
                     }}
                 />
-                {/* Desktop leaves the square through the 我的 / 广场 switcher; the back arrow
-                    is the mobile way out. */}
+                {/* Desktop hosts this page inside 广场 (~/pages/square), whose tabs are the way
+                    around; the back arrow is the mobile way out. */}
                 <div className="absolute left-4 top-4 z-10 md:hidden">
                     <Button
                         variant="ghost"

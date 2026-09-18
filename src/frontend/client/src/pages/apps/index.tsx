@@ -1,7 +1,7 @@
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useCallback, useEffect, useRef, useState, type UIEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ModuleHomeHeader, ModuleViewTabs } from '~/components/ModuleHome';
+import { Link } from 'react-router-dom';
+import { ModuleHomeHeader } from '~/components/ModuleHome';
 import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
@@ -35,7 +35,6 @@ export default function AppCenter() {
     // Mobile layout (≤767px) is when MainLayout shows its own centered top-bar
     // title, so the page must drop its inline big title to avoid a duplicate.
     const isMobileLayout = usePrefersMobileLayout();
-    const navigate = useNavigate();
     const appLastOriginKey = 'app-last-origin';
     const mainRef = useRef<HTMLElement | null>(null);
     const appGridRef = useRef<HTMLDivElement | null>(null);
@@ -189,11 +188,10 @@ export default function AppCenter() {
                 </>
             ) : (
                 <>
-                    {/* Shared module-home frame (~/components/ModuleHome): switchers left —
-                        我的 / 广场 replaces the 探索更多应用 link, which stays on mobile only —
-                        and the page's tools right. 应用 has nothing to create here, so that
-                        is the search alone. */}
-                    <ModuleViewTabs active="mine" onChange={(view) => view === 'square' && navigate('/apps/explore')} />
+                    {/* Shared module-home frame (~/components/ModuleHome): the page's tools on
+                        the right — 应用 has nothing to create here, so that is the search alone.
+                        Discovering apps is the sidebar's 广场; the 探索更多应用 link stays on
+                        mobile only. */}
                     <ModuleHomeHeader title={menuNames.apps}>
                         <div className="w-auto min-w-[120px] shrink-0">
                             <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
