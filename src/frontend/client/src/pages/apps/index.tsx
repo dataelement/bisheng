@@ -189,11 +189,16 @@ export default function AppCenter() {
                 </>
             ) : (
                 <>
-                    {/* Shared module-home frame (~/components/ModuleHome): title left, the
-                        我的 / 广场 switcher right — it replaces the 探索更多应用 link, which
-                        stays on mobile only. */}
+                    {/* Shared module-home frame (~/components/ModuleHome): switchers left —
+                        我的 / 广场 replaces the 探索更多应用 link, which stays on mobile only —
+                        and the page's tools right. 应用 has nothing to create here, so that
+                        is the search alone. */}
                     <ModuleViewTabs active="mine" onChange={(view) => view === 'square' && navigate('/apps/explore')} />
-                    <ModuleHomeHeader module="apps" title={menuNames.apps} />
+                    <ModuleHomeHeader title={menuNames.apps}>
+                        <div className="w-auto min-w-[120px] shrink-0">
+                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
+                        </div>
+                    </ModuleHomeHeader>
 
                     <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">
@@ -205,9 +210,6 @@ export default function AppCenter() {
                                     {recentAppsHint}
                                 </p>
                             </div>
-                        </div>
-                        <div className="shrink-0 min-w-[120px] w-auto">
-                            <AppSearchBar query={searchQuery} onSearch={setSearchQuery} forceExpanded />
                         </div>
                     </div>
                 </>
