@@ -158,7 +158,44 @@ def test_orphan_flowversion_is_skipped():
     assert version_maps == []
 
 
-def test_flow_unmapped_model_still_raises():
+def test_flow_dangling_model_is_dropped_with_exception():
+    sql, _maps, _versions, _reports = generate_flow_sql(
+        batch="b1",
+        flows=[
+            {
+                "id": "ffff",
+                "name": "wf",
+                "user_id": "7",
+                "tenant_id": "1",
+                "data": {
+                    "nodes": [{"data": {"group_params": [{"params": [{"key": "model_id", "value": 3}]}]}}],
+                    "edges": [],
+                },
+                "flow_type": 10,
+            }
+        ],
+        versions=[],
+        variables=[],
+        maps={
+            "user": {"7": "100"},
+            "tenant": {"1": "1"},
+            "knowledge": {},
+            "model": {},
+            "tool": {},
+            "flow": {},
+        },
+        a_flow_ids=set(),
+        a_flow_names=set(),
+        next_version_id=8,
+        a_tenant_default="1",
+    )
+    assert "INSERT INTO flow " in sql
+    assert "dangling_model_ref" in sql
+    assert '"value":3' not in sql.replace(" ", "")
+    assert '"value":null' in sql.replace(" ", "")
+
+
+def test_flow_unmapped_user_still_raises():
     with pytest.raises(ValueError, match="未映射"):
         generate_flow_sql(
             batch="b1",
@@ -169,7 +206,7 @@ def test_flow_unmapped_model_still_raises():
                     "user_id": "7",
                     "tenant_id": "1",
                     "data": {
-                        "nodes": [{"data": {"group_params": [{"params": [{"key": "model_id", "value": 3}]}]}}],
+                        "nodes": [{"data": {"group_params": [{"params": [{"key": "user_id", "value": 99}]}]}}],
                         "edges": [],
                     },
                     "flow_type": 10,
@@ -177,7 +214,14 @@ def test_flow_unmapped_model_still_raises():
             ],
             versions=[],
             variables=[],
-            maps={"user": {"7": "100"}, "tenant": {"1": "1"}, "knowledge": {}, "model": {}, "tool": {}, "flow": {}},
+            maps={
+                "user": {"7": "100"},
+                "tenant": {"1": "1"},
+                "knowledge": {},
+                "model": {},
+                "tool": {},
+                "flow": {},
+            },
             a_flow_ids=set(),
             a_flow_names=set(),
             next_version_id=8,

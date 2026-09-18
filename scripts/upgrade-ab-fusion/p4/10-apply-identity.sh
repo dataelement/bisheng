@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# 生成身份 SQL 并按 APPLY 写入 A. 需要已签字 p4/*.csv.
+# 生成身份 SQL 并按 APPLY 写入 A. 需要 p4/*.csv (02-propose 无冲突已自动安装).
 set -euo pipefail
 STEP="p4.10-apply-identity"
 APPLY="${APPLY:-0}"
-BATCH_NO="${BATCH_NO:-fusion-$(date +%Y%m%d)}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 # shellcheck disable=SC1091
 source "${PACK_ROOT}/lib/fusion_remote.sh"
+resolve_batch_no
 
-[[ -f "${PACK_ROOT}/p4/user-map.csv" ]] || die "缺少签字 ${PACK_ROOT}/p4/user-map.csv"
+[[ -f "${PACK_ROOT}/p4/user-map.csv" ]] || die "缺少 ${PACK_ROOT}/p4/user-map.csv (先跑 p4/02-propose-maps.sh)"
 [[ -f "${PACK_ROOT}/p4/tenant-map.csv" ]] || die "缺少 ${PACK_ROOT}/p4/tenant-map.csv"
 
 if [[ "${APPLY}" == "1" ]]; then

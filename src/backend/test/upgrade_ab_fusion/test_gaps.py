@@ -1,4 +1,4 @@
-"""模型/工具未 bind 的列入缺口, 不自动建."""
+"""从已签字 map 和 propose conflict 收集缺口. bind/create 不算缺口."""
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ from fusion.gaps import collect_gaps
 
 def test_collects_manual_and_skips_bind(tmp_path: Path):
     (tmp_path / "model-map.csv").write_text(
-        "b_model_id,a_model_id,action\n1,9,bind\n2,,manual\n",
+        "b_model_id,a_model_id,action\n1,9,bind\n2,,manual\n9,,create\n",
         encoding="utf-8",
     )
     (tmp_path / "tool-map.csv").write_text(
@@ -26,4 +26,5 @@ def test_collects_manual_and_skips_bind(tmp_path: Path):
     assert ("model", "2") in ids
     assert ("model", "4") in ids
     assert ("model", "1") not in ids
+    assert ("model", "9") not in ids
     assert ("tool", "3") not in ids

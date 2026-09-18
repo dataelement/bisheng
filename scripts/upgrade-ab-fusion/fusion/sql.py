@@ -27,6 +27,14 @@ def sql_str(value: str | None) -> str:
     return f"'{escape(value)}'"
 
 
+def sql_ident(name: str) -> str:
+    """反引号包裹表名/列名. group / role / user 是 MySQL 保留字."""
+    text = str(name)
+    if not text or any(ch in text for ch in "`\n;"):
+        raise ValueError(f"bad ident: {name!r}")
+    return f"`{text}`"
+
+
 def sql_int(value: str | int | None, default: str = "NULL") -> str:
     if value is None or value == "":
         return default

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # B -> A 融合编排. 默认 APPLY=0, 只导出/生成 SQL/dry-run, 不写 A.
-# 不迁: Redis/JWT/密钥明文, A 原 knowledge.type=3 不做 UPDATE/DELETE,
+# 不迁: Redis/JWT/分享签名密钥, A 原 knowledge.type=3 不做 UPDATE/DELETE,
 #       B 的 type=3 默认跳过 (MIGRATE_B_SPACES=0), 积分/遥测不迁, 审计迁.
 # APPLY=1 还要 CONFIRM_FULL_MIGRATE=1.
 set -euo pipefail
 STEP="full-migrate"
 APPLY="${APPLY:-0}"
 CONFIRM_FULL_MIGRATE="${CONFIRM_FULL_MIGRATE:-0}"
-BATCH_NO="${BATCH_NO:-fusion-$(date +%Y%m%d)}"
 STAGE="all"
 
 usage() {
@@ -27,8 +26,9 @@ usage() {
   retrieve-gold / incr / publish
   首次 business-export 会 LABEL=start 抓水位
 
-在 B 源机上跑: 本地 docker mysql 是 B, A 走 SSH (A_SSH_HOST/USER/PORT 必填).
-前置: 已填写 env.sh; 密码登录时 sshpass + 会话 SSHPASS.
+在 B 源机上跑: 本地 docker mysql 是 B, A 走 SSH.
+前置: 终端里会问 A 的地址/账号/端口 (写入 env.sh); 密码只进当前窗口, 不写文件.
+已填过则回显确认. 无人值守: SKIP_A_SSH_PROMPT=1 且已有 env.sh + SSHPASS/密钥.
 EOF
 }
 
@@ -50,6 +50,8 @@ if [[ "${APPLY}" == "1" && "${CONFIRM_FULL_MIGRATE}" != "1" ]]; then
   die "全迁 APPLY=1 需要 CONFIRM_FULL_MIGRATE=1"
 fi
 
+prompt_a_ssh_target
+resolve_batch_no
 export APPLY BATCH_NO
 mkdir -p "${LOG_DIR}/p4" "${LOG_DIR}/p5"
 ledger "${STEP}" "START" "APPLY=${APPLY} stage=${STAGE} batch=${BATCH_NO}"

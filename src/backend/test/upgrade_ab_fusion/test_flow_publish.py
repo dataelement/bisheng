@@ -82,6 +82,22 @@ def test_gate_flow_skips_offline():
     assert "下线" in row["reason"]
 
 
+def test_gate_flow_blocks_dangling_model():
+    data = {"nodes": [{"data": {"group_params": [{"params": [{"key": "model_id", "value": 3}]}]}}]}
+    row = gate_flow(
+        src_id="ffff",
+        dst_id="aabb",
+        desired_status=2,
+        data=data,
+        maps={"model": {}, "knowledge": {}, "tool": {}, "flow": {}},
+        gap_model_ids=set(),
+        gap_tool_ids=set(),
+        vector_exception_kids=set(),
+    )
+    assert row["ok"] is False
+    assert "模型引用已删除" in row["reason"]
+
+
 def test_gate_assistant_blocks_gap_model():
     row = gate_assistant(
         src_id="a1",

@@ -12,6 +12,7 @@ STEP="p2.10-2.3-beta1"
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 discover_deployment
+require_complete_p2_freeze
 ledger "${STEP}" "START" "$(sha256_file "$(dirname "$0")/sql/10-2.3-beta1-backfill.sql")"
 
 add_column_if_missing knowledge metadata_fields "ADD COLUMN metadata_fields json DEFAULT NULL COMMENT '知识库元数据字段配置'"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 2.4 正式版：知识空间相关列。新表 space_channel_member 由本 hop SQL 建, 不依赖 2.4 启动 create_all.
+# 2.4 正式版：知识空间相关列 + type=2 转个人空间。新表 space_channel_member 由本 hop SQL 建.
 set -euo pipefail
 STEP="p2.21-2.4"
 # 默认值可被环境变量覆盖；compose 路径一律自动发现，不写死。
@@ -12,6 +12,7 @@ STEP="p2.21-2.4"
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 discover_deployment
+require_complete_p2_freeze
 ledger "${STEP}" "START" ""
 
 mysql_exec "ALTER TABLE config MODIFY value longtext NULL"
@@ -46,5 +47,10 @@ table_exists space_channel_member || die "space_channel_member 未建成功，�
 switch_compose_images "${IMAGE_2_4}" "${IMAGE_FRONTEND_2_4}"
 log "启动 2.4 镜像"
 compose up -d backend backend_worker frontend
-ledger "${STEP}" "OK" "2.4 schema"
-log "下一步 22-hop-2.4-type2.sh（先看 type=2 清单，对齐 D07）"
+
+# type=2 是 2.4 数据兼容, 同一版本不拆第二个入口. 无 type=2 会直接跳过.
+log "2.4 schema 完成, 接着转 type=2 个人知识库"
+CONFIRM_TYPE2="${CONFIRM_TYPE2:-0}" bash "$(dirname "$0")/22-hop-2.4-type2.sh"
+
+ledger "${STEP}" "OK" "2.4 schema + type2"
+log "下一步 30-hop-2.5.sh"

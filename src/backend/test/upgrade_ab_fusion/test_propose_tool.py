@@ -21,5 +21,17 @@ def test_same_name_different_key_is_manual():
         [{"id": "9", "name": "搜索", "tool_key": "a"}],
         [{"id": "2", "name": "搜索", "tool_key": "b"}],
     )
-    assert result["map"] == []
-    assert result["manual"]
+    assert result["map"][0]["action"] == "create"
+    assert result["map"][0]["a_tool_id"] == ""
+    assert result["map"][0]["a_tool_key"] == "b"
+    assert result["manual"] == []
+
+
+def test_empty_key_creates_generated_key():
+    result = propose(
+        [{"id": "9", "name": "A工具", "tool_key": "k1"}],
+        [{"id": "2", "name": "B工具", "tool_key": ""}],
+    )
+    assert result["map"][0]["action"] == "create"
+    assert result["map"][0]["a_tool_key"] == "btool_2"
+    assert result["manual"] == []

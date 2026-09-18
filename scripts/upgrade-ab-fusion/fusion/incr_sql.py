@@ -100,6 +100,11 @@ def generate_incr_delete_sql(
                 lines.append(
                     f"DELETE FROM assistantlink WHERE assistant_id IN ({joined});"
                 )
+            if entity == "flow":
+                # 与批次回滚相同: 变量行没有独立 fusion_map
+                lines.append(
+                    f"DELETE FROM t_variable_value WHERE flow_id IN ({joined});"
+                )
             lines.append(f"DELETE FROM {table} WHERE id IN ({joined});")
         else:
             joined = ",".join(

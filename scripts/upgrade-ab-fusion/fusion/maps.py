@@ -25,9 +25,7 @@ def load_map(path: Path, src_key: str, dst_key: str) -> dict[str, str]:
     return out
 
 
-def require_mapped_model(
-    kind: str, src: str, model: str | None, model_map: dict[str, str]
-) -> str:
+def require_mapped_model(kind: str, src: str, model: str | None, model_map: dict[str, str]) -> str:
     """非空模型必须在 map 中. 禁止把 B 的数字 id 原样写入 A."""
     text = str(model or "").strip()
     if not text:
@@ -63,9 +61,7 @@ def require_mapped(kind: str, src_id: str | int | None, table: dict[str, str]) -
     return table[key]
 
 
-def fill_dst_column(
-    path: Path, src_key: str, dst_key: str, alloc: dict[str, str]
-) -> None:
+def fill_dst_column(path: Path, src_key: str, dst_key: str, alloc: dict[str, str]) -> None:
     """把 create 分配到的 A ID 填回已签字 csv, 不改其它列."""
     if not alloc:
         return
@@ -74,10 +70,7 @@ def fill_dst_column(
         write_csv(
             path,
             [src_key, dst_key, "action"],
-            [
-                {src_key: src, dst_key: dst, "action": "create"}
-                for src, dst in alloc.items()
-            ],
+            [{src_key: src, dst_key: dst, "action": "create"} for src, dst in alloc.items()],
         )
         return
     fields = list(rows[0].keys())
@@ -123,11 +116,7 @@ def write_alloc_csv(
     write_csv(
         path,
         [src_key, dst_key, "action"],
-        [
-            {src_key: src, dst_key: dst, "action": action}
-            for src, dst in alloc.items()
-            if src and dst
-        ],
+        [{src_key: src, dst_key: dst, "action": action} for src, dst in alloc.items() if src and dst],
     )
 
 
@@ -150,21 +139,36 @@ def persist_runtime_maps(map_dir: Path, extra: dict | None) -> None:
         return
     map_dir.mkdir(parents=True, exist_ok=True)
     if extra.get("user_alloc"):
-        upsert_alloc(
-            map_dir / "user-map.csv", "b_user_id", "a_user_id", extra["user_alloc"]
-        )
+        upsert_alloc(map_dir / "user-map.csv", "b_user_id", "a_user_id", extra["user_alloc"])
     if extra.get("group_alloc"):
-        upsert_alloc(
-            map_dir / "group-map.csv", "b_group_id", "a_group_id", extra["group_alloc"]
-        )
+        upsert_alloc(map_dir / "group-map.csv", "b_group_id", "a_group_id", extra["group_alloc"])
     if extra.get("role_alloc"):
+        upsert_alloc(map_dir / "role-map.csv", "b_role_id", "a_role_id", extra["role_alloc"])
+    if extra.get("server_alloc"):
         upsert_alloc(
-            map_dir / "role-map.csv", "b_role_id", "a_role_id", extra["role_alloc"]
+            map_dir / "server-map.csv",
+            "b_server_id",
+            "a_server_id",
+            extra["server_alloc"],
+        )
+    if extra.get("model_alloc"):
+        upsert_alloc(
+            map_dir / "model-map.csv",
+            "b_model_id",
+            "a_model_id",
+            extra["model_alloc"],
+        )
+    if extra.get("tool_alloc"):
+        upsert_alloc(map_dir / "tool-map.csv", "b_tool_id", "a_tool_id", extra["tool_alloc"])
+    if extra.get("tool_key_alloc"):
+        upsert_alloc(
+            map_dir / "tool-key-map.csv",
+            "b_key",
+            "a_key",
+            extra["tool_key_alloc"],
         )
     if extra.get("dept_as_group"):
-        fill_dst_column(
-            map_dir / "dept-map.csv", "b_dept_pk", "a_group_id", extra["dept_as_group"]
-        )
+        fill_dst_column(map_dir / "dept-map.csv", "b_dept_pk", "a_group_id", extra["dept_as_group"])
     if extra.get("knowledge_maps"):
         write_pair_csv(
             map_dir / "knowledge-map.csv",
@@ -175,13 +179,9 @@ def persist_runtime_maps(map_dir: Path, extra: dict | None) -> None:
             "a_id",
         )
     if extra.get("file_maps"):
-        write_pair_csv(
-            map_dir / "file-map.csv", "b_id", "a_id", extra["file_maps"], "b_id", "a_id"
-        )
+        write_pair_csv(map_dir / "file-map.csv", "b_id", "a_id", extra["file_maps"], "b_id", "a_id")
     if extra.get("flow_maps"):
-        write_pair_csv(
-            map_dir / "flow-map.csv", "b_id", "a_id", extra["flow_maps"], "b_id", "a_id"
-        )
+        write_pair_csv(map_dir / "flow-map.csv", "b_id", "a_id", extra["flow_maps"], "b_id", "a_id")
     if extra.get("flowversion_maps"):
         write_pair_csv(
             map_dir / "flowversion-map.csv",
@@ -219,13 +219,9 @@ def persist_runtime_maps(map_dir: Path, extra: dict | None) -> None:
             "a_id",
         )
     if extra.get("qa_maps"):
-        write_pair_csv(
-            map_dir / "qa-map.csv", "b_id", "a_id", extra["qa_maps"], "b_id", "a_id"
-        )
+        write_pair_csv(map_dir / "qa-map.csv", "b_id", "a_id", extra["qa_maps"], "b_id", "a_id")
     if extra.get("tag_maps"):
-        write_pair_csv(
-            map_dir / "tag-map.csv", "b_id", "a_id", extra["tag_maps"], "b_id", "a_id"
-        )
+        write_pair_csv(map_dir / "tag-map.csv", "b_id", "a_id", extra["tag_maps"], "b_id", "a_id")
     if extra.get("tag_link_maps"):
         write_pair_csv(
             map_dir / "tag-link-map.csv",

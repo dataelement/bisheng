@@ -5,12 +5,12 @@ set -euo pipefail
 STEP="p5.22-vectors"
 APPLY="${APPLY:-0}"
 ACTION="${ACTION:-copy}"
-BATCH_NO="${BATCH_NO:-fusion}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 # shellcheck disable=SC1091
 source "${PACK_ROOT}/lib/fusion_remote.sh"
+resolve_batch_no
 
 : "${BACKEND_CONTAINER:=bisheng-backend}"
 : "${A_BACKEND_CONTAINER:=bisheng-backend}"
@@ -93,8 +93,8 @@ runtime_a() {
 }
 
 if [[ "${ACTION}" == "drop" ]]; then
-  created="${LOG_DIR}/p5/vector-created.tsv"
-  [[ -f "${created}" ]] || die "缺少 ${created}, 没有本批创建记录可删"
+  created="${VECTOR_DROP_LIST:-${LOG_DIR}/p5/vector-created.tsv}"
+  [[ -f "${created}" ]] || die "缺少 ${created}, 没有本批 Collection/Index 名单可删"
   if [[ "${APPLY}" != "1" ]]; then
     log "APPLY=0, 将按 ${created} 删除本批 Collection/Index"
     ledger "${STEP}" "OK" "APPLY=0 drop preview"
@@ -105,16 +105,19 @@ if [[ "${ACTION}" == "drop" ]]; then
   stage_a
   fusion_scp_to_a "${forbid}" /tmp/ab-fusion/forbid.txt
   fusion_ssh_a docker cp /tmp/ab-fusion/forbid.txt "${A_BACKEND_CONTAINER}:/tmp/ab-fusion/forbid.txt"
+  dropped=0
   while IFS=$'\t' read -r kind name _ <&3; do
     [[ "${kind}" == "kind" || -z "${kind}" ]] && continue
+    [[ -n "${name}" ]] || continue
     if [[ "${kind}" == "milvus" ]]; then
       runtime_a drop-milvus --collection "${name}" --forbid-file /tmp/ab-fusion/forbid.txt
     else
       runtime_a drop-es --index "${name}" --forbid-file /tmp/ab-fusion/forbid.txt
     fi
+    dropped=$((dropped + 1))
   done 3< "${created}"
-  ledger "${STEP}" "OK" "APPLY=1 dropped"
-  echo "OK ${STEP} dropped"
+  ledger "${STEP}" "OK" "APPLY=1 dropped=${dropped} list=${created}"
+  echo "OK ${STEP} dropped=${dropped}"
   exit 0
 fi
 

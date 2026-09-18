@@ -11,12 +11,18 @@ from fusion.incr_sql import generate_incr_delete_sql, generate_incr_update_sql
 def test_delete_does_not_mark_batch_rolled_back():
     sql = generate_incr_delete_sql(
         batch="b1",
-        deleted=[{"entity": "file", "src_id": "12"}, {"entity": "knowledge", "src_id": "5"}],
-        maps={"file": {"12": "20"}, "knowledge": {"5": "10"}},
+        deleted=[
+            {"entity": "file", "src_id": "12"},
+            {"entity": "knowledge", "src_id": "5"},
+            {"entity": "flow", "src_id": "f1"},
+        ],
+        maps={"file": {"12": "20"}, "knowledge": {"5": "10"}, "flow": {"f1": "flow-dst-1"}},
         a_space_ids={3},
     )
     assert "DELETE FROM knowledgefile WHERE id IN (20)" in sql
     assert "DELETE FROM knowledge WHERE id IN (10) AND type IN (0,1)" in sql
+    assert "DELETE FROM t_variable_value WHERE flow_id IN ('flow-dst-1')" in sql
+    assert sql.index("DELETE FROM t_variable_value") < sql.index("DELETE FROM flow")
     assert "fusion_map" in sql
     assert "rolled_back" not in sql
     assert "AND entity='knowledge' AND src_id IN ('5')" in sql

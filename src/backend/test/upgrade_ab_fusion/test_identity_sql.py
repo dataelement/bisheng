@@ -185,3 +185,44 @@ def test_bind_does_not_copy_b_password():
     assert "UPDATE `user`" not in sql
     assert "INSERT INTO `user`" not in sql
     assert "5f4dcc3b5aa765d61d8327deb882cf99" not in sql
+
+
+def test_create_user_without_employee_code_inserts_null_codes():
+    sql, extra = generate_identity_sql(
+        batch="b1",
+        tenant_map=[{"b_tenant_id": "1", "a_tenant_id": "1", "action": "bind"}],
+        user_map=[
+            {
+                "b_user_id": "7",
+                "a_user_id": "",
+                "employee_code": "",
+                "action": "create",
+            }
+        ],
+        b_users=[
+            {
+                "user_id": "7",
+                "user_name": "localb",
+                "password": "5f4dcc3b5aa765d61d8327deb882cf99",
+                "external_id": "NULL",
+                "external_code": "NULL",
+            }
+        ],
+        a_user_names=set(),
+        next_user_id=200,
+        dept_map=[],
+        next_group_id=30,
+        b_groups=[],
+        b_usergroups=[],
+        b_user_departments=[],
+        role_map=[],
+        b_roles=[],
+        b_userroles=[],
+        next_role_id=40,
+        a_tenant_id="1",
+    )
+    assert "INSERT INTO `user`" in sql
+    assert "5f4dcc3b5aa765d61d8327deb882cf99" in sql
+    assert extra["user_alloc"]["7"] == "200"
+    assert "'local'," in sql or "'local'" in sql
+    assert ", NULL, NULL," in sql or ",NULL,NULL," in sql

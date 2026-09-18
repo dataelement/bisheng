@@ -10,7 +10,9 @@ source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 # shellcheck disable=SC1091
 source "${PACK_ROOT}/lib/fusion_remote.sh"
-BATCH_NO="${BATCH_NO:-fusion-$(date +%Y%m%d)}"
+if ! resolve_batch_no existing; then
+  fusion_pick_open_batch_from_a || die "找不到批次名. 看 ${LOG_DIR}/current-batch.txt 或 logs/ledger.tsv. 多批次才需要 export BATCH_NO=..."
+fi
 
 base="${LOG_DIR}/p5/a-baseline.tsv"
 [[ -f "${base}" ]] || die "缺少 ${base}, 先跑 p5/00-protect-a-baseline.sh"

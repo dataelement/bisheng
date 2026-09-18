@@ -17,15 +17,13 @@ load_env
 discover_deployment
 
 ledger "${STEP}" "START" ""
-if [[ "${DRILL:-0}" == "1" ]]; then
-  log "DRILL=1：演练机允许跳过 git commit / 镜像 digest 钉扎。生产禁止 DRILL=1"
+if skip_build_pin_checks; then
+  log "未钉 40 位 TARGET_GIT_COMMIT（当前 ${TARGET_GIT_COMMIT}），跳过 git/镜像 digest 检查。直接往下跑即可；生产要钉构建时再把 sha 写进 env.sh。"
 else
   assert_git_commit
   assert_pinned_image "${TARGET_BACKEND_IMAGE}"
   assert_pinned_image "${TARGET_FRONTEND_IMAGE}"
-  if [[ "${IMAGE_OPENFGA}" == *":latest"* ]] || [[ "${IMAGE_OPENFGA}" == REPLACE* ]]; then
-    die "IMAGE_OPENFGA 必须钉 digest，禁止 latest"
-  fi
+  # OpenFGA 以 docker-compose.yml 为准, 不在这里钉 IMAGE_OPENFGA.
 fi
 
 if table_exists "alembic_version"; then

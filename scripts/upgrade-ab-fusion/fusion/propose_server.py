@@ -1,4 +1,4 @@
-"""llm_server 映射: type+name 一致才 bind. 不拷 config 里的密钥."""
+"""llm_server 映射: type+name 一致才 bind, 否则 create 并在写入时拷 config 密钥."""
 
 from __future__ import annotations
 
@@ -29,11 +29,12 @@ def propose(a_servers: list[dict], b_servers: list[dict]) -> dict:
                 }
             )
         else:
-            manual.append(
+            mapped.append(
                 {
                     "b_server_id": bid,
-                    "name": b.get("name") or "",
-                    "reason": "A 无同 type+name 的 llm_server, 在 A 配好后再填; 禁止拷密钥",
+                    "a_server_id": "",
+                    "action": "create",
+                    "note": "A 无同 type+name, 在 A 新建并拷 config 密钥",
                 }
             )
     return {"map": mapped, "conflict": [], "manual": manual}

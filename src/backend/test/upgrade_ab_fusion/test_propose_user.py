@@ -47,7 +47,9 @@ def test_tsv_null_literal_is_not_employee_code():
         ],
     )
     assert result["conflict"] == []
-    assert {row["b_user_id"] for row in result["manual"]} == {"1", "2"}
+    assert result["manual"] == []
+    assert {row["b_user_id"] for row in result["map"]} == {"1", "2"}
+    assert all(row["action"] == "create" and row["employee_code"] == "" for row in result["map"])
 
 
 def test_a_local_and_sg_same_code_prefers_sg():

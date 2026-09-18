@@ -19,5 +19,6 @@ def test_name_only_does_not_bind():
         [{"id": "3", "name": "openai", "type": "openai"}],
         [{"id": "1", "name": "openai", "type": "azure"}],
     )
-    assert result["map"] == []
-    assert result["manual"]
+    assert result["map"][0]["action"] == "create"
+    assert result["map"][0]["a_server_id"] == ""
+    assert result["manual"] == []

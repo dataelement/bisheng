@@ -49,6 +49,14 @@ def gate_flow(
             "ok": False,
             "reason": "引用未映射: " + ",".join(report.missing[:6]),
         }
+    model_dropped = [x for x in report.dropped if x.startswith("model:")]
+    if model_dropped:
+        return {
+            "src_id": src_id,
+            "dst_id": dst_id,
+            "ok": False,
+            "reason": "模型引用已删除: " + ",".join(model_dropped[:6]),
+        }
     used = used_from_report(report)
     for mid in used.get("model") or []:
         if mid in gap_model_ids:
@@ -108,11 +116,7 @@ def gate_assistant(
             "ok": False,
             "reason": f"模型 {model_name} 仍在缺口清单",
         }
-    if (
-        model_name
-        and model_name.isdigit()
-        and model_name not in (maps.get("model") or {})
-    ):
+    if model_name and model_name.isdigit() and model_name not in (maps.get("model") or {}):
         return {
             "src_id": src_id,
             "dst_id": dst_id,
@@ -138,17 +142,12 @@ def generate_publish_sql(
     for row in flow_rows:
         if not row.get("ok"):
             continue
-        lines.append(
-            f"UPDATE flow SET status={sql_int(ONLINE)} WHERE id={sql_str(row['dst_id'])};"
-        )
+        lines.append(f"UPDATE flow SET status={sql_int(ONLINE)} WHERE id={sql_str(row['dst_id'])};")
         n += 1
     for row in assistant_rows:
         if not row.get("ok"):
             continue
-        lines.append(
-            "UPDATE assistant SET status="
-            f"{sql_int(ONLINE)} WHERE id={sql_str(row['dst_id'])};"
-        )
+        lines.append(f"UPDATE assistant SET status={sql_int(ONLINE)} WHERE id={sql_str(row['dst_id'])};")
         n += 1
     lines.append("COMMIT;")
     if n == 0:

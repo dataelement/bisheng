@@ -43,11 +43,14 @@ def propose(a_users: list[dict], b_users: list[dict]) -> dict:
         bid = str(b.get("user_id") or "")
         code = employee_code(b)
         if not code:
-            manual.append(
+            # 不编造工号. 无编码一律在 A 新建本地用户, 避免漏进对照表后身份写入失败.
+            mapped.append(
                 {
                     "b_user_id": bid,
-                    "b_user_name": b.get("user_name") or "",
-                    "reason": "无员工编码, 人工确认后映射或 create",
+                    "a_user_id": "",
+                    "employee_code": "",
+                    "action": "create",
+                    "note": "无员工编码, 在 A 新建本地用户; 不编造工号; 拷贝 B password 哈希",
                 }
             )
             continue

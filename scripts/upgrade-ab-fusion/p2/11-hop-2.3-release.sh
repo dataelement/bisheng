@@ -12,6 +12,7 @@ STEP="p2.11-2.3-release"
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 discover_deployment
+require_complete_p2_freeze
 ledger "${STEP}" "START" ""
 
 mysql_file "$(dirname "$0")/sql/11-2.3-release-roleaccess.sql"

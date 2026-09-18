@@ -53,8 +53,12 @@ mysql_b_tsv "SELECT id,app_id,user_id,task_id,create_id,status,tenant_id FROM ma
   > "${LOG_DIR}/p5/b-mark-app-users.tsv" || true
 mysql_b_tsv "SELECT id,flow_id,file_name,template_name,version_key,newversion_key,object_name,del_yn,tenant_id FROM t_report" \
   > "${LOG_DIR}/p5/b-reports.tsv" || true
-mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'logo',logo,'extra',extra,'description',description,'server_host',server_host,'auth_method',auth_method,'api_key',IF(api_key IS NULL OR api_key='','','1'),'auth_type',auth_type,'is_preset',is_preset,'user_id',user_id,'is_delete',is_delete,'tenant_id',tenant_id,'openapi_schema',openapi_schema) FROM t_gpts_tools_type" \
+mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'logo',logo,'extra',extra,'description',description,'server_host',server_host,'auth_method',auth_method,'api_key',api_key,'auth_type',auth_type,'is_preset',is_preset,'user_id',user_id,'is_delete',is_delete,'tenant_id',tenant_id,'openapi_schema',openapi_schema) FROM t_gpts_tools_type" \
   > "${LOG_DIR}/p5/b-tool-types.jsonl" || true
+chmod 600 "${LOG_DIR}/p5/b-tool-types.jsonl" || true
+mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'logo',logo,'desc',\`desc\`,'tool_key',tool_key,'type',type,'is_preset',is_preset,'is_delete',is_delete,'extra',extra,'api_params',api_params,'user_id',user_id,'tenant_id',tenant_id) FROM t_gpts_tools" \
+  > "${LOG_DIR}/p5/b-tools.jsonl" || true
+chmod 600 "${LOG_DIR}/p5/b-tools.jsonl" || true
 mysql_b_tsv "SELECT id,role_id,third_id,type,tenant_id FROM roleaccess" \
   > "${LOG_DIR}/p5/b-roleaccess.tsv" || true
 mysql_b_tsv "SELECT user_id,role_id,tenant_id FROM userrole" \
@@ -105,6 +109,8 @@ mysql_a_tsv "SELECT id FROM t_report" > "${LOG_DIR}/p5/a-report-ids.tsv" || true
 mysql_a_tsv "SELECT version_key FROM t_report WHERE version_key IS NOT NULL" > "${LOG_DIR}/p5/a-report-keys.tsv" || true
 mysql_a_tsv "SELECT id FROM t_gpts_tools_type" > "${LOG_DIR}/p5/a-tool-type-ids.tsv" || true
 mysql_a_tsv "SELECT name FROM t_gpts_tools_type" > "${LOG_DIR}/p5/a-tool-type-names.tsv" || true
+mysql_a_tsv "SELECT id FROM t_gpts_tools" > "${LOG_DIR}/p5/a-tool-ids.tsv" || true
+mysql_a_tsv "SELECT tool_key FROM t_gpts_tools WHERE tool_key IS NOT NULL AND tool_key<>''" > "${LOG_DIR}/p5/a-tool-keys.tsv" || true
 mysql_a_tsv "SELECT id FROM roleaccess" > "${LOG_DIR}/p5/a-role-access-ids.tsv" || true
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM message_citation" > "${LOG_DIR}/p5/next-citation-id.txt" || echo 1 > "${LOG_DIR}/p5/next-citation-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM message_citation_relation" > "${LOG_DIR}/p5/next-citation-relation-id.txt" || echo 1 > "${LOG_DIR}/p5/next-citation-relation-id.txt"
@@ -113,6 +119,7 @@ mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM markrecord" > "${LOG_DIR}/p5/next-mar
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM markappuser" > "${LOG_DIR}/p5/next-mark-app-user-id.txt" || echo 1 > "${LOG_DIR}/p5/next-mark-app-user-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM t_report" > "${LOG_DIR}/p5/next-report-id.txt" || echo 1 > "${LOG_DIR}/p5/next-report-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM t_gpts_tools_type" > "${LOG_DIR}/p5/next-tool-type-id.txt" || echo 1 > "${LOG_DIR}/p5/next-tool-type-id.txt"
+mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM t_gpts_tools" > "${LOG_DIR}/p5/next-tool-id.txt" || echo 1 > "${LOG_DIR}/p5/next-tool-id.txt"
 mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM roleaccess" > "${LOG_DIR}/p5/next-role-access-id.txt" || echo 1 > "${LOG_DIR}/p5/next-role-access-id.txt"
 # 仅用于 UUID 冲突检测; 行数很大时会慢
 mysql_a_tsv "SELECT id FROM auditlog" > "${LOG_DIR}/p5/a-audit-ids.tsv" || true
@@ -120,10 +127,19 @@ mysql_a_tsv "SELECT id,collection_name,index_name FROM knowledge WHERE type=3" \
   > "${LOG_DIR}/p5/a-space-stores.tsv" || true
 mysql_a_tsv "SELECT id,type,collection_name,index_name FROM knowledge" \
   > "${LOG_DIR}/p5/a-knowledge-stores.tsv" || true
-mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'model_name',model_name,'model_type',model_type,'config',config) FROM llm_model" \
+mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'server_id',server_id,'name',name,'description',description,'model_name',model_name,'model_type',model_type,'config',config,'status',status,'remark',remark,'online',online,'user_id',user_id,'tenant_id',tenant_id) FROM llm_model" \
   > "${LOG_DIR}/p5/b-llm-models.jsonl" || true
-mysql_a_jsonl "SELECT JSON_OBJECT('id',id,'model_name',model_name,'model_type',model_type,'config',config) FROM llm_model" \
+chmod 600 "${LOG_DIR}/p5/b-llm-models.jsonl" || true
+mysql_a_jsonl "SELECT JSON_OBJECT('id',id,'server_id',server_id,'model_name',model_name) FROM llm_model" \
   > "${LOG_DIR}/p5/a-llm-models.jsonl" || true
+mysql_b_jsonl "SELECT JSON_OBJECT('id',id,'name',name,'description',description,'type',type,'config',config,'user_id',user_id,'tenant_id',tenant_id,'limit_flag',limit_flag,'limit',\`limit\`) FROM llm_server" \
+  > "${LOG_DIR}/p5/b-llm-servers.jsonl" || true
+chmod 600 "${LOG_DIR}/p5/b-llm-servers.jsonl" || true
+mysql_a_tsv "SELECT id FROM llm_server" > "${LOG_DIR}/p5/a-llm-server-ids.tsv" || true
+mysql_a_tsv "SELECT id FROM llm_model" > "${LOG_DIR}/p5/a-llm-model-ids.tsv" || true
+mysql_a_tsv "SELECT name FROM llm_server" > "${LOG_DIR}/p5/a-llm-server-names.tsv" || true
+mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM llm_server" > "${LOG_DIR}/p5/next-llm-server-id.txt" || echo 1 > "${LOG_DIR}/p5/next-llm-server-id.txt"
+mysql_a "SELECT COALESCE(MAX(id),0)+1 FROM llm_model" > "${LOG_DIR}/p5/next-llm-model-id.txt" || echo 1 > "${LOG_DIR}/p5/next-llm-model-id.txt"
 
 bash "${PACK_ROOT}/p5/12-export-b-openfga.sh" || log "B OpenFGA 导出失败, 部门授权将只靠 roleaccess"
 

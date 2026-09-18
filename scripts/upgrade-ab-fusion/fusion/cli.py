@@ -13,6 +13,7 @@ if str(PACK) not in sys.path:
 
 from fusion.dry_run import dry_run_flows, dry_run_knowledge
 from fusion.gaps import collect_gaps, write_gaps
+from fusion.install_maps import install_official_maps
 from fusion.propose_dept import propose as propose_dept
 from fusion.propose_model import propose as propose_model
 from fusion.propose_role import propose as propose_role
@@ -36,7 +37,7 @@ def _dump_propose(
         out_dir / f"{stem}.proposed.csv",
         map_fields,
         result["map"],
-        "人工签字后复制为 p4 正式 csv",
+        "无冲突时由 02-propose 自动写成 p4 正式 csv",
     )
     cfields = list(result["conflict"][0].keys()) if result["conflict"] else ["reason"]
     write_csv(out_dir / f"{stem}.conflicts.csv", cfields, result["conflict"])
@@ -111,7 +112,7 @@ def cmd_tools_propose(args: argparse.Namespace) -> None:
         propose_tool(load_table(Path(args.a_csv)), load_table(Path(args.b_csv))),
         Path(args.out_dir),
         "tool-map",
-        ["b_tool_id", "a_tool_id", "action", "note"],
+        ["b_tool_id", "a_tool_id", "action", "b_tool_key", "a_tool_key", "note"],
     )
 
 
@@ -146,6 +147,15 @@ def cmd_gaps(args: argparse.Namespace) -> None:
     )
     write_gaps(Path(args.out), rows)
     print(f"gaps={len(rows)} -> {args.out}")
+
+
+def cmd_install_maps(args: argparse.Namespace) -> None:
+    try:
+        written = install_official_maps(Path(args.pack), Path(args.log_p4))
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(2)
+    print("installed " + ",".join(written))
 
 
 def cmd_verify_counts(args: argparse.Namespace) -> None:
@@ -219,6 +229,11 @@ def main(argv: list[str] | None = None) -> int:
         "--migrate-b-spaces", action=argparse.BooleanOptionalAction, default=False
     )
     vc.set_defaults(func=cmd_verify_counts)
+
+    im = sub.add_parser("install-maps")
+    im.add_argument("--pack", required=True)
+    im.add_argument("--log-p4", required=True)
+    im.set_defaults(func=cmd_install_maps)
 
     args = p.parse_args(argv)
     args.func(args)

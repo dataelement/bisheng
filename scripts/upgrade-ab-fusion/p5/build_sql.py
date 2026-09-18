@@ -19,6 +19,7 @@ from fusion.flow_sql import generate_assistant_sql, generate_flow_sql
 from fusion.group_resource_sql import generate_group_resource_sql
 from fusion.identity_sql import generate_identity_sql
 from fusion.knowledge_sql import generate_knowledge_sql
+from fusion.llm_sql import generate_llm_sql
 from fusion.maps import load_map, load_tool_key_map, persist_runtime_maps, upsert_alloc
 from fusion.mark_sql import generate_mark_sql
 from fusion.minio_keys import collect_map_jobs, merge_jobs_tsv
@@ -51,9 +52,7 @@ def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
         "group": load_map(map_dir / "group-map.csv", "b_group_id", "a_group_id"),
         "role": load_map(map_dir / "role-map.csv", "b_role_id", "a_role_id"),
         "model": load_map(map_dir / "model-map.csv", "b_model_id", "a_model_id"),
-        "llm_server": load_map(
-            map_dir / "server-map.csv", "b_server_id", "a_server_id"
-        ),
+        "llm_server": load_map(map_dir / "server-map.csv", "b_server_id", "a_server_id"),
         "tool": load_map(map_dir / "tool-map.csv", "b_tool_id", "a_tool_id"),
         "knowledge": load_map(map_dir / "knowledge-map.csv", "b_id", "a_id"),
         "file": load_map(map_dir / "file-map.csv", "b_id", "a_id"),
@@ -67,9 +66,7 @@ def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
         "review_tag_link": load_map(map_dir / "tag-link-map.csv", "b_id", "a_id"),
         "dictionary": load_map(map_dir / "dictionary-map.csv", "b_id", "a_id"),
         "citation": load_map(map_dir / "citation-map.csv", "b_id", "a_id"),
-        "citation_relation": load_map(
-            map_dir / "citation-relation-map.csv", "b_id", "a_id"
-        ),
+        "citation_relation": load_map(map_dir / "citation-relation-map.csv", "b_id", "a_id"),
         "mark_task": load_map(map_dir / "mark-task-map.csv", "b_id", "a_id"),
         "mark_record": load_map(map_dir / "mark-record-map.csv", "b_id", "a_id"),
         "mark_app_user": load_map(map_dir / "mark-app-user-map.csv", "b_id", "a_id"),
@@ -80,9 +77,7 @@ def _maps(map_dir: Path) -> dict[str, dict[str, str]]:
         "role_access": load_map(map_dir / "role-access-map.csv", "b_id", "a_id"),
         "audit": load_map(map_dir / "audit-map.csv", "b_id", "a_id"),
         "tool_key": {},
-        "report_version_key": load_map(
-            map_dir / "report-version-key-map.csv", "b_key", "a_key"
-        ),
+        "report_version_key": load_map(map_dir / "report-version-key-map.csv", "b_key", "a_key"),
     }
     tool_keys = load_tool_key_map(map_dir / "tool-map.csv")
     tool_keys.update(load_map(map_dir / "tool-key-map.csv", "b_key", "a_key"))
@@ -116,7 +111,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--kind", required=True)
     p.add_argument("--dump", required=True)
-    p.add_argument("--maps", required=True, help="目录, 含已签字 csv")
+    p.add_argument("--maps", required=True, help="目录, 含对照表 csv")
     p.add_argument("--out", required=True)
     p.add_argument("--batch", default="fusion")
     args = p.parse_args()
@@ -149,6 +144,23 @@ def main() -> int:
             b_userroles=dump.get("b_userroles") or [],
             next_role_id=int(dump.get("next_role_id") or 1),
             a_tenant_id=tenant_default,
+        )
+    elif args.kind == "llm":
+        sql, extra = generate_llm_sql(
+            batch=args.batch,
+            servers=dump.get("llm_servers") or [],
+            models=dump.get("llm_models") or [],
+            server_map=load_csv(map_dir / "server-map.csv"),
+            model_map=load_csv(map_dir / "model-map.csv"),
+            user_map=maps["user"],
+            tenant_map=maps["tenant"],
+            a_server_ids={int(x) for x in (dump.get("a_llm_server_ids") or []) if str(x).isdigit()},
+            a_model_ids={int(x) for x in (dump.get("a_llm_model_ids") or []) if str(x).isdigit()},
+            a_server_names=set(dump.get("a_llm_server_names") or []),
+            a_server_models=dump.get("a_llm_server_models") or [],
+            next_server_id=int(dump.get("next_llm_server_id") or 1),
+            next_model_id=int(dump.get("next_llm_model_id") or 1),
+            a_tenant_default=tenant_default,
         )
     elif args.kind == "dictionary":
         sql, dmaps = generate_dictionary_sql(
@@ -215,9 +227,7 @@ def main() -> int:
                 set(dump.get("a_report_version_keys") or []),
             )
             if vk:
-                upsert_alloc(
-                    map_dir / "report-version-key-map.csv", "b_key", "a_key", vk
-                )
+                upsert_alloc(map_dir / "report-version-key-map.csv", "b_key", "a_key", vk)
         maps["report_version_key"] = vk
         sql, flow_maps, version_maps, reports = generate_flow_sql(
             batch=args.batch,
@@ -262,9 +272,7 @@ def main() -> int:
             a_session_digest=dump.get("a_session_digest") or {},
             next_message_id=int(dump.get("next_message_id") or 1),
             a_tenant_default=tenant_default,
-            a_existing_message_ids={
-                int(x) for x in (dump.get("a_message_ids") or []) if str(x).isdigit()
-            },
+            a_existing_message_ids={int(x) for x in (dump.get("a_message_ids") or []) if str(x).isdigit()},
         )
         extra = {
             "session_maps": smaps,
@@ -325,7 +333,7 @@ def main() -> int:
         )
         extra = {"report_maps": rmaps}
     elif args.kind == "tool_types":
-        sql, tmaps, gaps = generate_tool_type_sql(
+        sql, tmaps, extra_tt = generate_tool_type_sql(
             batch=args.batch,
             rows=dump.get("tool_types") or [],
             maps=maps,
@@ -333,8 +341,19 @@ def main() -> int:
             a_names=set(dump.get("a_tool_type_names") or []),
             next_id=int(dump.get("next_tool_type_id") or 1),
             a_tenant_default=tenant_default,
+            tools=dump.get("tools") or [],
+            tool_map=load_csv(map_dir / "tool-map.csv"),
+            a_tool_ids={int(x) for x in (dump.get("a_tool_ids") or []) if str(x).isdigit()},
+            a_tool_keys=set(dump.get("a_tool_keys") or []),
+            next_tool_id=int(dump.get("next_tool_id") or 1),
         )
-        extra = {"tool_type_maps": tmaps, "tool_type_secret_gaps": gaps}
+        extra = {
+            "tool_type_maps": tmaps,
+            "tool_alloc": extra_tt.get("tool_alloc") or {},
+            "tool_key_alloc": extra_tt.get("tool_key_alloc") or {},
+            "minio_jobs": extra_tt.get("minio_jobs") or [],
+        }
+        gaps = extra_tt.get("gaps") or []
         if gaps:
             write_csv(
                 out.parent / "gaps-tool-type-secrets.tsv",
@@ -395,12 +414,7 @@ def main() -> int:
         group_tuples = dump.get("group_resource_tuples") or []
         meta_gr = out.parent / "group_resource.sql.meta.json"
         if meta_gr.exists():
-            group_tuples = (
-                json.loads(meta_gr.read_text(encoding="utf-8")).get(
-                    "group_resource_tuples"
-                )
-                or group_tuples
-            )
+            group_tuples = json.loads(meta_gr.read_text(encoding="utf-8")).get("group_resource_tuples") or group_tuples
         role_tuples = generate_role_grant_tuples(
             role_access=dump.get("role_access") or [],
             user_roles=dump.get("user_roles") or [],
@@ -441,21 +455,11 @@ def main() -> int:
         meta = Path(str(out) + ".meta.json")
         slim = {}
         for k, v in extra.items():
-            if (
-                isinstance(v, list)
-                and v
-                and isinstance(v[0], dict)
-                and "extra_jobs" in v[0]
-            ):
-                slim[k] = [
-                    {kk: vv for kk, vv in row.items() if kk != "extra_jobs"}
-                    for row in v
-                ]
+            if isinstance(v, list) and v and isinstance(v[0], dict) and "extra_jobs" in v[0]:
+                slim[k] = [{kk: vv for kk, vv in row.items() if kk != "extra_jobs"} for row in v]
             else:
                 slim[k] = v
-        meta.write_text(
-            json.dumps(slim, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        meta.write_text(json.dumps(slim, ensure_ascii=False, indent=2), encoding="utf-8")
         if extra.get("openfga_tuples") is not None:
             (out.parent / "openfga.tuples.json").write_text(
                 json.dumps(extra["openfga_tuples"], ensure_ascii=False, indent=2),

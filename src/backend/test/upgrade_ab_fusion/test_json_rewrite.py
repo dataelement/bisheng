@@ -61,6 +61,14 @@ def test_missing_knowledge_is_dropped():
     assert out["knowledge"]["value"] == []
 
 
+def test_dangling_model_id_is_dropped():
+    data = {"nodes": [{"data": {"group_params": [{"params": [{"key": "model_id", "value": 3}]}]}}]}
+    out, report = rewrite_flow_data(data, {"model": {"1": "9"}})
+    assert report.missing == []
+    assert any(x.startswith("model:") and x.endswith("=3") for x in report.dropped)
+    assert out["nodes"][0]["data"]["group_params"][0]["params"][0]["value"] is None
+
+
 def test_knowledge_selector_keeps_node_output_refs():
     data = {
         "nodes": [

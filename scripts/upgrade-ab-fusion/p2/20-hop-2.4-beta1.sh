@@ -11,6 +11,7 @@ STEP="p2.20-2.4-beta1"
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 discover_deployment
+require_complete_p2_freeze
 ledger "${STEP}" "START" ""
 
 add_column_if_missing message_session group_ids "ADD COLUMN group_ids json NULL COMMENT '会话所属用户组'"

@@ -5,12 +5,14 @@ set -euo pipefail
 STEP="p5.36-publish"
 APPLY="${APPLY:-0}"
 CONFIRM_PUBLISH_FLOWS="${CONFIRM_PUBLISH_FLOWS:-0}"
-BATCH_NO="${BATCH_NO:-fusion-$(date +%Y%m%d)}"
 # shellcheck disable=SC1091
 source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 # shellcheck disable=SC1091
 source "${PACK_ROOT}/lib/fusion_remote.sh"
+if ! resolve_batch_no existing; then
+  fusion_pick_open_batch_from_a || die "找不到批次名. 看 ${LOG_DIR}/current-batch.txt 或 logs/ledger.tsv. 多批次才需要 export BATCH_NO=..."
+fi
 
 [[ -f "${LOG_DIR}/p5/dump.json" ]] || die "缺少 dump.json, 先跑 p5/30-apply.sh"
 [[ -d "${LOG_DIR}/p4/maps" ]] || die "缺少 maps"

@@ -3,7 +3,6 @@
 set -euo pipefail
 STEP="p5.30-apply"
 APPLY="${APPLY:-0}"
-BATCH_NO="${BATCH_NO:-fusion-$(date +%Y%m%d)}"
 MIGRATE_B_SPACES="${MIGRATE_B_SPACES:-0}"
 CONFIRM_POINTS="${CONFIRM_POINTS:-0}"
 # shellcheck disable=SC1091
@@ -11,6 +10,7 @@ source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 # shellcheck disable=SC1091
 source "${PACK_ROOT}/lib/fusion_remote.sh"
+resolve_batch_no
 
 [[ -f "${PACK_ROOT}/p4/user-map.csv" ]] || die "先完成身份映射 p4/user-map.csv"
 
@@ -23,7 +23,7 @@ fi
 
 mkdir -p "${LOG_DIR}/p5" "${LOG_DIR}/p4/maps"
 cp -f "${PACK_ROOT}/p4/"*.csv "${LOG_DIR}/p4/maps/" 2>/dev/null || true
-# 身份 map 来自 p4 签字.
+# 身份 map 来自 p4/02-propose 自动安装的对照表.
 # 业务 map: A 已落库的实体保留 (续跑同 ID); 未落库的清掉, 否则 dry-run 残留会跳过 INSERT.
 applied_entities=""
 if [[ "${APPLY}" == "1" ]]; then
@@ -96,19 +96,24 @@ python3 "${PACK_ROOT}/fusion/cli.py" dry-run \
   --out "${LOG_DIR}/p5/dry-run.json" \
   "${dry_space[@]}"
 
-# 字典可先于业务; QA/标签依赖 knowledge-map; 组可见性依赖资源 map
-for kind in dictionary knowledge qa tags flow assistant session citations marks reports tool_types relations group_resource role_access audit openfga; do
+# 字典可先于业务; 模型/工具须在 knowledge/flow 之前落 map, 否则工作流引用会失败
+for kind in dictionary llm tool_types knowledge qa tags flow assistant session citations marks reports relations group_resource role_access audit openfga; do
   python3 "${PACK_ROOT}/p5/build_sql.py" --kind "${kind}" \
     --dump "${LOG_DIR}/p5/dump.json" \
     --maps "${LOG_DIR}/p4/maps" \
     --out "${LOG_DIR}/p5/${kind}.sql" \
     --batch "${BATCH_NO}"
 done
+chmod 600 "${LOG_DIR}/p5/llm.sql" "${LOG_DIR}/p5/tool_types.sql" 2>/dev/null || true
 
 python3 "${PACK_ROOT}/fusion/cli.py" gaps \
   --maps "${LOG_DIR}/p4/maps" \
   --propose-dir "${LOG_DIR}/p4" \
   --out "${LOG_DIR}/p5/gaps-model-tool.tsv"
+cp -f "${LOG_DIR}/p4/maps/"model-map.csv "${PACK_ROOT}/p4/" 2>/dev/null || true
+cp -f "${LOG_DIR}/p4/maps/"server-map.csv "${PACK_ROOT}/p4/" 2>/dev/null || true
+cp -f "${LOG_DIR}/p4/maps/"tool-map.csv "${PACK_ROOT}/p4/" 2>/dev/null || true
+cp -f "${LOG_DIR}/p4/maps/"tool-key-map.csv "${PACK_ROOT}/p4/" 2>/dev/null || true
 
 if [[ "${CONFIRM_POINTS}" == "1" ]]; then
   log "积分迁移未实现自动 APPLY, 见方案 D16; 本包跳过积分, 审计已在上面 APPLY"
@@ -117,6 +122,8 @@ fi
 if [[ "${APPLY}" == "1" ]]; then
   declare -A kind_entity=(
     [dictionary]=dictionary
+    [llm]=llm_server
+    [tool_types]=tool_type
     [knowledge]=knowledge
     [qa]=qa
     [tags]=review_tag
@@ -126,13 +133,12 @@ if [[ "${APPLY}" == "1" ]]; then
     [citations]=citation
     [marks]=mark_task
     [reports]=report
-    [tool_types]=tool_type
     [relations]=citation_relation
     [group_resource]=group_resource
     [role_access]=role_access
     [audit]=audit
   )
-  for kind in dictionary knowledge qa tags flow assistant session citations marks reports tool_types relations group_resource role_access audit; do
+  for kind in dictionary llm tool_types knowledge qa tags flow assistant session citations marks reports relations group_resource role_access audit; do
     entity="${kind_entity[${kind}]}"
     n="$(mysql_a "SELECT COUNT(*) FROM fusion_map WHERE batch_no='${BATCH_NO}' AND entity='${entity}'" || echo 0)"
     n="$(printf '%s' "${n}" | tr -d '[:space:]')"

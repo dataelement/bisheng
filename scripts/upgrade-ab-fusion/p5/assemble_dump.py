@@ -83,6 +83,9 @@ def main() -> None:
         "mark_app_users": _rows(d, "b-mark-app-users"),
         "reports": _rows(d, "b-reports"),
         "tool_types": _rows(d, "b-tool-types"),
+        "tools": _rows(d, "b-tools"),
+        "llm_servers": _rows(d, "b-llm-servers"),
+        "llm_models": _rows(d, "b-llm-models"),
         "role_access": _rows(d, "b-roleaccess"),
         "user_roles": _rows(d, "b-userroles"),
         "audits": _rows(d, "b-audit"),
@@ -101,9 +104,7 @@ def main() -> None:
         "a_group_resource_ids": _ids(d / "a-group-resource-ids.tsv", "id"),
         "a_dictionary_ids": _ids(d / "a-dictionary.tsv", "id"),
         "a_citation_pks": _ids(d / "a-citation-ids.tsv", "id"),
-        "a_citation_ids": [
-            str(x) for x in _ids(d / "a-citation-cids.tsv", "citation_id")
-        ],
+        "a_citation_ids": [str(x) for x in _ids(d / "a-citation-cids.tsv", "citation_id")],
         "a_citation_relation_ids": _ids(d / "a-citation-relation-ids.tsv", "id"),
         "a_mark_task_ids": _ids(d / "a-mark-task-ids.tsv", "id"),
         "a_mark_record_ids": _ids(d / "a-mark-record-ids.tsv", "id"),
@@ -112,6 +113,12 @@ def main() -> None:
         "a_report_version_keys": _names(d / "a-report-keys.tsv", "version_key"),
         "a_tool_type_ids": _ids(d / "a-tool-type-ids.tsv", "id"),
         "a_tool_type_names": _names(d / "a-tool-type-names.tsv", "name"),
+        "a_tool_ids": _ids(d / "a-tool-ids.tsv", "id"),
+        "a_tool_keys": _names(d / "a-tool-keys.tsv", "tool_key"),
+        "a_llm_server_ids": _ids(d / "a-llm-server-ids.tsv", "id"),
+        "a_llm_model_ids": _ids(d / "a-llm-model-ids.tsv", "id"),
+        "a_llm_server_names": _names(d / "a-llm-server-names.tsv", "name"),
+        "a_llm_server_models": _rows(d, "a-llm-models"),
         "a_role_access_ids": _ids(d / "a-role-access-ids.tsv", "id"),
         "a_audit_ids": [str(x) for x in _ids(d / "a-audit-ids.tsv", "id")],
         "a_session_digest": {},
@@ -131,11 +138,15 @@ def main() -> None:
         "next_mark_app_user_id": _int_file(d / "next-mark-app-user-id.txt"),
         "next_report_id": _int_file(d / "next-report-id.txt"),
         "next_tool_type_id": _int_file(d / "next-tool-type-id.txt"),
+        "next_tool_id": _int_file(d / "next-tool-id.txt"),
+        "next_llm_server_id": _int_file(d / "next-llm-server-id.txt"),
+        "next_llm_model_id": _int_file(d / "next-llm-model-id.txt"),
         "next_role_access_id": _int_file(d / "next-role-access-id.txt"),
         "a_minio_keys": [],
     }
     out = d / "dump.json"
     out.write_text(json.dumps(dump, ensure_ascii=False), encoding="utf-8")
+    out.chmod(0o600)
     print(out)
 
 

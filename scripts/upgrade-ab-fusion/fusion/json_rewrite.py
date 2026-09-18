@@ -29,13 +29,10 @@ STR_LEAF_KEYS = {
 
 SELECTOR_KEYS = {"knowledge", "qa_knowledge_id", "knowledge_id"}
 TOOL_LIST_KEYS = {"tool_list", "tools"}
-PARAM_LOGICAL_KEYS = (
-    SELECTOR_KEYS
-    | set(INT_LEAF_KEYS)
-    | set(STR_LEAF_KEYS)
-    | TOOL_LIST_KEYS
-    | {"group_ids"}
-)
+PARAM_LOGICAL_KEYS = SELECTOR_KEYS | set(INT_LEAF_KEYS) | set(STR_LEAF_KEYS) | TOOL_LIST_KEYS | {"group_ids"}
+# 知识库选择器 / 模型 id: B 已删的行不在对照表里. 丢掉引用并记 dropped,
+# 禁止把 B 的旧数字 id 原样写入 A (A 上同一个数字是别的对象).
+DROP_UNMAPPED_KINDS = frozenset({"knowledge", "model"})
 
 
 class RewriteReport:
@@ -87,6 +84,9 @@ def _map_int(
         report.rewritten.append(f"{path}={key}->{table[key]}")
         raw = table[key]
         return int(raw) if str(raw).isdigit() else raw
+    if kind in DROP_UNMAPPED_KINDS:
+        report.dropped.append(f"{kind}:{path}={key}")
+        return None
     report.missing.append(f"{path}={key}")
     return value
 
@@ -130,9 +130,7 @@ def _rewrite_key_list(
             if kind == "knowledge" and str(raw_key) not in table:
                 report.dropped.append(f"{path}[{i}].key={raw_key}")
                 continue
-            copied["key"] = _map_int(
-                raw_key, table, f"{path}[{i}].key", report, kind=kind
-            )
+            copied["key"] = _map_int(raw_key, table, f"{path}[{i}].key", report, kind=kind)
             out.append(copied)
         else:
             out.append(item)
@@ -149,15 +147,10 @@ def rewrite_value(
     if isinstance(value, list):
         if key == "group_ids":
             return [
-                _map_int(
-                    v, maps.get("group") or {}, f"{path}[{i}]", report, kind="group"
-                )
-                for i, v in enumerate(value)
+                _map_int(v, maps.get("group") or {}, f"{path}[{i}]", report, kind="group") for i, v in enumerate(value)
             ]
         if key in TOOL_LIST_KEYS:
-            return _rewrite_key_list(
-                value, maps.get("tool") or {}, path, report, kind="tool"
-            )
+            return _rewrite_key_list(value, maps.get("tool") or {}, path, report, kind="tool")
         if key == "qa_knowledge_id" and value and not isinstance(value[0], dict):
             table = maps.get("knowledge") or {}
             kept = []
@@ -165,31 +158,18 @@ def rewrite_value(
                 if v in (None, "", 0, "0"):
                     continue
                 if not _is_int_id(v) or str(v) in table:
-                    kept.append(
-                        _map_int(v, table, f"{path}[{i}]", report, kind="knowledge")
-                        if _is_int_id(v)
-                        else v
-                    )
+                    kept.append(_map_int(v, table, f"{path}[{i}]", report, kind="knowledge") if _is_int_id(v) else v)
                     continue
                 report.dropped.append(f"{path}[{i}]={v}")
             return kept
-        return [
-            rewrite_value(v, key, maps, f"{path}[{i}]", report)
-            for i, v in enumerate(value)
-        ]
+        return [rewrite_value(v, key, maps, f"{path}[{i}]", report) for i, v in enumerate(value)]
 
     if isinstance(value, dict):
         logical = value.get("key")
         # 工作流节点 params: {key: model_id|knowledge, value: ...}
-        if (
-            isinstance(logical, str)
-            and "value" in value
-            and logical in PARAM_LOGICAL_KEYS
-        ):
+        if isinstance(logical, str) and "value" in value and logical in PARAM_LOGICAL_KEYS:
             return {
-                k: rewrite_value(
-                    v, logical if k == "value" else k, maps, f"{path}.{k}", report
-                )
+                k: rewrite_value(v, logical if k == "value" else k, maps, f"{path}.{k}", report)
                 for k, v in value.items()
             }
         if key in SELECTOR_KEYS and "value" in value:
@@ -197,14 +177,9 @@ def rewrite_value(
             out = dict(value)
             items = out.get("value")
             if isinstance(items, list):
-                out["value"] = _rewrite_key_list(
-                    items, knowledge_map, f"{path}.value", report, kind="knowledge"
-                )
+                out["value"] = _rewrite_key_list(items, knowledge_map, f"{path}.value", report, kind="knowledge")
             return out
-        return {
-            k: rewrite_value(v, k, maps, f"{path}.{k}", report)
-            for k, v in value.items()
-        }
+        return {k: rewrite_value(v, k, maps, f"{path}.{k}", report) for k, v in value.items()}
 
     # 报表 version_key / 自定义 tool_key: 只在提供了对应 map 且命中时改写, 未命中保持原值 (预置工具 key 两边相同).
     if key == "version_key":
@@ -238,14 +213,10 @@ def rewrite_value(
     return value
 
 
-def rewrite_tree(
-    data: Any, maps: dict[str, dict[str, str]]
-) -> tuple[Any, RewriteReport]:
+def rewrite_tree(data: Any, maps: dict[str, dict[str, str]]) -> tuple[Any, RewriteReport]:
     report = RewriteReport()
     return rewrite_value(deepcopy(data), None, maps, "$", report), report
 
 
-def rewrite_flow_data(
-    data: Any, maps: dict[str, dict[str, str]]
-) -> tuple[Any, RewriteReport]:
+def rewrite_flow_data(data: Any, maps: dict[str, dict[str, str]]) -> tuple[Any, RewriteReport]:
     return rewrite_tree(data, maps)

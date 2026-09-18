@@ -5,15 +5,11 @@
 # 不含 F006 / 工作台，下一步 31-f006-workstation.sh。
 set -euo pipefail
 STEP="p2.30-2.5"
-# 默认值可被环境变量覆盖；compose 路径与宿主机文件位置一律自动发现，不写死。
-# 演练机（docker load 的 v2.5.0-sg 无 RepoDigest，只认 tag）需 export DRILL=1。
+# compose 路径与宿主机文件位置一律自动发现，不写死。
+# 2.5 的 backend/frontend/openfga 都以压缩包 docker-compose.yml 为准, 不用脚本默认 tag.
 : "${DRILL:=0}"
-: "${TARGET_BACKEND_IMAGE:=dataelement/bisheng-backend:v2.5.0-sg}"
-: "${TARGET_FRONTEND_IMAGE:=dataelement/bisheng-frontend:v2.5.0-sg}"
 : "${TARGET_ALEMBIC_HEAD:=f058_dashboard_dataset_flags}"
 : "${ALEMBIC_BEFORE_DEPT:=f011_backfill_create_knowledge_web_menu}"
-# OpenFGA 无 D02 digest，版本钉死；拉不到就覆盖这个变量。
-: "${IMAGE_OPENFGA:=openfga/openfga:v1.8.12}"
 : "${BACKEND_CONTAINER:=bisheng-backend}"
 : "${WORKER_CONTAINER:=bisheng-backend-worker}"
 : "${FRONTEND_CONTAINER:=bisheng-frontend}"
@@ -26,6 +22,7 @@ source "$(cd "$(dirname "$0")/.." && pwd)/lib/common.sh"
 load_env
 discover_deployment
 find_pack_docker
+require_complete_p2_freeze
 
 # 宿主机上这两个文件本 hop 要改，位置从容器挂载反查，
 # 不按 compose 目录拼路径（现场可能设了 DOCKER_VOLUME_DIRECTORY）。
@@ -44,6 +41,12 @@ compose_hop() {
 alembic_current() {
   docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
     bash -lc 'alembic current' | awk '/^f[0-9]|^[0-9a-f]{12}/{print $1; exit}'
+}
+
+# 以当前容器镜像里的 alembic head 为准, 不写死 f058.
+alembic_heads() {
+  docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
+    bash -lc 'alembic heads' | awk '/^f[0-9]|^[0-9a-f]{12}/{print $1; exit}'
 }
 
 wait_container() {
@@ -107,12 +110,6 @@ release_host_8080_for_openfga() {
 }
 
 ledger "${STEP}" "START" "head=${TARGET_ALEMBIC_HEAD}"
-if [[ "${TARGET_BACKEND_IMAGE}" == *"@sha256:"* ]]; then
-  assert_pinned_image "${TARGET_BACKEND_IMAGE}"
-fi
-if [[ "${TARGET_FRONTEND_IMAGE}" == *"@sha256:"* ]]; then
-  assert_pinned_image "${TARGET_FRONTEND_IMAGE}"
-fi
 [[ -f "${CONFIG_FILE}" ]] || die "找不到 config.yaml: ${CONFIG_FILE}"
 
 preflight_report
@@ -142,11 +139,22 @@ ensure_image() {
 
 log "2) 用压缩包 docker/ 整份覆盖现场 compose / config.yaml / entrypoint / nginx"
 replace_live_deploy_configs
-# 压缩包里的镜像 tag 可能和本次 TARGET_* 不一致，覆盖后再钉死。
-switch_compose_images "${TARGET_BACKEND_IMAGE}" "${TARGET_FRONTEND_IMAGE}"
+# backend/frontend/openfga 用 YAML 里的 image. 生产每次镜像都可能不同, 禁止再写成脚本默认 tag.
+TARGET_BACKEND_IMAGE="$(compose_service_image backend)"
+TARGET_FRONTEND_IMAGE="$(compose_service_image frontend)"
+TARGET_OPENFGA_IMAGE="$(compose_service_image openfga)"
+[[ -n "${TARGET_BACKEND_IMAGE}" && "${TARGET_BACKEND_IMAGE}" != *"REPLACE"* ]] \
+  || die "compose backend image 无效: ${TARGET_BACKEND_IMAGE}"
+[[ -n "${TARGET_FRONTEND_IMAGE}" && "${TARGET_FRONTEND_IMAGE}" != *"REPLACE"* ]] \
+  || die "compose frontend image 无效: ${TARGET_FRONTEND_IMAGE}"
+[[ -n "${TARGET_OPENFGA_IMAGE}" && "${TARGET_OPENFGA_IMAGE}" != *"REPLACE"* ]] \
+  || die "compose openfga image 无效: ${TARGET_OPENFGA_IMAGE}"
+log "YAML backend=${TARGET_BACKEND_IMAGE}"
+log "YAML frontend=${TARGET_FRONTEND_IMAGE}"
+log "YAML openfga=${TARGET_OPENFGA_IMAGE}"
 ensure_image "${TARGET_BACKEND_IMAGE}"
 ensure_image "${TARGET_FRONTEND_IMAGE}"
-ensure_image "${IMAGE_OPENFGA}"
+ensure_image "${TARGET_OPENFGA_IMAGE}"
 
 log "3) 停 API/worker，先起 mysql/redis/openfga"
 docker stop "${FRONTEND_CONTAINER}" "${BACKEND_CONTAINER}" "${WORKER_CONTAINER}" 2>/dev/null || true
@@ -160,10 +168,15 @@ compose up -d openfga
 wait_container bisheng-openfga
 
 # 以 alembic_version 为准决定跳过哪段. 已是 head 时禁止 upgrade f011 (不会回退, 旧脚本会误判失败).
-# 禁止 stamp.
-dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
-log "alembic_version=${dbv:-<空>}"
-[[ -n "${dbv}" ]] || die "alembic_version 为空, 禁止 stamp, 先确认这是 2.4 升上来的库"
+# 禁止 stamp. 2.4 常无此表, 无表就走两段 Alembic, 不要当失败.
+dbv="$(alembic_db_version)"
+if table_exists alembic_version; then
+  log "alembic_version=${dbv:-<空>}"
+  [[ -n "${dbv}" ]] || die "alembic_version 表在但无行, 禁止 stamp"
+else
+  log "无 alembic_version 表: 按 2.4 create_all 库处理, 接着跑两段 Alembic"
+  dbv=""
+fi
 
 need_schema_exec=0
 if [[ "${dbv}" != "${TARGET_ALEMBIC_HEAD}" ]]; then
@@ -228,7 +241,7 @@ else
     docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
       bash -lc "alembic upgrade ${ALEMBIC_BEFORE_DEPT}"
     cur="$(alembic_current)"
-    dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+    dbv="$(alembic_db_version)"
     log "alembic current=${cur} db=${dbv}"
     # 停在 f011 是正常路径; 已超过 f011 (重跑/上次跑完) 不回退, 也不当失败.
     if [[ "${dbv}" != "${ALEMBIC_BEFORE_DEPT}" && "${dbv}" != "${TARGET_ALEMBIC_HEAD}" ]]; then
@@ -243,18 +256,20 @@ else
     mysql_exec "ALTER TABLE tag MODIFY business_type VARCHAR(64) NOT NULL DEFAULT 'APPLICATION'"
   fi
 
-  dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+  dbv="$(alembic_db_version)"
   if [[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]]; then
     log "8) 已是 ${TARGET_ALEMBIC_HEAD}, 跳过第二段 Alembic"
   else
-    log "8) Alembic 第二段 -> ${TARGET_ALEMBIC_HEAD}"
+    log "8) Alembic 第二段 -> 当前镜像 alembic head"
     docker exec -e PYTHONPATH=./ -w /app "${BACKEND_CONTAINER}" \
       bash -lc 'alembic upgrade head'
     cur="$(alembic_current)"
-    dbv="$(mysql_scalar "SELECT version_num FROM alembic_version LIMIT 1")"
+    dbv="$(alembic_db_version)"
     log "alembic current=${cur} db=${dbv}"
   fi
-  [[ "${dbv}" == "${TARGET_ALEMBIC_HEAD}" ]] || die "head 不是 ${TARGET_ALEMBIC_HEAD}, 当前 ${dbv}. 禁止 stamp"
+  expected="$(alembic_heads)"
+  [[ -n "${expected}" ]] || die "读不到镜像 alembic heads"
+  [[ "${dbv}" == "${expected}" ]] || die "head 不是镜像 ${expected}, 当前 ${dbv}. 禁止 stamp"
 fi
 
 log "9) 去掉 hop override，按正常入口拉起"
@@ -276,7 +291,9 @@ if printf '%s\n' "${restart_logs}" | grep -q "WARNING: alembic migration failed"
   die "正常启动仍出现 alembic WARNING，不算成功"
 fi
 cur="$(alembic_current)"
-[[ "${cur}" == "${TARGET_ALEMBIC_HEAD}" ]] || die "重启后 current=${cur}"
+expected="$(alembic_heads)"
+[[ -n "${expected}" ]] || die "读不到镜像 alembic heads"
+[[ "${cur}" == "${expected}" ]] || die "重启后 current=${cur}, 镜像 head=${expected}"
 
 ledger "${STEP}" "OK" "alembic=${dbv}"
 log "2.5.0-sg schema 完成。不要开 SG 同步。下一步："

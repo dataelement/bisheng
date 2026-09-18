@@ -1,4 +1,4 @@
-"""模型映射: Provider+model_name 完全一致才 bind, 否则人工. 密钥不从 B 复制."""
+"""模型映射: Provider+model_name 完全一致才 bind, 否则 create 并在写入时拷 config 密钥."""
 
 from __future__ import annotations
 
@@ -32,11 +32,12 @@ def propose(a_models: list[dict], b_models: list[dict]) -> dict:
                 }
             )
         else:
-            manual.append(
+            mapped.append(
                 {
                     "b_model_id": bid,
-                    "model_name": b.get("model_name") or "",
-                    "reason": "参数不一致或 A 不存在, 在 A 重配后再填 model-map.csv; 禁止拷密钥",
+                    "a_model_id": "",
+                    "action": "create",
+                    "note": "A 无同 provider+model_name, 在 A 新建并拷 config 密钥",
                 }
             )
     return {"map": mapped, "conflict": [], "manual": manual}
