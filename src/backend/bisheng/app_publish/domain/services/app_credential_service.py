@@ -23,6 +23,17 @@ The shape of the whole thing:
   with the application's authority long after it.
 * **Deletion revokes** (AC-58), through F054's app-deleted hook, wired in
   ``app_publish/composition.py``.
+* **Both halves are audited** (AC-58's 「两者事件计审计」 / PRD-1 GOV-08). Nobody
+  clicks a button to get an application its key, so the rows are written under
+  the platform's system-trigger convention — ``operator_id=0``, rendered as
+  ``system`` — rather than borrowing the owner's identity for something the
+  owner did not do. The actions are ``open_api.api_key.issue`` /
+  ``open_api.api_key.revoke``, deliberately the same names a human-issued key
+  writes: GOV-04 files automatic issuance under 「key 签发/吊销」, and
+  ``metadata.subject_kind = 'hosted_app'`` is what separates the two on the
+  audit page. A new action name would have to be added in four places at once
+  (the ``_UI_VISIBLE_V2_ACTIONS`` whitelist, the platform log filter and three
+  ``bs.json`` copies) and buys nothing.
 * **There is no management surface** (AC-59). These rows are a distinct
   ``subject_kind``, so the service-account console — which queries
   ``subject_kind = 'service_account'`` — cannot show them, and no endpoint in
@@ -71,7 +82,7 @@ from bisheng.open_api.domain.models.api_credential import (
 )
 from bisheng.open_api.domain.schemas.credential import KeyIssueRequest
 from bisheng.open_api.domain.scopes import DELEGATE_SCOPE_CODE
-from bisheng.open_api.domain.services.credential_service import CredentialService
+from bisheng.open_api.domain.services.credential_service import SYSTEM_AUDIT_OPERATOR, CredentialService
 
 #: Environment variable the runtime credential is injected under (design D13).
 #: F051 names ``OPENAI_API_KEY`` / ``BISHENG_MODEL_BASE_URL`` for the model face
@@ -160,6 +171,7 @@ class AppRuntimeCredentialService:
             subject_id=int(subject.id),
             request=KeyIssueRequest(name=cls._credential_name(app), scopes=requested, expires_at=None),
             created_by=None,
+            audit_operator=SYSTEM_AUDIT_OPERATOR,
         )
         logger.info(
             "app_publish.runtime_credential_issued app_id={} subject_id={} scopes={} revoked={}",
@@ -230,7 +242,12 @@ class AppRuntimeCredentialService:
         because the ambient tenant was a sibling is the failure this avoids.
         """
         with bypass_tenant_filter():
-            return await CredentialService.revoke_by_subject(SUBJECT_KIND_HOSTED_APP, int(subject_id), reason=reason)
+            return await CredentialService.revoke_by_subject(
+                SUBJECT_KIND_HOSTED_APP,
+                int(subject_id),
+                reason=reason,
+                audit_operator=SYSTEM_AUDIT_OPERATOR,
+            )
 
     @staticmethod
     def _credential_name(app: App) -> str:

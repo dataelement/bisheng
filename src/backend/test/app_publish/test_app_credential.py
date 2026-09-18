@@ -151,6 +151,31 @@ async def _subject_id(app_id: str) -> int:
     return int(row.id)
 
 
+async def _audit_rows(publish_db, action: str | None = None) -> list:
+    """Rows actually present in ``auditlog``, optionally filtered by action.
+
+    Reads the table rather than capturing ``ainsert_v2`` calls on purpose. The
+    defect these tests exist for was not "the call was made with the wrong
+    arguments" — it was that the two automatic paths passed no
+    ``audit_operator`` at all, so ``_audit`` was never reached and the row never
+    existed. A captured-call fixture asserts the same thing only as long as
+    somebody remembers to install it; the table cannot be fooled.
+
+    ``bypass_tenant_filter`` for the same reason ``ainsert_v2`` writes under it:
+    the read must see rows regardless of whichever tenant the publish left in
+    the ContextVar.
+    """
+    from sqlmodel import select
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.database.models.audit_log import AuditLog
+
+    with bypass_tenant_filter():
+        async with publish_db() as session:
+            rows = (await session.exec(select(AuditLog))).all()
+    return [row for row in rows if action is None or row.action == action]
+
+
 # ---------------------------------------------------------------------------
 # AC-57 — issue / re-issue
 # ---------------------------------------------------------------------------
@@ -435,6 +460,144 @@ async def test_the_subject_surrogate_is_stable_across_reissues(publish_db, crede
     before = await _subject_id(app.id)
     await AppRuntimeCredentialService.issue(app.id)
     assert await _subject_id(app.id) == before
+
+
+# ---------------------------------------------------------------------------
+# AC-58, the audit half — 「两者事件计审计」 / PRD-1 GOV-08
+# ---------------------------------------------------------------------------
+#
+# The credential-state assertions above all passed while these rows were never
+# written: both automatic paths called the credential base without an
+# ``audit_operator``, and ``_audit`` only fires when one is present. So the
+# whole feature was observable to the platform as two ``logger.info`` lines and
+# nothing in the audit table.
+
+
+ISSUE_ACTION = "open_api.api_key.issue"
+REVOKE_ACTION = "open_api.api_key.revoke"
+
+
+def test_the_audit_actions_are_ones_the_audit_page_can_show():
+    """Reusing the human-issued key's action names is the whole point.
+
+    GOV-04 files automatic issuance under 「key 签发/吊销」, and these two names
+    are already in the UI whitelist, in the platform's log filter and in the
+    three ``bs.json`` copies. A hosted-app-specific action would have to land in
+    all four at once or become an event that writes and can never be found —
+    this test is what stops somebody "clarifying" the names later.
+    """
+    from bisheng.database.models.audit_log import _UI_VISIBLE_V2_ACTIONS
+
+    assert ISSUE_ACTION in _UI_VISIBLE_V2_ACTIONS
+    assert REVOKE_ACTION in _UI_VISIBLE_V2_ACTIONS
+
+
+async def test_issuing_the_runtime_credential_writes_one_audit_row(publish_db, credential_redis, app_factory):
+    """AC-58 / GOV-08: the signing event is on the record, attributed to the platform."""
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+
+    app, _ = await app_factory(state="online")
+    await AppRuntimeCredentialService.issue(app.id, scopes=["knowledge:read"])
+
+    rows = await _audit_rows(publish_db, ISSUE_ACTION)
+    assert len(rows) == 1
+    row = rows[0]
+    # No natural person triggered this, so none is borrowed: the platform's
+    # system-trigger convention, which the table renders as "system".
+    assert row.operator_id == 0
+    assert row.operator_name == "system"
+    assert row.tenant_id == ROOT_TENANT_ID
+    assert row.target_type == "api_credential"
+    # What separates this row from a human-issued service-account key on the
+    # very same action name.
+    assert row.audit_metadata["subject_kind"] == "hosted_app"
+    assert row.audit_metadata["subject_id"] == await _subject_id(app.id)
+    assert row.audit_metadata["scopes"] == ["knowledge:read"]
+    # ``_credential_name`` says it exists "for audit rows" — so this is the
+    # assertion that makes that comment true.
+    assert row.object_name == f"hosted-app:{app.slug}"
+    assert row.target_id == str(row.audit_metadata["credential_id"])
+
+
+async def test_the_delete_hook_audits_the_revocation(
+    publish_db, credential_redis, app_factory, hosted_app_resolver, owner_user
+):
+    """The gap ``test_delete_hook_revokes_the_runtime_credential`` left open.
+
+    That test asserts the credential's *state*, which was already correct. The
+    revocation event was the part nobody could see.
+    """
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+    from bisheng.app_runtime.domain.services import lifecycle_hooks
+
+    app, _ = await app_factory(state="stopped")
+    await AppRuntimeCredentialService.issue(app.id)
+
+    failures = await lifecycle_hooks.on_app_deleted(
+        app_id=app.id, actor_user_id=owner_user.user_id, tenant_id=ROOT_TENANT_ID
+    )
+    assert failures == []
+
+    rows = await _audit_rows(publish_db, REVOKE_ACTION)
+    assert len(rows) == 1
+    assert rows[0].operator_id == 0
+    assert rows[0].operator_name == "system"
+    assert rows[0].audit_metadata["subject_kind"] == "hosted_app"
+    assert rows[0].audit_metadata["subject_id"] == await _subject_id(app.id)
+
+
+async def test_a_reissue_audits_both_the_revocation_and_the_new_key(publish_db, credential_redis, app_factory):
+    """Issuance is re-issuance, and both halves are events.
+
+    A publish that only recorded the mint would leave "which key was live at
+    which moment" unanswerable — precisely the question an incident asks.
+    """
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+
+    app, _ = await app_factory(state="online")
+    await AppRuntimeCredentialService.issue(app.id)
+    await AppRuntimeCredentialService.issue(app.id)
+
+    assert len(await _audit_rows(publish_db, ISSUE_ACTION)) == 2
+    revoked = await _audit_rows(publish_db, REVOKE_ACTION)
+    assert len(revoked) == 1
+    assert revoked[0].audit_metadata["subject_kind"] == "hosted_app"
+
+
+async def test_revoking_an_application_without_a_credential_writes_nothing(publish_db, credential_redis, app_factory):
+    """No credential, no event — an empty revocation is not an occurrence."""
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+
+    app, _ = await app_factory(state="stopped")
+    assert await AppRuntimeCredentialService.revoke(app.id) == 0
+    assert await _audit_rows(publish_db) == []
+
+
+async def test_an_unwritable_audit_row_never_fails_the_publish(
+    publish_db, credential_redis, app_factory, hosted_app_resolver, monkeypatch
+):
+    """Best effort, in the shape ``release_audit`` established.
+
+    By the time the audit runs the key is minted and committed. Letting the
+    failure out would 500 the publish *and* lose the plaintext, which is
+    returned exactly once and stored nowhere — an application left permanently
+    unable to authenticate because a log row could not be written.
+    """
+    from bisheng.app_publish.domain.services.app_credential_service import AppRuntimeCredentialService
+    from bisheng.database.models.audit_log import AuditLogDao
+    from bisheng.open_api.domain.services.credential_validator import validate_bearer
+
+    async def _boom(cls, *args, **kwargs):
+        raise RuntimeError("auditlog is unreachable")
+
+    monkeypatch.setattr(AuditLogDao, "ainsert_v2", classmethod(_boom))
+
+    app, _ = await app_factory(state="online")
+    plaintext = await AppRuntimeCredentialService.issue(app.id)
+    assert (await validate_bearer(f"Bearer {plaintext}")).subject_ref == app.id
+
+    # And the revocation leg survives it too, so a deletion still completes.
+    assert await AppRuntimeCredentialService.revoke(app.id) == 1
 
 
 # ---------------------------------------------------------------------------

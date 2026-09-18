@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime
 
 from loguru import logger
@@ -22,6 +23,7 @@ from bisheng.common.errcode.open_api import (
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.open_api.domain.models.api_credential import (
     CREDENTIAL_SUBJECT_KINDS,
     HOSTED_APP_TOKEN_PREFIX,
@@ -46,6 +48,34 @@ from bisheng.open_api.domain.services.delegate_scope_service import DelegateScop
 CREDENTIAL_CACHE_KEY = "oapi:cred:{}"
 LAST_USED_THROTTLE_KEY = "oapi:cred:lastused:{}"
 LAST_USED_THROTTLE_SECONDS = 60
+
+#: ``operator_id`` for an action no natural person triggered — the platform's
+#: system-trigger convention. ``AuditLogDao.ainsert_v2`` recognises it and
+#: resolves ``operator_name`` to ``'system'`` instead of looking up a user row
+#: that does not exist; its docstring pairs it with
+#: ``operator_tenant_id = ROOT_TENANT_ID``.
+SYSTEM_OPERATOR_ID = 0
+
+
+@dataclass(frozen=True)
+class AuditOperator:
+    """The whole of what :meth:`CredentialService._audit` reads off an operator.
+
+    Human-triggered management routes hand that parameter a ``UserPayload``,
+    which carries these two attributes among many. The audit path wants none of
+    the rest, so a caller with no logged-in user behind it has no reason to
+    fabricate a login payload — it passes :data:`SYSTEM_AUDIT_OPERATOR`.
+    """
+
+    user_id: int
+    tenant_id: int
+
+
+#: Operator for credentials the platform issues and revokes on its own, with no
+#: human in the loop — today the hosted application's runtime credential (F055
+#: AC-58 / PRD-1 GOV-08). ``tenant_id`` is only the fallback: ``_audit`` prefers
+#: the ambient tenant whenever a request or a publish established one.
+SYSTEM_AUDIT_OPERATOR = AuditOperator(user_id=SYSTEM_OPERATOR_ID, tenant_id=ROOT_TENANT_ID)
 
 
 def hash_token(plaintext: str) -> str:
@@ -255,22 +285,34 @@ class CredentialService:
 
     @staticmethod
     async def _audit(operator, action: str, row: ApiCredential) -> None:
-        await AuditLogDao.ainsert_v2(
-            tenant_id=row.tenant_id,
-            operator_id=operator.user_id,
-            operator_tenant_id=get_current_tenant_id() or operator.tenant_id,
-            action=action,
-            target_type="api_credential",
-            target_id=str(row.id),
-            object_name=row.name,
-            metadata={
-                "credential_id": row.id,
-                "subject_kind": row.subject_kind,
-                "subject_id": row.subject_id,
-                "scopes": list(row.scopes or []),
-                "key_mask": row.key_mask,
-            },
-        )
+        """Record one credential event. Best effort, by design.
+
+        Every caller reaches here *after* the credential row is already
+        committed — the key is minted, or the revocation is durable. Letting an
+        audit failure out would therefore turn a completed mutation into a 500,
+        and on the issuance path it would take the plaintext with it, since it
+        is returned exactly once and stored nowhere. Same shape and same reason
+        as ``app_publish.release_audit`` and ``approval_outbox_service``.
+        """
+        try:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=row.tenant_id,
+                operator_id=operator.user_id,
+                operator_tenant_id=get_current_tenant_id() or operator.tenant_id,
+                action=action,
+                target_type="api_credential",
+                target_id=str(row.id),
+                object_name=row.name,
+                metadata={
+                    "credential_id": row.id,
+                    "subject_kind": row.subject_kind,
+                    "subject_id": row.subject_id,
+                    "scopes": list(row.scopes or []),
+                    "key_mask": row.key_mask,
+                },
+            )
+        except Exception:
+            logger.exception("open_api.credential_audit_failed action={} credential_id={}", action, row.id)
 
     @staticmethod
     async def _to_item(row: ApiCredential, *, now: datetime | None = None) -> KeyItem:
