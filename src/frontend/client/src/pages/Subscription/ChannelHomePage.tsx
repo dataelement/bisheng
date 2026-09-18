@@ -70,7 +70,7 @@ export function ChannelHomePage({
         // The scroll area spans the full width so its scrollbar sits at the page edge, not
         // beside the column.
         <div className={MODULE_HOME_FRAME}>
-            <ModuleHomeHeader title={menuNames.channel} />
+            <ModuleHomeHeader module="channel" title={menuNames.channel} />
             <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
                 <div className={cn(MODULE_HOME_COLUMN, "flex flex-col gap-6 pb-3 pt-4")}>
                     {sections.map((section) => (

@@ -6,7 +6,7 @@ export const skillCenterPreviewEnabled =
 export const skillCenterPath = '/skills';
 export const skillSquarePath = `${skillCenterPath}?view=square`;
 
-/** Deep link to one skill's detail sheet. Enterprise skills live in the square view. */
+/** Deep link to one skill's detail dialog. Enterprise skills live in the square view. */
 export function skillDetailPath(skill: { id: string; source: 'personal' | 'platform' }): string {
   const params = new URLSearchParams();
   if (skill.source === 'platform') params.set('view', 'square');

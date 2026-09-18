@@ -21,7 +21,7 @@ function SkillCard({ skill, onSelect }: SkillCardProps) {
     >
       <div className="flex w-full items-start gap-3">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-fill-1 text-text-2 group-hover:bg-fill-2">
-          <Outlined.Newspaper className="size-4" />
+          <Outlined.Skill className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1">

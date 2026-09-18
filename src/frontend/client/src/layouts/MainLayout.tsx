@@ -9,6 +9,7 @@ import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
+import { ModuleHubSwitcher } from '~/components/ModuleHome';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
@@ -521,6 +522,9 @@ export default function MainLayout() {
           </div>
         </KeepAlive>
         )}
+        {/* One instance for every module home, outside the per-module KeepAlive trees, so
+            switching between sibling modules slides its thumb. Desktop only. */}
+        {!isMobile && <ModuleHubSwitcher />}
       </main>
       <Dialog
         open={!!systemNotice}

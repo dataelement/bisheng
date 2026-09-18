@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { Button, SearchInput, StateView, Tabs } from '@bisheng/ui';
+import { Button, SearchInput, StateView, Tabs, Tooltip } from '@bisheng/ui';
 import { NotificationSeverity } from '~/common';
+import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
 import {
   MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader, ModuleViewTabs, type ModuleView,
 } from '~/components/ModuleHome';
@@ -10,47 +11,60 @@ import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
 import type { CenterSkill, PersonalSkill } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
+import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
+import { isDemoId } from '~/mock/demo/ids';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
+import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
 import { SkillSquareBanner } from './SkillSquareBanner';
 
 /**
  * 技能 module home, in the shared 我的 / 广场 frame (see ~/components/ModuleHome):
- *   我的  — skills the user uploaded; they can update, toggle and delete them.
- *   广场  — 技能广场: skills the enterprise provides to this account, read-only.
+ *   我的  — every skill this account can use, as one list in two groups: what the user
+ *           uploaded (a switch per row; update / delete in the details) and what the
+ *           enterprise provides (always on).
+ *   广场  — 技能广场: the enterprise skills as a card showcase, read-only.
  * The view and the open detail live in the URL (`?view=square`, `?skill=<id>`) so the
  * chat input's skill menu can deep-link here.
  */
 export function SkillCenterPage() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const { identity, platform, personal } = useSkillCenter();
+  const { identity, platform, personal, mutation } = useSkillCenter();
   const [search, setSearch] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
   const [target, setTarget] = useState<PersonalSkill>();
+  // DEV sample rows are not in the store; their switch flips this session-only override.
+  const [demoEnabled, setDemoEnabled] = useState<Record<string, boolean>>({});
+  const [sort, setSort] = useState<SkillSort>('recent');
   const [params, setParams] = useSearchParams();
 
   const skills = useMemo<CenterSkill[]>(() => [
-    ...(platform.data ?? []), ...(personal.data ?? []),
-  ].sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data]);
+    ...(platform.data ?? []),
+    ...(personal.data ?? []).map((skill) => (skill.id in demoEnabled ? { ...skill, enabled: demoEnabled[skill.id] } : skill)),
+  ].sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, demoEnabled]);
   const selected = skills.find((skill) => skill.id === params.get('skill'));
   // A deep link that only names a skill lands on the view that skill belongs to.
   const viewParam = params.get('view');
   const view: ModuleView = (viewParam ? viewParam === 'square' : selected?.source === 'platform') ? 'square' : 'mine';
-  const source = view === 'square' ? 'platform' : 'personal';
 
   const keyword = search.trim().toLocaleLowerCase();
-  const viewSkills = skills.filter((skill) => skill.source === source);
+  const viewSkills = view === 'square' ? skills.filter((skill) => skill.source === 'platform') : skills;
   const filtered = viewSkills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
+  // 我的 lists both sources; its error banner speaks for the personal store, and a failed
+  // enterprise query there only leaves that group out.
   const viewQuery = view === 'square' ? platform : personal;
-  const loading = identity.isLoading || viewQuery.isFetching;
+  const loading = identity.isLoading || viewQuery.isFetching || (view === 'mine' && platform.isLoading);
   const failed = identity.isError || viewQuery.isError;
 
   const updateParams = (nextView: ModuleView, skillId?: string) => {
     const next = new URLSearchParams(params);
     if (nextView === 'square') next.set('view', 'square');
+    // A skill opened from 我的 pins the view: an enterprise skill would otherwise pull the
+    // page over to the square, the view its bare deep link belongs to.
+    else if (skillId) next.set('view', 'mine');
     else next.delete('view');
     if (skillId) next.set('skill', skillId);
     else next.delete('skill');
@@ -62,6 +76,15 @@ export function SkillCenterPage() {
   };
   const handleStartUpload = () => { setTarget(undefined); setUploadOpen(true); };
   const handleRetry = () => { void identity.refetch(); void viewQuery.refetch(); };
+  const handleToggle = (skill: PersonalSkill, enabled: boolean) => {
+    if (isDemoId(skill.id)) {
+      setDemoEnabled((prev) => ({ ...prev, [skill.id]: enabled }));
+      return;
+    }
+    mutation.mutate({ kind: 'toggle', target: skill, enabled }, {
+      onError: () => showToast({ message: localize('com_skill_center_error_storage'), severity: NotificationSeverity.ERROR }),
+    });
+  };
   const handleSaved = () => {
     handleViewChange('mine');
     showToast({ message: localize('com_skill_center_saved'), severity: NotificationSeverity.SUCCESS });
@@ -100,8 +123,21 @@ export function SkillCenterPage() {
           <Button color="default" variant="outlined" size="small" loading={loading} onClick={handleRetry}>{localize('com_skill_center_retry')}</Button>
         </div>
       )}
-      {loading && viewSkills.length === 0 ? <SkillGridSkeleton /> : filtered.length ? (
-        <SkillGrid skills={filtered} onSelect={(skill) => updateParams(view, skill.id)} />
+      {loading && viewSkills.length === 0 ? (view === 'mine' ? <SkillListSkeleton /> : <SkillGridSkeleton />) : filtered.length ? (
+        view === 'mine' ? (
+          <SkillList
+            skills={filtered}
+            sort={sort}
+            pendingId={mutation.isLoading ? mutation.variables?.target?.id : undefined}
+            onSelect={(skill) => updateParams('mine', skill.id)}
+            onToggle={handleToggle}
+            createdEmptyHint={keyword ? undefined : (
+              <p className="px-2 py-3 text-body-sm text-text-3">{localize('com_skill_center_empty_hint')}</p>
+            )}
+          />
+        ) : (
+          <SkillGrid skills={filtered} onSelect={(skill) => updateParams(view, skill.id)} />
+        )
       ) : (
         <div className="flex flex-1 items-center justify-center py-10">
           <StateView
@@ -131,11 +167,28 @@ export function SkillCenterPage() {
           {mobileTabs}
           {/* Mobile shows the module title in the top bar instead. */}
           <div className="flex w-full justify-center max-md:hidden">
-            <ModuleHomeHeader title={localize('com_skill_center_title')} />
+            <ModuleHomeHeader module="skills" title={localize('com_skill_center_title')} />
           </div>
           <div className={cn(MODULE_HOME_COLUMN, 'mt-4 flex shrink-0 flex-wrap items-center gap-3')}>
             <p className="min-w-0 flex-1 truncate text-body-sm text-text-3 max-[575px]:basis-full">{localize('com_skill_center_subtitle')}</p>
             {searchInput}
+            <DropdownMenu>
+              <Tooltip content={localize('com_skill_center_sort')}>
+                <DropdownMenuTrigger asChild>
+                  <Button color="default" variant="outlined" iconOnly aria-label={localize('com_skill_center_sort')}>
+                    <Outlined.Sort />
+                  </Button>
+                </DropdownMenuTrigger>
+              </Tooltip>
+              <ActionMenuContent>
+                <ActionMenuCheckboxItem checked={sort === 'recent'} onCheckedChange={() => setSort('recent')}>
+                  {localize('com_skill_center_sort_recent')}
+                </ActionMenuCheckboxItem>
+                <ActionMenuCheckboxItem checked={sort === 'name'} onCheckedChange={() => setSort('name')}>
+                  {localize('com_skill_center_sort_name')}
+                </ActionMenuCheckboxItem>
+              </ActionMenuContent>
+            </DropdownMenu>
             <Button disabled={!identity.data || identity.isError} onClick={handleStartUpload} className="max-[575px]:w-full">
               <Outlined.Plus />{localize('com_skill_center_upload')}
             </Button>
@@ -158,7 +211,9 @@ export function SkillCenterPage() {
       {selected && !uploadOpen && (
         <SkillDetails
           skill={selected}
+          toggling={mutation.isLoading && mutation.variables?.kind === 'toggle'}
           onClose={() => updateParams(view)}
+          onToggle={handleToggle}
           onUpdate={(skill) => { setTarget(skill); setUploadOpen(true); }}
         />
       )}

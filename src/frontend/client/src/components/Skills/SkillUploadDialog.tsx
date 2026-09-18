@@ -80,7 +80,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
           onDrop={(event) => { event.preventDefault(); setDragging(false); if (!mutation.isLoading) void choose(event.dataTransfer.files); }}
           className={`flex flex-col items-center gap-3 rounded-xl border border-dashed p-7 text-center ${dragging ? 'border-blue-500 bg-blue-50' : 'border-border-base bg-fill-1'}`}
         >
-          <Outlined.Newspaper className="size-8 text-text-3" aria-hidden />
+          <Outlined.Skill className="size-8 text-text-3" aria-hidden />
           <p className="text-body text-text-1">{localize('com_skill_center_drop')}</p>
           <p className="text-caption text-text-3">{localize('com_skill_center_formats')}</p>
           <Button color="default" variant="outlined" loading={parsing} disabled={mutation.isLoading} onClick={() => input.current?.click()}>
@@ -91,7 +91,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
         {candidate && (
           <section className="space-y-3 rounded-xl border border-border-base p-4">
             <div className="flex items-start gap-3">
-              <Outlined.Newspaper className="mt-0.5 size-5 shrink-0 text-text-2" />
+              <Outlined.Skill className="mt-0.5 size-5 shrink-0 text-text-2" />
               <div className="min-w-0">
                 <p className="break-words text-h4 text-text-1">{candidate.manifest.displayName}</p>
                 <p className="mt-1 break-words text-body-sm text-text-3">{candidate.manifest.description}</p>
