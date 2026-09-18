@@ -10,7 +10,7 @@
 > 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性；F051 将知识库列表的非筛选动作
 > 改为打开单行操作菜单后按资源查询，保持 F048 最终动作判定与 F027 列表筛选契约；F052 为工作流
 > 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F067 将 F053 正式开放的业务能力
-> 以统一远程 MCP 服务交付，且不建立第二套身份与权限合同；F068 在文件/目录删除或跨空间移出后，
+> 以统一远程 MCP 服务交付，且不建立第二套身份与权限合同；F068 在文件/目录删除、空间内容清空或跨空间移出后，
 > 将仍存在的知识空间问答历史保留到原空间根目录。
 
 ---
@@ -52,7 +52,7 @@
 | **MessageSession / ChatMessage**（既有对象；本版增量 = `external_user_id` 分区键列，只写不读） | **F053-openapi-auth-and-identity**（列）| 会话本体仍归既有会话模块；本 Feature 只拥有该列的写入语义（PRD §4.3.4 / §4.6.3 四） |
 | **OpenApiTenantSetting**（既有对象，本体归 F053；**本增量 = `pat_data_scope` 数据范围列 + 租户策略变更操作审计写入**） | **F066-pat-data-scope-and-ai-access** | PRD v2.9 §4.10.7 闸门一之二（D21）。只拥有该列与策略审计的写行为增量；开关 + 默认有效期的既有写行为仍归 F053 |
 | —（无新增领域对象） | **F067-unified-remote-mcp-service** | 将 F053 正式公开合同中的本期业务能力投影为统一远程 MCP 服务；复用 ApiCredential、OpenApiCallLog、身份、资源权限、PAT 数据范围与业务 Service，不建立第二套凭据、授权、审计或业务对象 |
-| **MessageSession**（既有对象；本增量 = nullable `entry_flow_id` 展示入口覆盖列） | **F068-knowledge-space-chat-history-retention**（列） | null 时入口沿用原 `flow_id`；文件/目录删除或跨空间移出后写原空间根目录 flow，拥有 sticky root 与存量恢复语义；不改写原 `flow_id`、ChatMessage 或 MessageCitation，session `update_time` 沿用既有元数据更新机制 |
+| **MessageSession**（既有对象；本增量 = nullable `entry_flow_id` 展示入口覆盖列） | **F068-knowledge-space-chat-history-retention**（列） | null 时入口沿用原 `flow_id`；文件/目录删除、保留空间的内容清空或跨空间移出的对应 DB commit 后，按纳入范围的 flow 分片 best-effort 异步写原空间根目录，拥有 sticky root 与存量恢复语义；完整删除空间不新派发、不提供可访问入口，但不清理旧 session/entry 或取消已排队任务；在线派发不建设 outbox，不改写原 `flow_id`、ChatMessage 或 MessageCitation，session `update_time` 沿用既有元数据更新机制 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
 
@@ -99,7 +99,7 @@
 | INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-Bisheng-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
 | INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 5 秒内级联失效（**换租户不失效、随人迁移**——PRD v2.6 D19，原「离开租户级联失效」表述作废）；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤），**且「短路照常」仅在默认数据范围（all_visible）下成立——租户级数据范围收窄（PRD v2.9 D21）优先于管理员短路，对含管理员在内的全体持有人一致生效**；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；数据范围同为调用期准入检查、不写凭据行、可逆；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053、F066 |
 | INV-35 | **统一远程 MCP 是正式开放业务能力的等价访问面**：其工具发现和每次执行都必须使用平台既有凭据，并遵守与对应开放 API 相同的服务账号 S/D、PAT、租户与数据范围、资源动作、业务状态、审计、结果和错误语义；业务参数不得选择执行主体，任何认证或授权结果不可判定时失败关闭；不得开放正式合同已排除或延后的能力 | ApiCredential, OpenApiCallLog, PermissionGrant | F067、F053、F066 |
-| INV-36 | **知识空间问答历史归原空间所有**：关联文件/目录删除或跨空间移出后，未被用户主动删除且仍存在的会话与消息必须通过 `MessageSession.entry_flow_id` 在原空间根目录可见并可按全空间范围继续问答，目标空间不得继承；回收不得改写原 `flow_id`、消息/引用内容及其时间，不得改变会话所有者或绕过原空间权限；session `update_time` 可按既有元数据更新机制变化，但不作为知识空间会话排序或最后消息时间；必须覆盖子树、批量、并发与存量失联历史，保持幂等且回收后不自动回绑，同空间移动不触发 | MessageSession, ChatMessage, MessageCitation, Knowledge | F068 |
+| INV-36 | **知识空间问答历史归原空间所有**：关联文件/目录删除、保留空间本身的内容清空或跨空间移出后，未被用户主动删除且仍存在的会话与消息在在线任务正常执行后通过 `MessageSession.entry_flow_id` 在原空间根目录可见并可按全空间范围继续问答，目标空间不得继承；完整删除知识空间不新派发、不提供可访问历史入口，但沿用现状保留旧 session/entry，也不取消此前排队的回收任务，其写入的失效 entry 元数据由空间存在性与权限校验阻断访问；在线回收在每个 hard-delete commit、`clear_space` 子资源删除 commit 或跨空间 move metadata commit 后按 flow 分片 best-effort 投递，允许任务完成前短暂不可见，并接受派发/执行故障、任务扫描后迟到提交及直接 move rows 外的版本 sibling 留下的残余失联；不为此阻塞资源操作、建设 outbox、修改会话创建链路或周期全量扫描；回收不得改写原 `flow_id`、消息/引用内容及其时间，不得改变会话所有者或绕过原空间权限；session `update_time` 可按既有元数据更新机制变化，但不作为知识空间会话排序或最后消息时间；删除覆盖实际硬删除集合，`clear_space` 覆盖删除前已取得的全部子资源，移动覆盖 valid item 的直接 move rows，批量父子输入先规范化，处理保持幂等且回收后不自动回绑，同空间移动不触发；存量发布门禁只要求可恢复失联集合归零，已删除空间会话与其失效 entry 单独报告且不恢复、不清理 | MessageSession, ChatMessage, MessageCitation, Knowledge | F068 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -149,7 +149,7 @@
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
 | F053 / F066 开放 API 凭据、身份与数据范围 | F067 增加统一 MCP 访问面，但不改变开放 API 的地址、参数、凭据治理、S/D 身份、PAT 能力与数据范围合同；MCP 工具发现和执行不得成为绕过调用期授权的旁路 |
-| v2.6.0 F034 与既有知识空间问答 | F068 使删除或跨空间移出的文件/目录关联历史回收到源空间根目录并可继续问答；同空间移动、资源重命名、目标空间历史和其他会话类型保持原合同 |
+| v2.6.0 F034 与既有知识空间问答 | F068 使删除、随 `clear_space` 清空或跨空间移出的文件/目录关联历史回收到源空间根目录并可继续问答；完整删除空间不恢复；同空间移动、资源重命名、目标空间历史和其他会话类型保持原合同 |
 
 ---
 
@@ -193,3 +193,7 @@
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
 | 2026-09-15 | 登记 0923 PRD §3 / §10：F067 以统一远程 MCP 服务交付正式开放业务能力，新增 INV-35；F068 新增 KnowledgeChatScope 作用域投影，将删除或跨空间移出后的知识空间问答历史保留到原空间根目录，新增 INV-36；两项均不新增错误码 | F067、F068、F053、F066、F034、F048、既有知识空间问答 |
 | 2026-09-15 | 修订 F068 数据设计：取消 KnowledgeChatScope 新表，改由既有 MessageSession 的 nullable `entry_flow_id` 覆盖展示入口；原 flow 与消息链不变，会话元数据更新时间沿用既有更新机制 | F068、既有知识空间问答 |
+| 2026-09-18 | 修订 F068 在线一致性：资源操作成功后按精确 flow 分片投递定向延时回收；接受短暂不可见与极低概率迟到提交，不增加分布式锁、会话创建复查、跨业务长事务或全量巡检 | F068、F034、既有知识空间问答 |
+| 2026-09-18 | F068 在线回收降级为 best-effort：删除按每个 hard-delete commit、移动按 metadata commit 后触发；不建设 outbox，接受派发/执行残余失联；batch 先规范化父子输入，跨空间移动暂不处理直接 move rows 外的版本 sibling 会话 | F068、F034、既有知识空间问答 |
+| 2026-09-18 | F068 纳入保留空间本身的 `clear_space`，在子资源删除 commit 后按清空前 `child_resources` 回收；完整 `delete_space` 仍不恢复；存量迁移门禁改为可恢复失联集合归零，deleted-space 分类单独报告 | F068、F030、既有知识空间问答 |
+| 2026-09-18 | 明确 F068 接受完整删除空间后保留旧 session/entry 及此前排队任务写入的失效 entry；依赖空间存在性与权限校验保证不可访问，不扩大 `delete_space` 清理职责 | F068、既有知识空间问答 |

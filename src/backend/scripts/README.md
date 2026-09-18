@@ -711,6 +711,37 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py
 
 ## Tenant / Data Fix Scripts
 
+### `migrate_f068_knowledge_chat_entries.py`
+
+F068 知识空间历史会话入口迁移。脚本只访问数据库，扫描指定会话租户（不传
+`--tenant-id` 时扫描全部租户）的全部知识空间 session，识别原资源已删除或已移出
+原空间的活动会话，并把 `message_session.entry_flow_id` 指向原空间根目录。脚本不会
+改写 session/message/citation 的内容 `flow_id`，也不会初始化 OpenFGA、Redis、Milvus
+或 Elasticsearch。
+
+默认 dry-run，输出不含密码的数据库身份、稳定 manifest SHA-256、分类计数和掩码后的
+chat 样例。先处理所有 `unparseable`、`cross_tenant_conflict` 和非法 entry blocker，
+再复制 dry-run 的 SHA 执行 apply。apply 按 `--batch-size` 独立提交，并把同一 manifest
+hash 与最后完成的 `(tenant_id, chat_id)` 写入 checkpoint；可用同一命令续跑。原知识
+空间已删除的会话只计入非阻断的 `deleted_space_skipped`，不写 entry。
+
+> 前置：先执行包含 `f068_knowledge_chat_entry` 的 `alembic upgrade head`。运行期间应保持
+> 资源迁移/删除和知识空间会话写入入口关闭，避免 dry-run 与 apply 之间输入变化。
+
+Usage (from `src/backend/`):
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f068_knowledge_chat_entries.py --tenant-id 3
+
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f068_knowledge_chat_entries.py \
+  --tenant-id 3 \
+  --apply \
+  --expected-input-sha256 <dry-run-sha256> \
+  --batch-size 500 \
+  --checkpoint-file /var/lib/bisheng/f068-tenant-3.checkpoint.json
+```
+
 ### `backfill_message_citation_relations.py`
 
 把历史 `message_citation.message_id` 回填到新的 `message_citation_relation` 关联表，使同一个全局 `citation_id` 可以被多条工作流输出消息复用。脚本默认 dry-run、分批执行且幂等；必须在升级后的服务已经创建 `message_citation_relation` 表后运行。

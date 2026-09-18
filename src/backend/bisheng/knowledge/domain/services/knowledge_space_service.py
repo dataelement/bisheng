@@ -108,6 +108,10 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_chat_history_retention_service import (
+    build_knowledge_chat_flows,
+    dispatch_knowledge_chat_rehome,
+)
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -547,6 +551,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _dedupe_ids(resource_ids: list[int]) -> list[int]:
         return list(dict.fromkeys(resource_ids))
+
+    @staticmethod
+    def _dispatch_knowledge_chat_rehome(
+        *,
+        source_space_id: int,
+        resources: list[tuple[str, int]],
+        reason: str,
+    ) -> int:
+        if not resources:
+            return 0
+        try:
+            flows = build_knowledge_chat_flows(source_space_id, resources)
+            return dispatch_knowledge_chat_rehome(
+                source_space_id=source_space_id,
+                source_flow_ids=flows,
+                reason=reason,
+            )
+        except Exception:
+            # F068 recovery is best-effort and never changes the committed resource result.
+            logger.exception(
+                "knowledge_chat_entry.task_failed stage=prepare source_space={} reason={} resources={}",
+                source_space_id,
+                reason,
+                resources,
+            )
+            return 0
+
+    async def _normalize_batch_delete_inputs(
+        self,
+        space_id: int,
+        file_ids: list[int],
+        folder_ids: list[int],
+    ) -> tuple[list[int], list[int]]:
+        """Remove duplicate descendants covered by a selected ancestor folder."""
+        normalized_file_ids = self._dedupe_ids(file_ids)
+        normalized_folder_ids = self._dedupe_ids(folder_ids)
+        records = await KnowledgeFileDao.aget_file_by_ids(normalized_folder_ids + normalized_file_ids)
+        records_by_id = {record.id: record for record in records if record.knowledge_id == space_id}
+        selected_folders = set(normalized_folder_ids)
+
+        def covered_by_selected_ancestor(resource_id: int) -> bool:
+            record = records_by_id.get(resource_id)
+            if record is None:
+                return False
+            ancestor_ids = {int(segment) for segment in (record.file_level_path or "").split("/") if segment}
+            return bool(ancestor_ids & selected_folders)
+
+        normalized_folder_ids = [
+            resource_id for resource_id in normalized_folder_ids if not covered_by_selected_ancestor(resource_id)
+        ]
+        normalized_file_ids = [
+            resource_id for resource_id in normalized_file_ids if not covered_by_selected_ancestor(resource_id)
+        ]
+        return normalized_file_ids, normalized_folder_ids
 
     @staticmethod
     def _ensure_space_folder(folder: KnowledgeFile | None, space_id: int) -> KnowledgeFile:
@@ -1611,6 +1669,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Remove child file/folder rows only (only_clear keeps the space row).
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=space_id,
+            resources=child_resources,
+            reason="clear_space",
+        )
 
         # The vector drop above removed the Milvus collection + ES index; recreate
         # empty ones so the cleared space stays queryable (empty result, not 500).
@@ -3225,6 +3288,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=folder.knowledge_id,
+            resources=[("folder", resource_id) for resource_id in floder_ids]
+            + [("knowledge_file", resource_id) for resource_id in expanded_file_ids],
+            reason="delete_folder",
+        )
 
         # Prune channel ➜ knowledge-folder sync bindings that target the deleted
         # folders so the Celery sync worker stops referencing a tombstone.
@@ -4179,6 +4248,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             moved: list[dict] = []
             moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
             files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
+            direct_move_resources: set[tuple[str, int]] = set()
             for rec in valid:
                 is_folder = rec.file_type == FileType.DIR.value
                 word = "folder" if is_folder else "file"
@@ -4204,6 +4274,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
                         d.level = d.level + level_delta
                         rows.append(d)
+                if cross_space:
+                    direct_move_resources.update(
+                        (
+                            "folder" if row.file_type == FileType.DIR.value else "knowledge_file",
+                            row.id,
+                        )
+                        for row in rows
+                    )
                 rec.file_level_path = target_level_path
                 rec.level = target_level
 
@@ -4246,6 +4324,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await session.commit()
 
         # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
+        if cross_space:
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=space_id,
+                resources=sorted(direct_move_resources),
+                reason="cross_space_move",
+            )
+
         for m in moved:
             otype = "folder" if m["type"] == "folder" else "knowledge_file"
             old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
@@ -4353,6 +4438,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         expanded_ids = await self._cascade_version_links_on_delete([file_id])
         await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
         await KnowledgeFileDao.adelete_batch(expanded_ids)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=file_record.knowledge_id,
+            resources=[("knowledge_file", resource_id) for resource_id in expanded_ids],
+            reason="delete_file",
+        )
         delete_knowledge_file_celery.delay(
             file_ids=expanded_ids,
             knowledge_id=file_record.knowledge_id,
@@ -4586,6 +4676,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
+        file_ids, folder_ids = await self._normalize_batch_delete_inputs(
+            knowledge_id,
+            file_ids,
+            folder_ids,
+        )
 
         for folder_id in folder_ids:
             await self.delete_folder(knowledge.id, folder_id)
@@ -4604,6 +4699,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
             await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=knowledge.id,
+                resources=[("knowledge_file", resource_id) for resource_id in expanded_file_ids],
+                reason="batch_delete_files",
+            )
             delete_knowledge_file_celery.delay(
                 file_ids=expanded_file_ids,
                 knowledge_id=knowledge.id,

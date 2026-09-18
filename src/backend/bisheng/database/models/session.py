@@ -23,6 +23,14 @@ class MessageSessionBase(SQLModelSerializable):
     chat_id: str = Field(default=None, primary_key=True, description="Session UniqueID")
     name: str | None = Field(default="", description="SessionName")
     flow_id: str = Field(default="", index=True, description="Apply UniqueID")
+    entry_flow_id: str | None = Field(
+        default=None,
+        sa_column=Column(
+            String(255),
+            nullable=True,
+            comment="F068 knowledge-space visible entry override; null uses flow_id",
+        ),
+    )
     flow_type: int = Field(description="App type. Skills, assistants, workflows")
     flow_name: str = Field(default="", index=True, description="Application name")
     flow_description: str | None = Field(default=None, description="App Description")
@@ -73,6 +81,7 @@ class MessageSessionBase(SQLModelSerializable):
 class MessageSession(MessageSessionBase, table=True):
     __tablename__ = "message_session"
     __table_args__ = (
+        Index("idx_message_session_entry_flow_id", "entry_flow_id"),
         Index(
             "idx_message_session_api_subject",
             "tenant_id",
