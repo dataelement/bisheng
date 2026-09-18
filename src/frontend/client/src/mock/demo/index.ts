@@ -1,6 +1,6 @@
 /**
- * Demo data layer — DEV ONLY, opt-in. Pads the three workbench module lists (知识空间 /
- * 频道 / 应用) with sample rows so layouts can be reviewed on a backend that has little
+ * Demo data layer — DEV ONLY, opt-in. Pads the workbench module lists (知识空间 / 频道 /
+ * 应用 / 技能广场) with sample rows so layouts can be reviewed on a backend that has little
  * data. Real rows always come first; sample rows are appended to the same response, in
  * the backend's own row shape, so every mapper and component downstream runs unchanged.
  *
@@ -16,6 +16,7 @@ import { DEMO_ID_PREFIX } from './ids';
 import apps from './apps.json';
 import channels from './channels.json';
 import knowledgeSpaces from './knowledgeSpaces.json';
+import skills from './skills.json';
 
 export { DEMO_ID_PREFIX, isDemoId } from './ids';
 
@@ -76,6 +77,14 @@ function patch(response: DemoResponse) {
   if (path === '/api/v1/channel/manager/my_channels') {
     const queryType = (params as { query_type?: string } | undefined)?.query_type;
     padList(response, queryType === 'followed' ? channels.followed : channels.created);
+    return;
+  }
+
+  if (path === '/api/v1/linsight/skill/selectable') {
+    // Enterprise skills (技能广场 + the chat input's skill menu). Rows are keyed by
+    // `name`, which carries the demo prefix; the personal side has no endpoint — see
+    // ./skills.ts.
+    padList(response, skills.platform.map((skill) => ({ ...skill, id: skill.name })));
     return;
   }
 
