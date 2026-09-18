@@ -8,7 +8,6 @@
     "expiring": "{{name}}将于 {{date}} 到期，剩余 {{days}} 天",
     "expired": "{{name}}已于 {{date}} 过期",
     "renewHint": "请联系授权提供方续期。",
-    "bannerLabel": "授权到期提醒 Banner",
     "businessExpired": {
       "gateway": "Gateway 授权已过期，当前无法使用该能力",
       "etl": "ETL 授权已过期，当前无法解析该文件",
@@ -20,6 +19,8 @@
   "linsight": "{{linsightZh}}",
   "dailyFullName": "{{dailyFullNameZh}}",
   "prompt": "提示",
+  "sessionKickedTitle": "会话已注销",
+  "gotIt": "知道了",
   "unsupportedFileType": "不支持文件类型: {{extensions}}",
   "supportedFormatsWithImages": "支持的文件格式为 pdf（含扫描件）、ofd、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、et、dps、mp3、wav、m4a、aac、flac、ogg、mp4、mov、avi、mkv、webm；文档/图片每个文件最大支持{{maxSize}}mb，音视频每个文件最大支持{{mediaMaxSize}}mb；pdf支持溯源定位。",
   "supportedFormatsWithoutImages": "支持的文件格式为 pdf、ofd、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv、wps、et、dps、mp3、wav、m4a、aac、flac、ogg、mp4、mov、avi、mkv、webm；文档每个文件最大支持{{maxSize}}mb，音视频每个文件最大支持{{mediaMaxSize}}mb",

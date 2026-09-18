@@ -51,6 +51,14 @@
   "com_app_explore_end_of_list": "—— 已经到底啦 ——",
   "com_app_explore_loading_more": "正在加载更多智能体...",
   "com_app_explore_no_agents": "暂无找到相关的智能体",
+  "com_guest_app_unavailable": {
+    "offline_title": "该应用已下线，暂时无法使用",
+    "offline_desc": "可以联系分享链接给你的人确认一下，或者过段时间再来看看。",
+    "invalid_title": "链接无效或已失效",
+    "invalid_desc": "请检查链接是否复制完整，或向分享者重新索取。",
+    "closed_title": "免登录访问已关闭",
+    "closed_desc": "现在需要登录后才能使用，请联系分享链接给你的人。"
+  },
   "com_list_loading": "正在加载…",
   "com_list_loading_more": "正在加载更多…",
   "com_list_load_failed": "加载失败",
@@ -1146,6 +1154,10 @@
   "subscribe_success": "订阅成功",
   "subscribed": "已加入",
   "website": "网站",
+  "com_auth": {
+    "got_it": "知道了",
+    "session_kicked_title": "会话已注销"
+  },
   "com_app": {
     "center_title": "应用中心",
     "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
@@ -2229,7 +2241,7 @@
     "deleted_toast": "已删除。你的 AI 助手不能再用旧密钥访问平台知识。",
     "disabled_notice": "管理员已关闭「AI 助手接入」。已发放的密钥暂时无法使用，重新开启后自动恢复。如需使用，请联系管理员。",
     "empty_description": "你还没有专属密钥。生成一把，发给你的 AI 助手即可开始检索。",
-    "entry_hint": "让第三方 AI 助手检索知识空间",
+    "entry_hint": "让本地 AI 助手检索知识空间",
     "expires_label": "有效期至",
     "get_key": "生成我的密钥",
     "guide_title": "连接 AI 助手",
@@ -2252,14 +2264,14 @@
     "scope_all": "和你在平台里能看到的一致：部门知识空间、你创建的知识库、别人共享给你的知识空间。",
     "scope_own_only": "管理员已限定范围：只能查你自己创建的知识库，不含部门知识空间和别人共享给你的知识空间。",
     "scope_title": "这把密钥能查到什么",
-    "section_desc": "让 WorkBuddy 等 AI 助手检索你在平台可见的知识。装一个检索技能、配一把专属密钥即可。",
+    "section_desc": "让 WorkBuddy 桌面版等本地 AI 助手检索你在平台可见的知识。装一个检索技能、配一把专属密钥即可。",
     "status_active": "有效",
     "status_disabled": "已停用",
     "status_expired": "已过期",
     "status_label": "状态",
     "status_none": "未连接",
     "status_revoked": "已吊销",
-    "title": "AI 助手接入",
-    "verify_hint": "还没有 AI 助手用过这把密钥。配置好后问它「帮我在知识库里查…」，这里会显示使用时间。没保存密钥的话，重新获取一把。"
+    "supported_note": "发给装在你电脑上的 AI 助手，比如 WorkBuddy 桌面版。",
+    "title": "AI 助手接入"
   }
 }

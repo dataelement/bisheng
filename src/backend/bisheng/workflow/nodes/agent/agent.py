@@ -251,7 +251,7 @@ class AgentNode(BaseNode):
             self._sql_address = self._init_sql_address()
 
         # agent
-        self._agent_executor_type = "React"
+        self._agent_executor_type = "function call"
         self._agent = None
         self._citation_tools: list[WorkflowCitationToolWrapper] = []
 

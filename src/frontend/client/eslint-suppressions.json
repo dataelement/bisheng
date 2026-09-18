@@ -3283,9 +3283,6 @@
     }
   },
   "src/pages/standaloneChat/hooks/useStandaloneSidebar.ts": {
-    "no-console": {
-      "count": 3
-    },
     "no-restricted-imports": {
       "count": 1
     }

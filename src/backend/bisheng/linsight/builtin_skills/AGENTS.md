@@ -36,6 +36,8 @@ because a script that merely "works when I run it" can still fail invisibly in t
 
 ## Packaging
 
+- **Keep the platform's brand name out of everything a customer can read.** Rebranded (OEM) deployments ship these packs as the customer's own, so `BiSheng` must not appear in `metadata.display-name`, `description`, the `SKILL.md` body, `references/`, or script docstrings. The readable surface is wider than it looks: the skill list renders `display_name` *and* `description` (`skill_schema.py`), the admin detail view returns the whole `SKILL.md` plus every bundle file, and a value baked into an artifact reaches the customer directly — the xlsx comment author defaulted to `"BiSheng"` and rode out inside every delivered workbook. Technical identifiers are the exception and stay as they are: the skill id (`bisheng-docx`), in-bundle paths (`skills/bisheng-docx/...`) and the tool name `bisheng_code_interpreter`. Renaming those breaks every path reference and, because the store's unique key is `(tenant_id, name)`, leaves the old row behind as an orphan.
+
 - **Put no cross-environment assertions in the pack `description`** — it is the only text that reaches the prompt. Statements about what the runtime provides belong in a `SKILL.md` probe step that checks at run time. LibreOffice, pandoc and Chromium come from `base.Dockerfile`, so a hand-built venv or a trimmed image may not have them; depend on them softly and report their absence honestly rather than killing the task.
 
 - **The pack directory name must match the skill slug pattern** (lowercase, digits, single hyphens). Backup or scratch directories must not sit under a pack root — a directory name containing a dot pollutes the skill scan.

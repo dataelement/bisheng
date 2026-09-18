@@ -11,8 +11,10 @@ from loguru import logger
 
 from bisheng.api.v1.chat import chat_manager
 from bisheng.common.chat.types import WorkType
+from bisheng.common.errcode.public_endpoints import PublicAccessError
 from bisheng.core.logger import trace_id_var
-from bisheng.public_endpoints.domain.services.guest_policy import PublicAccessError, public_execution
+from bisheng.public_endpoints.api.exception_handlers import deny_public_websocket
+from bisheng.public_endpoints.domain.services.guest_policy import public_execution
 from bisheng.workflow.domain.services.published_workflow_service import PublishedWorkflowService
 
 router = APIRouter(prefix="/workflow", tags=["PublicAPI", "Workflow"])
@@ -45,7 +47,7 @@ async def workflow_ws(
                 execution_snapshot=snapshot.model_dump(mode="json"),
             )
     except PublicAccessError as exc:
-        await websocket.close(code=http_status.WS_1008_POLICY_VIOLATION, reason=exc.message)
+        await deny_public_websocket(websocket, exc)
     except Exception as exc:
         logger.opt(exception=True).error("public workflow websocket failed")
         await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))

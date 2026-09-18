@@ -1185,7 +1185,7 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 30 | 管理员管理范围与个人内容可见范围不是同一业务语义 | super_admin 身份把“我加入的”扩成平台全量 | visible 专用 facade 禁止 identity shortcut；具体 action 保持 C4 顺序 |
 | 31 | 列表路径成本取决于候选规模、可见率、业务过滤和继承比例 | 把 joined 的 ID-first 或文件的 candidate-first 机械推广到所有列表 | §3 决策14入口登记 + BENCH-01 业务链路阶段 |
 | 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
-| 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；存量用 `scripts/reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界 |
+| 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
 
 ---
 

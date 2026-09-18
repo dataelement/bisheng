@@ -8,7 +8,6 @@
     "expiring": "{{name}} expires on {{date}}, {{days}} day(s) remaining",
     "expired": "{{name}} expired on {{date}}",
     "renewHint": "Please contact your license provider to renew.",
-    "bannerLabel": "License expiry Banner",
     "businessExpired": {
       "gateway": "The Gateway license has expired. This capability is currently unavailable.",
       "etl": "The ETL license has expired. This file cannot be parsed.",
@@ -19,6 +18,8 @@
   "bisheng": "{{bisheng}}",
   "linsight": "{{linsight}}",
   "prompt": "Confirmation",
+  "sessionKickedTitle": "Signed out",
+  "gotIt": "Got it",
   "unsupportedFileType": "Unsupported file types: {{extensions}}",
   "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), ofd, txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, et, dps, mp3, wav, m4a, aac, flac, ogg, mp4, mov, avi, mkv, webm; documents/images up to {{maxSize}}MB each, audio/video up to {{mediaMaxSize}}MB each; pdf supports traceability positioning.",
   "supportedFormatsWithoutImages": "Supported file formats: pdf, ofd, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, wps, et, dps, mp3, wav, m4a, aac, flac, ogg, mp4, mov, avi, mkv, webm; documents up to {{maxSize}}MB each, audio/video up to {{mediaMaxSize}}MB each",

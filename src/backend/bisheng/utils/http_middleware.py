@@ -19,8 +19,11 @@ TENANT_CHECK_EXEMPT_PATHS = (
     "/api/v1/user/sso",
     "/api/v1/user/ldap",
     "/api/v1/user/public_key",
-    # 登录页拉验证码；若仍带失效 Bearer，不应走 token_version 否则永远 19103、前端拿不到 user_capthca
+    # A stale login token must not block the captcha request with 19103.
     "/api/v1/user/get_captcha",
+    # Kicked-off sessions still need logout to unset the HttpOnly cookie;
+    # otherwise the login page's /user/info keeps 10604-looping the dialog.
+    "/api/v1/user/logout",
     "/api/v1/user/switch-tenant",
     "/api/v1/user/tenants",
     "/api/v1/env",
@@ -86,7 +89,7 @@ def _tenant_id_from_subject(subject: dict | None) -> int:
 
 
 def _set_tenant_context(
-    token: str = None,
+    token: str | None = None,
     *,
     decoded_subject: dict | None = None,
 ) -> int:
@@ -141,6 +144,42 @@ async def _validate_token_version(
         logger.debug("token_version lookup failed for user %d: %s", user_id, exc)
         return True  # fail-open — don't lock users out on cache/DB hiccup
     return int(current) == int(payload_token_version)
+
+
+async def _validate_current_session_token(user_id: int, token: str) -> bool:
+    """Return True when this JWT is the user's current Redis session.
+
+    ``allow_multi_login=true`` skips the check (every issued JWT stays valid).
+    On config/Redis failure, or when Redis has no session key, we **fail-open**
+    — block only on a confirmed mismatch with a stored token.
+    """
+    if not user_id or not token:
+        return True
+    try:
+        from bisheng.common.services.config_service import settings
+
+        login_method = await settings.aget_system_login_method()
+        if login_method.allow_multi_login:
+            return True
+    except Exception as exc:
+        # Config lookup is best-effort: a miss must not lock users out.
+        logger.debug("allow_multi_login lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    try:
+        from bisheng.core.cache.redis_manager import get_redis_client
+        from bisheng.user.domain.const import USER_CURRENT_SESSION
+
+        redis_client = await get_redis_client()
+        current_token = await redis_client.aget(USER_CURRENT_SESSION.format(user_id))
+    except Exception as exc:
+        # Redis hiccup is best-effort: a miss must not lock users out.
+        logger.debug("current session lookup failed for user {}: {}", user_id, exc)
+        return True
+
+    if not current_token:
+        return True
+    return str(current_token) == token
 
 
 async def _check_is_global_super(
@@ -237,11 +276,12 @@ async def _apply_token_version_and_visible(
     *,
     decoded_subject: dict | None = None,
 ) -> JSONResponse | None:
-    """Enforce token_version + set visible_tenant_ids from a decoded JWT.
+    """Enforce token_version + current-session + set visible_tenant_ids.
 
-    Returns a JSONResponse (401) when the token_version mismatches; None
-    otherwise. ``decoded_subject`` lets the caller share a JWT decode across
-    middleware steps so the same token isn't decoded twice.
+    Returns a JSONResponse (401) when the token_version mismatches or, with
+    ``allow_multi_login=false``, when the JWT is not the Redis current session;
+    None otherwise. ``decoded_subject`` lets the caller share a JWT decode
+    across middleware steps so the same token isn't decoded twice.
     """
     subject = decoded_subject if decoded_subject is not None else _decode_jwt_subject(token)
     if subject is None:
@@ -255,6 +295,17 @@ async def _apply_token_version_and_visible(
             content={
                 "status_code": 19103,
                 "status_message": "token_version mismatch — please re-login",
+                "data": None,
+            },
+        )
+    if user_id and not await _validate_current_session_token(user_id, token):
+        from bisheng.common.errcode.user import UserLoginOfflineError
+
+        return JSONResponse(
+            status_code=401,
+            content={
+                "status_code": UserLoginOfflineError.Code,
+                "status_message": UserLoginOfflineError.Msg,
                 "data": None,
             },
         )
@@ -304,7 +355,10 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        token = _extract_http_access_token(request)
+        # v2 admission belongs exclusively to its API credential. A browser
+        # cookie or login JWT must not replace its errors with 191xx/200xx.
+        is_open_api = request.url.path == "/api/v2" or request.url.path.startswith("/api/v2/")
+        token = None if is_open_api else _extract_http_access_token(request)
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
 

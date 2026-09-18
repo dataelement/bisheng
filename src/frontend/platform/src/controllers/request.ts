@@ -7,9 +7,58 @@ const customAxios = axios.create({
     baseURL: import.meta.env.BASE_URL
     // 配置
 });
-export const requestInterceptor = {
-    remoteLoginFuc(msg) { }
-};
+export const requestInterceptor: {
+    remoteLoginFuc?: (msg: string) => void
+} = {};
+
+const SESSION_KICKED_CODE = 10604
+const SESSION_KICK_ACK_KEY = "bs:session-kicked-ack"
+let sessionKickInProgress = false
+
+function isSessionKickedEnvelope(envelope: unknown): boolean {
+    return Boolean(
+        envelope &&
+        typeof envelope === "object" &&
+        (envelope as { status_code?: number }).status_code === SESSION_KICKED_CODE
+    )
+}
+
+function hasSessionKickAck(): boolean {
+    try {
+        return sessionStorage.getItem(SESSION_KICK_ACK_KEY) === "1"
+    } catch {
+        return false
+    }
+}
+
+export function markSessionKickAck() {
+    try {
+        sessionStorage.setItem(SESSION_KICK_ACK_KEY, "1")
+    } catch {
+        /* storage disabled */
+    }
+}
+
+export function clearSessionKickAck() {
+    try {
+        sessionStorage.removeItem(SESSION_KICK_ACK_KEY)
+    } catch {
+        /* storage disabled */
+    }
+}
+
+function beginSessionKick(envelope: unknown): boolean {
+    if (hasSessionKickAck()) {
+        sessionKickInProgress = true
+        return true
+    }
+    if (sessionKickInProgress) return true
+    const handler = requestInterceptor.remoteLoginFuc
+    if (!handler) return false
+    sessionKickInProgress = true
+    handler(decodeEnvelopeMessage(envelope))
+    return true
+}
 
 customAxios.interceptors.request.use(function (config) {
     const token = localStorage.getItem('ws_token');
@@ -126,6 +175,10 @@ function shouldToastLicenseExpired(): boolean {
 customAxios.interceptors.response.use(function (response) {
     if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
+        const url = response.config?.url || ""
+        if (url.includes("/user/login") || url.includes("/user/info")) {
+            clearSessionKickAck()
+        }
         return response.data.data;
     }
     if (response.data.status_code === 11010) {
@@ -170,20 +223,23 @@ customAxios.interceptors.response.use(function (response) {
         location.href = `${__APP_ENV__.BASE_URL}/build/apps?error=${statusCode}`
         return Promise.reject(errorMessage);
     }
-    // 异地登录
-    if (response.data.status_code === 10604) {
-        const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
-        if (thirdPartyLoginUrl) {
-            window.location.href = thirdPartyLoginUrl;
-            return Promise.reject(errorMessage);
-        }
-        requestInterceptor.remoteLoginFuc(response.data.status_message)
+    // Kicked off by another device (HTTP 200 + business code 10604).
+    if (isSessionKickedEnvelope(response.data) && beginSessionKick(response.data)) {
         return Promise.reject(errorMessage);
     }
     return Promise.reject(errorMessage);
 }, function (error) {
     console.error('application error :>> ', error);
     if (error.response?.status === 401) {
+        // Another device took the session — show the confirm dialog, do not
+        // bounce to login until the user acknowledges. Concurrent 401s after
+        // the first 10604 must not hijack that dialog with a generic redirect.
+        if (sessionKickInProgress) {
+            return Promise.reject(error.response?.data);
+        }
+        if (isSessionKickedEnvelope(error.response?.data) && beginSessionKick(error.response.data)) {
+            return Promise.reject(error.response.data);
+        }
         // 必须在 remove 之前读取：从未持有 ws_token/UUR_INFO 时 401（如登录页拉 /user/info）不应整页跳转，否则会死循环。
         const hadSession =
             !!localStorage.getItem('ws_token')

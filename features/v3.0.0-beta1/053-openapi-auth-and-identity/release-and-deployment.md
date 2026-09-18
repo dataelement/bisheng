@@ -12,9 +12,32 @@
 5. 更新并验证商业网关的 v3 HTTP/WS 代理后，才完成调用方切换验收。
 6. PAT 默认保持部署级和租户级关闭；确认租户策略与管理员 TTL 后再按租户启用。
 
-### 已运行 F048 环境的模型升级
+### 已运行 F048 环境的模型升级与存量标记补齐
 
-现有环境不能只替换后端进程。旧 OpenFGA 模型与存量资源只有 `user:*` 技术状态标记，必须使用新版本中的对账脚本完成不可变模型发布、存量标记补齐和 Catalog 切换：
+此步骤由运维在发布维护窗口显式执行；容器启动、`alembic upgrade head` 和 `docker/deploy.sh update` 不会自动运行权限数据修复。旧资源可能只有 `user:*` 技术状态标记，不能以“模型已是最新版”或“后端重启成功”作为存量数据完整的依据。
+
+已完成 F048 迁移、业务 Grant 不需重建的环境，执行模型发布脚本。它在切换 Catalog 或返回 `already_current` 之前都会补齐并校验服务账号资源标记：
+
+```bash
+cd src/backend
+export config=<与线上 API/Worker 完全相同的配置文件>
+export PYTHONPATH=./
+.venv/bin/python scripts/publish_authorization_model_change.py
+```
+
+审核输出的 `store_id`、`target_model_checksum` 和 `service_account_marker_tuple_count`。资源标记数量是按 CURRENT 资源模式计算的应有数量，不是实际缺失数量。停止入口流量及 API、Celery、Linsight 进程，等待运行时心跳过期后，使用同配置的独立维护进程/容器执行：
+
+```bash
+.venv/bin/python scripts/publish_authorization_model_change.py \
+  --apply \
+  --confirm-store-id <dry-run 输出的 store_id> \
+  --confirm-target-model-checksum <dry-run 输出的 target_model_checksum> \
+  --operator-id <执行发布的管理员用户 ID>
+```
+
+脚本按每个 CURRENT 资源的已有模式补齐 `service_account:*` 的 `permission_enabled` 和 `custom_mode`/`inherit_mode`，覆盖空间及所有层级的目录、文件，保留自定义权限边界和现有父子关系，不给后代复制服务账号 Grant。写入与 higher-consistency 校验全部成功后才返回成功，并输出 `service_account_marker_tuples_verified`；模型已是最新版时也不会跳过。失败时保持维护状态并按错误修复后重跑，不能继续启服。
+
+如果还需要重建 Grant 的直接可见投影，则使用完整对账脚本；该路径也会补齐相同的服务账号资源标记：
 
 ```bash
 cd src/backend
@@ -33,7 +56,9 @@ export PYTHONPATH=./
   --allow-model-upgrade
 ```
 
-脚本先发布/复用新模型，再补齐 `service_account:*` 的目录、动作、授权级别、`permission_enabled` 和权限模式标记，以 higher consistency 验证后原子切换 Catalog。脚本成功后再启动新版本后端。它不修改 `user`、`service_account` 或业务授权记录，也不需要新增 Alembic revision。
+模型不变时可省略 `--allow-model-upgrade`，但不能省略 apply 的数据补齐步骤。脚本先发布/复用模型，再对账直接可见投影和服务账号资源标记，以 higher consistency 验证后按需切换 Catalog。脚本成功后再启动新版本后端。它不修改 `user`、`service_account` 或业务授权记录，也不需要新增 Alembic revision。
+
+从旧 RBAC 首次迁入 F048 的环境仍使用 `migrate_f048_permission_data.py`：首次迁移协调器已在每层资源同时写入 `user:*` 与 `service_account:*` 的模式和启用标记。已经完成首次迁移的环境不要通过重新迁移来补缺。
 
 上线冒烟以测试服务账号 `e2e-f053-fresh-sa-review` 和知识空间 `4255` 为基准：先确认 editor 可上传，再降为 viewer 验证上传拒绝，最后恢复 editor 并验证撤销后拒绝。代表用户模式必须按被代表用户的权限判定，不能叠加服务账号权限。
 
@@ -53,6 +78,25 @@ export PYTHONPATH=./
 - 2026-09-09 在 `192.168.106.116:7861` 执行 F053 API E2E 11/11：无密钥/JWT 回落拒绝、独立 SA 主体、身份头冲突、日常配置、PAT、v3 allowlist、资源授权候选、multipart `user_id`、知识空间 DTO 与 QA 防越权均通过。QA 样本拒绝前后内容哈希一致，测试服务账号清理后残留为 0。
 - 同日将该环境 OpenFGA Store `01KQ3ZRQ9VY0FJJ46V8NW98M7M` 从旧模型切换到 `f048-v4` 模型 `01M21ZT2425HJTQ6MX6W18JGYM`，Catalog release 195；补齐 20,764 条 SA 技术标记，41,187 条期望 tuple 经 higher consistency 验证。二次 dry-run 无 source upsert/retire，API/Celery 心跳均绑定新模型与 Catalog。
 - 执行 `pnpm install --frozen-lockfile` 同步工作区依赖后，全前端 `pnpm typecheck` 通过：platform 385 个 strict 文件、client 1290 个 strict 文件及 file-viewers 均通过。同步修正 dashboard 测试夹具的懒加载权限 hook 契约和 route filter 测试的字符串类型收窄；相关 10 项测试通过。
+
+## 租户边界修复（服务账号）
+
+**问题**：`service_account` 在租户过滤覆盖范围内，但子租户用户的可见集是 F012 的 `tenant_id IN (leaf, 1)`（为共享根租户资源而设），而服务账号是租户私有的。仓储层 `get` / `get_by_ids` / `list_page` 又没有自己的租户等值条件，于是子租户管理员能列出并打开根租户的服务账号，进而对它签发 / 编辑 / 吊销密钥——密钥按 `account.tenant_id` 落库，签出的是根租户的密钥。另有一处：`list_page` 的 `total` 在匿名子查询上计数，租户过滤看不进子查询，`total` 是全租户计数而 `data` 已过滤，分页会翻出空页。
+
+**影响面**：`/api/v1/service-accounts**` 全部按 id 寻址的读写（详情、改名、启停、删除、资源授权、密钥列表 / 签发 / 编辑 / 吊销）与列表页的 `total`。不涉及 `/api/v2` 的凭据校验和执行期读取——前者在租户上下文建立之前运行并自行比对凭据的 `tenant_id`，后者在显式 bypass 下运行，两者维持原样。
+
+**修法**：
+
+- `ServiceAccountRepository` 新增 `current_tenant_scope()`：显式 bypass 或无租户上下文时返回 `None`（不加谓词），否则返回 `get_current_tenant_id()`；`get` / `get_by_ids` / `list_page` 在 IN-list 之上再叠一条 `tenant_id ==` 等值条件。超管口径沿用 PAT 台账的 `personal_token_admin._tenant_id`：`get_current_tenant_id()` 已折叠 F019 admin-scope，未切租户视图的超管只管自己租户，切到子租户后按子租户判定。
+- `ServiceAccountService.get_row` 对租户不匹配的目标复用既有 `ServiceAccountNotFoundError`（26020 / 404），与「不存在」同形，不泄漏「存在但不属于你」。所有按 id 寻址的管理路径都汇到这里。
+- `list_page` 的计数改为 `select(func.count()).select_from(ServiceAccount).where(*filters)`，与 `data` 用同一组过滤条件。
+
+**验收命令**（在 `src/backend/` 下执行）：
+
+- `uv run pytest test/open_api -q`：含新增 `test/open_api/test_service_account_tenant_boundary.py` 8 项（子租户对根租户账号的读 / 改 / 启停 / 删除 / 资源授权 / 密钥六类操作、`get_by_ids`、`total` 与 `data` 同源、超管按 admin-scope）。
+- `uv run pytest test/tenant test/permission -q`：相对改动前无新增失败。
+- `uv run ruff check`、`bash scripts/arch-guard.sh <改动文件>`。
+- 人工：以子租户管理员登录，直接对根租户服务账号 id 请求 `GET` / `PATCH` / `DELETE /api/v1/service-accounts/{id}` 及 `*/keys*`，应一律 404 `26020`；列表页 `total` 与 `data` 条数一致。
 
 ## 发布阻断项
 

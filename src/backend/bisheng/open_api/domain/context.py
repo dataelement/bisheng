@@ -43,6 +43,14 @@ class OpenApiExecutionSnapshot(BaseModel):
     credential_id: int | None
     trace_id: str
     channel: Literal["open_api_v2", "public_v3"]
+    # Privilege facts resolved once at the synchronous entry point so the async
+    # (Celery) leg authorizes against the same identity instead of silently
+    # re-deriving a weaker one. Defaults keep in-flight messages produced by an
+    # older release valid, and keep ``from_principal`` (v2) byte-identical.
+    # ``PermissionActor`` force-clears both for service accounts, so a forged
+    # snapshot cannot buy privilege on that path.
+    super_admin: bool = False
+    tenant_admin_tenant_ids: frozenset[int] = frozenset()
 
     @classmethod
     def from_principal(cls, principal: OpenApiPrincipal, *, trace_id: str) -> OpenApiExecutionSnapshot:

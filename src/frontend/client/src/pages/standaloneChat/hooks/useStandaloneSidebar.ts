@@ -15,6 +15,7 @@ import { chatsState, runningState } from '~/pages/appChat/store/atoms';
 import { closeAppChatWebSocket } from '~/pages/appChat/useWebsocket';
 import { standaloneChatIdState } from '../store/atoms';
 import type { StandaloneChatContextValue } from '../StandaloneChatContext';
+import { resolveGuestAccessState, type GuestAccessState } from '../guestAccessError';
 import {
   getLocalConversations,
   addLocalConversation,
@@ -53,6 +54,8 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
 
   const [loading, setLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  // Guest-only: whether the share link still resolves to something usable.
+  const [accessState, setAccessState] = useState<GuestAccessState>('loading');
   const initializedRef = useRef(false);
   // Snapshot of latest conversations for draft-preservation in async callbacks
   const conversationsRef = useRef<AppConversation[]>(conversations);
@@ -208,15 +211,12 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
 
   // Fetch flow-level info (name, logo, description)
   useEffect(() => {
-    console.log('[standalone] flow detail effect:', { flowId, numericFlowType, apiVersion });
     if (!flowId) return;
     (async () => {
       try {
-        console.log('[standalone] fetching flow detail...');
         const res = numericFlowType === FLOW_TYPE_ASSISTANT
           ? await getAssistantDetailApi(flowId, undefined, true, apiVersion)
           : await getFlowApi(flowId, apiVersion, undefined, true);
-        console.log('[standalone] flow detail response:', res);
         // Auth-mode standalone chat: surface a dedicated 403 page when the
         // current user has no permission. Guest mode keeps the silent fallback
         // because passwordless links may legitimately hit non-200 transient
@@ -225,9 +225,14 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
           navigate('/403', { replace: true });
           return;
         }
-        if (res?.status_code !== 200) return;
+        if (res?.status_code !== 200) {
+          // A 200 envelope can still carry a policy denial.
+          if (mode === 'guest') setAccessState(resolveGuestAccessState(res));
+          return;
+        }
         const data = res.data;
         if (!data) return;
+        setAccessState('ok');
         setCurrentApp({
           id: data.id ?? flowId,
           name: data.name ?? '',
@@ -237,6 +242,11 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
           user_id: data.user_id ?? '',
         } as AppItem);
       } catch (err) {
+        // Guests used to get a blank, unresponsive chat box here: the rejection
+        // was logged and swallowed. Deliberate denials now surface as a state
+        // page; everything else still falls through so a flaky request does not
+        // take the page down.
+        if (mode === 'guest') setAccessState(resolveGuestAccessState(err));
         console.error('[standalone] Failed to fetch app detail:', err);
       }
     })();
@@ -294,6 +304,7 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
     groups,
     loading,
     historyLoaded,
+    accessState,
     activeChatId,
     sidebarVisible,
     fetchConversations,

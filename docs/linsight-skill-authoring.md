@@ -11,7 +11,7 @@
 
 | 目录 | 说明 |
 |---|---|
-| `bisheng-pptx/` | PPT 制作技能（BiSheng 适配版）。用 python-pptx 生成 .pptx，含中文排版规范、模板套用、交付前自检脚本。用户要「PPT／幻灯片／汇报材料」时用 |
+| `bisheng-pptx/` | PPT 制作技能。用 python-pptx 生成 .pptx，含中文排版规范、模板套用、交付前自检脚本。用户要「PPT／幻灯片／汇报材料」时用 |
 | `bisheng-xlsx/` | Excel 表格技能。用 openpyxl 生成 .xlsx，交付前必须经 LibreOffice Calc 重算公式再体检。用户要「表格／报表／台账／预算测算／财务模型」时用 |
 | `bisheng-docx/` | Word 文档技能。用 python-docx 生成 .docx，覆盖 `w:eastAsia` 中文字体、目录域、页码、表格列宽、封面。用户要**带版式**的正式文档时用；只是「把刚才的内容存成 Word」走自带的 `export_docx`，别用本技能 |
 

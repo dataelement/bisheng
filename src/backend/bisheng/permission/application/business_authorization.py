@@ -67,12 +67,14 @@ async def require_business_action(
     resource_type: str,
     resource_id: str | int,
     action: str,
+    actor: PermissionActor | None = None,
 ) -> None:
     if not await check_business_action(
         login_user,
         resource_type=resource_type,
         resource_id=resource_id,
         action=action,
+        actor=actor,
     ):
         raise UnAuthorizedError()
 

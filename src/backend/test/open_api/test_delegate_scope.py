@@ -8,24 +8,22 @@ from bisheng.open_api.domain.services.delegate_scope_service import DelegateScop
 
 
 async def test_user_and_department_scopes_are_validated_in_tenant(monkeypatch):
-    async def user(user_id):
-        return SimpleNamespace(user_id=user_id, tenant_id=4)
+    async def users(user_ids):
+        return {user_id: SimpleNamespace(user_id=user_id, tenant_id=4) for user_id in user_ids}
 
-    async def department(department_id):
-        return SimpleNamespace(
-            id=department_id,
-            tenant_id=4,
-            status="active",
-            is_deleted=0,
-        )
+    async def departments(department_ids):
+        return {
+            department_id: SimpleNamespace(id=department_id, tenant_id=4, status="active", is_deleted=0)
+            for department_id in department_ids
+        }
 
     monkeypatch.setattr(
-        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_person",
-        user,
+        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_people",
+        users,
     )
     monkeypatch.setattr(
-        "bisheng.open_api.domain.services.delegate_scope_service.DelegateScopeRepository.get_department",
-        department,
+        "bisheng.open_api.domain.services.delegate_scope_service.DelegateScopeRepository.get_departments",
+        departments,
     )
     entries = await DelegateScopeService.validate_entries(
         tenant_id=4,
@@ -39,11 +37,11 @@ async def test_user_and_department_scopes_are_validated_in_tenant(monkeypatch):
 
 
 async def test_cross_tenant_or_inactive_scope_is_rejected(monkeypatch):
-    async def cross_tenant(_user_id):
-        return SimpleNamespace(user_id=9, tenant_id=5)
+    async def cross_tenant(_user_ids):
+        return {9: SimpleNamespace(user_id=9, tenant_id=5)}
 
     monkeypatch.setattr(
-        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_person",
+        "bisheng.open_api.domain.services.delegate_scope_service.OwnerRepository.get_active_natural_people",
         cross_tenant,
     )
     with pytest.raises(OpenApiDelegateConfigurationInvalidError):

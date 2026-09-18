@@ -5,9 +5,34 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    get_current_tenant_id,
+    is_tenant_filter_bypassed,
+)
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.open_api.domain.models.service_account import ServiceAccount
+
+
+def current_tenant_scope() -> int | None:
+    """Return the tenant every service-account read must be pinned to.
+
+    ``service_account`` is tenant-aware, so the global filter already narrows
+    these reads — but for a child-tenant caller it injects the F012 IN-list
+    ``tenant_id IN (leaf, ROOT)``, which shares Root rows downwards. Service
+    accounts are tenant-private: a child-tenant administrator must never list,
+    read or mutate a Root account, let alone issue keys against it. So every
+    management read carries its own equality predicate on top of the IN-list.
+
+    ``None`` means "add no predicate": either tenant filtering is deliberately
+    bypassed (the execution path reads a credential's own account), or there is
+    no tenant context at all (bearer validation runs before one is installed
+    and compares ``tenant_id`` against the credential itself).
+    """
+
+    if is_tenant_filter_bypassed():
+        return None
+    return get_current_tenant_id()
 
 
 class ServiceAccountRepository:
@@ -24,6 +49,9 @@ class ServiceAccountRepository:
         statement = select(ServiceAccount).where(ServiceAccount.id == service_account_id)
         if not include_deleted:
             statement = statement.where(col(ServiceAccount.deleted_at).is_(None))
+        tenant_id = current_tenant_scope()
+        if tenant_id is not None:
+            statement = statement.where(ServiceAccount.tenant_id == tenant_id)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
@@ -35,6 +63,9 @@ class ServiceAccountRepository:
             col(ServiceAccount.id).in_(service_account_ids),
             col(ServiceAccount.deleted_at).is_(None),
         )
+        tenant_id = current_tenant_scope()
+        if tenant_id is not None:
+            statement = statement.where(ServiceAccount.tenant_id == tenant_id)
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
 
@@ -52,10 +83,19 @@ class ServiceAccountRepository:
         page: int,
         page_size: int,
     ) -> tuple[list[ServiceAccount], int]:
-        statement = select(ServiceAccount).where(col(ServiceAccount.deleted_at).is_(None))
+        filters = [col(ServiceAccount.deleted_at).is_(None)]
+        tenant_id = current_tenant_scope()
+        if tenant_id is not None:
+            filters.append(ServiceAccount.tenant_id == tenant_id)
         if keyword:
-            statement = statement.where(col(ServiceAccount.name).like(f"%{keyword}%"))
-        count_statement = select(func.count()).select_from(statement.subquery())
+            filters.append(col(ServiceAccount.name).like(f"%{keyword}%"))
+        statement = select(ServiceAccount).where(*filters)
+        # Counting over ``statement.subquery()`` hides ``service_account`` from
+        # the tenant-filter listener, which only sees the outer froms: ``data``
+        # came back filtered while ``total`` stayed a cross-tenant count, and the
+        # paginator then offered pages that render empty. Count the same table
+        # under the same filters instead.
+        count_statement = select(func.count()).select_from(ServiceAccount).where(*filters)
         async with get_async_db_session() as session:
             total = int((await session.exec(count_statement)).one())
             rows = (
