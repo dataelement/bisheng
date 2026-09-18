@@ -16,30 +16,61 @@ interface ChannelHomePageProps {
 
 interface ChannelCardProps {
     channel: Channel;
+    /** 1-based position inside its section — printed as the card's issue number. */
+    index: number;
     onSelect: (channel: Channel) => void;
 }
 
-function ChannelCard({ channel, onSelect }: ChannelCardProps) {
+// Headline face for the newspaper-style cards: the platform's Songti/Mincho where one
+// exists, the generic serif otherwise. System fonts only — nothing is downloaded.
+const HEADLINE_FONT =
+    "font-['Songti_SC','STSong','Noto_Serif_CJK_SC','Source_Han_Serif_SC','SimSun','Hiragino_Mincho_ProN',Georgia,serif]";
+
+/**
+ * A channel as a cell of a ruled newspaper index: issue-number kicker, serif headline,
+ * optional standfirst, dateline (last update · source count · unread). The cell has no box
+ * of its own — it carries the row rule (border-b) and an inset column rule on its left;
+ * see the grid wrapper for how the outer rules are closed.
+ */
+function ChannelCard({ channel, index, onSelect }: ChannelCardProps) {
     const localize = useLocalize();
     return (
         <button
             type="button"
             onClick={() => onSelect(channel)}
-            className="flex min-w-0 flex-col gap-1 rounded-lg border border-border-base px-4 py-3 text-left transition-colors hover:bg-fill-1"
+            className="group relative flex min-h-[116px] min-w-0 flex-col border-b border-border-base px-4 py-4 text-left before:absolute before:bottom-4 before:left-0 before:top-4 before:w-px before:bg-border-base"
         >
-            <div className="flex w-full min-w-0 items-center gap-1">
-                <span className="min-w-0 truncate text-body text-text-1">{channel.name}</span>
+            <div className="flex h-5 w-full min-w-0 items-center gap-2">
+                <span className="shrink-0 font-mono text-caption-sm tracking-[0.12em] text-text-3 tabular-nums">
+                    NO.{String(index).padStart(2, "0")}
+                </span>
                 <DemoTag id={channel.id} className="shrink-0" />
                 {channel.isPinned ? <Outlined.Pin className="size-3.5 shrink-0 text-text-3" aria-hidden /> : null}
-                {channel.unreadCount > 0 ? <Badge count={channel.unreadCount} className="ml-auto shrink-0" /> : null}
+                <Outlined.ArrowRightUp
+                    className="ml-auto size-4 shrink-0 text-text-3 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-blue-500"
+                    aria-hidden
+                />
             </div>
-            {/* my_channels returns neither counts nor a description (those come with the
-                channel detail), so the card sticks to what the list really knows. */}
-            <div className="flex w-full items-center gap-3 text-caption text-text-3 tabular-nums">
-                <span className="whitespace-nowrap">
+            <span className={cn(HEADLINE_FONT, "mt-1.5 line-clamp-2 w-full break-words text-h3 font-semibold text-text-1 transition-colors group-hover:text-blue-500")}>
+                {channel.name}
+            </span>
+            {/* my_channels rarely carries a description (it comes with the channel detail);
+                the standfirst only shows when the list really has one. */}
+            {channel.description ? (
+                <span className="mt-1 line-clamp-2 w-full text-caption text-text-2">{channel.description}</span>
+            ) : null}
+            <span className="min-h-3 flex-1" aria-hidden />
+            <div className="flex w-full items-center gap-2 text-caption text-text-3 tabular-nums">
+                {channel.updatedAt ? (
+                    <span className="shrink-0 whitespace-nowrap font-mono tracking-[0.04em]">
+                        {formatTimeCard(channel.updatedAt)}
+                    </span>
+                ) : null}
+                {channel.updatedAt ? <span className="size-0.5 shrink-0 rounded-full bg-text-3" aria-hidden /> : null}
+                <span className="min-w-0 truncate">
                     {localize("com_subscription.home_source_count", { 0: channel.source_list?.length ?? 0 })}
                 </span>
-                {channel.updatedAt ? <span className="min-w-0 truncate">{formatTimeCard(channel.updatedAt)}</span> : null}
+                {channel.unreadCount > 0 ? <Badge count={channel.unreadCount} className="ml-auto shrink-0" /> : null}
             </div>
         </button>
     );
@@ -85,10 +116,18 @@ export function ChannelHomePage({
                                 )}
                             </div>
                             {section.channels.length > 0 ? (
-                                <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
-                                    {section.channels.map((channel) => (
-                                        <ChannelCard key={channel.id} channel={channel} onSelect={onChannelSelect} />
-                                    ))}
+                                // Ruled index: the wrapper draws the heavier top/bottom rules; cells draw
+                                // the row rules. -mb-px + overflow-hidden clips the last row's own rule so a
+                                // partially filled last row still closes with a full-width line. The grid also
+                                // hangs one cell padding (-ml-4) past the clipped left edge: the first column's
+                                // inset rule falls outside and its content lines up with the section title,
+                                // whatever the auto-fill column count is.
+                                <div className="overflow-hidden border-y border-border-deep">
+                                    <div className="-mb-px -ml-4 grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))]">
+                                        {section.channels.map((channel, i) => (
+                                            <ChannelCard key={channel.id} channel={channel} index={i + 1} onSelect={onChannelSelect} />
+                                        ))}
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="flex h-24 items-center justify-center text-body text-text-3">
