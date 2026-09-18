@@ -25,6 +25,7 @@ import {
 import type { GrantablePermissionModel } from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
+import type { DepartmentSpaceCreator } from "./departmentSpaceCreator";
 
 const MAX_CUSTOM_TAGS = 200;
 
@@ -103,6 +104,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [canEdit, setCanEdit] = useState(mode === "create");
+  // Set for department spaces only: their creator holds no grant, so the roster
+  // shows them as a display-only row (see departmentSpaceCreator).
+  const [departmentCreator, setDepartmentCreator] =
+    useState<DepartmentSpaceCreator | null>(null);
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
@@ -219,6 +224,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           throw new Error("Knowledge space settings access denied");
         }
         setCanEdit(canEditSpace);
+        const creatorId = Number(space.creatorId);
+        setDepartmentCreator(
+          space.spaceKind === "department" && creatorId > 0
+            ? { id: creatorId, name: space.creator || space.creatorId }
+            : null,
+        );
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -394,6 +405,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     loadError,
     canEdit,
     canManagePermissions,
+    departmentCreator,
     relationModels,
     canAddNonUserSubjects: relationModels.length > 0,
     permissionRows,

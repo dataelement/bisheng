@@ -43,6 +43,11 @@ import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
 import { resolveSettingsReturnPath } from "../knowledgeUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
+  decorateDepartmentSpaceRows,
+  isCreatorDisplayRow,
+  restoreDepartmentSpaceRows,
+} from "./departmentSpaceCreator";
+import {
   parseKnowledgeSpaceCustomTags,
   useKnowledgeSpaceSettingsForm,
 } from "./useKnowledgeSpaceSettingsForm";
@@ -107,8 +112,11 @@ export function KnowledgeSpaceSettingsPage() {
     () =>
       creatorRow
         ? [creatorRow, ...settings.permissionRows]
-        : settings.permissionRows,
-    [creatorRow, settings.permissionRows],
+        : decorateDepartmentSpaceRows(
+            settings.permissionRows,
+            settings.departmentCreator,
+          ),
+    [creatorRow, settings.departmentCreator, settings.permissionRows],
   );
   // People added here hold no permission until they confirm, so they are in
   // neither the saved rows nor the draft. Read them separately or the panel
@@ -150,8 +158,9 @@ export function KnowledgeSpaceSettingsPage() {
   );
   const disabledIds = useMemo<Record<SubjectType, number[]>>(
     () => ({
+      // The display-only creator row holds no grant, so the creator stays pickable.
       user: displayedPermissionRows
-        .filter((row) => row.subjectType === "user")
+        .filter((row) => row.subjectType === "user" && !isCreatorDisplayRow(row))
         .map((row) => row.subjectId),
       department: displayedPermissionRows
         .filter((row) => row.subjectType === "department")
@@ -597,7 +606,10 @@ export function KnowledgeSpaceSettingsPage() {
                           settings.replacePermissionRows(
                             settings.mode === "create"
                               ? rows.filter((row) => !row.protected)
-                              : rows,
+                              : restoreDepartmentSpaceRows(
+                                  rows,
+                                  settings.permissionRows,
+                                ),
                           )
                         }
                         capabilities={permissionCapabilities}
