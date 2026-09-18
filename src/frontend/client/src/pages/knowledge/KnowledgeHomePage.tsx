@@ -1,7 +1,6 @@
 import type { KnowledgeSpace } from "~/api/knowledge";
-import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
+import { MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
 import { useWorkbenchMenuNames } from "~/hooks";
-import { cn } from "~/utils";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 
 interface KnowledgeHomePageProps {
@@ -29,8 +28,10 @@ export function KnowledgeHomePage({
 
     return (
         <div className={MODULE_HOME_FRAME}>
-            <ModuleHomeHeader title={menuNames.knowledge} />
-            <div className={cn(MODULE_HOME_COLUMN, "mt-4 min-h-0 flex-1 overflow-hidden")}>
+            <ModuleHomeHeader module="knowledge" title={menuNames.knowledge} />
+            {/* Full-bleed (cancels the frame's 12px gutters) so the list's scrollbar sits on the
+                page edge; the list re-centres its content into the 1000px column itself. */}
+            <div className="mt-4 min-h-0 w-[calc(100%+24px)] flex-1 overflow-hidden">
                 <KnowledgeSpaceSidebar
                     mobilePageMode
                     pageGrid

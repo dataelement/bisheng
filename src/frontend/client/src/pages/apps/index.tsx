@@ -193,7 +193,7 @@ export default function AppCenter() {
                         我的 / 广场 switcher right — it replaces the 探索更多应用 link, which
                         stays on mobile only. */}
                     <ModuleViewTabs active="mine" onChange={(view) => view === 'square' && navigate('/apps/explore')} />
-                    <ModuleHomeHeader title={menuNames.apps} />
+                    <ModuleHomeHeader module="apps" title={menuNames.apps} />
 
                     <div className="mt-4 mb-4 flex w-full max-w-[1000px] min-w-0 shrink-0 items-center gap-4 sm:gap-6">
                         <div className="flex min-w-0 flex-1 items-center justify-start overflow-hidden">

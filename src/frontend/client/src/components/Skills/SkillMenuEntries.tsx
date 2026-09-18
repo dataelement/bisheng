@@ -27,7 +27,7 @@ interface SkillMenuEntriesProps {
 export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesProps) {
   const localize = useLocalize();
   if (!skillCenterPreviewEnabled) return null;
-  const icon = <Outlined.Newspaper size={16} className="text-text-2" />;
+  const icon = <Outlined.Skill size={16} className="text-text-2" />;
   const label = localize('com_skill_center_menu');
   if (onOpenMobile) return (
     <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none">

@@ -1,28 +1,32 @@
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
-import { cloneElement } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { cloneElement, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
 import { useStartNewChat } from '~/components/Nav/NewChat';
+import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import { UserPopMenu } from '../UserPopMenu';
-import type { WorkbenchNavLink, WorkbenchNavSection } from '../useWorkbenchNavLinks';
+import { useWorkbenchHubs } from '../useWorkbenchHubs';
 import { useWorkbenchNavLinks } from '../useWorkbenchNavLinks';
 import { SidebarConversationList } from './SidebarConversationList';
-import { SidebarProjectsPlaceholder } from './SidebarProjectsPlaceholder';
+import { SidebarCustomizeDialog } from './SidebarCustomizeDialog';
+import { SidebarProjects } from './SidebarProjects';
+import { useSidebarPrefs } from './sidebarPrefs';
 
 /** Shown next to the logo when the admin has not configured a 首页 display name. */
 const DEFAULT_BRAND_NAME = 'BISHENG';
 
-/** Module order in the design (Figma 13139:111436); 首页 is the 新建对话 row above them. */
-const MODULE_ORDER: WorkbenchNavSection[] = ['knowledge', 'apps', 'channel', 'skills'];
-
-const BRAND_ROW = 'flex h-8 max-w-full shrink-0 items-center gap-2.5 self-start px-2';
+const BRAND_LINK = 'flex h-8 min-w-0 items-center gap-2.5';
 
 const NAV_ROW = 'flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-body text-text-1 transition-colors hover:bg-fill-1';
+
+/** One row of the module area: a hub, or a module standing on its own. */
+type SidebarEntry = { key: string; to: string; icon: ReactNode; label: string; active: boolean };
 
 interface SidebarNavRowProps {
   to: string;
@@ -45,6 +49,11 @@ function SidebarNavRow({ to, icon, label, active = false, onClick }: SidebarNavR
  * Desktop workbench sidebar (Figma 13139:111432): brand row, module entries, 项目,
  * the conversation list and the account row, present on every workbench page.
  * Mobile keeps its own rail / drawers — see MainLayout.
+ *
+ * The module area shows hubs, not modules: 知识空间 + 频道 fold into 知识资讯, 应用 + 技能
+ * into 智能拓展 (the module homes carry the switcher between siblings). What shows is the
+ * user's call — 自定义侧栏 (in the always-present 更多 row) hides a hub, which moves
+ * under 更多, or pins a single module.
  */
 interface WorkbenchSidebarProps {
   /** Keep it mounted but out of layout (设置 swaps its own nav into this slot), so the
@@ -56,13 +65,35 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
   const localize = useLocalize();
   const { pathname } = useLocation();
   const { data: bsConfig } = useGetBsConfig();
+  const navigate = useNavigate();
   const { links, showAdminEntry } = useWorkbenchNavLinks();
+  const hubs = useWorkbenchHubs();
+  const prefs = useSidebarPrefs();
   const startNewChat = useStartNewChat();
+  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const homeLink = links.find((link) => link.section === 'home');
-  const moduleLinks = MODULE_ORDER.map((section) => links.find((link) => link.section === section)).filter(
-    (link): link is WorkbenchNavLink => link !== undefined,
-  );
+
+  const entries: SidebarEntry[] = [];
+  const moreEntries: SidebarEntry[] = [];
+  hubs.forEach((hub) => {
+    // A hub with one granted module is that module: its name, its icon, nothing to pin.
+    const single = hub.modules.length === 1 ? hub.modules[0] : null;
+    const pinned = single ? [] : hub.modules.filter((link) => prefs.pinnedModules.includes(link.section));
+    const hubEntry: SidebarEntry = {
+      key: `hub-${hub.id}`,
+      to: hub.landing.to,
+      icon: single ? single.icon : hub.icon,
+      label: single ? single.label : hub.label,
+      // A pinned module carries its own highlight; the hub lights up for the rest.
+      active: hub.activeModule !== undefined && !pinned.includes(hub.activeModule),
+    };
+    (prefs.hiddenHubs.includes(hub.id) ? moreEntries : entries).push(hubEntry);
+    pinned.forEach((link) => {
+      entries.push({ key: link.section, to: link.to, icon: link.icon, label: link.label, active: link.isActive });
+    });
+  });
+  const moreActive = moreEntries.some((entry) => entry.active);
   const brandName = bsConfig?.homeMenuDisplayName?.trim() || DEFAULT_BRAND_NAME;
   const logoSrc = bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : '';
 
@@ -95,18 +126,20 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
         hidden ? 'hidden' : 'flex',
       )}
     >
-      {homeLink ? (
-        <NavLink
-          to={homeLink.to}
-          onClick={handleSamePathClick(homeLink.to)}
-          aria-label={localize('com_workbench_sidebar.home')}
-          className={BRAND_ROW}
-        >
-          {brand}
-        </NavLink>
-      ) : (
-        <div className={BRAND_ROW}>{brand}</div>
-      )}
+      <div className="flex h-8 w-full shrink-0 items-center px-2">
+        {homeLink ? (
+          <NavLink
+            to={homeLink.to}
+            onClick={handleSamePathClick(homeLink.to)}
+            aria-label={localize('com_workbench_sidebar.home')}
+            className={BRAND_LINK}
+          >
+            {brand}
+          </NavLink>
+        ) : (
+          <div className={BRAND_LINK}>{brand}</div>
+        )}
+      </div>
 
       <nav className="flex w-full shrink-0 flex-col gap-1 pb-4">
         {homeLink && (
@@ -117,20 +150,52 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
             onClick={handleNewChat}
           />
         )}
-        {moduleLinks.map((link) => (
+        {entries.map((entry) => (
           <SidebarNavRow
-            key={link.section}
-            to={link.to}
-            icon={link.icon}
-            label={link.label}
-            active={link.isActive}
-            onClick={handleSamePathClick(link.to)}
+            key={entry.key}
+            to={entry.to}
+            icon={entry.icon}
+            label={entry.label}
+            active={entry.active}
+            onClick={handleSamePathClick(entry.to)}
           />
         ))}
+        {/* Always there: it holds the hidden hubs and is the way into 自定义侧栏. */}
+        {hubs.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className={cn(NAV_ROW, 'data-[state=open]:bg-fill-1', moreActive && 'bg-fill-2 hover:bg-fill-2')}
+              >
+                <Outlined.More className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate py-px">{localize('com_workbench_sidebar.more')}</span>
+              </button>
+            </DropdownMenuTrigger>
+            <ActionMenuContent align="start" width={216}>
+              {moreEntries.map((entry) => (
+                <ActionMenuItem
+                  key={entry.key}
+                  icon={entry.icon}
+                  label={entry.label}
+                  onSelect={() => {
+                    if (entry.to !== pathname) navigate(entry.to);
+                  }}
+                />
+              ))}
+              {moreEntries.length > 0 && <ActionMenuDivider />}
+              <ActionMenuItem
+                icon={<Outlined.Setting />}
+                label={localize('com_workbench_sidebar.customize')}
+                onSelect={() => setCustomizeOpen(true)}
+              />
+            </ActionMenuContent>
+          </DropdownMenu>
+        )}
       </nav>
 
       {homeLink && homeGranted ? (
-        <SidebarConversationList leading={<SidebarProjectsPlaceholder />} />
+        <SidebarConversationList leading={<SidebarProjects />} />
       ) : (
         <div className="min-h-0 flex-1" />
       )}
@@ -152,6 +217,7 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
           </Tooltip>
         )}
       </div>
+      <SidebarCustomizeDialog open={customizeOpen} onOpenChange={setCustomizeOpen} />
     </aside>
   );
 }

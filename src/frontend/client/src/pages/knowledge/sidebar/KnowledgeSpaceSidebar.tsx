@@ -353,7 +353,7 @@ export function KnowledgeSpaceSidebar({
     // truncate instead of overflowing horizontally — preserving the v1 vertical scroll.
     const listRowClassName = pageGrid
         // No side padding: cards run the full width of the home's 1000px column.
-        ? "grid w-[100cqi] grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 py-2"
+        ? "grid w-[100cqi] grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-5 gap-y-5 py-3"
         : mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
     // Mobile: 8px gap above each section group.
     const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
@@ -477,7 +477,13 @@ export function KnowledgeSpaceSidebar({
                 >
                     <div
                         ref={listScrollRef}
-                        className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5 [container-type:inline-size]"
+                        className={cn(
+                            "h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5",
+                            // Desktop home: this container spans the whole page so its scrollbar sits on
+                            // the page edge; the query container moves to the centred column below, and
+                            // the gutter is reserved on both edges so that column stays truly centred.
+                            pageGrid ? "![scrollbar-gutter:stable_both-edges]" : "[container-type:inline-size]",
+                        )}
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
@@ -487,7 +493,18 @@ export function KnowledgeSpaceSidebar({
                             scroll container's visible width — that lets sticky-left/top
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
-                        <div className={cn("w-max min-w-full", fillListHeight && "flex min-h-full flex-col")}>
+                        <div
+                            className={cn(
+                                // Desktop home: the 1000px column (same maths as MODULE_HOME_COLUMN inside the
+                                // frame's 12px gutters — 100% here already excludes the two 8px scrollbar
+                                // gutters). Being the nearest query container, every `100cqi` below resolves
+                                // to this column instead of the page-wide scroll container.
+                                pageGrid
+                                    ? "mx-auto w-[min(1000px,calc(100%_-_8px))] [container-type:inline-size]"
+                                    : "w-max min-w-full",
+                                fillListHeight && "flex min-h-full flex-col",
+                            )}
+                        >
                             {compactMode ? (
                                 /* File-page title dropdown: same 3-section tree as the PC sidebar,
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden

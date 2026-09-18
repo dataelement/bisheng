@@ -618,7 +618,7 @@ export const ChatKnowledge = ({
             {!skillCenterPreviewEnabled && renderSkillSubmenu && (
               !isMobile ? (
                 <PlusMenuSub
-                  icon={<Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />}
+                  icon={<Outlined.Skill size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />}
                   label={localize('com_linsight_add_skill')}
                   panelClassName="w-[280px] gap-0"
                 >
@@ -633,7 +633,7 @@ export const ChatKnowledge = ({
                   className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
+                    <Outlined.Skill size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>

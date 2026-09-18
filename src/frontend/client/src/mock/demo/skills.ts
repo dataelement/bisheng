@@ -3,7 +3,7 @@
  * the browser's IndexedDB rather than behind an endpoint, so the axios interceptor cannot
  * reach them; `useSkillCenter` appends these to the store's rows instead, behind the same
  * DEV + opt-in switch. They are never written to the store — a page reload forgets any
- * interaction, and the detail sheet keeps their actions off.
+ * interaction; their switch is a session-only override and the detail dialog keeps replace / delete off.
  */
 import type { PersonalSkill } from '~/components/Skills/types';
 import { DEMO_ID_PREFIX } from './ids';

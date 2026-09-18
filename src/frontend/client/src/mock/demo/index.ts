@@ -12,25 +12,13 @@
  * Their ids carry DEMO_ID_PREFIX; anything that would open one must check isDemoId first.
  * The copy lives in the sibling JSON files so this source stays free of UI strings.
  */
-import { DEMO_ID_PREFIX } from './ids';
+import { DEMO_ID_PREFIX, isDemoDataEnabled } from './ids';
 import apps from './apps.json';
 import channels from './channels.json';
 import knowledgeSpaces from './knowledgeSpaces.json';
 import skills from './skills.json';
 
-export { DEMO_ID_PREFIX, isDemoId } from './ids';
-
-const STORAGE_KEY = 'bs_demo_data';
-
-export function isDemoDataEnabled(): boolean {
-  if (!import.meta.env.DEV) return false;
-  if (import.meta.env.VITE_DEMO_DATA === 'true') return true;
-  try {
-    return localStorage.getItem(STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+export { DEMO_ID_PREFIX, isDemoDataEnabled, isDemoId } from './ids';
 
 // Structural slices of the axios types this file touches: raw axios imports are reserved
 // for ~/api/request (constitution C7), and that wrapper is what hands the instance over.

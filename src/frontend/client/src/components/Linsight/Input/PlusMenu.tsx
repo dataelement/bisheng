@@ -135,7 +135,7 @@ export function PlusMenu({
                         >
                             <div className="flex items-center gap-3">
                                 <div className="relative">
-                                    <Outlined.Newspaper
+                                    <Outlined.Skill
                                         size={16}
                                         className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-text-2')}
                                     />
