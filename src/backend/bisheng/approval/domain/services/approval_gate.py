@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from loguru import logger
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalException,
@@ -112,6 +114,22 @@ class ApprovalGate:
 
         route_rules = await self.scenario_repository.list_route_rules(req.tenant_id, scenario.id)
         matched_route = await self.route_matcher(route_rules, req)
+        if matched_route is not None and matched_route.route_type == "pass" and self._forbids_pass(req.scenario_code):
+            # Second line of defence behind the admin surface's 18119. A route
+            # row can still reach the table by other means — a hand-run UPDATE,
+            # a restore from a backup taken before the refusal existed — and on
+            # a scenario that promised "every request goes to a human", letting
+            # it through silently is the worst of the available outcomes. Treat
+            # it as no usable route: the request lands in the exception queue and
+            # an administrator is told, instead of the business being auto
+            # approved behind everyone's back.
+            logger.warning(
+                "approval.pass_route_refused scenario={} route_id={} tenant={}",
+                req.scenario_code,
+                getattr(matched_route, "id", None),
+                req.tenant_id,
+            )
+            matched_route = None
         if not matched_route:
             return await self._create_exception_result(
                 req=req,
@@ -458,6 +476,20 @@ class ApprovalGate:
                     return route
 
         return None
+
+    def _forbids_pass(self, scenario_code: str) -> bool:
+        """Whether this scenario's preset declares that every request needs a human.
+
+        Read off the preset rather than a list of codes kept here: the approval
+        centre serves four scenarios today and must not grow a hardcoded opinion
+        about any one of them. A scenario the registry does not know (created by
+        hand in the admin surface) makes no such promise and is not restricted.
+        """
+        get_preset = getattr(self.registry, "get_preset", None)
+        if get_preset is None:
+            return False
+        preset = get_preset(scenario_code)
+        return bool(getattr(preset, "mandatory_approval", False))
 
     @staticmethod
     def _decision_from_instance_status(status: str) -> ApprovalGateDecision:

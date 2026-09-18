@@ -2180,6 +2180,7 @@
     "routeSectionHint": "上から順に評価",
     "routeTypeFlowFull": "承認フローに進む",
     "routeTypePassFull": "承認不要、直接通過",
+    "routeTypeMandatoryHint": "このシナリオではすべての申請に担当者の承認が必要で、審査免除の分岐は提供されません",
     "save": "保存",
     "scenarioSection": "承認シナリオ",
     "selectFlow": "フローを選択",

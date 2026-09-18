@@ -11,7 +11,7 @@ class ApprovalRegistry:
         self._handlers: dict[str, Any] = {}
 
     @classmethod
-    def with_default_presets(cls) -> "ApprovalRegistry":
+    def with_default_presets(cls) -> ApprovalRegistry:
         registry = cls()
         registry.register_preset(
             ApprovalScenarioPreset(
@@ -55,6 +55,13 @@ class ApprovalRegistry:
                 # No condition fields: every release is approved the same way,
                 # there is no免审 branch to select (F055 INV-34).
                 condition_fields=[],
+                # ``condition_fields=[]`` alone does not deliver INV-34. It only
+                # removes the *conditions* a branch could match on; a catch-all
+                # branch set to ``pass`` needs none, so a tenant administrator
+                # could still turn every release into an auto-approval. PRD-1
+                # RT-03 / GOV-02 promise the opposite in three places ("不提供
+                # 免审配置项"), so the refusal has to be stated, not implied.
+                mandatory_approval=True,
                 # ``direct_user`` is what makes AC-19 reachable — without it a
                 # tenant administrator who reconfigures the approvers can never
                 # put a named person back, because the admin page builds its

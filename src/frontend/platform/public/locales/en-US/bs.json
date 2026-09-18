@@ -2230,6 +2230,7 @@
     "routeSectionHint": "Evaluated top to bottom",
     "routeTypeFlowFull": "Enter approval flow",
     "routeTypePassFull": "No approval needed, pass directly",
+    "routeTypeMandatoryHint": "Every request in this scenario must be reviewed by a person — no auto-approval branch is offered",
     "save": "Save",
     "scenarioSection": "Approval Scenarios",
     "selectFlow": "Select flow",

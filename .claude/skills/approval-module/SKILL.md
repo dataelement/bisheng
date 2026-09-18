@@ -51,6 +51,7 @@ ApprovalGate.request_or_pass()        ← 统一网关，所有场景从这里�
         │
    ┌────┴───────────────────────────┐
    │ pass 分支 (route_type=pass)      │ → instance(APPROVED) + outbox → Celery → on_approved() → EXECUTED
+   │   └ 场景 mandatory_approval=True │ → 当作「无分支命中」，落 EXCEPTION（见下）
    │ flow 分支 (route_type=flow)      │ → instance(PENDING) + 首节点 task(PENDING) → 等待审批人
    │ 无分支命中                       │ → instance(EXCEPTION, route_missing) + 通知管理员
    │ 审批人解析为空                   │ → instance(EXCEPTION, approver_empty) + 通知管理员
@@ -67,6 +68,13 @@ ApprovalCenterService.decide_task()
         └── ⚠️ 前置守卫：instance 非 PENDING 一律拒 18118（见下）
    业务对象被删 → cancel_instance_by_business() → instance(CANCELLED) + 通知有 task 的审批人（排除操作人）
 ```
+
+**必审场景不接受免审分支（2026-09-18 加，PRD-1 INV-34）**：`ApprovalScenarioPreset` 新增 `mandatory_approval` 字段，`app_publish_request` 置 `True`，其余三个预置场景保持 `False`。**声明写在 preset 上而不是在引擎里硬编码场景码**——审批中心是通用模块，不该认识某个业务场景的名字。两道闸：
+
+1. **配置面拒绝**：`ApprovalScenarioAdminService._assert_route_type_allowed()` 在 `create_route` **与** `update_route` 两处校验，必审场景配 `route_type=pass` 答 **18119**。两处都要，否则「建不了 pass 但能把 flow 改成 pass」。注册表不认识的 scenario_code（管理员手工新建的场景）不受限——它们没做过这个承诺。
+2. **网关兜底**：`ApprovalGate._forbids_pass()`，匹配到的 pass 路由若属必审场景，**当作没匹配到**（落 `route_missing` 异常 + 通知管理员），不是抛错也不是放行。这一道不是冗余：路由行还能从手工 UPDATE、从改动前的备份恢复进来，而对必审场景来说「静默自动通过并上线」是最坏的结果，落异常队列让管理员去修才是对的。
+
+⚠️ 这条**只收紧 `app_publish_request` 一个场景**。菜单权限 / 频道订阅 / 知识空间加入三个场景的 pass 分支照常可配可用——它们一直允许免审，跟着收紧等于给存量租户一个无声的行为变更。回归护栏在 `test/approval/test_mandatory_approval_scenario.py`（6 例，含「其它场景仍可配 pass」与「其它场景的 pass 仍正常放行」两条反向断言）。
 
 **`withdraw_instance` 的终态守卫（2026-08-19 加，F055 T051 / AC-22）**：`withdraw_instance` 过去**只校验 `applicant_user_id`、不校验实例状态**，于是已 APPROVED / REJECTED / CANCELLED 的单子被直接打 API 也能「撤回」，`on_withdrawn` 照样触发——落到应用发布场景就是**已上线版本的 `app_version.terminal_state` 被反复改写成 `withdrawn`**。现在守卫是 `if instance.status != PENDING: raise ApprovalInstanceNotPendingError()`（**18118**，approval 段），位置在 `applicant_user_id` 校验**之后**、任何写入**之前**：
 - 排在 applicant 之后是刻意的——反过来的话，陌生人打一个终态单子会拿到「已结束」而不是「无权限」，等于把「哪些单子还开着」探测出去。
@@ -198,7 +206,7 @@ ApprovalCenterService.decide_task()
 | 表名 | 说明 | 关键状态字段 |
 |------|------|------------|
 | `approval_scenario` | 租户下启用的审批场景 | `enabled` |
-| `approval_route_rule` | 场景下条件分支（按 `sort_order` 匹配） | `route_type: pass/flow`、`enabled` |
+| `approval_route_rule` | 场景下条件分支（按 `sort_order` 匹配） | `route_type: pass/flow`（必审场景只接受 `flow`，见 §2）、`enabled` |
 | `approval_flow_definition` | 审批流程定义头 | — |
 | `approval_flow_version` | 流程版本快照 | `is_active` |
 | `approval_node_definition` | 流程版本内顺序节点 | `node_order`、`node_mode: or/and`、`approver_config` |
@@ -281,6 +289,8 @@ POST   /approval/admin/exceptions/{exception_id}/cancel      # 取消审批（�
 ```
 
 > **2026-08-19：路由本身零增删**（应用发布场景没有自己的审批端点，它复用上面这一套）。唯一的对外行为变化是 `withdraw` 多了 **18118**「该审批申请已结束，无法撤回」——错误码归 **approval 段 181xx**（`common/errcode/approval.py`），三语文案在 `src/frontend/packages/locales/src/api_errors/`。⚠️ **181 是审批引擎的段位，不是某个场景 owner 的段位**：在这里加码会同时收紧菜单权限 / 频道订阅 / 知识空间加入 / 应用发布四个场景，必须有全场景回归（`docs/constitution.md` C5 已登记该口径）。
+
+> **2026-09-18**：管理端分支配置多了 **18119**「该审批场景不允许配置免审分支」——只对 `mandatory_approval=True` 的场景（当前仅应用发布）生效，其余三场景的 pass 分支不受影响（§2）。前端 `ApprovalPage` 对这类场景直接不渲染「无需审批」选项，`list_presets` 响应里的 `mandatory_approval` 是它的判据。
 
 ### 旧系统 legacy（`/approval/requests`、`/approval/department-knowledge-space`）— ⚠️ 已废弃
 部门知识空间文件上传审批，独立于审批中心，见 `approval.py`。**已废弃**，仅兼容存量数据，不要在此新增/扩展接口。

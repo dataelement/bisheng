@@ -350,6 +350,7 @@
   "18116": "Approval flow not found",
   "18117": "This flow is still referenced by branches. Please unbind it from all branches before deleting.",
   "18118": "This approval request has already ended and can no longer be withdrawn",
+  "18119": "This approval scenario does not allow an auto-approval branch — every request must be reviewed by a person",
   "19000": "Permission denied",
   "19001": "Unauthorized access to Bisheng Information Service",
   "19002": "Error occurred while accessing Bisheng Information Service",

@@ -2180,6 +2180,7 @@
     "routeSectionHint": "从上到下依次校验",
     "routeTypeFlowFull": "进入审批流程",
     "routeTypePassFull": "无需审批，直接通过",
+    "routeTypeMandatoryHint": "该场景的每一次申请都必须经人工审批，不提供免审分支",
     "save": "保存",
     "scenarioSection": "审批场景",
     "selectFlow": "请选择流程",

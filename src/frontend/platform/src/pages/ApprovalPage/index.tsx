@@ -308,6 +308,7 @@ function RouteDialog({
   initial,
   flows,
   conditionFields,
+  allowPassRoute = true,
   onClose,
   onConfirm,
 }: {
@@ -315,6 +316,8 @@ function RouteDialog({
   initial: Partial<ApprovalRouteItem>;
   flows: ApprovalFlowItem[];
   conditionFields: string[];
+  /** False for scenarios whose preset declares every request must be reviewed. */
+  allowPassRoute?: boolean;
   onClose: () => void;
   onConfirm: (data: {
     route_name: string;
@@ -324,7 +327,11 @@ function RouteDialog({
   }) => void;
 }) {
   const [name, setName] = useState(initial.route_name ?? "");
-  const [type, setType] = useState(initial.route_type ?? "flow");
+  // A legacy row may already say "pass" on a scenario that no longer allows it.
+  // Showing it selected would leave the dropdown on an option that is not there.
+  const [type, setType] = useState(
+    !allowPassRoute && initial.route_type === "pass" ? "flow" : (initial.route_type ?? "flow"),
+  );
   const [flowId, setFlowId] = useState(
     initial.flow_definition_id ? String(initial.flow_definition_id) : "",
   );
@@ -478,10 +485,13 @@ function RouteDialog({
               onChange={(e) => setType(e.target.value)}
               className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             >
-              <option value="pass">{t("approvalPage.routeTypePassFull")}</option>
+              {allowPassRoute && <option value="pass">{t("approvalPage.routeTypePassFull")}</option>}
               <option value="flow">{t("approvalPage.routeTypeFlowFull")}</option>
             </select>
           </label>
+          {!allowPassRoute && (
+            <p className="text-xs text-muted-foreground">{t("approvalPage.routeTypeMandatoryHint")}</p>
+          )}
           {type === "flow" && (
             <label className="block text-sm text-muted-foreground">
               {t("approvalPage.bindFlow")}
@@ -1198,6 +1208,13 @@ export default function ApprovalPage() {
     // then prepend the always-included fields so they appear first.
     const presetFields = preset?.condition_fields?.filter((f) => CONDITION_FIELD_META[f]) ?? [];
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
+  }, [selectedScenario, presets]);
+  // Whether this scenario may carry an auto-approval branch. Unknown scenario
+  // codes (created by hand) keep the option — only a preset can withdraw it.
+  const allowPassRoute = useMemo(() => {
+    if (!selectedScenario) return true;
+    const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
+    return !preset?.mandatory_approval;
   }, [selectedScenario, presets]);
   // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)
   const activeSourceTypes = useMemo<string[] | undefined>(() => {
@@ -2256,6 +2273,7 @@ export default function ApprovalPage() {
         initial={routeDialog.initial}
         flows={flows}
         conditionFields={activeConditionFields}
+        allowPassRoute={allowPassRoute}
         onClose={() => setRouteDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveRoute(data)}
       />
