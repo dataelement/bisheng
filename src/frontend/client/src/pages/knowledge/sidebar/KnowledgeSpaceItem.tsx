@@ -269,6 +269,9 @@ export default function KnowledgeSpaceItem({
                     fully visible instead of being hidden under the button. Only the 20px button
                     itself carries an opaque bg (matching the row state) to cover text it floats
                     over; the 12px right gap stays transparent.
+                      • Hit area: a transparent ::before extends the clickable/hoverable zone to a
+                        square as tall as the row (28px normal / 36px compact) without changing
+                        the 20px visual box, its hover bg, or the dropdown anchor rect.
                       • w-8 (32px border box) + pr-3 (12px) → 20px button + 12px transparent gap;
                         justify-start keeps the button on the left.
                       • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
@@ -280,7 +283,8 @@ export default function KnowledgeSpaceItem({
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    flex size-5 items-center justify-center rounded-md outline-none
+                                    relative flex size-5 items-center justify-center rounded-md outline-none
+                                    before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
                                     ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
                                     ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}
