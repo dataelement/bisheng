@@ -329,6 +329,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             actions=actions,
         )
 
+    async def _has_joined_visibility(
+        self,
+        space_id: int,
+        *,
+        has_content_permission: bool,
+    ) -> bool:
+        if not has_content_permission:
+            return False
+
+        actor = await self._permission_actor()
+        if not actor.super_admin:
+            return True
+
+        # A full-scope super admin may open every space without an actual grant.
+        # The joined state, unlike access authorization, must reflect OpenFGA
+        # visibility so it stays aligned with the square and /joined list.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=[space_id],
+            actor=actor,
+        )
+        return visible_map.get(str(space_id), False)
+
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
         space_tid = space.tenant_id
@@ -385,6 +409,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
                 return SpaceSubscriptionStatusEnum.REJECTED
         return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_effective_subscription_status(
+        subscription_status: SpaceSubscriptionStatusEnum,
+        *,
+        has_visible: bool,
+    ) -> SpaceSubscriptionStatusEnum:
+        """Treat effective visibility as joined without hiding workflow states."""
+        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        return subscription_status
 
     @staticmethod
     def _apply_subscription_flags(
@@ -1537,14 +1572,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
+            has_joined_visibility = await self._has_joined_visibility(
+                space_id,
+                has_content_permission=has_content_permission,
+            )
+            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
                 user_id=self.login_user.user_id,
             )
             if member_info:
-                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=has_joined_visibility,
+            )
+            self._apply_subscription_flags(result, subscription_status)
             if result.user_role is None and has_content_permission:
                 result.user_role = (
                     UserRoleEnum.ADMIN
@@ -2225,10 +2270,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and visible_map.get(
-                str(space.id), False
-            ):
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=visible_map.get(str(space.id), False),
+            )
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
