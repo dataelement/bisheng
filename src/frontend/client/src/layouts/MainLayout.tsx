@@ -1,8 +1,7 @@
-import Cookies from 'js-cookie';
 import { getBysConfigApi } from '~/api/apps';
-import { Filled, Outlined } from 'bisheng-icons';
+import { Outlined } from 'bisheng-icons';
 import { X } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, Navigate, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
@@ -20,11 +19,11 @@ const systemNoticeTodayKey = () => {
   return `system_notice_shown_${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 import { cn } from '~/utils';
-import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
-import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
+import { lastSectionPaths } from './appModuleNavPaths';
+import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
+import { WorkbenchSidebar } from './WorkbenchSidebar';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -87,6 +86,7 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
   );
 }
 
+/** Mobile-only icon rail / apps drawer. Desktop renders WorkbenchSidebar instead. */
 function Sidebar({
   mobileSidebarOpen,
   onCloseMobileApps,
@@ -97,134 +97,16 @@ function Sidebar({
   /** 移动端应用中心抽屉：置于遮罩层内时用全宽撑满面板，避免与 flex 并排挤压主区域 */
   overlay?: boolean;
 }) {
-  const { pathname, search } = useLocation();
-  // On the menu-unavailable placeholder the URL carries the originating menu as
-  // `?plugin=xxx`; use it to keep that section's rail icon highlighted.
-  const menuUnavailablePlugin = pathname.startsWith('/menu-unavailable')
-    ? new URLSearchParams(search).get('plugin') || ''
-    : '';
+  const { pathname } = useLocation();
   const { data: bsConfig } = useGetBsConfig();
-  const { user, logout } = useAuthContext();
   const localize = useLocalize();
-  // Admin-configured sidebar entry names; blank config keeps the localized defaults.
-  const menuNames = useWorkbenchMenuNames();
-  const [langcode, setLangcode] = useRecoilState(store.lang);
+  const { links } = useWorkbenchNavLinks();
   const isMobile = usePrefersMobileLayout();
-  const isChatSection = /^\/(c|linsight)(\/|$)/.test(pathname);
   // Use includes() to tolerate possible basename prefix (e.g. "/xxx/apps")
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
   /** 仅当作为 240px 应用中心抽屉(overlay=true)被挂载时,才把侧边栏展宽为带文字标签。
-   *  PC 默认和移动端「系统菜单整页右滑」露出模式都保持 w-16 窄栏(纯图标)。 */
+   *  移动端「系统菜单整页右滑」露出模式保持 w-16 窄栏(纯图标)。 */
   const showExpandedHubSidebar = isMobile && isAppSection && overlay;
-
-  // Backend returns `web_menu` but we map it into front-end user as `plugins`.
-  const plugins: string[] | null = Array.isArray((user as any)?.plugins)
-    ? ((user as any)?.plugins as string[])
-    : null;
-  const canOpenWorkbenchEntry = useMemo(
-    () =>
-      !Array.isArray(plugins) ||
-      canOpenWorkbench({
-        role: user?.role,
-        plugins,
-        is_department_admin: (user as { is_department_admin?: boolean } | undefined)
-          ?.is_department_admin,
-      }),
-    [plugins, user],
-  );
-  // Workbench approval scope gates the workspace tabs (falls back to the legacy
-  // global flag for roles saved before the workbench/admin split).
-  const menuApprovalMode = Boolean(
-    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean })
-      ?.menu_approval_mode_workbench
-    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
-  );
-  const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
-  const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
-  const showSubscriptionTab = showWorkbenchItem('subscription');
-  const showKnowledgeSpaceTab = showWorkbenchItem('knowledge_space');
-  const showHomeTab = showWorkbenchItem('home');
-  const showAppsTab = showWorkbenchItem('apps');
-
-  // Prefer the backend-computed effective area permission. This includes tenant
-  // admins whose role still carries the compatible `backend` key rather than the
-  // newer `admin` parent key. Older servers fall back to parent-menu semantics.
-  const showAdminEntry = canShowPlatformAdminEntry({
-    role: user?.role,
-    plugins,
-    is_department_admin: user?.is_department_admin,
-    has_admin_console: user?.has_admin_console,
-  });
-
-  // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
-  const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge';
-    to: string;
-    icon: React.ReactNode;
-    label: string;
-    isActive: boolean;
-    closeDrawerOnNavigate?: boolean;
-  }>>(() => {
-    if (!canOpenWorkbenchEntry) return [];
-    return [
-      {
-        section: 'home' as const,
-        to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
-        icon: <Outlined.Home />,
-        activeIcon: <Filled.Home />,
-        label: menuNames.home,
-        isActive: /^\/(c|linsight)(\/|$)/.test(pathname) || menuUnavailablePlugin === 'home',
-        closeDrawerOnNavigate: true,
-      },
-
-      {
-        section: 'knowledge' as const,
-        // Mobile is list-page-first: the menu always opens the space list (/knowledge),
-        // never the last-visited file page. Desktop keeps last-path restoration.
-        to: hasPlugin('knowledge_space') || !menuApprovalMode
-          ? (isMobile ? '/knowledge' : (lastSectionPaths.knowledge || '/knowledge'))
-          : '/menu-unavailable?plugin=knowledge_space',
-        icon: <Outlined.Book />,
-        activeIcon: <Filled.Book />,
-        label: menuNames.knowledge,
-        isActive: pathname.startsWith('/knowledge') || menuUnavailablePlugin === 'knowledge_space',
-        closeDrawerOnNavigate: true,
-      },
-      {
-        section: 'channel' as const,
-        to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
-        icon: <Outlined.Rss />,
-        activeIcon: <Filled.Rss />,
-        label: menuNames.channel,
-        isActive: pathname.startsWith('/channel') || menuUnavailablePlugin === 'subscription',
-        closeDrawerOnNavigate: true,
-      },
-      {
-        section: 'apps' as const,
-        to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
-        icon: <Outlined.Application />,
-        activeIcon: <Filled.Application />,
-        label: menuNames.apps,
-        isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
-        closeDrawerOnNavigate: true,
-      },
-    ].filter((l) => {
-      if (l.section === 'home') return showHomeTab;
-      if (l.section === 'apps') return showAppsTab;
-      if (l.section === 'channel') return showSubscriptionTab;
-      if (l.section === 'knowledge') return showKnowledgeSpaceTab;
-      return true;
-    });
-    // Menu names are read field-by-field: the hook returns a fresh object each render.
-  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins,
-    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps]);
-
-  const changeLang = useCallback((value: string) => {
-    let userLang = value;
-    if (value === 'auto') userLang = navigator.language || navigator.languages[0];
-    setLangcode(userLang);
-    Cookies.set('lang', userLang, { expires: 365 });
-  }, [setLangcode]);
 
   return (
     <div
@@ -277,7 +159,7 @@ function Sidebar({
               key={link.section}
               to={link.to}
               icon={link.icon}
-              activeIcon={(link as { activeIcon?: React.ReactNode }).activeIcon}
+              activeIcon={link.activeIcon}
               label={link.label}
               active={link.isActive}
               showLabel={showExpandedHubSidebar}
@@ -292,21 +174,6 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col items-center">
-        {!isMobile && showAdminEntry && (
-          <>
-            <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer" className="mb-2">
-              <div
-                title={localize('com_nav_admin_panel')}
-                className="rounded-lg p-3 transition-colors hover:bg-fill-2"
-              >
-                <Outlined.DeviceDesktopExchange className="size-5 text-text-3" />
-              </div>
-            </a>
-            {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
-            <div className="mb-4 w-full h-px bg-fill-3" />
-          </>
-        )}
-
         {/* 用户菜单：应用中心抽屉模式展示整行（含右箭头） */}
         <UserPopMenu variant={showExpandedHubSidebar ? 'drawer' : 'rail'} />
       </div>
@@ -476,8 +343,10 @@ export default function MainLayout() {
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-fill-1',
-        isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
+        'relative flex w-screen',
+        // Desktop is a flat white page split by the sidebar's hairline (Figma 13139:111431);
+        // mobile keeps the gray backdrop its sliding panels are drawn against.
+        isMobile ? 'min-h-[100dvh] overflow-x-clip bg-fill-1' : 'h-[100dvh] overflow-hidden bg-white',
       )}
     >
       <WorkbenchAccessGuard />
@@ -490,11 +359,15 @@ export default function MainLayout() {
             />
           </div>
         ) : null
-      ) : (
+      ) : isMobile ? (
         <Sidebar
           mobileSidebarOpen={mobileSidebarOpen}
           onCloseMobileApps={() => setMobileSidebarOpen(false)}
         />
+      ) : (
+        // On 设置 the page's own nav takes this slot (same width and chrome); its back
+        // button brings the workbench sidebar back.
+        <WorkbenchSidebar hidden={isSettingsRoute} />
       )}
       {isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
         <div
@@ -522,7 +395,7 @@ export default function MainLayout() {
       <main
         className={cn(
           'relative min-w-0 flex-1',
-          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] py-2 pr-2',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
           shouldHideSidebarOnMobileAppsArea && 'transition-transform duration-300 ease-out',
           systemMenuRevealing && 'translate-x-16',
         )}
@@ -540,14 +413,14 @@ export default function MainLayout() {
           // useEffect fires on every navigation and re-checks pending status.
           <div
             className={cn(
-              'flex flex-col bg-white shadow-[0px_0px_20px_0px_#07225808]',
-              !isMobile && 'rounded-xl',
+              'flex flex-col bg-white',
+              isMobile && 'shadow-[0px_0px_20px_0px_#07225808]',
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-3xl',
               isMobile
                 ? 'h-auto min-h-[100dvh] overflow-visible'
-                : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                : 'scrollbar-os h-[100dvh] overflow-y-auto overscroll-y-none',
               systemMenuRevealing && 'overflow-hidden',
             )}
           >
@@ -585,8 +458,8 @@ export default function MainLayout() {
             // width.
             data-workbench-panel
             className={cn(
-              'relative bg-white shadow-[0px_0px_20px_0px_#07225808]',
-              !isMobile && 'rounded-xl',
+              'relative bg-white',
+              isMobile && 'shadow-[0px_0px_20px_0px_#07225808]',
               // When the left system menu is revealed, the panel slides right and
               // exposes its left edge — round the left corners to 24px.
               systemMenuRevealing && 'rounded-l-3xl',
@@ -595,8 +468,8 @@ export default function MainLayout() {
                   ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
                   : 'h-auto min-h-[100dvh] overflow-visible'
                 : innerScrollShell
-                  ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
-                  : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                  ? 'flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                  : 'scrollbar-os h-[100dvh] overflow-y-auto overscroll-y-none',
               // While the system menu is revealed, clip content to the rounded corners so the
               // exposed left edge shows the radius (e.g. knowledge uses overflow-visible otherwise).
               systemMenuRevealing && 'overflow-hidden',

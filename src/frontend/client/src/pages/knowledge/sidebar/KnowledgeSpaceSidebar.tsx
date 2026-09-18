@@ -47,6 +47,8 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
     /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
     mobilePageMode?: boolean;
+    /** With mobilePageMode: lay each section's spaces out as a card grid (desktop home). */
+    pageGrid?: boolean;
     /** The URL already names a space, so there is nothing to choose a default for.
      *  Auto-select must stand down until the host's own route effect lands, or it
      *  navigates to the first space in the list and takes the URL with it. */
@@ -69,6 +71,7 @@ export function KnowledgeSpaceSidebar({
     onDrawerClose,
     compactMode = false,
     mobilePageMode = false,
+    pageGrid = false,
     suppressAutoSelect = false,
     onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
@@ -210,7 +213,9 @@ export function KnowledgeSpaceSidebar({
     const departmentEmpty = !departmentSpaces.length;
     const createdEmpty = !filteredCreatedSpaces.length;
     const joinedEmpty = !filteredJoinedSpaces.length;
-    const fillListHeight = !compactMode;
+    // The desktop home grid keeps natural heights too: a stretched last section
+    // would turn its grid into a flex column.
+    const fillListHeight = !compactMode && !pageGrid;
     const stretchJoined = fillListHeight && !joinedCollapsed;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
@@ -315,6 +320,7 @@ export function KnowledgeSpaceSidebar({
                 space={s}
                 type={sectionType}
                 isActive={s.id === activeSpaceId}
+                card={pageGrid}
                 onSelect={onSpaceSelect}
                 onDelete={handleDeleteSpace}
                 onLeave={handleLeaveSpace}
@@ -345,7 +351,10 @@ export function KnowledgeSpaceSidebar({
     // w-[100cqi] pins the area to the scroll container's visible inline width (it has
     // container-type:inline-size) even inside the shared w-max wrapper, so card rows
     // truncate instead of overflowing horizontally — preserving the v1 vertical scroll.
-    const listRowClassName = mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
+    const listRowClassName = pageGrid
+        // No side padding: cards run the full width of the home's 1000px column.
+        ? "grid w-[100cqi] grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3 py-2"
+        : mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
     // Mobile: 8px gap above each section group.
     const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
 
@@ -386,6 +395,7 @@ export function KnowledgeSpaceSidebar({
         <div className={cn(
             "flex items-center justify-center text-center text-sm text-text-3",
             !mobilePageMode && pinnedEmptyClassName,
+            pageGrid && "col-span-full",
             stretch ? "flex-1 py-6" : "h-24",
         )}>
             {localize("com_knowledge.no_data")}

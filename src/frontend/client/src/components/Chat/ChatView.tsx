@@ -32,6 +32,7 @@ import {
   type ChatModelMode,
   type ChatModelOption,
 } from '~/hooks/useChatModelResolution';
+import { useChatAskHandoff } from './chatAskHandoff';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
@@ -235,6 +236,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     stopGenerating,
     regenerate,
   } = useAiChat(conversationId, false, shareToken);
+
+  const leaveTaskMode = useCallback(() => setTaskMode(false), [setTaskMode]);
+  // Questions asked from a module page's ask bar land here (see chatAskHandoff).
+  const { attachmentAsk, retireAttachmentAsk } = useChatAskHandoff({
+    conversationId: conversationId ?? '',
+    locationKey: location.key,
+    selectedKbs: selectedOrgKbs,
+    setSelectedKbs: setSelectedOrgKbs,
+    sendMessage,
+    // A knowledge question is a daily-chat turn, whatever mode the tab was left in.
+    onTake: leaveTaskMode,
+  });
 
   // ── F028: workstation conversation export / import-to-knowledge ──
   // Auto-exit selection mode whenever the user switches to another chat.
@@ -1076,6 +1089,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}
                             onSelectionPresenceChange={setLandingHasSelection}
+                            attachmentAsk={attachmentAsk}
+                            onAttachmentAskDone={retireAttachmentAsk}
                           />
                         </div>
                       )}

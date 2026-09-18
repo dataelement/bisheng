@@ -19,12 +19,15 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+import { DemoTag } from "~/mock/demo/DemoTag";
 import { formatTimeCard } from "../knowledgeUtils";
 
 interface KnowledgeSpaceCardItemProps {
     space: KnowledgeSpace;
     isActive: boolean;
     type: "created" | "joined" | "department";
+    /** Desktop home grid: a bordered, padded card instead of a full-bleed list row. */
+    card?: boolean;
     onSelect: (space: KnowledgeSpace) => void;
     onDelete: (id: string) => void;
     onLeave: (id: string) => void;
@@ -49,6 +52,7 @@ export default function KnowledgeSpaceCardItem({
     space,
     isActive,
     type,
+    card = false,
     onSelect,
     onDelete,
     onLeave,
@@ -136,7 +140,7 @@ export default function KnowledgeSpaceCardItem({
 
     return (
         <div
-            className={`group flex cursor-pointer items-center gap-2 rounded-lg py-3 transition-colors ${isActive ? "bg-[#EEEEEE]" : "active:bg-[#F4F4F4] fine-pointer:hover:bg-[#F4F4F4]"
+            className={`group flex cursor-pointer items-center gap-2 rounded-lg py-3 transition-colors ${card ? "border border-border-base px-3" : ""} ${isActive ? "bg-[#EEEEEE]" : "active:bg-[#F4F4F4] fine-pointer:hover:bg-[#F4F4F4]"
                 }`}
             onClick={() => onSelect(space)}
         >
@@ -144,6 +148,7 @@ export default function KnowledgeSpaceCardItem({
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
                     <span className="truncate text-sm leading-6 text-text-1">{space.name}</span>
+                    <DemoTag id={space.id} className="shrink-0" />
                     {space.isPinned ? (
                         <Outlined.Pin className="size-3.5 shrink-0 text-text-3" aria-hidden />
                     ) : null}

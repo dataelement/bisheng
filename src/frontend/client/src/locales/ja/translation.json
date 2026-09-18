@@ -1599,7 +1599,8 @@
     "filter_file_status": "ファイル状態で絞り込み",
     "sort_by_size_label": "サイズで並べ替え",
     "select_all": "すべて選択",
-    "folder_abnormal": "異常あり"
+    "folder_abnormal": "異常あり",
+    "ask_bar_placeholder": "このナレッジスペースについて質問すると、回答は新しいチャットで開きます…"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",
@@ -1859,7 +1860,12 @@
     "wechat_link_label": "公式アカウントのリンク",
     "wechat_article_link_label": "公式アカウント記事リンク",
     "wechat_link_copy_tip": "記事右上の「···」をタップして「リンクをコピー」を選ぶか、「ブラウザで開く」を選んでアドレスバーの URL をコピーしてください。",
-    "channel_unavailable_or_no_permission": "このチャンネルは利用できないか、閲覧権限がありません"
+    "channel_unavailable_or_no_permission": "このチャンネルは利用できないか、閲覧権限がありません",
+    "home_source_count": "情報源 {{0}} 件",
+    "ask_file_source": "情報源",
+    "ask_file_link": "原文リンク",
+    "ask_file_published_at": "公開日時",
+    "ask_bar_placeholder": "この記事について質問すると、回答は新しいチャットで開きます…"
   },
   "com_tools": {
     "image_view": "画像表示"
@@ -2354,5 +2360,26 @@
       "hundredMillion": "億",
       "tenThousand": "万"
     }
+  },
+  "com_workbench_sidebar": {
+    "home": "ホームに戻る",
+    "projects": "プロジェクト",
+    "conversations": "チャット",
+    "demo": {
+      "project_travel": "旅行ガイド",
+      "project_files": "ファイル整理",
+      "chat_food": "新疆のご当地グルメ",
+      "chat_heritage": "新疆の文化遺産",
+      "chat_season": "新疆旅行のベストシーズン",
+      "chat_spots": "新疆の人気観光スポット"
+    }
+  },
+  "com_demo_data": {
+    "readonly_toast": "これは表示用のサンプルデータのため、開くことはできません",
+    "tag": "サンプル"
+  },
+  "com_module_home": {
+    "tab_mine": "マイ",
+    "tab_square": "広場"
   }
 }

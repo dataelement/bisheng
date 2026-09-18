@@ -12,8 +12,9 @@ import {
 import { settingsLandingPath } from "~/pages/settings/settingsSections";
 import { cn } from "~/utils";
 
-/** 左侧窄栏仅头像 = PC；会话历史抽屉内整行 = 移动端 */
-export type UserPopMenuVariant = "rail" | "drawer";
+/** rail = avatar only (mobile icon rail); drawer = full row in the mobile history drawer;
+ *  sidebar = compact 24px avatar + name row in the desktop workbench sidebar. */
+export type UserPopMenuVariant = "rail" | "drawer" | "sidebar";
 
 export interface UserPopMenuProps {
     variant?: UserPopMenuVariant;
@@ -53,7 +54,7 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
     const avatarInner = user?.avatar ? (
         <AvatarImage src={user.avatar} alt="User" />
     ) : (
-        <AvatarName name={user?.username} />
+        <AvatarName name={user?.username} className={cn(variant === "sidebar" && "text-caption")} />
     );
 
     // 组件-Badge徽标.md §2/§5 — the corner dot on a round host: the badge pulls
@@ -65,6 +66,19 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
             {avatar}
         </Badge>
     );
+
+    if (variant === "sidebar") {
+        return (
+            <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none"
+                onClick={openSettings}
+            >
+                {withUnreadDot(<Avatar className="h-6 w-6">{avatarInner}</Avatar>)}
+                <span className="min-w-0 truncate text-body text-text-1">{displayName}</span>
+            </button>
+        );
+    }
 
     if (isDrawer) {
         return (

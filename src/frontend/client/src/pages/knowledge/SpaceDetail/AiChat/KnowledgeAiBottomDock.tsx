@@ -33,6 +33,7 @@ import {
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import { KnowledgeAskBar } from "./KnowledgeAskBar";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
@@ -55,9 +56,25 @@ interface KnowledgeAiBottomDockProps {
     folderId?: string;
     /** Welcome text disambiguates space-wide vs folder-scoped Q&A. */
     contextLabel?: string;
+    /** Space name — desktop hands it to the main chat as the mounted space's label. */
+    spaceName?: string;
 }
 
-export function KnowledgeAiBottomDock({
+/**
+ * Entry point. Desktop: KnowledgeAskBar — the question is answered on the 对话 page, so
+ * its history joins the workbench conversation list. Mobile: the in-place dock below,
+ * unchanged (no global conversation list to join there).
+ */
+export function KnowledgeAiBottomDock(props: KnowledgeAiBottomDockProps) {
+    const isH5 = usePrefersMobileLayout();
+    const chatModel = useRecoilValue(store.chatModel);
+    if (!isH5) {
+        return <KnowledgeAskBar spaceId={props.spaceId} spaceName={props.spaceName ?? ""} modelValue={chatModel.id} />;
+    }
+    return <KnowledgeAiInPlaceDock {...props} />;
+}
+
+function KnowledgeAiInPlaceDock({
     spaceId,
     folderId,
 }: KnowledgeAiBottomDockProps) {
