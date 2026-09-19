@@ -6,6 +6,19 @@ import pytest
 from test.knowledge.test_knowledge_space_service import _load_service_class
 
 
+@pytest.fixture(autouse=True)
+def _space_has_admin():
+    # COFCO F045: joining an approval space first checks that a department
+    # space has an admin. These spaces are ordinary ones, so the check passes;
+    # the pending-admin block itself is covered in test/cofco.
+    with patch(
+        "bisheng.knowledge.domain.services.department_knowledge_space_service."
+        "DepartmentKnowledgeSpaceService.ensure_space_not_pending_admin",
+        new_callable=AsyncMock,
+    ):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_approval_space_subscription_uses_approval_gate_pending():
     from bisheng.common.models.space_channel_member import (
