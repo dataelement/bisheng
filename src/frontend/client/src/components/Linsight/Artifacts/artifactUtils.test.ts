@@ -1,4 +1,5 @@
 import request from '~/api/request';
+import { type ChatCitation, resolveCitationDetails } from '~/api/chatApi';
 import { stripCitationHandles } from '~/components/Chat/Messages/Content/citationUtils';
 import {
     type ArtifactFile,
@@ -18,6 +19,29 @@ jest.mock('~/api/request', () => ({
     __esModule: true,
     default: { post: jest.fn() },
 }));
+
+// F069 P2: the export bake asks the resolver only for ids the seed lacks.
+jest.mock('~/api/chatApi', () => ({
+    __esModule: true,
+    resolveCitationDetails: jest.fn(),
+}));
+
+// The reference-list labels are i18n copy; render the key with its argument
+// so the fixtures stay ASCII.
+jest.mock('i18next', () => ({
+    __esModule: true,
+    default: {
+        t: (key: string, options?: Record<string, unknown>) =>
+            options && '0' in options ? `${key}:${String(options[0])}` : key,
+    },
+}));
+
+// Default: nothing more resolves than the seed. The P1 strip suites below
+// never seed anything, so they exercise the AC-22 fallback and must keep
+// producing the same bytes they did before baking existed.
+beforeEach(() => {
+    (resolveCitationDetails as jest.Mock).mockResolvedValue([]);
+});
 
 const mkArtifact = (over: Partial<ArtifactFile>): ArtifactFile => ({
     file_id: over.file_id ?? Math.random().toString(36).slice(2),
@@ -568,5 +592,107 @@ describe('fetchArtifactBlob unresolved-handle stripping', () => {
         );
         expect(saved).not.toMatch(/[\ue200\ue201\ue202]/);
         expect(saved).not.toContain('knowledgesearch_');
+    });
+});
+
+/**
+ * F069 P2 (AC-20 / AC-22): with the run's citation seed the saved markdown
+ * carries visible `[n]` markers and a reference list; without any detail the
+ * P1 strip above still applies byte for byte.
+ */
+describe('fetchArtifactBlob citation baking', () => {
+    const origFetch = global.fetch;
+
+    const readBlobText = (blob: Blob) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(blob);
+        });
+
+    const mockFetchText = (body: string) => {
+        const text = jest.fn().mockResolvedValue(body);
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, text, blob: jest.fn() }) as unknown as typeof fetch;
+    };
+
+    const seed: ChatCitation[] = [
+        {
+            citationId: 'knowledgesearch_18f5868b',
+            type: 'knowledgeSearch',
+            sourcePayload: {
+                documentName: 'handbook.pdf',
+                knowledgeName: 'HR',
+                items: [{ itemId: '0', page: 12 }],
+            },
+        },
+    ];
+
+    const report = { file_id: '6', file_name: 'report.md', file_url: 'output/report.md', source: 'output' as const };
+
+    beforeEach(() => {
+        (request.post as jest.Mock).mockResolvedValue({
+            status_code: 200,
+            data: { file_path: '/presigned/x' },
+        });
+    });
+
+    afterEach(() => {
+        global.fetch = origFetch;
+    });
+
+    it('bakes [n] plus a reference list from the seed and the resolve cache', async () => {
+        mockFetchText(
+            'Claimknowledgesearch_18f5868b:0 and webwebsearch_ab12cd34:3 and [S99].',
+        );
+        (resolveCitationDetails as jest.Mock).mockResolvedValue([
+            {
+                citationId: 'websearch_ab12cd34',
+                type: 'webSearch',
+                sourcePayload: { title: 'Example', source: 'example.com', url: 'https://example.com/x' },
+            },
+        ]);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: seed });
+
+        // Only the id missing from the seed goes to the resolver.
+        expect(resolveCitationDetails).toHaveBeenCalledWith(['websearch_ab12cd34']);
+        const saved = await readBlobText(blob);
+        expect(saved).toBe(
+            'Claim[1] and web[2] and .\n\n## com_linsight_export_references\n\n' +
+            '1. 《handbook.pdf》 · com_linsight_export_page:12 · HR\n' +
+            '2. Example · example.com · https://example.com/x\n',
+        );
+        expect(saved).not.toMatch(/[]/);
+        expect(saved).not.toContain('knowledgesearch_');
+    });
+
+    it('falls back to the P1 strip when there is no seed and the resolve fails (AC-22)', async () => {
+        mockFetchText('Claimknowledgesearch_18f5868b:0 and [S99] and bare [3].');
+        (resolveCitationDetails as jest.Mock).mockRejectedValue(new Error('network'));
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1');
+
+        expect(await readBlobText(blob)).toBe('Claim and  and bare [3].');
+        expect(warn).toHaveBeenCalled();
+    });
+
+    it('does not touch the resolver when the markdown has no markers', async () => {
+        mockFetchText('Plain [S99] text.');
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: seed });
+
+        expect(resolveCitationDetails).not.toHaveBeenCalled();
+        expect(await readBlobText(blob)).toBe('Plain  text.');
+    });
+
+    it('drops a span the resolver cannot answer for and adds no section (forbidden source)', async () => {
+        mockFetchText('Claimknowledgesearch_forbidden:0 end.');
+        (resolveCitationDetails as jest.Mock).mockResolvedValue([]);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: [] });
+
+        expect(await readBlobText(blob)).toBe('Claim end.');
     });
 });

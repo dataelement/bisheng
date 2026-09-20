@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
-| 实现 | 🔄 进行中 | 33 / 41 完成（Wave 1、Wave 2 全部完成；A/B uncited 44% → 0%，见 design §7；预览角标已核实）。Wave 3（P2）待产品确认版式。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
+| 实现 | 🔄 进行中 | 40 / 41 完成（Wave 1～3 代码全部完成；T041 的 F054 措辞与文档已回写，116 导出对照待 release 部署后执行）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
 
@@ -287,43 +287,43 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 ### Wave 3 — P2：导出烘焙（待产品确认版式）
 
-- [ ] **T034**: `render_citations_for_export` 测试
+- [x] **T034**: `render_citations_for_export` 测试
   **文件**: `src/backend/test/citation/test_citation_handle_service.py`（追加）
   **逻辑**: 输入 md（含私有区标记）与已按导出者 resolve 的来源列表：按首现顺序编号 `[n]`、文末「参考资料」（知识库：文档名+定位；网页：标题+URL）；未解析的 key 剥离不编号；无来源时等价 `strip_citation_markers`。
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-24
   **依赖**: T017
 
-- [ ] **T035**: `render_citations_for_export` 实现
+- [x] **T035**: `render_citations_for_export` 实现
   **文件**: `src/backend/bisheng/citation/domain/services/citation_handle_service.py`
   **逻辑**: 纯函数，不查权限（design 决策 8）。
   **测试**: T034 全绿
   **依赖**: T034
 
-- [ ] **T036**: 后端导出烘焙测试
+- [x] **T036**: 后端导出烘焙测试
   **文件**: `src/backend/test/linsight/test_linsight_export.py`（追加）
   **逻辑**: 导出工具与转换端点以导出者身份 `resolve_citations_with_reasons` 后烘焙；无权限来源不编号、不进参考资料；解析为空时退回剥标并有 `citations_baked=false` 日志；导出不失败；输出仍不含未识别编号 `[S99]`（AC-19 在 P2 继续成立）。
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-24
   **依赖**: T035
 
-- [ ] **T037**: 后端导出调用点改烘焙
+- [x] **T037**: 后端导出调用点改烘焙
   **文件**: `src/backend/bisheng/tool/domain/langchain/linsight_export.py`、`src/backend/bisheng/linsight/api/endpoints/linsight.py`
   **逻辑**: 导出前以导出者身份 `resolve_citations_with_reasons`（既有 `citation_resolve_service`，INV-7 执行点）取来源，调 `render_citations_for_export`；未解析退回剥离并记日志 `citations_baked=false`。替换 T027 引入位置上的 `strip_citation_markers` 调用；`strip_citation_handles`（剥未识别编号）保留（AC-19）。
   **测试**: T036 全绿
   **依赖**: T036
 
-- [ ] **T038**: html 交付物上标与附录测试
+- [x] **T038**: html 交付物上标与附录测试
   **文件**: `src/backend/test/linsight/test_workspace_backend_citation_handles.py`（追加）
   **逻辑**: 写 `.html` 时 `[S3]` → `<sup>[1]</sup>`，页尾追加附录（编号表标题）；无句柄时文件不变。
   **覆盖 AC**: AC-23
   **依赖**: T025
 
-- [ ] **T039**: html 交付物上标与附录实现
+- [x] **T039**: html 交付物上标与附录实现
   **文件**: `src/backend/bisheng/linsight/domain/services/workspace_backend.py`
   **逻辑**: 写 `.html` 分支（design 决策 8）。
   **测试**: T038 全绿
   **依赖**: T038
 
-- [ ] **T040**: 前端 Client 另存 md 客户端烘焙
+- [x] **T040**: 前端 Client 另存 md 客户端烘焙
   **文件**: `src/frontend/client/src/components/Linsight/Artifacts/artifactUtils.ts`、`src/frontend/client/src/components/Linsight/Artifacts/artifactUtils.test.ts`
   **逻辑**: 用预览时已取回的解析结果（`output_result.citations` 种子 + 解析缓存）按与后端同一规则烘焙；未解析 key 剥离；不新增端点（design 决策 8）；替换 T028 中对已识别标记的剥离，未识别编号 `[S99]` 仍剥（AC-19）。jest 先写红测。
   **覆盖 AC**: AC-20, AC-24
@@ -346,5 +346,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 - T006 审计日志断言改用 loguru sink（caplog 看不到 loguru）——实现细节，design 不变
 - T017 偏离 → 句柄前瞻改为 ASCII 字母数字（Python `\w` 含 CJK，`结论[S3]` 不会转换）；前端 `stripCitationHandles` 同步（实现细节，design §4.2 文法表补一行）
 - T032 偏离 → 契约钉 `meta:enabled` 改在 `_create_agent` 的 `scope.pin_contract()` 写入（不只靠首次分配）：逐字契约的会话永不分配句柄，否则开关翻开后追问轮会换契约 → 更新 design 决策 6
+- T039 偏离 → html 烘焙的 `<sup>` 带 `data-f069-h="S3"` 属性，再次写盘先还原再烘焙（否则 edit 追加的编号永远不烘）；混合未知句柄的 run 与 markdown 一致：已知部分烘、未知字面保留 → design §4.2 补一行
+- T035 / T040 偏离 → 定位文案统一为「第 N 页 / 第 N 段」（带空格，与前端 i18n 一致）
 - T013 基线暴露：零引用时 `persisted` 未写回 DB 行（提前 return 跳过保存）→ 已修，design §7 记录
 - T011 `ExecutionFlow.tsx` 第二个 `citations=` 属于 `FilePreviewPanel`，不透传 `citationAudit`（预览面板不显示提示）——与 spec AC-04「结果区摘要下方」一致

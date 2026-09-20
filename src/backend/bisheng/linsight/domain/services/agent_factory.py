@@ -1133,9 +1133,15 @@ async def create_linsight_agent(
     # _SUBAGENT_TOOL_DENY as belt-and-suspenders — deliverable export stays in the
     # main graph. init_linsight_export_tools returns [] for a non-writable backend
     # (e.g. the test FakeWorkspaceBackend), so the tools never surface when unusable.
+    from bisheng.citation.domain.services.citation_export_service import build_export_user
     from bisheng.tool.domain.langchain.linsight_export import init_linsight_export_tools
 
-    export_tools = init_linsight_export_tools(backend)
+    # F069 P2: the task owner is the exporter for in-run docx/pdf deliverables;
+    # the references section is permission-filtered under that identity.
+    export_user = await build_export_user(
+        getattr(session_model, "user_id", None), getattr(session_model, "tenant_id", None)
+    )
+    export_tools = init_linsight_export_tools(backend, export_user=export_user)
     # Invalid tool-call repair (after_model). Appended LAST on purpose: after_model
     # hooks run in REVERSE middleware order, so this one sees the model output
     # first and the tool-loop breaker / TodoList hooks then see the repaired call.
