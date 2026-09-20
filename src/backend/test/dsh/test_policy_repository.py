@@ -12,6 +12,7 @@ from bisheng.core.database import tenant_filter
 from bisheng.dsh.domain.models.admin_operation import DshAdminOperation
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
+from bisheng.dsh.domain.models.subject_policy import DshSubjectPolicy, DshSubjectPolicyAudit
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.admin_operation import DshOperationRepository
 from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
@@ -29,7 +30,14 @@ def sql_store(tmp_path, monkeypatch, request):
         previous = {name: set(getattr(probe.dispatch, name)) for name in ("do_orm_execute", "before_flush")}
     tenant_filter.register_tenant_filter_events()
     tenant_filter._tenant_aware_tables.update(
-        {"dsh_user_policy", "dsh_admin_operation", "dsh_model_call", "dsh_monthly_usage"}
+        {
+            "dsh_user_policy",
+            "dsh_admin_operation",
+            "dsh_model_call",
+            "dsh_monthly_usage",
+            "dsh_subject_policy",
+            "dsh_subject_policy_audit",
+        }
     )
     if request.param == "external":
         database_url = request.getfixturevalue("dsh_database_url")
@@ -40,6 +48,8 @@ def sql_store(tmp_path, monkeypatch, request):
         DshModelCall.__table__.drop(engine, checkfirst=True)
         DshMonthlyUsage.__table__.drop(engine, checkfirst=True)
         DshAdminOperation.__table__.drop(engine, checkfirst=True)
+        DshSubjectPolicyAudit.__table__.drop(engine, checkfirst=True)
+        DshSubjectPolicy.__table__.drop(engine, checkfirst=True)
         DshUserPolicy.__table__.drop(engine, checkfirst=True)
     else:
         engine = create_engine(f"sqlite:///{tmp_path / 'policy.db'}")
@@ -59,11 +69,20 @@ def sql_store(tmp_path, monkeypatch, request):
     DshAdminOperation.__table__.create(engine)
     DshModelCall.__table__.create(engine)
     DshMonthlyUsage.__table__.create(engine)
+    DshSubjectPolicy.__table__.create(engine)
+    DshSubjectPolicyAudit.__table__.create(engine)
     token = set_current_tenant_id(2)
     yield engine
     current_tenant_id.reset(token)
     if request.param == "external":
-        for model in (DshModelCall, DshMonthlyUsage, DshAdminOperation, DshUserPolicy):
+        for model in (
+            DshModelCall,
+            DshMonthlyUsage,
+            DshSubjectPolicyAudit,
+            DshSubjectPolicy,
+            DshAdminOperation,
+            DshUserPolicy,
+        ):
             model.__table__.drop(engine, checkfirst=True)
     engine.dispose()
     with Session() as probe:

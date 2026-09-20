@@ -232,7 +232,15 @@ async def test_real_redis_policy_recovery_preserves_storage_block(service_factor
             return invoke
 
     await quota.redis.hset(
-        gate, mapping={"version:2": "1", "model:2": "1", "limit:2": "1000", "version": "3", "limit": "3000"}
+        gate,
+        mapping={
+            "version:2": "1",
+            "direct_version:2": "1",
+            "model:2": "1",
+            "limit:2": "1000",
+            "version": "3",
+            "limit": "3000",
+        },
     )
     service, state, _quota = service_factory(quota=ResponseLoss())
     with service.repository_scope() as repository:

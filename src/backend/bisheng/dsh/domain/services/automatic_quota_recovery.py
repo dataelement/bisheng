@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -29,6 +29,7 @@ class AutomaticQuotaRecovery:
             return False
         if (
             gate.get("state") != "READY"
+            or gate.get("policy_revision_schema") != "2"
             or gate.get("write_in_progress") == "1"
             or gate.get("running_index") != "1"
             or int(gate.get("running_count", -1)) != await redis.zcard(base + ":running")
@@ -81,6 +82,7 @@ class AutomaticQuotaRecovery:
             await apply("renew")
             events, policy, operations = snapshot
             inventory = {event.request_id: event for event in events}
+            sql_only = set(inventory)
             surviving = set()
 
             def merge(raw):
@@ -90,6 +92,10 @@ class AutomaticQuotaRecovery:
                 surviving.add(event.request_id)
                 previous = inventory.get(event.request_id)
                 if previous is not None:
+                    if event.request_id in sql_only:
+                        previous = self.restore_sql_timestamp(previous, event)
+                        inventory[event.request_id] = previous
+                        sql_only.remove(event.request_id)
                     if self.quota._identity(previous) != self.quota._identity(event):
                         raise ValueError("Conflicting request identity during recovery")
                     if previous.event_version > event.event_version:
@@ -156,6 +162,7 @@ class AutomaticQuotaRecovery:
                     break
             epoch = policy["quota_epoch"]
             gate = {
+                "policy_revision_schema": "2",
                 "redis_generation": self.quota.topology.run_id,
                 "epoch": str(epoch),
                 "version": str(policy["version"]),
@@ -167,6 +174,8 @@ class AutomaticQuotaRecovery:
             for row in policy["rows"]:
                 model = str(row["model_id"])
                 gate["version:" + model] = str(row["version"])
+                direct_version = row.get("direct_version")
+                gate["direct_version:" + model] = str(row["version"] if direct_version is None else direct_version)
                 if row["enabled"]:
                     gate["model:" + model] = "1"
                     gate["limit:" + model] = str(row["monthly_token_limit"])
@@ -176,15 +185,17 @@ class AutomaticQuotaRecovery:
                     operation = operations[operation_id]
                     gate["operation_id:" + model] = operation_id
                     gate["generation:" + model] = str(operation["lease_generation"])
-                    gate["installed_version:" + model] = str(row["version"])
-                    gate["policy_payload:" + model] = json.dumps(
-                        [
-                            row["version"],
-                            {"model_id": row["model_id"], "monthly_token_limit": row["monthly_token_limit"]},
-                            bool(row["enabled"]),
-                        ],
-                        separators=(",", ":"),
-                    )
+                    after = operation.get("after_values")
+                    if operation.get("committed_at") and after:
+                        gate["installed_version:" + model] = str(after["version"])
+                        gate["policy_payload:" + model] = json.dumps(
+                            [
+                                after["version"],
+                                {"model_id": row["model_id"], "monthly_token_limit": after["monthly_token_limit"]},
+                                bool(after["enabled"]),
+                            ],
+                            separators=(",", ":"),
+                        )
                     blocks.append("POLICY_SYNC:" + model + ":" + operation_id)
             await apply(
                 "reset",
@@ -260,6 +271,21 @@ class AutomaticQuotaRecovery:
                 lease,
                 owner,
             )
+
+    @staticmethod
+    def restore_sql_timestamp(saved: UsageEvent, surviving: UsageEvent) -> UsageEvent:
+        """Recover subsecond precision lost by SQL DATETIME(0), once per SQL row.
+
+        MySQL rounds fractional seconds by default; truncation mode drops them.
+        Redis-to-Redis identity checks retain full precision. All other identity
+        fields are checked by the caller after restoring this one timestamp.
+        """
+        start = surviving.started_at
+        truncated = start.replace(microsecond=0)
+        rounded = truncated + timedelta(seconds=int(start.microsecond >= 500000))
+        if saved.started_at in (truncated, rounded):
+            return saved.model_copy(update={"started_at": start})
+        return saved
 
     def _snapshot(self, user_id):
         with self.repository_scope() as repository:

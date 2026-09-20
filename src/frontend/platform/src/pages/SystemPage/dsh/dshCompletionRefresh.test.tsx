@@ -10,6 +10,7 @@ vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('rea
 vi.mock('./SettingsPanel', () => ({ SettingsPanel: () => null }))
 vi.mock('./PolicyView', () => ({ PolicyView: () => null }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
+vi.mock('@/pages/ModelPage/manage/dsh/DshDesktopModelConfig', () => ({ DshDesktopModelConfig: () => null }))
 vi.mock('./SeatsView', () => ({ SeatsView: ({ revision, onOperation }: { revision: number; onOperation: (ref: DshOperationRef, result: DshOperation) => void }) => (
     <button onClick={() => onOperation({ operation_id: 'revoke-20', tenant_id: '2' }, { operation_id: 'revoke-20', action: 'REVOKE', status: 'SUCCEEDED' } as DshOperation)}>success-{revision}</button>
 ) }))

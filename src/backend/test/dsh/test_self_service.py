@@ -154,3 +154,50 @@ async def test_usage_exposes_only_authorized_models_without_a_seat(monkeypatch):
     assert result["models"] == [{"model_id": 4, "name": "Provider / Model", "limit": 100, "used": 10, "remaining": 90}]
     assert result["billing_timezone"] == "Asia/Shanghai"
     rt.gateway.request.assert_not_awaited()
+
+
+async def test_annual_usage_uses_authenticated_identity_and_shared_summary(monkeypatch):
+    from datetime import timedelta
+
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.dsh import admin_runtime
+
+    rt = runtime()
+    identity = AsyncMock(return_value=SimpleNamespace(active=True, tenant_active=True, natural_person=True))
+    monkeypatch.setattr(CurrentIdentityRecords, "get", identity)
+    observed = {}
+
+    async def summary(user_id, start_at, end_at, granularity):
+        observed.update(user_id=user_id, tenant_id=get_current_tenant_id())
+        assert start_at.hour == start_at.minute == start_at.second == 0
+        assert end_at.replace(hour=0, minute=0, second=0, microsecond=0) - start_at == timedelta(days=364)
+        assert start_at.utcoffset() == timedelta(hours=8)
+        assert granularity == "day"
+        return {"points": [], "totals": {"total_tokens": None, "missing_usage_count": 1}}
+
+    reader = AsyncMock(side_effect=summary)
+    monkeypatch.setattr(admin_runtime, "read_usage_time_summary", reader)
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api/v1")
+    app.dependency_overrides[UserPayload.get_login_user] = lambda: USER
+    app.dependency_overrides[get_runtime] = lambda: rt
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/dsh/me/usage-summary?user_id=99&tenant_id=3")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["data"]["totals"]["total_tokens"] is None
+        assert observed == {"user_id": 20, "tenant_id": 2}
+        identity.assert_awaited_with("2", "20")
+
+        reader.reset_mock()
+        identity.return_value = None
+        assert (await client.get("/api/v1/dsh/me/usage-summary")).status_code == 403
+        reader.assert_not_awaited()
+
+        async def anonymous():
+            raise HTTPException(401)
+
+        app.dependency_overrides[UserPayload.get_login_user] = anonymous
+        assert (await client.get("/api/v1/dsh/me/usage-summary")).status_code == 401
+        reader.assert_not_awaited()
+    rt.gateway.request.assert_not_awaited()

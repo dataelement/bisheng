@@ -2,26 +2,48 @@ import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDshBrowserConfig, saveDshManagementSettings } from '@/controllers/API/dshSettings'
 import { getDshLicense } from '@/controllers/API/dsh'
+import { getModelListApi } from '@/controllers/API/finetune'
 import { SettingsPanel } from './SettingsPanel'
 import { DshManagement } from './index'
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn(), saveDshManagementSettings: vi.fn() }))
 vi.mock('@/controllers/API/dsh', () => ({ getDshLicense: vi.fn() }))
+vi.mock('@/controllers/API/finetune', () => ({ getModelListApi: vi.fn() }))
 vi.mock('@/contexts/userContext', async () => ({ userContext: (await import('react')).createContext({ user: { role: 'admin' } }) }))
 vi.mock('./SeatsView', () => ({ SeatsView: () => <p>seat-content</p> }))
 vi.mock('./PolicyView', () => ({ PolicyView: () => null }))
 vi.mock('./OperationStatus', () => ({ OperationStatus: () => null }))
+vi.mock('@/pages/ModelPage/manage/dsh/DshDesktopModelConfig', () => ({ DshDesktopModelConfig: () => <p>model-content</p> }))
 
 beforeEach(() => {
     vi.resetAllMocks()
     vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: null, launch_url: 'dsh-desktop://login' })
+    vi.mocked(getModelListApi).mockResolvedValue([])
 })
 
 describe('DSH deployment and business settings', () => {
+    it('renders the license section without a repeated content title', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        vi.mocked(getDshLicense).mockResolvedValue({ status: 'active', seat_limit: 10, assigned: 1, available: 9, as_of: '2026-09-15T00:00:00Z', expires_at: null, license_id: 'license-1' })
+        render(<DshManagement />)
+        expect(await screen.findByText('seat-content')).toBeInTheDocument()
+        expect(screen.queryByRole('heading', { name: 'dsh.title' })).toBeNull()
+        fireEvent.click(await screen.findByText('dsh.getCommercialLicense'))
+        expect(screen.getByRole('dialog')).toHaveTextContent('dsh.copyApplicationInfo')
+    })
+
+    it('renders the section selected by the global header navigation', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        vi.mocked(getDshLicense).mockResolvedValue({ status: 'active', seat_limit: 10, assigned: 1, available: 9, as_of: '2026-09-15T00:00:00Z', expires_at: null, license_id: 'license-1' })
+        render(<DshManagement section="models" />)
+        expect(await screen.findByText('model-content')).toBeInTheDocument()
+        expect(screen.queryByText('seat-content')).toBeNull()
+    })
+
     it('keeps settings accessible while business is disabled and avoids license/seat calls', async () => {
         render(<DshManagement />)
-        await screen.findByText('dsh.accessSettings')
+        await screen.findByRole('switch')
         expect(screen.getByRole('switch')).not.toBeChecked()
         expect(screen.queryByText('seat-content')).toBeNull()
         expect(getDshLicense).not.toHaveBeenCalled()
@@ -65,6 +87,6 @@ describe('DSH deployment and business settings', () => {
         await screen.findByText('seat-content')
         await act(async () => { window.dispatchEvent(new Event('dsh-settings-changed')) })
         await waitFor(() => expect(screen.queryByText('seat-content')).toBeNull())
-        expect(screen.getByText('dsh.accessSettings')).toBeTruthy()
+        expect(screen.getByRole('switch')).toBeTruthy()
     })
 })

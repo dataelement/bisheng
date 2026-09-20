@@ -2179,5 +2179,26 @@
   "dsh_source_live": "リアルタイム使用量",
   "dsh_source_persisted": "保存済みスナップショット",
   "dsh_source_unavailable": "使用量を取得できません",
-  "dsh_unknown_usage": "{{count}} 回の呼び出しの使用量が未取得です。"
+  "dsh_unknown_usage": "{{count}} 回の呼び出しの使用量が未取得です。",
+  "dsh": {
+    "heatmapFuture": "まだ到達していない時間",
+    "heatmapMessageValue": "{{value}} 件のメッセージ",
+    "heatmapOutside": "選択範囲外",
+    "heatmapTile": "{{time}} · {{tokens}} トークン · {{messages}} 件",
+    "heatmapTokenValue": "{{exact}} トークン",
+    "messageActivity": "メッセージアクティビティ",
+    "messageCount": "メッセージ数",
+    "missingUsageCount": "{{count}} 件はトークン記録がなく、0 として集計していません。",
+    "tokenActivity": "トークンアクティビティ",
+    "tokenBreakdown": "入力 {{input}} トークン · 出力 {{output}} トークン",
+    "tokenUsage": "トークン使用量",
+    "unavailable": "現在利用できません。後でもう一度お試しください。",
+    "modelUsage": "モデル使用量",
+    "units": {
+      "trillion": "兆",
+      "hundredBillion": "千億",
+      "hundredMillion": "億",
+      "tenThousand": "万"
+    }
+  }
 }

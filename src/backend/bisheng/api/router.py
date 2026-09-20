@@ -27,6 +27,7 @@ from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
 from bisheng.department.api.router import router as department_router
 from bisheng.dsh.api.router import router as dsh_router
+from bisheng.dsh_market.api.router import router as dsh_market_router
 from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
@@ -62,9 +63,8 @@ from bisheng.tenant.api.router import router as tenant_router
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
-router = APIRouter(
-    prefix="/api/v1",
-)
+router = APIRouter(prefix="/api/v1")
+router.include_router(dsh_market_router)
 router.include_router(dsh_router)
 router.include_router(chat_router)
 router.include_router(endpoints_router)

@@ -14,14 +14,9 @@ import { RolesAndPermissions } from "./components/RolesAndPermissions"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
-import { DshManagement } from "./dsh"
-import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig"
 
 export default function SystemPage() {
   const { user } = useContext(userContext)
-  const { config: dshConfig } = useDshBrowserConfig()
-  const showDshManagement = !!dshConfig?.management_enabled
-
   const { t } = useTranslation()
   const isSuperAdmin = user?.role === "admin"
   const isDeptAdmin = !!user?.is_department_admin
@@ -82,7 +77,6 @@ export default function SystemPage() {
           {canAccessSystemConfig && (
             <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
           )}
-          {showDshManagement && (isSuperAdmin || isChildAdmin) && <TabsTrigger value="dsh">{t("dsh.title")}</TabsTrigger>}
         </TabsList>
         {showOrgTab && (
           <TabsContent value="organization" className="min-h-0 flex-1 overflow-hidden">
@@ -119,7 +113,6 @@ export default function SystemPage() {
             <Theme />
           </TabsContent>
         )}
-        {showDshManagement && (isSuperAdmin || isChildAdmin) && <TabsContent value="dsh" className="min-h-0 flex-1 overflow-hidden"><DshManagement /></TabsContent>}
       </Tabs>
     </div>
   )

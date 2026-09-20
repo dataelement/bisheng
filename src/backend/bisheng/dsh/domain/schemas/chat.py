@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.dsh.domain.schemas.contracts import DshContract
+from bisheng.dsh.domain.schemas.image import ContentPart
 
 PositiveInt = Annotated[int, Field(strict=True, gt=0)]
 
@@ -15,6 +16,7 @@ class ChatCapabilities(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
     streaming: bool = Field(default=True, description="Whether the provider supports streamed chat responses.")
+    vision: bool = False
     tools: bool = Field(default=True, description="Whether the provider supports function tools and tool choice.")
     reasoning_content: bool = Field(
         default=False, description="Whether assistant reasoning content is supported by the provider."
@@ -29,7 +31,7 @@ class ChatCapabilities(BaseModel):
     top_p: bool = Field(default=True, description="Whether the provider accepts a top_p sampling parameter.")
 
     def client_fields(self) -> dict[str, bool]:
-        return self.model_dump(include={"streaming", "tools", "reasoning_content"})
+        return self.model_dump(include={"streaming", "tools", "reasoning_content", "vision"})
 
 
 class ToolFunction(DshContract):
@@ -61,13 +63,15 @@ class ToolCall(DshContract):
 
 class ChatMessage(DshContract):
     role: Literal["system", "user", "assistant", "tool"]
-    content: str | None
+    content: str | list[ContentPart] | None
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
     reasoning_content: str | None = None
 
     @model_validator(mode="after")
     def role_fields(self):
+        if isinstance(self.content, list) and (self.role != "user" or not self.content):
+            raise ValueError("Content blocks require a nonempty user message")
         if self.role != "assistant" and (self.tool_calls is not None or self.reasoning_content is not None):
             raise ValueError("Only assistant messages carry calls or reasoning")
         if self.content is None and not (self.role == "assistant" and self.tool_calls):
@@ -116,6 +120,15 @@ class DshChatRequest(DshContract):
 
     @model_validator(mode="after")
     def request_semantics(self):
+        images = [
+            part
+            for message in self.messages
+            if isinstance(message.content, list)
+            for part in message.content
+            if part.type == "image_url"
+        ]
+        if len(images) > 10 or sum(len(part.image_url.url) for part in images) > 28_000_000:
+            raise ValueError("Use at most ten images within 20 MiB per request")
         if self.model_id > 9223372036854775807:
             raise ValueError("Model identifier is out of range")
         if self.max_tokens is not None and self.max_completion_tokens is not None:

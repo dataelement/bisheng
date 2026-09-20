@@ -13,6 +13,7 @@ from starlette.requests import ClientDisconnect
 from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshQuotaUnavailableError
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.endpoints import models as endpoints
+from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
 from bisheng.dsh.domain.services.model import PreparedStream
 from test.dsh.test_model_service import principal, service_setup  # noqa: F401
 
@@ -31,7 +32,16 @@ def app_setup(monkeypatch, service_setup):  # noqa: F811
     )
     monkeypatch.setattr(endpoints, "get_model_runtime", AsyncMock(return_value=model_runtime))
     monkeypatch.setattr(endpoints, "read_persisted_usage", AsyncMock(side_effect=ValueError()))
-    monkeypatch.setattr(endpoints, "read_policy", AsyncMock(return_value=SimpleNamespace(monthly_token_limit=100)))
+    monkeypatch.setattr(
+        endpoints,
+        "read_policy",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                monthly_token_limit=100,
+                model_configs=[DshModelQuotaConfig(model_id=42, monthly_token_limit=100)],
+            )
+        ),
+    )
     app = FastAPI()
     app.include_router(endpoints.router, prefix="/api/v1")
     app.dependency_overrides[get_runtime] = lambda: runtime
@@ -45,6 +55,18 @@ async def test_cookie_never_substitutes_for_desktop_bearer(app_setup):
         assert response.status_code == 401 and runtime.access.authenticate.await_count == 0
         runtime.access.authenticate.side_effect = DshInvalidAccessTokenError()
         assert (await client.get("/api/v1/dsh/usage", headers={"Authorization": "Bearer PAT"})).status_code == 401
+
+
+async def test_desktop_profile_uses_authenticated_identity_and_bearer(app_setup):
+    app, runtime, *_ = app_setup
+    expected = {"user": {"id": principal().user_id}, "tenant": {"id": principal().tenant_id, "name": "Renamed"}}
+    runtime.identity = SimpleNamespace(profile=AsyncMock(return_value=expected))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://bisheng.example") as client:
+        assert (await client.get("/api/v1/dsh/profile", headers={"Cookie": "access_token=browser"})).status_code == 401
+        response = await client.get("/api/v1/dsh/profile?tenant_id=999", headers={"Authorization": "Bearer verified"})
+        assert response.json() == expected
+        assert response.headers["cache-control"] == "no-store"
+    runtime.identity.profile.assert_awaited_once_with(principal().tenant_id, principal().user_id)
 
 
 @pytest.mark.parametrize("reliable", [True, False])
@@ -165,8 +187,6 @@ async def test_response_closes_prepared_stream_if_send_fails_before_first_read(s
 
 
 async def test_usage_selected_model_cannot_borrow_another_allowance(app_setup, monkeypatch):
-    from bisheng.dsh.domain.schemas.model_policy import DshModelQuotaConfig
-
     app, _runtime, model_runtime, *_ = app_setup
     policy = SimpleNamespace(
         model_configs=[
@@ -205,13 +225,19 @@ async def test_usage_selected_model_cannot_borrow_another_allowance(app_setup, m
             "available",
         )
         assert total["remaining"] == 150
+        policy.model_configs[1] = DshModelQuotaConfig(model_id=43, monthly_token_limit=500)
+        refreshed = (await client.get("/api/v1/dsh/usage?model=bisheng:43", headers=headers)).json()
+        assert (refreshed["used"], refreshed["limit"], refreshed["remaining"]) == (50, 500, 450)
+        policy.model_configs.append(DshModelQuotaConfig(model_id=44, monthly_token_limit=50))
+        new_model = (await client.get("/api/v1/dsh/usage?model=bisheng:44", headers=headers)).json()
+        assert (new_model["used"], new_model["limit"], new_model["remaining"]) == (0, 50, 50)
         denied = await client.get("/api/v1/dsh/usage?model=bisheng:99", headers=headers)
         assert denied.status_code == 403 and denied.json()["error"]["code"] == "model_not_allowed"
 
         model_runtime.prepare_month.return_value["models"].pop("43")
         missing = (await client.get("/api/v1/dsh/usage?model=bisheng:43", headers=headers)).json()
         assert missing["used"] is None and missing["remaining"] is None
-        assert missing["limit"] == 200 and missing["quota_state"] == "unavailable"
+        assert missing["limit"] == 500 and missing["quota_state"] == "unavailable"
 
         monkeypatch.setattr(endpoints, "read_policy", AsyncMock(side_effect=RuntimeError("Database unavailable")))
         failed = await client.get("/api/v1/dsh/usage?model=bisheng:43", headers=headers)

@@ -1322,11 +1322,6 @@
       "count": 1
     }
   },
-  "src/layout/HeaderMenu.tsx": {
-    "no-empty-pattern": {
-      "count": 1
-    }
-  },
   "src/layout/MainLayout.tsx": {
     "@typescript-eslint/ban-ts-comment": {
       "count": 2
@@ -3614,11 +3609,6 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/test/headerMenuChildAdmin.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 2
     }
   },

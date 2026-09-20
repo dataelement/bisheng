@@ -449,5 +449,9 @@
   "26127": "Actual request usage could not be confirmed",
   "26128": "Internal DSH service error",
   "26129": "A management operation is already in progress",
-  "26130": "Management operation version or payload conflict"
+  "26130": "Management operation version or payload conflict",
+  "26201": "Offline plugin bundle validation failed",
+  "26202": "Plugin state changed; refresh and retry",
+  "26203": "Plugin or published version not found",
+  "26204": "Tenant administrator access is required"
 }

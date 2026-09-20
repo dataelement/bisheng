@@ -165,7 +165,13 @@ async def get_admin_runtime(runtime, *, quota=None, usage=None):
         policy_view=policy_view,
         now=now,
         model_users_view=read_model_users,
+        model_user_permissions_view=read_model_user_permissions,
         model_policy_view=read_model_policy,
+        usage_summary_view=read_usage_time_summary,
+        usage_overview_view=read_usage_overview,
+        subject_policy_view=read_subject_policies,
+        subject_policy_update=write_subject_policy,
+        audit_view=read_audit_records,
     )
     result = AdminRuntime(
         admin,
@@ -181,6 +187,19 @@ async def runtime_identity(tenant_id, user_id):
 
     with profile_scope(tenant_id):
         return await CurrentIdentityRecords().get(str(tenant_id), str(user_id))
+
+
+async def read_audit_records(**query):
+    import asyncio
+
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.audit import DshAuditRepository
+
+    def read():
+        with get_sync_db_session() as session:
+            return DshAuditRepository(session).list_records(**query)
+
+    return await asyncio.to_thread(read)
 
 
 def build_policy_view(
@@ -221,6 +240,9 @@ def build_policy_view(
             "unknown_pending": None,
         }
         if snapshot:
+            from bisheng.dsh.domain.services.usage_projection import apply_current_policy_limits
+
+            snapshot = apply_current_policy_limits(snapshot, policy)
             live = snapshot["source"] == "live"
             state = "unavailable"
             if live and snapshot["quota_state"] == "ready":
@@ -356,6 +378,59 @@ async def read_model_users(model_id, *, after_user_id=0, limit=20, keyword="", a
     return {"model": candidates[0], "tenant_id": get_current_tenant_id(), **page}
 
 
+async def read_model_user_permissions(
+    model_id,
+    *,
+    after_user_id=0,
+    limit=20,
+    keyword="",
+    department_id=None,
+    membership="EFFECTIVE",
+    unassigned_only=False,
+):
+    import asyncio
+
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+    from bisheng.llm.domain.services.llm import LLMService
+    from bisheng.user.domain.services.dsh_access import list_dsh_access_users
+
+    candidates = await read_available_models([model_id], LLMService.get_dsh_model_snapshot)
+    if not candidates:
+        raise DshModelNotAllowedError()
+    department_ids = None
+    if department_id is not None:
+
+        def read_department_scope():
+            with get_sync_db_session() as session:
+                return DshSubjectPolicyRepository(session).department_scope_ids(
+                    department_id,
+                    include_descendants=membership == "EFFECTIVE",
+                )
+
+        department_ids = await asyncio.to_thread(read_department_scope)
+    rows = await list_dsh_access_users(
+        after_user_id=after_user_id,
+        limit=limit,
+        keyword=keyword,
+        department_ids=department_ids,
+        **({"unassigned_only": True} if unassigned_only else {}),
+    )
+
+    def read():
+        with get_sync_db_session() as session:
+            return DshSubjectPolicyRepository(session).user_permissions(
+                rows,
+                model_id=model_id,
+                limit=limit,
+                selected_department_id=department_id,
+            )
+
+    page = await asyncio.to_thread(read)
+    return {"model": candidates[0], "tenant_id": get_current_tenant_id(), **page}
+
+
 async def read_last_call(user_id):
     import asyncio
 
@@ -365,6 +440,63 @@ async def read_last_call(user_id):
     def read():
         with get_sync_db_session() as session:
             return DshAdminQueryRepository(session).last_call(user_id)
+
+    return await asyncio.to_thread(read)
+
+
+async def read_usage_time_summary(user_id, start_at, end_at, granularity):
+    import asyncio
+
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.admin_queries import DshAdminQueryRepository
+
+    def read():
+        with get_sync_db_session() as session:
+            return DshAdminQueryRepository(session).usage_time_summary(
+                user_id,
+                start_at=start_at,
+                end_at=end_at,
+                granularity=granularity,
+            )
+
+    return await asyncio.to_thread(read)
+
+
+async def read_usage_overview(
+    *,
+    start_at,
+    end_at,
+    after_user_id=0,
+    limit=20,
+    keyword="",
+    department_id=None,
+    include_summary=False,
+    granularity=None,
+):
+    import asyncio
+
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.admin_queries import DshAdminQueryRepository
+    from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+
+    def read():
+        with get_sync_db_session() as session:
+            department_ids = None
+            if department_id is not None:
+                department_ids = DshSubjectPolicyRepository(session).department_scope_ids(
+                    department_id, include_descendants=True
+                )
+            return DshAdminQueryRepository(session).usage_overview(
+                start_at=start_at,
+                end_at=end_at,
+                after_user_id=after_user_id,
+                limit=limit,
+                keyword=keyword,
+                department_ids=department_ids,
+                selected_department_id=department_id,
+                include_summary=include_summary,
+                granularity=granularity,
+            )
 
     return await asyncio.to_thread(read)
 
@@ -387,3 +519,48 @@ async def read_model_policy(user_id, model_id):
             }
 
     return await asyncio.to_thread(read)
+
+
+async def read_subject_policies(model_id):
+    import asyncio
+
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+    from bisheng.llm.domain.services.llm import LLMService
+
+    if not await read_available_models([model_id], LLMService.get_dsh_model_snapshot):
+        raise DshModelNotAllowedError()
+
+    def read():
+        with get_sync_db_session() as session:
+            return DshSubjectPolicyRepository(session).inventory(model_id)
+
+    return await asyncio.to_thread(read)
+
+
+async def write_subject_policy(*, model_id, subject_type, subject_id, actor_user_id, request, seat_limit=None):
+    import asyncio
+
+    from bisheng.common.errcode.dsh import DshModelNotAllowedError
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+    from bisheng.llm.domain.services.llm import LLMService
+
+    if not await read_available_models([model_id], LLMService.get_dsh_model_snapshot):
+        raise DshModelNotAllowedError()
+
+    def write():
+        with get_sync_db_session() as session, session.begin():
+            return DshSubjectPolicyRepository(session).update(
+                subject_type=subject_type,
+                subject_id=subject_id,
+                model_id=model_id,
+                actor_user_id=actor_user_id,
+                expected_version=request.expected_version,
+                monthly_token_limit=request.monthly_token_limit,
+                enabled=request.enabled,
+                seat_limit=seat_limit,
+            )
+
+    return await asyncio.to_thread(write)

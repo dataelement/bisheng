@@ -105,12 +105,13 @@ def test_models_preserve_unknown_and_policy_history():
     from bisheng.dsh.domain.models.model_call import DshModelCall
     from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
     from bisheng.dsh.domain.models.user_policy import DshUserPolicy
+    from bisheng.dsh.domain.services.profile import profile_scope
 
     models = (DshUserPolicy, DshAdminOperation, DshMonthlyUsage, DshModelCall)
     engine = create_engine("sqlite://")
     tables = [model.__table__ for model in models]
     SQLModel.metadata.create_all(engine, tables=tables)
-    with Session(engine) as session:
+    with Session(engine) as session, profile_scope(2):
         row = DshModelCall(
             request_id=str(uuid4()),
             tenant_id=2,

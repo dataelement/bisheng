@@ -29,7 +29,6 @@ export function useDshAuthorization(authId: string | null) {
     const [status, setStatus] = useState<
         'idle' | 'pending' | 'issued' | 'expired' | 'failed' | 'cancelled'
     >('idle')
-    const [seconds, setSeconds] = useState(0)
     const [denialUrl, setDenialUrl] = useState<string | null>(null)
     const active = useRef<AbortController | null>(null)
     const deadline = useRef(0)
@@ -41,18 +40,11 @@ export function useDshAuthorization(authId: string | null) {
     )
     useEffect(() => {
         if (status !== 'issued') return
-        const timer = window.setInterval(() => {
-            const remaining = Math.max(
-                0,
-                Math.ceil((deadline.current - Date.now()) / 1000),
-            )
-            setSeconds(remaining)
-            if (!remaining) {
-                setAuthorization(null)
-                setStatus('expired')
-            }
-        }, 500)
-        return () => window.clearInterval(timer)
+        const timer = window.setTimeout(() => {
+            setAuthorization(null)
+            setStatus('expired')
+        }, Math.max(0, deadline.current - Date.now()))
+        return () => window.clearTimeout(timer)
     }, [status])
     async function handleAuthorize() {
         if (!authId || active.current || status !== 'idle') return
@@ -63,7 +55,6 @@ export function useDshAuthorization(authId: string | null) {
             const result = await authorizeDsh(authId, controller.signal)
             if (controller.signal.aborted) return
             deadline.current = Date.now() + result.expires_in * 1000
-            setSeconds(result.expires_in)
             setAuthorization(result)
             setStatus('issued')
         } catch {
@@ -98,7 +89,6 @@ export function useDshAuthorization(authId: string | null) {
         authorization,
         denialUrl,
         status,
-        seconds,
         handleAuthorize,
         handleCancel,
     }

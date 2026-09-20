@@ -83,6 +83,110 @@ async def test_gateway_failure_is_unavailable_not_zero(operation_scope):  # noqa
         await service.license(90)
 
 
+async def test_subject_policy_management_stays_in_authorized_tenant(operation_scope):  # noqa: F811
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "status": "active",
+                "seat_limit": 10,
+                "assigned": 1,
+                "available": 9,
+                "as_of": "2026-09-09T00:00:00Z",
+                "license_id": "license",
+                "expires_at": "2027-09-09T00:00:00Z",
+            }
+        )
+    )
+    service, _, _ = build(operation_scope, gateway)
+    service.subject_policy_view = AsyncMock(
+        return_value={
+            "tenant_id": 2,
+            "model_id": 7,
+            "departments": [
+                {
+                    "subject_type": "DEPARTMENT",
+                    "subject_id": 10,
+                    "name": "研发中心",
+                    "parent_id": None,
+                    "depth": 0,
+                    "version": 0,
+                    "enabled": False,
+                    "monthly_token_limit": 0,
+                }
+            ],
+            "roles": [],
+        }
+    )
+    service.subject_policy_update = AsyncMock(
+        return_value={
+            "subject_type": "DEPARTMENT",
+            "subject_id": 10,
+            "model_id": 7,
+            "name": "研发中心",
+            "version": 1,
+            "enabled": True,
+            "monthly_token_limit": 200,
+        }
+    )
+    inventory = await service.model_subjects(90, 7, tenant_id=2)
+    assert inventory["departments"][0]["name"] == "研发中心"
+    request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
+    result = await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
+    assert result["version"] == 1
+    service.subject_policy_update.assert_awaited_once_with(
+        model_id=7,
+        subject_type="DEPARTMENT",
+        subject_id=10,
+        actor_user_id=90,
+        request=request,
+        seat_limit=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "status,error_name",
+    [
+        ("license_invalid", "DshLicenseInvalidError"),
+        ("license_expired", "DshLicenseExpiredError"),
+        ("dsh_disabled", "DshDshDisabledError"),
+    ],
+)
+async def test_quota_configuration_is_independent_of_commercial_capacity(
+    operation_scope,  # noqa: F811
+    status,
+    error_name,
+):
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "status": status,
+                "seat_limit": 10,
+                "assigned": 1,
+                "available": 9,
+                "as_of": "2026-09-09T00:00:00Z",
+                "license_id": "license",
+                "expires_at": "2027-09-09T00:00:00Z",
+            }
+        )
+    )
+    service, _, _ = build(operation_scope, gateway)
+    service.subject_policy_update = AsyncMock(
+        return_value={
+            "subject_type": "DEPARTMENT",
+            "subject_id": 10,
+            "model_id": 7,
+            "name": "Department",
+            "version": 1,
+            "enabled": True,
+            "monthly_token_limit": 200,
+        }
+    )
+    request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
+    await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
+    assert service.subject_policy_update.await_args.kwargs["seat_limit"] is None
+    gateway.request.assert_not_awaited()
+
+
 async def test_command_timeout_recovers_original_operation_without_new_intent(operation_scope):  # noqa: F811
     gateway = SimpleNamespace(
         request=AsyncMock(

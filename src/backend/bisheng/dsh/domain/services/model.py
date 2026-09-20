@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from inspect import isawaitable
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -78,6 +79,8 @@ class DshModelService:
                 except DshModelNotAllowedError:
                     continue
                 capabilities = self.capabilities_for(model, server)
+                if isawaitable(capabilities):
+                    capabilities = await capabilities
                 if capabilities is None:
                     continue
                 created = model.create_time
@@ -111,6 +114,8 @@ class DshModelService:
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
             capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
+            if isawaitable(capabilities):
+                capabilities = await capabilities
             if capabilities is None:
                 raise DshUnsupportedParameterError()
             llm = self.llm_builder(model, server, principal, request)
@@ -137,7 +142,7 @@ class DshModelService:
                 started_at=started,
             )
             try:
-                await self.usage.check_and_start(event)
+                event = await self.usage.check_and_start(event, monthly_token_limit=selected_policy.monthly_token_limit)
             except QuotaRejected as error:
                 if error.reason == "quota_exceeded":
                     raise DshMonthlyTokenLimitExceededError() from error

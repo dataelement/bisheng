@@ -5,7 +5,13 @@ from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepositor
 
 
 async def list_dsh_access_users(
-    *, after_user_id: int = 0, limit: int = 20, keyword: str = "", user_ids: list[int] | None = None
+    *,
+    after_user_id: int = 0,
+    limit: int = 20,
+    keyword: str = "",
+    user_ids: list[int] | None = None,
+    department_ids: list[int] | None = None,
+    unassigned_only: bool = False,
 ) -> list[tuple[int, str]]:
     async with get_async_db_session() as session:
         return await session.run_sync(
@@ -15,5 +21,7 @@ async def list_dsh_access_users(
                 limit=limit,
                 keyword=keyword,
                 user_ids=user_ids,
+                department_ids=department_ids,
+                unassigned_only=unassigned_only,
             )
         )

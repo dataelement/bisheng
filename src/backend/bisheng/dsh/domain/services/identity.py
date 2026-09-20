@@ -66,6 +66,13 @@ class IdentityService:
             profile_version=record.profile_version,
         )
 
+    async def profile(self, tenant_id: str, user_id: str) -> dict:
+        """Read current display data independently of the token issuance snapshot."""
+        snapshot = await self.check(tenant_id, user_id)
+        if not snapshot.active:
+            raise DshUserDisabledError()
+        return {"user": snapshot.user.model_dump(), "tenant": snapshot.tenant.model_dump()}
+
     async def authorize(
         self, identity: BrowserIdentity, auth_id: str, *, decision: str = "approve"
     ) -> dict[str, str | int]:
