@@ -2785,6 +2785,12 @@ export default function PortalKnowledgeWorkbench() {
             // Folder is not yet in the tree or only exists as a shallow root-level
             // placeholder (e.g. after a race or partial refresh). Build/rebuild the
             // full ancestor chain and prune any stale duplicate of the target node.
+            // 路径请求也属于目录加载，必须在首次异步等待前屏蔽空态。
+            setTreeNodes((prev) => updateTreeNode(
+                ensureFolderNode(prev, spaceId, folderId, effectiveFolderName),
+                folderId,
+                (item) => ({ ...item, expanded: true, loading: true, loadError: false }),
+            ));
             let fullPath: Array<{ id: string; name: string }> | undefined = knownParentPath;
             if (!fullPath?.length) {
                 try {
@@ -2797,6 +2803,7 @@ export default function PortalKnowledgeWorkbench() {
                     // Fall through to single-node placeholder below.
                 }
             }
+            if (activeSpaceIdRef.current !== spaceId) return;
             if (fullPath?.length) {
                 setTreeNodes((prev) => ensureFolderPath(removeTreeNode(prev, folderId), fullPath, spaceId));
             }
@@ -2833,6 +2840,7 @@ export default function PortalKnowledgeWorkbench() {
                         expanded: true,
                         loaded: true,
                         loading: false,
+                        loadError: false,
                         page: 1,
                         total,
                         hasMore: Boolean(res.has_more),
@@ -2848,12 +2856,13 @@ export default function PortalKnowledgeWorkbench() {
                     (item) => ({
                         ...item,
                         loading: false,
+                        loadError: true,
                     }),
                 ));
                 showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
             }
         } finally {
-            navigatingFolderRef.current = null;
+            if (navigatingFolderRef.current === folderId) navigatingFolderRef.current = null;
         }
     }, [activeSpace?.id, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
 
@@ -3234,6 +3243,13 @@ export default function PortalKnowledgeWorkbench() {
                                                             <p>搜索失败，请重试</p>
                                                             <button type="button" className="text-[#165DFF] hover:underline" onClick={() => void handleNativeSearch({ scope: "current", keyword: searchText, tagIds: searchTagIds })}>
                                                                 重试搜索
+                                                            </button>
+                                                        </>
+                                                    ) : !searchMode && currentFolderNode?.loadError ? (
+                                                        <>
+                                                            <p>文件夹加载失败，请重试</p>
+                                                            <button type="button" className="text-[#165DFF] hover:underline" onClick={() => void handleNavigateFolder(currentFolderId, currentFolderNode.file.name)}>
+                                                                重试加载
                                                             </button>
                                                         </>
                                                     ) : undefined}

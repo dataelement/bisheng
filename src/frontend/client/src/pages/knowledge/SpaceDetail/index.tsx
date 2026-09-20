@@ -1732,7 +1732,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
-                totalFileCount={listError ? null : totalFileCount}
+                totalFileCount={listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
             />
             </div>
 

@@ -34,6 +34,7 @@ import {
     getCreateSpaceOptionsApi,
     getDepartmentSpacesApi,
     getFilePreviewApi,
+    getFolderParentPathApi,
     getPortalDiscoverableSpacesApi,
     getPortalFilePreviewApi,
     getPortalSpaceFolderStatsApi,
@@ -455,6 +456,7 @@ jest.mock("~/api/knowledge", () => ({
     unsubscribeSpaceApi: jest.fn(),
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
+    getFolderParentPathApi: jest.fn(),
     getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
@@ -716,6 +718,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getSpacesByLevelApi).mockImplementation(resolveMockSpacesByLevel as any);
         jest.mocked(getPortalDiscoverableSpacesApi).mockResolvedValue([]);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+        // 保留旧用例未提供路径接口时的失败回退，只在目录加载用例中配置响应。
+        jest.mocked(getFolderParentPathApi).mockImplementation(() => { throw new Error("未配置父目录查询"); });
         jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
@@ -6058,6 +6062,66 @@ describe("PortalKnowledgeWorkbench", () => {
         } finally {
             intersectionObserver.restore();
         }
+    });
+
+    test.each([false, true])("目录等待路径和文件接口期间不闪空态，成功空结果=%s", async (empty) => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        const folder = makeFile("301", "天气", { type: FileType.FOLDER });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        let resolvePath!: (value: Array<{ id: string; name: string }>) => void;
+        let resolveChildren!: (value: any) => void;
+        jest.mocked(getFolderParentPathApi).mockReturnValue(new Promise((resolve) => { resolvePath = resolve; }));
+        const children = new Promise<any>((resolve) => { resolveChildren = resolve; });
+        jest.mocked(getSpaceChildrenApi).mockImplementation((params) => params.parent_id
+            ? children
+            : Promise.resolve({ data: [folder], has_more: false } as any));
+        renderWorkbench();
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(await within(workspace).findByRole("button", { name: "打开天气" }));
+        await waitFor(() => expect(getFolderParentPathApi).toHaveBeenCalled());
+        expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
+        expect(within(workspace).getByText(/com_knowledge.loading|Loading/)).toBeInTheDocument();
+        expect(within(workspace).queryByText("共计 0 文件")).not.toBeInTheDocument();
+        await act(async () => { resolvePath([{ id: "301", name: "天气" }]); });
+        expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
+        expect(within(workspace).getByText(/com_knowledge.loading|Loading/)).toBeInTheDocument();
+        await act(async () => {
+            resolveChildren({ data: empty ? [] : [makeFile("401", "天气预报.md", { parentId: "301" })], has_more: false });
+        });
+        if (empty) {
+            expect(await within(workspace).findByAltText("empty")).toBeInTheDocument();
+            expect(within(workspace).getByText("共计 0 文件")).toBeInTheDocument();
+        } else {
+            expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
+            expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
+        }
+    });
+
+    test("目录加载失败不显示空目录，重试成功恢复文件", async () => {
+        const space = makeSpace("personal-1", "我的技术文档", { role: SpaceRole.ADMIN });
+        const folder = makeFile("301", "天气", { type: FileType.FOLDER });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [], departmentSpaces: [], teamSpaces: [], personalSpaces: [space],
+        } as any);
+        let failed = false;
+        jest.mocked(getSpaceChildrenApi).mockImplementation((params) => {
+            if (!params.parent_id) return Promise.resolve({ data: [folder], has_more: false } as any);
+            if (!failed) {
+                failed = true;
+                return Promise.reject(new Error("目录请求失败"));
+            }
+            return Promise.resolve({ data: [makeFile("401", "天气预报.md", { parentId: "301" })], has_more: false } as any);
+        });
+        renderWorkbench();
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(await within(workspace).findByRole("button", { name: "打开天气" }));
+        expect(await within(workspace).findByRole("alert")).toHaveTextContent("文件夹加载失败");
+        expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
+        fireEvent.click(within(workspace).getByRole("button", { name: "重试加载" }));
+        expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
+        expect(within(workspace).queryByRole("alert")).not.toBeInTheDocument();
     });
 
     test("loads the next folder file batch with the folder cursor", async () => {

@@ -36,6 +36,7 @@ export interface PortalFileTreeNode {
     expanded: boolean;
     loaded: boolean;
     loading: boolean;
+    loadError?: boolean;
     page: number;
     total: number;
     hasMore: boolean;
