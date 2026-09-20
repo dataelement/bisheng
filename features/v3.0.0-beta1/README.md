@@ -26,6 +26,7 @@
 | F064 | [kb-list-file-abnormal](./064-kb-list-file-abnormal/) | P1 | Spec / Design / Tasks 已出，实现完成 | F027, F048, F051 |
 | F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec / Design 已确认；实现完成 | 既有模型管理页、`POST/PUT /api/v1/llm` |
 | F067 | [commercial-license-expiry-reminder](./067-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
+| F068 | [code-execution-sandbox](./068-code-execution-sandbox/) | P0 | Spec + Design 已出，待 ★ 确认；tasks 未写。讨论用 [沙箱架构设计说明书](./068-code-execution-sandbox/沙箱架构设计说明书.md)。错误码模块 280 | 无（与 3.0 应用工场 F103 sandbox-core 并行，不依赖其交付） |
 
 ---
 
@@ -84,3 +85,4 @@
 | 2026-09-14 | 登记 F067 商业授权统一到期提醒；Spec / Design 按《3.0 beta2》§5.3 与用户裁定的 `license_info` 三路写入写成。等待 spec + design ★ 确认；tasks 未写。 |
 | 2026-09-14 | 用户确认 F067 spec + design；tasks.md 完成 20 项拆解（6 个 Wave）。 |
 | 2026-09-14 | F067 实现完成：`license_info` + 聚合/上报 API + ETL Beat + Banner 改聚合 + 11001 点名 Gateway。 |
+| 2026-09-16 | 登记 F068 代码执行沙箱统一底座；Spec / Design 按《灵思代码执行沙箱选型调研（私有化场景）》§6 与《3.0 应用工场 产品方案》§5.2 写成，选定加固容器 + compose 副本池拓扑，申领错误码模块 280。等待 spec + design ★ 确认；tasks 未写。 |

@@ -59,10 +59,13 @@
 | —（无新增领域对象；在 F036 拥有的 `SensitiveWordPolicy` 上增加枚举值 `workbench_chat`） | **F063-workbench-content-safety** | 商业版工作台日常模式（输入 + 最终回答）与任务模式（仅输入）关键词审查。只读 / 调用现有 `SensitiveWordPolicy` 与 `check_text`；**不拥有**策略表 schema，不改知识空间 / 频道 / 工作流 Gateway 审查，不新增表 / Alembic / 对外 API 路径 / 错误码 / 不变量 |
 | —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
 | —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
+| —（无新增领域对象；在既有 `BaseExecutor` 执行后端抽象上新增第三种执行模式，并接管工作流代码节点的执行位置） | **F068-code-execution-sandbox** | 把模型/搭建者写的 Python 从 backend 与 Celery worker 进程搬入受控隔离执行环境，覆盖灵思任务模式、工作台日常会话、助手、工作流 Agent 节点、工作流工具节点五条既有路径，并迁入工作流代码节点。只读 / 调用现有 `ToolExecutor`、`gpts_tools.extra`、灵思任务工作区与 MinIO 产物链路；**不拥有** `gpts_tools` schema、不改工具装配的权限校验、不改日常会话「附件只抽文本进 prompt」语义、不改知识库解析链路的 LibreOffice 调用。不新增表 / Alembic / 对外 API 路径 / 领域对象 / 不变量；新增错误码模块 280 与系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像启动失败） |
 | **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F067-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
 | —（无新增） | F068-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
+>
+> ⚠️ **F068 编号冲突未决**：上表两行都占用 F068。`nvdb-security-fixes` 在 `feat/3.0.0-beta2` 取号（且已写明「工作流代码节点沙箱不在本 Feature」），`code-execution-sandbox` 在本提交取号。两行都保留，改哪一个由各自 Feature owner 决定。
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -179,7 +182,8 @@
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
 | 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；落码时按 C5 回写 `docs/constitution.md` |
 | 270 | 商业授权状态聚合与上报 | F067；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
-| —（不新增） | NVDB 漏洞修复 | F068 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
+| —（不新增） | NVDB 漏洞修复 | F068-nvdb-security-fixes 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
+| 280 | 代码执行沙箱（执行环境可达性、容量、超时、copy-in 超限、代码节点出参序列化、协议不符） | F068-code-execution-sandbox；28001～28006，具体语义见该 Feature Design §4.2。落码时按 C5 回写 `docs/constitution.md`。已按 C5 重新派生占用列表确认 280 空闲；不得占用 11x（灵思）或 150（tool） |
 
 ---
 
@@ -214,4 +218,5 @@
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
 | 2026-09-14 | 登记 F067 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F067、v2.6.0 F037 |
 | 2026-09-14 | 编号冲突改号：`feat/3.0.0-beta1` 合入 beta2 后，beta2 的商业授权统一到期提醒与 beta1 的 PAT 数据范围收窄同占 F066；商业授权一侧改号 **F067**（目录、表 1 归属行、INV-35、表 3 依赖、F037 影响行、错误码 270 归属同步），F066 专指 `pat-data-scope-and-ai-access` | F067、F066 |
-| 2026-09-14 | 登记 F068 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F068 |
+| 2026-09-14 | 登记 F068 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F068-nvdb-security-fixes |
+| 2026-09-16 | 登记 F068 代码执行沙箱统一底座：表 1 标无新增领域对象（在既有 `BaseExecutor` 抽象上加第三种执行模式 + 接管工作流代码节点执行位置）；分配错误码模块 **280**（28001～28006，已按 C5 重新派生占用列表确认空闲）；新增系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像因未知顶层 key 启动失败）。选定加固容器 + compose 副本池拓扑，**不新建持 docker 的编排控制面**（留给 3.0 应用工场 F103 `runtime-manager`）；不新增表 / Alembic / 对外 API / 领域对象 / 不变量 | F068-code-execution-sandbox |
