@@ -25,7 +25,7 @@
 
 全局铁律遵循 `docs/constitution.md` C1–C8，本节只列本功能特有：
 
-- **INV-7 不放松**：角标解析仍走 `CitationResolveService` 的 `view_file` 过滤，本 Feature 不新开任何取来源的口子。编号表里存的标题、定位只喂给模型，不进任何对用户的响应。
+- **INV-7 不放松**：角标解析仍走 `CitationResolveService` 的 `view_file` 过滤，本 Feature 不新开任何取来源的口子。编号表里存的标题、定位只喂给模型，不进任何对用户的响应。P2 导出烘焙是新的呈现面：参考资料列表必须按**导出者本人**（含分享页查看者）经同一 `CitationResolveService` 过滤后的结果生成，被过滤的来源退回剥离、不分配可见编号（spec AC-21）；不得直接读编号表或登记簿生成列表。
 - **下游契约冻结**：私有区标记字法 `U+E200 key (U+E201 key)* U+E202`、key 形态 `prefix_hex8:item`、Redis 登记簿 `citation:runtime:<citationId>`、`message_citation` 表、`POST /api/v1/citations/resolve`、`strip_citation_markers` 的全部调用点、client 与 platform 两套解析器，均不改。22 个既有测试钉住这些契约，是本 Feature 的回归基线。
 - **灵思工具「绝不 raise」**（F047 §2）：编号分配、来源记录、写盘转换全部包窄 try/except，异常回退原文。
 - **DM8 写放大红线**（F047 §2）：审计结果只放计数与有上限的列表，不把编号表塞进 `output_result`，不逐步写 `history`。
@@ -75,7 +75,7 @@
   - B. `linsight:cite_handles:{session_id}`（hash tag = session_id），字段 `h:<n>` 存 `{key, type, title, loc}`、`id:<identity>` 存编号、`next` 存下一个编号；identity：rag/temp 为 `rag:{documentId}:{itemId}`，web 为 `web:{normalize_url(url)}`；分配用进程内 `asyncio.Lock` 读改写。
   - C. Lua 原子分配 — 多进程安全，但运行锁 `linsight:run_lock:*` 已保证同一会话同一时刻只有一个 worker 在跑。
 - **选定**：B。
-- **原因**：追问轮共享同一表（AC-14），编号稳定；TTL 30 天与登记簿一致；Redis 异常回退原始 key（AC-15）。
+- **原因**：追问轮共享同一表（AC-16），编号稳定；TTL 30 天与登记簿一致；Redis 异常回退原始 key（AC-17）。
 - **何时该重新考虑**：若运行锁被移除或允许同会话并行执行，改 C。
 
 ### 决策 5：每轮来源表与一次提醒放 `awrap_model_call`，不放 `wrap_tool_call`，不加 `list_sources` 工具
@@ -141,7 +141,7 @@
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
 | `citation/domain/services/linsight_citation_scope.py`（新） | 每 run 的来源记账与编号表镜像；Redis 读写；`enabled`、`handles`、`unknown_handles` | 不生成 registry item，不查权限 |
-| `citation/domain/services/citation_handle_service.py`（新） | 编号分配、`convert_handles_to_markers`、`strip_citation_handles`、P2 `render_citations_for_export` | 不动 `citation_registry_service.py` |
+| `citation/domain/services/citation_handle_service.py`（新） | 编号分配、`convert_handles_to_markers`、`strip_citation_handles`、P2 `render_citations_for_export`（输入为已按导出者权限 resolve 过的来源列表） | 不动 `citation_registry_service.py`；不自行查权限 |
 | `linsight/domain/services/citation_source_middleware.py`（新） | 每轮来源表、一次补编号提醒 | 不改 state，不返回 error |
 | `agent_factory.py` | 3a 占位符、短规则分支、`_CitationTailMiddleware`、web wrapper 接 scope、把 scope 绑到工具 | 不动语言指令文本 |
 | `task_exec.py` | 构造 scope、`_audit_report_citations`、answer 转换 | `_persist_report_citations` 逻辑不变 |
@@ -160,8 +160,8 @@
 | 2 | `_with_soft_landing_note` 在 `get_final_result_file` 之前执行，`build_fallback_report_file(answer=)` 会把 answer 烘进 `报告.md` | 若在此处拼注记，注记进入交付物文件 | 决策 7：审计在兜底之后，后端不改 answer |
 | 3 | `_build_linsight_system_prompt` 没有 `has_web` 参数，3a 文本无条件；`_with_citation_rules` 只在 `has_kb or has_web` 时追加规则 | 无检索能力的任务会引用一段不存在的规则 | 3a 用占位符，增 `has_web_search` 入参，与规则同门控 |
 | 4 | `_LanguageTailMiddleware` 在 `has_kb/has_web` 计算之前构造，且其文本自述「仅约束输出语言」 | 把引用段塞进语言尾巴与其措辞冲突，且拿不到门控值 | 独立 `_CitationTailMiddleware`，`has_kb/has_web` 计算上移 |
-| 5 | 磁盘 md 写入后已是私有区标记，模型记忆里仍是 `[S3]`；`edit_file` 的 `old_string` 原样匹配 | 编辑定位失败「old_string not found」 | 写边界对 `old_string` 先转换（AC-12） |
-| 6 | run A 的 `[^n]` 指向模型自编的附录表，粒度是文档不是 chunk | 若兼收 `[^n]` 映射，会把错误来源挂到句子上 | AC-10 只计数不转换 |
+| 5 | 磁盘 md 写入后已是私有区标记，模型记忆里仍是 `[S3]`；`edit_file` 的 `old_string` 原样匹配 | 编辑定位失败「old_string not found」 | 写边界对 `old_string` 先转换（AC-14） |
+| 6 | run A 的 `[^n]` 指向模型自编的附录表，粒度是文档不是 chunk | 若兼收 `[^n]` 映射，会把错误来源挂到句子上 | AC-11 只计数不转换 |
 | 7 | 写文件返回 `status=error` 进 L3 连续失败计数（`resilience_middleware.py` `_trailing_tool_failure_run`），会被误诊为「内容过长」 | 拒写方案让软着陆阶段零交付 | 决策 2：不拒写，提醒走临时 HumanMessage |
 | 8 | deepagents summarization 会把旧消息里超 2000 字的工具参数截断 | 「读回旧稿再补标记」不能依赖上下文 | 每轮来源表 + 提醒用 `edit_file` 定点补 |
 | 9 | 每次检索 registry 重发 uuid，同一 chunk 多次检索多个 key | 若按 key 编号，run B 会出现 470 个编号 | 决策 4：identity 去重 |
