@@ -62,6 +62,7 @@
 | —（无新增领域对象；在既有 `BaseExecutor` 执行后端抽象上新增第三种执行模式，并接管工作流代码节点的执行位置） | **F068-code-execution-sandbox** | 把模型/搭建者写的 Python 从 backend 与 Celery worker 进程搬入受控隔离执行环境，覆盖灵思任务模式、工作台日常会话、助手、工作流 Agent 节点、工作流工具节点五条既有路径，并迁入工作流代码节点。只读 / 调用现有 `ToolExecutor`、`gpts_tools.extra`、灵思任务工作区与 MinIO 产物链路；**不拥有** `gpts_tools` schema、不改工具装配的权限校验、不改日常会话「附件只抽文本进 prompt」语义、不改知识库解析链路的 LibreOffice 调用。不新增表 / Alembic / 对外 API 路径 / 领域对象 / 不变量；新增错误码模块 280 与系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像启动失败） |
 | **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F067-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
 | —（无新增） | F068-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
+| —（无新增领域对象；在 F029 拥有的 citation 链路上为灵思任务模式增加会话级来源编号表与完成时审计） | **F069-linsight-citation-handles** | 拥有 Redis `linsight:cite_handles:<session_id>` / `linsight:cite_seen:<svid>` 的写入语义与 `output_result.citation_audit` 字段。不拥有 registry item 生成、`message_citation` 写入（仍经 F047 路径）、resolve 与权限过滤 |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
 >
@@ -145,6 +146,7 @@
 | F065-model-name-trim | 既有模型管理页、`POST/PUT /api/v1/llm` | 写入侧收紧 `model_name` 首尾空白；不改 19802、不回填存量、不新增错误码 |
 | F067-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
 | F068-nvdb-security-fixes | 既有 `Config` 表、`RoleAccess` WEB_MENU（`create_app`）、F027 目录 / 搜索排序参数、知识库 HTML 解析管线、`core/cache/utils` 下载工具 | 安全修复；每处只修根因所在层并加一道数据层再校验；不改前端、不加错误码。升级后全员重新登录 |
+| F069-linsight-citation-handles | F047（下游契约全部沿用）；F054（AC-07 / AC-12 导出契约，P2 改为烘焙）；F029 / F041（`view_file` 与 INV-7，本 Feature **不改**） | 上游契约替换型：模型只写 `[Sn]`，写盘边界转回私有区标记；下游零改动。不做自动补引用与事后归因写回；kill switch 可整体回退到 F047 契约 |
 
 ---
 
@@ -167,6 +169,7 @@
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
 | v2.6.0 F037-gateway-license-expiry-reminder | **F067 覆盖其 Banner 数据源与文案合同**。`GET /api/license/status` 与「只拦网关付费接口」的降级范围保持不动；管理后台 Banner 改为先上报 Gateway 状态再读平台聚合接口，文案必须点名授权对象，不再单独按 Gateway `warning/critical` 分色渲染「软件授权」 |
+| v3.0.0-beta1 F054-unified-citation-entries | **F069 P2 修订其 AC-07 / AC-12 导出契约**：任务模式报告导出（Word / PDF / 打包 md / 单文件转换 / 前端另存 md）允许出现可见编号 `[n]` 与文末参考资料段，仍不得出现内部引用键、片段标识与协议标记；会话导出（日常模式）不在 F069 范围、维持剥标 |
 
 ---
 
@@ -220,3 +223,4 @@
 | 2026-09-14 | 编号冲突改号：`feat/3.0.0-beta1` 合入 beta2 后，beta2 的商业授权统一到期提醒与 beta1 的 PAT 数据范围收窄同占 F066；商业授权一侧改号 **F067**（目录、表 1 归属行、INV-35、表 3 依赖、F037 影响行、错误码 270 归属同步），F066 专指 `pat-data-scope-and-ai-access` | F067、F066 |
 | 2026-09-14 | 登记 F068 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F068-nvdb-security-fixes |
 | 2026-09-16 | 登记 F068 代码执行沙箱统一底座：表 1 标无新增领域对象（在既有 `BaseExecutor` 抽象上加第三种执行模式 + 接管工作流代码节点执行位置）；分配错误码模块 **280**（28001～28006，已按 C5 重新派生占用列表确认空闲）；新增系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像因未知顶层 key 启动失败）。选定加固容器 + compose 副本池拓扑，**不新建持 docker 的编排控制面**（留给 3.0 应用工场 F103 `runtime-manager`）；不新增表 / Alembic / 对外 API / 领域对象 / 不变量 | F068-code-execution-sandbox |
+| 2026-09-20 | 登记 F069 灵思任务模式引用溯源可靠性（PRD《灵思任务模式引用溯源优化方案》2026-09-20 评审通过，D1～D8）：表 1 标无新领域对象（会话级来源编号表 + `citation_audit` 字段）；表 3 记依赖 F047 / F054 / F029；表 4 记 P2 修订 F054 AC-07 / AC-12 为烘焙措辞；无新增错误码 / 对外 API / 不变量 / Alembic；新增系统开关 `linsight.citation_handles_enabled` | F069、F047、F054 |

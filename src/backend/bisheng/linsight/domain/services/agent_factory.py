@@ -129,7 +129,7 @@ __SKILL_EXEC_LINE____KB_EXEC_LINE__
 __KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
-__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）
+__SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。图表/图片一律用 markdown 图片语法 `![说明](相对路径)` 引用（如 `![季节性走势](output/charts/x.png)`）；不要在 markdown 里写 `<div>`/`<img>`/`<table>` 等原始 HTML 标签——markdown 预览不渲染原始 HTML，会以纯文本泄漏。（HTML 交付物走 3b，不受此约束。）__CITATION_DELIVERABLE_LINE__
    - 3b（仅当选了 html）：write_file 写 output/<name>.html（完整自包含 HTML，内联样式，无外部脚本/CDN）。
    - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
    - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
@@ -251,10 +251,37 @@ class _LanguageTailMiddleware(AgentMiddleware):
         return await handler(self._append(request))
 
 
+# F069 P0: the citation requirement restated at the TAIL of the system message.
+# citation.yaml is appended to the kernel prompt (~37% into the assembled system
+# message) and then buried under ~7k chars of deepagents framework prompts; in
+# the two audited runs both models had stopped following it by the time they
+# wrote the report. This tail sits right before the language directive (which
+# stays the absolute tail — it self-describes as "language only"). Gated on the
+# same has_kb/has_web condition as _with_citation_rules.
+_CITATION_DELIVERABLE_LINE_ZH = (
+    "正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。"
+)
+
+_LINSIGHT_CITATION_TAIL_ZH = """# 来源标注（与上文 Citation Rules 同一要求，不改变其它任何要求）
+
+写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 的格式逐字复制检索结果里的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）并用引用标记包裹；一句用了多条资料就把多个标识放在同一组标记里。"""
+
+
+class _CitationTailMiddleware(_LanguageTailMiddleware):
+    """Same mechanics as the language tail; a separate instance so the language
+    directive text stays untouched and remains the absolute tail. langchain
+    asserts middleware names are unique, hence the distinct ``name``."""
+
+    @property
+    def name(self) -> str:
+        return "LinsightCitationTail"
+
+
 def _build_linsight_system_prompt(
     has_knowledge_base: bool,
     skills_present: bool = False,
     has_code_interpreter: bool = False,
+    has_web_search: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
@@ -383,6 +410,12 @@ def _build_linsight_system_prompt(
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
         )
 
+    # F069: the deliverable step names the citation requirement explicitly, but
+    # ONLY when the run has a citable retrieval tool — the same gate as
+    # _with_citation_rules, so the prompt never points at a "Citation Rules"
+    # section that was not appended (prompt/tool lockstep, see module docstring).
+    citation_deliverable_line = _CITATION_DELIVERABLE_LINE_ZH if (has_knowledge_base or has_web_search) else ""
+
     return (
         _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
@@ -390,6 +423,7 @@ def _build_linsight_system_prompt(
         .replace("__SKILL_EXEC_LINE__", skill_exec_line)
         .replace("__SKILL_DELIVERABLE_LINE__", skill_deliverable_line)
         .replace("__PATH_NAMESPACE_LINE__", path_namespace_line)
+        .replace("__CITATION_DELIVERABLE_LINE__", citation_deliverable_line)
     )
 
 
@@ -722,7 +756,12 @@ def _with_citation_rules(prompt: str, enabled: bool) -> str:
     return ensure_citation_rules(prompt)
 
 
-async def _annotate_web_search_output(output: Any) -> Any:
+async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
+    """Annotate a web_search JSON list with citation keys.
+
+    Returns ``(annotated_output, registry_items)``; a non-JSON / non-list payload
+    is passed through untouched with an empty item list.
+    """
     from bisheng.citation.domain.services.citation_prompt_helper import (
         annotate_web_results_with_citations,
         cache_citation_registry_items,
@@ -730,33 +769,45 @@ async def _annotate_web_search_output(output: Any) -> Any:
     )
 
     if not isinstance(output, str):
-        return output
+        return output, []
     try:
         results = json.loads(output)
     except json.JSONDecodeError:
-        return output
+        return output, []
     if not isinstance(results, list):
-        return output
+        return output, []
     annotated = annotate_web_results_with_citations(results)
-    await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
-    return json.dumps(annotated, ensure_ascii=False)
+    items = await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
+    return json.dumps(annotated, ensure_ascii=False), list(items or [])
+
+
+async def _annotate_web_search_output(output: Any) -> Any:
+    annotated, _items = await _annotate_web_search_items(output)
+    return annotated
 
 
 class _LinsightWebCitationWrapper(BaseTool):
-    """Register web_search hits into the citation runtime cache (F047)."""
+    """Register web_search hits into the citation runtime cache (F047).
+
+    F069: when a per-run ``scope`` (LinsightCitationScope) is bound, every hit is
+    also reported to it so the completion audit can count the sources this run
+    has seen — inside the researcher sub-graph too, which reuses this instance.
+    """
 
     name: str
     description: str
     args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
+    scope: Any = None
 
     @classmethod
-    def wrap(cls, inner: BaseTool) -> BaseTool:
+    def wrap(cls, inner: BaseTool, scope: Any = None) -> BaseTool:
         return cls(
             name=inner.name,
             description=inner.description,
             args_schema=inner.args_schema,
             tool=inner,
+            scope=scope,
         )
 
     def _run(self, *args, **kwargs):
@@ -765,20 +816,40 @@ class _LinsightWebCitationWrapper(BaseTool):
     async def _arun(self, config=None, **kwargs):
         output = await self.tool.ainvoke(kwargs, config=config)
         try:
-            return await _annotate_web_search_output(output)
+            annotated, items = await _annotate_web_search_items(output)
+            if self.scope is not None and items:
+                await self.scope.record_seen(items)
+            return annotated
         except Exception:
             logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
             return output
 
 
-def _wrap_linsight_web_citation_tools(tools: Sequence) -> list:
+def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
     wrapped = []
     for tool_obj in tools:
         if _is_web_search_tool(tool_obj) and isinstance(tool_obj, BaseTool):
-            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj))
+            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
         else:
             wrapped.append(tool_obj)
     return wrapped
+
+
+def _bind_linsight_citation_scope(tools: Sequence, scope: Any) -> list:
+    """Attach the run's citation scope to every retrieval tool (F069).
+
+    Knowledge-base tools get the scope as a field; web_search tools are wrapped
+    with it. The researcher sub-agent later receives the SAME instances via
+    ``_subagent_tools``, so its retrieval is counted as well.
+    """
+    if scope is not None:
+        for tool_obj in tools:
+            if hasattr(tool_obj, "citation_scope"):
+                try:
+                    tool_obj.citation_scope = scope
+                except Exception:
+                    logger.opt(exception=True).warning("failed to bind citation scope to tool")
+    return _wrap_linsight_web_citation_tools(tools, scope=scope)
 
 
 def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
@@ -849,6 +920,7 @@ async def create_linsight_agent(
     checkpointer=None,
     skills_present: bool = False,
     turn_budget_sink: dict | None = None,
+    citation_scope=None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -866,6 +938,8 @@ async def create_linsight_agent(
         turn_budget_sink: mutable dict the MAIN graph's resilience middleware flags
             when the run had to wrap up early on its turn budget, so the caller can
             tell the user. Main graph only — a subagent landing early is internal.
+        citation_scope: F069 ``LinsightCitationScope`` of this run; bound to the
+            retrieval tools so the completion audit knows which sources were seen.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -873,7 +947,7 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
-    tools = _wrap_linsight_web_citation_tools(list(tools or []))
+    tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
     model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:
@@ -905,6 +979,14 @@ async def create_linsight_agent(
     # those into file/audio/video content blocks — a hard 400 on most endpoints, a
     # client-side ValueError for video, and silent mojibake for docx/xlsx.
     has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
+    # Advertise search_knowledge_base in the system prompt IFF it is actually in
+    # `tools` (init_linsight_tools injects it only when the user selected a KB /
+    # knowledge space). Keeps the prompt and the bound tool list in lockstep so the
+    # model is never told to call a tool that isn't there (root cause of the
+    # "knowledge_id: Field required" error when no KB is selected). Computed here
+    # because the citation tail middleware below needs the same gate.
+    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
+    has_web = any(_is_web_search_tool(t) for t in tools)
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
@@ -938,6 +1020,10 @@ async def create_linsight_agent(
             )
         )
 
+    # F069: citation requirement restated right before the language tail, only
+    # when a citable retrieval tool is bound (same gate as the rules themselves).
+    if has_kb or has_web:
+        middlewares.append(_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH))
     # Language directive LAST in the stack so it appends AFTER every framework
     # middleware prompt (write_todos / filesystem / task / skills) — the absolute
     # tail of the system message, the strongest position to keep the model
@@ -980,6 +1066,8 @@ async def create_linsight_agent(
     # exhausted-transient step to a synthetic reply — letting the parent task
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools)
+    researcher_tools = researcher.get("tools") or []
+    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_search_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
         build_resilience_middleware(linsight_conf, is_subagent=True),
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in
@@ -991,6 +1079,8 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F069: same citation tail on the researcher's own stack, same gate.
+        *([_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH)] if researcher_citable else []),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
@@ -999,13 +1089,6 @@ async def create_linsight_agent(
         # note above for why it goes last).
         build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
-    # Advertise search_knowledge_base in the system prompt IFF it is actually in
-    # `tools` (init_linsight_tools injects it only when the user selected a KB /
-    # knowledge space). Keeps the prompt and the bound tool list in lockstep so the
-    # model is never told to call a tool that isn't there (root cause of the
-    # "knowledge_id: Field required" error when no KB is selected).
-    has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
-    has_web = any(_is_web_search_tool(t) for t in tools)
     # Same lockstep for skills: the skill-priority lines are advertised IFF
     # SkillsMiddleware was actually attached above (``skills_advertised``), so the
     # prompt never points at an "Available Skills" section that does not exist.
@@ -1019,6 +1102,7 @@ async def create_linsight_agent(
                 # Gates the hard "no export_docx/export_pdf" rule: only meaningful
                 # when the skill's script route can actually run in this session.
                 has_code_interpreter=has_code_interpreter,
+                has_web_search=has_web,
             ),
             has_kb or has_web,
         ),

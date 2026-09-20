@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -48,6 +49,11 @@ class SearchKnowledgeBase(BaseTool):
     # that id would reach ``KnowledgeDao.query_by_id`` directly and leak another
     # tenant's / unauthorised KB content.
     allowed_knowledge_ids: set[str] | None = None
+    # F069: per-run citation scope (LinsightCitationScope). Every registered hit is
+    # reported so the completion audit can count sources seen in BOTH the main
+    # graph and the researcher sub-graph (they share this tool instance). None
+    # keeps the pre-F069 behaviour.
+    citation_scope: Any | None = None
 
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
@@ -109,6 +115,8 @@ class SearchKnowledgeBase(BaseTool):
             annotated = annotate_rag_documents_with_citations(documents)
             items = collect_rag_citation_registry_items(annotated)
             await cache_citation_registry_items(items)
+            if self.citation_scope is not None:
+                await self.citation_scope.record_seen(items)
             formatted = [KnowledgeUtils.format_retrieved_chunk(doc, knowledge_name) for doc in annotated]
             return json.dumps({"状态": "成功", "结果": formatted}, ensure_ascii=False, indent=2)
         except Exception:
