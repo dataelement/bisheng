@@ -9,7 +9,18 @@ soft-return contract on failure (a raised exception would kill the whole task).
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from bisheng.tool.domain.langchain import linsight_export
+
+
+@pytest.fixture(autouse=True)
+def _no_persisted_sources(monkeypatch):
+    """F069 P2: exports resolve sources through the DB; these tests have none
+    persisted, so baking degrades to the plain strip the assertions expect."""
+    from bisheng.citation.domain.services import citation_export_service
+
+    monkeypatch.setattr(citation_export_service, "resolve_items_for_export", AsyncMock(return_value=[]))
 
 
 def _writable_backend(md_content="# Hello\n\ncontent", read_error=None):
@@ -248,3 +259,55 @@ async def test_export_pdf_strips_unknown_handles(monkeypatch):
 
     _assert_clean_handles(seen["md"])
     assert "已生成 PDF" in res
+
+
+# ---------------------------------------------------------------------------
+# F069 P2: the tools bake resolvable citations under the exporter's identity
+# ---------------------------------------------------------------------------
+def _resolved_rag():
+    from bisheng.citation.domain.schemas.citation_schema import (
+        CitationRegistryItemSchema,
+        CitationType,
+        RagCitationItemSchema,
+        RagCitationPayloadSchema,
+    )
+
+    return CitationRegistryItemSchema(
+        citationId="knowledgesearch_18f5868b",
+        type=CitationType.RAG,
+        accessScope="per_user",
+        sourcePayload=RagCitationPayloadSchema(
+            knowledgeId=9, documentId=11, documentName="政策.pdf", items=[RagCitationItemSchema(itemId="0", page=3)]
+        ),
+    )
+
+
+async def test_export_docx_bakes_numbers_for_the_task_owner(monkeypatch):
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
+    from bisheng.citation.domain.services import citation_export_service
+
+    seen = {}
+
+    async def fake_resolve(ids, login_user):
+        seen["user"] = login_user
+        return [_resolved_rag()]
+
+    monkeypatch.setattr(citation_export_service, "resolve_items_for_export", fake_resolve)
+
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            seen["md"] = md
+            return (b"DOCXBYTES", "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+    owner = SimpleNamespace(user_id=3)
+    tools = linsight_export.init_linsight_export_tools(_writable_backend(md_content=_CITED_MD), export_user=owner)
+    docx_tool = next(t for t in tools if t.name == "export_docx")
+
+    res = await docx_tool._arun(source_path="output/report.md")
+
+    assert seen["user"] is owner
+    assert "PM2.5 年均浓度下降。[1]" in seen["md"]
+    assert "## 参考资料" in seen["md"] and "《政策.pdf》 · 第3页" in seen["md"]
+    assert "" not in seen["md"] and "websearch_" not in seen["md"]  # the unresolved web key is stripped
+    assert "已生成 Word" in res
