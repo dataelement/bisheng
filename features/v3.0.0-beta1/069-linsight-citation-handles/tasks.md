@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
-| 实现 | 🔄 进行中 | 40 / 41 完成（Wave 1～3 代码全部完成；T041 的 F054 措辞与文档已回写，116 导出对照待 release 部署后执行）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
+| 实现 | ✅ 完成 | 41 / 41（P0 基线 uncited 44% → P1 A/B 0%；P2 导出对照见 design §7；前端另存 md 的真机对照未做，由 jest 覆盖） |Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
 
@@ -330,7 +330,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
   **手动验证**: 116 另存 md，文件含 `[n]` 与参考资料
   **依赖**: T035
 
-- [ ] **T041**: F054 契约措辞修订、文档回写与 116 导出对照
+- [x] **T041**: F054 契约措辞修订、文档回写与 116 导出对照
   **文件**: `features/v3.0.0-beta1/054-unified-citation-entries/spec.md`、`features/v3.0.0-beta1/release-contract.md`、本目录 design.md
   **逻辑**: F054 AC-07 / AC-12 补「任务模式报告导出按 F069 AC-24 烘焙」的例外措辞；release-contract 变更历史加一行「F069 P2 交付、F054 AC-07/AC-12 措辞已修订」；design §7 记 A/B 结果；116 以有权限 / 无权限 / 分享页三种身份各导出 docx、pdf、md，核对编号与参考资料、无内部键、无权限来源不出现。
   **覆盖 AC**: AC-21, AC-22, AC-24

@@ -106,12 +106,26 @@ def _item_location(item: Any) -> str:
     item_id = getattr(item, "itemId", None)
     for sub in getattr(payload, "items", None) or []:
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            page = getattr(sub, "page", None)
-            if page is not None:
-                return f"第 {page} 页"
-            chunk_index = getattr(sub, "chunkIndex", None)
-            if chunk_index is not None:
-                return f"第 {chunk_index} 段"
+            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
+    return ""
+
+
+def _location_label(page: Any, chunk_index: Any) -> str:
+    """``第 N 页`` when the parser produced a real page number, else ``第 N 段``.
+
+    docx / xlsx / md chunks carry ``page=0`` (no pagination), which must not
+    render as "page 0"; the chunk index is the meaningful locator there.
+    """
+    try:
+        if page is not None and int(page) > 0:
+            return f"第 {int(page)} 页"
+    except (TypeError, ValueError):
+        pass
+    try:
+        if chunk_index is not None and int(chunk_index) >= 0:
+            return f"第 {int(chunk_index)} 段"
+    except (TypeError, ValueError):
+        pass
     return ""
 
 
@@ -400,12 +414,7 @@ def _export_identity(item: Any, item_id: str | None) -> str:
 def _export_location(item: Any, item_id: str | None) -> str:
     for sub in _payload_items(item):
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            page = getattr(sub, "page", None)
-            if page is not None:
-                return f"第 {page} 页"
-            chunk_index = getattr(sub, "chunkIndex", None)
-            if chunk_index is not None:
-                return f"第 {chunk_index} 段"
+            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
     return ""
 
 
