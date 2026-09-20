@@ -8,7 +8,6 @@ from zoneinfo import ZoneInfo
 from loguru import logger
 
 from bisheng.common.errcode.dsh import DshQuotaUnavailableError
-from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
 from bisheng.dsh.domain.repositories.usage import DshUsageRepository
 from bisheng.dsh.domain.services.model import DshModelService
 from bisheng.dsh.domain.services.usage import DshUsageService
@@ -21,7 +20,9 @@ async def read_policy(user_id: int):
         from bisheng.core.database import get_sync_db_session
 
         with get_sync_db_session() as session:
-            policy = DshPolicyRepository(session).get(user_id)
+            from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+
+            policy = DshSubjectPolicyRepository(session).effective(user_id)
             return policy.model_copy(deep=True) if policy else None
 
     return await asyncio.to_thread(read)
@@ -113,9 +114,9 @@ async def get_model_runtime(runtime) -> ModelRuntime:
     def build(model, server, principal, request):
         return LLMService.build_dsh_llm(model, server, user_id=int(principal.user_id), streaming=request.stream)
 
-    from bisheng.dsh.infrastructure.model_capabilities import model_capabilities
+    from bisheng.dsh.infrastructure.model_capabilities import desktop_model_capabilities
 
-    capabilities = model_capabilities
+    capabilities = desktop_model_capabilities
 
     model = DshModelService(
         policy_reader=read_policy,

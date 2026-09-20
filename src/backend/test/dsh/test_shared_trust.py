@@ -101,7 +101,7 @@ async def test_model_catalog_does_not_require_a_deployment_allowlist(monkeypatch
         rows = await read_available_models(
             ids, AsyncMock(return_value=(available, SimpleNamespace(name="Bailian", type="openai")))
         )
-        assert rows == [{"id": 17, "name": "Bailian / qwen-max", "is_root_shared": False}]
+        assert rows == [{"id": 17, "name": "Bailian / model 1", "is_root_shared": False}]
     finally:
         current_tenant_id.reset(token)
 

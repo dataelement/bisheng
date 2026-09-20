@@ -18,6 +18,7 @@ export function DshLogin() {
     const { t } = useTranslation()
     const { user } = useContext(userContext)
     const { config, failed } = useDshBrowserConfig()
+    const homeUrl = import.meta.env.BASE_URL
     const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
     useEffect(() => {
         const previous = document.title
@@ -35,6 +36,13 @@ export function DshLogin() {
     }
     const flow = useDshAuthorization(authId)
     useEffect(() => {
+        if (flow.status !== 'issued') return
+        const timer = window.setTimeout(() => {
+            location.assign(homeUrl)
+        }, 10_000)
+        return () => window.clearTimeout(timer)
+    }, [flow.status, homeUrl])
+    useEffect(() => {
         const meta = document.createElement('meta')
         meta.name = 'referrer'
         meta.content = 'no-referrer'
@@ -45,7 +53,7 @@ export function DshLogin() {
     }, [])
     function handleLogin() {
         rememberDesktopLoginReturnTo()
-        location.assign(import.meta.env.BASE_URL)
+        location.assign(homeUrl)
     }
     async function handleCopy(value: string) {
         setCopyStatus('idle')
@@ -142,6 +150,14 @@ export function DshLogin() {
                                     {flow.status !== 'idle' &&
                                         t(`dsh.auth_${flow.status}`)}
                                 </p>
+                                {flow.status === 'issued' && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => location.assign(homeUrl)}
+                                    >
+                                        {t('dsh.returnHome')}
+                                    </Button>
+                                )}
                                 {flow.denialUrl && (
                                     <iframe
                                         title={t('dsh.callback')}
@@ -162,9 +178,7 @@ export function DshLogin() {
                                             )}
                                         />
                                         <p>
-                                            {t('dsh.ticketHelp', {
-                                                seconds: flow.seconds,
-                                            })}
+                                            {t('dsh.ticketHelp')}
                                         </p>
                                         <Input
                                             type="password"

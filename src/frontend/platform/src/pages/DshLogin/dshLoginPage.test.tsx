@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createContext } from 'react'
 import english from '../../../public/locales/en-US/bs.json'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,7 @@ import { DshLogin } from './index'
 import { consumeLoginReturnTo } from '@/utils/loginReturnTo'
 import { getDshBrowserConfig } from '@/controllers/API/dshSettings'
 import request from '@/controllers/request'
-import { authorizeDsh } from '@/controllers/API/dsh'
+import { authorizeDsh, denyDsh } from '@/controllers/API/dsh'
 vi.mock('@/controllers/request', () => ({ default: { get: vi.fn() } }))
 
 const identity = vi.hoisted(() => ({ user: null as null | {
@@ -43,6 +43,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
 })
 describe('desktop HTTP login entry', () => {
     it('uses the saved HTTP download address without a frontend build variable', async () => {
@@ -94,6 +95,83 @@ describe('desktop consent identity', () => {
         await waitFor(() => expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected))
         expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
         expect(screen.getByText(/Authorize DSH Desktop as/).textContent).not.toContain('()')
+    })
+})
+
+describe('desktop authorization completion', () => {
+    async function authorize(useFakeTimers = false) {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', {
+            origin,
+            pathname: '/desktop-login',
+            href: origin + '/desktop-login?auth_id=fixture',
+            search: '?auth_id=fixture',
+            assign,
+        })
+        vi.mocked(authorizeDsh).mockResolvedValue({
+            identity_ticket: 'fixture-one-time-ticket',
+            expires_in: 60,
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        const authorizeButton = await screen.findByRole('button', {
+            name: english.dsh.authorize,
+        })
+        if (useFakeTimers) vi.useFakeTimers()
+        await act(async () => {
+            fireEvent.click(authorizeButton)
+        })
+    }
+
+    it('returns home silently ten seconds after authorization succeeds', async () => {
+        await authorize(true)
+        expect(
+            screen.getByRole('button', { name: english.dsh.returnHome }),
+        ).toBeInTheDocument()
+        expect(screen.getByText(english.dsh.ticketHelp)).toBeInTheDocument()
+
+        act(() => vi.advanceTimersByTime(9_999))
+        expect(assign).not.toHaveBeenCalled()
+        act(() => vi.advanceTimersByTime(1))
+        expect(assign).toHaveBeenCalledWith('/')
+    })
+
+    it('lets the user return home immediately', async () => {
+        await authorize()
+        fireEvent.click(
+            screen.getByRole('button', { name: english.dsh.returnHome }),
+        )
+        expect(assign).toHaveBeenCalledWith('/')
+    })
+
+    it('stays on the result page when authorization is denied', async () => {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', {
+            origin,
+            pathname: '/desktop-login',
+            href: origin + '/desktop-login?auth_id=fixture',
+            search: '?auth_id=fixture',
+            assign,
+        })
+        vi.mocked(denyDsh).mockResolvedValue({
+            error: 'access_denied',
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        const denyButton = await screen.findByRole('button', {
+            name: english.dsh.cancel,
+        })
+        vi.useFakeTimers()
+        await act(async () => {
+            fireEvent.click(denyButton)
+        })
+        act(() => vi.advanceTimersByTime(10_000))
+        expect(assign).not.toHaveBeenCalled()
+        expect(
+            screen.queryByRole('button', { name: english.dsh.returnHome }),
+        ).toBeNull()
     })
 })
 

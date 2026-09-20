@@ -58,6 +58,18 @@ class DshPolicyRepository:
             raise DshOperationConflictError()
         return row
 
+    def effective_projection(self, user_id: int, model_id: int) -> dict:
+        from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+
+        snapshot = DshSubjectPolicyRepository(self.session).effective(user_id)
+        row = next(row for row in snapshot.rows if row.model_id == model_id)
+        return {
+            "version": row.version,
+            "aggregate_version": snapshot.version,
+            "monthly_token_limit": row.monthly_token_limit,
+            "enabled": bool(row.enabled),
+        }
+
     def register_update(
         self,
         *,
@@ -68,6 +80,7 @@ class DshPolicyRepository:
         model_id: int,
         monthly_token_limit: int,
         enabled: bool,
+        seat_limit: int | None = None,
     ):
         require_tenant()
         if type(expected_version) is not int or expected_version < 0:
@@ -82,6 +95,13 @@ class DshPolicyRepository:
             or type(enabled) is not bool
         ):
             raise ValueError("A typed model grant is required")
+        if seat_limit is not None:
+            from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
+
+            DshSubjectPolicyRepository(self.session).ensure_seat_capacity(
+                seat_limit,
+                proposed_user=(user_id, model_id, enabled, monthly_token_limit),
+            )
         payload = {"model_id": model_id, "monthly_token_limit": monthly_token_limit, "enabled": enabled}
         digest = payload_digest(payload)
         existing = self.operations.get(operation_id, lock=True)

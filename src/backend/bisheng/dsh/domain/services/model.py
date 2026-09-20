@@ -3,6 +3,7 @@
 import asyncio
 import json
 from datetime import UTC, datetime
+from inspect import isawaitable
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,7 @@ from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
+from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -78,6 +80,8 @@ class DshModelService:
                 except DshModelNotAllowedError:
                     continue
                 capabilities = self.capabilities_for(model, server)
+                if isawaitable(capabilities):
+                    capabilities = await capabilities
                 if capabilities is None:
                     continue
                 created = model.create_time
@@ -92,7 +96,7 @@ class DshModelService:
                         "object": "model",
                         "created": created,
                         "owned_by": "bisheng",
-                        "display_name": f"{server.name.strip() or server.type} / {model.model_name.strip() or model.name}",
+                        "display_name": model_display_name(model, server),
                         "capabilities": capabilities.client_fields(),
                     }
                 )
@@ -111,6 +115,8 @@ class DshModelService:
             if model.id != request.model_id:
                 raise DshModelNotAllowedError()
             capabilities: ChatCapabilities | None = self.capabilities_for(model, server)
+            if isawaitable(capabilities):
+                capabilities = await capabilities
             if capabilities is None:
                 raise DshUnsupportedParameterError()
             llm = self.llm_builder(model, server, principal, request)
@@ -137,7 +143,7 @@ class DshModelService:
                 started_at=started,
             )
             try:
-                await self.usage.check_and_start(event)
+                event = await self.usage.check_and_start(event, monthly_token_limit=selected_policy.monthly_token_limit)
             except QuotaRejected as error:
                 if error.reason == "quota_exceeded":
                     raise DshMonthlyTokenLimitExceededError() from error

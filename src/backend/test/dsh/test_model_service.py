@@ -54,10 +54,12 @@ class Ledger:
         self.used = 90
         self.frozen = False
 
-    async def check_and_start(self, event):
+    async def check_and_start(self, event, *, monthly_token_limit=None):
         assert self.used == 90
-        self.events.append(event)
-        return event
+        assert monthly_token_limit == 100
+        admitted = event.model_copy(update={"quota_epoch": 9})
+        self.events.append(admitted)
+        return admitted
 
     async def record_usage(self, event, expected_version):
         assert expected_version == 1
@@ -75,7 +77,7 @@ def service_setup():
         quota_epoch=1,
         quota_sync_state="READY",
         allowed_model_ids=[42],
-        rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY")],
+        rows=[SimpleNamespace(model_id=42, version=1, quota_sync_state="READY", monthly_token_limit=100)],
         monthly_token_limit=100,
     )
     model = SimpleNamespace(
@@ -102,6 +104,19 @@ def service_setup():
     return service, llm, ledger, policy, state
 
 
+async def test_async_capabilities_are_awaited_for_catalog_and_chat(service_setup):
+    service, _llm, _ledger, _policy, _state = service_setup
+
+    async def capabilities(*args):
+        return ChatCapabilities(vision=True)
+
+    service.capabilities_for = capabilities
+    assert (await service.list_models(principal()))["data"][0]["capabilities"]["vision"] is True
+    await service.complete(
+        principal(), DshChatRequest(model="bisheng:42", messages=[{"role": "user", "content": "hi"}])
+    )
+
+
 async def test_models_empty_policy_and_immediate_offline(service_setup):
     service, llm, _ledger, policy, state = service_setup
     assert (await service.list_models(principal()))["data"][0]["id"] == "bisheng:42"
@@ -118,15 +133,17 @@ async def test_models_empty_policy_and_immediate_offline(service_setup):
 @pytest.mark.parametrize(
     ("provider_name", "provider_type", "model_name", "alias", "expected"),
     [
-        ("百炼", "aliyun", "qwen-max", "model 2", "百炼 / qwen-max"),
-        ("DeepSeek", "openai", "deepseek-chat", "model 3", "DeepSeek / deepseek-chat"),
-        ("  百炼  ", "aliyun", "  qwen-max  ", "model 2", "百炼 / qwen-max"),
-        ("", "openai", "qwen-max", "model 2", "openai / qwen-max"),
+        ("百炼", "aliyun", "qwen-max", "通义千问 Max", "百炼 / 通义千问 Max"),
+        ("DeepSeek", "openai", "deepseek-chat", "DeepSeek V3", "DeepSeek / DeepSeek V3"),
+        ("  百炼  ", "aliyun", "  qwen-max  ", "  通义千问 Max  ", "百炼 / 通义千问 Max"),
+        ("", "openai", "qwen-max", "通义千问 Max", "openai / 通义千问 Max"),
+        ("百炼", "aliyun", "  qwen-max  ", "", "百炼 / qwen-max"),
+        ("百炼", "aliyun", "  qwen-max  ", "   ", "百炼 / qwen-max"),
         ("   ", "openai", "", "Custom model", "openai / Custom model"),
         ("OpenAI", "openai", "   ", "Custom model", "OpenAI / Custom model"),
     ],
 )
-async def test_models_display_provider_and_actual_name_with_existing_fallbacks(
+async def test_catalog_and_admin_share_configured_display_name_and_route_id(
     service_setup, provider_name, provider_type, model_name, alias, expected
 ):
     from bisheng.dsh.admin_runtime import read_available_models
@@ -173,6 +190,7 @@ async def test_known_usage_settled_before_success_and_inflight_overage_kept(serv
     }
     assert ledger.used == 102
     assert ledger.events[-1].status == "SUCCEEDED"
+    assert ledger.events[-1].quota_epoch == 9
     assert llm.calls == 1
 
 
@@ -280,7 +298,10 @@ async def test_real_redis_settlement_and_changed_model_keep_total(service_setup,
 
     service, llm, _ledger, policy, _state = service_setup
     policy.allowed_model_ids = [4, 5]
-    policy.rows = [SimpleNamespace(model_id=model, version=1, quota_sync_state="READY") for model in (4, 5)]
+    policy.rows = [
+        SimpleNamespace(model_id=model, version=1, quota_sync_state="READY", monthly_token_limit=1000)
+        for model in (4, 5)
+    ]
     policy.monthly_token_limit = 1000
 
     async def load_model(model_id):

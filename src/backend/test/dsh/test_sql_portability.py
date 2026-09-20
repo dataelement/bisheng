@@ -2,6 +2,7 @@
 
 import ast
 import importlib
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -124,6 +125,9 @@ def test_model_ddl_and_profile_column_compile_with_real_dialect(sql_dialect):
 
 
 class _CapturedResult:
+    def yield_per(self, _size):
+        return self
+
     def all(self):
         return []
 
@@ -156,18 +160,24 @@ def test_repository_queries_pagination_and_row_locks_compile_with_real_dialect(s
         DshOperationRepository(session).get("operation", lock=True)
         DshOperationRepository(session).list_for_user(20, after_id="previous", limit=100)
         DshAdminQueryRepository(session).last_call(20)
+        DshAdminQueryRepository(session).usage_time_summary(
+            20,
+            start_at=datetime(2026, 9, 1, tzinfo=UTC),
+            end_at=datetime(2026, 9, 2, tzinfo=UTC),
+            granularity="hour",
+        )
         UserDshProfileRepository.cursor_ids(session, after_user_id=10, limit=100)
         with pytest.raises(ValueError, match="User not found"):
             UserDshProfileRepository.get_for_update(session, 20)
     finally:
         current_tenant_id.reset(token)
-    assert len(session.statements) == 6
+    assert len(session.statements) == 7
     for index, statement in enumerate(session.statements):
         compiled = statement.compile(dialect=sql_dialect)
         assert compiled.params, "User/model/cursor parameters must remain bound"
         sql = str(compiled).upper()
         assert "SELECT" in sql
-        if index in {0, 1, 5}:
+        if index in {0, 1, 6}:
             assert "FOR UPDATE" in sql
         if sql_dialect.name == "dm":
             assert "`" not in sql

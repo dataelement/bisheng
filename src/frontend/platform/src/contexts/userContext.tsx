@@ -210,6 +210,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     '/filelib': 'knowledge',
                     '/dataset': 'dataset',
                     '/model/management': 'model',
+                    '/dsh': 'sys',
                     '/evaluation': 'evaluation',
                     '/label': 'mark_task',
                     '/log': 'log',

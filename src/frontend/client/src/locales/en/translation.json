@@ -2256,5 +2256,26 @@
   "dsh_source_live": "Live usage",
   "dsh_source_persisted": "Stored snapshot, not live",
   "dsh_source_unavailable": "Usage unavailable",
-  "dsh_unknown_usage": "Usage was not received for {{count}} calls."
+  "dsh_unknown_usage": "Usage was not received for {{count}} calls.",
+  "dsh": {
+    "heatmapFuture": "Upcoming interval",
+    "heatmapMessageValue": "{{value}} messages",
+    "heatmapOutside": "Outside selected range",
+    "heatmapTile": "{{time}} · {{tokens}} tokens · {{messages}} messages",
+    "heatmapTokenValue": "{{exact}} tokens",
+    "messageActivity": "Message activity",
+    "messageCount": "Messages",
+    "missingUsageCount": "{{count}} messages have no token record and are not counted as zero.",
+    "tokenActivity": "Token activity",
+    "tokenBreakdown": "Input {{input}} tokens · Output {{output}} tokens",
+    "tokenUsage": "Token usage",
+    "unavailable": "Unavailable. Try again later.",
+    "modelUsage": "Model usage",
+    "units": {
+      "trillion": "T",
+      "hundredBillion": "100B",
+      "hundredMillion": "100M",
+      "tenThousand": "10K"
+    }
+  }
 }

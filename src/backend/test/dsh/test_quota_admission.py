@@ -45,6 +45,9 @@ async def quota():
         gate,
         mapping={
             "state": "READY",
+            "policy_revision_schema": "2",
+            "direct_version:4": "1",
+            "direct_version:5": "1",
             "running_index": "1",
             "running_count": "0",
             "epoch": "1",
@@ -76,6 +79,25 @@ async def test_actual_usage_admits_two_without_reservation(quota):
     assert (await quota.check_and_start(b)).status == "RUNNING"
     assert await quota.redis.hget(quota.keys(a)[1], "used") == "900"
     assert await quota.redis.xlen(quota.keys(a)[5]) == 2
+
+
+async def test_effective_subject_limit_is_authoritative_and_initializes_new_model_counter(quota):
+    with pytest.raises(QuotaRejected, match="quota_exceeded"):
+        await quota.check_and_start(running(), monthly_token_limit=800)
+    event = running(model=6)
+    assert (await quota.check_and_start(event, monthly_token_limit=1000)).status == "RUNNING"
+    assert await quota.redis.hget(quota.keys(event)[2], "6") == "0"
+
+
+async def test_effective_subject_admission_uses_current_automatic_ledger_epoch(quota):
+    event = running()
+    gate, month, *_ = quota.keys(event)
+    await quota.redis.hset(gate, "epoch", "7")
+    await quota.redis.hset(month, "epoch", "7")
+    quota.topology.automatic = True
+    admitted = await quota.check_and_start(event, monthly_token_limit=1000)
+    assert admitted.quota_epoch == 7
+    assert (await quota.get_request(admitted)).quota_epoch == 7
 
 
 async def test_zero_limit_missing_key_and_bad_type_fail_closed(quota):

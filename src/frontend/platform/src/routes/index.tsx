@@ -44,6 +44,7 @@ const ResoucePage = lazy(() => import("@/pages/resoucePage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const TenantPage = lazy(() => import("@/pages/TenantPage"));
 const TenantSelect = lazy(() => import("@/pages/LoginPage/TenantSelect"));
+const DshPage = lazy(() => import("@/pages/DshPage"));
 
 const baseConfig = {
   //@ts-ignore
@@ -86,12 +87,14 @@ const privateRouter = [
       { path: "build/apps", element: <Apps />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
+      { path: "build/dsh", element: <Navigate to="/dsh?tab=plugins" replace /> },
       { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
       { path: "build", element: <Navigate to="apps" replace /> },
       { path: "build/temps/:type", element: <Templates />, permission: 'create_app', },
       { path: "model/management", element: <Management />, permission: 'model' },
       { path: "model/finetune", element: <Finetune />, permission: 'model' },
       { path: "model", element: <Navigate to="management" replace /> },
+      { path: "dsh", element: <DshPage />, permission: 'sys' },
       { path: "sys", element: <SystemPage />, permission: 'sys' },
       { path: "approval", element: <ApprovalPage />, permission: 'sys' },
       { path: "log", element: <LogPage />, permission: "log" },

@@ -2,10 +2,11 @@
 
 from contextlib import contextmanager
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, or_
 from sqlmodel import Session, col, select
 
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.user.domain.models.user import User
 
@@ -21,6 +22,8 @@ class UserDshProfileRepository:
         limit: int = 20,
         keyword: str = "",
         user_ids: list[int] | None = None,
+        department_ids: list[int] | None = None,
+        unassigned_only: bool = False,
     ) -> list[tuple[int, str]]:
         """Read one page plus a lookahead of active users for DSH administration."""
         tenant = get_current_tenant_id()
@@ -43,8 +46,28 @@ class UserDshProfileRepository:
         )
         if user_ids is not None:
             statement = statement.where(col(User.user_id).in_(user_ids))
+        if department_ids is not None:
+            if not department_ids:
+                return []
+            department_members = select(UserDepartment.user_id).where(
+                col(UserDepartment.department_id).in_(department_ids)
+            )
+            statement = statement.where(col(User.user_id).in_(department_members))
         if keyword:
-            statement = statement.where(col(User.user_name).contains(keyword, autoescape=True))
+            match = col(User.user_name).contains(keyword, autoescape=True)
+            if keyword.isdecimal() and 0 < int(keyword) <= 9223372036854775807:
+                match = or_(match, User.user_id == int(keyword))
+            statement = statement.where(match)
+        if unassigned_only:
+            members = (
+                select(UserDepartment.user_id)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(
+                    Department.tenant_id == tenant,
+                    Department.status == "active",
+                )
+            )
+            statement = statement.where(col(User.user_id).not_in(members))
         with strict_tenant_filter():
             return [(user_id, name) for user_id, name in session.exec(statement).all()]
 

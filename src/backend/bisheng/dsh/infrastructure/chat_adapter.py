@@ -186,6 +186,11 @@ class DshChatAdapter:
             raise DshInvalidRequestError()
         messages = []
         for item in request.messages:
+            content = item.content
+            if isinstance(content, list):
+                if any(part.type == "image_url" for part in content) and not capabilities.vision:
+                    raise DshUnsupportedParameterError()
+                content = [part.model_dump() for part in content]
             extras = {}
             if item.reasoning_content is not None:
                 if not capabilities.reasoning_content:
@@ -197,7 +202,7 @@ class DshChatAdapter:
                 message = ToolMessage(content=item.content, tool_call_id=item.tool_call_id)
             else:
                 message_type = {"user": HumanMessage, "system": SystemMessage, "assistant": AIMessage}[item.role]
-                message = message_type(content=item.content or "", additional_kwargs=extras)
+                message = message_type(content=content or "", additional_kwargs=extras)
             messages.append(message)
         parameters = {
             key: getattr(request, key)

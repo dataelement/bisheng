@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from sqlalchemy import create_engine
 from sqlmodel import Session
 
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.model_access import DshModelAccessRepository
@@ -21,7 +22,7 @@ from bisheng.user.domain.repositories.dsh_profile import UserDshProfileRepositor
 @pytest.fixture
 def model_access_db(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'model-access.db'}")
-    for model in (Tenant, User, UserTenant, DshUserPolicy):
+    for model in (Tenant, User, Department, UserDepartment, UserTenant, DshUserPolicy):
         model.__table__.create(engine)
     with engine.begin() as connection:
         connection.execute(
@@ -62,6 +63,23 @@ def model_access_db(tmp_path):
                 }
                 for user in range(20, 27)
             ],
+        )
+        connection.execute(
+            Department.__table__.insert(),
+            [
+                {
+                    "id": 31,
+                    "dept_id": "temporary-visitors",
+                    "name": "临时访客",
+                    "tenant_id": 2,
+                    "path": "/31/",
+                    "status": "active",
+                }
+            ],
+        )
+        connection.execute(
+            UserDepartment.__table__.insert(),
+            [{"id": 301, "user_id": 20, "department_id": 31, "is_primary": 1}],
         )
         connection.execute(
             DshUserPolicy.__table__.insert(),
@@ -115,6 +133,7 @@ def test_users_with_and_without_policy_are_listed_independently_of_dsh_sessions(
                 "items"
             ]
         ] == [26]
+        assert UserDshProfileRepository.access_users(session, department_ids=[31]) == [(20, "e2e-dsh-first-login")]
     with Session(model_access_db) as session, profile_scope(3):
         assert [
             row["user_id"]
@@ -183,6 +202,107 @@ async def test_model_users_route_uses_verified_actor_and_validates_query():
         app.dependency_overrides[admin.admin_user] = denied
         assert (await client.get("/api/v1/dsh/admin/models/7/users")).status_code == 403
         assert service.model_users.await_count == 1
+
+
+async def test_model_user_permissions_authorizes_scope_and_validates_result():
+    from bisheng.core.context.tenant import get_current_tenant_id
+
+    async def view(model_id, **kwargs):
+        assert get_current_tenant_id() == 2
+        assert model_id == 7
+        assert kwargs == {
+            "after_user_id": 20,
+            "limit": 10,
+            "keyword": "admin",
+            "department_id": 31,
+            "membership": "DIRECT",
+        }
+        return {
+            "tenant_id": 2,
+            "model": {"id": 7, "name": "Bailian / qwen-max", "is_root_shared": False},
+            "items": [
+                {
+                    "user_id": 20,
+                    "user_name": "admin",
+                    "direct_version": 0,
+                    "direct_enabled": False,
+                    "direct_monthly_token_limit": 0,
+                    "direct_pending_operation_id": None,
+                    "departments": [{"id": 31, "name": "临时访客", "is_primary": True}],
+                    "roles": [],
+                    "authorized": True,
+                    "monthly_token_limit": 100,
+                    "sources": [
+                        {
+                            "subject_type": "DEPARTMENT",
+                            "subject_id": 31,
+                            "name": "临时访客",
+                            "monthly_token_limit": 100,
+                            "inherited": False,
+                            "winning": True,
+                        }
+                    ],
+                    "department_match": "DIRECT",
+                }
+            ],
+            "next_cursor": None,
+            "has_more": False,
+        }
+
+    reader = AsyncMock(side_effect=view)
+    service = DshManagementService(
+        repository_scope=None,
+        gateway=None,
+        authorize=AsyncMock(return_value=({}, 2)),
+        profiles=None,
+        policy=None,
+        policy_view=None,
+        now=None,
+        model_user_permissions_view=reader,
+    )
+    with profile_scope(1):
+        result = await service.model_user_permissions(
+            90,
+            7,
+            tenant_id=2,
+            cursor="20",
+            limit=10,
+            keyword="admin",
+            department_id=31,
+            membership="DIRECT",
+        )
+    assert result["items"][0]["monthly_token_limit"] == 100
+
+
+async def test_model_user_permissions_route_validates_department_and_membership():
+    from bisheng.dsh.api.endpoints import admin
+
+    app = FastAPI()
+    app.include_router(admin.router, prefix="/api/v1")
+    service = SimpleNamespace(model_user_permissions=AsyncMock(return_value={"items": []}))
+    app.dependency_overrides[admin.admin_user] = lambda: SimpleNamespace(user_id=90)
+    app.dependency_overrides[admin.get_management] = lambda: service
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/dsh/admin/models/7/user-permissions"
+            "?tenant_id=2&keyword=admin&limit=20&department_id=31&membership=EFFECTIVE"
+        )
+        assert response.status_code == 200
+        service.model_user_permissions.assert_awaited_once_with(
+            90,
+            7,
+            tenant_id=2,
+            cursor=None,
+            limit=20,
+            keyword="admin",
+            department_id=31,
+            membership="EFFECTIVE",
+            unassigned_only=False,
+            include_seats=False,
+        )
+        for query in ("department_id=0", "membership=CHILDREN", "limit=101"):
+            assert (await client.get(f"/api/v1/dsh/admin/models/7/user-permissions?{query}")).status_code == 422
+        assert service.model_user_permissions.await_count == 1
 
 
 def test_authorized_model_query_uses_only_enabled_rows_and_model_prefix_index(model_access_db):

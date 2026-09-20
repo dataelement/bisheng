@@ -44,6 +44,57 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 describe('DSH seat pagination and commands', () => {
+    it('right-aligns filters and shows only available page directions', async () => {
+        vi.mocked(getDshSeats).mockImplementation(async (query) => {
+            const page = Number(query.cursor || 1)
+            return {
+                items: [seat(page)],
+                next_cursor: page < 3 ? String(page + 1) : null,
+                has_more: page < 3,
+            }
+        })
+        const { unmount } = render(
+            <SeatsView operations={{}} revision={0} onOperation={vi.fn()} />,
+        )
+        await screen.findByText('User 1')
+        const search = screen.getByLabelText('dsh.searchUsers')
+        const filters = search.parentElement!.parentElement!
+        expect(search.parentElement!.classList.contains('w-56')).toBe(true)
+        expect(filters.classList.contains('justify-end')).toBe(true)
+        expect(filters.classList.contains('items-center')).toBe(true)
+        expect(filters.contains(screen.getByLabelText('dsh.seatState'))).toBe(true)
+        expect(filters.contains(screen.getByLabelText('dsh.loginState'))).toBe(true)
+        expect(screen.queryByRole('button', { name: 'dsh.previous' })).toBeNull()
+        const next = screen.getByRole('button', { name: 'dsh.next' })
+        expect(next.parentElement!.classList.contains('justify-end')).toBe(true)
+        fireEvent.click(next)
+        await screen.findByText('User 2')
+        expect(screen.getByRole('button', { name: 'dsh.previous' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.next' }))
+        await screen.findByText('User 3')
+        expect(screen.queryByRole('button', { name: 'dsh.next' })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.previous' }))
+        await screen.findByText('User 2')
+        fireEvent.change(search, { target: { value: 'User' } })
+        await screen.findByText('User 1')
+        expect(screen.queryByRole('button', { name: 'dsh.previous' })).toBeNull()
+        expect(vi.mocked(getDshSeats).mock.calls.at(-1)![0]).toMatchObject({ keyword: 'User' })
+        unmount()
+    })
+    it.each([0, 1])('hides both page directions for a single page with %s seats', async (count) => {
+        vi.mocked(getDshSeats).mockResolvedValue({
+            items: count ? [seat(1)] : [],
+            next_cursor: null,
+            has_more: false,
+        })
+        const { unmount } = render(
+            <SeatsView operations={{}} revision={0} onOperation={vi.fn()} />,
+        )
+        await screen.findByRole('table')
+        expect(screen.queryByRole('button', { name: 'dsh.previous' })).toBeNull()
+        expect(screen.queryByRole('button', { name: 'dsh.next' })).toBeNull()
+        unmount()
+    })
     it('renders one page from ten thousand seats and loads sessions independently', async () => {
         const fixtures = Array.from({ length: 10000 }, (_, i) => seat(i + 1))
         vi.mocked(getDshSeats).mockImplementation(async (query) => ({

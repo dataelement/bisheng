@@ -7,10 +7,12 @@ from sqlalchemy import func, select
 from sqlmodel import Session
 
 from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
+from bisheng.database.models.tenant import UserTenant
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.models.monthly_usage import DshMonthlyUsage
 from bisheng.dsh.domain.models.user_policy import DshUserPolicy
 from bisheng.dsh.domain.repositories.policy import DshPolicyRepository
+from bisheng.dsh.domain.repositories.subject_policy import DshSubjectPolicyRepository
 from bisheng.dsh.domain.schemas.model_policy import model_configs_payload
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 
@@ -41,7 +43,7 @@ class DshUsageRepository:
         deltas = defaultdict(int)
         timezones = {}
         with strict_tenant_filter():
-            # Existing policy rows serialize first request/month inserts across consumers.
+            # A direct policy or active tenant membership serializes first request/month inserts.
             for user_id in sorted({e.user_id for e in merged.values()}):
                 policies = list(
                     self.session.scalars(
@@ -53,7 +55,18 @@ class DshUsageRepository:
                 )
                 policy = next((p for p in policies if p.tenant_id == tenant), None)
                 if policy is None:
-                    raise ValueError("Projection requires an existing tenant user policy")
+                    membership = self.session.scalar(
+                        select(UserTenant)
+                        .where(
+                            UserTenant.user_id == user_id,
+                            UserTenant.tenant_id == tenant,
+                        )
+                        .order_by(UserTenant.id)
+                        .limit(1)
+                        .with_for_update()
+                    )
+                    if membership is None:
+                        raise ValueError("Projection requires a retained tenant membership")
             for request_id, event in sorted(merged.items()):
                 current = self.session.scalar(
                     select(DshModelCall).where(DshModelCall.request_id == request_id).with_for_update()
@@ -150,7 +163,7 @@ class DshUsageRepository:
 
         tenant = get_current_tenant_id()
         with strict_tenant_filter():
-            policy = DshPolicyRepository(self.session).get(user_id, lock=True)
+            policy = DshSubjectPolicyRepository(self.session).effective(user_id, lock=True)
             if policy is None:
                 raise ValueError("Recovery requires a current SQL user policy")
             calls = []
@@ -211,7 +224,7 @@ class DshUsageRepository:
     def complete_recovery(self, user_id: int, *, expected_policy: dict, epoch: int):
         """Publish the recovered epoch only if policy authority has not changed during IO."""
         repository = DshPolicyRepository(self.session)
-        current = repository.get(user_id, lock=True)
+        current = DshSubjectPolicyRepository(self.session).effective(user_id, lock=True)
         if current is None or current.recovery_payload() != expected_policy:
             raise ValueError("SQL policy changed during controlled recovery")
         if epoch < current.quota_epoch:
@@ -246,16 +259,12 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policies = [
-                row
-                for row in self.session.scalars(select(DshUserPolicy).where(DshUserPolicy.user_id == user_id))
-                if row.tenant_id == tenant
-            ]
+            policy = DshSubjectPolicyRepository(self.session).effective(user_id)
             unknown_pending = self.unknown_pending(user_id)
-        if not rows or not policies or any(row.projected_at is None for row in rows):
+        if not rows or policy is None or any(row.projected_at is None for row in rows):
             raise ValueError("No trustworthy persisted usage snapshot exists")
         used = sum(row.used_tokens for row in rows)
-        model_limits = {str(row.model_id): row.monthly_token_limit for row in policies if row.enabled}
+        model_limits = {str(config.model_id): config.monthly_token_limit for config in policy.model_configs}
         models = {str(row.model_id): row.used_tokens for row in rows}
         limit = sum(model_limits.values())
         return {
@@ -291,14 +300,9 @@ class DshUsageRepository:
                 )
                 if row.tenant_id == tenant
             ]
-            policies = [
-                row
-                for row in self.session.scalars(select(DshUserPolicy).where(DshUserPolicy.user_id == user_id))
-                if row.tenant_id == tenant
-            ]
-        if calls or totals or not policies:
+            policy = DshSubjectPolicyRepository(self.session).effective(user_id)
+        if calls or totals or policy is None:
             raise ValueError("Month history is not proven empty")
-        policy = DshPolicyRepository(self.session).get(user_id)
         return {
             "tenant_id": tenant,
             "user_id": user_id,

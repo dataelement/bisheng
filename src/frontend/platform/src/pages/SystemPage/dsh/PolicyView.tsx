@@ -1,134 +1,202 @@
+import { TreeDepartmentSelect } from '@/components/bs-comp/department/TreeDepartmentSelect'
 import { Button } from '@/components/bs-ui/button'
-import { Input } from '@/components/bs-ui/input'
-import { getDshPolicy } from '@/controllers/API/dsh'
-import { getUsersApi } from '@/controllers/API/user'
-import type { User } from '@/types/api/user'
-import type { DshPolicy } from '@/types/dsh'
-import { useEffect, useState } from 'react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/bs-ui/tabs'
+import {
+    getDshUsagePresentationOverview as getDshUsageOverview,
+    getDshUsagePresentationSummary as getDshUsageTimeSummary,
+} from '@/controllers/API/dshUsagePresentation'
+import { userContext } from '@/contexts/userContext'
+import type { DshUsageOverviewUser, DshUsageTimeSummary } from '@/types/dsh'
+import { useContext, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import { DshPager } from './common'
-import { UsageSummary } from './UsageSummary'
+import { UsageRangeSelect } from './UsageRangeSelect'
+import { UsageSummaryView } from './UsageSummaryView'
+import { UsageUserSelect } from './UsageUserSelect'
+import {
+    localInputValue,
+    usageGranularity,
+    usagePresetRange,
+    type UsagePreset,
+    type UsageRange,
+} from './usageRange'
 
-export function PolicyView() {
+type Dimension = 'user' | 'department'
+
+interface PolicyViewProps {
+    toolbarTarget?: HTMLDivElement | null
+}
+
+export function PolicyView({ toolbarTarget }: PolicyViewProps) {
     const { t } = useTranslation()
-    const [keyword, setKeyword] = useState('')
-    const [page, setPage] = useState(1)
-    const [users, setUsers] = useState<{ data: User[]; total: number } | null>(
-        null,
-    )
-    const [selected, setSelected] = useState<User | null>(null)
-    const [policy, setPolicy] = useState<DshPolicy | null>(null)
+    const { user: currentUser } = useContext(userContext)
+    const [dimension, setDimension] = useState<Dimension>('user')
+    const [department, setDepartment] = useState<{ id: number; name: string } | null>(null)
+    const [user, setUser] = useState<DshUsageOverviewUser | null>(null)
+    const [preset, setPreset] = useState<UsagePreset>('year')
+    const [selectedRange, setRange] = useState<UsageRange>(() => usagePresetRange('year'))
+    const range = useMemo(() => selectedRange, [selectedRange])
+    const [summary, setSummary] = useState<DshUsageTimeSummary | null>(null)
     const [error, setError] = useState(false)
-    const [usersError, setUsersError] = useState(false)
-    const [revision, setRevision] = useState(0)
+    const [defaultUserLoading, setDefaultUserLoading] = useState(true)
+    const [defaultUserError, setDefaultUserError] = useState(false)
+    const targetId = dimension === 'department' ? department?.id : user?.user_id
+    const hasTarget = dimension === 'department' || !!user
+    const tenantLabel = [currentUser?.tenant_name || currentUser?.leaf_tenant_name, t('dsh.entireTenant')]
+        .filter(Boolean)
+        .join(' / ')
+
     useEffect(() => {
+        if (dimension !== 'user' || user) return
         const abort = new AbortController()
-        setUsers(null)
-        setUsersError(false)
-        const timer = window.setTimeout(() => {
-            getUsersApi(
-                {
-                    name: keyword,
-                    page,
-                    pageSize: 20,
-                    simple: true,
-                },
-                { signal: abort.signal },
-            )
-                .then((value) => {
-                    if (!abort.signal.aborted) setUsers(value)
-                })
-                .catch(() => {
-                    if (!abort.signal.aborted) setUsersError(true)
-                })
-        }, 300)
-        return () => {
-            abort.abort()
-            window.clearTimeout(timer)
+        setDefaultUserLoading(true)
+        setDefaultUserError(false)
+        const loadDefaultUser = async () => {
+            const page = await getDshUsageOverview({ ...range, limit: 20 }, abort.signal)
+            let preferred =
+                page.items.find((item) => item.user_name === 'admin') ??
+                page.items.find((item) => item.user_id === Number(currentUser?.user_id))
+            if (!preferred && currentUser?.user_name && page.has_more) {
+                const matches = await getDshUsageOverview(
+                    { ...range, keyword: currentUser.user_name, limit: 100 },
+                    abort.signal,
+                )
+                preferred = matches.items.find((item) => item.user_id === Number(currentUser.user_id))
+            }
+            if (!abort.signal.aborted) setUser((selected) => selected ?? preferred ?? page.items[0] ?? null)
         }
-    }, [keyword, page])
+        loadDefaultUser()
+            .catch(() => {
+                if (!abort.signal.aborted) setDefaultUserError(true)
+            })
+            .finally(() => {
+                if (!abort.signal.aborted) setDefaultUserLoading(false)
+            })
+        return () => abort.abort()
+    }, [dimension, user, currentUser?.user_id, currentUser?.user_name, range])
+
     useEffect(() => {
-        if (!selected) return
         const abort = new AbortController()
-        setPolicy(null)
+        setSummary(null)
         setError(false)
-        getDshPolicy(String(selected.user_id), undefined, abort.signal)
-            .then((value) => {
+        if (!hasTarget) return
+        const request =
+            dimension === 'department'
+                ? getDshUsageOverview(
+                      {
+                          ...range,
+                          granularity: usageGranularity(range),
+                          departmentId: targetId,
+                          limit: 20,
+                          includeSummary: true,
+                      },
+                      abort.signal,
+                  ).then((result) => result.summary ?? null)
+                : getDshUsageTimeSummary(
+                      String(targetId),
+                      { ...range, granularity: usageGranularity(range) },
+                      abort.signal,
+                  )
+        request
+            .then((result) => {
                 if (!abort.signal.aborted) {
-                    setPolicy(value)
+                    setSummary(result)
+                    setError(!result)
                 }
             })
             .catch(() => {
                 if (!abort.signal.aborted) setError(true)
             })
         return () => abort.abort()
-    }, [selected, revision])
+    }, [dimension, targetId, hasTarget, range])
+
+    const handleUser = (next: DshUsageOverviewUser) => {
+        setUser(next)
+        setDimension('user')
+    }
+    const handleRange = (next: UsagePreset, nextRange: UsageRange) => {
+        setPreset(next)
+        setRange(nextRange)
+    }
+    const targetName =
+        dimension === 'department'
+            ? (department?.name ?? tenantLabel)
+            : [user?.department_name, user?.user_name].filter(Boolean).join(' / ')
+
+    const toolbar = (
+        <div
+            className="flex max-w-full flex-wrap items-center justify-end gap-2"
+            aria-label={t('dsh.usageFilters')}
+        >
+            <Tabs
+                value={dimension}
+                onValueChange={(value) => {
+                    setDimension(value as Dimension)
+                }}
+            >
+                <TabsList>
+                    <TabsTrigger value="department">{t('dsh.byDepartment')}</TabsTrigger>
+                    <TabsTrigger value="user">{t('dsh.byUser')}</TabsTrigger>
+                </TabsList>
+            </Tabs>
+            {dimension === 'department' ? (
+                <TreeDepartmentSelect
+                    allowNone
+                    noneLabel={tenantLabel}
+                    value={department?.id ?? null}
+                    onChange={(id, node) => {
+                        setDepartment(id && node ? { id, name: node.name } : null)
+                    }}
+                    placeholder={t('dsh.selectDepartment')}
+                    searchPlaceholder={t('dsh.searchDepartments')}
+                    modal={false}
+                    className="w-72 max-w-full"
+                />
+            ) : (
+                <UsageUserSelect value={user} range={range} onChange={handleUser} />
+            )}
+            <UsageRangeSelect preset={preset} onChange={handleRange} />
+            <Button variant="outline" className="h-9" onClick={() => setRange(usagePresetRange(preset))}>
+                {t('dsh.refresh')}
+            </Button>
+        </div>
+    )
+
     return (
         <section className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-                {t('dsh.usageScope')}
-            </p>
-            <Input
-                className="max-w-sm"
-                aria-label={t('dsh.searchUsers')}
-                placeholder={t('dsh.searchUsers')}
-                value={keyword}
-                onChange={(event) => {
-                    setKeyword(event.target.value)
-                    setPage(1)
-                }}
-            />
-            {!users ? (
-                <p role="status">
-                    {t(usersError ? 'dsh.unavailable' : 'dsh.loading')}
-                </p>
-            ) : (
-                <div className="flex flex-wrap gap-2">
-                    {users.data.map((item) => (
-                        <Button
-                            key={item.user_id}
-                            variant={
-                                selected?.user_id === item.user_id
-                                    ? 'default'
-                                    : 'outline'
-                            }
-                            onClick={() => setSelected(item)}
-                        >
-                            {item.user_name}
-                        </Button>
-                    ))}
-                    {!users.data.length && <p>{t('dsh.empty')}</p>}
+            {toolbarTarget
+                ? createPortal(toolbar, toolbarTarget)
+                : toolbarTarget === undefined
+                  ? toolbar
+                  : null}
+            {!hasTarget ? (
+                <div
+                    role={defaultUserError ? 'alert' : 'status'}
+                    className="rounded-lg border p-10 text-center text-sm text-muted-foreground"
+                >
+                    {t(
+                        defaultUserError
+                            ? 'dsh.unavailable'
+                            : defaultUserLoading
+                              ? 'dsh.loading'
+                              : 'dsh.empty',
+                    )}
                 </div>
-            )}
-            <DshPager
-                previous={page > 1}
-                next={!!users && page * 20 < users.total}
-                loading={!users && !usersError}
-                onPrevious={() => setPage((old) => old - 1)}
-                onNext={() => setPage((old) => old + 1)}
-            />
-            {selected && (
+            ) : (
                 <>
-                    <h3 className="font-semibold">{selected.user_name}</h3>
-                    <Button variant="outline" onClick={() => setRevision((old) => old + 1)}>{t('dsh.refresh')}</Button>
-                    {!policy ? (
-                        <p role="status">
-                            {t(error ? 'dsh.unavailable' : 'dsh.loading')}
-                        </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h2 className="text-base font-medium">{targetName}</h2>
+                        <span className="text-xs text-muted-foreground">
+                            {localInputValue(range.startAt).replace('T', ' ')} —{' '}
+                            {localInputValue(range.endAt).replace('T', ' ')}
+                        </span>
+                    </div>
+                    {summary ? (
+                        <UsageSummaryView summary={summary} />
                     ) : (
-                        <>
-                            <UsageSummary
-                                usage={policy.usage}
-                                lastCall={policy.last_call}
-                                lastCallSource={policy.last_call_source}
-                                modelNames={Object.fromEntries(
-                                    policy.available_models.map((model) => [
-                                        String(model.id),
-                                        model.name,
-                                    ]),
-                                )}
-                            />
-                        </>
+                        <p role={error ? 'alert' : 'status'} className="py-8 text-sm text-muted-foreground">
+                            {t(error ? 'dsh.usageRangeUnavailable' : 'dsh.loading')}
+                        </p>
                     )}
                 </>
             )}
