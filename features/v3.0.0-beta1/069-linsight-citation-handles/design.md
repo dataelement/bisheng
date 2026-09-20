@@ -111,7 +111,7 @@
 - **选定**：B。三条落点：
   - **后端导出**（docx / pdf 导出工具、`/workbench` 单文件转换、批量 zip）：`render_citations_for_export(md, resolved_items)` 替换现有 `strip_citation_markers` 调用；`resolved_items` 由调用方按导出者身份走 `resolve_citations_with_reasons` 取得，未解析的 key 退回剥离（AC-22）。
   - **前端「另存为 md」**（`artifactUtils.ts` 的下载路径）：不新增端点；用预览时已经通过既有 `POST /api/v1/citations/resolve` 取回的解析结果（`output_result.citations` 种子 + 解析缓存）在客户端烘焙，与后端同一渲染规则（编号按首现顺序、文末「参考资料」）；未解析的 key 剥离。
-  - **html 交付物**：模型写盘时 `[Sn]` → `<sup>[n]</sup>` + 页尾附录，附录标题取编号表（写盘发生在任务执行期，作者即检索者，与模型自己写出的标题同一层级；F047 已接受「分享泄露文档名」）。不经 resolve。
+  - **html 交付物**：模型写盘时 `[Sn]` → `<sup data-f069-h="Sn">[n]</sup>` + 页尾 `<section data-f069-references>` 附录，附录标题取编号表（写盘发生在任务执行期，作者即检索者，与模型自己写出的标题同一层级；F047 已接受「分享泄露文档名」）。不经 resolve。再次写盘（edit）先按 `data-f069-h` 还原句柄、删旧附录再烘，因此幂等且后加的编号也能烘；混合未知句柄的 run 已知部分烘、未知字面保留（与 markdown 一致）。
 - **原因**：INV-7 只能在面向查看者的呈现面用查看者身份过滤；`message_citation` 不过期，老任务也能烘焙；不新增 HTTP 端点与表。
 - **何时该重新考虑**：产品要求分享页导出也按发起人权限（而非查看者）时，改为服务端按 owner 解析。
 
@@ -253,6 +253,19 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
   ```
   MySQL（库 `langflow`）：`SELECT JSON_EXTRACT(output_result,'$.citation_audit') FROM linsight_session_version WHERE id='<svid>'`。凭据走容器内配置，不写进文档。
 
+- **P1 A/B（2026-09-21 00:20–01:05，同环境同两题同三模型各 3 次，release 镜像含 P1，开关默认开，共 18 次全部 COMPLETED）**：
+
+  | 模型 | Q1 引用数 / 检索到（3 次） | Q2 引用数 / 检索到（3 次） | 有引用轮次 | uncited 率 | 基线 uncited 率 |
+  |---|---|---|---|---|---|
+  | deepseek-v4-flash (774) | 6/215 · 8/100 · 6/75 | 6/60 · 6/56 · 4/105 | 6/6 | 0% | 67% |
+  | deepseek-v4-pro (900) | 3/70 · 4/195 · 4/70 | 7/60 · 9/70 · 8/40 | 6/6 | 0% | 0% |
+  | qwen3.5-397b-a17b (775) | 5/40 · 3/30 · 3/50 | 7/31 · 5/25 · 4/33 | 6/6 | 0% | 67% |
+  | 合计 | | | 18/18 | 0% | 44% |
+
+  判定：uncited 率 44% → 0%，`unknown_handles` 18 次全为 0（无幻觉编号），写后提醒 0 次触发（模型首写即带编号），worker 无一条句柄分配 / 转换告警，`persisted` 与 `cited` 逐次相等（写盘转换后的标记全部被既有持久化链路识别）。按 §3 决策 1 的判定规则保留默认开。每次转换的句柄组数 4～73，说明模型不是象征性地标一两处。`sources_seen` 仍按 registry key 计（未按 identity 去重），只用于 uncited 判定。svid 前缀：4797039d / 50f412ab / d5517ede / ff658e9c / 68374abe / 1bc66a5d / 7fd7c2da / d15bdf0d / 334cadcd / 4a248696 / df9d9f28 / ce872952 / 9710dc54 / fa6d94e2 / 7feac63f / 73ba9469 / 79da919d / 57bfcbcb。
+
+  复核（网络恢复后）：A/B 结束时 3002 预览一度「文件加载失败」是本机 VPN 到 192.168.106 网段中断所致；MinIO 上 P1 报告对象（`linsight/final_result/<svid>/…md`）含 10 组私有区标记、0 个 `[Sn]`，预览面板正文与表格单元格均渲染为角标，与日常模式同一外观。
+
 ---
 
 ## 8. 后续改进 / 不打算做的事
@@ -260,6 +273,7 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 - **P3 条件触发**：子代理 `response_format` 结构化 findings、离线归因诊断（只度量不写回），在 P1 数据后议。
 - **不做**：文本重叠硬贴 key、无标记全量落库、脚注自动映射、事后归因写回、`write_file` 拒写、`wrap_tool_call` 提示、`list_sources` 工具、接 Anthropic Citations / OpenAI annotations、登记上传附件、前端复制加剥编号、部分引用与归因错误的检测。
 - **已知短板**：技能或代码解释器读含标记的 md 再生成产物会带私有区字符；上传件同时在知识库时可能误报 `uncited`。
+- **分享页匿名导出**：两个下载端点今天就不接 share token（匿名调用直接 401），P2 未新增；若日后放开，`bake_citations_for_export(text, None)` 已按匿名口径只保留公开网页来源。
 
 ---
 
@@ -270,3 +284,5 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 | 2026-09-20 | 初版 | PRD 评审通过（D1～D8） |
 | 2026-09-20 | §7 记 P0 基线 18 次结果；`_persist_report_citations` 零条也保存 persisted 计数 | T013 基线 |
 | 2026-09-21 | 决策 6 钉契约时机改为 `_create_agent`；§4.2 文法表补 ASCII 前瞻 | Wave 2 实现（T017 / T032 偏差） |
+| 2026-09-21 | §7 记 P1 A/B 18 次：uncited 44% → 0%，保留默认开 | T033 |
+| 2026-09-21 | 决策 8 落地：导出烘焙 / html 附录 / 前端另存烘焙；html 再烘策略；定位文案「第 N 页」 | Wave 3 实现 |

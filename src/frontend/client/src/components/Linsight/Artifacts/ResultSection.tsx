@@ -97,7 +97,7 @@ export function ResultSection({
                         column of them read as noise, and this is the only download
                         entry a single-file run has — the exact gap this fixed. */}
                     {!multiple && (
-                        <SaveAsButton file={primaryFile} versionId={versionId} variant="inline" />
+                        <SaveAsButton file={primaryFile} versionId={versionId} variant="inline" citations={citations} />
                     )}
                 </div>
             )}
@@ -188,7 +188,7 @@ export function ResultSection({
                                 <span className="truncate">{file.file_name}</span>
                                 <NewTabHint file={file} />
                             </span>
-                            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
+                            <SaveAsButton file={file} versionId={versionId} variant="labeled" citations={citations} />
                         </div>
                     ))}
                 </div>

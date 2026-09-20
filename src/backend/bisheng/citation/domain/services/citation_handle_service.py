@@ -108,10 +108,10 @@ def _item_location(item: Any) -> str:
         if str(getattr(sub, "itemId", None)) == str(item_id):
             page = getattr(sub, "page", None)
             if page is not None:
-                return f"第{page}页"
+                return f"第 {page} 页"
             chunk_index = getattr(sub, "chunkIndex", None)
             if chunk_index is not None:
-                return f"第{chunk_index}段"
+                return f"第 {chunk_index} 段"
     return ""
 
 
@@ -355,3 +355,136 @@ def ensure_handle_rules(prompt: str | None) -> str:
     base = (prompt or "").rstrip()
     rules = load_handle_rules()
     return f"{base}\n\n{rules}" if base else rules
+
+
+# --------------------------------------------------------------------------
+# export baking (P2): hidden markers -> visible [n] + a references section
+# --------------------------------------------------------------------------
+_MARKER_SPAN_RE = re.compile(rf"{_CITATION_START}(.*?){_CITATION_END}", re.S)
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+EXPORT_HEADING_ZH = "参考资料"
+EXPORT_HEADING_EN = "References"
+
+
+@dataclass
+class ExportRenderResult:
+    text: str
+    numbered: int = 0  # distinct sources that received a number
+    unresolved: list[str] = field(default_factory=list)  # marker keys with no resolved item
+
+
+def export_heading_for(text: str) -> str:
+    """参考资料 when the report is (partly) Chinese, References otherwise."""
+    return EXPORT_HEADING_ZH if _CJK_RE.search(text or "") else EXPORT_HEADING_EN
+
+
+def _payload_items(item: Any) -> list:
+    return list(getattr(getattr(item, "sourcePayload", None), "items", None) or [])
+
+
+def _export_identity(item: Any, item_id: str | None) -> str:
+    payload = getattr(item, "sourcePayload", None)
+    type_name = _type_name(item)
+    if type_name == "web":
+        from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
+
+        url = getattr(payload, "url", None) or ""
+        return f"web:{CitationRegistryService.normalize_url(url) if url else getattr(item, 'citationId', '')}"
+    if type_name == "article":
+        return f"article:{getattr(item, 'citationId', '')}"
+    document_id = getattr(payload, "documentId", None)
+    base = document_id if document_id is not None else getattr(item, "citationId", "")
+    return f"{type_name or 'rag'}:{base}:{item_id if item_id is not None else ''}"
+
+
+def _export_location(item: Any, item_id: str | None) -> str:
+    for sub in _payload_items(item):
+        if str(getattr(sub, "itemId", None)) == str(item_id):
+            page = getattr(sub, "page", None)
+            if page is not None:
+                return f"第 {page} 页"
+            chunk_index = getattr(sub, "chunkIndex", None)
+            if chunk_index is not None:
+                return f"第 {chunk_index} 段"
+    return ""
+
+
+def _export_line(item: Any, item_id: str | None) -> str:
+    payload = getattr(item, "sourcePayload", None)
+    type_name = _type_name(item)
+    parts: list[str]
+    if type_name == "web":
+        url = getattr(payload, "url", None) or ""
+        title = getattr(payload, "title", None) or url
+        parts = [title, getattr(payload, "source", None) or "", url if title != url else ""]
+    elif type_name == "article":
+        parts = [getattr(payload, "title", None) or "", getattr(payload, "sourceUrl", None) or ""]
+    else:
+        name = getattr(payload, "documentName", None) or getattr(payload, "knowledgeName", None) or ""
+        parts = [f"《{name}》" if name else "", _export_location(item, item_id), getattr(payload, "knowledgeName", None) or ""]
+    return " · ".join(str(x).strip() for x in parts if x and str(x).strip())
+
+
+def render_citations_for_export(text: str, resolved_items: list[Any] | None, *, heading: str | None = None) -> ExportRenderResult:
+    """Bake hidden citation markers into visible ``[n]`` plus a references section.
+
+    ``resolved_items`` are the registry items the EXPORTER may see (already run
+    through the permission-filtering resolve service). A marker key whose
+    source is not among them is dropped — it neither gets a number nor a line,
+    so the exporter learns nothing about it. Numbers follow first appearance;
+    two keys pointing at the same source (same chunk / same page) share one
+    number. Unregistered short handles (``[S99]``) are stripped as before. With
+    nothing resolvable the result equals the old strip behaviour.
+    """
+    from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
+
+    result = ExportRenderResult(text=text or "")
+    if not text:
+        return result
+    text = unescape_citation_markers(text)
+    index: dict[str, Any] = {}
+    for item in resolved_items or []:
+        citation_id = getattr(item, "citationId", None)
+        if citation_id:
+            index.setdefault(str(citation_id), item)
+    numbers: dict[str, int] = {}
+    lines: list[str] = []
+
+    def _replace(match: re.Match[str]) -> str:
+        ordered: list[int] = []
+        for key in match.group(1).split(_CITATION_SEP):
+            key = key.strip()
+            if not key:
+                continue
+            citation_id, _, item_id = key.partition(":")
+            item = index.get(citation_id)
+            if item is None:
+                if key not in result.unresolved:
+                    result.unresolved.append(key)
+                continue
+            identity = _export_identity(item, item_id or None)
+            number = numbers.get(identity)
+            if number is None:
+                number = len(numbers) + 1
+                numbers[identity] = number
+                lines.append(_export_line(item, item_id or None))
+            if number not in ordered:
+                ordered.append(number)
+        return "".join(f"[{n}]" for n in ordered)
+
+    out: list[str] = []
+    for is_code, segment in _split_code(text):
+        out.append(segment if is_code else _MARKER_SPAN_RE.sub(_replace, segment))
+    baked = "".join(out)
+    # a marker the model never closed, or stray marker chars: drop them like strip_citation_markers does
+    from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
+
+    baked = strip_citation_markers(baked)
+    baked = strip_citation_handles(baked)
+    result.numbered = len(numbers)
+    if numbers:
+        title = heading or export_heading_for(text)
+        section = "\n".join(f"{i}. {line}" if line else f"{i}." for i, line in enumerate(lines, start=1))
+        baked = f"{baked.rstrip()}\n\n## {title}\n\n{section}\n"
+    result.text = baked
+    return result

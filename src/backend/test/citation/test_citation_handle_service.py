@@ -122,7 +122,7 @@ async def test_assign_numbers_sources_in_order_and_writes_table(redis):
     assert table["id:rag:11:3"] == "S1"
     assert table["id:web:https://a.com/x"] == "S2"
     e1 = json.loads(table["h:S1"])
-    assert e1["key"] == "knowledgesearch_aaaa1111:3" and e1["title"] == "OKR规则.docx" and e1["loc"] == "第3页"
+    assert e1["key"] == "knowledgesearch_aaaa1111:3" and e1["title"] == "OKR规则.docx" and e1["loc"] == "第 3 页"
     assert scope.handles == {"S1": "knowledgesearch_aaaa1111:3", "S2": "websearch_bbbb2222:1"}
     assert [e["handle"] for e in scope.entries] == ["S1", "S2"]
     assert "linsight:cite_handles:chat-1" in redis.expired
@@ -271,3 +271,128 @@ def test_strip_and_count_handles():
 
     assert strip_citation_handles(text) == "A。 B。 `[S3]` [S3](u)\n[S3]: def"
     assert count_handle_runs(text) == 2
+
+
+# --------------------------------------------------------------------------
+# F069 P2: export baking (AC-20 / AC-21 / AC-22 / AC-24)
+# --------------------------------------------------------------------------
+from bisheng.citation.domain.schemas.citation_schema import (  # noqa: E402
+    CitationRegistryItemSchema,
+    CitationType,
+    RagCitationItemSchema,
+    RagCitationPayloadSchema,
+    WebCitationItemSchema,
+    WebCitationPayloadSchema,
+)
+from bisheng.citation.domain.services.citation_handle_service import (  # noqa: E402
+    export_heading_for,
+    render_citations_for_export,
+)
+
+
+def _rag_resolved(citation_id="knowledgesearch_aaaa1111", document_id=11, name="OKR规则2026.docx", kb="制度库"):
+    return CitationRegistryItemSchema(
+        citationId=citation_id,
+        type=CitationType.RAG,
+        accessScope="per_user",
+        sourcePayload=RagCitationPayloadSchema(
+            knowledgeId=9,
+            knowledgeName=kb,
+            documentId=document_id,
+            documentName=name,
+            items=[
+                RagCitationItemSchema(itemId="3", chunkId="c3", content="x", page=3),
+                RagCitationItemSchema(itemId="4", chunkId="c4", content="y", chunkIndex=4),
+            ],
+        ),
+    )
+
+
+def _web_resolved(citation_id="websearch_bbbb2222", url="https://a.com/x", title="OCR 2026 进展"):
+    return CitationRegistryItemSchema(
+        citationId=citation_id,
+        type=CitationType.WEB,
+        accessScope="per_user",
+        sourcePayload=WebCitationPayloadSchema(
+            url=url, title=title, source="csdn", items=[WebCitationItemSchema(itemId="1", snippet="s")]
+        ),
+    )
+
+
+def _m(*keys):
+    return S + SEP.join(keys) + E
+
+
+def test_export_numbers_by_first_appearance_and_appends_references():
+    text = f"结论一。{_m('knowledgesearch_aaaa1111:3')} 结论二。{_m('websearch_bbbb2222:1', 'knowledgesearch_aaaa1111:3')}"
+
+    r = render_citations_for_export(text, [_rag_resolved(), _web_resolved()])
+
+    assert r.text.startswith("结论一。[1] 结论二。[2][1]")
+    assert r.numbered == 2 and r.unresolved == []
+    assert "## 参考资料" in r.text
+    assert "1. 《OKR规则2026.docx》 · 第 3 页 · 制度库" in r.text
+    assert "2. OCR 2026 进展 · csdn · https://a.com/x" in r.text
+    assert S not in r.text and "knowledgesearch_" not in r.text
+
+
+def test_export_same_source_shares_a_number_but_other_chunk_gets_its_own():
+    text = f"A{_m('knowledgesearch_aaaa1111:3')} B{_m('knowledgesearch_aaaa1111:3')} C{_m('knowledgesearch_aaaa1111:4')}"
+
+    r = render_citations_for_export(text, [_rag_resolved()])
+
+    assert r.text.startswith("A[1] B[1] C[2]")
+    assert "2. 《OKR规则2026.docx》 · 第 4 段 · 制度库" in r.text
+
+
+def test_export_drops_unresolved_keys_and_whole_spans():
+    text = f"有权限。{_m('knowledgesearch_aaaa1111:3', 'knowledgesearch_zzzz9999:1')} 无权限。{_m('knowledgesearch_zzzz9999:2')} 结尾。"
+
+    r = render_citations_for_export(text, [_rag_resolved()])
+
+    assert r.text.startswith("有权限。[1] 无权限。 结尾。")
+    assert r.unresolved == ["knowledgesearch_zzzz9999:1", "knowledgesearch_zzzz9999:2"]
+    assert r.text.count("\n1. ") == 1 and "\n2. " not in r.text
+
+
+def test_export_with_nothing_resolvable_equals_strip():
+    from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
+
+    text = f"正文。{_m('knowledgesearch_aaaa1111:3')} 还有 [S99] 与 `code {_m('x:1')}`"
+
+    r = render_citations_for_export(text, [])
+
+    assert r.numbered == 0
+    assert "## " not in r.text
+    assert r.text == strip_citation_handles(strip_citation_markers(text)).replace("`code `", f"`code {_m('x:1')}`") or S not in r.text
+
+
+def test_export_leaves_code_alone_and_strips_handles():
+    text = f"正文。{_m('knowledgesearch_aaaa1111:3')} [S99]\n```\n{_m('knowledgesearch_aaaa1111:3')}\n```\n"
+
+    r = render_citations_for_export(text, [_rag_resolved()])
+
+    assert r.text.startswith("正文。[1]")
+    assert "[S99]" not in r.text
+    # fenced content is never NUMBERED, but no private-use marker may survive in
+    # a deliverable either (F054 AC-12): the span inside the fence is stripped
+    assert "```\n\n```" in r.text
+    assert S not in r.text and "[1]" not in r.text.split("```")[1]
+
+
+def test_export_heading_language_and_override():
+    assert export_heading_for("含中文的报告") == "参考资料"
+    assert export_heading_for("english only") == "References"
+    r = render_citations_for_export(f"English body.{_m('websearch_bbbb2222:1')}", [_web_resolved()])
+    assert "## References" in r.text
+    r2 = render_citations_for_export(f"English body.{_m('websearch_bbbb2222:1')}", [_web_resolved()], heading="Sources")
+    assert "## Sources" in r2.text
+
+
+def test_export_is_idempotent_on_baked_text():
+    text = f"结论。{_m('knowledgesearch_aaaa1111:3')}"
+    once = render_citations_for_export(text, [_rag_resolved()]).text
+
+    twice = render_citations_for_export(once, [_rag_resolved()])
+
+    assert twice.text == once and twice.numbered == 0

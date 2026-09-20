@@ -743,6 +743,35 @@ def _strip_citation_markers_in_zip(zip_bytes: bytes) -> bytes:
     return out.getvalue()
 
 
+async def _bake_citations_in_zip(zip_bytes: bytes, login_user) -> bytes:
+    """F069 P2: bake the ``.md`` entries of a download bundle for this exporter.
+
+    Markers become visible ``[n]`` with a references section, filtered by the
+    exporter's permissions; unresolvable ones are stripped. Every other entry
+    is copied through untouched, and a bundle with no markdown is returned as-is.
+    """
+    from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as src:
+        entries = src.infolist()
+        if not any(info.filename.lower().endswith(".md") for info in entries):
+            return zip_bytes
+        payloads: list[tuple[zipfile.ZipInfo, bytes]] = []
+        for info in entries:
+            data = src.read(info)
+            if info.filename.lower().endswith(".md"):
+                try:
+                    data = (await bake_citations_for_export(data.decode("utf-8"), login_user)).encode("utf-8")
+                except UnicodeDecodeError:
+                    logger.warning("batch download: {} is not utf-8, citation markers left untouched", info.filename)
+            payloads.append((info, data))
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for info, data in payloads:
+            dst.writestr(info, data)
+    return out.getvalue()
+
+
 # Batch Download Task Files
 @router.post("/workbench/batch-download-files", summary="Batch Download Task Files")
 async def batch_download_files(
@@ -761,7 +790,7 @@ async def batch_download_files(
     try:
         # Call to implement class processing batch download
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
-        zip_bytes = await util.sync_func_to_async(_strip_citation_markers_in_zip)(zip_bytes)
+        zip_bytes = await _bake_citations_in_zip(zip_bytes, login_user)
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
         # Convert to unicode String
@@ -818,10 +847,12 @@ async def download_md_to_pdf_or_docx(
         # Call the implementation class to process the file download
         file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
 
-        # The conversion output must not carry citation spans: the wrapper chars
-        # are invisible in Word / PDF while the ids would leak as plain text.
-        # F069: unregistered short handles ([S99]) go too.
-        md_str = strip_citation_handles(strip_citation_markers(file_bytes.decode("utf-8")))
+        # F069 P2: hidden citation spans become visible [n] plus a references
+        # section filtered by this user's permissions; unresolvable spans and
+        # unregistered short handles ([S99]) are stripped as before.
+        from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+
+        md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
