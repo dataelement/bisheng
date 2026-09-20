@@ -1,19 +1,14 @@
 import { Badge } from '@/components/bs-ui/badge'
 import { Button } from '@/components/bs-ui/button'
-import { getDshModelUserPermissions } from '@/controllers/API/dsh'
-import type {
-    DshDepartmentPolicy,
-    DshModelUserPermission,
-    DshModelUserPermissionPage,
-    DshSubjectPolicy,
-} from '@/types/dsh'
-import { Building2, ChevronDown, ChevronRight, UserRound } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { DshDepartmentPolicy, DshModelUserPermission, DshSubjectPolicy } from '@/types/dsh'
+import { Building2, ChevronDown, ChevronRight, Loader2, UserRound } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { policyKey, type PolicyDrafts } from './SubjectPolicyControls'
 import { useUserPolicyDrafts, userDraftOf } from './useUserPolicyDrafts'
 import { QuotaInput } from './QuotaInput'
 import { formatWanQuota } from './quotaUnits'
+import { AccessMembersProvider, useAccessMembers, useDelayedMemberLoading } from './useAccessMembers'
 
 type UserDrafts = ReturnType<typeof useUserPolicyDrafts>
 interface Props {
@@ -28,73 +23,6 @@ interface Props {
 }
 type Node = { item: DshDepartmentPolicy; children: Node[] }
 const columns = 'grid grid-cols-[minmax(280px,1fr)_200px_200px_160px] items-center gap-3 px-3'
-
-function useMembers(
-    modelId: number,
-    departmentId: number | undefined,
-    keyword: string | undefined,
-    refresh: number,
-    remember: UserDrafts['remember'],
-) {
-    const [page, setPage] = useState<DshModelUserPermissionPage | null>(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState(false)
-    const [retry, setRetry] = useState(0)
-    const active = useRef<AbortController>()
-    const pageRef = useRef(page)
-    pageRef.current = page
-    const load = useCallback(
-        async (append: boolean, abort: AbortController) => {
-            setLoading(true)
-            setError(false)
-            try {
-                const next = await getDshModelUserPermissions(
-                    modelId,
-                    {
-                        limit: 50,
-                        include_seats: true,
-                        membership: 'DIRECT',
-                        ...(departmentId === 0 ? { unassigned_only: true } : { department_id: departmentId }),
-                        keyword: keyword || undefined,
-                        cursor: append ? (pageRef.current?.next_cursor ?? undefined) : undefined,
-                    },
-                    abort.signal,
-                )
-                if (abort.signal.aborted) return
-                remember(next.items)
-                setPage((current) => ({
-                    ...next,
-                    items: append ? [...(current?.items ?? []), ...next.items] : next.items,
-                }))
-            } catch {
-                if (!abort.signal.aborted) setError(true)
-            } finally {
-                if (!abort.signal.aborted) setLoading(false)
-            }
-        },
-        [modelId, departmentId, keyword, remember],
-    )
-    useEffect(() => {
-        const abort = new AbortController()
-        active.current = abort
-        setPage(null)
-        setLoading(true)
-        const timer = setTimeout(() => void load(false, abort), keyword ? 250 : 0)
-        return () => {
-            clearTimeout(timer)
-            abort.abort()
-        }
-    }, [keyword, refresh, retry, load])
-    return {
-        page,
-        loading,
-        error,
-        retry: () => setRetry((value) => value + 1),
-        more: () => {
-            if (!loading && page?.has_more && active.current) void load(true, active.current)
-        },
-    }
-}
 
 function MemberRows({
     items,
@@ -165,26 +93,34 @@ function MemberRows({
 function MemberList({
     modelId,
     departmentId,
-    refresh,
     users,
     saving,
     depth,
+    onLoadingChange,
 }: {
     modelId: number
     departmentId: number
-    refresh: number
     users: UserDrafts
     saving: boolean
     depth: number
+    onLoadingChange: (loading: boolean) => void
 }) {
     const { t } = useTranslation()
-    const state = useMembers(modelId, departmentId, undefined, refresh, users.remember)
+    const state = useAccessMembers(modelId, departmentId, undefined, users.remember)
+    useEffect(() => {
+        onLoadingChange(state.loading)
+        return () => onLoadingChange(false)
+    }, [state.loading, onLoadingChange])
     return (
         <>
-            <MemberRows items={state.page?.items ?? []} users={users} saving={saving} depth={depth} />
-            {(state.loading || state.error || state.page?.has_more) && (
+            <MemberRows
+                items={state.page?.items ?? []}
+                users={users}
+                saving={saving || state.loading || state.error}
+                depth={depth}
+            />
+            {(state.error || state.page?.has_more) && (
                 <div className="py-1 text-sm text-muted-foreground" style={{ paddingLeft: depth * 24 + 48 }}>
-                    {state.loading && <p role="status">{t('dsh.loading')}</p>}
                     {state.error && (
                         <Button variant="outline" size="sm" onClick={state.retry}>
                             {t('dsh.refresh')}
@@ -235,6 +171,8 @@ function Branch({
     const { t } = useTranslation()
     const { item } = node
     const [expanded, setExpanded] = useState(depth === 0)
+    const [loading, setLoading] = useState(false)
+    const showLoading = useDelayedMemberLoading(loading)
     const query = props.query.trim().toLocaleLowerCase()
     const departmentMatched = parentMatched || Boolean(query && item.name.toLocaleLowerCase().includes(query))
     const directHits =
@@ -269,11 +207,18 @@ function Branch({
                         type="button"
                         aria-label={item.name}
                         aria-expanded={open}
+                        aria-busy={open && loading}
                         disabled={Boolean(query)}
                         className="flex min-h-8 min-w-0 items-center gap-2 rounded-sm text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                         onClick={() => setExpanded(!expanded)}
                     >
-                        {open ? (
+                        {open && showLoading ? (
+                            <Loader2
+                                role="status"
+                                aria-label={t('dsh.loading')}
+                                className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-pulse"
+                            />
+                        ) : open ? (
                             <ChevronDown aria-hidden className="h-4 w-4 shrink-0" />
                         ) : (
                             <ChevronRight aria-hidden className="h-4 w-4 shrink-0" />
@@ -307,7 +252,7 @@ function Branch({
                         <MemberList
                             modelId={props.modelId}
                             departmentId={item.subject_id}
-                            refresh={props.refresh}
+                            onLoadingChange={setLoading}
                             users={props.users}
                             saving={props.saving}
                             depth={depth}
@@ -339,13 +284,7 @@ function Branch({
 
 function SearchTree({ props, roots }: { props: Props; roots: Node[] }) {
     const { t } = useTranslation()
-    const state = useMembers(
-        props.modelId,
-        undefined,
-        props.query.trim(),
-        props.refresh,
-        props.users.remember,
-    )
+    const state = useAccessMembers(props.modelId, undefined, props.query.trim(), props.users.remember)
     return (
         <>
             {state.loading && (
@@ -399,51 +338,62 @@ export function DepartmentAccessTree(props: Props) {
     const { t } = useTranslation()
     const roots = useMemo(() => treeOf(props.items), [props.items])
     const [unassignedOpen, setUnassignedOpen] = useState(false)
+    const [loading, setLoading] = useState(false)
+    const showLoading = useDelayedMemberLoading(loading)
     return (
-        <div className="min-w-[900px] text-sm leading-5">
-            <div
-                className={
-                    columns +
-                    ' sticky top-0 z-10 min-h-12 border-b bg-background text-sm text-muted-foreground'
-                }
-            >
-                <span>{t('dsh.departmentAndMember')}</span>
-                <span>{t('dsh.configuredQuotaWan')}</span>
-                <span>{t('dsh.effectiveQuotaWan')}</span>
-                <span>{t('dsh.authorizationAndStatus')}</span>
-            </div>
-            {props.query.trim() ? (
-                <SearchTree props={props} roots={roots} />
-            ) : (
-                <>
-                    {roots.map((node) => (
-                        <Branch key={node.item.subject_id} node={node} depth={0} props={props} />
-                    ))}
-                    <button
-                        type="button"
-                        className="flex min-h-12 items-center gap-2 rounded-sm px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
-                        aria-expanded={unassignedOpen}
-                        onClick={() => setUnassignedOpen(!unassignedOpen)}
-                    >
-                        {unassignedOpen ? (
-                            <ChevronDown className="h-4 w-4" />
-                        ) : (
-                            <ChevronRight className="h-4 w-4" />
+        <AccessMembersProvider modelId={props.modelId} refresh={props.refresh}>
+            <div className="min-w-[900px] text-sm leading-5">
+                <div
+                    className={
+                        columns +
+                        ' sticky top-0 z-10 min-h-12 border-b bg-background text-sm text-muted-foreground'
+                    }
+                >
+                    <span>{t('dsh.departmentAndMember')}</span>
+                    <span>{t('dsh.configuredQuotaWan')}</span>
+                    <span>{t('dsh.effectiveQuotaWan')}</span>
+                    <span>{t('dsh.authorizationAndStatus')}</span>
+                </div>
+                {props.query.trim() ? (
+                    <SearchTree props={props} roots={roots} />
+                ) : (
+                    <>
+                        {roots.map((node) => (
+                            <Branch key={node.item.subject_id} node={node} depth={0} props={props} />
+                        ))}
+                        <button
+                            type="button"
+                            className="flex min-h-12 items-center gap-2 rounded-sm px-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                            aria-expanded={unassignedOpen}
+                            aria-busy={unassignedOpen && loading}
+                            onClick={() => setUnassignedOpen(!unassignedOpen)}
+                        >
+                            {unassignedOpen && showLoading ? (
+                                <Loader2
+                                    role="status"
+                                    aria-label={t('dsh.loading')}
+                                    className="h-4 w-4 animate-spin motion-reduce:animate-pulse"
+                                />
+                            ) : unassignedOpen ? (
+                                <ChevronDown className="h-4 w-4" />
+                            ) : (
+                                <ChevronRight className="h-4 w-4" />
+                            )}
+                            {t('dsh.unassignedDepartment')}
+                        </button>
+                        {unassignedOpen && (
+                            <MemberList
+                                modelId={props.modelId}
+                                departmentId={0}
+                                onLoadingChange={setLoading}
+                                users={props.users}
+                                saving={props.saving}
+                                depth={0}
+                            />
                         )}
-                        {t('dsh.unassignedDepartment')}
-                    </button>
-                    {unassignedOpen && (
-                        <MemberList
-                            modelId={props.modelId}
-                            departmentId={0}
-                            refresh={props.refresh}
-                            users={props.users}
-                            saving={props.saving}
-                            depth={0}
-                        />
-                    )}
-                </>
-            )}
-        </div>
+                    </>
+                )}
+            </div>
+        </AccessMembersProvider>
     )
 }

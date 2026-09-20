@@ -221,3 +221,43 @@ it('uses the same search to find a user and preserves the department path', asyn
     expect(await screen.findByText('Alice')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Organization' })).toBeTruthy()
 })
+
+it('keeps loading feedback inside the department row and reuses results after reopening', async () => {
+    let complete!: (value: Awaited<ReturnType<typeof getDshModelUserPermissions>>) => void
+    vi.mocked(getDshModelUserPermissions).mockReturnValueOnce(
+        new Promise((resolve) => {
+            complete = resolve
+        }),
+    )
+    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+    const departmentButton = await screen.findByRole('button', { name: 'Organization' })
+    const indicator = await screen.findByRole('status')
+    expect(departmentButton.contains(indicator)).toBe(true)
+    expect(indicator.tagName.toLowerCase()).toBe('svg')
+    complete({
+        tenant_id: 2,
+        model: { ...model, is_root_shared: false },
+        items: [],
+        has_more: false,
+        next_cursor: null,
+    })
+    await waitFor(() => expect(departmentButton).toHaveAttribute('aria-busy', 'false'))
+    fireEvent.click(departmentButton)
+    fireEvent.click(departmentButton)
+    await waitFor(() => expect(departmentButton).toHaveAttribute('aria-busy', 'false'))
+    expect(getDshModelUserPermissions).toHaveBeenCalledTimes(1)
+})
+
+it('keeps existing member rows visible and read-only while refreshing after a save', async () => {
+    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+    const memberQuota = await screen.findByLabelText('Alice · dsh.configuredQuotaWan')
+    vi.mocked(getDshModelUserPermissions).mockReturnValue(new Promise(() => {}))
+    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), {
+        target: { value: '20' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'save' }))
+    await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledTimes(2))
+    expect(screen.getByText('Alice')).toBeTruthy()
+    expect(memberQuota).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Organization' })).toHaveAttribute('aria-busy', 'true')
+})
