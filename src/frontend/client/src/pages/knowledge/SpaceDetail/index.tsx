@@ -125,6 +125,8 @@ interface KnowledgeSpaceContentProps {
     onEditSpace?: () => void;
     /** Delete current space (navigates back to the list); permission-gated by the menu. */
     onDeleteSpace?: () => void;
+    /** Leave a joined space (navigates back to the list); permission-gated by the menu. */
+    onLeaveSpace?: () => void;
     /** Open the search page from the top-bar search icon. */
     onOpenSearch?: () => void;
     /** Mobile full-page search mode: replaces the top bar with an inline search header. */
@@ -176,6 +178,7 @@ export function KnowledgeSpaceContent({
     spaceListOpen = false,
     onEditSpace,
     onDeleteSpace,
+    onLeaveSpace,
     onOpenSearch,
     searchMode = false,
     onCloseSearch,
@@ -328,6 +331,13 @@ export function KnowledgeSpaceContent({
         space.id,
         "edit",
     );
+    // "Leave" is the joined-space counterpart of "delete", mirroring the space list's
+    // rule (delete when you may, otherwise exit for spaces you joined). Department
+    // spaces are membership-managed elsewhere, and a creator never leaves their own.
+    const canLeaveSpace =
+        !canDeleteSpace &&
+        space.spaceKind !== "department" &&
+        space.role !== SpaceRole.CREATOR;
     // ─── Version Management ──────────────────────────────────────────────
     const versionManagementEnabled = useVersionManagementEnabled();
     const queryClient = useQueryClient();
@@ -1195,7 +1205,7 @@ export function KnowledgeSpaceContent({
                             </DropdownMenu>
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
-                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
+                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace || canLeaveSpace) && (
                             <DropdownMenu onOpenChange={(open) => { if (open) ensureSpaceActions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
@@ -1243,6 +1253,12 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuDangerLabelClassName}>{localize("com_knowledge.delete_space")}</span>
                                         </DropdownMenuItem>
                                     )}
+                                    {canLeaveSpace && onLeaveSpace && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuDangerItemClassName} onClick={() => onLeaveSpace()}>
+                                            <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                                            <span className={sidebarListMoreMenuDangerLabelClassName}>{localize("com_knowledge.exit_space_short")}</span>
+                                        </DropdownMenuItem>
+                                    )}
                                 </SidebarListMoreMenuContent>
                             </DropdownMenu>
                             )}
@@ -1282,6 +1298,12 @@ export function KnowledgeSpaceContent({
                 hasSimilarSelected={hasSimilarSelected}
                 onProcessSimilar={handleProcessSimilar}
                 canManageMembers={canManageMembers}
+                onOpenSettings={onEditSpace}
+                onDeleteSpace={onDeleteSpace}
+                onLeaveSpace={onLeaveSpace}
+                canEditSpace={canEditSpace}
+                canDeleteSpace={canDeleteSpace}
+                canLeaveSpace={canLeaveSpace}
             />
             </div>
             )}

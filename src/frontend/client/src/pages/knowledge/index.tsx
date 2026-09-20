@@ -28,10 +28,12 @@ import {
     getJoinedSpacesApi,
     getDepartmentSpacesApi,
     deleteSpaceApi,
+    unsubscribeSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
+import { createApiStatusError, extractApiErrorMessage, extractApiStatusCode } from "~/utils/apiStatusError";
 import { KnowledgeHomePage } from "./KnowledgeHomePage";
 import { MODULE_HOME_FRAME, ModuleHomeHeader } from "~/components/ModuleHome";
 import { squareTypePath } from "~/pages/square/squarePaths";
@@ -554,6 +556,41 @@ export default function Knowledge() {
         }
     };
 
+    // Leave the current joined space from the space page, then return to the list.
+    // Mirrors useSpaceActions.handleLeaveSpace, including the organization-grant
+    // refusal (18071) that must not be reported as a generic failure.
+    // Unsubscribe refusal for a space granted through an organization: the user
+    // cannot leave on their own, so it is not reported as a generic failure.
+    const ORGANIZATION_GRANT_EXIT_DENIED_CODE = 18071;
+
+    const handleLeaveActiveSpace = async (sp: KnowledgeSpace | null) => {
+        if (!sp) return;
+        const ok = await confirm({
+            title: localize("com_knowledge.prompt"),
+            description: localize("com_knowledge.confirm_exit_space"),
+            confirmText: localize("com_knowledge.exit"),
+            cancelText: localize("com_knowledge.cancel"),
+        });
+        if (!ok) return;
+        try {
+            const response = await unsubscribeSpaceApi(sp.id);
+            const exitCode = extractApiStatusCode(response);
+            if (exitCode && exitCode !== 200) {
+                throw createApiStatusError(response);
+            }
+            queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            showToast({ message: localize("com_knowledge.exited_space"), severity: NotificationSeverity.SUCCESS });
+            setActiveSpace(null);
+            navigate("/knowledge");
+        } catch (e) {
+            const errorCode = extractApiStatusCode(e);
+            const message = errorCode === ORGANIZATION_GRANT_EXIT_DENIED_CODE
+                ? localize("com_knowledge.organization_grant_exit_blocked")
+                : extractApiErrorMessage(e) || localize("com_knowledge.exit_space_failed");
+            showToast({ message, severity: NotificationSeverity.WARNING });
+        }
+    };
+
     const handleDragStateChange = (dragging: boolean, error?: string | null) => {
         setIsDragging(dragging);
         setDragError(error || null);
@@ -811,6 +848,7 @@ export default function Knowledge() {
                             spaceListOpen={spaceListDrawerOpen}
                             onEditSpace={() => handleSpaceSettings(activeSpace)}
                             onDeleteSpace={() => handleDeleteActiveSpace(activeSpace)}
+                            onLeaveSpace={() => handleLeaveActiveSpace(activeSpace)}
                             onOpenSearch={() => setKnowledgeSearchMode(true)}
                             searchMode={knowledgeSearchMode}
                             onCloseSearch={() => setKnowledgeSearchMode(false)}
