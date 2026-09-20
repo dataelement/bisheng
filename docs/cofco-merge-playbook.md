@@ -84,11 +84,22 @@
 命中几百个文件全是噪音。类型检查也未必兜得住:上游仍给被删的 prop 传值会报 TS2322,但调用方常带
 `@ts-strict-ignore`,`pnpm typecheck` 看不见。
 
-**只能按功能守护。** 必须保留的中粮前端定制,每项配一个能直接判断「还在不在」的检查(新增定制时同步加):
+**后端定制同样会被静默删掉。** 2026-09-19 发现 F045 的两处部门空间逻辑在 2026-09-01 合并 3.0
+时丢了:知识空间服务以主线文件为底重建,嵌在已有函数里的中粮片段没补回来。部门空间因此显示
+建空间的超管为创建者,没有管理员的部门空间还能发起加入申请(没人能审批)。F045 自己的 20 个
+测试只测部门空间服务,测不到「知识空间服务有没有调用它」。
 
-| 定制 | 检查(合并后在仓库根目录跑,无输出即丢了) |
+**只能按功能守护。** 必须保留的中粮定制,每项配一个能直接判断「还在不在」的检查
+(新增定制时同步加进这张表):
+
+| 定制 | 检查(合并后在仓库根目录跑,输出 0 即丢了) |
 |---|---|
-| 知识空间 AI dock 引用条 | `grep -l selectedContent src/frontend/client/src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiBottomDock.tsx` |
+| 知识空间 AI dock 引用条 | `grep -c selectedContent src/frontend/client/src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiBottomDock.tsx` |
+| F045 部门空间显示管理员而非创建者 | `grep -c "never surfaces on a" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
+| F045 无管理员时拦住申请加入 | `grep -c "ensure_space_not_pending_admin(space.id)" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
+
+守卫测试:`src/backend/test/cofco/test_cofco_department_space_admin.py`(这两处调用)、
+`src/backend/test/cofco/test_cofco_config_customizations.py`(配置)。
 
 ### 2.4 Alembic 迁移分叉(每次合主线都要检查)
 
