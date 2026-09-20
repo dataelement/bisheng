@@ -122,7 +122,7 @@ async def test_assign_numbers_sources_in_order_and_writes_table(redis):
     assert table["id:rag:11:3"] == "S1"
     assert table["id:web:https://a.com/x"] == "S2"
     e1 = json.loads(table["h:S1"])
-    assert e1["key"] == "knowledgesearch_aaaa1111:3" and e1["title"] == "OKR规则.docx" and e1["loc"] == "第3页"
+    assert e1["key"] == "knowledgesearch_aaaa1111:3" and e1["title"] == "OKR规则.docx" and e1["loc"] == "第 3 页"
     assert scope.handles == {"S1": "knowledgesearch_aaaa1111:3", "S2": "websearch_bbbb2222:1"}
     assert [e["handle"] for e in scope.entries] == ["S1", "S2"]
     assert "linsight:cite_handles:chat-1" in redis.expired
@@ -331,7 +331,7 @@ def test_export_numbers_by_first_appearance_and_appends_references():
     assert r.text.startswith("结论一。[1] 结论二。[2][1]")
     assert r.numbered == 2 and r.unresolved == []
     assert "## 参考资料" in r.text
-    assert "1. 《OKR规则2026.docx》 · 第3页 · 制度库" in r.text
+    assert "1. 《OKR规则2026.docx》 · 第 3 页 · 制度库" in r.text
     assert "2. OCR 2026 进展 · csdn · https://a.com/x" in r.text
     assert S not in r.text and "knowledgesearch_" not in r.text
 
@@ -342,7 +342,7 @@ def test_export_same_source_shares_a_number_but_other_chunk_gets_its_own():
     r = render_citations_for_export(text, [_rag_resolved()])
 
     assert r.text.startswith("A[1] B[1] C[2]")
-    assert "2. 《OKR规则2026.docx》 · 第4段 · 制度库" in r.text
+    assert "2. 《OKR规则2026.docx》 · 第 4 段 · 制度库" in r.text
 
 
 def test_export_drops_unresolved_keys_and_whole_spans():

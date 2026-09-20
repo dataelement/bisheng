@@ -28,6 +28,7 @@
  */
 import { Outlined } from 'bisheng-icons';
 import { useRef, useState } from 'react';
+import type { ChatCitation } from '~/api/chatApi';
 import { getMdDownload } from '~/api/linsight';
 import { listUploadableSpacesApi } from '~/api/messageExport';
 import { NotificationSeverity } from '~/common';
@@ -54,6 +55,12 @@ interface SaveAsButtonProps {
     /** Trigger placement — see the file header. Defaults to the list-row action. */
     variant?: SaveAsVariant;
     className?: string;
+    /**
+     * F069 P2: the run's `output_result.citations`. Lets the markdown download
+     * and the knowledge-space save bake citations into `[n]` plus a reference
+     * list; the pdf / docx conversion bakes server-side and ignores it.
+     */
+    citations?: ChatCitation[] | null;
 }
 
 const TRIGGER_BASE =
@@ -101,14 +108,14 @@ async function readBlobError(blob: Blob): Promise<string | null> {
     return null;
 }
 
-export function SaveAsButton({ file, versionId, variant = 'labeled', className }: SaveAsButtonProps) {
+export function SaveAsButton({ file, versionId, variant = 'labeled', className, citations }: SaveAsButtonProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [busy, setBusy] = useState(false);
     /** Was the menu opened by pointer? Drives whether closing restores focus. */
     const pointerOpened = useRef(false);
     const { pickerOpen, setPickerOpen, openPicker, saveTo, saving } =
-        useSaveArtifactToKnowledge(file, versionId);
+        useSaveArtifactToKnowledge(file, versionId, citations);
 
     // Markdown is the only type with a local format choice (md / pdf / docx).
     const isMarkdown = getFileExtension(file.file_name) === 'md';
@@ -120,7 +127,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className }
         if (busy) return;
         setBusy(true);
         try {
-            await downloadArtifactFile(file, versionId);
+            await downloadArtifactFile(file, versionId, { citations });
         } catch (e) {
             console.error('artifact download failed:', e);
             showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });

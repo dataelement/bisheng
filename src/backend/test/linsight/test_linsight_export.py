@@ -308,6 +308,6 @@ async def test_export_docx_bakes_numbers_for_the_task_owner(monkeypatch):
 
     assert seen["user"] is owner
     assert "PM2.5 年均浓度下降。[1]" in seen["md"]
-    assert "## 参考资料" in seen["md"] and "《政策.pdf》 · 第3页" in seen["md"]
+    assert "## 参考资料" in seen["md"] and "《政策.pdf》 · 第 3 页" in seen["md"]
     assert "" not in seen["md"] and "websearch_" not in seen["md"]  # the unresolved web key is stripped
     assert "已生成 Word" in res

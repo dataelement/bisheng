@@ -54,7 +54,7 @@ async def test_bake_numbers_permitted_sources_and_passes_the_exporter(monkeypatc
     out = await svc.bake_citations_for_export(f"正文。{S}knowledgesearch_aaaa1111:3{E}", user)
 
     assert seen["ids"] == ["knowledgesearch_aaaa1111"] and seen["user"] is user
-    assert out.startswith("正文。[1]") and "## 参考资料" in out and "《规则.docx》 · 第2页" in out
+    assert out.startswith("正文。[1]") and "## 参考资料" in out and "《规则.docx》 · 第 2 页" in out
 
 
 async def test_bake_drops_sources_the_service_withheld(monkeypatch):

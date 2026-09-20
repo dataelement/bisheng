@@ -108,10 +108,10 @@ def _item_location(item: Any) -> str:
         if str(getattr(sub, "itemId", None)) == str(item_id):
             page = getattr(sub, "page", None)
             if page is not None:
-                return f"第{page}页"
+                return f"第 {page} 页"
             chunk_index = getattr(sub, "chunkIndex", None)
             if chunk_index is not None:
-                return f"第{chunk_index}段"
+                return f"第 {chunk_index} 段"
     return ""
 
 
@@ -402,10 +402,10 @@ def _export_location(item: Any, item_id: str | None) -> str:
         if str(getattr(sub, "itemId", None)) == str(item_id):
             page = getattr(sub, "page", None)
             if page is not None:
-                return f"第{page}页"
+                return f"第 {page} 页"
             chunk_index = getattr(sub, "chunkIndex", None)
             if chunk_index is not None:
-                return f"第{chunk_index}段"
+                return f"第 {chunk_index} 段"
     return ""
 
 
