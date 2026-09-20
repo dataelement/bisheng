@@ -31,8 +31,33 @@ class LinsightCitationScope:
     def __init__(self, svid: str, session_id: str, enabled: bool = True):
         self.svid = svid
         self.session_id = session_id
+        # F069 P1: contract of this session — short handles [Sn] (True) or the
+        # F047 verbatim-id contract (False). Pinned in the handle table on first
+        # allocation so a resumed / follow-up run never switches mid-way.
         self.enabled = enabled
         self.seen_keys: set[str] = set()
+        # in-process mirror of the session handle table (Redis is the truth)
+        self.handles: dict[str, str] = {}  # handle -> registry key
+        self.key_to_handle: dict[str, str] = {}
+        self.entries: list[dict] = []  # ordered by handle number
+        # write-boundary bookkeeping for the completion audit
+        self.unknown_handles: dict[str, int] = {}
+        self.converted_count: int = 0
+        # True once the session table carries meta:enabled (read by load / written by pin_contract)
+        self.pinned: bool = False
+
+    def register_handle(self, handle: str, key: str, entry: dict) -> None:
+        if handle in self.handles:
+            return
+        self.handles[handle] = key
+        self.key_to_handle[key] = handle
+        self.entries.append(dict(entry, handle=handle, key=key))
+        self.entries.sort(key=lambda e: _handle_number(e.get("handle", "")))
+
+    def note_conversion(self, converted: int, unknown: list[str]) -> None:
+        self.converted_count += int(converted or 0)
+        for handle in unknown or []:
+            self.unknown_handles[handle] = self.unknown_handles.get(handle, 0) + 1
 
     @property
     def seen_redis_key(self) -> str:
@@ -75,15 +100,60 @@ class LinsightCitationScope:
             )
 
     async def load(self) -> None:
-        """Hydrate the in-process mirror from Redis (resume / continue paths)."""
+        """Hydrate the in-process mirror from Redis (resume / continue paths).
+
+        Reads both the per-run seen set and the per-session handle table; the
+        table's ``meta:enabled`` overrides ``enabled`` so an in-flight session
+        keeps the contract it started with (design decision 6).
+        """
         try:
             redis_client = await get_redis_client()
             stored = await redis_client.ahgetall(self.seen_redis_key)
         except Exception:
             logger.opt(exception=True).warning(f"linsight citation scope: failed to load seen sources svid={self.svid}")
-            return
+            stored = None
         for key in (stored or {}).keys():
             if isinstance(key, bytes):
                 key = key.decode("utf-8", errors="replace")
             if key:
                 self.seen_keys.add(str(key))
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import load_handle_table
+
+            entries, pinned = await load_handle_table(self.session_id)
+        except Exception:
+            logger.opt(exception=True).warning(f"linsight citation scope: failed to load handle table session={self.session_id}")
+            return
+        if pinned is not None:
+            self.enabled = pinned
+            self.pinned = True
+        for handle, entry in entries.items():
+            key = entry.get("key")
+            if handle and key:
+                self.register_handle(handle, key, entry)
+
+    async def pin_contract(self) -> None:
+        """Write ``meta:enabled`` once so later runs of this session keep the contract.
+
+        Called by ``_create_agent`` when ``load`` found no pin — including under
+        the verbatim contract, where no handle is ever allocated and the table
+        would otherwise never exist (a later switch flip must not change a
+        follow-up turn's contract either).
+        """
+        if self.pinned:
+            return
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import HANDLE_TTL_SECONDS, handle_redis_key
+
+            redis_client = await get_redis_client()
+            name = handle_redis_key(self.session_id)
+            await redis_client.ahsetnx(name, "meta:enabled", "1" if self.enabled else "0")
+            await redis_client.aexpire_key(name, HANDLE_TTL_SECONDS)
+            self.pinned = True
+        except Exception:
+            logger.opt(exception=True).warning(f"linsight citation scope: failed to pin contract session={self.session_id}")
+
+
+def _handle_number(handle: str) -> int:
+    digits = "".join(ch for ch in str(handle) if ch.isdigit())
+    return int(digits) if digits else 0

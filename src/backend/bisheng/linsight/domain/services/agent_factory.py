@@ -261,10 +261,20 @@ class _LanguageTailMiddleware(AgentMiddleware):
 _CITATION_DELIVERABLE_LINE_ZH = (
     "正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。"
 )
+# F069 P1 wording under the short-handle contract (scope.enabled). Both wordings
+# are kept so the kill switch can revert the whole prompt side in lockstep.
+_CITATION_DELIVERABLE_LINE_HANDLES_ZH = (
+    "正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾写来源编号，如 [S3] 或 [S3][S7]。"
+)
 
 _LINSIGHT_CITATION_TAIL_ZH = """# 来源标注（与上文 Citation Rules 同一要求，不改变其它任何要求）
 
 写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 的格式逐字复制检索结果里的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）并用引用标记包裹；一句用了多条资料就把多个标识放在同一组标记里。"""
+
+
+_LINSIGHT_CITATION_TAIL_HANDLES_ZH = """# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）
+
+写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号 [Sn]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。"""
 
 
 class _CitationTailMiddleware(_LanguageTailMiddleware):
@@ -282,6 +292,7 @@ def _build_linsight_system_prompt(
     skills_present: bool = False,
     has_code_interpreter: bool = False,
     has_web_search: bool = False,
+    citation_handles: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
@@ -414,7 +425,12 @@ def _build_linsight_system_prompt(
     # ONLY when the run has a citable retrieval tool — the same gate as
     # _with_citation_rules, so the prompt never points at a "Citation Rules"
     # section that was not appended (prompt/tool lockstep, see module docstring).
-    citation_deliverable_line = _CITATION_DELIVERABLE_LINE_ZH if (has_knowledge_base or has_web_search) else ""
+    if has_knowledge_base or has_web_search:
+        citation_deliverable_line = (
+            _CITATION_DELIVERABLE_LINE_HANDLES_ZH if citation_handles else _CITATION_DELIVERABLE_LINE_ZH
+        )
+    else:
+        citation_deliverable_line = ""
 
     return (
         _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
@@ -427,7 +443,9 @@ def _build_linsight_system_prompt(
     )
 
 
-def _build_researcher_prompt(has_knowledge_base: bool, has_web_search: bool = False) -> str:
+def _build_researcher_prompt(
+    has_knowledge_base: bool, has_web_search: bool = False, citation_handles: bool = False
+) -> str:
     """Resolve the researcher subagent prompt (same lockstep rule as the main one).
 
     The subagent receives search_knowledge_base only when it is in the filtered
@@ -446,7 +464,13 @@ def _build_researcher_prompt(has_knowledge_base: bool, has_web_search: bool = Fa
             "不要调用任何知识库检索工具，基于已有资料与自身知识给出结论。"
             f"{media_line}"
         )
-    if has_knowledge_base or has_web_search:
+    if (has_knowledge_base or has_web_search) and citation_handles:
+        # F069 P1: the researcher hands back handles, in place, at sentence ends.
+        citation_handoff = (
+            "- 检索结果中的来源编号（如 S3）必须原样出现在你的最后一条消息里的对应句末，写作 [S3]，"
+            "供主智能体写入报告正文；不要改写成参考文献列表或来源名称。\n"
+        )
+    elif has_knowledge_base or has_web_search:
         citation_handoff = (
             "- 检索结果中的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）必须**原样**出现在你的"
             "最后一条消息里，供主智能体写入报告正文；不要改写、翻译或改成参考文献列表。\n"
@@ -742,15 +766,22 @@ def _is_web_search_tool(tool: object) -> bool:
     return getattr(tool, "name", None) == "web_search" or getattr(tool, "tool_name", None) == "web_search"
 
 
-def _with_citation_rules(prompt: str, enabled: bool) -> str:
-    """Append citation.yaml rules when the run actually has a citable tool.
+def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> str:
+    """Append the citation rules when the run actually has a citable tool.
 
-    Delegates to the shared backstop so linsight, daily chat, knowledge space
-    and channel all teach the same rules (real U+E200 markers, written files
-    included). The gate stays here: no KB / web tool → nothing to cite → no rules.
+    ``handles=False``: the shared citation.yaml backstop (real U+E200 markers,
+    verbatim ids) that daily chat / knowledge space / channel also teach.
+    ``handles=True`` (F069 P1, ``scope.enabled``): the short [Sn] contract from
+    citation_handles.yaml instead — the write boundary turns the handles back
+    into markers, so the downstream contract is unchanged. The gate stays here:
+    no KB / web tool → nothing to cite → no rules.
     """
     if not enabled or not prompt:
         return prompt
+    if handles:
+        from bisheng.citation.domain.services.citation_handle_service import ensure_handle_rules
+
+        return ensure_handle_rules(prompt)
     from bisheng.citation.domain.services.citation_prompt_helper import ensure_citation_rules
 
     return ensure_citation_rules(prompt)
@@ -819,10 +850,43 @@ class _LinsightWebCitationWrapper(BaseTool):
             annotated, items = await _annotate_web_search_items(output)
             if self.scope is not None and items:
                 await self.scope.record_seen(items)
+                if getattr(self.scope, "enabled", False):
+                    annotated = await _rewrite_web_results_with_handles(self.scope, annotated, items)
             return annotated
         except Exception:
             logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
             return output
+
+
+async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: list) -> Any:
+    """F069 P1: show the model ``"ref": "S7"`` instead of the registry key.
+
+    Allocation failure (empty mapping) keeps the F047 shape untouched so the
+    model still has a citable id.
+    """
+    from bisheng.citation.domain.services.citation_handle_service import assign_handles
+
+    handles = await assign_handles(scope, items)
+    if not handles or not isinstance(annotated, str):
+        return annotated
+    try:
+        results = json.loads(annotated)
+    except json.JSONDecodeError:
+        return annotated
+    if not isinstance(results, list):
+        return annotated
+    changed = False
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        handle = handles.get(str(result.get("citation_key") or ""))
+        if not handle:
+            continue
+        result["ref"] = handle
+        result.pop("citation_key", None)
+        result.pop("itemId", None)
+        changed = True
+    return json.dumps(results, ensure_ascii=False) if changed else annotated
 
 
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
@@ -872,7 +936,13 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
 
-def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
+def _researcher_source_middleware(citation_scope) -> list:
+    from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+    return [LinsightCitationSourceMiddleware(citation_scope, is_subagent=True)]
+
+
+def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool = False) -> dict:
     """Build the single MVP researcher subagent spec (deepagents ``SubAgent``).
 
     Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
@@ -903,8 +973,9 @@ def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
             "返回蒸馏后的、有出处的结构化摘要。它不能向用户提问，也不负责最终交付物的撰写与拼装。"
         ),
         "system_prompt": _with_citation_rules(
-            _build_researcher_prompt(has_kb, has_web_search=has_web),
+            _build_researcher_prompt(has_kb, has_web_search=has_web, citation_handles=citation_handles),
             has_kb or has_web,
+            handles=citation_handles,
         ),
         "tools": sub_tools,
     }
@@ -948,6 +1019,9 @@ async def create_linsight_agent(
 
     svid = svid or session_model.id
     tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
+    # F069 P1: the whole prompt side (rules text, deliverable line, tail,
+    # researcher handoff) follows the session's citation contract in lockstep.
+    citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
     model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:
@@ -992,6 +1066,15 @@ async def create_linsight_agent(
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
+    # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
+    # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
+    # (design decision 5). Gated like the rules: citable tool AND handle contract.
+    if citation_handles and (has_kb or has_web):
+        from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+        middlewares.append(
+            LinsightCitationSourceMiddleware(citation_scope, budget_sink=turn_budget_sink, is_subagent=False)
+        )
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
     # bundles were copied into the workspace /skills/ subtree before this call (see
@@ -1022,8 +1105,9 @@ async def create_linsight_agent(
 
     # F069: citation requirement restated right before the language tail, only
     # when a citable retrieval tool is bound (same gate as the rules themselves).
+    citation_tail_text = _LINSIGHT_CITATION_TAIL_HANDLES_ZH if citation_handles else _LINSIGHT_CITATION_TAIL_ZH
     if has_kb or has_web:
-        middlewares.append(_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH))
+        middlewares.append(_CitationTailMiddleware(citation_tail_text))
     # Language directive LAST in the stack so it appends AFTER every framework
     # middleware prompt (write_todos / filesystem / task / skills) — the absolute
     # tail of the system message, the strongest position to keep the model
@@ -1065,7 +1149,7 @@ async def create_linsight_agent(
     # resilience instance (is_subagent=True) which DEGRADES a content-filter /
     # exhausted-transient step to a synthetic reply — letting the parent task
     # continue with the remaining steps (Layer B partial-result win).
-    researcher = _build_researcher_subagent(tools)
+    researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
     researcher_tools = researcher.get("tools") or []
     researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_search_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
@@ -1079,8 +1163,11 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F069 P1: the researcher gets the source table too (no nudge — it does
+        # not write deliverables).
+        *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
         # F069: same citation tail on the researcher's own stack, same gate.
-        *([_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH)] if researcher_citable else []),
+        *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
@@ -1103,8 +1190,10 @@ async def create_linsight_agent(
                 # when the skill's script route can actually run in this session.
                 has_code_interpreter=has_code_interpreter,
                 has_web_search=has_web,
+                citation_handles=citation_handles,
             ),
             has_kb or has_web,
+            handles=citation_handles,
         ),
         middleware=middlewares,
         subagents=[researcher],
