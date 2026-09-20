@@ -100,7 +100,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         document_type: str | None,
         file_subcategory_code: str | None,
         before_id: int | None,
-        limit: int,
+        limit: int | None,
     ) -> list[KnowledgeFile]:
         if not space_ids:
             return []
@@ -127,7 +127,8 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             )
         if before_id is not None:
             statement = statement.where(KnowledgeFile.id < before_id)
-        statement = statement.order_by(col(KnowledgeFile.id).desc()).limit(min(max(limit, 1), 200))
+        if limit is not None:
+            statement = statement.order_by(col(KnowledgeFile.id).desc()).limit(min(max(limit, 1), 200))
         result = await self.session.execute(statement)
         return list(result.scalars().all())
 

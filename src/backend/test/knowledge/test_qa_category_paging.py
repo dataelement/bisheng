@@ -7,6 +7,8 @@ from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeS
 
 def make_service(denied=()):
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     service._get_shougang_portal_request_spaces = AsyncMock(return_value=[SimpleNamespace(id=10, name="公共库")])
     service._require_read_permission = AsyncMock()
     service.version_repo = None

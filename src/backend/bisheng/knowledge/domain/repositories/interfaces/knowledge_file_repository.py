@@ -25,9 +25,9 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         document_type: str | None,
         file_subcategory_code: str | None,
         before_id: int | None,
-        limit: int,
+        limit: int | None,
     ) -> list[KnowledgeFile]:
-        """按分类和 ID 游标读取有限候选, 业务层继续执行文件权限检查。"""
+        """按分类读取候选；limit=None 用于完整统计，业务层继续检查文件权限。"""
         ...
 
     async def find_by_id_for_update(self, entity_id: int) -> KnowledgeFile | None:

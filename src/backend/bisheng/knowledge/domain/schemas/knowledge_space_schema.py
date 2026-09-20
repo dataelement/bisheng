@@ -1,6 +1,6 @@
 from datetime import date
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -819,6 +819,33 @@ class ShougangPortalQaCategoryFilesReq(BaseModel):
     stats_only: bool = False
     cursor: str | None = Field(default=None, pattern=r"^[0-9]{1,20}$")
     page_size: int = Field(default=20, ge=1, le=100)
+
+
+class ShougangPortalQaCategoryFileRefsReq(BaseModel):
+    space_ids: list[Annotated[int, Field(gt=0)]] = Field(default_factory=list)
+    discovery_scope: Literal["legacy", "public"] = "legacy"
+    document_type: str = Field(min_length=1, max_length=100)
+    file_subcategory_code: str | None = Field(default=None, max_length=100)
+    cursor: str | None = Field(default=None, pattern=r"^[0-9]{1,20}$")
+    page_size: int = Field(default=100, ge=1, le=100)
+
+    @field_validator("document_type")
+    @classmethod
+    def nonempty_document_type(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("document_type must not be blank")
+        return value.strip().upper()
+
+
+class ShougangPortalQaCategoryFileRef(BaseModel):
+    space_id: int = Field(gt=0)
+    file_id: int = Field(gt=0)
+
+
+class ShougangPortalQaCategoryFileRefsResp(BaseModel):
+    data: list[ShougangPortalQaCategoryFileRef]
+    has_more: bool
+    next_cursor: str | None
 
 
 class ShougangPortalQaFileSearchReq(BaseModel):

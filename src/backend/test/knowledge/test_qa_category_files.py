@@ -22,7 +22,7 @@ def request(**kwargs):
         space_ids=[10],
         discovery_scope="legacy",
         stats_only=False,
-        document_type="ZC",
+        document_type=None,
         file_subcategory_code=None,
         cursor=None,
         page_size=1,
@@ -32,6 +32,8 @@ def request(**kwargs):
 
 async def test_category_counts_cover_unloaded_pages_and_parent_scope():
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     files = [
         SimpleNamespace(id=i, knowledge_id=10, file_subcategory_code=sub) for i, sub in [(3, "A"), (2, "B"), (1, "")]
     ]
@@ -44,8 +46,45 @@ async def test_category_counts_cover_unloaded_pages_and_parent_scope():
     assert result["data"] == []
 
 
+async def test_scoped_category_counts_filter_before_permissions_without_page_limit():
+    service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
+    service._get_shougang_portal_request_spaces = AsyncMock(return_value=[SimpleNamespace(id=10, name="库")])
+    service._require_read_permission = AsyncMock()
+    service.version_repo = None
+    rows = [
+        SimpleNamespace(id=i, knowledge_id=10, file_type=1, status=2,
+                        file_encoding="SG-ZC-A-001", file_subcategory_code="A")
+        for i in range(1, 206)
+    ]
+    # SQL 编码包含匹配可能命中其他分段，服务层仍须精确校验分类。
+    other = SimpleNamespace(id=999, knowledge_id=10, file_type=1, status=2,
+                            file_encoding="SG-BG-ZC-001", file_subcategory_code="A")
+    service.knowledge_file_repo = SimpleNamespace(
+        list_qa_category_candidates=AsyncMock(return_value=[*rows, other]),
+    )
+    service._filter_visible_child_items = AsyncMock(side_effect=lambda files, **kw: files[:-1])
+    req = request()
+    req.stats_only, req.document_type, req.file_subcategory_code = True, "ZC", "A"
+    with (
+        patch('bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+              AsyncMock(side_effect=AssertionError("分类统计不得读取全库文件"))),
+        patch('bisheng.knowledge.domain.services.knowledge_recycle_service.KnowledgeRecycleService.list_recycled_file_ids',
+              AsyncMock(return_value=[])),
+    ):
+        result = await service.get_shougang_portal_qa_category_files(req)
+    assert result['counts'] == {'l1:ZC': 204, 'l2:ZC:A': 204}
+    service._filter_visible_child_items.assert_awaited_once_with(rows, space_id=10)
+    service.knowledge_file_repo.list_qa_category_candidates.assert_awaited_once_with(
+        space_ids=[10], document_type="ZC", file_subcategory_code="A", before_id=None, limit=None,
+    )
+
+
 async def test_category_loader_reuses_space_and_file_permissions_and_excludes_old_files():
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     service._get_shougang_portal_request_spaces = AsyncMock(return_value=[SimpleNamespace(id=10, name="库")])
     service._require_read_permission = AsyncMock()
     service.version_repo = SimpleNamespace(find_non_primary_file_ids_by_knowledge_ids=AsyncMock(return_value=[2]))
@@ -69,6 +108,8 @@ async def test_category_loader_reuses_space_and_file_permissions_and_excludes_ol
 
 async def test_empty_category_scope_never_falls_back_to_all_spaces():
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     service._get_shougang_portal_request_spaces = AsyncMock()
     req = request()
     req.space_ids = []
@@ -78,6 +119,8 @@ async def test_empty_category_scope_never_falls_back_to_all_spaces():
 
 async def test_denied_space_stops_before_loading_any_files():
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     service._get_shougang_portal_request_spaces = AsyncMock(return_value=[SimpleNamespace(id=10, name="库")])
     service._require_read_permission = AsyncMock(side_effect=PermissionError("denied"))
     with patch(
@@ -95,6 +138,8 @@ async def test_category_scope_isolates_stale_spaces_but_propagates_service_failu
     from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePermissionDeniedError
 
     service = object.__new__(KnowledgeSpaceService)
+    service._load_qa_category_space_metadata = AsyncMock(
+        side_effect=lambda ids: [(SimpleNamespace(id=sid, name=str(sid)), None) for sid in ids])
     spaces = [SimpleNamespace(id=sid, name=str(sid)) for sid in [20, 30, 10]]
     service._get_shougang_portal_request_spaces = AsyncMock(return_value=spaces)
 
