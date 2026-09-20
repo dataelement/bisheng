@@ -78,8 +78,8 @@ async def test_candidates_use_configured_ids_and_target_tenant_governance():
     with profile_scope(2):
         result = await read_available_models({"4": object(), "5": object(), "6": object()}, loader)
     assert result == [
-        {"id": 4, "name": "Provider 4 / qwen-max", "is_root_shared": False},
-        {"id": 5, "name": "Provider 5 / qwen-max", "is_root_shared": True},
+        {"id": 4, "name": "Provider 4 / Model 4", "is_root_shared": False},
+        {"id": 5, "name": "Provider 5 / Model 5", "is_root_shared": True},
     ]
     assert [call.args[0] for call in loader.await_args_list] == [4, 5, 6]
     with profile_scope(2), pytest.raises(TimeoutError):
