@@ -45,9 +45,22 @@ async def resolve_items_for_export(citation_ids: list[str], login_user: Any) -> 
     from bisheng.citation.domain.services.citation_resolve_service import CitationResolveService
     from bisheng.core.database import get_async_db_session
 
-    async with get_async_db_session() as session:
-        service = CitationResolveService(MessageCitationRepositoryImpl(session))
-        response = await service.resolve_citations_with_reasons(list(citation_ids), login_user)
+    from bisheng.core.context.tenant import current_tenant_id, get_current_tenant_id
+
+    # The tenant-aware repository needs the ContextVar; requests and the
+    # worker set it, but a caller outside both (scripts, future jobs) does not.
+    # Borrow the exporter's tenant for the duration of the lookup.
+    token = None
+    exporter_tenant = getattr(login_user, "tenant_id", None)
+    if get_current_tenant_id() is None and exporter_tenant is not None:
+        token = current_tenant_id.set(int(exporter_tenant))
+    try:
+        async with get_async_db_session() as session:
+            service = CitationResolveService(MessageCitationRepositoryImpl(session))
+            response = await service.resolve_citations_with_reasons(list(citation_ids), login_user)
+    finally:
+        if token is not None:
+            current_tenant_id.reset(token)
     return list(getattr(response, "items", None) or [])
 
 
