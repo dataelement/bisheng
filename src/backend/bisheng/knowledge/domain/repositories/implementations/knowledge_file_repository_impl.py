@@ -93,6 +93,16 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
         return list((await self.session.exec(statement)).all())
 
+    async def list_qa_favorite_page(self, *, space_id: int, after_id: int, limit: int) -> list[KnowledgeFile]:
+        statement = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == space_id,
+            KnowledgeFile.id > after_id,
+            KnowledgeFile.file_source == "favorite_reference",
+            KnowledgeFile.file_type == FileType.FILE.value,
+            col(KnowledgeFile.deleted_at).is_(None),
+        ).order_by(KnowledgeFile.id).limit(max(1, min(limit, 500)))
+        return list((await self.session.exec(statement)).all())
+
     async def list_qa_category_candidates(
         self,
         *,
@@ -109,6 +119,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
             col(KnowledgeFile.deleted_at).is_(None),
+            or_(col(KnowledgeFile.file_source).is_(None), KnowledgeFile.file_source != "favorite_reference"),
         )
         if document_type:
             # 编码解析会忽略分段两侧空白, 候选查询也保留这一兼容行为。

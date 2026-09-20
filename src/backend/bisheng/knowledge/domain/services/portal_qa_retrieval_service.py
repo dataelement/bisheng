@@ -319,7 +319,9 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
     from bisheng.llm.domain import LLMService
     from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
-    if not plan.space_ids or (plan.file_ids_by_space is not None and not any(plan.file_ids_by_space.values())):
+    if not plan.space_ids or (
+        plan.file_ids_by_space is not None and not any(plan.file_ids_by_space.values()) and not plan.whole_space_ids
+    ):
         return [], QaRetrievalResult()
     phase_started = time.monotonic()
     spaces = await KnowledgeDao.aget_list_by_ids(list(plan.space_ids))
@@ -389,6 +391,9 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
                 entry_refs=refs,
                 authorize_spaces=False,
             )
+            if plan.whole_space_ids:
+                from dataclasses import replace
+                scope = replace(scope, whole_space_ids=plan.whole_space_ids)
             logger.info("portal_qa_stage stage=scope elapsed_ms={}", int((time.monotonic() - scope_started) * 1000))
             context = PortalQaContext(
                 tenant_id=int(user.tenant_id), user_id=int(user.user_id),
@@ -400,7 +405,13 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
             if phase == "candidates":
                 context.seed("spaces", {int(space.id): space for space in spaces})
             try:
-                yield resolver, scope, PortalEntryAuthorizer(owner, context=context)
+                authorizer = PortalEntryAuthorizer(owner, context=context)
+                if plan.favorite_bindings:
+                    from bisheng.knowledge.domain.services.portal_qa_favorites import (
+                        FavoriteScopeAuthorizer, create_qa_favorites,
+                    )
+                    authorizer = FavoriteScopeAuthorizer(authorizer, create_qa_favorites(session, user), plan)
+                yield resolver, scope, authorizer
             finally:
                 from bisheng.knowledge.rag.shared_search_cursor import finish_inflight
 
@@ -509,63 +520,58 @@ async def retrieve_portal_qa(*, request, user, plan, query, config, max_chars):
 
 
 async def build_portal_qa_plan(*, request, user, knowledge_base, department_access):
+    from bisheng.core.database import get_async_db_session
     from bisheng.knowledge.domain.contracts.qa_retrieval import QaRetrievalPlan
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+    from bisheng.knowledge.domain.services.portal_qa_favorites import create_qa_favorites
 
     if knowledge_base is None:
         return QaRetrievalPlan(())
     scope = knowledge_base.knowledge_scope
-    ids = list(knowledge_base.knowledge_space_ids or [])
-    if scope is None or scope.mode == "knowledge_space":
-        if scope is not None and scope.knowledge_space_id:
-            ids.append(int(scope.knowledge_space_id))
-        return QaRetrievalPlan(tuple(sorted(set(int(sid) for sid in ids if int(sid) > 0))))
-    if scope.mode != "files":
+    ids = sorted({int(sid) for sid in knowledge_base.knowledge_space_ids or [] if int(sid) > 0})
+    whole_mode = scope is None or scope.mode == "knowledge_space"
+    if whole_mode and scope is not None and scope.knowledge_space_id:
+        ids.append(int(scope.knowledge_space_id))
+    if whole_mode and not ids:
+        return QaRetrievalPlan(())
+    if not whole_mode and scope.mode != "files":
         raise ValueError("unsupported knowledge scope")
-    service = KnowledgeSpaceService(request, user)
-    service.department_file_view_access_service = department_access
-    from bisheng.core.database import get_async_db_session
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
-        KnowledgeFileRepositoryImpl,
-    )
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
-        KnowledgeDocumentRepositoryImpl,
-    )
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
-        KnowledgeDocumentVersionRepositoryImpl,
-    )
-    from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
-        KnowledgeDocumentEntryResolver,
-        KnowledgeDocumentDurableReferenceResolver,
-    )
 
     async with get_async_db_session() as session:
-        service.knowledge_file_repo = KnowledgeFileRepositoryImpl(session)
-        service.version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
-        service.doc_repo = KnowledgeDocumentRepositoryImpl(session)
-
-        async def permission_loader(fid, sid):
-            # 此处只解析 durable reference，授权在候选阶段统一进行。
-            return set()
-
-        entry_resolver = KnowledgeDocumentEntryResolver(
-            document_repository=service.doc_repo,
-            version_repository=service.version_repo,
-            file_repository=service.knowledge_file_repo,
-            permission_loader=permission_loader,
-        )
-        service.document_durable_reference_resolver = KnowledgeDocumentDurableReferenceResolver(
-            entry_resolver=entry_resolver,
-            version_repository=service.version_repo,
-            file_repository=service.knowledge_file_repo,
-        )
-        filters = await service.resolve_shougang_portal_qa_scope_file_ids(
-            mode="files",
-            knowledge_space_ids=ids,
-            folder_refs=list(scope.folder_refs or []),
-            file_refs=list(scope.file_refs or []),
-            max_files=None,
-            subtree_page_size=200,
-            defer_authorization=True,
-        )
-    return QaRetrievalPlan(tuple(sorted(filters)), filters)
+        favorites = create_qa_favorites(session, user)
+        # 元数据只读取请求涉及的库；普通整库仍不展开文件。
+        await favorites.preload_spaces(ids)
+        if whole_mode:
+            whole, bindings = await favorites.expand_spaces(ids)
+            if not bindings:
+                return QaRetrievalPlan(whole)
+            direct = {}
+        else:
+            whole, bindings, regular = (), [], []
+            for ref in scope.file_refs or []:
+                sid, fid = int(ref.knowledge_space_id), int(ref.file_id)
+                space = await favorites.space(sid)
+                row = await favorites.files.find_by_id(fid)
+                if (space and getattr(space, "is_favorite", False)) or (row and row.file_source == "favorite_reference"):
+                    binding = await favorites.resolve(sid, fid)
+                    if binding is not None:
+                        bindings.append(binding)
+                else:
+                    regular.append(ref)
+            service = KnowledgeSpaceService(request, user)
+            service.department_file_view_access_service = department_access
+            service.knowledge_file_repo = favorites.files
+            service.version_repo = favorites.durable.version_repository
+            service.document_durable_reference_resolver = favorites.durable
+            direct = await service.resolve_shougang_portal_qa_scope_file_ids(
+                mode="files", knowledge_space_ids=ids, folder_refs=list(scope.folder_refs or []),
+                file_refs=regular, max_files=None, subtree_page_size=200, defer_authorization=True,
+            )
+        filters = {sid: list(fids) for sid, fids in direct.items()}
+        for binding in bindings:
+            bucket = filters.setdefault(binding.source_space_id, [])
+            if binding.source_file_id not in bucket:
+                bucket.append(binding.source_file_id)
+        return QaRetrievalPlan(tuple(sorted(set(whole) | set(filters))), filters,
+                               whole_space_ids=whole, favorite_bindings=tuple(bindings),
+                               direct_file_ids_by_space=direct)

@@ -9,6 +9,10 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     """Knowledge Base File Repository Interface Class"""
 
+    async def list_qa_favorite_page(self, *, space_id: int, after_id: int, limit: int) -> list[KnowledgeFile]:
+        """按 ID 分页读取未删除的收藏引用，不展开源库。"""
+        ...
+
     async def find_portal_tag_file_ids(self, space_ids: list[int], tag_name: str) -> list[int]:
         """批量解析空间原有标签及绑定标签库，返回关联的文件 ID。"""
         ...

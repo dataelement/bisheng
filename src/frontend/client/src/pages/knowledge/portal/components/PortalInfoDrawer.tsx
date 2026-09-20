@@ -390,8 +390,8 @@ export function PortalInfoDrawer({
                     >
                         {isSharedFile ? renderDetailItem("文件来源", "分享文件") : null}
                         {isDistributedFile ? renderDetailItem("原始上传知识库", selectedFile?.originalKnowledgeName) : null}
-                        {renderDetailItem("创建人", operatorName)}
-                        {renderDetailItem("最后修改人", updaterName)}
+                        {renderDetailItem("上传人", operatorName)}
+                        {renderDetailItem("更新人", updaterName)}
                         {renderDetailItem("部门", sourceDepartmentName)}
                         {renderDetailItem("知识库", sourceSpaceName)}
                         {renderDetailItem("路径", sourcePath)}

@@ -568,6 +568,7 @@ async def list_space_children(
         default="none",
         description="none=列表不统计目录数量(默认);shallow=直接子文件数(门户 QA 树,零 openfga)",
     ),
+    qa_selection: bool = Query(default=False, description="门户问答选择，解析收藏源文件的可选状态"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """List space children (F027 cursor-based pagination).
@@ -587,6 +588,7 @@ async def list_space_children(
         file_type=file_type,
         enrich_files=enrich_files,
         folder_count_mode=folder_count_mode,
+        qa_selection=qa_selection,
     )
     return resp_200(result)
 

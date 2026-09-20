@@ -348,6 +348,15 @@ class TestSharedSpaceStorageReader:
 
         assert "routing" not in calls[0]
         assert calls[1]["routing"] == "10,11"
+        await reader.search_es(
+            BackendQueryFilter(
+                tenant_id=1, requested_space_ids=(11, 12), routing_version=3,
+                canonical_document_ids=(10, 11), whole_space_ids=(12,),
+            ),
+            query_text="hello", limit=5,
+        )
+        # 混选中的普通整库不能被收藏文档的分片路由截断。
+        assert "routing" not in calls[2]
 
 
 class TestESQueryRendering:

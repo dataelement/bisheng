@@ -24,7 +24,7 @@ import inspect
 import json
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections
@@ -1283,6 +1283,12 @@ class SharedSpaceStorageReader:
     @staticmethod
     def _full_expr(filter_: Any) -> str:
         """Membership pre-filter + optional canonical narrowing (spec 3.6)."""
+        if getattr(filter_, "whole_space_ids", ()):
+            whole = build_milvus_membership_expr(filter_.tenant_id, filter_.whole_space_ids)
+            if not filter_.canonical_document_ids:
+                return whole
+            explicit = SharedSpaceStorageReader._full_expr(replace(filter_, whole_space_ids=()))
+            return f"({whole}) or ({explicit})"
         expr = build_milvus_membership_expr(filter_.tenant_id, filter_.requested_space_ids)
         if filter_.canonical_document_ids:
             ids = ", ".join(str(int(d)) for d in filter_.canonical_document_ids)
@@ -1304,6 +1310,13 @@ class SharedSpaceStorageReader:
 
     @staticmethod
     def _es_bool_filter(filter_: Any) -> list[dict[str, Any]]:
+        if getattr(filter_, "whole_space_ids", ()):
+            whole = {"terms": {"metadata.knowledge_ids": list(filter_.whole_space_ids)}}
+            if not filter_.canonical_document_ids:
+                return [whole]
+            explicit = SharedSpaceStorageReader._es_bool_filter(replace(filter_, whole_space_ids=()))
+            return [{"bool": {"minimum_should_match": 1,
+                              "should": [whole, {"bool": {"filter": explicit}}]}}]
         clauses = build_shared_es_filter(filter_)
         if filter_.canonical_document_ids:
             clauses.append(
@@ -1509,6 +1522,7 @@ class SharedSpaceStorageReader:
         if (
             (self.conf or get_shared_storage_conf()).es_routing_enabled
             and filter_.canonical_document_ids
+            and not getattr(filter_, "whole_space_ids", ())
         ):
             kwargs["routing"] = ",".join(
                 es_routing_value(self.tenant_id, document_id)

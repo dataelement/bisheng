@@ -70,6 +70,8 @@ class RetrievalScope:
     )
     #: Routing version asserted on every store access (risk R16).
     routing_version: int = 0
+    # 仅门户混合范围使用，与显式入口取并集；空值保持原有语义。
+    whole_space_ids: tuple[SpaceId, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,7 @@ class BackendQueryFilter:
     #: is handled by the renderer via version metadata, not by the caller.
     canonical_version_ids: tuple[CanonicalVersionId, ...] | None = None
     generation_constraints: tuple[CanonicalGenerationConstraint, ...] = ()
+    whole_space_ids: tuple[SpaceId, ...] = ()
 
 
 @dataclass(frozen=True)

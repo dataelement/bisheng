@@ -159,6 +159,19 @@ async def test_whole_space_plan_does_not_expand_files(monkeypatch, ids):
     from bisheng.knowledge.domain.services.portal_qa_retrieval_service import build_portal_qa_plan
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
+    from contextlib import asynccontextmanager
+    from bisheng.core import database
+    from bisheng.knowledge.domain.services import portal_qa_favorites
+    from test.knowledge.test_portal_qa_favorites import Repo, PortalQaFavorites
+
+    @asynccontextmanager
+    async def session():
+        yield object()
+
+    spaces = Repo([SimpleNamespace(id=sid, is_favorite=False) for sid in ids])
+    favorites = PortalQaFavorites(user=None, spaces=spaces, files=Repo([]), durable=None)
+    monkeypatch.setattr(database, "get_async_db_session", session)
+    monkeypatch.setattr(portal_qa_favorites, "create_qa_favorites", lambda *args: favorites)
     expand = AsyncMock(side_effect=AssertionError("must not enumerate files"))
     monkeypatch.setattr(KnowledgeSpaceService, "resolve_shougang_portal_qa_scope_file_ids", expand)
     plan = await build_portal_qa_plan(

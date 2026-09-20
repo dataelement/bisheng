@@ -23,6 +23,10 @@ class QaRetrievalPlan:
     space_ids: tuple[int, ...]
     # None 是整库；空映射是明确没有获准文件。
     file_ids_by_space: dict[int, list[int]] | None = None
+    # 混合范围中的普通整库；收藏引入的空间不在这里。
+    whole_space_ids: tuple[int, ...] = ()
+    favorite_bindings: tuple[Any, ...] = ()
+    direct_file_ids_by_space: dict[int, list[int]] = field(default_factory=dict)
 
 
 @dataclass

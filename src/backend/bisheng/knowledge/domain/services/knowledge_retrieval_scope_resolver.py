@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from bisheng.knowledge.domain.contracts.errors import (
@@ -325,6 +325,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 "retrieval scope carries no requested spaces",
                 tenant_id=int(scope.tenant_id) if scope.tenant_id is not None else None,
             )
+        if not set(scope.whole_space_ids).issubset(scope.requested_space_ids):
+            raise ValueError("whole-space union exceeds requested scope")
         return BackendQueryFilter(
             tenant_id=scope.tenant_id,
             requested_space_ids=scope.requested_space_ids,
@@ -332,6 +334,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             canonical_document_ids=_dedupe_optional(canonical_document_ids),
             canonical_version_ids=_dedupe_optional(canonical_version_ids),
             generation_constraints=tuple(generation_constraints or ()),
+            whole_space_ids=scope.whole_space_ids,
         )
 
     async def resolve_current_generation_constraints(
@@ -593,7 +596,8 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
                 continue
             entries = entries_by_document.get(document_id, [])
             if strict_explicit and explicit_entries:
-                entries = [entry for entry in entries if int(entry.id) in explicit_entries]
+                entries = [entry for entry in entries if int(entry.id) in explicit_entries
+                           or int(entry.knowledge_id) in scope.whole_space_ids]
             if require_projection_ready and skip_unready:
                 ready_entries = []
                 for entry in entries:
@@ -976,6 +980,12 @@ def render_milvus_expr(query_filter: BackendQueryFilter) -> str:
     ``ARRAY_CONTAINS_ANY``. The reader already selected the tenant-bound
     physical collection, so the data-plane filter does not repeat tenant_id.
     """
+    if query_filter.whole_space_ids:
+        whole = render_milvus_expr(replace(query_filter, requested_space_ids=query_filter.whole_space_ids,
+                                           whole_space_ids=(), canonical_document_ids=None, canonical_version_ids=None))
+        if not query_filter.canonical_document_ids:
+            return whole
+        return f"({whole}) or ({render_milvus_expr(replace(query_filter, whole_space_ids=()))})"
     spaces = [int(s) for s in query_filter.requested_space_ids]
     if not spaces:
         raise ValueError("BackendQueryFilter without requested spaces is not renderable")
@@ -995,6 +1005,13 @@ def render_milvus_expr(query_filter: BackendQueryFilter) -> str:
 
 def render_es_membership_query(query_filter: BackendQueryFilter) -> dict:
     """Render the membership pre-filter as an ES bool/filter query (spec 3.6)."""
+    if query_filter.whole_space_ids:
+        whole = render_es_membership_query(replace(query_filter, requested_space_ids=query_filter.whole_space_ids,
+                                                   whole_space_ids=(), canonical_document_ids=None, canonical_version_ids=None))
+        if not query_filter.canonical_document_ids:
+            return whole
+        explicit = render_es_membership_query(replace(query_filter, whole_space_ids=()))
+        return {"bool": {"minimum_should_match": 1, "should": [whole, explicit]}}
     spaces = [int(s) for s in query_filter.requested_space_ids]
     if not spaces:
         raise ValueError("BackendQueryFilter without requested spaces is not renderable")

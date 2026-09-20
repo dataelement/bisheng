@@ -20,7 +20,7 @@ from test.knowledge.test_knowledge_retrieval_scope_resolver import (
 )
 
 
-@pytest.mark.parametrize("case", ["normal", "revoke", "es_init_failure", "embedding_failure"])
+@pytest.mark.parametrize("case", ["normal", "revoke", "favorite_removed", "es_init_failure", "embedding_failure"])
 async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkeypatch, case):
     from bisheng.core import database
     from bisheng.core.search.elasticsearch import manager
@@ -136,17 +136,32 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
 
     monkeypatch.setattr(WorkStationService, "_rerank_retrieval_candidates", rerank)
 
+    plan = QaRetrievalPlan((10,))
+    if case == "favorite_removed":
+        from test.knowledge.test_portal_qa_favorites import fixture
+        from bisheng.knowledge.domain.services import portal_qa_favorites
+        favorite_resolver, _, _ = fixture()
+        binding = await favorite_resolver.resolve(90, 100)
+        plan = QaRetrievalPlan((10,), {10: [1]}, favorite_bindings=(binding,))
+
+        def current_favorites(*args):
+            if len(sessions) > 1:
+                favorite_resolver.files.rows.pop(100, None)
+            return favorite_resolver
+
+        monkeypatch.setattr(portal_qa_favorites, "create_qa_favorites", current_favorites)
+
     async def run():
         return await retrieve_portal_qa(
             request=None,
             user=SimpleNamespace(user_id=42, tenant_id=7),
-            plan=QaRetrievalPlan((10,)),
+            plan=plan,
             query="question",
             config=KnowledgeRetrievalRuntimeConf(),
             max_chars=1000,
         )
 
-    if case == "revoke":
+    if case in {"revoke", "favorite_removed"}:
         with pytest.raises(QaRetrievalError, match="scope changed"):
             await run()
     else:
@@ -155,7 +170,7 @@ async def test_pipeline_authorizes_before_rerank_and_freshly_before_model(monkey
         assert result.scope_complete == (case == "normal")
         assert bool(result.degraded_reasons) == (case != "normal")
         assert all(doc.metadata["entry_file_id"] == 1 for doc in documents)
-    assert checks == [(0, [1]), (1, [1])]
+    assert checks == ([(0, [1])] if case == "favorite_removed" else [(0, [1]), (1, [1])])
     assert sessions == [0, 1]
     assert closed == [1, 0]
     assert dense.await_count == (0 if case == "embedding_failure" else 1)

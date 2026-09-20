@@ -57,7 +57,8 @@ class PortalQaContext(PortalSearchContext):
         self.require_identity(tenant_id=scope.tenant_id, user_id=scope.user_id, routing_version=scope.routing_version)
         if frozenset(scope.requested_space_ids) != self.space_ids:
             raise ValueError("QA context scope changed")
-        self.bind_filters(repr((tuple(scope.requested_space_ids), sorted(scope.explicit_entry_ids_by_space.items()))))
+        self.bind_filters(repr((tuple(scope.requested_space_ids), sorted(scope.explicit_entry_ids_by_space.items()),
+                               tuple(getattr(scope, "whole_space_ids", ())))))
 
     async def prepare_entries(self, owner: Any, entries: Sequence[KnowledgeFile]) -> None:
         self.require_identity(

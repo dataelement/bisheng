@@ -191,6 +191,14 @@ async def test_portal_plan_resolves_files_and_folders_without_preflight_permissi
         yield MagicMock()
 
     monkeypatch.setattr(database, "get_async_db_session", session)
+    from bisheng.knowledge.domain.services import portal_qa_favorites
+    from test.knowledge.test_portal_qa_favorites import Repo, PortalQaFavorites
+    favorites = PortalQaFavorites(
+        user=_login_user(), spaces=Repo([SimpleNamespace(id=7103, is_favorite=False)]),
+        files=Repo([]), durable=SimpleNamespace(version_repository=object()),
+    )
+    monkeypatch.setattr(portal_qa_favorites, "create_qa_favorites", lambda *args: favorites)
+
 
     class _FakeKnowledgeSpaceService:
         def __init__(self, request, login_user):

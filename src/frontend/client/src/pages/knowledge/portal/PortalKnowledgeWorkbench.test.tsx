@@ -4632,8 +4632,8 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(screen.getByRole("tab", { name: "来源" }));
         expect(screen.getByRole("tab", { name: "来源" })).toHaveAttribute("aria-selected", "true");
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("创建人");
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("最后修改人");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("上传人");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("更新人");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("陈亮");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("部门");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("产品研发中心-数智组");

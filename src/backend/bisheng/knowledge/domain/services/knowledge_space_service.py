@@ -7474,6 +7474,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return counts
 
+    async def list_qa_favorite_children(
+        self, *, space_id: int, parent_id: int | None, cursor: str | None, page_size: int,
+    ) -> dict | None:
+        """收藏以自身 ID 展示，源文件授权通过后才能选择；普通库继续原目录链路。"""
+        from bisheng.knowledge.domain.services.portal_qa_favorites import create_qa_favorites
+
+        async with get_async_db_session() as session:
+            favorites = create_qa_favorites(session, self.login_user)
+            space = await favorites.space(space_id)
+            if not space or not getattr(space, "is_favorite", False):
+                return None
+            if not await favorites.owns(space_id):
+                raise SpacePermissionDeniedError()
+            if parent_id is not None:
+                raise SpaceFolderNotFoundError()
+            context = f"qa_favorites|space={space_id}|user={self.login_user.user_id}"
+            try:
+                decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
+                after = int(decoded[0]) if decoded else 0
+            except (CursorDecodeError, ValueError, TypeError) as exc:
+                raise KnowledgeInvalidCursorError(exception=exc)
+            limit = min(max(page_size, 1), 100)
+            rows = await favorites.files.list_qa_favorite_page(space_id=space_id, after_id=after, limit=limit + 1)
+            more, rows = len(rows) > limit, rows[:limit]
+            bindings, sources = {}, {}
+            for row in rows:
+                binding = await favorites.resolve(space_id, int(row.id))
+                if binding is not None:
+                    bindings[int(row.id)] = binding
+                    sources[binding.source_file_id] = await favorites.files.find_by_id(binding.source_file_id)
+            allowed = set()
+            for sid in {int(file.knowledge_id) for file in sources.values()}:
+                visible = await self._filter_visible_child_items(
+                    [file for file in sources.values() if int(file.knowledge_id) == sid], space_id=sid,
+                )
+                department = sid in await self._get_valid_department_space_ids({sid})
+                authorized, _ = await self._filter_shougang_portal_qa_authorized_files(
+                    files=visible, is_department_space=department,
+                )
+                allowed.update(int(file.id) for file in authorized)
+            data = []
+            for row in rows:
+                binding = bindings.get(int(row.id))
+                selectable = bool(binding and binding.source_file_id in allowed)
+                data.append({
+                    "id": int(row.id), "knowledge_id": space_id, "file_type": FileType.FILE.value,
+                    "file_name": str(row.file_name or ""), "status": int(row.status),
+                    "selectable": selectable, "disabled_reason": "" if selectable else "源文件已失效或无访问权限",
+                    "resolved_file_count": int(selectable), "has_children": False,
+                })
+            return {"data": data, "page_size": limit, "has_more": more,
+                    "next_cursor": encode_cursor([int(rows[-1].id)], context=context) if more else None,
+                    "can_reorder_folders": False}
+
     async def list_shougang_portal_qa_children(
         self,
         *,
@@ -15359,6 +15413,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_type: int | None = None,
         enrich_files: bool = True,
         folder_count_mode: str = "none",
+        qa_selection: bool = False,
     ) -> "KnowledgeSpaceChildrenPage":
         """F027 cursor-paginated listing of direct children under a parent folder.
 
@@ -15366,6 +15421,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Legacy ``total`` / ``page`` fields removed (AC-03);
         clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
+        if qa_selection:
+            favorites = await self.list_qa_favorite_children(
+                space_id=space_id, parent_id=parent_id, cursor=cursor, page_size=page_size,
+            )
+            if favorites is not None:
+                return favorites
         perf_start = time.perf_counter()
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
