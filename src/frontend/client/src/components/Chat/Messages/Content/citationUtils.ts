@@ -72,6 +72,63 @@ export function stripCitationMarkers(content: string) {
     .replace(/[]/g, '');
 }
 
+// Short citation handles the task-mode model writes as `[S3]` (F069). The
+// grammar mirrors the backend's citation_handle_service (_RUN_RE / _DEF_LINE_RE
+// / _CODE_RE) so that what the writer leaves literal and what an export drops
+// agree: one handle is `S` + 1-4 digits; a group is one or more handles in
+// brackets separated by `,` / U+FF0C / U+3001; a run is one or more adjacent
+// groups. A run is never the label of a markdown link (`[S3](url)`), never
+// glued to an ASCII identifier character or another `[`, and never inside
+// code. The lookbehind is ASCII-only on purpose (mirrors the backend
+// `_RUN_RE`): a handle glued to a CJK word is the common case, not an
+// identifier.
+const CITATION_HANDLE = 'S\\d{1,4}';
+const CITATION_HANDLE_GROUP = `\\[\\s*${CITATION_HANDLE}(?:\\s*[,\uff0c\u3001]\\s*${CITATION_HANDLE})*\\s*\\]`;
+const CITATION_HANDLE_RUN_RE = new RegExp(
+  `(?<![A-Za-z0-9_\\[])${CITATION_HANDLE_GROUP}(?:\\s*${CITATION_HANDLE_GROUP})*(?!\\s*\\()`,
+  'gu',
+);
+// `[S3]: some source` - a definition line the model wrote on its own; kept as is.
+const CITATION_HANDLE_DEF_LINE_RE = new RegExp(`^[ \\t]*${CITATION_HANDLE_GROUP}[ \\t]*[:\uff1a]`, 'gmu');
+// Fenced blocks and inline code spans are never rewritten.
+const CITATION_CODE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+const defLinePlaceholder = (index: number) => `\u0000DEF${index}\u0000`;
+
+function stripHandleRunsOutsideDefinitions(segment: string) {
+  const stash: string[] = [];
+  const protectedSegment = segment.replace(CITATION_HANDLE_DEF_LINE_RE, (line) => {
+    stash.push(line);
+    return defLinePlaceholder(stash.length - 1);
+  });
+  let stripped = protectedSegment.replace(CITATION_HANDLE_RUN_RE, '');
+  stash.forEach((line, index) => {
+    stripped = stripped.replace(defLinePlaceholder(index), line);
+  });
+  return stripped;
+}
+
+/**
+ * Remove every unresolved short-handle run (`[S3]`, `[S3][S7]`, `[S3, S7]`)
+ * from a string. Used on the save-as-markdown path (download / knowledge-space
+ * save) after stripCitationMarkers: a handle the backend could not resolve
+ * stays literal in the file the model wrote, and a saved file must not leak
+ * it. Code spans, fenced blocks, link labels and `[Sn]:` definition lines are
+ * left untouched, exactly as the backend's strip_citation_handles does.
+ */
+export function stripCitationHandles(content: string) {
+  if (!content || !content.includes('[')) return content;
+  const out: string[] = [];
+  let last = 0;
+  for (const match of content.matchAll(CITATION_CODE_RE)) {
+    const start = match.index ?? 0;
+    if (start > last) out.push(stripHandleRunsOutsideDefinitions(content.slice(last, start)));
+    out.push(match[0]);
+    last = start + match[0].length;
+  }
+  if (last < content.length) out.push(stripHandleRunsOutsideDefinitions(content.slice(last)));
+  return out.join('');
+}
+
 function padTimeUnit(value: number) {
   return String(value).padStart(2, '0');
 }

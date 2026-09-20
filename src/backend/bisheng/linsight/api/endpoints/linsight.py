@@ -15,6 +15,7 @@ from starlette.websockets import WebSocket
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -731,7 +732,8 @@ def _strip_citation_markers_in_zip(zip_bytes: bytes) -> bytes:
                 data = src.read(info)
                 if info.filename.lower().endswith(".md"):
                     try:
-                        data = strip_citation_markers(data.decode("utf-8")).encode("utf-8")
+                        # F069: unregistered short handles ([S99]) go too.
+                        data = strip_citation_handles(strip_citation_markers(data.decode("utf-8"))).encode("utf-8")
                     except UnicodeDecodeError:
                         # Not UTF-8 text, so it cannot carry the PUA markers; ship the bytes as-is.
                         logger.warning(
@@ -818,7 +820,8 @@ async def download_md_to_pdf_or_docx(
 
         # The conversion output must not carry citation spans: the wrapper chars
         # are invisible in Word / PDF while the ids would leak as plain text.
-        md_str = strip_citation_markers(file_bytes.decode("utf-8"))
+        # F069: unregistered short handles ([S99]) go too.
+        md_str = strip_citation_handles(strip_citation_markers(file_bytes.decode("utf-8")))
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]

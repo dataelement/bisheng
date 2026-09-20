@@ -1,0 +1,10 @@
+version: v1
+description: Linsight task-mode short citation handles (F069)
+prompts:
+  linsight_handle_rules:
+    description: "灵思任务模式来源编号规则（短句柄 [Sn]）"
+    type: prompt
+    prompt: |
+      # 来源编号
+
+      检索结果里每条资料都带一个编号（知识库 `<ref>S3</ref>`，联网 `"ref": "S7"`）。写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾写编号：`……市占率为 31%。[S3]`；一句用了多条资料写 `[S3][S7]`。编号必须是检索结果或本轮来源表里出现过的；没有对应资料的句子不标。编号就是全部标注，不需要再列参考文献或来源名称。

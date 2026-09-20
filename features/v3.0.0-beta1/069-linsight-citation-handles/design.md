@@ -92,7 +92,7 @@
   - A. 工具、规则、写盘各自读 `settings` — 任一处单独回退都会造成契约错配（模型看到编号但写盘不转换，或看到 key 但规则讲编号）。
   - B. 唯一读取点在 `task_exec._create_agent` 构造 scope，各处只看 `scope.enabled` — 但 `_create_agent` 在 fresh / resume / continue 三处都调用，ask_user 挂起期间翻开关会让恢复后的任务中途换契约。
   - C. B 之上再把契约钉在会话上：编号表 HASH 首次创建时写 `meta:enabled`，`_create_agent` 先读它、没有才读 `LinsightConf.citation_handles_enabled`（默认 on）。
-- **选定**：C。
+- **选定**：C，且钉的时机是 `_create_agent`（`scope.pin_contract()`，`HSETNX meta:enabled`），不是首次分配句柄：逐字契约的会话永远不会分配句柄，若只在分配时钉，开关翻开后它的追问轮就会换成句柄契约。
 - **原因**：spec §3「进行中的任务沿用创建时的契约」；开关翻转只影响新会话，A/B 回退不会把挂起任务打坏。
 - **何时该重新考虑**：契约稳定两个版本后可删开关与 `meta:enabled`。
 
@@ -150,7 +150,7 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 | Redis `linsight:cite_seen:<svid>` | HASH，field = item key，value = type；TTL 30d | 本 run 见过的来源 | 审计 |
 | Redis `linsight:cite_handles:<session_id>` | HASH：`h:<n>` → JSON `{key,type,title,loc}`；`id:<identity>` → n；`next` → int（HINCRBY）；`meta:enabled` → 0/1（会话契约）；`nudged:<svid>:<path>` → 1；TTL 30d | 会话级编号表、契约钉、提醒去重 | 工具输出、来源表、写盘转换、html 附录 |
 | 模型可见来源标识 | KB `<ref>S3</ref>`（替换 `<chunk_id>` 内容）；web `"ref": "S7"` | 开关关闭时恢复 `<chunk_id>key</chunk_id>` / `citation_key` | 模型 |
-| 写盘转换文法 | 只认 `[S\d{1,4}]`、连续多组、`[S3, S7]`（逗号 / 全角逗号 / 顿号）；排除 `(` 紧随、代码块、行首 `[Sn]:` 定义行 | 未知编号字面保留 | `WorkspaceBackend`、answer 路径 |
+| 写盘转换文法 | 只认 `[S\d{1,4}]`、连续多组、`[S3, S7]`（逗号 / 全角逗号 / 顿号）；排除 `(` 紧随、代码块、行首 `[Sn]:` 定义行；前瞻只排除 ASCII 字母数字与 `[`（`结论[S3]` 紧贴中文要转，`ident[S3]` 不转；Python `\w` 含 CJK 故不能用 `\w`） | 未知编号字面保留 | `WorkspaceBackend`、answer 路径、client `stripCitationHandles` |
 | `LinsightConf.citation_handles_enabled` | bool，默认 true | kill switch | `_create_agent` |
 | i18n key `com_linsight_citation_uncited` | `{{0}}` = sources_seen | 零引用提示 | client |
 | 日志 `[linsight-citation-audit] session= model= status= sources_seen= cited= unknown_handles= footnotes_without_defs= bracket_numbers= html_only=` | 一行，`uncited` 为 WARNING 其余 INFO | 统计与告警 | 运维 |
@@ -228,6 +228,16 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 - **离线回放**：用 116 上两次 run 的 `write_file` 内容跑 `convert_handles_to_markers`，应 0 转换、`[^n]` 只计数。
 - **116 A/B 协议**（PRD §7）：固定两题；P0 上线后 flash / pro / qwen3.5 各 3 次取 uncited 率基线；P1 上线后同样 18 次；判定 uncited 率显著下降且 unknown_handles 率低于 5% 保留默认 on，否则关开关。pro 若仍 100% uncited 如实记录。指标全部从 `[linsight-citation-audit]` 日志与 `linsight_session_version.output_result` 取。
 - **关键日志**：`[linsight-citation-audit]`（WARNING 即需关注）、`[linsight-citation-nudge]`。
+- **P0 基线（2026-09-20 22:48–23:15，116 test，release 镜像含 P0，知识空间 3812，Q1 = OCR 进展 + OKR 第二版评估（知识库 + 联网），Q2 = OKR 第二版对照 2025 版（仅知识库），每模型每题 3 次，共 18 次全部 COMPLETED）**：
+
+  | 模型 | Q1 引用数 / 检索到（3 次） | Q2 引用数 / 检索到（3 次） | 有引用轮次 | uncited 率 |
+  |---|---|---|---|---|
+  | deepseek-v4-flash (774) | 0/90 · 15/65 · 0/75 | 2/100 · 0/115 · 0/90 | 2/6 | 67% |
+  | deepseek-v4-pro (900) | 8/85 · 8/95 · 16/75 | 8/60 · 7/91 · 6/55 | 6/6 | 0% |
+  | qwen3.5-397b-a17b (775) | 11/65 · 0/40 · 11/35 | 0/20 · 0/35 · 0/35 | 2/6 | 67% |
+  | 合计 | | | 10/18 | 44% |
+
+  观察：① 18 次里 `footnotes_without_defs` 与 `bracket_numbers` 全为 0，零引用的轮次是完全没标，不是改写成脚注或编号（与 9 月 18 日 run A 的 `[^n]` 形态不同，可能与题干明确要求「markdown 评估报告、不需确认」有关）；② 仅 P0（规则搬到尾部 + 3a 补句）就把 9 月 18 日的 0/2 变成 10/18，pro 六次全中，flash / qwen3.5 各三分之二失败——P1 短句柄的 A/B 对照就以这张表为基线；③ `sources_seen` 偏高（65～115）是每次检索重发 uuid 的膨胀（design §5 #9），P1 按 identity 去重后会明显下降，对照时看 uncited 率而非 seen 绝对值；④ qwen3.5 的 Q2 三次都在 1 分钟内完成、seen 只有 20～35，报告很短，零引用可能与「读得少写得快」有关，P1 之后单独看。数据取自 `linsight_session_version.output_result.citation_audit`，svid 前缀：8c19685f / ac586cf2 / a183498b / f4401cc6 / bffbff59 / 38263eb9 / a1664718 / ba0cb745 / 94d0c658 / 50d85881 / 38d9df1d / a43ee168 / 6cb6807f / a47b054d / 4966e301 / 73bb2fe3 / 4c28a4bf / 6ffbefb6。
 - **手动验证（116 测试环境，入口 `http://192.168.106.120:3002`，用自己的测试账号）**：
   ```bash
   ssh root@192.168.106.116
@@ -258,3 +268,5 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-09-20 | 初版 | PRD 评审通过（D1～D8） |
+| 2026-09-20 | §7 记 P0 基线 18 次结果；`_persist_report_citations` 零条也保存 persisted 计数 | T013 基线 |
+| 2026-09-21 | 决策 6 钉契约时机改为 `_create_agent`；§4.2 文法表补 ASCII 前瞻 | Wave 2 实现（T017 / T032 偏差） |

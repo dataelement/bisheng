@@ -120,3 +120,80 @@ async def test_batch_download_serves_stripped_markdown(monkeypatch: pytest.Monke
     body = b"".join([chunk async for chunk in resp.body_iterator])
     with zipfile.ZipFile(BytesIO(body)) as zf:
         _assert_clean(zf.read("report.md").decode("utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# F069 T026: an unregistered short handle ([S99]) must not leak either
+# ---------------------------------------------------------------------------
+_HANDLE_MD = (
+    "# 报告\n\n"
+    "PM2.5 年均浓度下降。knowledgesearch_18f5868b:0[S99]\n\n"
+    "- 要点 [S12, S99]\n"
+    "- 代码里的 `[S99]` 不是引用\n"
+)
+
+
+def _assert_clean_handles(md: str) -> None:
+    _assert_clean(md)
+    assert "[S99]" not in md.replace("`[S99]`", "")
+    assert "[S12" not in md
+    assert "`[S99]`" in md  # code span kept verbatim
+
+
+@pytest.fixture
+def stored_handle_report(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        endpoint.LinsightWorkbenchImpl,
+        "download_file",
+        AsyncMock(return_value=("report.md", _HANDLE_MD.encode("utf-8"))),
+    )
+    return DownloadFilesSchema(file_name="report.md", file_url="/bucket/linsight/report.md")
+
+
+async def test_convert_to_docx_strips_unknown_handles(stored_handle_report, monkeypatch: pytest.MonkeyPatch):
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
+
+    seen = {}
+
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            seen["md"] = md
+            return (b"DOCXBYTES", "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+
+    resp = await endpoint.download_md_to_pdf_or_docx(
+        file_info=stored_handle_report, to_type="docx", login_user=SimpleNamespace(user_id=1)
+    )
+
+    assert isinstance(resp, StreamingResponse)
+    _assert_clean_handles(seen["md"])
+
+
+async def test_convert_to_pdf_strips_unknown_handles(stored_handle_report, monkeypatch: pytest.MonkeyPatch):
+    import bisheng.common.utils.markdown_cmpnt.md_to_pdf as md_to_pdf_mod
+
+    seen = {}
+
+    def _fake_pdf(md, *args, **kwargs):
+        seen["md"] = md
+        return b"PDFBYTES"
+
+    monkeypatch.setattr(md_to_pdf_mod, "md_to_pdf_bytes", _fake_pdf)
+
+    resp = await endpoint.download_md_to_pdf_or_docx(
+        file_info=stored_handle_report, to_type="pdf", login_user=SimpleNamespace(user_id=1)
+    )
+
+    assert isinstance(resp, StreamingResponse)
+    _assert_clean_handles(seen["md"])
+
+
+def test_zip_rewrite_strips_unknown_handles_in_markdown():
+    original = _zip({"report.md": _HANDLE_MD.encode("utf-8"), "data.csv": b"[S99],x\n"})
+
+    out = endpoint._strip_citation_markers_in_zip(original)
+
+    with zipfile.ZipFile(BytesIO(out)) as zf:
+        _assert_clean_handles(zf.read("report.md").decode("utf-8"))
+        assert zf.read("data.csv") == b"[S99],x\n"  # only .md entries are rewritten

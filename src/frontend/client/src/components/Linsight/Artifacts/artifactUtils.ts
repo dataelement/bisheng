@@ -5,7 +5,7 @@
  * legacy task flow but kept here so P5 can delete the Sop components.
  */
 import { getLinsightFileDownloadApi } from '~/api/chat/data-service';
-import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
+import { stripCitationHandles, stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
 import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
@@ -385,11 +385,16 @@ export function applyHtmlViewerTabIdentity(htmlContent: string): void {
  * around a bare `knowledgesearch_xxx:0` id, so the local download and the
  * knowledge-space save hand out the markdown with every span removed, ids
  * included - the same rule clipboard copy applies via stripCitationMarkers.
+ * A short handle the backend could not resolve (`[S99]`, F069) stays literal
+ * in the file the model wrote; the saved copy drops those too
+ * (stripCitationHandles) - only here, the copy path and the preview keep them.
  * Decoded with Response.text() so the result is a proper UTF-8 text blob.
  */
 async function readCitationFreeMarkdown(response: Response): Promise<Blob> {
   const text = await response.text();
-  return new Blob([stripCitationMarkers(text)], { type: 'text/markdown;charset=utf-8' });
+  return new Blob([stripCitationHandles(stripCitationMarkers(text))], {
+    type: 'text/markdown;charset=utf-8',
+  });
 }
 
 /**

@@ -480,7 +480,7 @@ class WorkspaceBackend(FilesystemBackend):
         file_dir: local cache directory (per-task; safe to clear).
     """
 
-    def __init__(self, svid: str, minio, file_dir: str) -> None:
+    def __init__(self, svid: str, minio, file_dir: str, citation_scope=None) -> None:
         if not _DEEPAGENTS_AVAILABLE:
             # TODO(Wave2): align with deepagents FilesystemBackend once the
             # dependency is installed in this environment.
@@ -493,6 +493,12 @@ class WorkspaceBackend(FilesystemBackend):
         self.svid = str(svid)
         self.minio = minio
         self.file_dir = file_dir
+        # F069 P1: the run's ``LinsightCitationScope``. While it is active
+        # (``enabled`` and a non-empty handle table) every markdown write
+        # converts the model's short handles (``[S3]``) into the private-use
+        # citation markers the rest of the platform understands. ``None`` keeps
+        # the F047 contract: markdown is only unescaped.
+        self.citation_scope = citation_scope
         os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
@@ -600,13 +606,54 @@ class WorkspaceBackend(FilesystemBackend):
         return str(content).encode("utf-8")
 
     @staticmethod
-    def _normalize_markdown_citation_bytes(rel: str, data: bytes) -> bytes:
-        """Rewrite escaped \\ue200 sequences in markdown to real PUA chars.
+    def _is_markdown_path(rel: str) -> bool:
+        return rel.lower().endswith((".md", ".markdown"))
 
-        write_file JSON often stores the six-character escape; the preview and
-        extract_citation_ids_from_text only recognize U+E200/E201/E202.
+    def _citation_handles_active(self) -> bool:
+        """True when the F069 short-handle contract applies to this run."""
+        scope = self.citation_scope
+        if scope is None or not getattr(scope, "enabled", False):
+            return False
+        return bool(getattr(scope, "handles", None))
+
+    def _convert_citation_handles(self, text: str, note: bool = True) -> str:
+        """``[S3]`` -> private-use marker via the scope's handle table.
+
+        Never raises: the write boundary sits inside a tool call and a tool
+        exception kills the whole task (F047 design §2), so any failure returns
+        ``text`` unchanged. ``note=False`` skips the audit bookkeeping — used
+        when converting an ``edit`` argument only to locate it on disk, so the
+        same unknown handle is not counted twice.
         """
-        if not rel.lower().endswith((".md", ".markdown")):
+        if not text or not self._citation_handles_active():
+            return text
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+
+            result = convert_handles_to_markers(text, self.citation_scope.handles)
+            if note:
+                note_conversion = getattr(self.citation_scope, "note_conversion", None)
+                if note_conversion is not None:
+                    note_conversion(result.converted, result.unknown)
+            return result.text
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-citation] svid={} handle conversion failed, writing text unconverted", self.svid
+            )
+            return text
+
+    def _canonicalize_citation_bytes(self, rel: str, data: bytes) -> bytes:
+        """Bring the citation spelling of a markdown write onto the canonical form.
+
+        1. Rewrite escaped ``\\ue200`` sequences to real PUA chars — write_file
+           JSON often stores the six-character escape while the preview and
+           ``extract_citation_ids_from_text`` only recognize U+E200/E201/E202.
+        2. (F069, scope active) convert the model's short handles ``[S3]`` into
+           markers; unknown handles stay literal and are reported to the scope.
+
+        Non-markdown files (``.txt`` / ``.html`` / ``.py`` …) are returned as-is.
+        """
+        if not self._is_markdown_path(rel):
             return data
         try:
             text = data.decode("utf-8")
@@ -615,9 +662,13 @@ class WorkspaceBackend(FilesystemBackend):
         from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
 
         fixed = unescape_citation_markers(text)
+        fixed = self._convert_citation_handles(fixed)
         if fixed == text:
             return data
         return fixed.encode("utf-8")
+
+    # Pre-F069 name; kept so an out-of-tree caller of the old spelling still works.
+    _normalize_markdown_citation_bytes = _canonicalize_citation_bytes
 
     # -- write --------------------------------------------------------------
     def write(self, file_path: str, content) -> WriteResult:
@@ -625,7 +676,7 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
+        data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
         self._minio_put_sync(rel, data)
@@ -706,6 +757,16 @@ class WorkspaceBackend(FilesystemBackend):
                     f"(doing so would corrupt it). Regenerate it with the code interpreter instead."
                 )
             )
+        if self._is_markdown_path(rel) and self._citation_handles_active():
+            # The disk already holds markers while the model still remembers the
+            # ``[S3]`` it wrote (design §5 #5): convert the arguments first so
+            # ``old_string`` locates the marker text. If the converted form is
+            # not on disk (the model quoted an already-literal passage) fall
+            # back to the verbatim argument.
+            converted_old = self._convert_citation_handles(old_string, note=False)
+            if converted_old != old_string and converted_old in text:
+                old_string = converted_old
+            new_string = self._convert_citation_handles(new_string, note=False)
         if old_string not in text:
             return EditResult(error=f"old_string not found in '{file_path}'")
         if replace_all:
@@ -718,7 +779,7 @@ class WorkspaceBackend(FilesystemBackend):
                 )
             occurrences = 1
             new_text = text.replace(old_string, new_string, 1)
-        new_data = self._normalize_markdown_citation_bytes(rel, new_text.encode("utf-8"))
+        new_data = self._canonicalize_citation_bytes(rel, new_text.encode("utf-8"))
         self._cache_write(rel, new_data)
         self._minio_put_sync(rel, new_data)
         return EditResult(path="/" + rel, occurrences=occurrences)
@@ -856,7 +917,7 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
+        data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
             bucket_name=self._bucket(),
