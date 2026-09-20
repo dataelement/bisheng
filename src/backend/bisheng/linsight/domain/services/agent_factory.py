@@ -722,7 +722,12 @@ def _with_citation_rules(prompt: str, enabled: bool) -> str:
     return ensure_citation_rules(prompt)
 
 
-async def _annotate_web_search_output(output: Any) -> Any:
+async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
+    """Annotate a web_search JSON list with citation keys.
+
+    Returns ``(annotated_output, registry_items)``; a non-JSON / non-list payload
+    is passed through untouched with an empty item list.
+    """
     from bisheng.citation.domain.services.citation_prompt_helper import (
         annotate_web_results_with_citations,
         cache_citation_registry_items,
@@ -730,33 +735,45 @@ async def _annotate_web_search_output(output: Any) -> Any:
     )
 
     if not isinstance(output, str):
-        return output
+        return output, []
     try:
         results = json.loads(output)
     except json.JSONDecodeError:
-        return output
+        return output, []
     if not isinstance(results, list):
-        return output
+        return output, []
     annotated = annotate_web_results_with_citations(results)
-    await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
-    return json.dumps(annotated, ensure_ascii=False)
+    items = await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
+    return json.dumps(annotated, ensure_ascii=False), list(items or [])
+
+
+async def _annotate_web_search_output(output: Any) -> Any:
+    annotated, _items = await _annotate_web_search_items(output)
+    return annotated
 
 
 class _LinsightWebCitationWrapper(BaseTool):
-    """Register web_search hits into the citation runtime cache (F047)."""
+    """Register web_search hits into the citation runtime cache (F047).
+
+    F069: when a per-run ``scope`` (LinsightCitationScope) is bound, every hit is
+    also reported to it so the completion audit can count the sources this run
+    has seen — inside the researcher sub-graph too, which reuses this instance.
+    """
 
     name: str
     description: str
     args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
+    scope: Any = None
 
     @classmethod
-    def wrap(cls, inner: BaseTool) -> BaseTool:
+    def wrap(cls, inner: BaseTool, scope: Any = None) -> BaseTool:
         return cls(
             name=inner.name,
             description=inner.description,
             args_schema=inner.args_schema,
             tool=inner,
+            scope=scope,
         )
 
     def _run(self, *args, **kwargs):
@@ -765,20 +782,40 @@ class _LinsightWebCitationWrapper(BaseTool):
     async def _arun(self, config=None, **kwargs):
         output = await self.tool.ainvoke(kwargs, config=config)
         try:
-            return await _annotate_web_search_output(output)
+            annotated, items = await _annotate_web_search_items(output)
+            if self.scope is not None and items:
+                await self.scope.record_seen(items)
+            return annotated
         except Exception:
             logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
             return output
 
 
-def _wrap_linsight_web_citation_tools(tools: Sequence) -> list:
+def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
     wrapped = []
     for tool_obj in tools:
         if _is_web_search_tool(tool_obj) and isinstance(tool_obj, BaseTool):
-            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj))
+            wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
         else:
             wrapped.append(tool_obj)
     return wrapped
+
+
+def _bind_linsight_citation_scope(tools: Sequence, scope: Any) -> list:
+    """Attach the run's citation scope to every retrieval tool (F069).
+
+    Knowledge-base tools get the scope as a field; web_search tools are wrapped
+    with it. The researcher sub-agent later receives the SAME instances via
+    ``_subagent_tools``, so its retrieval is counted as well.
+    """
+    if scope is not None:
+        for tool_obj in tools:
+            if hasattr(tool_obj, "citation_scope"):
+                try:
+                    tool_obj.citation_scope = scope
+                except Exception:
+                    logger.opt(exception=True).warning("failed to bind citation scope to tool")
+    return _wrap_linsight_web_citation_tools(tools, scope=scope)
 
 
 def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
@@ -849,6 +886,7 @@ async def create_linsight_agent(
     checkpointer=None,
     skills_present: bool = False,
     turn_budget_sink: dict | None = None,
+    citation_scope=None,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -866,6 +904,8 @@ async def create_linsight_agent(
         turn_budget_sink: mutable dict the MAIN graph's resilience middleware flags
             when the run had to wrap up early on its turn budget, so the caller can
             tell the user. Main graph only — a subagent landing early is internal.
+        citation_scope: F069 ``LinsightCitationScope`` of this run; bound to the
+            retrieval tools so the completion audit knows which sources were seen.
 
     Returns:
         ``CompiledStateGraph`` to be driven by ``agent.astream(...)``.
@@ -873,7 +913,7 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
-    tools = _wrap_linsight_web_citation_tools(list(tools or []))
+    tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
     model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:

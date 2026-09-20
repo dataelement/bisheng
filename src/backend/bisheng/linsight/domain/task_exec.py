@@ -1077,6 +1077,14 @@ class LinsightWorkflowTask:
 
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        # F069: one citation scope per run. Rebuilt on every _create_agent call
+        # (fresh / resume / continue) and hydrated from Redis so the completion
+        # audit still knows the sources seen before a park or a worker restart.
+        from bisheng.citation.domain.services.linsight_citation_scope import LinsightCitationScope
+
+        citation_scope = LinsightCitationScope(svid=session_model.id, session_id=session_model.session_id)
+        await citation_scope.load()
+        self._citation_scope = citation_scope
         # F035 Fork X: copy this run's allowed skill bundles into the workspace
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
@@ -1096,6 +1104,7 @@ class LinsightWorkflowTask:
             backend=backend,
             skills_present=bool(skills.copied),
             turn_budget_sink=self._turn_budget,
+            citation_scope=citation_scope,
         )
 
     async def _push_skill_load_failure(self, svid: str, names: list[str]) -> None:
