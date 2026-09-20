@@ -33,6 +33,7 @@ from loguru import logger
 
 from bisheng.core.cache.redis_manager import get_redis_client
 
+HANDLE_RULES_HEADER = "# 来源编号"
 HANDLE_KEY_PREFIX = "linsight:cite_handles:"
 HANDLE_TTL_SECONDS = 30 * 24 * 3600  # aligned with the citation runtime cache
 HANDLE_PREFIX = "S"
@@ -320,3 +321,35 @@ def count_handle_runs(text: str) -> int:
         segment, _, _ = _protect_definition_lines(segment)
         total += len(_RUN_RE.findall(segment))
     return total
+
+
+# --------------------------------------------------------------------------
+# prompt rules (task-mode replacement for citation.yaml under the handle contract)
+# --------------------------------------------------------------------------
+_HANDLE_RULES_CACHE: dict[str, str] = {}
+
+
+def load_handle_rules() -> str:
+    """The short, commission-style rules for the [Sn] contract (citation_handles.yaml)."""
+    if "rules" not in _HANDLE_RULES_CACHE:
+        try:
+            from bisheng.core.prompts.prompt_loader import PromptLoader
+
+            prompt_obj = PromptLoader().render_prompt("citation_handles", "linsight_handle_rules")
+            _HANDLE_RULES_CACHE["rules"] = str(prompt_obj.prompt).strip()
+        except Exception as e:  # pragma: no cover - configuration error surfaced in the prompt itself
+            _HANDLE_RULES_CACHE["rules"] = f"{HANDLE_RULES_HEADER}\n\nFailed to load citation_handles prompt rules: {e}"
+    return _HANDLE_RULES_CACHE["rules"]
+
+
+def prompt_has_handle_rules(prompt: str | None) -> bool:
+    return bool(prompt) and HANDLE_RULES_HEADER in prompt
+
+
+def ensure_handle_rules(prompt: str | None) -> str:
+    """Append the [Sn] rules once (idempotent), mirroring ensure_citation_rules."""
+    if prompt_has_handle_rules(prompt):
+        return prompt or ""
+    base = (prompt or "").rstrip()
+    rules = load_handle_rules()
+    return f"{base}\n\n{rules}" if base else rules

@@ -189,3 +189,32 @@ async def test_no_citation_tail_without_retrieval_tools(factory_env):
     assert CITATION_LINE_MARK not in factory_env["system_prompt"]
     # language tail is still the last prompt-appending middleware
     assert "LinsightLanguageTail" in _names(factory_env["middleware"])
+
+
+# --------------------------------------------------------------------------
+# F069 P1: handle-contract wording
+# --------------------------------------------------------------------------
+def test_deliverable_line_switches_to_handles():
+    from bisheng.linsight.domain.services.agent_factory import _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+
+    prompt = _build_linsight_system_prompt(True, citation_handles=True)
+    assert "[S3] 或 [S3][S7]" in prompt
+    assert CITATION_LINE_MARK not in prompt
+    assert "[Sn]" in _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+    assert "" not in _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+
+
+async def test_stacks_use_handle_tail_and_rules_when_scope_enabled(factory_env):
+    from bisheng.linsight.domain.services.agent_factory import _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+
+    session = SimpleNamespace(id="sv-1", session_id="chat-1", tenant_id=1, user_id=1, question="q")
+    scope = SimpleNamespace(enabled=True, entries=[], handles={}, record_seen=AsyncMock())
+
+    await agent_factory.create_linsight_agent(session, [SearchKnowledgeBase(), _FakeWeb()], citation_scope=scope)
+
+    tails = [m for m in factory_env["middleware"] if getattr(m, "name", "") == "LinsightCitationTail"]
+    assert tails and tails[0]._directive == _LINSIGHT_CITATION_TAIL_HANDLES_ZH
+    assert "# 来源编号" in factory_env["system_prompt"]
+    assert "" not in factory_env["system_prompt"]
+    assert "[S3] 或 [S3][S7]" in factory_env["system_prompt"]
+    assert "# 来源编号" in factory_env["subagents"][0]["system_prompt"]
