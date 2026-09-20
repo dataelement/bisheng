@@ -264,6 +264,8 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 
   判定：uncited 率 44% → 0%，`unknown_handles` 18 次全为 0（无幻觉编号），写后提醒 0 次触发（模型首写即带编号），worker 无一条句柄分配 / 转换告警，`persisted` 与 `cited` 逐次相等（写盘转换后的标记全部被既有持久化链路识别）。按 §3 决策 1 的判定规则保留默认开。每次转换的句柄组数 4～73，说明模型不是象征性地标一两处。`sources_seen` 仍按 registry key 计（未按 identity 去重），只用于 uncited 判定。svid 前缀：4797039d / 50f412ab / d5517ede / ff658e9c / 68374abe / 1bc66a5d / 7fd7c2da / d15bdf0d / 334cadcd / 4a248696 / df9d9f28 / ce872952 / 9710dc54 / fa6d94e2 / 7feac63f / 73ba9469 / 79da919d / 57bfcbcb。
 
+  **P2 导出对照（2026-09-21 02:00，release b578cd73f 前一版镜像）**：① 以任务发起人（admin，user 3）经 `/workbench/download-md-to-pdf-or-docx` 导出 P1 报告 `ff658e9c…` 为 docx：`word/document.xml` 正文含 `[1]`～`[5]`、文末「参考资料」，无私有区字符、无内部 id；② 权限过滤：在 api 容器里以 user 1 / 2 / 4 与匿名身份调 `bake_citations_for_export`，参考资料段均不出现、编号为空，正文只剥标（该脚本环境缺 `permission_runtime` 上下文，非 owner 的判定走的是 resolve 失败即剥离的保守路径；真实请求路径由 F054 的 resolve 测试覆盖）；③ html 交付物（新任务 `168f70c0…`，flash，仅知识库）：`report.html` 含 32 处 `<sup data-f069-h>`、1 个 `data-f069-references` 附录，无 `[Sn]` 残留；同任务 `report.md` 含 32 组私有区标记；④ 对照发现 docx 来源 chunk 的 page=0 被渲染成「第 0 页」→ 已改为 page>0 才用页码、否则用段落号（编号表里已存的 loc 文本不回填，新会话生效）。
+
   复核（网络恢复后）：A/B 结束时 3002 预览一度「文件加载失败」是本机 VPN 到 192.168.106 网段中断所致；MinIO 上 P1 报告对象（`linsight/final_result/<svid>/…md`）含 10 组私有区标记、0 个 `[Sn]`，预览面板正文与表格单元格均渲染为角标，与日常模式同一外观。
 
 ---
@@ -286,3 +288,4 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 | 2026-09-21 | 决策 6 钉契约时机改为 `_create_agent`；§4.2 文法表补 ASCII 前瞻 | Wave 2 实现（T017 / T032 偏差） |
 | 2026-09-21 | §7 记 P1 A/B 18 次：uncited 44% → 0%，保留默认开 | T033 |
 | 2026-09-21 | 决策 8 落地：导出烘焙 / html 附录 / 前端另存烘焙；html 再烘策略；定位文案「第 N 页」 | Wave 3 实现 |
+| 2026-09-21 | §7 记 P2 导出对照；page=0 退回段落号 | T041 |
