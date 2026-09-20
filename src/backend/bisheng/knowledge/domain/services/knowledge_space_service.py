@@ -462,6 +462,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         binding_map = {binding.space_id: binding for binding in bindings}
         departments = await DepartmentDao.aget_by_ids([binding.department_id for binding in bindings])
         department_name_map = {dept.id: dept.name for dept in departments}
+        admin_user_ids = sorted(
+            {int(binding.admin_user_id) for binding in bindings if getattr(binding, "admin_user_id", None)}
+        )
+        admin_name_map: dict[int, str] = {}
+        if admin_user_ids:
+            admin_users = await UserDao.aget_user_by_ids(admin_user_ids)
+            admin_name_map = {int(user.user_id): user.user_name for user in admin_users or []}
         for space in spaces:
             binding = binding_map.get(int(space.id))
             if binding is None:
@@ -472,6 +479,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.approval_enabled = binding.approval_enabled
             space.sensitive_check_enabled = binding.sensitive_check_enabled
             space.is_hidden = binding.is_hidden
+            # F045: the single space admin; NULL column ⟺ pending-admin state.
+            admin_user_id = getattr(binding, "admin_user_id", None)
+            space.admin_user_id = int(admin_user_id) if admin_user_id else None
+            space.admin_user_name = admin_name_map.get(int(admin_user_id)) if admin_user_id else None
+            space.pending_admin = admin_user_id is None
+            # F045 AC-04/AC-12: the creator (super admin) never surfaces on a
+            # department space. Kill the Knowledge.user_id-derived CREATOR role
+            # the generic formatters synthesize, and show the space admin — not
+            # the creator — as the space's front-facing owner figure.
+            # Lost once in the 2026-09-01 merge of the 3.0 line; guarded by
+            # test/cofco/test_cofco_department_space_admin.py.
+            if space.user_role == UserRoleEnum.CREATOR:
+                space.user_role = (
+                    UserRoleEnum.ADMIN if admin_user_id and self.login_user.user_id == int(admin_user_id) else None
+                )
+            space.user_name = space.admin_user_name or ""
+            space.avatar = None
         return spaces
 
     async def _populate_root_file_counts(self, spaces: list[KnowledgeSpaceInfoResp]) -> None:
@@ -5015,6 +5039,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # next click and mask the error (first click errors, second click silently
             # "succeeds"). The membership is written only once the gate has decided.
             gate = self.approval_gate or self._build_space_approval_gate()
+            # F045 AC-09: a department space without a space admin has no valid
+            # approver — block the join request instead of stranding it.
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.ensure_space_not_pending_admin(space.id)
             primary_dept = await UserDepartmentDao.aget_user_primary_department(self.login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(
