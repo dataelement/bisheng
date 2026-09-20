@@ -11,7 +11,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
-| tasks.md | 🔲 草稿 | 拆解完成后改为 ✅ 已拆解 |
+| tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
 | 实现 | 🔲 未开始 | 0 / 41 完成。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
@@ -69,14 +69,13 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 - [ ] **T004**: 检索工具与联网包装器接 scope
   **文件**: `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: `SearchKnowledgeBase` 新增 pydantic 字段 `citation_scope: Any | None = None`（样板同文件 `allowed_knowledge_ids`）；`base_search` 在 `await cache_citation_registry_items(items)` 之后、既有 try 内 `if self.citation_scope: await self.citation_scope.record_seen(items)`。`agent_factory.py`：把 `_annotate_web_search_output(output)` 拆成 `_annotate_web_search_items(output) -> tuple[str, list]`（原函数保留为薄封装，既有测试不改）；`_LinsightWebCitationWrapper` 新增字段 `scope: Any = None`，`wrap(inner, scope=None)`，`_arun` 用新函数并 `record_seen`；`_wrap_linsight_web_citation_tools(tools, scope=None)` 透传。
-  **测试**: T003 全绿；`test_linsight_citation_agent.py`、`test_linsight_knowledge_citations.py` 不破
+  **测试**: T003 (a)(b)(c) 全绿；`test_linsight_citation_agent.py`、`test_linsight_knowledge_citations.py` 不破
   **依赖**: T003
 
 - [ ] **T005**: 执行器构造 scope 并绑定到工具
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`、`src/backend/bisheng/linsight/domain/task_exec.py`
   **逻辑**: `create_linsight_agent(..., citation_scope=None)`：原 `tools = _wrap_linsight_web_citation_tools(list(tools or []))` 处改为 `_bind_linsight_citation_scope(tools, citation_scope)`（KB 工具设 `citation_scope` 字段、web 工具包装带 scope），`_subagent_tools` 取同一批实例。`task_exec._create_agent`：构造 `LinsightCitationScope(svid=session_model.id, session_id=session_model.session_id)`，`await scope.load()`（resume / continue 回读），存 `self._citation_scope`，传 `citation_scope=scope`。
   **测试**: T003 (d) 用例全绿
-  **覆盖 AC**: AC-02
   **依赖**: T004
 
 #### 完成时审计（后端 Domain，Test-First 配对）
@@ -103,7 +102,11 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T009**: 3a 占位符、`has_web_search` 入参、`_CitationTailMiddleware`
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`
-  **逻辑**: 3a 行「其它格式由它派生）。」后插 `__CITATION_DELIVERABLE_LINE__`；`_build_linsight_system_prompt(has_knowledge_base, skills_present=False, has_code_interpreter=False, has_web_search=False)`，replace 链解析占位符为「正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。」（仅 `has_knowledge_base or has_web_search`），否则空串；新增常量 `_LINSIGHT_CITATION_TAIL_ZH`（PRD 附录 C「P0 尾巴」）与 `class _CitationTailMiddleware(_LanguageTailMiddleware)`（只覆盖 `name` 返回 `"LinsightCitationTail"`）；`has_kb/has_web` 的计算上移到中间件列表构造之前；主栈语言尾巴之前 `if has_kb or has_web: middlewares.append(_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH))`；researcher 栈同样（`_build_researcher_subagent` 已算好 `has_kb/has_web`，把结果经 spec 私有键传入、构造后 pop）；`create_deep_agent` 调用传 `has_web_search=has_web`；语言指令文本一字不动（design §5 #4）。
+  **逻辑**: 3a 行「其它格式由它派生）。」后插 `__CITATION_DELIVERABLE_LINE__`；`_build_linsight_system_prompt(has_knowledge_base, skills_present=False, has_code_interpreter=False, has_web_search=False)`，replace 链解析占位符为「正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。」（仅 `has_knowledge_base or has_web_search`），否则空串；新增常量 `_LINSIGHT_CITATION_TAIL_ZH`，正文：
+  「# 来源标注（与上文 Citation Rules 同一要求，不改变其它任何要求）
+
+  写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 的格式逐字复制检索结果里的来源标识（知识库 `<chunk_id>`、联网 `citation_key`）并用引用标记包裹；一句用了多条资料就把多个标识放在同一组标记里。」
+  与 `class _CitationTailMiddleware(_LanguageTailMiddleware)`（只覆盖 `name` 返回 `"LinsightCitationTail"`）；`has_kb/has_web` 的计算上移到中间件列表构造之前；主栈语言尾巴之前 `if has_kb or has_web: middlewares.append(_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH))`；researcher 栈同样（`_build_researcher_subagent` 已算好 `has_kb/has_web`，把结果经 spec 私有键传入、构造后 pop）；`create_deep_agent` 调用传 `has_web_search=has_web`；语言指令文本一字不动（design §5 #4）。
   **测试**: T008 全绿；`test_skill_prompt_priority.py`、`test_invalid_tool_call_middleware.py`、`test_harness_profile_and_time.py`、`test_linsight_citation_agent.py` 不破
   **依赖**: T008
 
@@ -161,7 +164,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T017**: `citation_handle_service` 实现与 scope 扩展
   **文件**: `src/backend/bisheng/citation/domain/services/citation_handle_service.py`（新）、`src/backend/bisheng/citation/domain/services/linsight_citation_scope.py`
-  **逻辑**: 键 `linsight:cite_handles:<session_id>`；`_HANDLE = r"S\d{1,4}"`、`_GROUP`、`_RUN_RE`（design §4.2）；`async assign(scope, items) -> dict[key, handle]` 用 T014 的原子命令；`convert_handles_to_markers(text, handles) -> ConvertResult(text, converted, unknown, skipped_definitions)`；`strip_citation_handles(text)`。scope 新增属性 `handles: dict[str, str]`（handle→key）、`entries: list[dict]`、`unknown_handles: dict[str, int]`、`converted_count: int`；`load()` 从 `linsight:cite_handles:<session_id>` 水化并读 `meta:enabled`。
+  **逻辑**: 键 `linsight:cite_handles:<session_id>`；`_HANDLE = r"S\d{1,4}"`、`_GROUP`、`_RUN_RE`（design §4.2）；`async assign(scope, items) -> dict[key, handle]` 用 T014 的原子命令，表首次创建（`next` 不存在）时同时 `HSETNX meta:enabled <scope.enabled>`；`convert_handles_to_markers(text, handles) -> ConvertResult(text, converted, unknown, skipped_definitions)`；`strip_citation_handles(text)`。scope 新增属性 `handles: dict[str, str]`（handle→key）、`entries: list[dict]`、`unknown_handles: dict[str, int]`、`converted_count: int`；`load()` 从 `linsight:cite_handles:<session_id>` 水化并读 `meta:enabled`。
   **测试**: T016 全绿
   **依赖**: T016
 
@@ -175,7 +178,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T019**: 工具输出句柄化实现
   **文件**: `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
-  **逻辑**: `base_search` 在 `format_retrieved_chunk` 之后按 `handles` 做 `<chunk_id>` → `<ref>` 替换（不改 `format_retrieved_chunk`）；`_annotate_web_search_items` 之后按 `handles` 加 `ref`、删 `citation_key` / `itemId`。
+  **逻辑**: `base_search` 在 `record_seen` 之后调 `handles = await citation_handle_service.assign(scope, items)`（刷新 `scope.handles` / `scope.entries` 镜像），再在 `format_retrieved_chunk` 之后按 `handles` 做 `<chunk_id>` → `<ref>` 替换（不改 `format_retrieved_chunk`）；web wrapper `_arun` 同样先 `assign` 再按 `handles` 加 `ref`、删 `citation_key` / `itemId`；`assign` 返回空映射（Redis 故障或 scope 关闭）时保留旧形态。
   **测试**: T018 全绿
   **依赖**: T018
 
@@ -189,7 +192,15 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T021**: 短规则与编号措辞实现
   **文件**: `src/backend/bisheng/core/prompts/yaml/citation_handles.yaml`（新）、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
-  **逻辑**: yaml key `linsight_handle_rules`（PRD 附录 C 短规则）；`_with_citation_rules` 增 `handles` 分支（判据 `"# 来源编号" in prompt`）；3a 占位句、`_LINSIGHT_CITATION_TAIL_ZH`、researcher `citation_handoff` **各保留两套文本**（P0 逐字复制 / P1 编号），由 `handles`（= `scope.enabled`）选择，供 T032 的开关回退；`citation.yaml` 不动。
+  **逻辑**: yaml key `linsight_handle_rules`，正文：
+  「# 来源编号
+
+  检索结果里每条资料都带一个编号（知识库 `<ref>S3</ref>`，联网 `"ref": "S7"`）。写 output/ 下的 markdown 交付物和最终回复时，凡依据检索资料写出的事实、数字、引文，在该句或该段末尾写编号：`……市占率为 31%。[S3]`；一句用了多条资料写 `[S3][S7]`。编号必须是检索结果或本轮来源表里出现过的；没有对应资料的句子不标。编号就是全部标注，不需要再列参考文献或来源名称。」
+  `_with_citation_rules` 增 `handles` 分支（判据 `"# 来源编号" in prompt`）。三处文本**各保留两套**（P0 逐字复制 / P1 编号），由 `handles`（= `scope.enabled`）选择，供 T032 的开关回退：
+  - 3a 句（P1）：「正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾写来源编号，如 [S3] 或 [S3][S7]。」
+  - 尾巴（P1）：「# 来源编号（与上文「来源编号」同一要求，不改变其它任何要求）\n\n写交付物正文和最终回复时，每条依据检索资料的句子末尾写编号 [Sn]，多条写 [S3][S7]；编号取自检索结果或本轮来源表。」
+  - researcher 交接行（P1）：「- 检索结果中的来源编号（如 S3）必须原样出现在你的最后一条消息里的对应句末，写作 [S3]，供主智能体写入报告正文；不要改写成参考文献列表或来源名称。」
+  `citation.yaml` 不动。
   **测试**: T020 全绿
   **依赖**: T020
 
@@ -217,7 +228,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T025**: 写边界转换实现
   **文件**: `src/backend/bisheng/linsight/domain/services/workspace_backend.py`、`src/backend/bisheng/linsight/domain/task_exec.py`
-  **逻辑**: `WorkspaceBackend.__init__(..., citation_scope=None)`；`_normalize_markdown_citation_bytes` 改为实例方法 `_canonicalize_citation_bytes(rel, data)`：unescape → `convert_handles_to_markers`；`write` / `edit`（含 `old_string`）/ `awrite` 调用；`_create_agent` 传 scope；新方法 `_canonicalize_answer_citations(answer)` 在三条路径接线。
+  **逻辑**: `WorkspaceBackend.__init__(..., citation_scope=None)`；`_normalize_markdown_citation_bytes` 改为实例方法 `_canonicalize_citation_bytes(rel, data)`：unescape → `convert_handles_to_markers`；`write` / `edit`（含 `old_string`）/ `awrite` 调用，每次把 `ConvertResult.converted` 累加到 `scope.converted_count`、`unknown` 累加到 `scope.unknown_handles`；`_create_agent` 传 scope；新方法 `_canonicalize_answer_citations(answer)` 在三条路径接线（同样累加）。
   **测试**: T024 全绿；`test_workspace_backend.py` 不破
   **依赖**: T024
 
@@ -260,11 +271,11 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
   **文件**: `src/backend/test/linsight/test_citation_handles_switch.py`
   **逻辑**: `_create_agent`（monkeypatch `create_linsight_agent`、`WorkspaceBackend`、`materialize_session_skills`、`settings.aget_linsight_conf`）：会话已有 `meta:enabled=0` 时 scope.enabled 为 False 即使配置为 True（在途会话不换契约）；无 `meta:enabled` 时取配置值并在首次分配时写入；开关关闭时 `create_linsight_agent` 收到 `scope.enabled=False` → 工具输出旧形态、`_with_citation_rules(handles=False)`、不挂 source middleware、写盘只 unescape；审计照常写。
   **覆盖 AC**: AC-16, AC-18
-  **依赖**: T015, T017, T023, T025
+  **依赖**: T015, T017, T019, T021, T023, T025
 
 - [ ] **T032**: 开关与在途会话契约实现
   **文件**: `src/backend/bisheng/linsight/domain/task_exec.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
-  **逻辑**: `_create_agent` 先 `await scope.load()` 读 `meta:enabled`，无则 `(await settings.aget_linsight_conf()).citation_handles_enabled`，写 `scope.enabled`；首次分配句柄时落 `meta:enabled`（design 决策 6）；`create_linsight_agent` 按 `scope.enabled` 选择工具输出 / 规则文本（T021 两套）/ 是否挂 source middleware；写盘边界看 `scope.enabled`。
+  **逻辑**: `_create_agent` 先 `await scope.load()` 读 `meta:enabled`，无则 `(await settings.aget_linsight_conf()).citation_handles_enabled`，写 `scope.enabled`（首次落 `meta:enabled` 由 T017 的 `assign` 在建表时完成，design 决策 6）；`create_linsight_agent` 按 `scope.enabled` 选择工具输出 / 规则文本（T021 两套）/ 是否挂 source middleware；写盘边界看 `scope.enabled`。
   **测试**: T031 全绿
   **依赖**: T031
 
@@ -272,7 +283,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
   **文件**: 无（结果记入 design §7）
   **逻辑**: PRD §7 同题同模型各 3 次；指标 uncited 率、cited 中位数、unknown_handles 率（<5%）、footnotes_without_defs、每轮 token 增量、nudge 触发数；判定保留默认开或关开关。
   **覆盖 AC**: AC-07, AC-15, AC-18
-  **依赖**: T032
+  **依赖**: T030, T032
 
 ### Wave 3 — P2：导出烘焙（待产品确认版式）
 
@@ -290,13 +301,13 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T036**: 后端导出烘焙测试
   **文件**: `src/backend/test/linsight/test_linsight_export.py`（追加）
-  **逻辑**: 导出工具与转换端点以导出者身份 `resolve_citations_with_reasons` 后烘焙；无权限来源不编号、不进参考资料；解析为空时退回剥标并有 `citations_baked=false` 日志；导出不失败。
+  **逻辑**: 导出工具与转换端点以导出者身份 `resolve_citations_with_reasons` 后烘焙；无权限来源不编号、不进参考资料；解析为空时退回剥标并有 `citations_baked=false` 日志；导出不失败；输出仍不含未识别编号 `[S99]`（AC-19 在 P2 继续成立）。
   **覆盖 AC**: AC-20, AC-21, AC-22, AC-24
   **依赖**: T035
 
 - [ ] **T037**: 后端导出调用点改烘焙
   **文件**: `src/backend/bisheng/tool/domain/langchain/linsight_export.py`、`src/backend/bisheng/linsight/api/endpoints/linsight.py`
-  **逻辑**: 导出前以导出者身份 `resolve_citations_with_reasons`（既有 `citation_resolve_service`，INV-7 执行点）取来源，调 `render_citations_for_export`；未解析退回剥离并记日志 `citations_baked=false`。替换 T027 的剥离调用（有意的两阶段替换）。
+  **逻辑**: 导出前以导出者身份 `resolve_citations_with_reasons`（既有 `citation_resolve_service`，INV-7 执行点）取来源，调 `render_citations_for_export`；未解析退回剥离并记日志 `citations_baked=false`。替换 T027 引入位置上的 `strip_citation_markers` 调用；`strip_citation_handles`（剥未识别编号）保留（AC-19）。
   **测试**: T036 全绿
   **依赖**: T036
 
@@ -314,14 +325,14 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - [ ] **T040**: 前端 Client 另存 md 客户端烘焙
   **文件**: `src/frontend/client/src/components/Linsight/Artifacts/artifactUtils.ts`、`src/frontend/client/src/components/Linsight/Artifacts/artifactUtils.test.ts`
-  **逻辑**: 用预览时已取回的解析结果（`output_result.citations` 种子 + 解析缓存）按与后端同一规则烘焙；未解析 key 剥离；不新增端点（design 决策 8）；替换 T028 的剥离（有意的两阶段替换）。jest 先写红测。
+  **逻辑**: 用预览时已取回的解析结果（`output_result.citations` 种子 + 解析缓存）按与后端同一规则烘焙；未解析 key 剥离；不新增端点（design 决策 8）；替换 T028 中对已识别标记的剥离，未识别编号 `[S99]` 仍剥（AC-19）。jest 先写红测。
   **覆盖 AC**: AC-20, AC-24
   **手动验证**: 116 另存 md，文件含 `[n]` 与参考资料
   **依赖**: T035
 
 - [ ] **T041**: F054 契约措辞修订、文档回写与 116 导出对照
   **文件**: `features/v3.0.0-beta1/054-unified-citation-entries/spec.md`、`features/v3.0.0-beta1/release-contract.md`、本目录 design.md
-  **逻辑**: F054 AC-07 / AC-12 补「任务模式报告导出按 F069 AC-24 烘焙」的例外措辞；design §7 记 A/B 结果；116 以有权限 / 无权限 / 分享页三种身份各导出 docx、pdf、md，核对编号与参考资料、无内部键、无权限来源不出现。
+  **逻辑**: F054 AC-07 / AC-12 补「任务模式报告导出按 F069 AC-24 烘焙」的例外措辞；release-contract 变更历史加一行「F069 P2 交付、F054 AC-07/AC-12 措辞已修订」；design §7 记 A/B 结果；116 以有权限 / 无权限 / 分享页三种身份各导出 docx、pdf、md，核对编号与参考资料、无内部键、无权限来源不出现。
   **覆盖 AC**: AC-21, AC-22, AC-24
   **依赖**: T037, T040
 

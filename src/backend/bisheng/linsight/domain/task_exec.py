@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 import traceback
 from collections.abc import Callable
@@ -2015,10 +2016,12 @@ class LinsightWorkflowTask:
             final_files = await linsight_execute_utils.build_fallback_report_file(
                 session_model=session_model, answer=answer, file_dir=self.file_dir
             )
+        citation_audit = self._audit_report_citations(session_model, answer, final_files)
         session_model.output_result = {
             "answer": answer,
             "final_files": final_files,
             "all_from_session_files": [],
+            "citation_audit": citation_audit,
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
         self._flag_invalid_deliverables(session_model, file_details)
@@ -2074,6 +2077,84 @@ class LinsightWorkflowTask:
         )
         session_model.output_result["invalid_deliverables"] = invalid
 
+    _FOOTNOTE_REF_RE = re.compile(r"\[\^\d+\](?!:)")
+    _FOOTNOTE_DEF_RE = re.compile(r"^[ \t]*\[\^\d+\]:", re.M)
+    _BRACKET_NUMBER_RE = re.compile(r"(?<![\[\w])\[\d{1,3}\](?!\()")
+
+    def _audit_report_citations(self, session_model, answer: str, final_files: list[dict] | None) -> dict:
+        """F069 P0: measure "sources retrieved vs sources cited" for this run.
+
+        Runs on every completion path AFTER the fallback report is built (so the
+        real deliverable is inspected) and BEFORE ``output_result`` is assembled
+        (so the result carries the verdict). Purely observational: never touches
+        the answer, never adds citations, never blocks completion. The frontend
+        renders a one-line notice from ``status == "uncited"``; ``sources_seen``
+        comes from the tool-level scope, so retrieval done inside the researcher
+        sub-graph counts too (design §3 decision 3).
+        """
+        try:
+            scope = getattr(self, "_citation_scope", None)
+            sources_seen = len(getattr(scope, "seen_keys", None) or ())
+            from bisheng.citation.domain.services.citation_prompt_helper import extract_citation_ids_from_text
+
+            texts = [answer or ""]
+            scanned_files: list[str] = []
+            has_md = False
+            has_html = False
+            for file_info in final_files or []:
+                path = (file_info or {}).get("file_path") or ""
+                if not isinstance(path, str):
+                    continue
+                lowered = path.lower()
+                if lowered.endswith((".html", ".htm")):
+                    has_html = True
+                if not lowered.endswith((".md", ".markdown")):
+                    continue
+                has_md = True
+                if not os.path.isfile(path):
+                    continue
+                try:
+                    with open(path, encoding="utf-8") as handle:
+                        texts.append(handle.read())
+                    if len(scanned_files) < 20:
+                        scanned_files.append(os.path.basename(path))
+                except OSError:
+                    logger.warning("citation audit could not read {}", path)
+            corpus = "\n".join(texts)
+            cited_ids = {cid for cid in extract_citation_ids_from_text(corpus) if cid}
+            footnote_refs = len(self._FOOTNOTE_REF_RE.findall(corpus))
+            footnote_defs = len(self._FOOTNOTE_DEF_RE.findall(corpus))
+            audit = {
+                "sources_seen": sources_seen,
+                "cited": len(cited_ids),
+                "unknown_handles": [],
+                "bracket_numbers": len(self._BRACKET_NUMBER_RE.findall(corpus)),
+                "footnotes_without_defs": max(0, footnote_refs - footnote_defs),
+                "scanned_files": scanned_files,
+                "html_only": bool(has_html and not has_md),
+            }
+            if sources_seen == 0:
+                audit["status"] = "no_sources"
+            elif cited_ids:
+                audit["status"] = "cited"
+            else:
+                audit["status"] = "uncited"
+            line = (
+                f"[linsight-citation-audit] session={session_model.id} "
+                f"model={getattr(session_model, 'model', None)} status={audit['status']} "
+                f"sources_seen={sources_seen} cited={audit['cited']} unknown_handles=0 "
+                f"footnotes_without_defs={audit['footnotes_without_defs']} "
+                f"bracket_numbers={audit['bracket_numbers']} html_only={audit['html_only']}"
+            )
+            if audit["status"] == "uncited":
+                logger.warning(line)
+            else:
+                logger.info(line)
+            return audit
+        except Exception:
+            logger.opt(exception=True).warning("citation audit failed; task continues")
+            return {}
+
     async def _persist_report_citations(self, session_model, msg, final_files: list[dict] | None) -> None:
         """Best-effort: bind report-cited sources to the task ChatMessage (F047).
 
@@ -2106,15 +2187,20 @@ class LinsightWorkflowTask:
                 report_texts=texts,
             )
             payloads = serialize_citation_items_for_page(items)
-            if not payloads:
-                logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
-                return
             # Copy + reassign. JsonType in-place mutation is not dirty: the
             # subsequent set_session_version_info does add/commit/refresh and
             # would reload the old output_result, so FINAL_RESULT and the
             # version-list API (which the client reconciles onto) never saw
             # the citations.
             output_result = dict(session_model.output_result or {})
+            if isinstance(output_result.get("citation_audit"), dict):
+                audit = dict(output_result["citation_audit"])
+                audit["persisted"] = len(payloads)
+                output_result["citation_audit"] = audit
+            if not payloads:
+                session_model.output_result = output_result
+                logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
+                return
             output_result["citations"] = payloads
             session_model.output_result = output_result
             logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
@@ -2193,6 +2279,7 @@ class LinsightWorkflowTask:
             final_files = await linsight_execute_utils.build_fallback_report_file(
                 session_model=session_model, answer=answer, file_dir=self.file_dir
             )
+        citation_audit = self._audit_report_citations(session_model, answer, final_files)
         session_model.output_result = {
             "answer": answer,
             "final_files": final_files,
@@ -2200,6 +2287,7 @@ class LinsightWorkflowTask:
             # Marker so the frontend/analytics can tell this was a degraded run
             # even though it renders as a normal result (no frontend change required).
             "partial": True,
+            "citation_audit": citation_audit,
         }
         self._flag_phantom_deliverables(session_model, answer, final_files)
         self._flag_invalid_deliverables(session_model, file_details)
@@ -2242,12 +2330,15 @@ class LinsightWorkflowTask:
                 execution_tasks=execution_tasks, file_details=file_details
             )
 
+            citation_audit = self._audit_report_citations(session_model, answer, final_result_files)
+
             # Update session status
             session_model.status = SessionVersionStatusEnum.COMPLETED
             session_model.output_result = {
                 "answer": answer,
                 "final_files": final_result_files,
                 "all_from_session_files": all_from_session_files,
+                "citation_audit": citation_audit,
             }
             self._flag_phantom_deliverables(session_model, answer, final_result_files)
             self._flag_invalid_deliverables(session_model, file_details)
