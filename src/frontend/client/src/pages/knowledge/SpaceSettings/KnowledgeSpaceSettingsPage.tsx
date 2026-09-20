@@ -134,6 +134,12 @@ export function KnowledgeSpaceSettingsPage() {
     }),
     [displayedPermissionRows],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => displayedPermissionRows
+      .filter((row) => row.subjectType === "department" && row.includeChildren)
+      .map((row) => row.subjectId),
+    [displayedPermissionRows],
+  );
 
   const handleVisibilityModeChange = async (value: "private" | "shared") => {
     if (value === "private") {
@@ -611,6 +617,7 @@ export function KnowledgeSpaceSettingsPage() {
         resourceType="knowledge_space"
         resourceId={spaceId}
         disabledIds={disabledIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationModels}
         canAddNonUserSubjects={settings.canAddNonUserSubjects}
         onConfirm={settings.addPermissionRows}

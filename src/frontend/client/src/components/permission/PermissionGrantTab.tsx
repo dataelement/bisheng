@@ -146,6 +146,31 @@ export function PermissionGrantTab({
     ],
     [assignees, queuedAdds, subjectType],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => [
+      ...assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === "department"
+            && assignee.scope === "LOCAL"
+            && assignee.source.include_children,
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+      ...queuedAdds
+        .filter(
+          (change) =>
+            change.op === "ADD"
+            && change.subject.type === "department"
+            && change.subject.include_children,
+        )
+        .map((change) =>
+          change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
+        )
+        .filter(Number.isFinite),
+    ],
+    [assignees, queuedAdds],
+  );
 
   // The badge names which model they already hold, so a locked row explains
   // itself rather than just refusing to be clicked.
@@ -267,6 +292,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
           grantedLabels={grantedModelLabels}
         />
       )}
