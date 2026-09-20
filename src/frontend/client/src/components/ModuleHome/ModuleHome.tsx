@@ -31,11 +31,14 @@ interface ModuleHomeHeaderProps {
   children?: ReactNode;
 }
 
-/** Header row of a module home: 24px brand title, 32px tall, 16px above the content. */
+/** Header row of a module home: 32px tall, 16px above the content. The title takes the
+ *  sidebar wordmark's voice — same semibold, same neutral text-1, one step up the
+ *  ladder (text-h2, 20/28) so the page still outranks the shell — and leaves the brand
+ *  color to what the user acts on: the create button on this same row. */
 export function ModuleHomeHeader({ title, children }: ModuleHomeHeaderProps) {
   return (
     <header className={cn(MODULE_HOME_COLUMN, 'flex h-8 shrink-0 items-center gap-4')}>
-      <h1 className="min-w-0 flex-1 truncate text-[24px] font-semibold leading-8 text-blue-500">{title}</h1>
+      <h1 className="min-w-0 flex-1 truncate text-h2 font-semibold text-text-1">{title}</h1>
       {children ? <div className="flex shrink-0 items-center gap-2">{children}</div> : null}
     </header>
   );
