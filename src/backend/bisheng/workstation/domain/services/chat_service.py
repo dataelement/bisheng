@@ -2427,9 +2427,23 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # on an already-running session.
     from bisheng.linsight.domain import utils as linsight_execute_utils
 
+    # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
+    # (`_execute_workflow`) is the same find-then-insert upsert with no unique
+    # key, and an idle worker dequeues within milliseconds — persisting after
+    # the enqueue raced it, both sides found no row, and every task turn landed
+    # as two category="task" rows (the whole task panel rendered twice in the
+    # conversation). Writing the row first makes the worker's call a plain
+    # update. Best-effort on its own: a persist failure must not stop the run.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version)
+    except Exception:
+        logger.exception(
+            f"[TASK_SUBMIT] task turn persist failed chat_id={session_version.session_id} "
+            f"svid={session_version.id}; the worker writes the row at execution start"
+        )
+
     try:
         await linsight_execute_utils.enqueue_session_for_execution(session_version)
-        await linsight_execute_utils.persist_task_turn_message(session_version)
     except Exception:
         # Keep streaming the handoff: the client's start-execute is the fallback
         # path, and failing the whole submit here would lose the question too.

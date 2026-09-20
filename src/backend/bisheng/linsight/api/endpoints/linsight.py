@@ -291,6 +291,26 @@ async def start_execute(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
+    # Persist the bot task turn BEFORE enqueueing so a refresh while the task is
+    # still QUEUED (status stays NOT_STARTED until the worker dequeues it in
+    # _execute_workflow) re-hydrates the task turn from the conversation and keeps
+    # showing the 排队中 QueueCard. Without this the category="task" row is written
+    # only at execution start, so a queued refresh finds just the user question and
+    # the whole task panel (queue badge included) disappears.
+    #
+    # The order matters: the upsert is find-then-insert with no unique key, and
+    # the worker's own start-time call runs the same upsert milliseconds after the
+    # enqueue. Persisting AFTER the enqueue raced it — both found no row, both
+    # inserted, and the conversation showed the task panel twice. Writing the row
+    # first turns the worker's call into a plain in-place update.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version_model)
+    except Exception:
+        # Best-effort: the task still runs; only the reload-while-queued view is
+        # affected if this fails (the worker writes the row at execution start
+        # regardless).
+        logger.exception("Failed to persist queued task turn message")
+
     try:
         await linsight_execute_utils.enqueue_session_for_execution(session_version_model)
 
@@ -298,21 +318,6 @@ async def start_execute(
         logger.error(f"Failed to start the Ideas task: {e!s}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
-
-    # Persist the bot task turn at enqueue time so a refresh while the task is
-    # still QUEUED (status stays NOT_STARTED until the worker dequeues it in
-    # _execute_workflow) re-hydrates the task turn from the conversation and keeps
-    # showing the 排队中 QueueCard. Without this the category="task" row is written
-    # only at execution start, so a queued refresh finds just the user question and
-    # the whole task panel (queue badge included) disappears. Upsert is idempotent:
-    # _execute_workflow's start-time call later updates this same row in place.
-    try:
-        await linsight_execute_utils.persist_task_turn_message(session_version_model)
-    except Exception:
-        # Best-effort: enqueue already succeeded and the task will run; only the
-        # reload-while-queued view is affected if this fails (the worker writes
-        # the row at execution start regardless).
-        logger.exception("Failed to persist queued task turn message")
 
     return resp_200(
         data=True, message="Ideas execution task has started, execution results will be returned via message flow"
