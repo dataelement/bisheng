@@ -23,6 +23,7 @@ from bisheng.dsh.domain.schemas.chat import ChatCapabilities, DshChatRequest
 from bisheng.dsh.domain.schemas.contracts import DshTokenUsage
 from bisheng.dsh.domain.schemas.usage import UsageEvent
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
+from bisheng.dsh.domain.services.model_display import model_display_name
 from bisheng.dsh.infrastructure.chat_adapter import DshChatAdapter
 from bisheng.dsh.infrastructure.quota_redis import QuotaRejected
 from bisheng.dsh.infrastructure.telemetry import record_settlement, request_trace
@@ -95,7 +96,7 @@ class DshModelService:
                         "object": "model",
                         "created": created,
                         "owned_by": "bisheng",
-                        "display_name": f"{server.name.strip() or server.type} / {model.model_name.strip() or model.name}",
+                        "display_name": model_display_name(model, server),
                         "capabilities": capabilities.client_fields(),
                     }
                 )

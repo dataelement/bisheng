@@ -722,7 +722,7 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 | BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供用户用量只读视图；保存后单行刷新使用新增模型策略 GET |
 | BiSheng `GET /api/v1/dsh/admin/users/{id}/sessions` | 管理员 JWT、同租户 | cursor/limit 的设备会话列表，内部复用 Gateway management/read |
 
-管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，单模型管理接口同样返回/使用该目标，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 展示“提供方名称 / 实际 model_name”，不使用自动生成的模型配置标签；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
+管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，单模型管理接口同样返回/使用该目标，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 与 Desktop 目录共用展示规则：“提供方名称 / 管理员配置的模型展示名称”；模型展示名称 `name` 去除首尾空白后为空时使用调用名称 `model_name`，提供方名称为空时使用提供方类型；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
 
 ### 6.2 内部接口与权限
 
