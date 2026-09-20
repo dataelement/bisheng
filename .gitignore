@@ -305,3 +305,9 @@ scripts/dev-stack.sh
 src/backend/scripts/backups/
 .cursor/
 src/backend/migration_reports
+
+# A/B 2.2→2.5.0-sg 升级包：本地密钥、执行账本、含用户清单的盘点导出
+scripts/upgrade-ab-fusion/env.sh
+scripts/upgrade-ab-fusion/logs/
+scripts/upgrade-ab-fusion/p1/raw/*
+!scripts/upgrade-ab-fusion/p1/raw/README.md

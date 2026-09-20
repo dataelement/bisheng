@@ -1,0 +1,2 @@
+b_user_id,a_user_id,employee_code,action,note
+# bind=保留 A user_id; create=在 A 新建; 禁止按姓名合并
