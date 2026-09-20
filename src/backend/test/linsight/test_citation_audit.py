@@ -238,3 +238,5 @@ async def test_persist_records_zero_persisted_on_audit(monkeypatch):
 
     assert session.output_result["citation_audit"]["persisted"] == 0
     assert "citations" not in session.output_result
+    # the zero count must be saved too (116 baseline: uncited rows had persisted=None)
+    task._state_manager.set_session_version_info.assert_awaited_once_with(session)

@@ -2197,13 +2197,14 @@ class LinsightWorkflowTask:
                 audit = dict(output_result["citation_audit"])
                 audit["persisted"] = len(payloads)
                 output_result["citation_audit"] = audit
-            if not payloads:
-                session_model.output_result = output_result
+            if payloads:
+                output_result["citations"] = payloads
+                logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
+            else:
                 logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
-                return
-            output_result["citations"] = payloads
             session_model.output_result = output_result
-            logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
+            # Saved in both branches: the persisted count on the audit must reach
+            # the DB row too (history / version-list), not only the FINAL_RESULT push.
             state_manager = getattr(self, "_state_manager", None)
             if state_manager is not None:
                 await state_manager.set_session_version_info(session_model)
