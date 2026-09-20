@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
-| 实现 | 🔄 进行中 | 12 / 41 完成（Wave 1 代码 T001～T012 已实现并单测通过；T013 116 基线待部署）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
+| 实现 | 🔄 进行中 | 13 / 41 完成（Wave 1 全部完成：代码 + 116 基线 18 次，uncited 率 44%，见 design §7）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
 
@@ -134,7 +134,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 #### 真机基线
 
-- [ ] **T013**: 116 P0 基线取数
+- [x] **T013**: 116 P0 基线取数
   **文件**: 无（结果记入 design §7）
   **逻辑**: 按 PRD §7：两题 × deepseek-v4-flash / -pro / qwen3.5 × 3 次；每次记 `docker logs bisheng-test-backend-worker | grep '\[linsight-citation-audit\]'` 一行与 MySQL `linsight_session_version.output_result.citation_audit`；统计 uncited 率作为 P1 对照基线；确认历史回看与分享页提示一致。
   **覆盖 AC**: AC-03, AC-04
@@ -344,4 +344,5 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 - T003 (d) 用例需 stub `agent_factory.settings`（pydantic 实例不可 monkeypatch 属性，改为替换模块级 `settings` 对象）——实现细节，design 不变
 - T006 审计日志断言改用 loguru sink（caplog 看不到 loguru）——实现细节，design 不变
+- T013 基线暴露：零引用时 `persisted` 未写回 DB 行（提前 return 跳过保存）→ 已修，design §7 记录
 - T011 `ExecutionFlow.tsx` 第二个 `citations=` 属于 `FilePreviewPanel`，不透传 `citationAudit`（预览面板不显示提示）——与 spec AC-04「结果区摘要下方」一致
