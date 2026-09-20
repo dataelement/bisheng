@@ -1077,15 +1077,29 @@ class LinsightWorkflowTask:
         self._has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
 
         minio = await get_minio_storage()
-        backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
         # F069: one citation scope per run. Rebuilt on every _create_agent call
         # (fresh / resume / continue) and hydrated from Redis so the completion
         # audit still knows the sources seen before a park or a worker restart.
+        # P1 contract: the system setting decides for a NEW session; a session
+        # that already has a handle table keeps the contract pinned in it
+        # (scope.load reads meta:enabled), so a resume / follow-up after a switch
+        # flip never changes contract mid-way (design decision 6).
         from bisheng.citation.domain.services.linsight_citation_scope import LinsightCitationScope
 
-        citation_scope = LinsightCitationScope(svid=session_model.id, session_id=session_model.session_id)
+        try:
+            handles_enabled = bool((await settings.aget_linsight_conf()).citation_handles_enabled)
+        except Exception:
+            logger.opt(exception=True).warning("citation_handles_enabled lookup failed; defaulting to on")
+            handles_enabled = True
+        citation_scope = LinsightCitationScope(
+            svid=session_model.id, session_id=session_model.session_id, enabled=handles_enabled
+        )
         await citation_scope.load()
+        await citation_scope.pin_contract()
         self._citation_scope = citation_scope
+        backend = WorkspaceBackend(
+            svid=session_model.id, minio=minio, file_dir=self.file_dir, citation_scope=citation_scope
+        )
         # F035 Fork X: copy this run's allowed skill bundles into the workspace
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
@@ -1983,7 +1997,7 @@ class LinsightWorkflowTask:
         if not answer:
             await self._handle_task_failure(session_model, "Task produced no result")
             return
-        answer = self._with_soft_landing_note(answer)
+        answer = self._canonicalize_answer_citations(self._with_soft_landing_note(answer))
 
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # A direct-answer completion with NO sub-tasks is a genuine trivial reply
@@ -2081,6 +2095,26 @@ class LinsightWorkflowTask:
     _FOOTNOTE_DEF_RE = re.compile(r"^[ \t]*\[\^\d+\]:", re.M)
     _BRACKET_NUMBER_RE = re.compile(r"(?<![\[\w])\[\d{1,3}\](?!\()")
 
+    def _canonicalize_answer_citations(self, answer: str) -> str:
+        """F069 P1: turn the model's ``[Sn]`` handles in the final answer into markers.
+
+        Same converter as the workspace write boundary, applied before the
+        fallback report is built from the answer (so 报告.md carries markers
+        too). No-op under the verbatim contract or without a handle table.
+        """
+        scope = getattr(self, "_citation_scope", None)
+        if not answer or scope is None or not getattr(scope, "enabled", False) or not getattr(scope, "handles", None):
+            return answer
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+
+            result = convert_handles_to_markers(answer, scope.handles)
+            scope.note_conversion(result.converted, result.unknown)
+            return result.text
+        except Exception:
+            logger.opt(exception=True).warning("answer citation handle conversion failed; keeping the answer as written")
+            return answer
+
     def _audit_report_citations(self, session_model, answer: str, final_files: list[dict] | None) -> dict:
         """F069 P0: measure "sources retrieved vs sources cited" for this run.
 
@@ -2124,10 +2158,13 @@ class LinsightWorkflowTask:
             cited_ids = {cid for cid in extract_citation_ids_from_text(corpus) if cid}
             footnote_refs = len(self._FOOTNOTE_REF_RE.findall(corpus))
             footnote_defs = len(self._FOOTNOTE_DEF_RE.findall(corpus))
+            unknown_handles = sorted((getattr(scope, "unknown_handles", None) or {}).keys())[:50]
             audit = {
                 "sources_seen": sources_seen,
                 "cited": len(cited_ids),
-                "unknown_handles": [],
+                "unknown_handles": unknown_handles,
+                "converted": int(getattr(scope, "converted_count", 0) or 0),
+                "handles_enabled": bool(getattr(scope, "enabled", False)) if scope is not None else False,
                 "bracket_numbers": len(self._BRACKET_NUMBER_RE.findall(corpus)),
                 "footnotes_without_defs": max(0, footnote_refs - footnote_defs),
                 "scanned_files": scanned_files,
@@ -2142,7 +2179,8 @@ class LinsightWorkflowTask:
             line = (
                 f"[linsight-citation-audit] session={session_model.id} "
                 f"model={getattr(session_model, 'model', None)} status={audit['status']} "
-                f"sources_seen={sources_seen} cited={audit['cited']} unknown_handles=0 "
+                f"sources_seen={sources_seen} cited={audit['cited']} unknown_handles={len(unknown_handles)} "
+                f"converted={audit['converted']} handles_enabled={audit['handles_enabled']} "
                 f"footnotes_without_defs={audit['footnotes_without_defs']} "
                 f"bracket_numbers={audit['bracket_numbers']} html_only={audit['html_only']}"
             )
@@ -2267,7 +2305,7 @@ class LinsightWorkflowTask:
             preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP
         else:
             preamble = _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
-        answer = f"{preamble}\n\n{body}"
+        answer = self._canonicalize_answer_citations(f"{preamble}\n\n{body}")
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # Collect any output/ deliverable the model managed to write before looping;
         # otherwise synthesize a report from the salvaged answer (same backstop as
@@ -2314,7 +2352,7 @@ class LinsightWorkflowTask:
             # the last streamed assistant text so the answer field — and the
             # synthesized report below — still carry the real content.
             answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
-            answer = self._with_soft_landing_note(answer)
+            answer = self._canonicalize_answer_citations(self._with_soft_landing_note(answer))
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
                 session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files

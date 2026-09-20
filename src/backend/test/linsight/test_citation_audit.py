@@ -240,3 +240,79 @@ async def test_persist_records_zero_persisted_on_audit(monkeypatch):
     assert "citations" not in session.output_result
     # the zero count must be saved too (116 baseline: uncited rows had persisted=None)
     task._state_manager.set_session_version_info.assert_awaited_once_with(session)
+
+
+# --------------------------------------------------------------------------
+# F069 P1: answer handles are converted; audit reports unknown / converted
+# --------------------------------------------------------------------------
+class _HandleScope(SimpleNamespace):
+    def note_conversion(self, converted, unknown):
+        self.converted_count = getattr(self, "converted_count", 0) + converted
+        for h in unknown:
+            self.unknown_handles[h] = self.unknown_handles.get(h, 0) + 1
+
+
+def _handle_scope(enabled=True):
+    return _HandleScope(
+        enabled=enabled,
+        seen_keys={"knowledgesearch_ab12cd34:3"},
+        handles={"S3": "knowledgesearch_ab12cd34:3"},
+        unknown_handles={},
+        converted_count=0,
+    )
+
+
+async def test_answer_handles_become_markers_before_fallback_report(completion_task, monkeypatch):
+    completion_task._citation_scope = _handle_scope()
+    completion_task._final_result = SimpleNamespace(answer="结论如下。[S3] 另一句。[S9]")
+    completion_task._last_assistant_text = completion_task._final_result.answer
+    fallback = AsyncMock(return_value=[])
+    monkeypatch.setattr(linsight_execute_utils, "build_fallback_report_file", fallback)
+    session = _session()
+
+    await completion_task._handle_task_success(session)
+
+    answer = session.output_result["answer"]
+    assert answer.startswith(f"结论如下。{MARKER}")
+    assert "[S3]" not in answer and "[S9]" in answer  # unknown stays literal
+    assert fallback.await_args.kwargs["answer"] == answer  # the fallback report gets the converted text
+    audit = session.output_result["citation_audit"]
+    assert audit["status"] == "cited"
+    assert audit["unknown_handles"] == ["S9"]
+    assert audit["converted"] == 1
+    assert audit["handles_enabled"] is True
+
+
+async def test_answer_untouched_under_verbatim_contract(completion_task):
+    completion_task._citation_scope = _handle_scope(enabled=False)
+    completion_task._final_result = SimpleNamespace(answer="结论。[S3]")
+    completion_task._last_assistant_text = "结论。[S3]"
+    session = _session()
+
+    await completion_task._handle_task_success(session)
+
+    assert session.output_result["answer"] == "结论。[S3]"
+    assert session.output_result["citation_audit"]["handles_enabled"] is False
+
+
+async def test_partial_path_converts_answer_too(completion_task):
+    completion_task._citation_scope = _handle_scope()
+    completion_task._partial_salvage = "抢救出来的正文。[S3]"
+    session = _session()
+
+    await completion_task._handle_task_partial(session)
+
+    assert MARKER in session.output_result["answer"]
+    assert "[S3]" not in session.output_result["answer"]
+
+
+async def test_audit_log_line_carries_converted_and_unknown(completion_task, audit_log):
+    completion_task._citation_scope = _handle_scope()
+    completion_task._final_result = SimpleNamespace(answer="结论。[S3][S42]")
+    completion_task._last_assistant_text = completion_task._final_result.answer
+    session = _session()
+
+    await completion_task._handle_task_success(session)
+
+    lines = [m for _, m in audit_log if "[linsight-citation-audit]" in m]
+    assert lines and "converted=1" in lines[-1] and "unknown_handles=1" in lines[-1] and "handles_enabled=True" in lines[-1]

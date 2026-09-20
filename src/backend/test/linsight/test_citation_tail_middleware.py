@@ -218,3 +218,19 @@ async def test_stacks_use_handle_tail_and_rules_when_scope_enabled(factory_env):
     assert "" not in factory_env["system_prompt"]
     assert "[S3] 或 [S3][S7]" in factory_env["system_prompt"]
     assert "# 来源编号" in factory_env["subagents"][0]["system_prompt"]
+
+
+async def test_source_middleware_mounted_only_under_handle_contract(factory_env):
+    session = SimpleNamespace(id="sv-1", session_id="chat-1", tenant_id=1, user_id=1, question="q")
+    scope = SimpleNamespace(enabled=True, entries=[], handles={}, svid="sv-1", session_id="chat-1", record_seen=AsyncMock())
+
+    await agent_factory.create_linsight_agent(session, [SearchKnowledgeBase(), _FakeWeb()], citation_scope=scope)
+    main = _names(factory_env["middleware"])
+    researcher = _names(factory_env["subagents"][0]["middleware"])
+    assert "LinsightCitationSource" in main and main.index("LinsightCitationSource") < main.index("LinsightCitationTail")
+    assert "LinsightCitationSourceSub" in researcher
+
+    scope.enabled = False
+    await agent_factory.create_linsight_agent(session, [SearchKnowledgeBase(), _FakeWeb()], citation_scope=scope)
+    assert "LinsightCitationSource" not in _names(factory_env["middleware"])
+    assert "LinsightCitationSourceSub" not in _names(factory_env["subagents"][0]["middleware"])

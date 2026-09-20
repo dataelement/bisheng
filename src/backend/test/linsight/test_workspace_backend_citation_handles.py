@@ -137,7 +137,7 @@ def test_edit_non_markdown_keeps_verbatim_matching(fake_minio, file_dir):
     res = be.edit("/output/page.html", "[S3]", "[S4]")
 
     assert res.error is None
-    assert _stored(fake_minio, "output/page.html") == b"<p>结论。[S4]</p>"
+    assert _stored(fake_minio, "output/page.html") == "<p>结论。[S4]</p>".encode()
 
 
 @pytest.mark.parametrize("scope", [None, _scope(enabled=False), _scope(handles={})])

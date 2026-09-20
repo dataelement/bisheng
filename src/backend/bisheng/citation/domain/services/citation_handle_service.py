@@ -46,7 +46,9 @@ _HANDLE = r"S\d{1,4}"
 _GROUP = rf"\[\s*{_HANDLE}(?:\s*[,，、]\s*{_HANDLE})*\s*\]"
 # One or more adjacent groups (``[S3][S7]``); never the label of a markdown
 # link (``[S3](url)``) and never glued to a word or another bracket.
-_RUN_RE = re.compile(rf"(?<![\w\[]){_GROUP}(?:\s*{_GROUP})*(?!\s*\()")
+# ASCII-only lookbehind: Python's \w matches CJK, and a handle glued to a
+# Chinese word (``结论[S3]``) is the common case, not an identifier.
+_RUN_RE = re.compile(rf"(?<![A-Za-z0-9_\[]){_GROUP}(?:\s*{_GROUP})*(?!\s*\()")
 _HANDLE_RE = re.compile(_HANDLE)
 # ``[S3]: 知识库·规则`` — a definition line the model wrote on its own; not a
 # citation, only counted.

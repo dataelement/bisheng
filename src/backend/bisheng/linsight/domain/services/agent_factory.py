@@ -936,6 +936,12 @@ def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
     return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
 
 
+def _researcher_source_middleware(citation_scope) -> list:
+    from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+    return [LinsightCitationSourceMiddleware(citation_scope, is_subagent=True)]
+
+
 def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool = False) -> dict:
     """Build the single MVP researcher subagent spec (deepagents ``SubAgent``).
 
@@ -1060,6 +1066,15 @@ async def create_linsight_agent(
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
+    # F069 P1: per-turn source table (+ one-shot "add the handles" nudge after a
+    # handle-less output/*.md write). awrap_model_call only — never wrap_tool_call
+    # (design decision 5). Gated like the rules: citable tool AND handle contract.
+    if citation_handles and (has_kb or has_web):
+        from bisheng.linsight.domain.services.citation_source_middleware import LinsightCitationSourceMiddleware
+
+        middlewares.append(
+            LinsightCitationSourceMiddleware(citation_scope, budget_sink=turn_budget_sink, is_subagent=False)
+        )
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
     # bundles were copied into the workspace /skills/ subtree before this call (see
@@ -1148,6 +1163,9 @@ async def create_linsight_agent(
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
         *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
+        # F069 P1: the researcher gets the source table too (no nudge — it does
+        # not write deliverables).
+        *(_researcher_source_middleware(citation_scope) if (citation_handles and researcher_citable) else []),
         # F069: same citation tail on the researcher's own stack, same gate.
         *([_CitationTailMiddleware(citation_tail_text)] if researcher_citable else []),
         # Same tail language directive on the subagent's own stack (last -> after

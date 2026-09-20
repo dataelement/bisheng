@@ -92,7 +92,7 @@
   - A. 工具、规则、写盘各自读 `settings` — 任一处单独回退都会造成契约错配（模型看到编号但写盘不转换，或看到 key 但规则讲编号）。
   - B. 唯一读取点在 `task_exec._create_agent` 构造 scope，各处只看 `scope.enabled` — 但 `_create_agent` 在 fresh / resume / continue 三处都调用，ask_user 挂起期间翻开关会让恢复后的任务中途换契约。
   - C. B 之上再把契约钉在会话上：编号表 HASH 首次创建时写 `meta:enabled`，`_create_agent` 先读它、没有才读 `LinsightConf.citation_handles_enabled`（默认 on）。
-- **选定**：C。
+- **选定**：C，且钉的时机是 `_create_agent`（`scope.pin_contract()`，`HSETNX meta:enabled`），不是首次分配句柄：逐字契约的会话永远不会分配句柄，若只在分配时钉，开关翻开后它的追问轮就会换成句柄契约。
 - **原因**：spec §3「进行中的任务沿用创建时的契约」；开关翻转只影响新会话，A/B 回退不会把挂起任务打坏。
 - **何时该重新考虑**：契约稳定两个版本后可删开关与 `meta:enabled`。
 
@@ -150,7 +150,7 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 | Redis `linsight:cite_seen:<svid>` | HASH，field = item key，value = type；TTL 30d | 本 run 见过的来源 | 审计 |
 | Redis `linsight:cite_handles:<session_id>` | HASH：`h:<n>` → JSON `{key,type,title,loc}`；`id:<identity>` → n；`next` → int（HINCRBY）；`meta:enabled` → 0/1（会话契约）；`nudged:<svid>:<path>` → 1；TTL 30d | 会话级编号表、契约钉、提醒去重 | 工具输出、来源表、写盘转换、html 附录 |
 | 模型可见来源标识 | KB `<ref>S3</ref>`（替换 `<chunk_id>` 内容）；web `"ref": "S7"` | 开关关闭时恢复 `<chunk_id>key</chunk_id>` / `citation_key` | 模型 |
-| 写盘转换文法 | 只认 `[S\d{1,4}]`、连续多组、`[S3, S7]`（逗号 / 全角逗号 / 顿号）；排除 `(` 紧随、代码块、行首 `[Sn]:` 定义行 | 未知编号字面保留 | `WorkspaceBackend`、answer 路径 |
+| 写盘转换文法 | 只认 `[S\d{1,4}]`、连续多组、`[S3, S7]`（逗号 / 全角逗号 / 顿号）；排除 `(` 紧随、代码块、行首 `[Sn]:` 定义行；前瞻只排除 ASCII 字母数字与 `[`（`结论[S3]` 紧贴中文要转，`ident[S3]` 不转；Python `\w` 含 CJK 故不能用 `\w`） | 未知编号字面保留 | `WorkspaceBackend`、answer 路径、client `stripCitationHandles` |
 | `LinsightConf.citation_handles_enabled` | bool，默认 true | kill switch | `_create_agent` |
 | i18n key `com_linsight_citation_uncited` | `{{0}}` = sources_seen | 零引用提示 | client |
 | 日志 `[linsight-citation-audit] session= model= status= sources_seen= cited= unknown_handles= footnotes_without_defs= bracket_numbers= html_only=` | 一行，`uncited` 为 WARNING 其余 INFO | 统计与告警 | 运维 |
@@ -269,3 +269,4 @@ html（P2）：写盘边界 [Sn] → <sup>[n]</sup> + 页尾附录（编号表�
 |---|---|---|
 | 2026-09-20 | 初版 | PRD 评审通过（D1～D8） |
 | 2026-09-20 | §7 记 P0 基线 18 次结果；`_persist_report_citations` 零条也保存 persisted 计数 | T013 基线 |
+| 2026-09-21 | 决策 6 钉契约时机改为 `_create_agent`；§4.2 文法表补 ASCII 前瞻 | Wave 2 实现（T017 / T032 偏差） |

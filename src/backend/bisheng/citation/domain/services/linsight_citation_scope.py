@@ -43,6 +43,8 @@ class LinsightCitationScope:
         # write-boundary bookkeeping for the completion audit
         self.unknown_handles: dict[str, int] = {}
         self.converted_count: int = 0
+        # True once the session table carries meta:enabled (read by load / written by pin_contract)
+        self.pinned: bool = False
 
     def register_handle(self, handle: str, key: str, entry: dict) -> None:
         if handle in self.handles:
@@ -124,10 +126,32 @@ class LinsightCitationScope:
             return
         if pinned is not None:
             self.enabled = pinned
+            self.pinned = True
         for handle, entry in entries.items():
             key = entry.get("key")
             if handle and key:
                 self.register_handle(handle, key, entry)
+
+    async def pin_contract(self) -> None:
+        """Write ``meta:enabled`` once so later runs of this session keep the contract.
+
+        Called by ``_create_agent`` when ``load`` found no pin — including under
+        the verbatim contract, where no handle is ever allocated and the table
+        would otherwise never exist (a later switch flip must not change a
+        follow-up turn's contract either).
+        """
+        if self.pinned:
+            return
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import HANDLE_TTL_SECONDS, handle_redis_key
+
+            redis_client = await get_redis_client()
+            name = handle_redis_key(self.session_id)
+            await redis_client.ahsetnx(name, "meta:enabled", "1" if self.enabled else "0")
+            await redis_client.aexpire_key(name, HANDLE_TTL_SECONDS)
+            self.pinned = True
+        except Exception:
+            logger.opt(exception=True).warning(f"linsight citation scope: failed to pin contract session={self.session_id}")
 
 
 def _handle_number(handle: str) -> int:

@@ -223,6 +223,8 @@ H = {"S3": "knowledgesearch_aaaa1111:3", "S7": "websearch_bbbb2222:1"}
         ("行内 `[S3]` 不动", "行内 `[S3]` 不动", 0),
         ("[S3]: 知识库·规则\n正文。[S7]", f"[S3]: 知识库·规则\n正文。{S}websearch_bbbb2222:1{E}", 1),
         ("表格|[S3]|", f"表格|{S}knowledgesearch_aaaa1111:3{E}|", 1),
+        ("紧贴中文词[S3]也要转", f"紧贴中文词{S}knowledgesearch_aaaa1111:3{E}也要转", 1),
+        ("ascii_ident[S3] stays", "ascii_ident[S3] stays", 0),
     ],
 )
 def test_convert_grammar(text, expected, converted):

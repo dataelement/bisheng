@@ -195,3 +195,56 @@ async def test_export_pdf_strips_citation_markers_before_convert(monkeypatch):
 
     _assert_clean(seen["md"])
     assert "已生成 PDF" in res
+
+
+# ---------------------------------------------------------------------------
+# F069 T026: an unregistered short handle ([S99]) must not leak either
+# ---------------------------------------------------------------------------
+_HANDLE_MD = (
+    "# 报告\n\n"
+    "PM2.5 年均浓度下降。knowledgesearch_18f5868b:0[S99]\n\n"
+    "- 要点 [S12, S99]\n"
+    "- 代码里的 `[S99]` 不是引用\n"
+)
+
+
+def _assert_clean_handles(md: str) -> None:
+    _assert_clean(md)
+    assert "[S99]" not in md.replace("`[S99]`", "")
+    assert "[S12" not in md
+    assert "`[S99]`" in md  # code span kept verbatim
+
+
+async def test_export_docx_strips_unknown_handles(monkeypatch):
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
+
+    seen = {}
+
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            seen["md"] = md
+            return (b"DOCXBYTES", "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+
+    tool = linsight_export.ExportDocxTool(backend=_writable_backend(md_content=_HANDLE_MD))
+    res = await tool._arun(source_path="output/report.md")
+
+    _assert_clean_handles(seen["md"])
+    assert "已生成 Word" in res
+
+
+async def test_export_pdf_strips_unknown_handles(monkeypatch):
+    seen = {}
+
+    def _fake_pdf(md):
+        seen["md"] = md
+        return b"PDFBYTES"
+
+    monkeypatch.setattr(linsight_export, "_md_to_pdf_bytes_via_libreoffice", _fake_pdf)
+
+    tool = linsight_export.ExportPdfTool(backend=_writable_backend(md_content=_HANDLE_MD))
+    res = await tool._arun(source_path="output/report.md")
+
+    _assert_clean_handles(seen["md"])
+    assert "已生成 PDF" in res

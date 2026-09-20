@@ -154,7 +154,7 @@ class LinsightCitationSourceMiddleware(AgentMiddleware):
     # source table
     # ------------------------------------------------------------------
     def _render_source_table(self) -> str:
-        entries = sorted(list(self._scope.entries or []), key=lambda e: _handle_number(e.get("handle", "")))
+        entries = sorted(self._scope.entries or [], key=lambda e: _handle_number(e.get("handle", "")))
         overflow = len(entries) > self._max_rows
         if overflow:
             entries = entries[-self._max_rows :]  # the most recently allocated handles
