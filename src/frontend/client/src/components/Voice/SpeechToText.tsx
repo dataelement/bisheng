@@ -2,7 +2,8 @@ import { Outlined } from 'bisheng-icons';
 import { Pause } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useRecoilState } from 'recoil';
-import { getVoice2TextApi } from '~/api';
+import { transcribeVoice } from '~/api/voice';
+import { useVoiceTarget } from '~/hooks/useVoice';
 import { Button } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -28,6 +29,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
   const callbacks = useRef(props);
   callbacks.current = props;
   const localize = useLocalize();
+  const voiceTarget = useVoiceTarget();
   const { showToast } = useToastContext();
   const [interruptAudio] = useRecoilState(interruptAudioAtom);
   const [, setAudioOpening] = useRecordingAudioLoading();
@@ -44,11 +46,11 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
     if (sessionRef.current || props.disabled) return;
     callbacks.current.onRecordingStart?.();
     const session = new VoiceSession({
-      realtime: !!props.realtime,
+      realtime: voiceTarget.version === 'v1' && !!props.realtime,
       modelId: props.modelId ?? '',
       websocketUrl: getAsrWebSocketUrl(import.meta.env.BASE_URL, window.location.origin),
       transcribe: async (form) => {
-        const response = await getVoice2TextApi(form);
+        const response = await transcribeVoice(form, voiceTarget);
         return typeof response.data === 'string' ? response.data : '';
       },
     }, {

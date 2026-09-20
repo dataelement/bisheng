@@ -1,4 +1,4 @@
-"""Bailian ASR protocols with independent input finish and resource close."""
+"""Bailian protocols and the shared streaming/file transcription lifecycle."""
 
 from __future__ import annotations
 
@@ -14,16 +14,11 @@ from websockets.asyncio.client import connect
 
 from bisheng.core.ai.base import BaseASRClient
 
-ASR_PROTOCOLS = {
-    "paraformer-realtime-v2": "paraformer",
-    "paraformer-realtime-v1": "paraformer",
-    "qwen3-asr-flash-realtime": "qwen",
-}
+from .capabilities import ALI_MODELS as ASR_PROTOCOLS
+from .capabilities import realtime_protocol as realtime_protocol
+from .connection import StreamConnection
+
 FINISH_TIMEOUT = 15.0
-
-
-def realtime_protocol(provider: str, model: str | None) -> str | None:
-    return ASR_PROTOCOLS.get(model or "") if provider == "qwen" else None
 
 
 def websocket_url(base_url: str, protocol: str, model: str) -> str:
@@ -42,18 +37,7 @@ def websocket_url(base_url: str, protocol: str, model: str) -> str:
     return urlunsplit(("wss", parsed.netloc, path, urlencode(query), ""))
 
 
-class ASRConnection:
-    def __init__(self, client: RealtimeASRClient):
-        self.client = client
-        self.ws = None
-        self.task_id = uuid.uuid4().hex
-        self.finished_input = False
-        self.finals: set[str] = set()
-        self.versions: dict[str, int] = {}
-
-    async def send_json(self, payload: dict):
-        await self.ws.send(json.dumps(payload))
-
+class ASRConnection(StreamConnection):
     def event(self, kind: str, **kwargs) -> dict:
         return {"type": kind, "event_id": uuid.uuid4().hex, **kwargs}
 
@@ -155,19 +139,10 @@ class ASRConnection:
                 text = message.get("transcript", "") if final else message.get("text", "") + message.get("stash", "")
             else:
                 continue
-            if segment in self.finals:
-                continue
-            if final:
-                self.finals.add(segment)
-            version = self.versions.get(segment, 0) + 1
-            self.versions[segment] = version
-            yield {"type": "final" if final else "partial", "segment_id": segment, "version": version, "text": text}
+            event = self.transcript(segment, text, final)
+            if event is not None:
+                yield event
         raise RuntimeError("ASR connection closed before recognition completed")
-
-    async def close(self):
-        if self.ws is not None:
-            ws, self.ws = self.ws, None
-            await ws.close()
 
 
 class RealtimeASRClient(BaseASRClient):
@@ -179,13 +154,16 @@ class RealtimeASRClient(BaseASRClient):
         self.protocol = ASR_PROTOCOLS[model]
         self.url = websocket_url(base_url, self.protocol, model)
 
+    def create_connection(self) -> StreamConnection:
+        return ASRConnection(self)
+
     async def stream(
         self,
         audio: AsyncIterator[bytes],
         on_ready: Callable[[], Awaitable[None]],
         on_event: Callable[[dict], Awaitable[None]],
     ):
-        connection = ASRConnection(self)
+        connection = self.create_connection()
         tasks: list[asyncio.Task] = []
         try:
             await connection.start()

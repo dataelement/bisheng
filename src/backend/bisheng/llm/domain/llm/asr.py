@@ -12,6 +12,8 @@ from bisheng.common.errcode.server import (
 )
 from bisheng.core.ai import AliyunASRClient, AzureOpenAIASRClient, BaseASRClient, OpenAIASRClient
 from bisheng.core.ai.asr.realtime import RealtimeASRClient, realtime_protocol
+from bisheng.core.ai.asr.speech_cloud import BaiduRealtimeASRClient, TencentRealtimeASRClient
+from bisheng.core.ai.asr.volcengine import VolcengineRealtimeASRClient
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
 
@@ -94,6 +96,13 @@ class BishengASR(BishengBase):
             params.update(server_info.config)
         if model_info.config:
             params.update(model_info.config)
+        streaming_clients = {
+            "volcengine": VolcengineRealtimeASRClient,
+            "qianfan": BaiduRealtimeASRClient,
+            "tencent": TencentRealtimeASRClient,
+        }
+        if server_info.type in streaming_clients:
+            return streaming_clients[server_info.type](model=model_info.model_name, config=params)
         if realtime_protocol(server_info.type, model_info.model_name):
             return RealtimeASRClient(
                 api_key=params.get("openai_api_key") or params.get("api_key"),

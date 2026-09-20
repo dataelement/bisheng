@@ -158,7 +158,7 @@
       "count": 4
     },
     "no-console": {
-      "count": 2
+      "count": 3
     },
     "no-restricted-syntax": {
       "count": 6
@@ -928,6 +928,20 @@
     },
     "no-restricted-syntax": {
       "count": 5
+    }
+  },
+  "src/components/voiceFunction/speechToText.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 9
+    },
+    "no-console": {
+      "count": 1
+    },
+    "no-restricted-syntax": {
+      "count": 6
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
     }
   },
   "src/constants.tsx": {
