@@ -1,5 +1,7 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
+> **2026-09-20 会话版本修复（已批准）**：创建授权事务新增可选 `client_version`，取 DSH Desktop 应用实际版本，随后保存至登录会话。协议版本仍为 `0.5.0`；该字段不是协议版本，不参与登录资格判断。两端配套更新，不为测试阶段旧 Gateway 增加降级重试。详见 [会话版本修订](./client-version-revision.md)。
+
 > **2026-09-11 兼容修订（待服务端实现）**：移除安装标识不改变本公开契约，`contract_version` 保持 `0.5.0`。客户端无需新增参数或解析 JWT，现有登录、刷新、模型调用和缓存用量协议保持不变；测试环境切换需重新登录。详见可独立交付客户端的 [安装标识解绑兼容说明](./client-installation-unbinding-compatibility.md)。License schema=2 和内部 HMAC 变化仅由服务端/发行工具处理，不应因此把本接口升为 0.6.0。
 
 > 0.4.0 部署简化：服务端改用共享 HMAC 派生的 HS256；客户端不持有密钥，将 token 视为不透明凭证。月度默认 Asia/Shanghai。接口路径和时序保持，旧 access token 需重新登录。详见 deployment-simplification.md。
@@ -152,11 +154,12 @@ dsh-desktop://login?server=https%3A%2F%2Fbisheng.example.com
   "code_challenge":"E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
   "code_challenge_method":"S256",
   "state":"N8x6LXw61DPlYNVoKm5rWOj2vbJmZiRK1CPIyw50HBs",
-  "device_name":"Work Mac"
+  "device_name":"Work Mac",
+  "client_version":"0.1.1-beta.2+build.7"
 }
 ```
 
-以上除 `device_name` 外均必填；device_name 为 1～100 字符的显示标签，不用于身份或席位计数。redirect_uri 必须是本次登记的 IPv4 loopback、端口与固定路径，无 query/fragment/userinfo；不接受 localhost、任意 HTTP URL 或自定义协议作为此回调。
+以上除 `device_name`、`client_version` 外均必填。client_version 为可选字符串（可缺省或 null）；提供时为 1～64 个 ASCII 字符，首字符为字母/数字，其余允许字母/数字、`.`、`_`、`+`、`-`，例如 `0.1.1-beta.2+build.7`。只作会话展示，不用于鉴权、席位或版本拦截；不能填插件版本或 contract_version。历史空版本不补造，重新登录后记录。device_name 为 1～100 字符的显示标签，不用于身份或席位计数。redirect_uri 必须是本次登记的 IPv4 loopback、端口与固定路径，无 query/fragment/userinfo；不接受 localhost、任意 HTTP URL 或自定义协议作为此回调。
 
 200：
 

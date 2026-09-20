@@ -854,3 +854,8 @@ Desktop GET usage 增加可选 `model=bisheng:<id>`，响应字段不变；选�
 按用户确认，删除 installation_id 及其在数据、Redis、HMAC、JWT、内部 DTO、遥测和恢复证据中的绑定；不换名为另一个环境 ID。指纹输入与外层 finger 字段继续保留并受签名完整性保护，但本期不收集机器指纹、不执行环境匹配，也不新增校验开关。允许相同 License 在多个独立环境使用，每套共享数据库独立控制总席位。
 
 DSH License schema 改为 2，不兼容未发布的 schema 1 测试授权；没有 DSH 扩展的旧 SSO License 保持兼容。公共客户端契约继续 0.5.0；内部协议需两端配套更新，详细密钥派生、数据切换、风险和验收以 [解绑修订](./installation-unbinding-revision.md) 为附件，客户端联调以 [0.5.0 兼容说明](./client-installation-unbinding-compatibility.md) 为附件。代码与本地验证已完成，未部署。
+
+
+## 2026-09-20 登录会话客户端版本修复
+
+用户已批准新增可选 client_version 元数据，复用会话字段，版本不参与准入；不做旧 Gateway 兼容重试。范围、实现及验收见 [会话版本修订](./client-version-revision.md)。
