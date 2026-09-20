@@ -302,6 +302,7 @@ async def read_available_models(model_ids, model_loader):
     from bisheng.common.errcode.dsh import DshModelNotAllowedError
     from bisheng.dsh.domain.repositories.admin_operation import require_tenant
     from bisheng.dsh.domain.schemas.admin import AvailableModel
+    from bisheng.dsh.domain.services.model_display import model_display_name
 
     tenant_id = require_tenant()
     result = []
@@ -313,7 +314,7 @@ async def read_available_models(model_ids, model_loader):
         result.append(
             AvailableModel(
                 id=model.id,
-                name=f"{server.name.strip() or server.type} / {model.model_name.strip() or model.name}",
+                name=model_display_name(model, server),
                 is_root_shared=model.tenant_id == 1 and tenant_id != 1,
             ).model_dump()
         )

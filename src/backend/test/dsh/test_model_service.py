@@ -118,15 +118,17 @@ async def test_models_empty_policy_and_immediate_offline(service_setup):
 @pytest.mark.parametrize(
     ("provider_name", "provider_type", "model_name", "alias", "expected"),
     [
-        ("百炼", "aliyun", "qwen-max", "model 2", "百炼 / qwen-max"),
-        ("DeepSeek", "openai", "deepseek-chat", "model 3", "DeepSeek / deepseek-chat"),
-        ("  百炼  ", "aliyun", "  qwen-max  ", "model 2", "百炼 / qwen-max"),
-        ("", "openai", "qwen-max", "model 2", "openai / qwen-max"),
+        ("百炼", "aliyun", "qwen-max", "通义千问 Max", "百炼 / 通义千问 Max"),
+        ("DeepSeek", "openai", "deepseek-chat", "DeepSeek V3", "DeepSeek / DeepSeek V3"),
+        ("  百炼  ", "aliyun", "  qwen-max  ", "  通义千问 Max  ", "百炼 / 通义千问 Max"),
+        ("", "openai", "qwen-max", "通义千问 Max", "openai / 通义千问 Max"),
+        ("百炼", "aliyun", "  qwen-max  ", "", "百炼 / qwen-max"),
+        ("百炼", "aliyun", "  qwen-max  ", "   ", "百炼 / qwen-max"),
         ("   ", "openai", "", "Custom model", "openai / Custom model"),
         ("OpenAI", "openai", "   ", "Custom model", "OpenAI / Custom model"),
     ],
 )
-async def test_models_display_provider_and_actual_name_with_existing_fallbacks(
+async def test_catalog_and_admin_share_configured_display_name_and_route_id(
     service_setup, provider_name, provider_type, model_name, alias, expected
 ):
     from bisheng.dsh.admin_runtime import read_available_models
