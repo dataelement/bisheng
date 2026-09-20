@@ -552,15 +552,18 @@ export function ArticleList({
                 <div className={cn(
                     "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4",
                     isGridMode ? "max-w-none" : "max-w-[1000px]",
-                    // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
-                    isH5 ? "px-4" : "px-10",
+                    // PC uses 24px gutters (header and list share them); H5 keeps 16px.
+                    isH5 ? "px-4" : "px-6",
                 )}>
-                    {/* 切换频道（左，无边框按钮） + 频道名（居中） */}
+                    {/* 返回（左） + 频道名（居中） */}
                     <div className="flex items-center gap-3">
-                        <div className="flex min-w-0 flex-1 items-center">
+                        {/* `relative` is the anchor for the switcher's absolutely centered
+                            title: the row spans the full content width, so the title lands on
+                            the pane midpoint and the back button no longer pushes it right. */}
+                        <div className="relative flex min-w-0 flex-1 items-center">
                             {/* Back to the 频道 home (/channel). Inside a channel the 我的 / 广场
                                 switcher already reads 我的, so it cannot be the way out. Same
-                                button + hairline as the 知识空间 space header. */}
+                                button as the 知识空间 space header. */}
                             <button
                                 type="button"
                                 onClick={() => navigate("/channel")}
@@ -569,18 +572,40 @@ export function ArticleList({
                             >
                                 <Outlined.ArrowLeft className="size-4" />
                             </button>
-                            <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
                             {onChannelSelect ? (
                                 <ChannelSwitcher
                                     activeChannelId={channel.id}
                                     channelName={channelDetail?.name || channel.name}
                                     onChannelSelect={onChannelSelect}
-                                    onCreateChannel={onCreateChannel}
                                     onChannelSquare={onGoChannelSquare}
                                     // Browse mode (full-width pane): title on the pane's absolute
                                     // midpoint. Reading mode (detail open): flex centering that
                                     // truncates to the space between the side groups.
                                     absoluteCenterTitle={isGridMode}
+                                    // Channel-level actions (share / ⋯) ride the title row's
+                                    // right edge; the toolbar row below keeps article filters only.
+                                    rightSlot={
+                                        <>
+                                            {canOpenChannelShare ? (
+                                                <CopyShareLinkButton
+                                                    sharePath={`/channel/share/${channel.id}`}
+                                                    label={localize("com_subscription.share")}
+                                                    successMessage={localize("com_subscription.share_link_copied")}
+                                                    errorMessage={localize("com_subscription.copy_failed_retry")}
+                                                    iconOnly
+                                                    className="border-border-base"
+                                                    aria-label={localize("com_subscription.share")}
+                                                    icon={<Outlined.Share className="size-4 shrink-0 text-text-2" />}
+                                                />
+                                            ) : null}
+                                            <ChannelActionsMenu
+                                                channel={channel}
+                                                onChannelSelect={onChannelSelect}
+                                                onChannelSettings={onChannelSettings}
+                                                triggerClassName="border-border-base"
+                                            />
+                                        </>
+                                    }
                                     infoContent={
                                         <div className="space-y-1.5 text-sm text-gray-800">
                                             <div><span className="text-gray-400">{localize("com_subscription.channel_name_colon")}</span>
@@ -667,30 +692,6 @@ export function ArticleList({
                                         : "border-border-base bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
-
-                            {/* Divider separating the article filters from the channel-level actions */}
-                            <div className="h-5 w-px shrink-0 bg-fill-3" aria-hidden />
-
-                            {canOpenChannelShare ? (
-                                <CopyShareLinkButton
-                                    sharePath={`/channel/share/${channel.id}`}
-                                    label={localize("com_subscription.share")}
-                                    successMessage={localize("com_subscription.share_link_copied")}
-                                    errorMessage={localize("com_subscription.copy_failed_retry")}
-                                    iconOnly
-                                    className="border-border-base"
-                                    aria-label={localize("com_subscription.share")}
-                                    icon={<Outlined.Share className="size-4 shrink-0 text-text-2" />}
-                                />
-                            ) : null}
-                            {onChannelSelect ? (
-                                <ChannelActionsMenu
-                                    channel={channel}
-                                    onChannelSelect={onChannelSelect}
-                                    onChannelSettings={onChannelSettings}
-                                    triggerClassName="border-border-base"
-                                />
-                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -705,8 +706,8 @@ export function ArticleList({
                 <div className={cn(
                     "mx-auto flex min-h-full w-full min-w-0 flex-col overflow-x-hidden",
                     isGridMode ? "max-w-none" : "max-w-[1000px]",
-                    // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
-                    isH5 ? "px-4" : "px-10",
+                    // PC uses 24px gutters (header and list share them); H5 keeps 16px.
+                    isH5 ? "px-4" : "px-6",
                 )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (

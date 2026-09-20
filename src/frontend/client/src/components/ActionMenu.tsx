@@ -171,13 +171,17 @@ interface ActionMenuSubTriggerProps
     icon?: React.ReactNode;
     label?: React.ReactNode;
     children?: React.ReactNode;
+    /** Drops the trailing chevron the DropdownMenuSubTrigger primitive always
+     *  appends. It is the primitive's last child, hence the :last-child reach —
+     *  the leading `icon` is the first child and is left alone. */
+    hideChevron?: boolean;
 }
 
 export const ActionMenuSubTrigger = React.forwardRef<
     React.ElementRef<typeof DropdownMenuSubTrigger>,
     ActionMenuSubTriggerProps
 >(function ActionMenuSubTrigger(
-    { icon, label, className, children, ...props },
+    { icon, label, className, children, hideChevron, ...props },
     ref,
 ) {
     const content = children ?? label;
@@ -187,6 +191,7 @@ export const ActionMenuSubTrigger = React.forwardRef<
             className={cn(
                 itemRegularClassName,
                 "font-normal data-[state=open]:bg-fill-2",
+                hideChevron && "[&>svg:last-child]:hidden",
                 className,
             )}
             {...props}
