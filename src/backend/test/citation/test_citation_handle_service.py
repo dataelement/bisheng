@@ -396,3 +396,23 @@ def test_export_is_idempotent_on_baked_text():
     twice = render_citations_for_export(once, [_rag_resolved()])
 
     assert twice.text == once and twice.numbered == 0
+
+
+def test_export_page_zero_falls_back_to_chunk_index():
+    item = CitationRegistryItemSchema(
+        citationId="knowledgesearch_cccc3333",
+        type=CitationType.RAG,
+        accessScope="per_user",
+        sourcePayload=RagCitationPayloadSchema(
+            knowledgeId=9,
+            documentId=12,
+            documentName="规则.docx",
+            items=[RagCitationItemSchema(itemId="7", page=0, chunkIndex=7), RagCitationItemSchema(itemId="8", page=0)],
+        ),
+    )
+
+    r = render_citations_for_export(f"甲{_m('knowledgesearch_cccc3333:7')} 乙{_m('knowledgesearch_cccc3333:8')}", [item])
+
+    assert "1. 《规则.docx》" in r.text and "第 7 段" in r.text
+    assert "第 0 页" not in r.text
+    assert "2. 《规则.docx》\n" in r.text or r.text.rstrip().endswith("2. 《规则.docx》")
