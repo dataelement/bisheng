@@ -22,8 +22,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilValue, useResetRecoilState } from "recoil";
+import { useRecoilState, useRecoilValue } from "recoil";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
+import type { SelectedContentItem } from "../index";
 import {
     Tooltip,
     TooltipContent,
@@ -33,6 +34,7 @@ import {
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import { KnowledgeAttachmentStrip } from "./KnowledgeAttachmentStrip";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
@@ -49,11 +51,68 @@ interface KnowledgeAiBottomDockProps {
     folderId?: string;
     /** Welcome text disambiguates space-wide vs folder-scoped Q&A. */
     contextLabel?: string;
+    /** Content ticked in the file list, in tick order. Empty = ask the whole folder. */
+    selectedContent?: SelectedContentItem[];
+    /** Re-tick what this location remembers — a fresh conversation starts from it. */
+    onRestoreSelection?: () => void;
+    /** Empty the input without forgetting the location's pick (resuming history). */
+    onClearSelectionKeepingMemory?: () => void;
+}
+
+/** History + expand icon pair, shared by the floating corner buttons (bordered
+ *  white pills above the input) and the reference strip's right end (bare icons
+ *  on the grey strip — Figma 13022:47623/47629 drop the fill and border). */
+function DockControls({
+    bare = false,
+    onHistory,
+    onExpand,
+    historyLabel,
+    expandLabel,
+}: {
+    bare?: boolean;
+    onHistory: () => void;
+    onExpand: () => void;
+    historyLabel: string;
+    expandLabel: string;
+}) {
+    const buttonClass = cn(
+        "flex size-8 items-center justify-center rounded-[20px] text-[#86909c] transition-colors hover:text-[#4e5969]",
+        !bare && "border border-[#EBEBEB] bg-white drop-shadow-[0_0_8px_rgba(3,7,117,0.05)]",
+    );
+    return (
+        <TooltipProvider>
+            <div className="flex shrink-0 items-center gap-2">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button type="button" onClick={onHistory} aria-label={historyLabel} className={buttonClass}>
+                            <Outlined.History className="size-4" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{historyLabel}</p>
+                    </TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <button type="button" onClick={onExpand} aria-label={expandLabel} className={buttonClass}>
+                            <Outlined.DoubleDown className="size-4 rotate-180" />
+                        </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>{expandLabel}</p>
+                    </TooltipContent>
+                </Tooltip>
+            </div>
+        </TooltipProvider>
+    );
 }
 
 export function KnowledgeAiBottomDock({
     spaceId,
     folderId,
+    selectedContent = [],
+    onRestoreSelection,
+    onClearSelectionKeepingMemory,
 }: KnowledgeAiBottomDockProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -66,21 +125,40 @@ export function KnowledgeAiBottomDock({
 
     const [open, setOpen] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    // Whether the history panel was opened straight from the collapsed dock's floating
+    // button ("direct") vs. from the assistant header ("standard") — the two entries
+    // render different history-panel headers and animations.
+    const [historyDirect, setHistoryDirect] = useState(false);
+
+    // Switching space/folder swaps the session list underneath — fold the history panel.
+    useEffect(() => {
+        setShowHistory(false);
+    }, [spaceId, folderId]);
+
     /** Default vs active (input-focused) state — distinct from the mobile-keyboard
      *  `keyboardVisible` flag so styling can hang off it later without coupling. */
     const [isActive, setIsActive] = useState(false);
 
-    // Clears the file-list selection (shared atom). File selection and AI Q&A are
-    // independent: focusing or sending in the input clears any lingering selection
-    // so the two never read as coupled.
-    const resetFileSelection = useResetRecoilState(knowledgeSelectedFilesState);
+    // The file-list selection (shared atom) IS the Q&A scope: tick a few rows and the
+    // assistant answers only from them. It survives focus and send, and is remembered
+    // per folder by the page above — so a fresh conversation starts from what this
+    // location remembers, while resuming a past one starts from the folder instead.
+    const [, setFileSelection] = useRecoilState(knowledgeSelectedFilesState);
+    const selectedIds = selectedContent.map((item) => item.id);
 
-    /** Input focus/blur. On focus we both mark the dock active and clear the file
-     *  selection; also drives the mobile keyboard-overlay flag. */
+    /** Input focus/blur — marks the dock active and drives the mobile keyboard overlay. */
     const handleInputFocusChange = (focused: boolean) => {
         setIsActive(focused);
         setKeyboardVisible(focused);
-        if (focused) resetFileSelection();
+    };
+
+    /** Removing a reference card unticks the row — the list and the cards are one state. */
+    const handleUnselectContent = (id: string) => {
+        setFileSelection((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+        });
     };
 
     /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
@@ -153,45 +231,80 @@ export function KnowledgeAiBottomDock({
         : localize("com_knowledge.qa_current_space");
 
     const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
-        sendMessage(text, files, tag);
-        // Sending is an AI interaction — clear any file selection made while typing
-        // so selection never appears to feed the Q&A.
-        resetFileSelection();
-        // First send slides the panel up — the input itself stays put.
-        if (!open) setOpen(true);
+        // The selection stays put after sending so the user can keep asking follow-up
+        // questions about the same content without re-ticking it.
+        sendMessage(text, files, tag, selectedIds);
+        // First send slides the panel up — the input itself stays put. Clear any
+        // latched direct-history state so the conversation (not history) shows.
+        if (!open) {
+            setShowHistory(false);
+            setOpen(true);
+        }
     };
 
+    // A new conversation starts from what this folder remembers, not from a blank
+    // slate: the pick belongs to the location, not to the conversation.
     const handleNewChat = async () => {
+        onRestoreSelection?.();
         await createSession();
     };
 
-    // Collapsed-state expand button — restores the conversation that was open before
-    // collapse. Collapsing only hides the panel (useFolderChat state persists), so
-    // expanding simply re-reveals it. Starting a new chat is a separate action
-    // (the MessagePlus button in the expanded header / history panel).
-    const handleExpand = () => {
+    // Collapsed-state entry points (the floating buttons shown when history exists).
+    // History opens the panel straight into the history list; the expand arrow opens
+    // a fresh conversation — existing history stays in `sessions`, reachable via history.
+    const handleOpenHistory = () => {
+        // Direct entry keeps the dock collapsed — the history panel pops up above
+        // the (still visible) box input instead of expanding the conversation card.
+        setHistoryDirect(true);
+        setShowHistory(true);
+    };
+
+    // Header history toggle — the "standard" entry from within the assistant.
+    const handleToggleHistory = () => {
+        setHistoryDirect(false);
+        setShowHistory((v) => !v);
+    };
+
+    const handleExpandNew = async () => {
         setShowHistory(false);
         setOpen(true);
     };
 
+    // Resuming a past conversation answers against the current folder (spec §2.3):
+    // a selection left over from the previous one must not silently narrow it. The
+    // location's memory is kept, so a new conversation can still start from it.
     const handleHistorySelect = (chatId: string) => {
+        onClearSelectionKeepingMemory?.();
         switchSession(chatId);
         setShowHistory(false);
+        // Direct entry: the dock is still collapsed — expand it to show the conversation.
+        setOpen(true);
     };
 
-    // History-panel header actions. Back returns to the conversation view; new chat
-    // starts a fresh conversation and reveals it; collapse folds the whole dock.
+    // History-panel header actions (standard variant). Back returns to the conversation
+    // view; new chat starts a fresh conversation and reveals it.
     const handleHistoryBack = () => setShowHistory(false);
 
     const handleHistoryNewChat = async () => {
         setShowHistory(false);
+        onRestoreSelection?.();
         await createSession();
     };
 
+    // History-panel header action: collapse. Standard entry lives inside the expanded
+    // dock, so fold the dock too; the direct panel floats over the collapsed dock —
+    // closing it (its wrapper animates shut, the panel stays mounted) is enough.
     const handleHistoryCollapse = () => {
         setShowHistory(false);
-        setOpen(false);
+        if (!historyDirect) setOpen(false);
     };
+
+    // Collapsed dock with content ticked: the grey reference strip stacked above
+    // the input (Figma 13022:46625) shows the chips AND hosts the history/expand
+    // controls; without it they float above the input's top-right corner.
+    const hasReferenceStrip = !open && selectedContent.length > 0;
+    const showDockControls =
+        !(showHistory && historyDirect) && (sessions.length > 0 || messages.length > 0);
 
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
     if (isH5 && open) {
@@ -207,7 +320,7 @@ export function KnowledgeAiBottomDock({
                     <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
                         <button
                             type="button"
-                            onClick={() => setShowHistory((v) => !v)}
+                            onClick={handleToggleHistory}
                             aria-label={localize("com_knowledge.history_chat")}
                             className={cn(
                                 "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
@@ -241,7 +354,7 @@ export function KnowledgeAiBottomDock({
             <div
                 className="fixed inset-x-0 top-0 z-50 flex flex-col bg-white"
                 style={{
-                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+                    height: viewportHeight ? `${viewportHeight}px` : "var(--bs-dvh,100dvh)",
                     transform: `translateY(${viewportOffsetTop}px)`,
                 }}
                 role="dialog"
@@ -298,6 +411,8 @@ export function KnowledgeAiBottomDock({
                         onStop={stopGenerating}
                         variant="box"
                         onFocusChange={handleInputFocusChange}
+                        selectedContent={selectedContent}
+                        onUnselectContent={handleUnselectContent}
                     />
                 </div>
 
@@ -311,6 +426,7 @@ export function KnowledgeAiBottomDock({
                         onBack={handleHistoryBack}
                         onNewChat={handleHistoryNewChat}
                         onCollapse={handleHistoryCollapse}
+                        variant={historyDirect ? "direct" : "standard"}
                     />
                 )}
             </div>
@@ -338,15 +454,21 @@ export function KnowledgeAiBottomDock({
                     // pt-10 always — the fade backdrop hides on focus but the input
                     // shouldn't jump when the keyboard opens.
                     !open && "pt-10",
-                    // White fade backdrop. On mobile it hides while the input is focused so the
-                    // grey keyboard overlay's gradient can carry through; on desktop there is no
-                    // such overlay, so keep the fade consistent regardless of focus.
-                    !open && (!isH5 || !keyboardVisible) && "bg-gradient-to-b from-white/0 to-white",
-                    // Expanded: same transparent→white fade as the collapsed state, sized to the
-                    // dialog (the container hugs the card when open, no pt-10), masking the list behind.
-                    open && "bg-gradient-to-b from-white/0 to-white",
                 )}
             >
+                {/* White fade backdrop — its own layer instead of the container's background,
+                    at a CONSTANT height in every state: it never grows with the expanded
+                    panel, the direct-history card, the reference strip, or a multi-line
+                    textarea. 120px = default collapsed footprint (pt-10 + box input +
+                    bottom padding), so the default state looks exactly as before. On
+                    mobile it hides while the input is focused so the grey keyboard
+                    overlay's gradient can carry through. */}
+                {(!isH5 || !keyboardVisible) && (
+                    <div
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 h-[120px] bg-gradient-to-b from-white/0 to-white"
+                    />
+                )}
                 <div
                     // data-active exposes the default/active (input-focused) state for future
                     // styling hooks and QA, without coupling to the mobile keyboard flag.
@@ -359,30 +481,46 @@ export function KnowledgeAiBottomDock({
                             "overflow-hidden rounded-[20px] border border-border-base bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating expand button — shown whenever any conversation exists.
-                        Gate on `sessions`, not `messages`: starting a new chat clears
-                        `messages` but the session history is still there, so the button must
-                        persist. Restores the conversation open before collapse (does not start
-                        a new one). Shared by desktop + mobile-collapsed docks. */}
-                    {!open && (sessions.length > 0 || messages.length > 0) && (
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        onClick={handleExpand}
-                                        aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
-                                    >
-                                        <Outlined.DoubleDown className="size-4 rotate-180" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_ui_expand")}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                    {/* Floating collapsed-state controls — shown whenever any conversation
+                        exists. Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the controls must
+                        persist. Left = history (opens the history list), right = expand (opens a
+                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks.
+                        With content ticked they dock into the reference strip instead. */}
+                    {!open && !hasReferenceStrip && showDockControls && (
+                        <div className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex items-center justify-end">
+                            <DockControls
+                                onHistory={handleOpenHistory}
+                                onExpand={handleExpandNew}
+                                historyLabel={localize("com_knowledge.history_chat")}
+                                expandLabel={localize("com_ui_expand")}
+                            />
+                        </div>
                     )}
+
+                    {/* Direct-entry history — its own rounded card floating above the
+                        (still visible) box input, growing/collapsing with the same
+                        max-height transition as the normal panel. Both wrapper and panel
+                        stay mounted so open and close transitions can play out. */}
+                    <div
+                        className={cn(
+                            "overflow-hidden rounded-[20px] bg-white transition-[max-height] duration-300 ease-out",
+                            !open && showHistory && historyDirect
+                                ? "mb-2 max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] border border-[#ECECEC] shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]"
+                                : "max-h-0",
+                        )}
+                    >
+                        <ConversationHistory
+                            sessions={sessions}
+                            activeChatId={activeChatId}
+                            onSelect={handleHistorySelect}
+                            onDelete={deleteSession}
+                            onRename={renameSession}
+                            onCollapse={handleHistoryCollapse}
+                            variant="direct"
+                            fitContent
+                        />
+                    </div>
 
                     {/* Header + messages grow upward above the input. Height scales with the
                         viewport (taller on large screens) — floored at 440px so small screens
@@ -390,10 +528,10 @@ export function KnowledgeAiBottomDock({
                     <div
                         className={cn(
                             "overflow-hidden transition-[max-height] duration-300 ease-out",
-                            open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
+                            open ? "max-h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))]" : "max-h-0",
                         )}
                     >
-                        <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
+                        <div className="flex h-[clamp(440px,70vh,calc(var(--bs-vh,100vh)_-_160px))] flex-col">
                             {/* Header */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-text-1">
@@ -407,7 +545,7 @@ export function KnowledgeAiBottomDock({
                                             <TooltipTrigger asChild>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setShowHistory((v) => !v)}
+                                                    onClick={handleToggleHistory}
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
@@ -483,6 +621,27 @@ export function KnowledgeAiBottomDock({
                         </div>
                     </div>
 
+                    {/* Reference strip — ticked content as white chips on a grey bar
+                        overlapping the input card (Figma 13022:46625). The floating
+                        history/expand controls dock into its right end. */}
+                    {hasReferenceStrip && (
+                        <KnowledgeAttachmentStrip
+                            items={selectedContent}
+                            onRemove={handleUnselectContent}
+                            trailing={
+                                showDockControls ? (
+                                    <DockControls
+                                        bare
+                                        onHistory={handleOpenHistory}
+                                        onExpand={handleExpandNew}
+                                        historyLabel={localize("com_knowledge.history_chat")}
+                                        expandLabel={localize("com_ui_expand")}
+                                    />
+                                ) : undefined
+                            }
+                        />
+                    )}
+
                     {/* Input bar — `box` collapsed, `line` expanded. */}
                     <KnowledgeAiInput
                         key={spaceId}
@@ -495,9 +654,13 @@ export function KnowledgeAiBottomDock({
                         onStop={stopGenerating}
                         variant={open ? "line" : "box"}
                         onFocusChange={handleInputFocusChange}
+                        selectedContent={selectedContent}
+                        onUnselectContent={handleUnselectContent}
+                        hideReferenceRow={!open}
                     />
 
-                    {open && showHistory && (
+                    {/* Standard-entry history — overlays the expanded card. */}
+                    {open && showHistory && !historyDirect && (
                         <ConversationHistory
                             sessions={sessions}
                             activeChatId={activeChatId}
@@ -507,6 +670,7 @@ export function KnowledgeAiBottomDock({
                             onBack={handleHistoryBack}
                             onNewChat={handleHistoryNewChat}
                             onCollapse={handleHistoryCollapse}
+                            variant="standard"
                         />
                     )}
                 </div>
