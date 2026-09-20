@@ -191,6 +191,12 @@ class DshUpstreamErrorError(BaseErrorCode):
     ErrorType: str = "upstream_error"
 
 
+class DshUpstreamBillingError(DshUpstreamErrorError):
+    """Actionable billing guidance within the existing upstream-error contract."""
+
+    Msg: str = "Model provider billing is unavailable; contact your administrator to check balance and billing status"
+
+
 class DshUpstreamTimeoutError(BaseErrorCode):
     Code: int = 26124
     Msg: str = "Upstream model request timed out"
