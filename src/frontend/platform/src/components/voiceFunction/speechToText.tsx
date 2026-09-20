@@ -5,6 +5,7 @@ import { Mic, Pause } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VoiceSession } from "../../../../shared/voice/session";
+import { getAsrWebSocketUrl } from "../../../../shared/voice/url";
 import { useAudioPlayerStore, useAudioStore } from "./audioPlayerStore";
 
 interface SpeechToTextProps {
@@ -56,16 +57,11 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
     callbacks.current.onRecordingStart?.();
     const version =
       (window as Window & { chat_version?: string }).chat_version || "v1";
-    const url = new URL(
-      `${import.meta.env.BASE_URL}api/v1/llm/workbench/asr/ws`,
-      window.location.origin,
-    );
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     const session = new VoiceSession(
       {
         realtime: !!props.realtime && version === "v1",
         modelId: props.modelId ?? "",
-        websocketUrl: url.toString(),
+        websocketUrl: getAsrWebSocketUrl(import.meta.env.BASE_URL, window.location.origin),
         transcribe: async (form) => {
           const response: unknown = await speechToText(form, version);
           if (typeof response === "string") return response;

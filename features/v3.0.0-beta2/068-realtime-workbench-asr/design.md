@@ -8,6 +8,7 @@
 4. 模型能力精确登记；模型名称含 realtime 不能推导协议。首批 16 kHz：paraformer-realtime-v2/v1、qwen3-asr-flash-realtime。供应商地址从现有 Base URL 解析，北京旧域名/业务空间域名及 Qwen 海外地域按配置使用。
 5. 两个前端共用纯 TypeScript 音频和会话模块，保留各自请求包装及组件。每次开始绑定独立插入范围；中间结果替换该范围，最终结果幂等提交。手工编辑范围外的内容平移锚点；编辑范围内的内容交还用户并停止录音。
 6. 3007 HTTP 内网入口受浏览器麦克风安全上下文约束；部署健康与协议测试不能代替真实浏览器及真实模型验证。
+7. 两个前端统一通过 `getAsrWebSocketUrl` 构造同源识别地址，先规范化部署前缀，再连接 API 路径，并保留访问端口。Client 的实际 `BASE_URL` 为 `/workspace`，直接拼接 `api/...` 曾产生 `/workspaceapi/...`，被页面路由接收并使 WebSocket 握手失败；回归覆盖前缀有无尾斜杠、平台根路径及 HTTPS。
 
 协议参考：
 - https://help.aliyun.com/zh/model-studio/websocket-for-paraformer-real-time-service
