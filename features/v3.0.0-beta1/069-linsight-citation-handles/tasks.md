@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
-| 实现 | 🔲 未开始 | 0 / 41 完成。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
+| 实现 | 🔄 进行中 | 12 / 41 完成（Wave 1 代码 T001～T012 已实现并单测通过；T013 116 基线待部署）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
 
@@ -48,31 +48,31 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 #### 来源记账（后端 Domain，Test-First 配对）
 
-- [ ] **T001**: `LinsightCitationScope` 单元测试
+- [x] **T001**: `LinsightCitationScope` 单元测试
   **文件**: `src/backend/test/citation/test_linsight_citation_scope.py`
   **逻辑**: 用 `AsyncMock` 替身 Redis（monkeypatch `bisheng.citation.domain.services.linsight_citation_scope.get_redis_client`）。断言：`record_seen(items)` 对键 `linsight:cite_seen:<svid>` 调 `ahset(mapping={item_key: type})` 并 `aexpire_key(..., 30*24*3600)`；`seen_keys` 去重且进程内累积；`load()` 用 `ahgetall` 回填 `seen_keys`；Redis 抛异常时 `record_seen` / `load` 只记 warning、不抛、`seen_keys` 仍按进程内累积；`items` 为空不写 Redis。
   **覆盖 AC**: AC-02, AC-25
   **依赖**: 无
 
-- [ ] **T002**: `LinsightCitationScope` 实现
+- [x] **T002**: `LinsightCitationScope` 实现
   **文件**: `src/backend/bisheng/citation/domain/services/linsight_citation_scope.py`（新）
   **逻辑**: `class LinsightCitationScope(svid: str, session_id: str, enabled: bool = True)`；属性 `seen_keys: set[str]`；`async record_seen(items: list[CitationRegistryItemSchema])`：取 `build_item_key`（`citation_registry_service.py`）得 key，`ahset(name, mapping=)` + `aexpire_key`（`core/cache/redis_conn.py` `ahset`/`aexpire_key`，样板 `knowledge/domain/services/knowledge_utils.py` L174-207）；`async load()`：`ahgetall` 回填；两者包 try/except 记 warning（design §2「绝不 raise」）。Redis 键 `linsight:cite_seen:<svid>`，无花括号（design §2）。
   **测试**: T001 全绿
   **依赖**: T001
 
-- [ ] **T003**: 检索工具与联网包装器记账钩子测试
+- [x] **T003**: 检索工具与联网包装器记账钩子测试
   **文件**: `src/backend/test/linsight/test_linsight_citation_scope_hooks.py`
   **逻辑**: (a) `SearchKnowledgeBase.base_search`（monkeypatch `cache_citation_registry_items` 与 vector client，样板 `test_linsight_knowledge_citations.py`）：设 `tool.citation_scope = scope` 后调用，`scope.record_seen` 被 await 且收到 annotate 后的 items；`citation_scope=None` 时输出与今天逐字节相同。(b) `_LinsightWebCitationWrapper.wrap(inner, scope=scope)._arun(...)`（样板 `test_linsight_citation_agent.py` 的 `cache_web` fixture）同样记账；`scope=None` 不变。(c) `_subagent_tools(tools)` 返回的工具实例与入参同一对象（`is` 断言），证明子代理共用 scope。(d) `create_linsight_agent(session, tools, citation_scope=scope)`（monkeypatch `create_deep_agent` 捕获 `tools`、`_resolve_model`、`settings`）：KB 工具 `citation_scope is scope`，web 工具为带 scope 的包装器。
   **覆盖 AC**: AC-02, AC-25
   **依赖**: T002
 
-- [ ] **T004**: 检索工具与联网包装器接 scope
+- [x] **T004**: 检索工具与联网包装器接 scope
   **文件**: `src/backend/bisheng/tool/domain/langchain/linsight_knowledge.py`、`src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: `SearchKnowledgeBase` 新增 pydantic 字段 `citation_scope: Any | None = None`（样板同文件 `allowed_knowledge_ids`）；`base_search` 在 `await cache_citation_registry_items(items)` 之后、既有 try 内 `if self.citation_scope: await self.citation_scope.record_seen(items)`。`agent_factory.py`：把 `_annotate_web_search_output(output)` 拆成 `_annotate_web_search_items(output) -> tuple[str, list]`（原函数保留为薄封装，既有测试不改）；`_LinsightWebCitationWrapper` 新增字段 `scope: Any = None`，`wrap(inner, scope=None)`，`_arun` 用新函数并 `record_seen`；`_wrap_linsight_web_citation_tools(tools, scope=None)` 透传。
   **测试**: T003 (a)(b)(c) 全绿；`test_linsight_citation_agent.py`、`test_linsight_knowledge_citations.py` 不破
   **依赖**: T003
 
-- [ ] **T005**: 执行器构造 scope 并绑定到工具
+- [x] **T005**: 执行器构造 scope 并绑定到工具
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`、`src/backend/bisheng/linsight/domain/task_exec.py`
   **逻辑**: `create_linsight_agent(..., citation_scope=None)`：原 `tools = _wrap_linsight_web_citation_tools(list(tools or []))` 处改为 `_bind_linsight_citation_scope(tools, citation_scope)`（KB 工具设 `citation_scope` 字段、web 工具包装带 scope），`_subagent_tools` 取同一批实例。`task_exec._create_agent`：构造 `LinsightCitationScope(svid=session_model.id, session_id=session_model.session_id)`，`await scope.load()`（resume / continue 回读），存 `self._citation_scope`，传 `citation_scope=scope`。
   **测试**: T003 (d) 用例全绿
@@ -80,13 +80,13 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 #### 完成时审计（后端 Domain，Test-First 配对）
 
-- [ ] **T006**: `_audit_report_citations` 与三条完成路径测试
+- [x] **T006**: `_audit_report_citations` 与三条完成路径测试
   **文件**: `src/backend/test/linsight/test_citation_audit.py`
   **逻辑**: 克隆 `test_task_exec_report_citations.py` 的 `completion_task` fixture（`LinsightWorkflowTask()` + 各 AsyncMock），补 `task._citation_scope = SimpleNamespace(seen_keys={...})`；`build_fallback_report_file` / `get_final_result_file` 用 monkeypatch 返回临时 md。断言：直答、部分、成功三条路径的 `session_model.output_result["citation_audit"]` 含 `sources_seen, cited, unknown_handles, bracket_numbers, footnotes_without_defs, status, scanned_files, html_only, persisted`；seen>0 且 md 含真实标记 → `cited`；seen>0 且无标记 → `uncited` 且 caplog 有 `WARNING` 行以 `[linsight-citation-audit]` 开头、含 `model=`；seen==0 → `no_sources` 为 INFO；只有 `.html` 交付物且 seen>0 → `uncited` 且 `html_only=True`；正文 `[^1]` 无 `[^1]:` 定义计 `footnotes_without_defs=1`、`[3]` 计 `bracket_numbers=1`；`answer` 前后逐字节相同；`_citation_scope=None` 时 `status="no_sources"`；审计函数抛异常时完成路径照常结束且 `citation_audit` 缺省（不阻断）。
   **覆盖 AC**: AC-01, AC-03, AC-05, AC-26
   **依赖**: T002
 
-- [ ] **T007**: `_audit_report_citations` 实现与三条路径接线
+- [x] **T007**: `_audit_report_citations` 实现与三条路径接线
   **文件**: `src/backend/bisheng/linsight/domain/task_exec.py`
   **逻辑**: 新方法 `_audit_report_citations(self, session_model, answer, final_files) -> dict`（放 `_persist_report_citations` 之前）：`sources_seen = len(self._citation_scope.seen_keys)`（无 scope 则 0）；扫描 `final_files` 中本地存在的 `.md`（同 `_persist_report_citations` 的读法）+ `answer`；`cited = len(set(extract_citation_ids_from_text(text)))`（`citation_prompt_helper.py`）；`footnotes_without_defs = max(0, count(r"\[\^\d+\](?!:)") - count(r"^\[\^\d+\]:", M))`；`bracket_numbers = count(r"(?<!\[)\[\d{1,3}\](?!\()")`；`html_only = 无 .md 但有 .html`；`status`：seen==0→`no_sources`，cited>0→`cited`，否则→`uncited`；`scanned_files` ≤20；`unknown_handles=[]`（P1 填）；日志一行 `[linsight-citation-audit] session={svid} model={getattr(session_model,'model',None)} status= sources_seen= cited= unknown_handles= footnotes_without_defs= bracket_numbers= html_only=`，`uncited` 用 `logger.warning` 否则 `logger.info`；整体 try/except 返回 `{}`。三条路径在 `build_fallback_report_file` 之后、`session_model.output_result = {...}` 之前调用，字典加 `"citation_audit": audit`（design 决策 7；`_handle_direct_answer_completion`、`_handle_task_partial`、`_handle_task_success`）。`_persist_report_citations` 末尾把 `len(payloads)` 写进 `output_result["citation_audit"]["persisted"]`（沿用其 copy+reassign）。不改 answer。
   **测试**: T006 全绿；`test_task_exec_report_citations.py` 不破（fixture 需补 `_citation_scope = None`）
@@ -94,13 +94,13 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 #### 提示词位置（后端 Domain，Test-First 配对）
 
-- [ ] **T008**: 引用尾巴中间件与 3a 门控测试
+- [x] **T008**: 引用尾巴中间件与 3a 门控测试
   **文件**: `src/backend/test/linsight/test_citation_tail_middleware.py`
   **逻辑**: 样板 `test_harness_profile_and_time.py` 的 `_FakeReq` + handler 捕获：`_CitationTailMiddleware(_LINSIGHT_CITATION_TAIL_ZH)` 把文本追加到 system 末块、`name == "LinsightCitationTail"`、`tools == []`、文本不含 U+E200 且含「Citation Rules」；`_build_linsight_system_prompt(True)`（位置参数，兼容 `test_skill_prompt_priority.py` 调用形态）含 3a 引用句；`_build_linsight_system_prompt(False, has_web_search=True)` 含；`(False)` 不含且不含 `__CITATION_DELIVERABLE_LINE__`。中间件栈：monkeypatch `create_deep_agent` 捕获 `middleware` 列表，`has_kb=True` 时列表含 `LinsightCitationTail` 且其索引小于 `LinsightLanguageTail`；无 kb/web 时不含；researcher 子代理 spec 的 `middleware` 同样规律。
   **覆盖 AC**: AC-06
   **依赖**: 无
 
-- [ ] **T009**: 3a 占位符、`has_web_search` 入参、`_CitationTailMiddleware`
+- [x] **T009**: 3a 占位符、`has_web_search` 入参、`_CitationTailMiddleware`
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: 3a 行「其它格式由它派生）。」后插 `__CITATION_DELIVERABLE_LINE__`；`_build_linsight_system_prompt(has_knowledge_base, skills_present=False, has_code_interpreter=False, has_web_search=False)`，replace 链解析占位符为「正文中凡依据检索资料写出的事实、数字、引文，在该句或该段末尾按 Citation Rules 逐字复制来源标识并用引用标记包裹。」（仅 `has_knowledge_base or has_web_search`），否则空串；新增常量 `_LINSIGHT_CITATION_TAIL_ZH`，正文：
   「# 来源标注（与上文 Citation Rules 同一要求，不改变其它任何要求）
@@ -112,21 +112,21 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 #### 前端 Client（i18n + 组件 + 测试）
 
-- [ ] **T010**: 零引用提示三语文案
+- [x] **T010**: 零引用提示三语文案
   **文件**: `src/frontend/client/src/locales/zh-Hans/translation.json`、`src/frontend/client/src/locales/en/translation.json`、`src/frontend/client/src/locales/ja/translation.json`
   **逻辑**: 各加 `com_linsight_citation_uncited`（`{{0}}` 位置占位，与 `com_linsight_files_ready_suffix` 同格式，放其附近）：zh-Hans「本次检索到 {{0}} 条资料，但报告正文未标注来源，暂无法提供溯源角标。」/ en「{{0}} sources were retrieved, but the report does not cite any of them, so no citation markers can be shown.」/ ja「{{0}} 件の資料を検索しましたが、レポート本文に出典が記されていないため、引用マーカーを表示できません。」
   **覆盖 AC**: AC-04
   **手动验证**: `cd src/frontend && node scripts/check-i18n.mjs` 三语 parity 通过
   **依赖**: 无
 
-- [ ] **T011**: `ResultSection` 渲染提示行并从三处调用点透传
+- [x] **T011**: `ResultSection` 渲染提示行并从三处调用点透传
   **文件**: `src/frontend/client/src/components/Linsight/Artifacts/ResultSection.tsx`、`src/frontend/client/src/components/Linsight/Execution/TaskTurnPanel.tsx`、`src/frontend/client/src/components/Linsight/Execution/ConversationRound.tsx`、`src/frontend/client/src/components/Linsight/Execution/ExecutionFlow.tsx`
   **逻辑**: `ResultSectionProps` 新增 `citationAudit?: { status?: string; sources_seen?: number } | null`；`status === 'uncited'` 时在 answer 块之后渲染一行 `<p className="text-sm text-text-3">{localize('com_linsight_citation_uncited', { 0: sources_seen ?? 0 })}</p>`（沿用文件内既有灰字样式；不加 Badge，design 决策 7）；三处调用点传 `citationAudit={...output_result?.citation_audit}`（`output_result` 在 `store/linsight.ts` 为 `any`，不改类型）。文件数超 3 的例外理由：三处调用点各只加一行 prop 透传，拆开会让新 prop 在中间态无人消费。历史回看与分享页走同一 `output_result` 通道，天然一致。
   **覆盖 AC**: AC-04
   **手动验证**: 116 test 环境（`http://192.168.106.120:3002/workspace`）跑一个知识库任务用 deepseek-v4-pro：完成后摘要下方出现提示行；刷新后仍在；分享页仍在；`no_sources` 任务无此行
   **依赖**: T010
 
-- [ ] **T012**: `ResultSection` jest 测试
+- [x] **T012**: `ResultSection` jest 测试
   **文件**: `src/frontend/client/src/components/Linsight/Artifacts/ResultSection.test.tsx`
   **逻辑**: 样板 `Execution/TaskPanel.test.tsx`；三种 `citationAudit.status`（`uncited` 出现提示并含 `sources_seen` 数字；`cited`、`no_sources`、`undefined` 不出现）。
   **覆盖 AC**: AC-04
@@ -342,4 +342,6 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
 
 > 只留一行指针，论证在 design.md。推翻已 ★ 确认的决策时先停下与用户重新确认。
 
-- （无）
+- T003 (d) 用例需 stub `agent_factory.settings`（pydantic 实例不可 monkeypatch 属性，改为替换模块级 `settings` 对象）——实现细节，design 不变
+- T006 审计日志断言改用 loguru sink（caplog 看不到 loguru）——实现细节，design 不变
+- T011 `ExecutionFlow.tsx` 第二个 `citations=` 属于 `FilePreviewPanel`，不透传 `citationAudit`（预览面板不显示提示）——与 spec AC-04「结果区摘要下方」一致
