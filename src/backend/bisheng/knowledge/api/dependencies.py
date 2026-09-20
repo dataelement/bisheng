@@ -8,6 +8,9 @@ from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.knowledge.domain.repositories.implementations.knowledge_chat_session_repository_impl import (
+    KnowledgeChatSessionRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -18,6 +21,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
     KnowledgeFileRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_chat_session_repository import (
+    KnowledgeChatSessionRepository,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -56,6 +62,10 @@ async def get_knowledge_file_repository(
     """DapatkanKnowledgeFileRepositoryInstance Dependencies"""
 
     return KnowledgeFileRepositoryImpl(session)
+
+
+async def get_knowledge_chat_session_repository() -> KnowledgeChatSessionRepository:
+    return KnowledgeChatSessionRepositoryImpl()
 
 
 async def get_knowledge_document_repository(
@@ -216,15 +226,14 @@ async def get_knowledge_space_file_change_service(
 
 async def get_knowledge_space_chat_service(
     request: Request,
-    session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+    chat_session_repo: KnowledgeChatSessionRepository = Depends(get_knowledge_chat_session_repository),
 ) -> "KnowledgeSpaceChatService":
     """Get KnowledgeSpaceChatService instance, bound to the current request and login user."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService as _SvcClass
 
     service = _SvcClass(request=request, login_user=login_user)
-    service.version_repo = version_repo
+    service.chat_session_repo = chat_session_repo
     return service
 
 

@@ -9,6 +9,7 @@ Heavier end-to-end coverage (real retrieval against Milvus/ES, OpenFGA
 permission filtering, cursor round-trips over a live DB) is **测试降级 → manual /
 infra-backed e2e** and tracked in tasks.md §实际偏差记录.
 """
+
 import pytest
 from fastapi import HTTPException
 
@@ -17,6 +18,19 @@ from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeCreate, KnowledgeTypeEnum, KnowledgeUpdate
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context():
+    # COFCO: the v2 endpoints refuse a caller whose tenant does not match the
+    # ambient tenant context, so these tests must set one. _FakeUser is tenant 1.
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+    token = set_current_tenant_id(_FakeUser.tenant_id)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 class _FakeUser:
@@ -31,19 +45,22 @@ class _Row:
     def __init__(self, ktype: int, is_released: bool = False):
         self.type = ktype
         self.is_released = is_released
+        # COFCO: the v2 tenant guard also checks the resource's own tenant.
+        self.tenant_id = _FakeUser.tenant_id
 
 
 @pytest.fixture(autouse=True)
 def _patch_identity(monkeypatch):
-    """Default operator + resolve_operator return a fake user (no DB)."""
-    async def _fake_default():
+    """Current OpenAPI identity adapters return a fake user (no DB)."""
+
+    async def _fake_async():
         return _FakeUser()
 
-    async def _fake_resolve(user_id=None):
+    def _fake_sync():
         return _FakeUser()
 
-    monkeypatch.setattr(filelib, "get_default_operator_async", _fake_default)
-    monkeypatch.setattr(filelib, "resolve_operator", _fake_resolve)
+    monkeypatch.setattr(filelib, "get_open_api_operator_async", _fake_async)
+    monkeypatch.setattr(filelib, "get_open_api_operator", _fake_sync)
 
 
 # --------------------------------------------------------------------------- #
@@ -59,7 +76,7 @@ def test_errcode_value():
 # --------------------------------------------------------------------------- #
 async def test_create_dispatch_kb(monkeypatch):
     """AC-07/AC-12: type=0 → KnowledgeService; auth_type/is_released forced to default;
-    output enriched to KnowledgeRead (user_name + permission_ids)."""
+    output enriched to KnowledgeRead (user_name + actions)."""
     captured = {}
 
     async def _fake_acreate(cls, request, login_user, knowledge):
@@ -67,18 +84,19 @@ async def test_create_dispatch_kb(monkeypatch):
         return type("K", (), {"id": 1, "type": knowledge.type, "user_id": 1})()
 
     async def _fake_convert(cls, login_user, knowledge_list):
-        return [{"id": 1, "type": knowledge_list[0].type,
-                 "user_name": "operator", "permission_ids": ["use_kb", "edit_kb"]}]
+        return [{"id": 1, "type": knowledge_list[0].type, "user_name": "operator", "actions": ["use_kb", "edit_kb"]}]
 
     monkeypatch.setattr(KnowledgeService, "acreate_knowledge", classmethod(_fake_acreate))
     monkeypatch.setattr(KnowledgeService, "aconvert_knowledge_read", classmethod(_fake_convert))
 
-    req = KnowledgeCreate(name="kb", type=KnowledgeTypeEnum.NORMAL.value, model="12",
-                          auth_type=AuthTypeEnum.APPROVAL, is_released=True)
+    req = KnowledgeCreate(
+        name="kb", type=KnowledgeTypeEnum.NORMAL.value, model="12", auth_type=AuthTypeEnum.APPROVAL, is_released=True
+    )
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
     assert resp.data["type"] == KnowledgeTypeEnum.NORMAL.value
-    assert resp.data["user_name"] == "operator"            # enriched
-    assert resp.data["permission_ids"]                     # enriched, non-empty
+    assert resp.data["user_name"] == "operator"  # enriched
+    assert resp.data["actions"]  # enriched, non-empty
+    assert "permission_ids" not in resp.data
     # AC-12: KB ignores auth_type / is_released (forced to defaults before create).
     assert captured["knowledge"].auth_type == AuthTypeEnum.PUBLIC
     assert captured["knowledge"].is_released is False
@@ -91,10 +109,14 @@ async def test_create_dispatch_space(monkeypatch):
 
     async def _fake_space_create(self, **kwargs):
         captured.update(kwargs)
-        return type("S", (), {
-            "id": 7,
-            "model_dump": lambda self: {"id": 7, "name": "space", "type": KnowledgeTypeEnum.SPACE.value},
-        })()
+        return type(
+            "S",
+            (),
+            {
+                "id": 7,
+                "model_dump": lambda self: {"id": 7, "name": "space", "type": KnowledgeTypeEnum.SPACE.value},
+            },
+        )()
 
     async def _fake_eff(self, object_type, object_id, **kw):
         return {"visible", "edit"}
@@ -102,11 +124,16 @@ async def test_create_dispatch_space(monkeypatch):
     monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", _fake_space_create)
     monkeypatch.setattr(KnowledgeSpaceService, "_get_effective_actions", _fake_eff)
 
-    req = KnowledgeCreate(name="space", type=KnowledgeTypeEnum.SPACE.value, model="ignored",
-                          auth_type=AuthTypeEnum.PRIVATE, is_released=True)
+    req = KnowledgeCreate(
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        model="ignored",
+        auth_type=AuthTypeEnum.PRIVATE,
+        is_released=True,
+    )
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
     assert resp.data.type == KnowledgeTypeEnum.SPACE.value
-    assert resp.data.user_name == "operator"               # enriched
+    assert resp.data.user_name == "operator"  # enriched
     assert set(resp.data.actions) == {"edit", "visible"}  # enriched
     # model is never forwarded to the space create path.
     assert "model" not in captured
@@ -140,12 +167,13 @@ async def test_update_dispatch_space_preserves_is_released(monkeypatch):
 
     req = KnowledgeUpdate(knowledge_id=7, name="new", description=None)
     await filelib.update_knowledge(request=None, knowledge=req, version_repo=None, doc_repo=None)
-    assert captured["is_released"] is True          # preserved, not clobbered
-    assert captured["description"] == ""            # missing description → empty (AD-09)
+    assert captured["is_released"] is True  # preserved, not clobbered
+    assert captured["description"] == ""  # missing description → empty (AD-09)
 
 
 async def test_update_missing_resource(monkeypatch):
     """AC-16: unknown knowledge_id → NotFoundError (HTTPException)."""
+
     async def _fake_query(knowledge_id):
         return None
 
@@ -160,14 +188,20 @@ async def test_update_missing_resource(monkeypatch):
 # --------------------------------------------------------------------------- #
 async def test_list_dispatch_kb(monkeypatch):
     """AC-01: type=0 → KnowledgeService.get_knowledge (cursor page)."""
+
     async def _fake_get(cls, request, login_user, ktype, **kwargs):
         return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
 
     monkeypatch.setattr(KnowledgeService, "get_knowledge", classmethod(_fake_get))
     resp = await filelib.get_knowledge(
-        request=None, knowledge_type=KnowledgeTypeEnum.NORMAL.value, name=None,
-        sort_by="update_time", page_size=10, cursor=None, user_id=None,
-        version_repo=None, doc_repo=None,
+        request=None,
+        knowledge_type=KnowledgeTypeEnum.NORMAL.value,
+        name=None,
+        sort_by="update_time",
+        page_size=10,
+        cursor=None,
+        version_repo=None,
+        doc_repo=None,
     )
     assert resp.data["has_more"] is False
     assert "total" not in resp.data  # INV-6: no total
@@ -175,14 +209,20 @@ async def test_list_dispatch_kb(monkeypatch):
 
 async def test_list_dispatch_space(monkeypatch):
     """AC-02: type=3 → KnowledgeSpaceService.alist_mine_and_joined_cursor."""
+
     async def _fake_list(self, **kwargs):
         return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
 
     monkeypatch.setattr(KnowledgeSpaceService, "alist_mine_and_joined_cursor", _fake_list)
     resp = await filelib.get_knowledge(
-        request=None, knowledge_type=KnowledgeTypeEnum.SPACE.value, name=None,
-        sort_by="update_time", page_size=10, cursor=None, user_id=None,
-        version_repo=None, doc_repo=None,
+        request=None,
+        knowledge_type=KnowledgeTypeEnum.SPACE.value,
+        name=None,
+        sort_by="update_time",
+        page_size=10,
+        cursor=None,
+        version_repo=None,
+        doc_repo=None,
     )
     assert resp.data["has_more"] is False
 
@@ -191,9 +231,14 @@ async def test_list_rejects_type2():
     """AC-04: type=2 not listable via v2."""
     with pytest.raises(HTTPException):
         await filelib.get_knowledge(
-            request=None, knowledge_type=KnowledgeTypeEnum.PRIVATE.value, name=None,
-            sort_by="update_time", page_size=10, cursor=None, user_id=None,
-            version_repo=None, doc_repo=None,
+            request=None,
+            knowledge_type=KnowledgeTypeEnum.PRIVATE.value,
+            name=None,
+            sort_by="update_time",
+            page_size=10,
+            cursor=None,
+            version_repo=None,
+            doc_repo=None,
         )
 
 
@@ -202,6 +247,7 @@ async def test_list_rejects_type2():
 # --------------------------------------------------------------------------- #
 async def test_filelist_dispatch_kb(monkeypatch):
     """AC-26: KB file list → aget_knowledge_files_cursor (PageInfiniteCursorData + writeable)."""
+
     class _Page:
         def model_dump(self):
             return {"data": [], "page_size": 10, "has_more": False, "next_cursor": None}
@@ -216,8 +262,15 @@ async def test_filelist_dispatch_kb(monkeypatch):
     monkeypatch.setattr(KnowledgeService, "aget_knowledge_files_cursor", classmethod(_fake_cursor))
 
     resp = await filelib.get_filelist(
-        request=None, knowledge_id=1, parent_id=None, keyword=None, status=None,
-        page_size=10, cursor=None, user_id=None, version_repo=None, doc_repo=None,
+        request=None,
+        knowledge_id=1,
+        parent_id=None,
+        keyword=None,
+        status=None,
+        page_size=10,
+        cursor=None,
+        version_repo=None,
+        doc_repo=None,
     )
     assert resp.data["writeable"] is True
     assert "total" not in resp.data
@@ -225,6 +278,7 @@ async def test_filelist_dispatch_kb(monkeypatch):
 
 async def test_filelist_dispatch_space(monkeypatch):
     """AC-27: space file list → list_space_children + can_write_space_container."""
+
     class _Page:
         def model_dump(self):
             return {"data": [], "page_size": 20, "has_more": False, "next_cursor": None}
@@ -243,8 +297,15 @@ async def test_filelist_dispatch_space(monkeypatch):
     monkeypatch.setattr(KnowledgeSpaceService, "can_write_space_container", _fake_writeable)
 
     resp = await filelib.get_filelist(
-        request=None, knowledge_id=7, parent_id=3, keyword=None, status=None,
-        page_size=20, cursor=None, user_id=None, version_repo=None, doc_repo=None,
+        request=None,
+        knowledge_id=7,
+        parent_id=3,
+        keyword=None,
+        status=None,
+        page_size=20,
+        cursor=None,
+        version_repo=None,
+        doc_repo=None,
     )
     assert resp.data["writeable"] is False
 
@@ -265,8 +326,7 @@ async def test_delete_dispatch_space(monkeypatch):
     monkeypatch.setattr(filelib.KnowledgeDao, "aquery_by_id", staticmethod(_fake_query))
     monkeypatch.setattr(KnowledgeSpaceService, "delete_space", _fake_delete_space)
 
-    resp = await filelib.delete_knowledge_api(
-        request=None, knowledge_id=7, version_repo=None, doc_repo=None)
+    resp = await filelib.delete_knowledge_api(request=None, knowledge_id=7, version_repo=None, doc_repo=None)
     assert called["space_id"] == 7
     assert "deleted" in resp.status_message.lower() or resp.status_code == 200
 
@@ -337,10 +397,12 @@ def _setup_delete_knowledge_mocks(monkeypatch, knowledge, qa_delete_spy):
         def __init__(self, i):
             self.id = i
 
-    monkeypatch.setattr(QAKnoweldgeDao, "get_qa_knowledge_by_knowledge_ids",
-                        classmethod(lambda cls, kids: [_QA(11), _QA(12)]))
-    monkeypatch.setattr(QAKnoweldgeDao, "delete_batch",
-                        classmethod(lambda cls, ids: qa_delete_spy.update({"ids": ids})))
+    monkeypatch.setattr(
+        QAKnoweldgeDao, "get_qa_knowledge_by_knowledge_ids", classmethod(lambda cls, kids: [_QA(11), _QA(12)])
+    )
+    monkeypatch.setattr(
+        QAKnoweldgeDao, "delete_batch", classmethod(lambda cls, ids: qa_delete_spy.update({"ids": ids}))
+    )
 
 
 def test_clear_qa_removes_qa_rows(monkeypatch):
@@ -363,6 +425,7 @@ def test_clear_normal_kb_skips_qa_rows(monkeypatch):
 
 async def test_delete_rejects_type2(monkeypatch):
     """type=2 resource is not deletable via v2."""
+
     async def _fake_query(knowledge_id):
         return _Row(KnowledgeTypeEnum.PRIVATE.value)
 

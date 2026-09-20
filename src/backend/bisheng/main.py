@@ -20,6 +20,7 @@ from bisheng.open_api.api.exception_handlers import register_open_api_exception_
 from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
+from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
@@ -86,57 +87,58 @@ def _register_permission_runtime_contexts() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_app_context(config=settings)
-    _register_permission_runtime_contexts()
-    open_api_call_audit_service.start()
-    try:
-        await init_default_data()
-        # F035 task-mode compatibility data remains unrelated to F048 resource
-        # authorization and is safe to maintain independently.
+    async with app.state.open_mcp_runtime.lifespan():
+        await initialize_app_context(config=settings)
+        _register_permission_runtime_contexts()
+        open_api_call_audit_service.start()
         try:
-            from bisheng.linsight.domain.services.task_mode_menu_backfill import (
-                backfill_linsight_task_mode_web_menu,
-            )
+            await init_default_data()
+            # F035 task-mode compatibility data remains unrelated to F048 resource
+            # authorization and is safe to maintain independently.
+            try:
+                from bisheng.linsight.domain.services.task_mode_menu_backfill import (
+                    backfill_linsight_task_mode_web_menu,
+                )
 
-            await backfill_linsight_task_mode_web_menu()
-        except Exception:
-            logger.exception("linsight task-mode menu backfill failed; continuing startup")
-        try:
-            from bisheng.llm.domain.services.linsight_default_model_backfill import (
-                backfill_linsight_default_model,
-            )
+                await backfill_linsight_task_mode_web_menu()
+            except Exception:
+                logger.exception("linsight task-mode menu backfill failed; continuing startup")
+            try:
+                from bisheng.llm.domain.services.linsight_default_model_backfill import (
+                    backfill_linsight_default_model,
+                )
 
-            await backfill_linsight_default_model()
-        except Exception:
-            logger.exception("linsight default-model backfill failed; continuing startup")
-        # Skill bundles moved from node-local disk to object storage. Publish what
-        # this host still holds so an upgraded deployment heals itself; anything it
-        # cannot resolve is logged by name for the operator to run the migration
-        # script on the host that has it. Runs before seeding: built-in rows are
-        # left to the seeder, which republishes them from the image.
-        try:
-            from bisheng.linsight.domain.services.skill_bundle_backfill import (
-                backfill_skill_bundles_from_local_disk,
-            )
+                await backfill_linsight_default_model()
+            except Exception:
+                logger.exception("linsight default-model backfill failed; continuing startup")
+            # Skill bundles moved from node-local disk to object storage. Publish what
+            # this host still holds so an upgraded deployment heals itself; anything it
+            # cannot resolve is logged by name for the operator to run the migration
+            # script on the host that has it. Runs before seeding: built-in rows are
+            # left to the seeder, which republishes them from the image.
+            try:
+                from bisheng.linsight.domain.services.skill_bundle_backfill import (
+                    backfill_skill_bundles_from_local_disk,
+                )
 
-            await backfill_skill_bundles_from_local_disk()
-        except Exception:
-            logger.exception("linsight skill bundle backfill failed; continuing startup")
-        # Ships the kernel's built-in skills into every tenant so a fresh deploy
-        # has them without any operator step. Content-addressed and idempotent:
-        # an unchanged image costs one existence probe per skill.
-        try:
-            from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
+                await backfill_skill_bundles_from_local_disk()
+            except Exception:
+                logger.exception("linsight skill bundle backfill failed; continuing startup")
+            # Ships the kernel's built-in skills into every tenant so a fresh deploy
+            # has them without any operator step. Content-addressed and idempotent:
+            # an unchanged image costs one existence probe per skill.
+            try:
+                from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
 
-            await seed_builtin_skills()
-        except Exception:
-            logger.exception("built-in linsight skill seeding failed; continuing startup")
-        # LangfuseInstance.update()
-        yield
-    finally:
-        await open_api_call_audit_service.stop()
-        thread_pool.tear_down()
-        await close_app_context()
+                await seed_builtin_skills()
+            except Exception:
+                logger.exception("built-in linsight skill seeding failed; continuing startup")
+            # LangfuseInstance.update()
+            yield
+        finally:
+            await open_api_call_audit_service.stop()
+            thread_pool.tear_down()
+            await close_app_context()
 
 
 def create_app():
@@ -148,6 +150,7 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    app.state.open_mcp_runtime = create_open_mcp_runtime()
     register_open_api_exception_handlers(app)
     install_open_api_schema(app)
     register_public_exception_handlers(app)
@@ -186,6 +189,7 @@ def create_app():
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
     app.add_middleware(AdminScopeMiddleware)
+    app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=app.state.open_mcp_runtime.app)
     app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)

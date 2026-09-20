@@ -145,6 +145,12 @@ export function ChannelSettingsPage() {
     }),
     [displayedPermissionRows],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => displayedPermissionRows
+      .filter((row) => row.subjectType === "department" && row.includeChildren)
+      .map((row) => row.subjectId),
+    [displayedPermissionRows],
+  );
 
   if (settings.isLoading) {
     return (
@@ -375,6 +381,7 @@ export function ChannelSettingsPage() {
         resourceType="channel"
         resourceId={channelId}
         disabledIds={disabledSubjectIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationOptions}
         canAddNonUserSubjects={relationOptions.length > 0}
         onConfirm={settings.permissionDraft.addRows}

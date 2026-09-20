@@ -40,6 +40,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileRenameReq,
     FolderCreateReq,
     FolderRenameReq,
+    KnowledgeChatSessionResponse,
     KnowledgeSpaceCreateReq,
     KnowledgeSpaceUpdateReq,
     WebLinkCreateReq,
@@ -515,7 +516,7 @@ async def batch_create_department_spaces(
 async def get_knowledge_square(
     page: int = 1,
     page_size: int = 20,
-    keyword: str = None,
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_knowledge_square(keyword, page, page_size)
@@ -1004,7 +1005,7 @@ async def get_chat_folder_session(
     svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.get_chat_folder_session(space_id, folder_id)
-    return resp_200(result)
+    return resp_200([KnowledgeChatSessionResponse.model_validate(item) for item in result])
 
 
 @router.post("/{space_id}/chat/folder/session")
@@ -1014,7 +1015,7 @@ async def create_chat_folder_session(
     svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.create_chat_folder_session(space_id, folder_id)
-    return resp_200(result)
+    return resp_200(KnowledgeChatSessionResponse.model_validate(result))
 
 
 @router.delete("/{space_id}/chat/folder/session")

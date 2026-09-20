@@ -10,7 +10,7 @@ const source = readFileSync(
 
 describe("F050 permission subject picker contract", () => {
   it("preserves the 2.6 multi-subject selection flow", () => {
-    expect(source).toContain('<TabsTrigger value="user"');
+    expect(source).toContain('<Radio value="user"');
     expect(source).toContain('value="department"');
     expect(source).toContain('value="user_group"');
     expect(source).toContain("includeChildren");
@@ -24,6 +24,7 @@ describe("F050 permission subject picker contract", () => {
     );
     expect(source).toContain("grantUserTreeSearchApi={searchApi?.userTreeSearchApi}");
     expect(source).toContain("departmentChildrenApi={searchApi?.departmentChildrenApi}");
+    expect(source).toContain("disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}");
     expect(source).toContain("userGroupsApi={searchApi?.userGroupsApi}");
     expect(source).toContain("modelKey: activeModel.id");
     expect(source).not.toContain("modelId:");

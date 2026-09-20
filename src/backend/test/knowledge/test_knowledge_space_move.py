@@ -75,6 +75,7 @@ def _svc():
     svc._require_read_permission = AsyncMock(return_value=MagicMock(id=1, tenant_id=1))
     svc._replace_resource_parent_tuple = AsyncMock(return_value=None)
     svc._ensure_space_async_task_tenant_consistency = MagicMock(return_value=None)
+    svc._dispatch_knowledge_chat_rehome = MagicMock(return_value=1)
     return svc
 
 
@@ -97,6 +98,7 @@ async def test_same_space_move_file_updates_path_and_parent_tuple(async_db_sessi
     assert fresh.level == 1
     assert fresh.knowledge_id == 1  # same space
     svc._replace_resource_parent_tuple.assert_awaited()
+    svc._dispatch_knowledge_chat_rehome.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -278,6 +280,11 @@ async def test_cross_space_file_name_conflict_allowed(async_db_session, monkeypa
 
     assert res["invalid"] == []
     assert res["moved"][0]["id"] == 301 and res["moved"][0]["cross_space"] is True
+    svc._dispatch_knowledge_chat_rehome.assert_called_once_with(
+        source_space_id=1,
+        resources=[("knowledge_file", 301)],
+        reason="cross_space_move",
+    )
 
 
 @pytest.mark.asyncio
@@ -381,6 +388,13 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(async
     assert {a[1] for a in cleared_tags} == {"100", "101"}
     assert {fid for fid, _ in dispatched} == {100, 101}
     assert all(src == 1 for _, src in dispatched)
+    # F068 intentionally freezes only direct move rows. Version-chain sibling
+    # 101 moves with the document but is outside the online session flow set.
+    svc._dispatch_knowledge_chat_rehome.assert_called_once_with(
+        source_space_id=1,
+        resources=[("knowledge_file", 100)],
+        reason="cross_space_move",
+    )
 
 
 @pytest.mark.asyncio

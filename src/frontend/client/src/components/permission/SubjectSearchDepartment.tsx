@@ -41,6 +41,8 @@ export interface SubjectSearchDepartmentProps {
   includeChildren: boolean;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
+  /** Existing department grants whose include-children scope covers descendants. */
+  disabledSubtreeRootIds?: number[];
   /** subjectId -> the permission model(s) that subject already holds here. */
   grantedLabels?: Record<string, string>;
   departmentChildrenApi?: typeof getDepartmentChildren;
@@ -55,12 +57,17 @@ export function SubjectSearchDepartment({
   includeChildren,
   onSelectionSummaryChange,
   disabledIds = [],
+  disabledSubtreeRootIds = [],
   grantedLabels = {},
   departmentChildrenApi,
   departmentSearchApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
+  const disabledSubtreeRootIdSet = useMemo(
+    () => new Set(disabledSubtreeRootIds),
+    [disabledSubtreeRootIds],
+  );
 
   const fetchChildren = departmentChildrenApi ?? getDepartmentChildren;
   const fetchSearch = departmentSearchApi ?? searchDepartments;
@@ -106,6 +113,9 @@ export function SubjectSearchDepartment({
     !!node.path &&
     selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp));
 
+  const isCoveredByDisabledSubtree = (node: GrantDepartmentNode): boolean =>
+    isDepartmentPathCovered(node.path, disabledSubtreeRootIdSet);
+
   // Summary = the explicit department picks (decision 10: subtree coverage is
   // conveyed by the include-children flag, not enumerated client-side).
   useEffect(() => {
@@ -114,7 +124,7 @@ export function SubjectSearchDepartment({
   }, [value, onSelectionSummaryChange]);
 
   const toggle = (node: GrantDepartmentNode) => {
-    if (disabledIdSet.has(node.id)) return;
+    if (disabledIdSet.has(node.id) || isCoveredByDisabledSubtree(node)) return;
     if (selectedIdSet.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id));
       return;
@@ -171,6 +181,7 @@ export function SubjectSearchDepartment({
                 tree={tree}
                 selectedIdSet={selectedIdSet}
                 isImplicit={isImplicit}
+                isCoveredByDisabledSubtree={isCoveredByDisabledSubtree}
                 disabledIdSet={disabledIdSet}
                 grantedLabels={grantedLabels}
                 onToggle={toggle}
@@ -195,6 +206,7 @@ function DepartmentRow({
   tree,
   selectedIdSet,
   isImplicit,
+  isCoveredByDisabledSubtree,
   disabledIdSet,
   grantedLabels,
   onToggle,
@@ -205,6 +217,7 @@ function DepartmentRow({
   tree: ReturnType<typeof useGrantDepartmentTree>;
   selectedIdSet: Set<number>;
   isImplicit: (n: GrantDepartmentNode) => boolean;
+  isCoveredByDisabledSubtree: (n: GrantDepartmentNode) => boolean;
   disabledIdSet: Set<number>;
   grantedLabels: Record<string, string>;
   onToggle: (n: GrantDepartmentNode) => void;
@@ -220,15 +233,16 @@ function DepartmentRow({
   const isLoading = tree.loadingIds.has(node.id);
   const explicit = selectedIdSet.has(node.id);
   const granted = disabledIdSet.has(node.id);
+  const coveredByGrantedSubtree = !granted && isCoveredByDisabledSubtree(node);
   const grantedLabel = grantedLabels[String(node.id)];
-  const implicit = !explicit && !granted && isImplicit(node);
+  const implicit = !explicit && !granted && !coveredByGrantedSubtree && isImplicit(node);
   // Already-granted nodes read as checked too — an empty box next to the
   // "already granted" badge reads as a bug.
-  const isChecked = explicit || implicit || granted;
-  const isDisabled = granted || implicit;
+  const isChecked = explicit || implicit || granted || coveredByGrantedSubtree;
+  const isDisabled = granted || implicit || coveredByGrantedSubtree;
 
   const handleActivate = () => {
-    if (granted || implicit) return;
+    if (granted || implicit || coveredByGrantedSubtree) return;
     onToggle(node);
   };
 
@@ -285,7 +299,7 @@ function DepartmentRow({
           <Outlined.City className={PERMISSION_SUBJECT_ICON_CLASS} />
         </div>
         <span className="min-w-0 truncate pl-1" title={node.name}>{node.name}</span>
-        {(grantedLabel || granted) && (
+        {(grantedLabel || granted || coveredByGrantedSubtree) && (
           <Tag size="small" className="ml-auto shrink-0">
             {grantedLabel
               ? localize("com_permission.already_granted_as", {
@@ -306,6 +320,7 @@ function DepartmentRow({
             tree={tree}
             selectedIdSet={selectedIdSet}
             isImplicit={isImplicit}
+            isCoveredByDisabledSubtree={isCoveredByDisabledSubtree}
             disabledIdSet={disabledIdSet}
             grantedLabels={grantedLabels}
             onToggle={onToggle}
@@ -313,4 +328,14 @@ function DepartmentRow({
         ))}
     </>
   );
+}
+
+export function isDepartmentPathCovered(
+  path: string | undefined,
+  subtreeRootIds: ReadonlySet<number>,
+): boolean {
+  if (!path || subtreeRootIds.size === 0) return false;
+  return path
+    .split("/")
+    .some((segment) => segment !== "" && subtreeRootIds.has(Number(segment)));
 }

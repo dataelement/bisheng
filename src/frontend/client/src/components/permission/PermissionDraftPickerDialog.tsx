@@ -43,6 +43,7 @@ export interface PermissionDraftPickerDialogProps {
   resourceType: ResourceType;
   resourceId?: string;
   disabledIds: Record<SubjectType, number[]>;
+  disabledDepartmentSubtreeRootIds?: number[];
   relationModels: RelationModelOption[];
   canAddNonUserSubjects: boolean;
   onConfirm: (rows: PermissionDraftRow[]) => void;
@@ -56,6 +57,7 @@ export function PermissionDraftPickerDialog({
   resourceType,
   resourceId,
   disabledIds,
+  disabledDepartmentSubtreeRootIds = [],
   relationModels,
   canAddNonUserSubjects,
   onConfirm,
@@ -167,6 +169,7 @@ export function PermissionDraftPickerDialog({
               <SubjectSearchDepartment
                 {...searchProps}
                 includeChildren={includeChildren}
+                disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
                 departmentChildrenApi={searchApi?.departmentChildrenApi}
                 departmentSearchApi={searchApi?.departmentSearchApi}
               />
