@@ -2375,6 +2375,9 @@
     "project_new": "新規プロジェクト",
     "project_rename": "プロジェクト名を変更",
     "project_name_placeholder": "プロジェクト名を入力",
+    "move_to_project": "プロジェクトに移動",
+    "move_out_of_project": "プロジェクトから外す",
+    "project_none": "プロジェクトがありません",
     "project_empty": "会話はまだありません",
     "demo": {
       "project_travel": "旅行ガイド",

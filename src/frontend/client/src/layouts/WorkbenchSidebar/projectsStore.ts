@@ -23,6 +23,20 @@ const projectsStore = createLocalStore<MockProject[]>('bs_mock_projects', [], (r
     : [],
 );
 
+/**
+ * MOCK: which project a conversation was moved into — conversationId → projectId.
+ * A conversation belongs to at most one project, and the flat 对话 list hides the ones
+ * that live in a project, the way the real feature is meant to behave.
+ */
+const projectChatsStore = createLocalStore<Record<string, string>>('bs_mock_project_chats', {}, (raw) => {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return Object.fromEntries(
+    Object.entries(raw as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
+});
+
 /** Newest first, like the conversation list below it. */
 export function useMockProjects(): MockProject[] {
   return useLocalStore(projectsStore);
@@ -41,4 +55,27 @@ export function renameMockProject(id: string, name: string) {
 
 export function deleteMockProject(id: string) {
   projectsStore.set((prev) => prev.filter((project) => project.id !== id));
+  // The conversations filed under it go back to the flat 对话 list rather than
+  // disappearing with the folder.
+  projectChatsStore.set((prev) => {
+    const next = Object.fromEntries(Object.entries(prev).filter(([, projectId]) => projectId !== id));
+    return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+  });
+}
+
+export function useMockProjectChats(): Record<string, string> {
+  return useLocalStore(projectChatsStore);
+}
+
+export function moveChatToProject(conversationId: string, projectId: string) {
+  projectChatsStore.set((prev) => ({ ...prev, [conversationId]: projectId }));
+}
+
+export function removeChatFromProject(conversationId: string) {
+  projectChatsStore.set((prev) => {
+    if (!(conversationId in prev)) return prev;
+    const next = { ...prev };
+    delete next[conversationId];
+    return next;
+  });
 }

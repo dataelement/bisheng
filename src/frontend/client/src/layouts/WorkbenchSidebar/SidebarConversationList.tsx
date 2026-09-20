@@ -6,6 +6,7 @@ import { useAuthContext, useLocalize, useNavScrolling } from '~/hooks';
 import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import type { ConversationListResponse } from '~/types/chat';
 import { cn } from '~/utils';
+import { useMockProjectChats } from './projectsStore';
 import { SidebarSectionLabel } from './SidebarSectionLabel';
 
 const noop = () => undefined;
@@ -38,9 +39,15 @@ export function SidebarConversationList({ leading }: SidebarConversationListProp
     isFetchingNextPage,
   });
 
+  // MOCK: a conversation moved into a project leaves the flat list and shows up
+  // under its folder above (see projectsStore).
+  const projectChats = useMockProjectChats();
   const conversations = useMemo(
-    () => data?.pages.flatMap((page) => page.conversations).filter((convo) => convo != null) ?? [],
-    [data],
+    () =>
+      (data?.pages.flatMap((page) => page.conversations).filter((convo) => convo != null) ?? []).filter(
+        (convo) => projectChats[convo.conversationId ?? ''] == null,
+      ),
+    [data, projectChats],
   );
 
   // Edge fades, same idea as the knowledge-space menu: shown only while there is

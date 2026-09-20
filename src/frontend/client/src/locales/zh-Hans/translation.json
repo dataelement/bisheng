@@ -2381,6 +2381,9 @@
     "project_new": "新建项目",
     "project_rename": "重命名项目",
     "project_name_placeholder": "输入项目名称",
+    "move_to_project": "移入项目",
+    "move_out_of_project": "移出项目",
+    "project_none": "暂无项目",
     "project_empty": "暂无对话",
     "demo": {
       "project_travel": "旅游攻略",
