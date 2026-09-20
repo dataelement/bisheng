@@ -1,7 +1,10 @@
 import os
 import re
+import shutil
+import uuid
 from abc import ABC, abstractmethod
 from datetime import timedelta
+from os import DirEntry
 from typing import Any
 
 from loguru import logger
@@ -196,6 +199,128 @@ class BaseExecutor(ABC):
     @abstractmethod
     def run(self, code: str) -> Any:
         raise NotImplementedError()
+
+    def execute_code(
+        self,
+        code: str | None = None,
+        timeout: int | None = None,
+        filename: str | None = None,
+        work_dir: str | None = None,
+        lang: str | None = "python",
+    ) -> tuple[int, str, str]:
+        """Run ``code`` in ``work_dir``. Backends that share ``run_with_dir`` implement this.
+
+        Not ``@abstractmethod``: ``E2bCodeExecutor`` is frozen and only overrides
+        ``run``, so marking this abstract would make that class un-instantiable.
+        """
+        raise NotImplementedError()
+
+    @staticmethod
+    def _snapshot_files(dir_path: str) -> dict[str, tuple[float, int]]:
+        """Map every non-hidden file under ``dir_path`` to ``(mtime, size)``.
+
+        Taken before and after a run so the executor can tell what THIS run
+        produced. Without the diff the working dir is indistinguishable from its
+        contents: it also holds the prefetched uploaded sources and every earlier
+        step's files, so "what did this code write" is otherwise unanswerable.
+        """
+        snapshot: dict[str, tuple[float, int]] = {}
+        for root, dirs, files in os.walk(dir_path):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+            for name in files:
+                if name.startswith("."):
+                    continue
+                abs_path = os.path.join(root, name)
+                try:
+                    stat = os.stat(abs_path)
+                except OSError:
+                    continue
+                snapshot[os.path.relpath(abs_path, dir_path)] = (stat.st_mtime, stat.st_size)
+        return snapshot
+
+    def _relocate_root_files(self, dir_path: str, created: list[str]) -> list[tuple[str, str]]:
+        """Move run-created ROOT-level files into ``output/``; return the moves.
+
+        The working-dir root is not a delivery zone — only ``output/`` is harvested
+        into the result panel — so a model that writes ``report.xlsx`` instead of
+        ``output/report.xlsx`` loses its deliverable silently. Relocating is safe
+        because only files *this run created* are eligible: prefetched upload
+        sources and prior-step files sit in the pre-run snapshot and stay put.
+
+        An existing ``output/<name>`` is overwritten on purpose: re-running the same
+        script must refresh its deliverable, not accumulate ``report (1).xlsx``.
+        """
+        moved: list[tuple[str, str]] = []
+        for rel in created:
+            if os.sep in rel or "/" in rel:
+                continue
+            src = os.path.join(dir_path, rel)
+            if not os.path.isfile(src):
+                continue
+            target_dir = os.path.join(dir_path, OUTPUT_DIR_NAME)
+            dst = os.path.join(target_dir, rel)
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(src, dst)
+            except OSError:
+                logger.exception("relocate root deliverable failed: {}", src)
+                continue
+            moved.append((rel, os.path.relpath(dst, dir_path)))
+        return moved
+
+    def run_with_dir(self, code: str, dir_path: str, lang: str) -> tuple[int, str, list]:
+        """Run ``code`` under ``dir_path`` and return logs plus this run's files."""
+        pre_snapshot = self._snapshot_files(dir_path)
+        exitcode, logs, _ = self.execute_code(
+            code,
+            work_dir=dir_path,
+            lang=lang,
+        )
+        file_list = []
+        if exitcode != 0:
+            return exitcode, logs, file_list
+
+        post_snapshot = self._snapshot_files(dir_path)
+        created = [rel for rel in post_snapshot if rel not in pre_snapshot]
+        modified = [rel for rel, meta in post_snapshot.items() if rel in pre_snapshot and pre_snapshot[rel] != meta]
+
+        moved = self._relocate_root_files(dir_path, created)
+        relocated_from = {old for old, _ in moved}
+        touched = [rel for rel in created if rel not in relocated_from]
+        touched.extend(new for _, new in moved)
+        touched.extend(modified)
+        logs += self.relocation_advisory(moved)
+
+        for rel in touched:
+            file_name = os.path.join(dir_path, rel)
+            if not os.path.isfile(file_name):
+                continue
+            file_ext = os.path.splitext(rel)[-1]
+            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        self.sync_to_workspace(dir_path, touched)
+        if self.local_sync_path and os.path.exists(self.local_sync_path):
+            files_info = list(os.scandir(dir_path))
+            self.sync_files_to_local(files_info, dir_path)
+        return exitcode, logs, file_list
+
+    def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
+        if not files_info:
+            return
+        for file in files_info:
+            if file.name.startswith("."):
+                continue
+            if file.is_file():
+                self.download_file(file, root_path)
+            else:
+                new_files_info = os.scandir(file.path)
+                self.sync_files_to_local(list(new_files_info), root_path)
+
+    def download_file(self, file_info: DirEntry, root_path: str):
+        relative_path = file_info.path.replace(root_path, "").lstrip(os.sep)
+        local_path = os.path.join(self.local_sync_path, relative_path)
+        local_dir = os.path.dirname(local_path)
+        os.makedirs(local_dir, exist_ok=True)
+        shutil.move(file_info.path, local_path)
 
     @staticmethod
     def absolute_path_advisory(code: str) -> str:

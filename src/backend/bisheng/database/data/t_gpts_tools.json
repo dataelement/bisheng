@@ -108,6 +108,7 @@
     "desc": "可以执行 Python  和 shell 代码，并在 600 秒内返回结果，适合处理数学、编程、图片和文件等问题场景。",
     "tool_key": "bisheng_code_interpreter",
     "type": 6,
+    "extra": "{\"type\": \"container\"}",
     "is_preset": 1,
     "is_delete": 0,
     "user_id": null,

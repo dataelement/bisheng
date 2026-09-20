@@ -354,6 +354,8 @@
   "toolFetchFailed": "Failed to fetch tool",
   "executionModeLabel": "Code execution mode",
   "executionLocalLabel": "Run locally",
+  "executionContainerLabel": "Isolated execution",
+  "executionContainerHint": "Connection settings are managed in system configuration. You do not need to enter them here.",
   "executionE2bLabel": "Run in E2B sandbox",
   "serviceProviderLabel": "Service provider",
   "providerPrivateLabel": "Self-hosted",

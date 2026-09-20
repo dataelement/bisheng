@@ -1,7 +1,61 @@
 import ast
 import importlib
 import inspect
-from typing import Union, Type, Dict, Any
+import json
+from typing import Any, Union
+
+from bisheng.common.errcode.sandbox import SandboxCodeNodeOutputError
+
+SENTINEL_OK = "__BISHENG_CODE_NODE_RESULT__"
+SENTINEL_BAD = "__BISHENG_CODE_NODE_UNSERIALIZABLE__"
+
+
+def build_code_node_wrapper(user_code: str, method_name: str, params: dict) -> str:
+    """User source + json.loads inputs → call ``method_name`` → sentinel json.dumps.
+
+    The isolation environment does not know what a workflow node is; it only execs
+    this script. ``method_name`` must be a Python identifier.
+    """
+    if not method_name.isidentifier():
+        raise ValueError(f"Invalid method name: {method_name!r}")
+    payload = json.dumps(params, ensure_ascii=False)
+    return (
+        user_code
+        + "\n\n"
+        + "import json as _bisheng_json\n"
+        + f"_bisheng_params = _bisheng_json.loads({payload!r})\n"
+        + f"_bisheng_ret = {method_name}(**_bisheng_params)\n"
+        + "try:\n"
+        + "    _bisheng_out = _bisheng_json.dumps(_bisheng_ret, ensure_ascii=False)\n"
+        + "except (TypeError, ValueError):\n"
+        + f"    print({SENTINEL_BAD!r})\n"
+        + "else:\n"
+        + f"    print({SENTINEL_OK!r} + _bisheng_out)\n"
+    )
+
+
+def _parse_sentinel(logs: str):
+    if SENTINEL_BAD in logs:
+        raise SandboxCodeNodeOutputError()
+    idx = logs.rfind(SENTINEL_OK)
+    if idx < 0:
+        return None
+    raw = logs[idx + len(SENTINEL_OK) :].splitlines()[0]
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SandboxCodeNodeOutputError() from exc
+
+
+def make_code_parser(code: str, *, execute_code=None, enabled: bool | None = None):
+    """CodeParser (in-process) or SandboxCodeParser. Only the system switch rolls back."""
+    if enabled is None:
+        from bisheng.common.services.config_service import settings
+
+        enabled = settings.sandbox_conf.code_node_enabled
+    if enabled:
+        return SandboxCodeParser(code, execute_code=execute_code)
+    return CodeParser(code)
 
 
 class CodeParser:
@@ -9,7 +63,7 @@ class CodeParser:
     A parser for Python source code, extracting code details.
     """
 
-    def __init__(self, code: Union[str, Type]) -> None:
+    def __init__(self, code: Union[str, type]) -> None:
         """
         Initializes the parser with the provided code.
         """
@@ -21,7 +75,7 @@ class CodeParser:
         self.code = code
         self.exec_globals = {}
         self.exec_locals = {}
-        self.data: Dict[str, Any] = {
+        self.data: dict[str, Any] = {
             "imports": [],
         }
         self.handlers = {
@@ -32,7 +86,7 @@ class CodeParser:
             ast.Assign: self.parse_global_vars,
         }
 
-    def parse_code(self) -> Dict[str, Any]:
+    def parse_code(self) -> dict[str, Any]:
         """
         Runs all parsing operations and returns the resulting data.
         """
@@ -125,3 +179,46 @@ class CodeParser:
         if not class_:
             raise AttributeError(f"Class {class_name} not found.")
         return class_(*args, **kwargs)
+
+
+class SandboxCodeParser(CodeParser):
+    """Static ``ast.parse`` plus wrapper → the same ``execute_code`` as interpreters."""
+
+    def __init__(self, code: Union[str, type], *, execute_code=None) -> None:
+        super().__init__(code)
+        self._execute_code = execute_code
+
+    def parse_code(self) -> dict[str, Any]:
+        # Syntax only. Do not exec / importlib — those run inside the isolation
+        # environment. Keeps save-time failure on SyntaxError (AC-20).
+        ast.parse(self.code)
+        return self.data
+
+    def exec_method(self, method_name: str, *args, **kwargs):
+        if args:
+            raise TypeError("code node isolation exec_method only accepts keyword arguments")
+        wrapper = build_code_node_wrapper(self.code, method_name, kwargs)
+        exitcode, logs, _ = self._invoke_execute(wrapper)
+        logs = logs or ""
+        result = _parse_sentinel(logs)
+        if result is None:
+            if exitcode:
+                raise RuntimeError(logs or f"code node exited {exitcode}")
+            raise SandboxCodeNodeOutputError()
+        return result
+
+    def _invoke_execute(self, wrapper: str):
+        fn = self._execute_code
+        if fn is None:
+            from bisheng.common.services.config_service import settings
+            from bisheng_langchain.gpts.tools.code_interpreter.container_executor import (
+                ContainerExecutor,
+            )
+
+            fn = ContainerExecutor(
+                minio={},
+                sandbox_conf=settings.sandbox_conf,
+                keep_session=False,
+            ).execute_code
+            self._execute_code = fn
+        return fn(code=wrapper, lang="python")

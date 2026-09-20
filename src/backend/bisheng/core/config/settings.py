@@ -784,6 +784,69 @@ class MetricLogConf(BaseModel):
     )
 
 
+class SandboxConf(BaseModel):
+    """Isolation-environment (sandbox) access and capacity settings.
+
+    Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
+    ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
+    ``orchestrator`` field — replica discovery is the hostname pattern only.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    endpoints: list[str] = Field(
+        default_factory=list, description="Explicit runner URLs; non-empty skips DNS discovery"
+    )
+    discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
+    discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
+    discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
+    discover_ttl_s: int = Field(default=15, description="Cache discovered hostnames for this many seconds")
+    discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
+    token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
+    pool_lease_ttl_s: int = Field(default=900, description="Idle lease TTL in seconds")
+    max_sessions_per_replica: int = Field(default=1, ge=1, description="Concurrent sessions per runner replica")
+    enable_uid_isolation: bool = Field(
+        default=False,
+        description="Required when max_sessions_per_replica > 1 (per-session uid + directory mode)",
+    )
+    pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
+    default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
+    max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
+    code_node_enabled: bool = Field(default=True, description="Run workflow code nodes in the isolation environment")
+
+    @model_validator(mode="after")
+    def overlay_env_and_guard_concurrent_sessions(self):
+        prefix = "BS_SANDBOX_CONF__"
+        for name, field in type(self).model_fields.items():
+            raw = os.getenv(f"{prefix}{name.upper()}")
+            if raw is None:
+                continue
+            object.__setattr__(self, name, _coerce_sandbox_env(field.annotation, raw))
+        if self.max_sessions_per_replica > 1 and not self.enable_uid_isolation:
+            raise ValueError("max_sessions_per_replica > 1 requires enable_uid_isolation=true")
+        return self
+
+
+def _coerce_sandbox_env(annotation, raw: str):
+    origin = getattr(annotation, "__origin__", annotation)
+    args = getattr(annotation, "__args__", ())
+    if origin is list or (args and origin is list):
+        text = raw.strip()
+        if text.startswith("["):
+            parsed = json.loads(text)
+            if not isinstance(parsed, list):
+                raise ValueError("sandbox_conf list env must be a JSON array")
+            return [str(item) for item in parsed]
+        if not text:
+            return []
+        return [item.strip() for item in text.split(",") if item.strip()]
+    if annotation is bool or origin is bool:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    if annotation is int or origin is int:
+        return int(raw)
+    return raw
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -853,6 +916,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
 
     @field_validator("database_url")
     @classmethod

@@ -354,6 +354,8 @@
   "toolFetchFailed": "工具获取失败",
   "executionModeLabel": "代码执行方式",
   "executionLocalLabel": "本机运行",
+  "executionContainerLabel": "隔离执行",
+  "executionContainerHint": "接入参数在系统配置中管理，这里不用填写。",
   "executionE2bLabel": "E2B沙箱运行",
   "serviceProviderLabel": "服务提供方",
   "providerPrivateLabel": "自托管",

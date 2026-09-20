@@ -16,6 +16,7 @@ Three behaviours are pinned:
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -180,3 +181,40 @@ async def test_e2b_file_list_honours_autopush_ceiling(monkeypatch: pytest.Monkey
     assert "./uploads/huge.xlsx" not in pushed
     # LocalExecutor still reaches the big one through the shared directory.
     assert bound_row.extra["config"]["local"]["local_sync_path"] == str(tmp_path)
+
+
+async def test_container_binds_workspace_without_e2b_file_list(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """Container copy-in happens at run(); do not pre-scan file_list (AC-11)."""
+    from bisheng_langchain.gpts.load_tools import _get_native_code_interpreter
+    from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import SIZE_AUTOPUSH
+
+    (tmp_path / "skills" / "demo").mkdir(parents=True)
+    (tmp_path / "skills" / "demo" / "SKILL.md").write_text("hi")
+    (tmp_path / "uploads").mkdir()
+    (tmp_path / "uploads" / "huge.bin").write_bytes(b"x" * (SIZE_AUTOPUSH + 1))
+
+    row = SimpleNamespace(
+        id=CODE_TOOL_ID,
+        tool_key="bisheng_code_interpreter",
+        extra=json.dumps({"type": "container"}),
+    )
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(return_value=row))
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", AsyncMock(return_value=[]))
+
+    await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([CODE_TOOL_ID]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    bound_row = init_one.await_args.kwargs["tool"]
+    container = bound_row.extra["config"]["container"]
+    assert container["local_sync_path"] == str(tmp_path)
+    assert container["keep_session"] is True
+    assert "workspace_prefix" in container
+    assert "file_list" not in bound_row.extra["config"].get("e2b", {})
+    tool = _get_native_code_interpreter(minio={}, type="container", config=bound_row.extra["config"])
+    assert "skills/" in tool.description
