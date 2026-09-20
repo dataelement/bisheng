@@ -2358,6 +2358,9 @@
     "project_new": "New project",
     "project_rename": "Rename project",
     "project_name_placeholder": "Enter a project name",
+    "move_to_project": "Move to project",
+    "move_out_of_project": "Remove from project",
+    "project_none": "No projects yet",
     "project_empty": "No conversations yet",
     "demo": {
       "project_travel": "Travel guides",

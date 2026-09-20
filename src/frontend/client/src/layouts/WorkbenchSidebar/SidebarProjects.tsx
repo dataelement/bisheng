@@ -1,38 +1,18 @@
 import { Tooltip } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
+import Convo from '~/components/Conversations/Convo';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
-import { useLocalize } from '~/hooks';
-import { isDemoDataEnabled } from '~/mock/demo/ids';
+import { useAuthContext, useLocalize } from '~/hooks';
+import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
+import type { TConversation } from '~/types/chat';
 import { cn } from '~/utils';
 import { ProjectNameDialog } from './ProjectNameDialog';
-import { createMockProject, deleteMockProject, renameMockProject, useMockProjects } from './projectsStore';
+import { createMockProject, deleteMockProject, renameMockProject, useMockProjectChats } from './projectsStore';
+import { useSidebarProjects } from './useSidebarProjects';
 
-type SidebarProject = {
-  id: string;
-  name: string;
-  /** Titles of the conversations filed under it — sample projects only, for now. */
-  chats: string[];
-  /** Sample rows are read-only: no rename / delete. */
-  readonly: boolean;
-};
-
-// Sample projects of the DEV demo data layer (Figma 13139:111454), shown after the
-// user's own so the section can be reviewed with content in it.
-const DEMO_PROJECTS = [
-  {
-    id: 'demo-travel',
-    nameKey: 'com_workbench_sidebar.demo.project_travel',
-    chatKeys: [
-      'com_workbench_sidebar.demo.chat_food',
-      'com_workbench_sidebar.demo.chat_heritage',
-      'com_workbench_sidebar.demo.chat_season',
-      'com_workbench_sidebar.demo.chat_spots',
-    ],
-  },
-  { id: 'demo-files', nameKey: 'com_workbench_sidebar.demo.project_files', chatKeys: [] },
-];
+const noop = () => undefined;
 
 const ROW = 'flex w-full items-center rounded-lg py-[5px] pr-2 text-left text-body text-text-1 transition-colors';
 const ICON_BUTTON = 'flex size-5 shrink-0 items-center justify-center rounded text-text-2 transition-colors hover:bg-fill-3';
@@ -41,12 +21,32 @@ type NameDialogTarget = { mode: 'create' } | { mode: 'rename'; id: string; name:
 
 /**
  * 项目 section of the workbench sidebar. MOCK: the backend has no project model yet, so
- * projects are created / renamed / deleted in localStorage (see projectsStore) and cannot
- * hold conversations yet — an open project shows the empty hint.
+ * projects — and which conversations were moved into them — live in localStorage
+ * (see projectsStore); a conversation filed here leaves the flat 对话 list below.
  */
 export function SidebarProjects() {
   const localize = useLocalize();
-  const ownProjects = useMockProjects();
+  const { isAuthenticated } = useAuthContext();
+  const projects = useSidebarProjects();
+  const projectChats = useMockProjectChats();
+
+  // Same query (and cache entry) as the 对话 list below: this only reads the pages it
+  // already loaded, so a moved conversation renders from the data that is in hand.
+  const { data } = useConversationsInfiniteQuery(
+    { pageNumber: '1', isArchived: false },
+    { enabled: isAuthenticated },
+  );
+  const conversationsByProject = useMemo(() => {
+    const grouped = new Map<string, TConversation[]>();
+    for (const convo of data?.pages.flatMap((page) => page.conversations) ?? []) {
+      const projectId = convo == null ? undefined : projectChats[convo.conversationId ?? ''];
+      if (projectId == null || convo == null) continue;
+      const list = grouped.get(projectId);
+      if (list) list.push(convo);
+      else grouped.set(projectId, [convo]);
+    }
+    return grouped;
+  }, [data, projectChats]);
   const [openIds, setOpenIds] = useState<string[]>([]);
   // The target outlives `open` so the dialog keeps its title while it animates out.
   const [nameDialog, setNameDialog] = useState<NameDialogTarget>({ mode: 'create' });
@@ -55,18 +55,6 @@ export function SidebarProjects() {
     setNameDialog(target);
     setNameDialogOpen(true);
   };
-
-  const projects: SidebarProject[] = [
-    ...ownProjects.map((project) => ({ id: project.id, name: project.name, chats: [], readonly: false })),
-    ...(isDemoDataEnabled()
-      ? DEMO_PROJECTS.map((project) => ({
-          id: project.id,
-          name: localize(project.nameKey),
-          chats: project.chatKeys.map((key) => localize(key)),
-          readonly: true,
-        }))
-      : []),
-  ];
 
   const handleToggle = (id: string) => {
     setOpenIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -111,6 +99,7 @@ export function SidebarProjects() {
 
       {projects.map((project) => {
         const open = openIds.includes(project.id);
+        const conversations = conversationsByProject.get(project.id) ?? [];
         return (
           <div key={project.id} className="flex w-full flex-col">
             <div className={cn(ROW, 'group/project relative pl-2 hover:bg-fill-1 has-[[data-state=open]]:bg-fill-1')}>
@@ -157,18 +146,33 @@ export function SidebarProjects() {
                 </DropdownMenu>
               )}
             </div>
-            {open &&
-              (project.chats.length > 0 ? (
-                project.chats.map((chat) => (
+            {open && (
+              <>
+                {/* Real rows, so a conversation filed here keeps its click / rename /
+                    ⋯ menu — indented to the sample rows' 32px. */}
+                {conversations.map((convo) => (
+                  <div key={convo.conversationId} className="pl-6">
+                    <Convo
+                      compact
+                      isLatestConvo={false}
+                      conversation={convo}
+                      retainView={noop}
+                      toggleNav={noop}
+                    />
+                  </div>
+                ))}
+                {project.demoChats.map((chat) => (
                   <div key={chat} className={cn(ROW, 'cursor-default pl-8 hover:bg-fill-1')}>
                     <span className="min-w-0 flex-1 truncate">{chat}</span>
                   </div>
-                ))
-              ) : (
-                <div className="w-full truncate py-[5px] pl-8 pr-2 text-caption text-text-3">
-                  {localize('com_workbench_sidebar.project_empty')}
-                </div>
-              ))}
+                ))}
+                {conversations.length === 0 && project.demoChats.length === 0 && (
+                  <div className="w-full truncate py-[5px] pl-8 pr-2 text-caption text-text-3">
+                    {localize('com_workbench_sidebar.project_empty')}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         );
       })}

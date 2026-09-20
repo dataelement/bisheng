@@ -3,7 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import type { MouseEvent, ReactElement, ReactNode } from 'react';
 import { cloneElement, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
+import { ActionMenuContent, ActionMenuDivider, ActionMenuItem } from '~/components/ActionMenu';
 import { useStartNewChat } from '~/components/Nav/NewChat';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
@@ -161,9 +161,9 @@ export function WorkbenchSidebar({ hidden = false }: WorkbenchSidebarProps) {
                   }}
                 />
               ))}
-              {/* A hairline like the sidebar's own rules — the shared 1px ActionMenuDivider reads
-                  too heavy in this short menu. */}
-              <div role="separator" className="my-1.5 border-t-[0.5px] border-border-base" />
+              {/* A hairline like the sidebar's own rules — the 1px divider reads too heavy
+                  in this short menu. */}
+              <ActionMenuDivider hairline />
               <ActionMenuItem
                 icon={<Outlined.Setting />}
                 label={localize('com_workbench_sidebar.customize')}
