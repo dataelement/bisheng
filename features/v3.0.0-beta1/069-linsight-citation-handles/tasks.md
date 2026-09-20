@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-20 用户确认（sdd-review 修订后，AC-01 至 AC-27 共 27 条） |
 | design.md | ✅ 已评审 | 2026-09-20 用户确认（决策 1～8）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-09-20 sdd-review 两轮（41 项）；第二轮 2 项 medium（P2 保留剥未知编号、T031/T033 依赖）已直接修正 |
-| 实现 | 🔄 进行中 | 32 / 41 完成（Wave 1 全部完成；Wave 2 代码 T014～T032 已实现并单测通过，T033 A/B 待部署）。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
+| 实现 | 🔄 进行中 | 33 / 41 完成（Wave 1、Wave 2 全部完成；A/B uncited 44% → 0%，见 design §7；预览「文件加载失败」待网络恢复后复核）。Wave 3（P2）待产品确认版式。Wave 1（P0）先行；Wave 2（P1）待 P0 基线；Wave 3（P2）待产品确认版式 |
 
 ---
 
@@ -279,7 +279,7 @@ cd client && ../node_modules/.bin/tsc-strict && node_modules/.bin/jest <测试�
   **测试**: T031 全绿
   **依赖**: T031
 
-- [ ] **T033**: 116 P1 A/B 与判定
+- [x] **T033**: 116 P1 A/B 与判定
   **文件**: 无（结果记入 design §7）
   **逻辑**: PRD §7 同题同模型各 3 次；指标 uncited 率、cited 中位数、unknown_handles 率（<5%）、footnotes_without_defs、每轮 token 增量、nudge 触发数；判定保留默认开或关开关。
   **覆盖 AC**: AC-07, AC-15, AC-18
