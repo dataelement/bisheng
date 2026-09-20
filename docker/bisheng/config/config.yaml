@@ -163,3 +163,8 @@ logger_conf:
 #   # Set it when the backend sits behind the commercial gateway, a path prefix,
 #   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
 #   public_base_url: https://kb.example.com
+
+# Linsight (task mode) runtime knobs. Commented out on purpose: an older image
+# rejects unknown top-level keys, so enable per deployment or via 系统配置.
+# linsight:
+#   citation_handles_enabled: true   # F069 short citation handles [Sn]; false = F047 verbatim-id contract
