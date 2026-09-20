@@ -831,7 +831,8 @@
     "dailyLimitSuffix": "calls per day",
     "shareToChildrenTip": "When on, child tenants can use the models of this provider but cannot view or change its configuration.",
     "getApiKey": "Get a {{provider}} API key",
-    "formatExample": "Example: {{example}}"
+    "formatExample": "Example: {{example}}",
+    "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2, paraformer-realtime-v1 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model."
   },
   "finetune": {
     "all": "All",

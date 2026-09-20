@@ -409,6 +409,7 @@ class Icon(BaseModel):
 
 
 class WSModel(BaseModel):
+    realtime: bool = False
     key: str | None = None
     id: str
     name: str | None = None

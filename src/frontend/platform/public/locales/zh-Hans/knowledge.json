@@ -438,5 +438,10 @@
   "tagDeleted": "删除成功",
   "tagOperationRequiresCompletedFiles": "仅已完成文件支持添加标签",
   "qa": {},
-  "legacyFormatNotSupported": "旧版文件格式暂不支持预览"
+  "legacyFormatNotSupported": "旧版文件格式暂不支持预览",
+  "voiceInput": {
+    "start": "开始录音",
+    "pause": "暂停录音",
+    "failed": "语音输入失败，请重试"
+  }
 }

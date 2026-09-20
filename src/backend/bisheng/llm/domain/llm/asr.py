@@ -11,6 +11,7 @@ from bisheng.common.errcode.server import (
     NoAsrModelConfigError,
 )
 from bisheng.core.ai import AliyunASRClient, AzureOpenAIASRClient, BaseASRClient, OpenAIASRClient
+from bisheng.core.ai.asr.realtime import RealtimeASRClient, realtime_protocol
 from bisheng.llm.domain.const import LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMModel, LLMServer
 
@@ -90,10 +91,17 @@ class BishengASR(BishengBase):
     async def init_asr_client(cls, model_info: LLMModel, server_info: LLMServer) -> BaseASRClient:
         params = {}
         if server_info.config:
-            if server_info.config:
-                params.update(server_info.config)
-            if model_info.config:
-                params.update(model_info.config)
+            params.update(server_info.config)
+        if model_info.config:
+            params.update(model_info.config)
+        if realtime_protocol(server_info.type, model_info.model_name):
+            return RealtimeASRClient(
+                api_key=params.get("openai_api_key") or params.get("api_key"),
+                model=model_info.model_name,
+                base_url=params.get("openai_api_base", ""),
+            )
+        if server_info.type == LLMServerType.QWEN.value and "realtime" in model_info.model_name:
+            raise ValueError("This realtime ASR model has no registered protocol adapter")
         if server_info.type not in _asr_client_type:
             raise Exception(f"asrModel not supported{server_info.type}Type of service provider")
         params_handler = _asr_client_type[server_info.type]["params_handler"]
@@ -104,3 +112,9 @@ class BishengASR(BishengBase):
     @wrapper_bisheng_model_limit_check_async
     async def ainvoke(self, audio: Union[str, bytes, BinaryIO], **kwargs) -> str:
         return await self.asr.transcribe(audio=audio, **kwargs)
+
+    @wrapper_bisheng_model_limit_check_async
+    async def astream(self, audio, on_ready, on_event):
+        if not isinstance(self.asr, RealtimeASRClient):
+            raise ValueError("The configured ASR model supports file recognition")
+        await self.asr.stream(audio, on_ready, on_event)

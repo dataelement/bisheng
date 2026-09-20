@@ -670,7 +670,8 @@
     "dailyLimitSuffix": "回",
     "shareToChildrenTip": "オンにすると、子テナントはこのプロバイダーのモデルを利用できますが、設定の閲覧や変更はできません。",
     "getApiKey": "{{provider}} の API キーを取得",
-    "formatExample": "形式の例：{{example}}"
+    "formatExample": "形式の例：{{example}}",
+    "streamingAsrHint": "リアルタイム音声認識は paraformer-realtime-v2、paraformer-realtime-v1、qwen3-asr-flash-realtime に対応しています。保存して接続テストを実行後、ワークベンチの ASR モデルとして選択してください。"
   },
   "finetune": {
     "all": "すべて",

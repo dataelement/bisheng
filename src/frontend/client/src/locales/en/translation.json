@@ -2447,5 +2447,10 @@
   "com_citation.locate_missed": "Couldn't find the cited passage automatically. Here is the quoted text:",
   "com_ui": {
     "scroll_to_bottom": "Scroll to bottom"
+  },
+  "voice_input": {
+    "start": "Start recording",
+    "pause": "Pause recording",
+    "failed": "Voice input failed. Please try again."
   }
 }

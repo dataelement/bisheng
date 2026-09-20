@@ -36,6 +36,7 @@ from bisheng.common.errcode.server import (
     TtsSynthesisFailedError,
 )
 from bisheng.common.models.config import ConfigKeyEnum
+from bisheng.core.ai.asr.realtime import realtime_protocol
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -881,7 +882,9 @@ class LLMService:
             example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
             with open(example_file_path, "rb") as f:
                 bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_asr.ainvoke(f)
+                transcript = await bisheng_asr.ainvoke(f)
+                if not transcript.strip():
+                    raise ValueError("ASR model check returned no final transcript for the sample")
         elif model.model_type == LLMModelType.RERANK.value:
             bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
             await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
@@ -1645,6 +1648,9 @@ class LLMService:
             target,
             inherited_from_root=inherited,
         )
+        if config.asr_model and config.asr_model.id:
+            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
+            config.asr_model.realtime = bool(model and server and realtime_protocol(server.type, model.model_name))
         return config, inherited, blocked
 
     @classmethod

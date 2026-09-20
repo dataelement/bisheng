@@ -675,7 +675,8 @@
     "dailyLimitSuffix": "次",
     "shareToChildrenTip": "开启后，子租户可以使用这个服务提供商下的模型，但不能查看或修改它的配置。",
     "getApiKey": "获取{{provider}} API Key",
-    "formatExample": "格式示例：{{example}}"
+    "formatExample": "格式示例：{{example}}",
+    "streamingAsrHint": "实时语音识别支持 paraformer-realtime-v2、paraformer-realtime-v1 和 qwen3-asr-flash-realtime。保存并检测成功后，在工作台模型配置中选择该 ASR 模型。"
   },
   "finetune": {
     "all": "全部",

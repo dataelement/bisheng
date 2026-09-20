@@ -13,6 +13,7 @@ import { formatDate } from "@/util/utils";
 import { CirclePause } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useVoiceDraft } from "@/hooks/useVoiceDraft";
 import GuideQuestions from "./GuideQuestions";
 import { isBlockingChatError, resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
@@ -31,7 +32,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
-    const inputRef = useRef(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
+    const voice = useVoiceDraft(inputRef, '', (value) => {
+        if (!inputRef.current) return
+        inputRef.current.value = value
+        inputRef.current.dispatchEvent(new Event('input', { bubbles: true }))
+    })
     const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
@@ -73,6 +79,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        if (voice.busy) return
         // 解除锁定状态下 form 按钮开放的状态
         setShowWhenLocked(false)
         // 关闭引导词
@@ -265,7 +272,8 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     // 触发发送消息事件（重试、表单）
     useEffect(() => {
         const handleCustomEvent = (e) => {
-            if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
+            if (voice.busy) return
+        if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
             const { send, message } = e.detail
             inputRef.current.value = message
             if (send) handleSendClick()
@@ -278,6 +286,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     // 点击引导词
     const handleClickGuideWord = (message) => {
+        if (voice.busy) return
         if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
         inputRef.current.value = message
         handleSendClick()
@@ -291,25 +300,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    const handleSpeechRecognition = (text) => {
-        console.log('text', text);
-
-        if (!showWhenLocked && inputLock.locked) return;
-        if (!inputRef.current) return;
-
-        // 将识别结果追加到当前输入框内容后
-        const currentValue = inputRef.current.value;
-        inputRef.current.value = currentValue + text;
-
-        // 触发input事件以更新UI（如自动调整高度）
-        const event = new Event('input', { bubbles: true, cancelable: true });
-        inputRef.current.dispatchEvent(event);
-    };
-
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* 语音转文字 */}
-            {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent
+                key={chatId} {...voice.props} disabled={inputLock.locked}
+                realtime={!!linsightConfig.asr_model.realtime} modelId={linsightConfig.asr_model.id}
+            />}
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -359,7 +356,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <SendIcon className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
@@ -381,11 +378,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                 rows={1}
                 style={{ height: 56 }}
                 disabled={inputLock.locked}
-                onInput={handleTextAreaHeight}
+                onInput={(event) => { voice.handleEdit(event.currentTarget.value); handleTextAreaHeight(event) }}
+                onCompositionStart={voice.compositionStart}
+                onCompositionEnd={voice.compositionEnd}
                 placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
                 className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
                 onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         !inputLock.locked && handleSendClick()
                     }
