@@ -1,6 +1,6 @@
 import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
 import {
   getCreationDepartmentChildren,
@@ -37,6 +37,7 @@ import { useAuthContext, useLocalize } from "~/hooks";
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
+import { resolveSettingsReturnPath } from "../knowledgeUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
   parseKnowledgeSpaceCustomTags,
@@ -49,11 +50,18 @@ const MAX_DESCRIPTION_LENGTH = 200;
 export function KnowledgeSpaceSettingsPage() {
   const localize = useLocalize();
   const navigate = useNavigate();
+  const location = useLocation();
   const confirm = useConfirm();
   const { user } = useAuthContext();
   const { showToast } = useToastContext();
   const { spaceId } = useParams<{ spaceId?: string }>();
   const settings = useKnowledgeSpaceSettingsForm(spaceId);
+  // Save / cancel / back resume where the user entered from; a direct link
+  // falls back to the space root (or the list when creating).
+  const returnPath = resolveSettingsReturnPath(
+    location.state,
+    spaceId ? `/knowledge/space/${spaceId}` : "/knowledge",
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [activeSubjectType, setActiveSubjectType] =
     useState<SubjectType>("user");
@@ -84,6 +92,10 @@ export function KnowledgeSpaceSettingsPage() {
       modelKey: ownerModel?.id ?? "owner",
       modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
+      // Same source the backend reports for this row once the space exists, so
+      // the roster shows the creator tag in create mode too. Display-only: this
+      // row never enters the draft diff.
+      sourceType: "creator",
       protected: true,
       editable: false,
     };
@@ -120,6 +132,12 @@ export function KnowledgeSpaceSettingsPage() {
         .filter((row) => row.subjectType === "user_group")
         .map((row) => row.subjectId),
     }),
+    [displayedPermissionRows],
+  );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => displayedPermissionRows
+      .filter((row) => row.subjectType === "department" && row.includeChildren)
+      .map((row) => row.subjectId),
     [displayedPermissionRows],
   );
 
@@ -201,12 +219,12 @@ export function KnowledgeSpaceSettingsPage() {
         message: localize("com_knowledge.space_updated"),
         severity: NotificationSeverity.SUCCESS,
       });
-      navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
+      navigate(returnPath);
     } catch (error) {
       if (!extractApiStatusCode(error)) {
         showToast({
           message: localize("com_knowledge.operation_failed_retry"),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     }
@@ -242,8 +260,7 @@ export function KnowledgeSpaceSettingsPage() {
   }
 
   const disabled = !settings.canEdit;
-  const cancel = () =>
-    navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
+  const cancel = () => navigate(returnPath);
   const permissionCapabilities = {
     canChangeRelation: true,
     canRemove: true,
@@ -600,6 +617,7 @@ export function KnowledgeSpaceSettingsPage() {
         resourceType="knowledge_space"
         resourceId={spaceId}
         disabledIds={disabledIds}
+        disabledDepartmentSubtreeRootIds={disabledDepartmentSubtreeRootIds}
         relationModels={relationModels}
         canAddNonUserSubjects={settings.canAddNonUserSubjects}
         onConfirm={settings.addPermissionRows}

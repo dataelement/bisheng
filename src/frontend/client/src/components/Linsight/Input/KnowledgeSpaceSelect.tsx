@@ -92,7 +92,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                     type === 'space'
                         ? localize('com_chat_knowledge_toast_space_limit')
                         : localize('com_chat_knowledge_toast_org_limit'),
-                status: 'error',
+                status: 'warning',
             });
             return;
         }

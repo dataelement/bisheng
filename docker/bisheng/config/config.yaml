@@ -36,9 +36,15 @@ openfga:
   enabled: true
   api_url: "http://openfga:8080"
 
-# 网关 HMAC 推送验签（与 bisheng-gateway 的 bisheng.gateway-hmac-secret 一致）
+# 网关 HMAC 推送验签，仅商业版 Java 网关的 SSO 登录/组织同步链路使用。
+# 留空即关闭：/internal/sso/login-sync、/internal/sso/gateway-wecom-org-sync、
+# /departments/sync、/internal/departments/relink* 会拒绝所有请求（fail-closed）。
+# 开源单体部署不走这条链路，保持留空即可。
+# 部署商业版网关时必须填一个足够长的随机串，并与网关的
+# bisheng.gateway-hmac-secret 配成同一个值——这把密钥等同于「可以替任何人
+# 签发登录态」的权限，绝不能沿用示例值或在多个环境间复用。
 sso_sync:
-  gateway_hmac_secret: "bisheng-local-hmac-20260422"
+  gateway_hmac_secret: ""
   signature_header: "X-Signature"
 
 # 集群模式或者哨兵模式（只能选其一）:

@@ -2257,6 +2257,11 @@
     "sourceExpired": "来源已失效"
   },
   "openApiManagement": {
+    "list": {
+      "loading": "正在加载…",
+      "retry": "加载失败，点击重试",
+      "done": "已展示全部内容"
+    },
     "empty": "暂无记录",
     "fields": {
       "name": "名称",

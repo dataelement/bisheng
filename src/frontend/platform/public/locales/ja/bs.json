@@ -2257,6 +2257,11 @@
     "sourceExpired": "このソースは無効になりました"
   },
   "openApiManagement": {
+    "list": {
+      "loading": "読み込み中…",
+      "retry": "読み込みに失敗しました。クリックして再試行",
+      "done": "すべての内容を表示しました"
+    },
     "empty": "レコードがありません",
     "fields": {
       "name": "名前",

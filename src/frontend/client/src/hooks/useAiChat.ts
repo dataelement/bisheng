@@ -541,7 +541,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     message: localize("com_error_file_upload_incomplete", {
                         0: stranded.map((f) => f.name || f.filename || f.file_name || "").join("、"),
                     }),
-                    status: "error",
+                    status: "warning",
                 });
                 return;
             }

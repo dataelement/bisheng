@@ -38,13 +38,20 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
+import { FROSTED_GLASS_CLASS, FROSTED_GLASS_ENABLED } from "~/utils/frostedGlass";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import {
+    SETTINGS_RETURN_STATE_KEY,
+    canOpenSharedSpace,
+    resolveUploadSizeLimits,
+    shouldNavigateOnSpaceSelect,
+} from "./knowledgeUtils";
+import { resolveSpaceInfoFailure } from "./spaceInfoError";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -202,7 +209,7 @@ export default function Knowledge() {
         if (knowledgePluginGate !== "disabled") return;
         showToastRef.current({
             message: localizeRef.current("com_plugin_feature_no_access_toast"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
         });
         navigateRef.current("/c/new", { replace: true });
     }, [knowledgePluginGate]);
@@ -282,13 +289,18 @@ export default function Knowledge() {
                 // preview therefore looped: close the preview -> /knowledge -> auto-select
                 // the same department space -> redirect -> preview again, with no way out.
                 setActiveSpace({ ...detail, id: detailSpaceId });
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Only a space the server says is absent or closed to this caller
+                // sends the user away; anything else stays put (see spaceInfoError).
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {
@@ -443,14 +455,19 @@ export default function Knowledge() {
                 }
 
                 setPreviewDrawerOpen(true);
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Same rule as the detail load: a share link only sends the user to
+                // the square when the server says the space is gone or closed.
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                setPreviewDrawerOpen(false);
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    setPreviewDrawerOpen(false);
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {
@@ -492,6 +509,17 @@ export default function Knowledge() {
         }
     };
 
+    // Pin / rename of the active space: merge the new fields, keep space + folder.
+    const handleActiveSpaceUpdate = (space: KnowledgeSpace) => {
+        setActiveSpace(prev => prev?.id === space.id ? { ...prev, ...space, role: prev.role } : prev);
+    };
+
+    // Hand the settings page the location being browsed, so leaving it resumes
+    // this space and folder instead of the settings' own space root.
+    const settingsEntryState = () => ({
+        [SETTINGS_RETURN_STATE_KEY]: `${location.pathname}${location.search}`,
+    });
+
     const handleCreateSpace = () => {
         (async () => {
             try {
@@ -511,7 +539,7 @@ export default function Knowledge() {
                     });
                     return;
                 }
-                navigate("/knowledge/create");
+                navigate("/knowledge/create", { state: settingsEntryState() });
             } catch {
                 // 如果校验接口失败，为避免阻塞用户操作，仍允许进入创建页面
                 // （可根据需要改成硬拦截）
@@ -528,13 +556,13 @@ export default function Knowledge() {
                     return;
                 }
 
-                navigate("/knowledge/create");
+                navigate("/knowledge/create", { state: settingsEntryState() });
             }
         })();
     };
 
     const handleSpaceSettings = (space: KnowledgeSpace) => {
-        navigate(`/knowledge/space/${space.id}/settings`);
+        navigate(`/knowledge/space/${space.id}/settings`, { state: settingsEntryState() });
     };
 
     // Delete the current space from the file-page top-bar menu, then return to the list.
@@ -553,7 +581,7 @@ export default function Knowledge() {
             setActiveSpace(null);
             navigate("/knowledge");
         } catch {
-            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -637,10 +665,12 @@ export default function Knowledge() {
 
     return (
         <div className="relative flex h-full min-h-0">
-            {/* Drag and Drop Overlay */}
+            {/* Drag and Drop Overlay. Frosted glass here is the sanctioned exception
+                (single full-screen overlay, only while dragging) and is gated by the
+                global FROSTED_GLASS_ENABLED switch — see ~/utils/frostedGlass. */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-xl flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${FROSTED_GLASS_ENABLED ? FROSTED_GLASS_CLASS : ""} ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (
@@ -676,6 +706,7 @@ export default function Knowledge() {
                     <KnowledgeSpaceSidebar
                         activeSpaceId={activeSpace?.id}
                         onSpaceSelect={handleSpaceSelect}
+                        onActiveSpaceUpdate={handleActiveSpaceUpdate}
                         onCreateSpace={handleCreateSpace}
                         onSpaceSettings={handleSpaceSettings}
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
@@ -717,6 +748,7 @@ export default function Knowledge() {
                                     handleSpaceSelect(space);
                                     setSpaceListDrawerOpen(false);
                                 }}
+                                onActiveSpaceUpdate={handleActiveSpaceUpdate}
                                 onCreateSpace={() => {
                                     handleCreateSpace();
                                     setSpaceListDrawerOpen(false);
@@ -890,6 +922,7 @@ export default function Knowledge() {
                                 <KnowledgeSpaceSidebar
                                     mobilePageMode
                                     onSpaceSelect={handleSpaceSelect}
+                                    onActiveSpaceUpdate={handleActiveSpaceUpdate}
                                     onCreateSpace={handleCreateSpace}
                                     onSpaceSettings={handleSpaceSettings}
                                     onKnowledgeSquare={() => setShowKnowledgeSquare(true)}

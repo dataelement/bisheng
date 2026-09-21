@@ -157,18 +157,27 @@ async def test_child_tenant_key_is_not_mistaken_for_missing_account(open_api_db,
     from bisheng.open_api.domain.schemas.credential import KeyIssueRequest
     from bisheng.open_api.domain.services.credential_service import CredentialService
 
-    async with open_api_db() as session:
-        account = ServiceAccount(tenant_id=9, name="child-account", resource_owner_user_id=12)
-        session.add(account)
-        await session.commit()
-        await session.refresh(account)
-    issued = await CredentialService.issue(
-        tenant_id=9,
-        subject_kind="service_account",
-        subject_id=account.id,
-        request=KeyIssueRequest(name="child-key"),
-        created_by=12,
-    )
+    # The account belongs to tenant 9 and the tenant filter only shows a session
+    # its own tenant's rows, so the setup has to run as tenant 9. Without this the
+    # refresh reads whatever tenant a previous test left in the ContextVar and
+    # cannot find the row it just wrote - the test only passed while nothing
+    # earlier in the run happened to set one.
+    setup_token = current_tenant_id.set(9)
+    try:
+        async with open_api_db() as session:
+            account = ServiceAccount(tenant_id=9, name="child-account", resource_owner_user_id=12)
+            session.add(account)
+            await session.commit()
+            await session.refresh(account)
+        issued = await CredentialService.issue(
+            tenant_id=9,
+            subject_kind="service_account",
+            subject_id=account.id,
+            request=KeyIssueRequest(name="child-key"),
+            created_by=12,
+        )
+    finally:
+        current_tenant_id.reset(setup_token)
     monkeypatch.setattr(
         "bisheng.open_api.domain.services.credential_service.CredentialService.touch_last_used", AsyncMock()
     )

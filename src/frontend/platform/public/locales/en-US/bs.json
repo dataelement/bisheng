@@ -2312,6 +2312,11 @@
     "sourceExpired": "This source is no longer available"
   },
   "openApiManagement": {
+    "list": {
+      "loading": "Loading…",
+      "retry": "Failed to load. Click to retry",
+      "done": "All content loaded"
+    },
     "empty": "No records",
     "fields": {
       "name": "Name",

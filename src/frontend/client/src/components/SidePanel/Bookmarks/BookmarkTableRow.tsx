@@ -33,7 +33,7 @@ const BookmarkTableRow: React.FC<BookmarkTableRowProps> = ({ row, moveRow, posit
         onError: () => {
           showToast({
             message: localize('com_ui_bookmarks_update_error'),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
           });
         },
       },

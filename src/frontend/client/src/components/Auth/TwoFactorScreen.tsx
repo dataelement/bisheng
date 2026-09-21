@@ -48,7 +48,7 @@ const TwoFactorScreen: React.FC = React.memo(() => {
         typeof err.response?.data?.message === 'string'
           ? err.response.data.message
           : 'Error verifying 2FA';
-      showToast({ message: errorMsg, status: 'error' });
+      showToast({ message: errorMsg, status: 'warning' });
     },
   });
 

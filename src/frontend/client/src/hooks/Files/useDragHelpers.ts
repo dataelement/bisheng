@@ -68,7 +68,7 @@ export default function useDragHelpers(isLingsi) {
               .map(f => f.name.split('.').pop()?.toLowerCase())
               .filter(Boolean)
           )];
-          showToast({ message: localize('com_unsupported_file_type') + uniqueExtensions.join(','), status: 'error' });
+          showToast({ message: localize('com_unsupported_file_type') + uniqueExtensions.join(','), status: 'warning' });
           return;
         }
         if (!isAgents) {

@@ -91,7 +91,7 @@ export default function usePresets() {
       console.error('Error deleting the preset:', error);
       showToast({
         message: localize('com_endpoint_preset_delete_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
   });
@@ -117,7 +117,7 @@ export default function usePresets() {
       console.error('Error updating the preset:', error);
       showToast({
         message: localize('com_endpoint_preset_save_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
   });
@@ -138,7 +138,7 @@ export default function usePresets() {
           console.error('Error uploading the preset:', error);
           showToast({
             message: localize('com_endpoint_preset_import_error'),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
           });
         },
       },

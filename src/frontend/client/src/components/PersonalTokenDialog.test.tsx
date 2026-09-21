@@ -238,6 +238,6 @@ it("reports copy failures without a success message", async () => {
   jest.mocked(copyText).mockRejectedValueOnce(new Error("clipboard unavailable"));
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await act(async () => { fireEvent.click(screen.getByRole("button", { name: en.com_ai_access.copy_all })); });
-  expect(mockToast).toHaveBeenCalledWith({ message: en.com_ai_access.copy_failed, status: "error" });
+  expect(mockToast).toHaveBeenCalledWith({ message: en.com_ai_access.copy_failed, status: "warning" });
   expect(mockToast).not.toHaveBeenCalledWith(expect.objectContaining({ status: "success" }));
 });

@@ -41,6 +41,9 @@ from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_chat_session_repository import (
+    KnowledgeChatSessionRepository,
+)
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
@@ -57,6 +60,12 @@ class KnowledgeSpaceChatService:
     def __init__(self, request: Request, login_user: UserPayload):
         self.request = request
         self.login_user = login_user
+        self.chat_session_repo: KnowledgeChatSessionRepository | None = None
+
+    def _chat_session_repository(self) -> KnowledgeChatSessionRepository:
+        if self.chat_session_repo is None:
+            raise RuntimeError("KnowledgeChatSessionRepository is not configured")
+        return self.chat_session_repo
 
     def _permission_service(self):
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -164,11 +173,9 @@ class KnowledgeSpaceChatService:
 
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
 
-        session = await MessageSessionDao.afilter_session(
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().find_first_by_effective_entry(
+            flow_id,
+            self.login_user.user_id,
         )
         if not session:
             session = await MessageSessionDao.async_insert_one(
@@ -180,9 +187,6 @@ class KnowledgeSpaceChatService:
                     user_id=self.login_user.user_id,
                 )
             )
-        else:
-            session = session[0]
-
         milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(self.login_user.user_id, knowledge=space)
         vector_retriever = milvus_vector.as_retriever(
             search_kwargs={"k": 100, "param": {"ef": 110}, "expr": f"document_id == {file_id}"}
@@ -229,29 +233,23 @@ class KnowledgeSpaceChatService:
         await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
 
-        session = await MessageSessionDao.afilter_session(
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().find_first_by_effective_entry(
+            flow_id,
+            self.login_user.user_id,
         )
         if not session:
             return []
-        session = session[0]
         return await ChatSessionService.get_chat_history(session.chat_id, session.flow_id, page_size=page_size)
 
     async def clear_file_history(self, knowledge_id: int, file_id: int) -> bool:
         await self._require_file_view_permission(knowledge_id, file_id)
         flow_id = self.generate_flow_id_for_file(knowledge_id, file_id)
-        session = await MessageSessionDao.afilter_session(
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().find_first_by_effective_entry(
+            flow_id,
+            self.login_user.user_id,
         )
         if not session:
             return True
-        session = session[0]
         await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
         return True
 
@@ -264,11 +262,9 @@ class KnowledgeSpaceChatService:
 
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
 
-        session = await MessageSessionDao.afilter_session(
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().list_by_effective_entry(
+            flow_id,
+            self.login_user.user_id,
         )
         return session
 
@@ -299,12 +295,10 @@ class KnowledgeSpaceChatService:
         else:
             await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        session = await MessageSessionDao.afilter_session(
-            chat_ids=[chat_id],
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().get_by_chat_and_effective_entry(
+            chat_id,
+            flow_id,
+            self.login_user.user_id,
         )
         if session:
             await MessageSessionDao.delete_session(chat_id=chat_id)
@@ -318,7 +312,14 @@ class KnowledgeSpaceChatService:
         else:
             await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        return await ChatSessionService.get_chat_history(chat_id, flow_id, page_size=page_size)
+        session = await self._chat_session_repository().get_by_chat_and_effective_entry(
+            chat_id,
+            flow_id,
+            self.login_user.user_id,
+        )
+        if not session:
+            return []
+        return await ChatSessionService.get_chat_history(chat_id, session.flow_id, page_size=page_size)
 
     async def delete_chat_folder_history(self, space_id: int, folder_id: int, chat_id: str) -> bool:
         if folder_id:
@@ -326,16 +327,13 @@ class KnowledgeSpaceChatService:
         else:
             await self._require_space_view_permission(space_id)
         flow_id = self.generate_flow_id_for_folder(space_id, folder_id)
-        session = await MessageSessionDao.afilter_session(
-            chat_ids=[chat_id],
-            flow_ids=[flow_id],
-            flow_type=[FlowType.KNOLEDGE_SPACE.value],
-            user_ids=[self.login_user.user_id],
-            include_delete=False,
+        session = await self._chat_session_repository().get_by_chat_and_effective_entry(
+            chat_id,
+            flow_id,
+            self.login_user.user_id,
         )
         if not session:
             return True
-        session = session[0]
         await ChatMessageDao.adelete_by_user_chat_id(chat_id=session.chat_id, user_id=self.login_user.user_id)
         return True
 
@@ -357,7 +355,7 @@ class KnowledgeSpaceChatService:
             skip retriever construction).
         """
         # Fetch non-primary file ids once, used in both branches.
-        excluded: list[int] = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([knowledge_id])
+        excluded = sorted(await self._visibility_service()._non_primary_ids(knowledge_id))
 
         if target_file_ids is None:
             # Branch A: whole-space query — apply not-in filter when exclusions exist.
@@ -619,25 +617,30 @@ class KnowledgeSpaceChatService:
         tags: list[dict] | None = None,
     ) -> AsyncIterator[ChatResponse]:
         """Folder RAG query"""
-        flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
-        session = await MessageSessionDao.afilter_session(
-            chat_ids=[chat_id], flow_ids=[flow_id], user_ids=[self.login_user.user_id], include_delete=False
-        )
-        if not session:
-            raise NotFoundError(msg="Folder session not found")
-        session = session[0]
-
         await self._require_space_view_permission(knowledge_id)
         space = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not space:
             raise NotFoundError(msg="Knowledge space not found for chat")
 
-        target_file_ids = None
-
+        file_record = None
         if folder_id:
             file_record = await self._require_folder_view_permission(knowledge_id, folder_id)
             if not file_record or file_record.knowledge_id != knowledge_id or file_record.file_type != 0:
                 raise NotFoundError(msg="Invalid folder for chat")
+
+        flow_id = self.generate_flow_id_for_folder(knowledge_id, folder_id)
+        session = await self._chat_session_repository().get_by_chat_and_effective_entry(
+            chat_id,
+            flow_id,
+            self.login_user.user_id,
+        )
+        if not session:
+            raise NotFoundError(msg="Folder session not found")
+
+        target_file_ids = None
+
+        if folder_id:
+            assert file_record is not None
             file_level_path = file_record.file_level_path + f"/{file_record.id}"
 
             folder_files = await SpaceFileDao.get_children_by_prefix(space.id, file_level_path)

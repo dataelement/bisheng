@@ -168,6 +168,37 @@ async def personal_token(client: httpx.AsyncClient, admin_token: str):
 class TestE2EF053OpenApiAuthIdentity:
     """F053 live API isolation, key, PAT, daily, and public-v3 checks."""
 
+    async def test_ac_r14_key_pagination(self, client: httpx.AsyncClient, admin_token: str, service_account: dict):
+        """AC-R14: paginated management reads cover the same masked keys as the legacy list."""
+        base = f"{API_BASE}/service-accounts/{service_account['account']['id']}/keys"
+        headers = auth_headers(admin_token)
+        issued = assert_resp_200(
+            await client.post(
+                base,
+                json={"name": f"{PREFIX}pagination", "scopes": ["knowledge:read"], "delegate_scopes": []},
+                headers=headers,
+            )
+        )
+        try:
+            all_keys = assert_resp_200(await client.get(base, headers=headers))
+            expected_ids = [item["id"] for item in all_keys]
+            assert issued["id"] in expected_ids
+            assert len(expected_ids) >= 2
+            loaded_ids = []
+            for number in range(1, len(expected_ids) + 2):
+                result = assert_resp_200(
+                    await client.get(f"{base}/page", params={"page": number, "page_size": 1}, headers=headers)
+                )
+                assert result["total"] == len(all_keys)
+                assert result["active_count"] == sum(item["is_valid"] for item in all_keys)
+                assert len(result["data"]) <= 1
+                for item in result["data"]:
+                    assert "plaintext" not in item and "token_hash" not in item
+                    loaded_ids.append(item["id"])
+            assert loaded_ids == expected_ids
+        finally:
+            assert_resp_200(await client.post(f"{base}/{issued['id']}/revoke", headers=headers))
+
     async def test_ac_f053_01_v2_rejects_missing_key_and_jwt_fallback(
         self,
         client: httpx.AsyncClient,

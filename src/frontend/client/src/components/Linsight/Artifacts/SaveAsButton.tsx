@@ -130,7 +130,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             await downloadArtifactFile(file, versionId, { citations });
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         } finally {
             setBusy(false);
         }
@@ -153,7 +153,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
             showToast?.({ message: localize('com_linsight_export_success'), severity: NotificationSeverity.SUCCESS });
         } catch (e) {
             console.error(`${toType} export failed:`, e);
-            showToast?.({ message: localize('com_linsight_export_failed'), severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize('com_linsight_export_failed'), severity: NotificationSeverity.WARNING });
         } finally {
             setBusy(false);
         }

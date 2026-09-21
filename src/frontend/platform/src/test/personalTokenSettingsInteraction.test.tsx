@@ -115,7 +115,7 @@ describe("personal-token tenant settings interaction", () => {
     const saveButton = await screen.findByRole("button", { name: "save" })
     await user.click(saveButton)
 
-    expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(1)
+    expect(captureAndAlertRequestErrorHoc).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(saveButton).toBeEnabled())
     expect(message).not.toHaveBeenCalled()
   })

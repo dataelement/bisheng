@@ -85,9 +85,9 @@ export function PlusMenu({
                 {onUploadFolder && (
                     <DropdownMenuItem
                         onSelect={() => onUploadFolder()}
-                        className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                        className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                     >
-                        <Outlined.FolderClose size={16} className="shrink-0 text-slate-600" />
+                        <Outlined.FolderClose size={16} className="shrink-0 text-text-2" />
                         <span className="text-[14px] font-normal text-slate-700">
                             {localize('com_ui_upload_folder')}
                         </span>

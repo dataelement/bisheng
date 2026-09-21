@@ -225,7 +225,7 @@ export function PersonalTokenDialog({ open, onOpenChange }: PersonalTokenDialogP
       await copyText(value);
       showToast({ message: doneMessage ?? localize("com_ui_copied_to_clipboard"), status: "success" });
     } catch {
-      showToast({ message: localize("com_ai_access.copy_failed"), status: "error" });
+      showToast({ message: localize("com_ai_access.copy_failed"), status: "warning" });
     }
   };
 

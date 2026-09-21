@@ -285,7 +285,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           message:
             translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
             || t('workstation.messageExport.renderFailed'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     },

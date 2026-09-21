@@ -1,4 +1,5 @@
 import { Checkbox } from "~/components/ui/Checkbox";
+import { Tag } from "@bisheng/ui";
 import {
   getDepartmentChildren,
   searchDepartments,
@@ -8,9 +9,20 @@ import type {
   ResourceType,
   SelectedSubject,
 } from "~/api/permission";
-import { ChevronDown, ChevronRight, Building2, Loader2, Search } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { PermissionEmptyState } from "./PermissionEmptyState";
+import {
+  PERMISSION_SUBJECT_ICON_CLASS,
+  PERMISSION_SUBJECT_LIST_CLASS,
+  PERMISSION_SUBJECT_ROW_CLASS,
+  PERMISSION_SUBJECT_ROW_DISABLED_CLASS,
+  PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+  PERMISSION_SUBJECT_SLOT_CLASS,
+  permissionSubjectIndent,
+} from "./permissionDialogStyles";
 import { useGrantDepartmentTree } from "./useGrantDepartmentTree";
 
 /**
@@ -29,6 +41,8 @@ export interface SubjectSearchDepartmentProps {
   includeChildren: boolean;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
+  /** Existing department grants whose include-children scope covers descendants. */
+  disabledSubtreeRootIds?: number[];
   /** subjectId -> the permission model(s) that subject already holds here. */
   grantedLabels?: Record<string, string>;
   departmentChildrenApi?: typeof getDepartmentChildren;
@@ -43,12 +57,17 @@ export function SubjectSearchDepartment({
   includeChildren,
   onSelectionSummaryChange,
   disabledIds = [],
+  disabledSubtreeRootIds = [],
   grantedLabels = {},
   departmentChildrenApi,
   departmentSearchApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
+  const disabledSubtreeRootIdSet = useMemo(
+    () => new Set(disabledSubtreeRootIds),
+    [disabledSubtreeRootIds],
+  );
 
   const fetchChildren = departmentChildrenApi ?? getDepartmentChildren;
   const fetchSearch = departmentSearchApi ?? searchDepartments;
@@ -94,6 +113,9 @@ export function SubjectSearchDepartment({
     !!node.path &&
     selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp));
 
+  const isCoveredByDisabledSubtree = (node: GrantDepartmentNode): boolean =>
+    isDepartmentPathCovered(node.path, disabledSubtreeRootIdSet);
+
   // Summary = the explicit department picks (decision 10: subtree coverage is
   // conveyed by the include-children flag, not enumerated client-side).
   useEffect(() => {
@@ -102,7 +124,7 @@ export function SubjectSearchDepartment({
   }, [value, onSelectionSummaryChange]);
 
   const toggle = (node: GrantDepartmentNode) => {
-    if (disabledIdSet.has(node.id)) return;
+    if (disabledIdSet.has(node.id) || isCoveredByDisabledSubtree(node)) return;
     if (selectedIdSet.has(node.id)) {
       onChange(value.filter((s) => s.id !== node.id));
       return;
@@ -127,7 +149,7 @@ export function SubjectSearchDepartment({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
+        <Outlined.Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_department")}
@@ -138,33 +160,37 @@ export function SubjectSearchDepartment({
       </div>
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
         {busy && (
-          <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
-            <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex items-center justify-center gap-2 py-4 text-sm text-text-3">
+            <Outlined.Loading className="size-4 animate-spin" />
             {localize("com_ui_loading")}
           </div>
         )}
         {!busy && roots.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_departments")}
+          <PermissionEmptyState
+            message={localize(searchMode ? "com_permission.empty_search" : "com_permission.empty_departments")}
+          />
+        )}
+        {!busy && roots.length > 0 && (
+          <div className={PERMISSION_SUBJECT_LIST_CLASS}>
+            {roots.map((node) => (
+              <DepartmentRow
+                key={node.id}
+                node={node}
+                depth={0}
+                searchMode={searchMode}
+                tree={tree}
+                selectedIdSet={selectedIdSet}
+                isImplicit={isImplicit}
+                isCoveredByDisabledSubtree={isCoveredByDisabledSubtree}
+                disabledIdSet={disabledIdSet}
+                grantedLabels={grantedLabels}
+                onToggle={toggle}
+              />
+            ))}
           </div>
         )}
-        {!busy &&
-          roots.map((node) => (
-            <DepartmentRow
-              key={node.id}
-              node={node}
-              depth={0}
-              searchMode={searchMode}
-              tree={tree}
-              selectedIdSet={selectedIdSet}
-              isImplicit={isImplicit}
-              disabledIdSet={disabledIdSet}
-              grantedLabels={grantedLabels}
-              onToggle={toggle}
-            />
-          ))}
         {searchMode && tree.truncated && (
-          <div className="px-2 py-1.5 text-center text-xs text-gray-400">
+          <div className="px-2 py-1.5 text-center text-caption text-text-3">
             {localize("com_permission.search_truncated")}
           </div>
         )}
@@ -180,6 +206,7 @@ function DepartmentRow({
   tree,
   selectedIdSet,
   isImplicit,
+  isCoveredByDisabledSubtree,
   disabledIdSet,
   grantedLabels,
   onToggle,
@@ -190,6 +217,7 @@ function DepartmentRow({
   tree: ReturnType<typeof useGrantDepartmentTree>;
   selectedIdSet: Set<number>;
   isImplicit: (n: GrantDepartmentNode) => boolean;
+  isCoveredByDisabledSubtree: (n: GrantDepartmentNode) => boolean;
   disabledIdSet: Set<number>;
   grantedLabels: Record<string, string>;
   onToggle: (n: GrantDepartmentNode) => void;
@@ -205,15 +233,16 @@ function DepartmentRow({
   const isLoading = tree.loadingIds.has(node.id);
   const explicit = selectedIdSet.has(node.id);
   const granted = disabledIdSet.has(node.id);
+  const coveredByGrantedSubtree = !granted && isCoveredByDisabledSubtree(node);
   const grantedLabel = grantedLabels[String(node.id)];
-  const implicit = !explicit && !granted && isImplicit(node);
+  const implicit = !explicit && !granted && !coveredByGrantedSubtree && isImplicit(node);
   // Already-granted nodes read as checked too — an empty box next to the
   // "already granted" badge reads as a bug.
-  const isChecked = explicit || implicit || granted;
-  const isDisabled = granted || implicit;
+  const isChecked = explicit || implicit || granted || coveredByGrantedSubtree;
+  const isDisabled = granted || implicit || coveredByGrantedSubtree;
 
   const handleActivate = () => {
-    if (granted || implicit) return;
+    if (granted || implicit || coveredByGrantedSubtree) return;
     onToggle(node);
   };
 
@@ -221,48 +250,63 @@ function DepartmentRow({
     <>
       <div
         data-depth={depth}
-        className={`flex items-center gap-1 px-2 py-1.5 ${
-          isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
-        }`}
-        style={{ paddingLeft: `${depth * 16 + 8}px` }}
+        className={cn(
+          PERMISSION_SUBJECT_ROW_CLASS,
+          isDisabled ? PERMISSION_SUBJECT_ROW_DISABLED_CLASS : PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+        )}
+        style={{ paddingLeft: permissionSubjectIndent(depth) }}
         onClick={handleActivate}
       >
+        {/* Switcher slot: 20×20 wrapper, 16×16 chevron that rotates on expand.
+            A department with no children renders the slot empty so its checkbox
+            still lines up with the siblings that do have one. */}
         {node.has_children ? (
           <button
-            className="rounded p-0.5 hover:bg-gray-200"
+            type="button"
+            className={cn(PERMISSION_SUBJECT_SLOT_CLASS, "rounded")}
+            aria-label={isExpanded ? "Collapse department" : "Expand department"}
             onClick={(e) => {
               e.stopPropagation();
               if (!searchMode) tree.toggle(node);
             }}
           >
             {isLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
-            ) : isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+              <Outlined.Loading className="size-3.5 animate-spin text-text-3" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+              <Outlined.Right
+                className={cn(
+                  PERMISSION_SUBJECT_ICON_CLASS,
+                  "transition-transform duration-150",
+                  isExpanded && "rotate-90",
+                )}
+              />
             )}
           </button>
         ) : (
-          <span className="w-5" />
+          <span className={PERMISSION_SUBJECT_SLOT_CLASS} />
         )}
-        <Checkbox
-          className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-          checked={isChecked}
-          disabled={isDisabled}
-          onClick={(e) => e.stopPropagation()}
-          onCheckedChange={handleActivate}
-        />
-        <Building2 className="h-4 w-4 text-gray-400" />
-        <span className="min-w-0 truncate text-sm">{node.name}</span>
-        {(grantedLabel || granted) && (
-          <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+        <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+          <Checkbox
+            className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+            checked={isChecked}
+            disabled={isDisabled}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={handleActivate}
+          />
+        </div>
+        {/* Icon slot: 20×20 wrapper, 16×16 department icon. */}
+        <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+          <Outlined.City className={PERMISSION_SUBJECT_ICON_CLASS} />
+        </div>
+        <span className="min-w-0 truncate pl-1" title={node.name}>{node.name}</span>
+        {(grantedLabel || granted || coveredByGrantedSubtree) && (
+          <Tag size="small" className="ml-auto shrink-0">
             {grantedLabel
               ? localize("com_permission.already_granted_as", {
                   model: grantedLabel,
                 })
               : localize("com_permission.already_granted")}
-          </span>
+          </Tag>
         )}
       </div>
       {node.has_children &&
@@ -276,6 +320,7 @@ function DepartmentRow({
             tree={tree}
             selectedIdSet={selectedIdSet}
             isImplicit={isImplicit}
+            isCoveredByDisabledSubtree={isCoveredByDisabledSubtree}
             disabledIdSet={disabledIdSet}
             grantedLabels={grantedLabels}
             onToggle={onToggle}
@@ -283,4 +328,14 @@ function DepartmentRow({
         ))}
     </>
   );
+}
+
+export function isDepartmentPathCovered(
+  path: string | undefined,
+  subtreeRootIds: ReadonlySet<number>,
+): boolean {
+  if (!path || subtreeRootIds.size === 0) return false;
+  return path
+    .split("/")
+    .some((segment) => segment !== "" && subtreeRootIds.has(Number(segment)));
 }

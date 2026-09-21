@@ -1,4 +1,5 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import * as Popover from '@radix-ui/react-popover';
 import { Outlined } from 'bisheng-icons';
 import { Badge } from '@bisheng/ui';
@@ -22,6 +23,7 @@ import {
 import { Artifact, artifactPlugin } from '~/components/Artifacts/Artifact';
 import { remarkCitationPlugin } from '~/components/Artifacts/remarkCitationPlugin';
 import CodeBlock from '~/components/Messages/Content/CodeBlock';
+import DialogImage from './DialogImage';
 import { useFileDownload } from '~/hooks/queries/data-provider';
 import { PermissionTypes, Permissions } from '~/types/chat';
 import useHasAccess from '~/hooks/Roles/useHasAccess';
@@ -205,7 +207,7 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
       if (stream.data == null || stream.data === '') {
         console.error('Error downloading file: No data found');
         showToast({
-          status: 'error',
+          status: 'warning',
           message: localize('com_ui_download_error'),
         });
         return;
@@ -813,6 +815,35 @@ const Citation = ({
   );
 };
 
+/**
+ * Inline figure for answers in the knowledge-space / subscription assistant.
+ * The default <img> is block-level at 100% width, so a 1800x2400 scan from a
+ * RAG chunk filled the panel and ran a thousand pixels tall. Here it is boxed
+ * to 320px high and 60% of the answer's width (at most 480px), left-aligned
+ * with the text; clicking opens the same lightbox as an attached picture.
+ */
+function CompactMarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
+  if (!src) return null;
+  return (
+    <Dialog.Root>
+      {/* not-prose: the prose sheet's 2em image margins sit later in the
+          stylesheet than the utilities and would win the tie otherwise. */}
+      <span className="not-prose my-3 block">
+        <Dialog.Trigger asChild>
+          <img
+            src={src}
+            alt={alt ?? ''}
+            title={title}
+            loading="lazy"
+            className="block max-h-[320px] max-w-[min(60%,480px)] cursor-zoom-in rounded-lg object-contain"
+          />
+        </Dialog.Trigger>
+      </span>
+      <DialogImage src={src} />
+    </Dialog.Root>
+  );
+}
+
 // Absolute / already-loadable image src (http(s), protocol-relative, data:/blob:,
 // root-relative). Anything else is a bare relative ref that must be resolved.
 const ABSOLUTE_IMAGE_SRC_RE = /^(https?:)?\/\/|^(data|blob):|^\//i;
@@ -895,8 +926,15 @@ const Markdown = memo(({
   resolveImageSrc,
   resolveArtifactLink,
   onArtifactPreview,
+  compactImages = false,
 }: TContentProps & {
   webContent: any;
+  /**
+   * Box inline images (320px high, 60% / 480px wide) with click-to-enlarge.
+   * On for the knowledge-space and subscription assistants; daily chat keeps
+   * the default <img>. Ignored when `resolveImageSrc` is set.
+   */
+  compactImages?: boolean;
   /**
    * Optional async resolver for relative image refs inside the markdown. When
    * provided, a custom <img> renderer resolves `![](charts/x.png)` to a real URL
@@ -1209,7 +1247,9 @@ const Markdown = memo(({
                       <MarkdownImage src={src} alt={alt} title={title} resolveImageSrc={resolveImageSrc} />
                     ),
                   }
-                : {}),
+                : compactImages
+                  ? { img: CompactMarkdownImage }
+                  : {}),
               citation: ({ children }: { children: React.ReactNode }) => {
                 if (typeof children === 'string') {
                   const citationPattern = /\[citation:(\d+)\]|\[citationref:([^\]]+)\]/g;

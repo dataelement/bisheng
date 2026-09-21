@@ -223,7 +223,7 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             await downloadArtifactFile(file, versionId);
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         }
     };
 

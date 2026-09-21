@@ -1,4 +1,3 @@
-import asyncio
 import json
 from typing import TYPE_CHECKING
 
@@ -91,34 +90,16 @@ class ChatSessionService:
         return session
 
     @staticmethod
-    async def get_public_session_for_resolution(chat_id: str) -> MessageSession:
-        """Resolve only a public-v3 row before its tenant context is known."""
+    async def get_public_session_for_resolution(chat_id: str) -> MessageSession | None:
+        """Resolve a public-v3 row, allowing an unpersisted draft to have no title."""
 
         with bypass_tenant_filter():
             session = await MessageSessionDao.async_get_one(chat_id)
-        if session is None or session.is_delete or session.api_subject_type != "public_v3":
+        if session is None:
+            return None
+        if session.is_delete or session.api_subject_type != "public_v3":
             raise NotFoundError.http_exception()
         return session
-
-    @staticmethod
-    async def wait_for_subject_title(
-        chat_id: str,
-        subject: SessionSubject,
-        *,
-        deadline_seconds: float = 30.0,
-        interval_seconds: float = 0.5,
-    ) -> str:
-        """Wait for the existing background title task without weakening ownership."""
-
-        waited = 0.0
-        while waited < deadline_seconds:
-            session = await ChatSessionService.get_subject_session(chat_id, subject)
-            if session.name and session.name != "New Chat":
-                return session.name
-            await asyncio.sleep(interval_seconds)
-            waited += interval_seconds
-        session = await ChatSessionService.get_subject_session(chat_id, subject)
-        return session.name or "New Chat"
 
     @staticmethod
     async def create_subject_session(

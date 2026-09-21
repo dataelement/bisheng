@@ -455,7 +455,7 @@ export function AddToKnowledgeModal({
                 }));
                 setTree(nodes);
             })
-            .catch(() => showToast({ message: localize("com_subscription.load_space_list_failed"), severity: NotificationSeverity.ERROR }))
+            .catch(() => showToast({ message: localize("com_subscription.load_space_list_failed"), severity: NotificationSeverity.WARNING }))
             .finally(() => setSpacesLoading(false));
     }, [open]);
 
@@ -589,7 +589,7 @@ export function AddToKnowledgeModal({
                 })));
                 setSelectedId(created.id);
             } catch {
-                showToast({ message: localize("com_subscription.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_subscription.create_folder_failed"), severity: NotificationSeverity.WARNING });
                 // Remove the temp node
                 setTree(prev => {
                     function removeNode(nodes: KnowledgeNode[]): KnowledgeNode[] {
@@ -695,7 +695,7 @@ export function AddToKnowledgeModal({
                 //     setPendingConfirm({ spaceId, parentFolderId });
                 //     setShowDuplicate(true);
                 // } else {
-                //     showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.ERROR });
+                //     showToast({ message: localize("com_subscription.add_to_space_failed"), severity: NotificationSeverity.WARNING });
             }
         } finally {
             setIsConfirming(false);

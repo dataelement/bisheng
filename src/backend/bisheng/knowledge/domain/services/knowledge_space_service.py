@@ -108,6 +108,10 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.services.knowledge_space_chat_history_retention_service import (
+    build_knowledge_chat_flows,
+    dispatch_knowledge_chat_rehome,
+)
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
@@ -148,6 +152,9 @@ if TYPE_CHECKING:
     )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
+    )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+        KnowledgeFileRepository,
     )
     from bisheng.message.domain.services.message_service import MessageService
 
@@ -224,6 +231,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         f048_file_delivery=None,
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
+        knowledge_file_repo: "KnowledgeFileRepository | None" = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -233,6 +241,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.f048_file_delivery = f048_file_delivery
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
+        self.knowledge_file_repo = knowledge_file_repo
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -324,6 +333,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             actions=actions,
         )
 
+    async def _has_joined_visibility(
+        self,
+        space_id: int,
+        *,
+        has_content_permission: bool,
+    ) -> bool:
+        if not has_content_permission:
+            return False
+
+        actor = await self._permission_actor()
+        if not actor.super_admin:
+            return True
+
+        # A full-scope super admin may open every space without an actual grant.
+        # The joined state, unlike access authorization, must reflect OpenFGA
+        # visibility so it stays aligned with the square and /joined list.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=[space_id],
+            actor=actor,
+        )
+        return visible_map.get(str(space_id), False)
+
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
         space_tid = space.tenant_id
@@ -380,6 +413,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
                 return SpaceSubscriptionStatusEnum.REJECTED
         return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_effective_subscription_status(
+        subscription_status: SpaceSubscriptionStatusEnum,
+        *,
+        has_visible: bool,
+    ) -> SpaceSubscriptionStatusEnum:
+        """Treat effective visibility as joined without hiding workflow states."""
+        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        return subscription_status
 
     @staticmethod
     def _apply_subscription_flags(
@@ -547,6 +591,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
     @staticmethod
     def _dedupe_ids(resource_ids: list[int]) -> list[int]:
         return list(dict.fromkeys(resource_ids))
+
+    @staticmethod
+    def _dispatch_knowledge_chat_rehome(
+        *,
+        source_space_id: int,
+        resources: list[tuple[str, int]],
+        reason: str,
+    ) -> int:
+        if not resources:
+            return 0
+        try:
+            flows = build_knowledge_chat_flows(source_space_id, resources)
+            return dispatch_knowledge_chat_rehome(
+                source_space_id=source_space_id,
+                source_flow_ids=flows,
+                reason=reason,
+            )
+        except Exception:
+            # F068 recovery is best-effort and never changes the committed resource result.
+            logger.exception(
+                "knowledge_chat_entry.task_failed stage=prepare source_space={} reason={} resources={}",
+                source_space_id,
+                reason,
+                resources,
+            )
+            return 0
+
+    async def _normalize_batch_delete_inputs(
+        self,
+        space_id: int,
+        file_ids: list[int],
+        folder_ids: list[int],
+    ) -> tuple[list[int], list[int]]:
+        """Remove duplicate descendants covered by a selected ancestor folder."""
+        normalized_file_ids = self._dedupe_ids(file_ids)
+        normalized_folder_ids = self._dedupe_ids(folder_ids)
+        records = await KnowledgeFileDao.aget_file_by_ids(normalized_folder_ids + normalized_file_ids)
+        records_by_id = {record.id: record for record in records if record.knowledge_id == space_id}
+        selected_folders = set(normalized_folder_ids)
+
+        def covered_by_selected_ancestor(resource_id: int) -> bool:
+            record = records_by_id.get(resource_id)
+            if record is None:
+                return False
+            ancestor_ids = {int(segment) for segment in (record.file_level_path or "").split("/") if segment}
+            return bool(ancestor_ids & selected_folders)
+
+        normalized_folder_ids = [
+            resource_id for resource_id in normalized_folder_ids if not covered_by_selected_ancestor(resource_id)
+        ]
+        normalized_file_ids = [
+            resource_id for resource_id in normalized_file_ids if not covered_by_selected_ancestor(resource_id)
+        ]
+        return normalized_file_ids, normalized_folder_ids
 
     @staticmethod
     def _ensure_space_folder(folder: KnowledgeFile | None, space_id: int) -> KnowledgeFile:
@@ -1532,14 +1630,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
+            has_joined_visibility = await self._has_joined_visibility(
+                space_id,
+                has_content_permission=has_content_permission,
+            )
+            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
                 user_id=self.login_user.user_id,
             )
             if member_info:
-                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=has_joined_visibility,
+            )
+            self._apply_subscription_flags(result, subscription_status)
             if result.user_role is None and has_content_permission:
                 result.user_role = (
                     UserRoleEnum.ADMIN
@@ -1611,6 +1719,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Remove child file/folder rows only (only_clear keeps the space row).
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=space_id,
+            resources=child_resources,
+            reason="clear_space",
+        )
 
         # The vector drop above removed the Milvus collection + ES index; recreate
         # empty ones so the cleared space stays queryable (empty result, not 500).
@@ -2220,10 +2333,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and visible_map.get(
-                str(space.id), False
-            ):
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=visible_map.get(str(space.id), False),
+            )
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -2354,100 +2467,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return items
 
-    async def _handle_file_folder_extra_info(self, res: list[KnowledgeFile]) -> list[dict]:
-        folder_ids = []
+    async def _handle_file_folder_extra_info(
+        self,
+        res: list[KnowledgeFile],
+        *,
+        space_creator_user_id: int | None = None,
+    ) -> list[dict]:
+        folder_prefix_groups: dict[tuple[int, int], dict[int, str]] = {}
         file_ids = []
         for one in res:
             if one.file_type == FileType.DIR:
-                folder_ids.append(one.id)
+                folder_prefix = f"{one.file_level_path or ''}/{one.id}"
+                group_key = (int(one.knowledge_id), folder_prefix.count("/"))
+                folder_prefix_groups.setdefault(group_key, {})[int(one.id)] = folder_prefix
             else:
                 file_ids.append(one.id)
 
-        # folder need find all success file num and all file num
-        folder_counts = {}
-        if folder_ids:
-            from sqlalchemy import func, or_
-            from sqlmodel import col, select
-
-            from bisheng.core.database import get_async_db_session
-
-            # 存在异常 only counts files the *current user* may see. A viewer or editor
-            # cannot see other people's failed uploads in the listing, so a folder must
-            # not light up over files that are invisible to them. The check reuses the
-            # listing's own visibility rule (_filter_visible_child_items) so both agree;
-            # the permission context is built once per space and shared across folders.
-            permission_contexts: dict[int, dict] = {}
-
-            async def visible_abnormal_exists(folder: KnowledgeFile, prefix: str, abnormal_statuses: set[int]) -> bool:
-                candidates_stmt = select(KnowledgeFile).where(
-                    KnowledgeFile.knowledge_id == folder.knowledge_id,
-                    KnowledgeFile.file_type == 1,
-                    col(KnowledgeFile.status).in_(sorted(abnormal_statuses)),
-                    or_(
-                        col(KnowledgeFile.file_level_path) == prefix,
-                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                    ),
-                )
-                async with get_async_db_session() as session:
-                    candidates = list((await session.exec(candidates_stmt)).all())
-                if not candidates:
-                    return False
-                space_id = int(folder.knowledge_id)
-                if space_id not in permission_contexts:
-                    permission_contexts[space_id] = await self._build_child_permission_context(space_id)
-                visible = await self._filter_visible_child_items(
-                    candidates, space_id=space_id, context=permission_contexts[space_id]
-                )
-                return bool(visible)
-
-            async def count_folder(folder: KnowledgeFile):
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                stmt = (
-                    select(KnowledgeFile.status, func.count(KnowledgeFile.id))
-                    .where(
-                        KnowledgeFile.knowledge_id == folder.knowledge_id,
-                        KnowledgeFile.file_type == 1,
-                        or_(
-                            col(KnowledgeFile.file_level_path) == prefix,
-                            col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                        ),
+        # Prefixes at the same depth cannot contain one another. Children pages
+        # therefore use one query, while search results split parent/child hits.
+        folder_states = {}
+        if folder_prefix_groups:
+            if self.knowledge_file_repo is None:
+                raise RuntimeError("KnowledgeFileRepository is required for folder enrichment")
+            for (knowledge_id, _depth), folder_prefixes in sorted(folder_prefix_groups.items()):
+                folder_states.update(
+                    await self.knowledge_file_repo.find_folder_descendant_status_flags(
+                        knowledge_id,
+                        folder_prefixes,
                     )
-                    .group_by(KnowledgeFile.status)
                 )
-
-                in_progress_statuses = {
-                    KnowledgeFileStatus.PROCESSING.value,
-                    KnowledgeFileStatus.WAITING.value,
-                    KnowledgeFileStatus.REBUILDING.value,
-                }
-                # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
-                retryable_statuses = {
-                    KnowledgeFileStatus.FAILED.value,
-                    KnowledgeFileStatus.VIOLATION.value,
-                }
-                # What the folder rollup calls "存在异常" — everything needing the user to step
-                # in. Deliberately wider than retryable_statuses: a timed-out file is an anomaly
-                # the folder must surface, but batch retry does not act on it, so the display
-                # signal and the retry signal stay separate instead of one doing double duty.
-                abnormal_statuses = retryable_statuses | {KnowledgeFileStatus.TIMEOUT.value}
-                async with get_async_db_session() as session:
-                    rows = (await session.exec(stmt)).all()
-                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
-                    processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
-                    failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
-                    abnormal = sum(r[1] for r in rows if r[0] in abnormal_statuses)
-                # The aggregate says whether anything abnormal exists at all; only then is the
-                # (dearer) visibility pass worth running.
-                has_abnormal = abnormal > 0 and await visible_abnormal_exists(folder, prefix, abnormal_statuses)
-                folder_counts[folder.id] = {
-                    "has_failed_files": failed > 0,
-                    "has_abnormal_files": has_abnormal,
-                    "success_file_num": success,
-                    "processing_file_num": processing,
-                }
-
-            folders = [f for f in res if f.file_type == FileType.DIR]
-            await asyncio.gather(*(count_folder(f) for f in folders))
+        is_space_creator = space_creator_user_id is not None and int(space_creator_user_id) == int(
+            self.login_user.user_id
+        )
 
         # file need find all tags
         file_tags = {}
@@ -2464,16 +2515,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for one in res:
             item = one.model_dump()
             if one.file_type == FileType.DIR:
-                counts = folder_counts.get(
-                    one.id,
+                state = folder_states.get(one.id)
+                has_abnormal = state.has_abnormal_files if state is not None else False
+                item.update(
                     {
-                        "has_failed_files": False,
-                        "has_abnormal_files": False,
-                        "success_file_num": 0,
-                        "processing_file_num": 0,
-                    },
+                        "has_failed_files": has_abnormal,
+                        "has_abnormal_files": is_space_creator and has_abnormal,
+                        "has_processing_files": state.has_processing_files if state is not None else False,
+                    }
                 )
-                item.update(counts)
             else:
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
@@ -2656,6 +2706,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
+        candidate_batch_size = min(max(page_size + 1, 1), _CHILD_PERMISSION_SCAN_BATCH_SIZE)
         scan_started_at = perf_counter()
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         if permission_context is not None and verified_space is not None:
@@ -2715,7 +2766,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 order_sort=order_sort,
                 file_status=file_status,
                 page=0,  # cursor mode bypasses OFFSET
-                page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
+                page_size=candidate_batch_size,
                 file_type=file_type,
                 exclude_file_ids=exclude_file_ids,
                 cursor=batch_cursor,
@@ -2750,7 +2801,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             last_db = batch_items[-1]
             batch_cursor = candidate_cursor(last_db)
 
-            if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
+            if len(batch_items) < candidate_batch_size:
                 break
 
         emit_scan_metric(has_more=False)
@@ -2835,7 +2886,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_sort: str = "asc",
         file_status: list[int] | None = None,
         cursor: str | None = None,
-        page_size: int = 20,
+        page_size: int = 40,
         file_type: int | None = None,
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
@@ -2943,7 +2994,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             stage = "extra_info"
             stage_started_at = perf_counter()
-            data = await self._handle_file_folder_extra_info(visible_page_items)
+            space_creator_user_id = getattr(verified_space, "user_id", None)
+            if space_creator_user_id is None:
+                data = await self._handle_file_folder_extra_info(visible_page_items)
+            else:
+                data = await self._handle_file_folder_extra_info(
+                    visible_page_items,
+                    space_creator_user_id=space_creator_user_id,
+                )
             stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             next_cursor: str | None = None
@@ -3090,7 +3148,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
-        data = await self._handle_file_folder_extra_info(page_items)
+        data = await self._handle_file_folder_extra_info(
+            page_items,
+            space_creator_user_id=space.user_id,
+        )
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
         # count requires materialising every match, which is exactly what the
         # batch-scan avoids. Both consumers (client useFileManager, F030
@@ -3225,6 +3286,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
 
         await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=folder.knowledge_id,
+            resources=[("folder", resource_id) for resource_id in floder_ids]
+            + [("knowledge_file", resource_id) for resource_id in expanded_file_ids],
+            reason="delete_folder",
+        )
 
         # Prune channel ➜ knowledge-folder sync bindings that target the deleted
         # folders so the Celery sync worker stops referencing a tombstone.
@@ -4179,6 +4246,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             moved: list[dict] = []
             moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
             files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
+            direct_move_resources: set[tuple[str, int]] = set()
             for rec in valid:
                 is_folder = rec.file_type == FileType.DIR.value
                 word = "folder" if is_folder else "file"
@@ -4204,6 +4272,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
                         d.level = d.level + level_delta
                         rows.append(d)
+                if cross_space:
+                    direct_move_resources.update(
+                        (
+                            "folder" if row.file_type == FileType.DIR.value else "knowledge_file",
+                            row.id,
+                        )
+                        for row in rows
+                    )
                 rec.file_level_path = target_level_path
                 rec.level = target_level
 
@@ -4246,6 +4322,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await session.commit()
 
         # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
+        if cross_space:
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=space_id,
+                resources=sorted(direct_move_resources),
+                reason="cross_space_move",
+            )
+
         for m in moved:
             otype = "folder" if m["type"] == "folder" else "knowledge_file"
             old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
@@ -4353,6 +4436,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         expanded_ids = await self._cascade_version_links_on_delete([file_id])
         await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
         await KnowledgeFileDao.adelete_batch(expanded_ids)
+        self._dispatch_knowledge_chat_rehome(
+            source_space_id=file_record.knowledge_id,
+            resources=[("knowledge_file", resource_id) for resource_id in expanded_ids],
+            reason="delete_file",
+        )
         delete_knowledge_file_celery.delay(
             file_ids=expanded_ids,
             knowledge_id=file_record.knowledge_id,
@@ -4530,10 +4618,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
         all_file_level_path = set()
-        retryable_status = {
-            KnowledgeFileStatus.FAILED.value,
-            KnowledgeFileStatus.VIOLATION.value,
-        }
+        retryable_status = KnowledgeFileStatus.abnormal_values()
         for file in retry_files:
             if file.knowledge_id != space_id:
                 continue
@@ -4586,6 +4671,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
+        file_ids, folder_ids = await self._normalize_batch_delete_inputs(
+            knowledge_id,
+            file_ids,
+            folder_ids,
+        )
 
         for folder_id in folder_ids:
             await self.delete_folder(knowledge.id, folder_id)
@@ -4604,6 +4694,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
             await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
             await KnowledgeFileDao.adelete_batch(expanded_file_ids)
+            self._dispatch_knowledge_chat_rehome(
+                source_space_id=knowledge.id,
+                resources=[("knowledge_file", resource_id) for resource_id in expanded_file_ids],
+                reason="batch_delete_files",
+            )
             delete_knowledge_file_celery.delay(
                 file_ids=expanded_file_ids,
                 knowledge_id=knowledge.id,
