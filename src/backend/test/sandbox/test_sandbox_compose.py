@@ -44,7 +44,9 @@ def test_dockerfile_is_single_multiarch_image_without_platform_payload():
     assert "USER 65534" in text
     assert "serve.py" in text
     assert "pip install --no-cache-dir uv" in text
+    assert "mirrors.tuna.tsinghua.edu.cn" in text
     assert "astral.sh" not in text
+    assert "--mount=type=cache,target=/var/lib/apt" not in text
     assert "playwright install" not in text
     copies = [line for line in text.splitlines() if line.strip().startswith("COPY ")]
     joined = "\n".join(copies)
@@ -73,9 +75,10 @@ def test_compose_named_runners_and_hardening():
         assert svc["networks"] == ["sandbox_net"]
         assert "ports" not in svc
         assert "deploy" not in svc
-        assert svc["user"] == "65534"
+        assert svc["user"] == "0"
         assert svc["read_only"] is True
         assert svc["cap_drop"] == ["ALL"]
+        assert set(svc.get("cap_add") or []) == {"SETUID", "SETGID", "CHOWN"}
         assert "no-new-privileges:true" in svc["security_opt"]
         mem = str(svc["mem_limit"]).lower()
         assert mem.endswith("g")
@@ -84,6 +87,9 @@ def test_compose_named_runners_and_hardening():
         assert any(str(item).startswith("/tmp") for item in svc["tmpfs"])
         env = svc["environment"]
         joined = " ".join(f"{k}={v}" for k, v in env.items()) if isinstance(env, dict) else " ".join(env)
+        env_map = env if isinstance(env, dict) else {}
+        assert str(env_map.get("SANDBOX_MAX_SESSIONS")) == "2"
+        assert str(env_map.get("SANDBOX_ENABLE_UID_ISOLATION")).lower() == "true"
         assert "minio" not in joined.lower()
         assert "mysql" not in joined.lower()
         assert "hmac" not in joined.lower()

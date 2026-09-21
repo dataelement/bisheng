@@ -145,6 +145,8 @@ services:
       BS_MINIO_SECRET_KEY: 'minioadmin'
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      BS_SANDBOX_CONF__MAX_SESSIONS_PER_REPLICA: "2"
+      BS_SANDBOX_CONF__ENABLE_UID_ISOLATION: "true"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
@@ -263,20 +265,28 @@ services:
   code-runner-1: &code_runner
     image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
     container_name: bisheng-code-runner-1
-    user: "65534"
+    # Isolation mode (sessions > 1): PID 1 is root so it can chown/setuid per session.
+    # User code still drops via SETUID; keep cap_drop ALL and add back only those three.
+    user: "0"
     read_only: true
     cap_drop:
       - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
     security_opt:
       - no-new-privileges:true
     mem_limit: 2g
     pids_limit: 256
     tmpfs:
+      # 0755 root:root — session uids cannot plant files in /tmp (not Docker's 1777).
       - /tmp:mode=755
     environment:
       TZ: Asia/Shanghai
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
-      SANDBOX_MAX_SESSIONS: "1"
+      SANDBOX_MAX_SESSIONS: "2"
+      SANDBOX_ENABLE_UID_ISOLATION: "true"
       SANDBOX_LEASE_TTL_S: "900"
     networks:
       - sandbox_net

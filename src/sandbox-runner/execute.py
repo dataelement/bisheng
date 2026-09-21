@@ -56,7 +56,7 @@ def _child_env(work_dir: str) -> dict[str, str]:
     return env
 
 
-def _preexec() -> None:
+def _preexec(uid: int = 65534) -> None:
     for res, limit in (
         (resource.RLIMIT_AS, _RLIMIT_AS),
         (resource.RLIMIT_NPROC, _RLIMIT_NPROC),
@@ -67,7 +67,11 @@ def _preexec() -> None:
         except (OSError, ValueError):
             continue
     if os.geteuid() == 0:
-        os.setuid(65534)
+        try:
+            os.setgid(uid)
+        except OSError:
+            pass
+        os.setuid(uid)
 
 
 def _kill_group(proc: subprocess.Popen) -> None:
@@ -99,7 +103,7 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
             encoding="utf-8",
             errors="replace",
             start_new_session=True,
-            preexec_fn=_preexec,
+            preexec_fn=lambda uid=lease.uid: _preexec(uid),
         )
         timed_out = False
         try:

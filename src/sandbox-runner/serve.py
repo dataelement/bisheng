@@ -23,7 +23,7 @@ def build_app():
         max_sessions=int(os.environ.get("SANDBOX_MAX_SESSIONS") or "1"),
         lease_ttl_s=float(os.environ.get("SANDBOX_LEASE_TTL_S") or "900"),
         max_copy_in_bytes=int(os.environ.get("SANDBOX_MAX_COPY_IN_BYTES") or str(50 * 1024 * 1024)),
-        enable_uid_isolation=_bool_env("SANDBOX_ENABLE_UID_ISOLATION", False),
+        enable_uid_isolation=_bool_env("SANDBOX_ENABLE_UID_ISOLATION", True),
     )
 
 
