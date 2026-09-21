@@ -30,10 +30,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Official debian images wipe apt caches after each RUN; drop that so the
-# BuildKit apt mounts actually survive to the next CI build on this host.
+# BuildKit .deb cache survives across CI builds. Do NOT cache /var/lib/apt —
+# a failed proxy response there sticks as NODATA/NOSPLIT on the next build.
+#
+# deb.debian.org through the CI proxy returns invalid Release signatures; use
+# tuna and keep the mirror on no_proxy (build-arg) so apt does not MITM.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+      sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' \
+        /etc/apt/sources.list.d/debian.sources; \
+    fi && \
+    if [ -f /etc/apt/sources.list ]; then \
+      sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g; s/security.debian.org/mirrors.tuna.tsinghua.edu.cn/g' \
+        /etc/apt/sources.list; \
+    fi && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
         gcc g++ build-essential wget curl ca-certificates \

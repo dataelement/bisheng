@@ -121,7 +121,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: PROXY
       https_proxy:
         from_secret: PROXY
-      no_proxy: 192.168.106.8
+      no_proxy: 192.168.106.8,localhost,127.0.0.1,mirrors.tuna.tsinghua.edu.cn,pypi.tuna.tsinghua.edu.cn
       version: release
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-sandbox
@@ -132,12 +132,13 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     commands:
       # Context is the repo root (Dockerfile COPYs src/backend lock + src/sandbox-runner).
       # uv/apt indexes are baked into the Dockerfile; proxy is build-arg only (not in the image).
+      # tuna is on no_proxy so apt/pip do not get NODATA/NOSPLIT through the corporate proxy.
       - test -f docker/bisheng-sandbox/Dockerfile
       - docker login -u $docker_user -p $docker_password $docker_registry
       - export DOCKER_BUILDKIT=1
       - docker pull $docker_repo:$version || true
       - docker pull $docker_repo:release || true
-      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
+      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg no_proxy=$no_proxy --build-arg NO_PROXY=$no_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
   - name: ssh deploy
@@ -331,7 +332,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: PROXY
       https_proxy:
         from_secret: PROXY
-      no_proxy: 192.168.106.8
+      no_proxy: 192.168.106.8,localhost,127.0.0.1,mirrors.tuna.tsinghua.edu.cn,pypi.tuna.tsinghua.edu.cn
       version: ${DRONE_BRANCH}
       docker_registry: http://192.168.106.8:6082
       docker_repo: 192.168.106.8:6082/dataelement/bisheng-sandbox
@@ -348,7 +349,7 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - export DOCKER_BUILDKIT=1
       - docker pull $docker_repo:$version || true
       - docker pull $docker_repo:release || true
-      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
+      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg no_proxy=$no_proxy --build-arg NO_PROXY=$no_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
   # - name: ssh deploy backend
