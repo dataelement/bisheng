@@ -20,8 +20,9 @@ export const PUBLIC_GUEST_CLOSED = 26103;
  *
  * Anything that is not a deliberate policy denial resolves to `ok` so the page
  * still renders: a share page must not turn a flaky network or a 5xx into a
- * dead end. Only the codes below — and the bare statuses an older backend would
- * return for the same situations — block the page.
+ * dead end. Only the codes below — and a bare 404 an older backend would
+ * return for a missing link — block the page. A bare 403 is not "guest
+ * closed": downstream permission denials must stay in the conversation.
  */
 export function resolveGuestAccessState(input: unknown): GuestAccessState {
   const code = extractApiStatusCode(input);
@@ -34,7 +35,6 @@ export function resolveGuestAccessState(input: unknown): GuestAccessState {
     case 404:
       return 'invalid';
     case PUBLIC_GUEST_CLOSED:
-    case 403:
       return 'closed';
     default:
       return 'ok';

@@ -16,6 +16,7 @@ from bisheng.common.chat.clients.workflow_client import WorkflowClient
 from bisheng.common.chat.types import IgnoreException, WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.public_endpoints import PublicGuestAccessDisabledError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.flow import InMemoryCache
@@ -30,31 +31,30 @@ from bisheng.utils.util import get_cache_key
 
 
 class ChatHistory(Subject):
-
     def __init__(self):
         super().__init__()
         self.history: dict[str, list[ChatMessage]] = defaultdict(list)
 
     def add_message(
-            self,
-            client_id: str,
-            chat_id: str,
-            message: ChatMessage,
+        self,
+        client_id: str,
+        chat_id: str,
+        message: ChatMessage,
     ):
         """Add a message to the chat history."""
         t1 = time.time()
         from bisheng.database.models.message import ChatMessage
+
         message.flow_id = client_id
         message.chat_id = chat_id
         db_message = None
-        if chat_id and (message.message or message.intermediate_steps
-                        or message.files) and message.type != 'stream':
+        if chat_id and (message.message or message.intermediate_steps or message.files) and message.type != "stream":
             msg = message.copy()
             msg.message = json.dumps(msg.message, ensure_ascii=False) if isinstance(msg.message, dict) else msg.message
-            files = json.dumps(msg.files) if msg.files else ''
-            msg.__dict__.pop('files')
+            files = json.dumps(msg.files) if msg.files else ""
+            msg.__dict__.pop("files")
             db_message = ChatMessage(files=files, **msg.__dict__)
-            logger.info(f'chat={db_message} time={time.time() - t1}')
+            logger.info(f"chat={db_message} time={time.time() - t1}")
             with get_sync_db_session() as seesion:
                 seesion.add(db_message)
                 seesion.commit()
@@ -71,7 +71,6 @@ class ChatHistory(Subject):
 
 
 class ChatManager:
-
     def __init__(self):
         self.active_connections: dict[str, WebSocket] = {}
         self.chat_history = ChatHistory()
@@ -91,13 +90,14 @@ class ChatManager:
             # Add a new ChatResponse with the data
             chat_response = FileResponse(
                 message=None,
-                type='file',
-                data=self.last_cached_object_dict['obj'],
-                data_type=self.last_cached_object_dict['type'],
+                type="file",
+                data=self.last_cached_object_dict["obj"],
+                data_type=self.last_cached_object_dict["type"],
             )
 
-            self.chat_history.add_message(self.cache_manager.current_client_id,
-                                          self.cache_manager.current_chat_id, chat_response)
+            self.chat_history.add_message(
+                self.cache_manager.current_client_id, self.cache_manager.current_chat_id, chat_response
+            )
 
     async def connect(self, client_id: str, chat_id: str, websocket: WebSocket):
         await websocket.accept()
@@ -115,10 +115,10 @@ class ChatManager:
         key: str | None = None,
     ):
         if key:
-            logger.debug('disconnect_ws key={}', key)
+            logger.debug("disconnect_ws key={}", key)
             self.active_connections.pop(key, None)
         else:
-            logger.info('disconnect_ws key={}', get_cache_key(client_id, chat_id))
+            logger.info("disconnect_ws key={}", get_cache_key(client_id, chat_id))
             self.active_connections.pop(get_cache_key(client_id, chat_id), None)
 
     async def send_message(self, client_id: str, chat_id: str, message: str):
@@ -134,12 +134,9 @@ class ChatManager:
             self.chat_history.add_message(client_id, chat_id, message)
         await websocket.send_json(message.dict())
 
-    async def close_connection(self,
-                               flow_id: str,
-                               chat_id: str,
-                               code: int,
-                               reason: str,
-                               key_list: list[str] | None = None):
+    async def close_connection(
+        self, flow_id: str, chat_id: str, code: int, reason: str, key_list: list[str] | None = None
+    ):
         """close and clean ws"""
         if websocket := self.active_connections.get(get_cache_key(flow_id, chat_id)):
             try:
@@ -151,14 +148,14 @@ class ChatManager:
             except RuntimeError as exc:
                 # This is to catch the following error:
                 #  Unexpected ASGI message 'websocket.close', after sending 'websocket.close'
-                if 'after sending' in str(exc):
+                if "after sending" in str(exc):
                     logger.error(exc)
 
     async def ping(self, client_id: str, chat_id: str):
         ping_pong = ChatMessage(
             is_bot=True,
-            message='pong',
-            intermediate_steps='',
+            message="pong",
+            intermediate_steps="",
         )
         await self.send_json(client_id, chat_id, ping_pong, False)
 
@@ -176,9 +173,9 @@ class ChatManager:
 
     def clear_client(self, client_key: str):
         if client_key not in self.active_clients:
-            logger.warning('close_client client_key={} not in active_clients', client_key)
+            logger.warning("close_client client_key={} not in active_clients", client_key)
             return
-        logger.info('close_client client_key={}', client_key)
+        logger.info("close_client client_key={}", client_key)
         self.active_clients.pop(client_key, None)
 
     async def close_client(self, client_key: str, code: int, reason: str):
@@ -190,16 +187,16 @@ class ChatManager:
             except RuntimeError as exc:
                 # This is to catch the following error:
                 #  Unexpected ASGI message 'websocket.close', after sending 'websocket.close'
-                if 'after sending' in str(exc):
+                if "after sending" in str(exc):
                     logger.error(exc)
 
     async def _has_use_action(
-            self,
-            login_user: UserPayload,
-            work_type: WorkType,
-            client_id: str,
+        self,
+        login_user: UserPayload,
+        work_type: WorkType,
+        client_id: str,
     ) -> bool:
-        object_type = 'assistant' if work_type == WorkType.GPTS else 'workflow'
+        object_type = "assistant" if work_type == WorkType.GPTS else "workflow"
         return await check_business_action(
             login_user,
             resource_type=object_type,
@@ -208,50 +205,52 @@ class ChatManager:
         )
 
     async def dispatch_client(
-            self,
-            request: Request | WebSocket,  # Raw request body
-            client_id: str,
-            chat_id: str,
-            login_user: UserPayload,
-            work_type: WorkType,
-            websocket: WebSocket,
-            graph_data: dict | None = None,
-            session_subject=None,
-            execution_snapshot: dict | None = None,
+        self,
+        request: Request | WebSocket,  # Raw request body
+        client_id: str,
+        chat_id: str,
+        login_user: UserPayload,
+        work_type: WorkType,
+        websocket: WebSocket,
+        graph_data: dict | None = None,
+        session_subject=None,
+        execution_snapshot: dict | None = None,
     ):
         start_time = time.time()
         client_key = generate_uuid()
         if work_type == WorkType.GPTS:
-            chat_client = ChatClient(request,
-                                     client_key,
-                                     client_id,
-                                     chat_id,
-                                     login_user.user_id,
-                                     login_user,
-                                     work_type,
-                                     websocket,
-                                     graph_data=graph_data,
-                                     session_subject=session_subject,
-                                     execution_snapshot=execution_snapshot)
+            chat_client = ChatClient(
+                request,
+                client_key,
+                client_id,
+                chat_id,
+                login_user.user_id,
+                login_user,
+                work_type,
+                websocket,
+                graph_data=graph_data,
+                session_subject=session_subject,
+                execution_snapshot=execution_snapshot,
+            )
         else:
-            chat_client = WorkflowClient(request,
-                                         client_key,
-                                         client_id,
-                                         chat_id,
-                                         login_user.user_id,
-                                         login_user,
-                                         work_type,
-                                         websocket,
-                                         session_subject=session_subject,
-                                         execution_snapshot=execution_snapshot)
+            chat_client = WorkflowClient(
+                request,
+                client_key,
+                client_id,
+                chat_id,
+                login_user.user_id,
+                login_user,
+                work_type,
+                websocket,
+                session_subject=session_subject,
+                execution_snapshot=execution_snapshot,
+            )
         await self.accept_client(client_key, chat_client, websocket)
-        logger.debug(
-            f'act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}')
+        logger.debug(f"act=accept_client client_key={client_key} client_id={client_id} chat_id={chat_id}")
         try:
             while True:
                 try:
-                    json_payload_receive = await asyncio.wait_for(websocket.receive_json(),
-                                                                  timeout=2.0)
+                    json_payload_receive = await asyncio.wait_for(websocket.receive_json(), timeout=2.0)
                 except TimeoutError:
                     continue
                 try:
@@ -260,40 +259,54 @@ class ChatManager:
                     payload = json_payload_receive
                 # clientHandle your own business logic internally
                 # TODO zgq: Here you can increase the thread pool to prevent blocking
-                if not await self._has_use_action(
-                    login_user,
-                    work_type,
-                    client_id,
-                ):
+                try:
+                    if not await self._has_use_action(
+                        login_user,
+                        work_type,
+                        client_id,
+                    ):
+                        logger.warning(
+                            "close_client permission_revoked client_key={} client_id={} user_id={}",
+                            client_key,
+                            client_id,
+                            login_user.user_id,
+                        )
+                        await self.close_client(
+                            client_key,
+                            code=status.WS_1008_POLICY_VIOLATION,
+                            reason="No permission to use this app",
+                        )
+                        break
+                except PublicGuestAccessDisabledError as exc:
                     logger.warning(
-                        'close_client permission_revoked client_key={} client_id={} user_id={}',
+                        "close_client guest_disabled client_key={} client_id={} user_id={}",
                         client_key,
                         client_id,
                         login_user.user_id,
                     )
+                    try:
+                        await websocket.send_json({"category": "error", "type": "end", "message": exc.to_dict(data={})})
+                    except Exception:
+                        logger.opt(exception=True).debug("guest disabled frame not delivered")
                     await self.close_client(
                         client_key,
                         code=status.WS_1008_POLICY_VIOLATION,
-                        reason='No permission to use this app',
+                        reason=str(exc.code),
                     )
                     break
                 await chat_client.handle_message(payload)
         except WebSocketDisconnect as e:
-            logger.info('act=rcv_client_disconnect {}', str(e))
+            logger.info("act=rcv_client_disconnect {}", str(e))
         except IgnoreException:
             # client Inside closed on its ownwsLink, no abnormalities
             pass
         except Exception as e:
             # Handle any exceptions that might occur
             logger.exception(str(e))
-            await self.close_client(client_key,
-                                    code=status.WS_1011_INTERNAL_ERROR,
-                                    reason='Backend Unknown Error Type')
+            await self.close_client(client_key, code=status.WS_1011_INTERNAL_ERROR, reason="Backend Unknown Error Type")
         finally:
             try:
-                await self.close_client(client_key,
-                                        code=status.WS_1000_NORMAL_CLOSURE,
-                                        reason='Client disconnected')
+                await self.close_client(client_key, code=status.WS_1000_NORMAL_CLOSURE, reason="Client disconnected")
             except Exception as e:
                 logger.exception(e)
             self.clear_client(client_key)
@@ -303,15 +316,17 @@ class ChatManager:
             else:
                 app_info = await WorkFlowService.get_one_workflow_simple_info(client_id)
                 app_type = ApplicationTypeEnum.WORKFLOW
-            app_name = app_info.name if app_info else 'unknown'
-            await telemetry_service.log_event(user_id=login_user.user_id,
-                                              event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                              trace_id=trace_id_var.get(),
-                                              event_data=ApplicationAliveEventData(
-                                                  app_id=client_id,
-                                                  app_name=app_name,
-                                                  app_type=app_type,
-                                                  chat_id=chat_id,
-                                                  start_time=int(start_time),
-                                                  end_time=int(time.time()),
-                                              ))
+            app_name = app_info.name if app_info else "unknown"
+            await telemetry_service.log_event(
+                user_id=login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+                trace_id=trace_id_var.get(),
+                event_data=ApplicationAliveEventData(
+                    app_id=client_id,
+                    app_name=app_name,
+                    app_type=app_type,
+                    chat_id=chat_id,
+                    start_time=int(start_time),
+                    end_time=int(time.time()),
+                ),
+            )
