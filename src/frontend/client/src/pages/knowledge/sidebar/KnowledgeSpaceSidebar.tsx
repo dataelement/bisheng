@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
+import { KnowledgeSpaceGhostTile } from "./KnowledgeSpaceGhostTile";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
@@ -612,14 +613,27 @@ export function KnowledgeSpaceSidebar({
                                     sortOptions={sortOptions}
                                     sortFieldLabel={localize("com_knowledge.sort_field")}
                                     onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                    onAdd={onCreateSpace}
+                                    // The home grid opens with a dashed create tile, so the header
+                                    // would offer the same action twice. Every other mode keeps its
+                                    // "+" — that is their only create entry.
+                                    onAdd={pageGrid ? undefined : onCreateSpace}
                                     addLabel={localize("com_knowledge.create")}
                                     mobile={mobilePageMode}
                                 />
                                 {!createdCollapsed && (
                                     <div className={listRowClassName}>
+                                        {/* The grid opens with a dashed folder instead of an empty state:
+                                            it is the invitation AND the create action, so an empty 我创建的
+                                            still shows something to do rather than "暂无数据". */}
+                                        {pageGrid && (
+                                            <KnowledgeSpaceGhostTile
+                                                tone="created"
+                                                label={localize("com_knowledge.create_knowledge_space")}
+                                                onClick={onCreateSpace}
+                                            />
+                                        )}
                                         {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {createdEmpty && renderEmptyState(false)}
+                                        {createdEmpty && !pageGrid && renderEmptyState(false)}
                                     </div>
                                 )}
                             </div>
@@ -640,8 +654,17 @@ export function KnowledgeSpaceSidebar({
                                 />
                                 {!joinedCollapsed && (
                                     <div className={cn(listRowClassName, stretchJoined && "flex flex-1 flex-col")}>
+                                        {/* Same idea as 我创建的, but you don't create a space you join —
+                                            the dashed folder sends you to 广场 to find one. */}
+                                        {pageGrid && (
+                                            <KnowledgeSpaceGhostTile
+                                                tone="joined"
+                                                label={localize("com_knowledge.go_to_knowledge_square")}
+                                                onClick={() => onKnowledgeSquare?.()}
+                                            />
+                                        )}
                                         {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {joinedEmpty && renderEmptyState(stretchJoined)}
+                                        {joinedEmpty && !pageGrid && renderEmptyState(stretchJoined)}
                                     </div>
                                 )}
                             </div>

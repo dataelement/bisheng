@@ -226,7 +226,7 @@ export default function KnowledgeSpaceCardItem({
                 {/* No fileCount on purpose: the list endpoints only count files sitting in the
                     space ROOT (backend _populate_root_file_counts), so a space whose content
                     lives in sub-folders reports 0 and would wrongly render as an empty folder. */}
-                <KnowledgeSpaceFolderArt>
+                <KnowledgeSpaceFolderArt tone={type}>
                     <div className="flex items-end gap-1">
                         <div className="min-w-0 flex-1">
                             {nameRow}
