@@ -129,6 +129,8 @@ def _unit(unit_id: int = 1):
 
 
 def _operations(context: dict):
+    from unittest.mock import AsyncMock
+
     from bisheng.knowledge.domain.services.migration_preserve_link_operations import (
         PreserveLinkMigrationOperations,
     )
@@ -142,6 +144,8 @@ def _operations(context: dict):
         PreserveLinkMigrationOperations(
             publish_service_factory=factory,
             context_loader=loader,
+            folder_preparer=AsyncMock(),
+            result_recorder=AsyncMock(),
         ),
         factory,
     )
@@ -164,12 +168,9 @@ def _context(**overrides):
 @pytest.mark.parametrize(
     "step",
     [
-        "create_target_rows",
         "copy_target_objects",
-        "build_target_indexes",
         "write_target_permissions",
         "verify_target",
-        "cleanup_source_external",
         "cleanup_source_rows",
         "cleanup_new_target",
     ],

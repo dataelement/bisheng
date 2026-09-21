@@ -33,6 +33,15 @@ class MigrationRuntimeContext:
 
 class KnowledgeMigrationRuntimeRepository(ABC):
     @abstractmethod
+    async def shared_projection_plan(self, unit_id: int, *, attempt_id: int, execution_token: str) -> dict: ...
+
+    @abstractmethod
+    async def prepare_preserve_link_folders(self, unit_id: int, *, attempt_id: int, execution_token: str): ...
+
+    @abstractmethod
+    async def record_preserve_link_result(self, unit_id: int, result, *, attempt_id: int, execution_token: str) -> None: ...
+
+    @abstractmethod
     async def prepare_target_rows(
         self,
         unit_id: int,

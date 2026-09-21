@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlmodel import col, delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
@@ -276,6 +276,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                         KnowledgeFile.id == batch.target_folder_id,
                         KnowledgeFile.knowledge_id == batch.target_space_id,
                         KnowledgeFile.file_type == FileType.DIR.value,
+                        KnowledgeFile.deleted_at.is_(None),
                     )
                     .with_for_update()
                 )
@@ -315,7 +316,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                 raise RuntimeError("target folder became ambiguous after preflight")
             if matches:
                 folder = matches[0]
-                action = "reused"
+                action = "created" if planned.get("action") == "created" and planned.get("target_folder_id") == folder.id else "reused"
             else:
                 folder = KnowledgeFile(
                     tenant_id=batch.tenant_id,
@@ -392,6 +393,8 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         payload["user_metadata"] = metadata
         if source.entry_type == KnowledgeFileEntryType.MANAGER.value:
             payload["entry_status"] = KnowledgeFileEntryStatus.PREPARING.value
+        # Prepared rows must not participate in canonical projection before switch.
+        payload["reference_document_id"] = None
         return KnowledgeFile(**payload)
 
     async def prepare_target_rows(
@@ -474,12 +477,14 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             ).all()
         )
         if len(source_spaces) != len(source_space_ids) or any(
-            str(space.model or "") != str(target_space.model or "")
-            for space in source_spaces
+            space.type != KnowledgeTypeEnum.SPACE.value
+            or space.state != KnowledgeState.PUBLISHED.value
+            or int(space.tenant_id or 1) != int(batch.tenant_id)
+            for space in [*source_spaces, target_space]
         ):
-            raise RuntimeError(
-                "source and target embedding models are no longer compatible"
-            )
+            raise RuntimeError("source and target must be active spaces in the same tenant")
+        if unit.source_document_id is None:
+            raise RuntimeError("shared migration requires a canonical document")
         source_artifacts = list(
             (
                 await self.session.exec(
@@ -613,6 +618,8 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         actual = {int(row.id): self._fingerprint(row) for row in current_rows}
         if actual != expected:
             raise RuntimeError("overwrite target changed after confirmation")
+        if any(row.projection_lease_owner or row.projection_status == "processing" for row in current_rows):
+            raise RuntimeError("overwrite target has an in-flight shared projection")
         expected_document = snapshot.get("document")
         expected_versions = snapshot.get("versions") or []
         if expected_document is not None:
@@ -874,6 +881,15 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             ).first()
             if document is None:
                 raise RuntimeError("canonical document disappeared before switch")
+            active_entries = list((await self.session.exec(select(KnowledgeFile).where(
+                KnowledgeFile.reference_document_id == unit.source_document_id,
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+            ).with_for_update())).all())
+            if any(entry.projection_lease_owner or entry.projection_status == "processing" for entry in active_entries):
+                raise RuntimeError("source canonical document has an in-flight shared projection")
+            managers = [entry for entry in active_entries if entry.entry_type == "manager"]
+            if len(managers) != 1 or int(managers[0].id) not in source_ids:
+                raise RuntimeError("source canonical manager changed before switch")
             versions = list(
                 (
                     await self.session.exec(
@@ -894,12 +910,17 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                 int(version.knowledge_file_id) for version in versions
             } != set(target_id_by_source):
                 raise RuntimeError("canonical version graph changed before switch")
+            primary_versions = [version for version in versions if version.is_primary]
+            if (len(primary_versions) != 1 or primary_versions[0].id != document.primary_version_id
+                    or primary_versions[0].knowledge_file_id != managers[0].id):
+                raise RuntimeError("canonical primary version changed before switch")
             for version in versions:
                 version.knowledge_file_id = target_id_by_source[
                     int(version.knowledge_file_id)
                 ]
                 self.session.add(version)
             document.knowledge_id = batch.target_space_id
+            document.content_generation += 1
             document.file_level_path = (
                 next(iter(target_by_id.values())).file_level_path or ""
             )
@@ -914,14 +935,98 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                 target.entry_type = KnowledgeFileEntryType.MANAGER.value
                 target.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
                 source.entry_status = KnowledgeFileEntryStatus.DELETING.value
+                # The migration owns old physical-resource cleanup. Exclude it
+                # from the concurrent canonical deletion worker.
+                source.reference_document_id = None
+                source.entry_type = None
+                target.desired_entry_generation += 1
             source.status = KnowledgeFileStatus.PROCESSING.value
             self.session.add(source)
             self.session.add(target)
+        if unit.source_document_id is not None:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+                KnowledgeFileRepositoryImpl,
+            )
+
+            await self.session.flush()
+            await KnowledgeFileRepositoryImpl(self.session).mark_document_entries_content_generation(
+                int(unit.source_document_id), int(document.content_generation),
+            )
         unit.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
         self.session.add(unit)
         for control in control_files:
             control.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
             self.session.add(control)
+        await self._commit()
+
+    async def shared_projection_plan(self, unit_id: int, *, attempt_id: int, execution_token: str) -> dict:
+        batch, unit, _files = await self._active_control_rows(
+            unit_id=unit_id, attempt_id=attempt_id, execution_token=execution_token,
+        )
+        if unit.checkpoint not in {"db_switched", "source_external_cleaned", "source_rows_cleaned", "completed"}:
+            raise RuntimeError("shared projection cannot run before the migration switch")
+        document_id = unit.target_document_id or unit.source_document_id
+        document = await self.session.get(KnowledgeDocument, document_id) if document_id else None
+        if (document is None or int(document.tenant_id or 1) != int(batch.tenant_id)
+                or document.knowledge_id != batch.target_space_id or document.lifecycle_status != "active"):
+            raise RuntimeError("migration canonical destination changed")
+        deleted_document_ids = []
+        candidates = []
+        if batch.preserve_link and unit.source_document_id != document_id:
+            # Publish merge rebinds every source entry to the retained target
+            # document. Its old canonical content must also be tombstoned.
+            candidates.append(int(unit.source_document_id))
+        elif not batch.preserve_link:
+            snapshot = unit.overwrite_snapshot or {}
+            old = snapshot.get("document")
+            if old:
+                candidates.append(int(old["id"]))
+        for old_id in candidates:
+            if old_id == int(document_id) or await self.session.get(KnowledgeDocument, old_id) is not None:
+                raise RuntimeError("overwrite canonical document is still in use")
+            remaining = (await self.session.exec(select(KnowledgeFile.id).where(
+                KnowledgeFile.reference_document_id == old_id,
+                KnowledgeFile.entry_status == "active",
+            ))).first()
+            if remaining is not None:
+                raise RuntimeError("overwrite canonical document still has active entries")
+            deleted_document_ids.append(old_id)
+        return {"tenant_id": int(batch.tenant_id), "document_id": int(document_id),
+                "deleted_document_ids": deleted_document_ids}
+
+    async def prepare_preserve_link_folders(self, unit_id: int, *, attempt_id: int, execution_token: str):
+        batch, unit, files = await self._active_control_rows(
+            unit_id=unit_id, attempt_id=attempt_id, execution_token=execution_token,
+        )
+        target = await self.session.get(Knowledge, batch.target_space_id)
+        owner = await self.session.get(User, target.user_id) if target is not None else None
+        if owner is None or owner.delete:
+            raise RuntimeError("target knowledge-space owner is disabled or missing")
+        folder_id, _parent_path, _, mapping = await self._prepare_target_folder(batch, unit, owner)
+        unit.planned_target_folder_id = folder_id
+        unit.folder_mapping_snapshot = mapping
+        for row in files:
+            row.target_folder_id = folder_id
+            self.session.add(row)
+        self.session.add(unit)
+        await self._commit()
+        folder_ids = [int(item["target_folder_id"]) for item in mapping if item["action"] == "created"]
+        folders = list((await self.session.exec(select(KnowledgeFile).where(col(KnowledgeFile.id).in_(folder_ids)))).all()) if folder_ids else []
+        return folders, int(owner.user_id), int(batch.target_space_id)
+
+    async def record_preserve_link_result(self, unit_id: int, result, *, attempt_id: int, execution_token: str) -> None:
+        _, unit, files = await self._active_control_rows(
+            unit_id=unit_id, attempt_id=attempt_id, execution_token=execution_token,
+        )
+        unit.target_document_id = int(result.document_id)
+        unit.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
+        for row in files:
+            row.target_file_id = row.source_file_id
+            row.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
+            row.target_resource_manifest = {**(row.target_resource_manifest or {}),
+                "publish_entry_id": int(result.publish_entry_id), "storage_contract": "shared"}
+            self.session.add(row)
+        self.session.add(unit)
         await self._commit()
 
     async def cleanup_source_rows(self, unit_id: int) -> None:

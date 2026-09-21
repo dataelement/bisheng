@@ -210,6 +210,7 @@ class KnowledgeMigrationService:
             target_path=batch.target_path_snapshot,
             conflict_strategy=batch.conflict_strategy,
             preserve_structure=batch.preserve_structure,
+            preserve_link=batch.preserve_link,
             status=batch.status,
             current_stage=batch.current_stage,
             round_no=batch.round_no,
@@ -283,8 +284,10 @@ class KnowledgeMigrationService:
         preserve_link: bool,
         purpose: str,
     ) -> MigrationSpaceResponse:
-        selectable = row.owner_id > 0
-        reason = None if selectable else "knowledge space owner is invalid"
+        # Migration may recover files from an ownerless source. Only the
+        # destination needs a valid owner for new files and permission tuples.
+        selectable = purpose == "source" or row.owner_id > 0
+        reason = None if selectable else "target knowledge space owner is invalid"
         if (
             selectable
             and preserve_link
@@ -345,7 +348,29 @@ class KnowledgeMigrationService:
                 )
             )
             if not selectable:
-                unavailable_reason = "当前记录不是可迁移的 SUCCESS 物理文件"
+                unavailable_reason = {
+                    KnowledgeFileEntryType.PUBLISH.value: "发布入口, 请从原始文件所在库迁移",
+                    KnowledgeFileEntryType.SHARE.value: "共享入口, 请从原始文件所在库迁移",
+                    KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value: "已失效的入口, 不可迁移",
+                }.get(item.entry_type)
+                if unavailable_reason is None and (
+                    item.entry_type == KnowledgeFileEntryType.MANAGER.value
+                    and item.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+                ):
+                    unavailable_reason = {
+                        KnowledgeFileEntryStatus.PREPARING.value: "管理入口准备中, 暂不可迁移",
+                        KnowledgeFileEntryStatus.DELETING.value: "管理入口删除中, 不可迁移",
+                        KnowledgeFileEntryStatus.INVALID.value: "管理入口已失效, 不可迁移",
+                    }.get(item.entry_status, "管理入口尚未生效, 暂不可迁移")
+                if unavailable_reason is None:
+                    unavailable_reason = {
+                        KnowledgeFileStatus.PROCESSING.value: "正在解析, 暂不可迁移",
+                        KnowledgeFileStatus.FAILED.value: "解析失败, 暂不可迁移",
+                        KnowledgeFileStatus.REBUILDING.value: "正在重建, 暂不可迁移",
+                        KnowledgeFileStatus.WAITING.value: "等待解析, 暂不可迁移",
+                        KnowledgeFileStatus.TIMEOUT.value: "解析超时, 暂不可迁移",
+                        KnowledgeFileStatus.VIOLATION.value: "内容违规, 不可迁移",
+                    }.get(item.status, "当前文件状态不支持迁移")
             data.append(
                 MigrationChildResponse(
                     id=int(item.id),
@@ -386,8 +411,8 @@ class KnowledgeMigrationService:
             raise KnowledgeMigrationCandidateInvalidError(
                 msg="one or more knowledge spaces are not migratable"
             )
-        if any(spaces_by_id[space_id].owner_id <= 0 for space_id in spaces_by_id):
-            raise KnowledgeMigrationCandidateInvalidError(msg="knowledge space owner is invalid")
+        if spaces_by_id[request.target_space_id].owner_id <= 0:
+            raise KnowledgeMigrationCandidateInvalidError(msg="target knowledge space owner is invalid")
         if request.preserve_link:
             # Checked before any node work: the operator picked these spaces by
             # hand, so tell them which constraint they hit rather than letting a

@@ -40,6 +40,11 @@ class KnowledgeMigrationPreflightInspectorImpl(
         self,
         files: Sequence[KnowledgeFile],
     ) -> dict[int, str]:
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+        from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+
+        for tenant_id in {int(file.tenant_id or 1) for file in files}:
+            await aresolve_space_shared_routing(tenant_id, KnowledgeTypeEnum.SPACE.value)
         return await asyncio.to_thread(
             self._find_storage_errors,
             tuple(files),

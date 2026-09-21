@@ -1,18 +1,9 @@
-"""Executing a migration unit as a publish, so a shortcut stays at the source.
+"""Prepare folders, publish, then converge shared content and membership.
 
-The normal migration walks a long checkpoint chain — create target rows, copy
-objects, build indexes, write permissions, verify, switch, clean the source.
-Publishing does all of that itself: the distribution state machine owns the
-target entry, its permission projection and its index, and the source row is
-not cleaned up at all because it *becomes* the shortcut.
-
-So this reuses the same chain rather than inventing a second one, and simply
-has nothing to do in most steps. The publish happens at ``switch_database``,
-which is honest: that step is where the normal path flips the document over to
-its new home, and publishing is that same flip. Reusing the chain keeps the
-lease, the resumable checkpoints, the compensation and the attempt bookkeeping
-exactly as they are — and makes retries idempotent for free, since a unit that
-already switched resumes past the publish.
+The publish moves physical versions and leaves a logical source entry. Object
+copy/cleanup steps are intentionally empty; the post-switch shared projection
+gate is mandatory before the unit can finish. Persistent checkpoints and the
+publish idempotency key allow retries after either commit boundary.
 """
 
 from __future__ import annotations
@@ -81,23 +72,54 @@ class PreserveLinkContextError(RuntimeError):
 class PreserveLinkMigrationOperations:
     """Runs one migration unit as a publish. See the module docstring."""
 
-    def __init__(self, *, publish_service_factory: Any, context_loader: Any = None):
+    def __init__(self, *, publish_service_factory: Any, context_loader: Any = None,
+                 shared_projection: Any = None, folder_preparer: Any = None, result_recorder: Any = None):
         # Both are injected so tests can drive the whole chain without a live
         # database session or a real OpenFGA; production passes the real
         # distribution service factory and the default loader.
         self.publish_service_factory = publish_service_factory
         self.context_loader = context_loader or self._load_publish_context
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_shared_projection import (
+            KnowledgeMigrationSharedProjection,
+        )
+
+        self.shared_projection = shared_projection or KnowledgeMigrationSharedProjection()
+        self.folder_preparer = folder_preparer or self._prepare_folders
+        self.result_recorder = result_recorder or self._record_result
 
     # ── Steps the distribution state machine already owns ──────────
 
     async def create_target_rows(self, unit: MigrationExecutionUnit) -> None:
-        return None
+        await self.folder_preparer(unit)
+
+    @staticmethod
+    async def _prepare_folders(unit: MigrationExecutionUnit) -> None:
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_operations_impl import (
+            _replace_permission_tuples,
+            _target_permissions,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_runtime_repository_impl import (
+            KnowledgeMigrationRuntimeRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            folders, owner_id, space_id = await KnowledgeMigrationRuntimeRepositoryImpl(session).prepare_preserve_link_folders(
+                unit.unit_id, attempt_id=unit.attempt_id, execution_token=unit.execution_token,
+            )
+        for folder in folders:
+            await _replace_permission_tuples(f"folder:{folder.id}", _target_permissions(
+                folder, target_space_id=space_id, owner_id=owner_id, object_type="folder",
+            ))
 
     async def copy_target_objects(self, unit: MigrationExecutionUnit) -> None:
         return None
 
     async def build_target_indexes(self, unit: MigrationExecutionUnit) -> None:
-        return None
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+        from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
+
+        context = await self.context_loader(unit.unit_id)
+        await aresolve_space_shared_routing(context["tenant_id"], KnowledgeTypeEnum.SPACE.value)
 
     async def write_target_permissions(self, unit: MigrationExecutionUnit) -> None:
         return None
@@ -108,7 +130,7 @@ class PreserveLinkMigrationOperations:
     # ── Steps that have no meaning once the source becomes a shortcut ──
 
     async def cleanup_source_external(self, unit: MigrationExecutionUnit) -> None:
-        return None
+        await self.shared_projection.converge_unit(unit)
 
     async def cleanup_source_rows(self, unit: MigrationExecutionUnit) -> None:
         return None
@@ -116,9 +138,10 @@ class PreserveLinkMigrationOperations:
     async def cleanup_new_target(self, unit: MigrationExecutionUnit) -> None:
         """Compensation before the switch.
 
-        Nothing is created before the publish, so there is nothing to undo. A
-        publish that failed part-way cleans up after itself inside the
-        distribution service.
+        Prepared folders are reusable and retained for retry. A publish that
+        failed part-way owns its compensation inside the distribution service;
+        it may also have committed before the migration checkpoint was saved.
+        Never delete its canonical entries from this compensation step.
         """
         return None
 
@@ -128,7 +151,19 @@ class PreserveLinkMigrationOperations:
         if unit.attempt_id is None or not unit.execution_token:
             raise RuntimeError("migration execution generation is missing")
         context = await self.context_loader(unit.unit_id)
-        await self._publish(context)
+        result = await self._publish(context)
+        await self.result_recorder(unit, result)
+
+    @staticmethod
+    async def _record_result(unit, result):
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_runtime_repository_impl import (
+            KnowledgeMigrationRuntimeRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            await KnowledgeMigrationRuntimeRepositoryImpl(session).record_preserve_link_result(
+                unit.unit_id, result, attempt_id=unit.attempt_id, execution_token=unit.execution_token,
+            )
 
     async def _load_publish_context(self, unit_id: int) -> dict[str, Any]:
         async with get_async_db_session() as session:
@@ -165,7 +200,9 @@ class PreserveLinkMigrationOperations:
                 folder = (
                     await session.exec(
                         select(KnowledgeFile).where(
-                            KnowledgeFile.id == int(unit_row.planned_target_folder_id)
+                            KnowledgeFile.id == int(unit_row.planned_target_folder_id),
+                            KnowledgeFile.knowledge_id == batch.target_space_id,
+                            KnowledgeFile.deleted_at.is_(None),
                         )
                     )
                 ).first()
@@ -196,7 +233,7 @@ class PreserveLinkMigrationOperations:
             "target_document_id": _merge_target_document_id(unit_row.overwrite_unit_key),
         }
 
-    async def _publish(self, context: dict[str, Any]) -> None:
+    async def _publish(self, context: dict[str, Any]):
         from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
             PublishKnowledgeDocumentCommand,
         )
@@ -218,7 +255,7 @@ class PreserveLinkMigrationOperations:
             target_document_id=context["target_document_id"],
         )
         async with self.publish_service_factory() as service:
-            await service.publish_approved(command)
+            result = await service.publish_approved(command)
         logger.info(
             "F100 preserve-link publish document_id=%s source_entry_id=%s "
             "target_space_id=%s merged=%s",
@@ -227,6 +264,7 @@ class PreserveLinkMigrationOperations:
             context["target_space_id"],
             context["target_document_id"] is not None,
         )
+        return result
 
 
 class PreserveLinkAwareOperations:

@@ -65,6 +65,7 @@ class MigrationCursorPage(BaseModel):
 
 
 class MigrationBatchResponse(BaseModel):
+    preserve_link: bool = False
     batch_no: str
     request_id: str
     operator_id: int

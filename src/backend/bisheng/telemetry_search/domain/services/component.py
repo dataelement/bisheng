@@ -43,6 +43,7 @@ from ..schemas.query_builder import (
     TermOp,
     TermsOp,
 )
+from .login_participation import CHINA, LOGIN_FIELDS, load_login_population, query_login_participation
 from .search_engine_service import SearchEngineService, SearchParameters
 
 TIMESTAMP_FIELD = "timestamp"
@@ -60,6 +61,12 @@ class DataQueryService(BaseModel):
         default_factory=list,
         description="runtime dimension filters from linked filter components",
     )
+
+    @property
+    def uses_login_participation(self) -> bool:
+        return self.dataset_code in {"mid_user_increment", "mid_user_daily_participation"} and any(
+            metric.field_id in LOGIN_FIELDS for metric in self.data_config.metrics
+        )
 
     async def query_telemetry_data(self) -> DataQueryResult:
         res = DataQueryResult()
@@ -94,6 +101,10 @@ class DataQueryService(BaseModel):
             stack_dimension = None
 
         query_filters, time_range = await self.convert_filters(dimension_map, metric_map)
+        if self.uses_login_participation:
+            for dimension in [*query_dimensions, *([stack_dimension] if stack_dimension else [])]:
+                if dimension.type == AggsTypeEnum.DATE_HISTOGRAM:
+                    dimension.custom_params["time_zone"] = "+08:00"
         # empty time_range means no time filter applied
         if time_range is None:
             # time filter not find intersection, dont`t need query data
@@ -129,16 +140,24 @@ class DataQueryService(BaseModel):
                                 filters: List[FilterExpression]) -> List[List]:
         all_dimensions = {}
         res = []
+        login_population = None
         for metric_index, metric in enumerate(self.data_config.metrics):
             metric_config = metric_map.get(metric.field_id)
             if not metric_config:
                 raise QueryMetricNotFoundError()
             # metric filters、dimensions、stack_dimension、index_name copy from search_kwargs
-            one_metric_result = await self.query_one_metric(metric_config, metric.aggregation, dimension_index,
-                                                            index_name=index_name,
-                                                            dimensions=copy.deepcopy(dimensions),
-                                                            stack_dimension=copy.deepcopy(stack_dimension),
-                                                            filters=copy.deepcopy(filters) if filters else None)
+            if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
+                if login_population is None:
+                    login_population = await load_login_population(
+                        index_name=index_name, dimensions=dimensions, stack_dimension=stack_dimension, filters=filters,
+                    )
+                one_metric_result = login_population.rows(metric_config.field)
+            else:
+                one_metric_result = await self.query_one_metric(metric_config, metric.aggregation, dimension_index,
+                                                                index_name=index_name,
+                                                                dimensions=copy.deepcopy(dimensions),
+                                                                stack_dimension=copy.deepcopy(stack_dimension),
+                                                                filters=copy.deepcopy(filters) if filters else None)
             # complete all dimensions
             if dimension_index >= 0:
                 for one in one_metric_result:
@@ -172,6 +191,8 @@ class DataQueryService(BaseModel):
     async def query_one_metric(self, metric_config: MetricConfig, aggregation: AggregationType,
                                dimension_index: int, **search_kwargs) -> List[List]:
         if metric_config.is_virtual:
+            if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
+                return await query_login_participation(metric_config.field, **search_kwargs)
             # need query twice from telemetry mid table
             if metric_config.calculation == VirtualMetricCalculationEnum.SHARE_OF_TOTAL:
                 return await self.query_share_of_total_metric(
@@ -435,7 +456,8 @@ class DataQueryService(BaseModel):
 
                 if time_dimension_index >= 0:
                     one_dimension[time_dimension_index] = self.format_timestamp(
-                        one_dimension[time_dimension_index], timestamp_dimension)
+                        one_dimension[time_dimension_index], timestamp_dimension,
+                        timezone=CHINA if self.uses_login_participation else None)
 
                 final_dimensions.append(one_dimension)
                 final_values.append(one[dimension_index + 1:])
@@ -454,9 +476,12 @@ class DataQueryService(BaseModel):
         """ judge data timestamp whether in time range"""
         if not time_range:
             return True
-        start_date = datetime.fromtimestamp(time_range[0] / 1000)
-        end_date = datetime.fromtimestamp(time_range[1] / 1000)
-        data_date = datetime.fromtimestamp(timestamp / 1000)
+        timezone = CHINA if self.uses_login_participation else None
+        start_date = datetime.fromtimestamp(time_range[0] / 1000, timezone)
+        end_date = datetime.fromtimestamp(time_range[1] / 1000, timezone)
+        data_date = datetime.fromtimestamp(timestamp / 1000, timezone)
+        if timezone and timestamp_dimension.time_interval == "day":
+            return start_date.date() <= data_date.date() <= end_date.date()
         if timestamp_dimension.time_interval == "year":
             return start_date.year <= data_date.year <= end_date.year
         elif timestamp_dimension.time_interval == "month":
@@ -472,8 +497,8 @@ class DataQueryService(BaseModel):
         return start_date <= data_date <= end_date
 
     @staticmethod
-    def format_timestamp(timestamp: int, timestamp_dimension: AggregationExpression) -> str:
-        dt_object = datetime.fromtimestamp(timestamp / 1000)
+    def format_timestamp(timestamp: int, timestamp_dimension: AggregationExpression, timezone=None) -> str:
+        dt_object = datetime.fromtimestamp(timestamp / 1000, timezone)
         if timestamp_dimension.time_interval == "year":
             return dt_object.strftime('%Y')
         elif timestamp_dimension.time_interval == "month":
@@ -606,7 +631,8 @@ class DataQueryService(BaseModel):
         time_range = []
         for one in all_time_filters:
             start_date, end_date = one.get_start_end_date(
-                include_today=self.dataset_code in REALTIME_TEMPORAL_DATASETS
+                include_today=self.dataset_code in REALTIME_TEMPORAL_DATASETS or self.uses_login_participation,
+                timezone=CHINA if self.uses_login_participation else None,
             )
             if start_date and end_date:
                 time_range.append([start_date, end_date])

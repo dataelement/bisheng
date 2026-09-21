@@ -97,15 +97,17 @@ class TimeFilter(BaseModel):
         self,
         *,
         include_today: bool = False,
+        timezone=None,
     ) -> (Optional[int], Optional[int]):
         if self.mode == TimeRangeMode.DYNAMIC:
             recent_days = max(int(self.recent_days or 1), 1)
-            now = datetime.now()
+            now = datetime.now(timezone)
             if include_today:
                 start = datetime(
                     year=now.year,
                     month=now.month,
                     day=now.day,
+                    tzinfo=timezone,
                 ) - timedelta(days=recent_days - 1)
                 end = datetime(
                     year=now.year,
@@ -114,6 +116,7 @@ class TimeFilter(BaseModel):
                     hour=23,
                     minute=59,
                     second=59,
+                    tzinfo=timezone,
                 )
                 start_date = int(start.timestamp() * 1000)
                 end_date = int(end.timestamp() * 1000)
@@ -127,6 +130,7 @@ class TimeFilter(BaseModel):
                         hour=23,
                         minute=59,
                         second=59,
+                        tzinfo=timezone,
                     ).timestamp()
                     * 1000
                 )

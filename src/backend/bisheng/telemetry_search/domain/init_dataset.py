@@ -29,6 +29,32 @@ from bisheng.telemetry_search.domain.schemas.query_builder import (
     TermsOp,
 )
 
+
+def _login_participation_metrics() -> list[MetricConfig]:
+    """两个用户数据集共用同一登录去重口径, 保留原字段标识。"""
+    return [
+        MetricConfig(
+            field=field,
+            name=name,
+            is_virtual=True,
+            calculation=VirtualMetricCalculationEnum.LOGIN_PARTICIPATION,
+            filter=FilterExpression(
+                bool_operator="must",
+                filters=[
+                    TermOp(field="metric_source", value="participation"),
+                    TermOp(field="logged_in", value=True),
+                ],
+            ),
+            aggregations=[AggregationExpression(name=field, type=AggsTypeEnum.CARDINALITY, field="user_id")],
+            default_number_format=(
+                {"type": "percent", "decimalPlaces": 2, "thousandSeparator": False}
+                if field == "participation_rate" else None
+            ),
+        )
+        for field, name in (("participation_rate", "全员参与占比"), ("logged_in_employee_count", "实际登录人数"))
+    ]
+
+
 DASHBOARD_DATASET = [
     DashboardDataset(
         # F058 follow-up: this is now the ONE surviving, visible entry for what used to
@@ -90,47 +116,7 @@ DASHBOARD_DATASET = [
                         )
                     ]
                 ),
-                MetricConfig(
-                    field="participation_rate",
-                    name="全员参与占比",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[
-                            TermOp(field="logged_in", value=True),
-                            MatchAllOp(field=""),
-                        ],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="logged_in_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        ),
-                        AggregationExpression(
-                            name="active_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        ),
-                    ],
-                    formula=FormulaEnum.DIVIDE,
-                ),
-                MetricConfig(
-                    field="logged_in_employee_count",
-                    name="实际登录人数",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[TermOp(field="logged_in", value=True)],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="logged_in_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        )
-                    ],
-                ),
+                *_login_participation_metrics(),
                 MetricConfig(
                     field="active_employee_count",
                     name="全员总数",
@@ -1608,47 +1594,7 @@ DASHBOARD_DATASET = [
         is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
-                MetricConfig(
-                    field="participation_rate",
-                    name="全员参与占比",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[
-                            TermOp(field="logged_in", value=True),
-                            MatchAllOp(field=""),
-                        ],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="logged_in_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        ),
-                        AggregationExpression(
-                            name="active_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        ),
-                    ],
-                    formula=FormulaEnum.DIVIDE,
-                ),
-                MetricConfig(
-                    field="logged_in_employee_count",
-                    name="实际登录人数",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[TermOp(field="logged_in", value=True)],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="logged_in_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        )
-                    ],
-                ),
+                *_login_participation_metrics(),
                 MetricConfig(
                     field="active_employee_count",
                     name="全员总数",

@@ -338,6 +338,7 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
     )
     assert migrated_document.knowledge_id == 20
     assert migrated_document.primary_version_id == 702
+    assert migrated_document.content_generation == 1
     assert [row.id for row in migrated_versions] == [701, 702]
     assert [row.knowledge_file_id for row in migrated_versions] == [
         target_ids[1001],
@@ -364,6 +365,10 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
     ).one()
     assert published.reference_document_id == 501
     assert published.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert published.desired_content_generation == 1
+    assert published.projection_status == "pending"
+    assert manager_entries[0].desired_content_generation == 1
+    assert manager_entries[0].projection_status == "pending"
     switched_unit = await runtime_session.get(
         KnowledgeMigrationUnit,
         int(unit.id),
@@ -380,6 +385,58 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
         KnowledgeMigrationCheckpoint.DB_SWITCHED.value,
     ]
 
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.knowledge.domain.contracts.shared_space_storage import SharedContentChunk
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_shared_projection import (
+        KnowledgeMigrationSharedProjection,
+    )
+    from bisheng.knowledge.domain.services.file_migration.executor import MigrationExecutionUnit
+    from test.fakes.shared_storage_fakes import FakeSharedSpaceStorageWriter
+
+    @asynccontextmanager
+    async def session_factory():
+        yield runtime_session
+
+    writer = FakeSharedSpaceStorageWriter()
+    writer.schema_spec = SimpleNamespace(embedding_model_id="7")
+    loader = AsyncMock(return_value=[SharedContentChunk(chunk_index=0, text="canonical content")])
+    adapter = KnowledgeMigrationSharedProjection(
+        session_factory=session_factory, components_factory=lambda _: (writer, None), content_loader=loader,
+    )
+    execution = MigrationExecutionUnit(unit_id=unit_id, attempt_id=int(attempt.id), execution_token="runtime-token")
+    real_update = writer.update_membership
+    writer.update_membership = AsyncMock(side_effect=RuntimeError("ES unavailable"))
+    with pytest.raises(RuntimeError, match="ES unavailable"):
+        await adapter.converge_unit(execution)
+    assert await runtime_session.get(KnowledgeFile, 1001) is not None
+    assert (await runtime_session.get(KnowledgeMigrationUnit, unit_id)).checkpoint == "db_switched"
+    writer.update_membership = real_update
+    await adapter.converge_unit(execution)
+    assert writer.membership_of(1, 501) == (20, 30)
+    assert loader.await_args.args[0].id == target_ids[1002]
+    calls = list(writer.calls)
+    await adapter.converge_unit(execution)
+    assert writer.calls == calls
+    assert "delete_content" not in calls
+
+    # Resume confirmed overwrite cleanup independently of destination projection.
+    unit.overwrite_snapshot = {"document": {"id": 801}}
+    runtime_session.add(unit)
+    await runtime_session.commit()
+    writer.content[(1, 801, 901, 0)] = {0: {"text": "obsolete"}}
+    delete_content = writer.delete_content
+    writer.delete_content = AsyncMock(side_effect=RuntimeError("Milvus unavailable"))
+    with pytest.raises(RuntimeError, match="Milvus unavailable"):
+        await adapter.converge_unit(execution)
+    assert await runtime_session.get(KnowledgeFile, 1001) is not None
+    writer.delete_content = delete_content
+    await adapter.converge_unit(execution)
+    assert not any(key[1] == 801 for key in writer.content)
+    assert writer.membership_of(1, 501) == (20, 30)
+
     await repository.cleanup_source_rows(int(unit.id))
     remaining_source_ids = (
         await runtime_session.exec(
@@ -389,6 +446,71 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
         )
     ).all()
     assert remaining_source_ids == []
+
+
+async def test_preserve_link_creates_planned_directory_and_records_switch(runtime_session, monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.services import migration_preserve_link_operations as link_module
+
+    monkeypatch.setattr(runtime_repository_module, "User", RuntimeUser)
+    runtime_session.add(RuntimeUser(user_id=1, user_name="owner"))
+    runtime_session.add(Knowledge(id=20, name="target", user_id=1, type=3, model="old-model"))
+    runtime_session.add(KnowledgeFile(id=42, knowledge_id=20, user_id=1, user_name="owner",
+        updater_id=1, updater_name="owner", file_name="destination", file_type=FileType.DIR.value,
+        file_level_path="", level=0, status=2))
+    batch = KnowledgeMigrationBatch(batch_no="link-folder", request_id="link-folder", operator_id=1,
+        operator_name="admin", target_space_id=20, target_space_name="target", target_folder_id=42,
+        preserve_link=True, status="running")
+    runtime_session.add(batch)
+    await runtime_session.flush()
+    unit = KnowledgeMigrationUnit(batch_id=batch.id, unit_key="document:91", unit_type="version_chain",
+        source_document_id=91, source_space_id=10, source_space_name="source", status="running", attempt_count=1,
+        folder_mapping_snapshot=[{"source_folder_id": 11, "source_name": "child", "action": "planned"}])
+    runtime_session.add(unit)
+    await runtime_session.flush()
+    attempt = KnowledgeMigrationAttempt(batch_id=batch.id, unit_id=unit.id, round_no=1, attempt_no=1,
+        execution_token="link-token", start_checkpoint="planned", started_at=datetime.now())
+    row = KnowledgeMigrationFile(batch_id=batch.id, unit_id=unit.id, source_file_id=100,
+        source_document_id=91, source_version_no=1, is_primary=True, source_space_id=10,
+        source_space_name="source", source_file_name="a.pdf", target_space_id=20, target_space_name="target",
+        target_file_name="a.pdf")
+    runtime_session.add_all([attempt, row])
+    await runtime_session.commit()
+    repository = KnowledgeMigrationRuntimeRepositoryImpl(runtime_session)
+    args = {"attempt_id": attempt.id, "execution_token": "link-token"}
+    folders, _, _ = await repository.prepare_preserve_link_folders(unit.id, **args)
+    assert len(folders) == 1 and folders[0].file_level_path == "/42"
+    created_id = folders[0].id
+    retried, _, _ = await repository.prepare_preserve_link_folders(unit.id, **args)
+    assert [f.id for f in retried] == [created_id]
+
+    @asynccontextmanager
+    async def session_factory():
+        yield runtime_session
+
+    monkeypatch.setattr(link_module, "get_async_db_session", session_factory)
+    operations = link_module.PreserveLinkMigrationOperations(publish_service_factory=None)
+    context = await operations._load_publish_context(unit.id)
+    assert context["target_file_level_path"] == f"/42/{created_id}"
+    assert context["target_level"] == 2
+    await repository.record_preserve_link_result(unit.id,
+        SimpleNamespace(document_id=91, publish_entry_id=777), **args)
+    assert unit.checkpoint == row.checkpoint == "db_switched"
+    assert row.target_file_id == 100
+    assert row.target_resource_manifest["publish_entry_id"] == 777
+    runtime_session.add(KnowledgeDocument(id=92, knowledge_id=20, primary_version_id=2))
+    await runtime_session.commit()
+    await repository.record_preserve_link_result(unit.id,
+        SimpleNamespace(document_id=92, publish_entry_id=777), **args)
+    plan = await repository.shared_projection_plan(unit.id, **args)
+    assert plan["document_id"] == 92
+    assert plan["deleted_document_ids"] == [91]
+    runtime_session.add(KnowledgeDocument(id=91, knowledge_id=10, primary_version_id=1))
+    await runtime_session.commit()
+    with pytest.raises(RuntimeError, match="still in use"):
+        await repository.shared_projection_plan(unit.id, **args)
 
 
 @pytest.mark.asyncio

@@ -44,11 +44,12 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         metric["field"]: metric
         for metric in participation.schema_config["metrics"]
     }
-    assert metrics["participation_rate"]["formula"] == "divide"
+    assert metrics["participation_rate"]["calculation"] == "login_participation"
+    assert metrics["participation_rate"]["formula"] is None
     assert {
         aggregation["type"]
         for aggregation in metrics["participation_rate"]["aggregations"]
-    } == {"value_count"}
+    } == {"cardinality"}
     # F058 follow-up (2026-09-01): mid_user_daily_participation's ES index was repointed to
     # the merged user-engagement index (see user_engagement_shared.py / init_dataset.py) —
     # the dataset_code itself, and its role as a REALTIME_DATASETS entry, are unchanged.

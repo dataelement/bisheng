@@ -528,6 +528,8 @@ async def build_portal_qa_plan(*, request, user, knowledge_base, department_acce
     if knowledge_base is None:
         return QaRetrievalPlan(())
     scope = knowledge_base.knowledge_scope
+    if scope is not None and scope.mode == "none":
+        return QaRetrievalPlan(())
     ids = sorted({int(sid) for sid in knowledge_base.knowledge_space_ids or [] if int(sid) > 0})
     whole_mode = scope is None or scope.mode == "knowledge_space"
     if whole_mode and scope is not None and scope.knowledge_space_id:

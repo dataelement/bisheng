@@ -49,3 +49,13 @@ class DashboardExportEmptyError(BaseErrorCode):
 class DashboardExportLimitExceededError(BaseErrorCode):
     Code: int = 17017
     Msg: str = 'Detail row count exceeds export limit'
+
+
+class LoginParticipationFilterError(BaseErrorCode):
+    Code: int = 17019
+    Msg: str = '登录参与统计仅支持自然日及以上粒度, 以及可确定起止日期的 AND 时间筛选'
+
+
+class LoginParticipationDataError(BaseErrorCode):
+    Code: int = 17020
+    Msg: str = '登录参与统计数据读取不完整或格式异常, 请重试并检查统计索引'

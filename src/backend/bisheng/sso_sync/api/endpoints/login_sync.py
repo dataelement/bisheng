@@ -42,6 +42,7 @@ async def login_sync(
             payload,
             request_ip=get_request_ip(request),
             row_source=payload.source or DEFAULT_SSO_SYNC_SOURCE,
+            record_login=True,
         )
     except BaseErrorCode as exc:
         return JSONResponse(

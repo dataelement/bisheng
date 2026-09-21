@@ -126,7 +126,7 @@ export interface MetricConfig {
     filter?: Record<string, any>
     aggregations?: Record<string, any>[]
     formula?: 'add' | 'subtract' | 'multiply' | 'divide'
-    calculation?: 'share_of_total'
+    calculation?: 'share_of_total' | 'login_participation'
     default_number_format?: {
         type: 'number' | 'percent' | 'duration' | 'storage'
         decimalPlaces: number

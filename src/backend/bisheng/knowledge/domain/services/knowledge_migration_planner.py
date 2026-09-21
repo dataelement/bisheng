@@ -195,6 +195,7 @@ class KnowledgeMigrationPlannerService:
             summary = None
             version_numbers = [int(version.version_no) for version in versions]
             primary_versions = [version for version in versions if version.is_primary]
+            primary_file = all_version_files.get(int(primary_versions[0].knowledge_file_id)) if len(primary_versions) == 1 else None
             allowed_source_spaces = {
                 int(item["id"]) for item in batch.source_spaces_snapshot
             }
@@ -214,6 +215,9 @@ class KnowledgeMigrationPlannerService:
             ):
                 reason_code = "source_version_graph_invalid"
                 summary = "主版本指针不一致"
+            elif primary_file is None or primary_file.entry_type != KnowledgeFileEntryType.MANAGER.value or primary_file.entry_status != KnowledgeFileEntryStatus.ACTIVE.value or primary_file.reference_document_id != document_id:
+                reason_code = "source_canonical_manager_required"
+                summary = "共享存储迁移要求主版本具有有效管理入口"
             elif not all(
                 self._is_file_selected(
                     file,
@@ -258,6 +262,8 @@ class KnowledgeMigrationPlannerService:
                     unit_key=f"file:{file_id}",
                     unit_type="file",
                     files=(file,),
+                    reason_code="source_canonical_document_required",
+                    summary="共享存储迁移要求规范文档及完整版本链, 不支持旧独立文件",
                 )
             )
             accounted.add(file_id)
@@ -598,8 +604,6 @@ class KnowledgeMigrationPlannerService:
         folders: dict[int, KnowledgeFile],
         selected_folder_ids: set[int],
         selected_file_ids: set[int],
-        source_models: dict[int, str],
-        target_model: str,
         overwrite_reservations: set[str],
         output_name_reservations: set[tuple[str, str]],
         output_md5_reservations: set[str],
@@ -608,7 +612,7 @@ class KnowledgeMigrationPlannerService:
         list[KnowledgeMigrationFile],
         int,
     ]:
-        primary_file = source_unit.files[-1]
+        primary_file = next((file for file in source_unit.files if getattr(version_by_file_id.get(int(file.id)), "is_primary", False)), source_unit.files[-1])
         source_chain = self._source_chain(
             primary_file,
             preserve_structure=batch.preserve_structure,
@@ -634,9 +638,7 @@ class KnowledgeMigrationPlannerService:
         if reason_code is None and unit_storage_errors:
             reason_code = "source_storage_unavailable"
             summary = "; ".join(sorted(unit_storage_errors))
-        if reason_code is None and source_models.get(int(primary_file.knowledge_id), "") != target_model:
-            reason_code = "embedding_model_mismatch"
-            summary = "来源与目标知识库向量模型不一致"
+        # SPACE uses the tenant route's embedding model, not historical per-space model fields.
 
         matched: dict[str, set[str]] = defaultdict(set)
         target_graph_snapshots: dict[str, dict[str, Any]] = {}
@@ -733,6 +735,13 @@ class KnowledgeMigrationPlannerService:
             elif resolution.overwrite_unit_key:
                 overwrite_reservations.add(resolution.overwrite_unit_key)
                 overwrite_delta = 1
+
+        if reason_code is None and batch.preserve_link and resolution.overwrite_unit_key:
+            if len(source_unit.files) != 1 or not resolution.overwrite_unit_key.startswith("document:"):
+                reason_code = "publish_merge_requires_single_source_version"
+                summary = "保留链接覆盖仅支持单版本来源合并到规范目标文档"
+                overwrite_reservations.discard(resolution.overwrite_unit_key)
+                overwrite_delta -= 1
 
         unit_status = (
             KnowledgeMigrationUnitStatus.POLICY_SKIPPED.value
@@ -897,11 +906,6 @@ class KnowledgeMigrationPlannerService:
             )
             if not target_space_rows:
                 raise RuntimeError("target knowledge space is no longer available")
-            target_model = str(target_space_rows[0].space.model or "")
-            source_models = {
-                int(item["id"]): str(item.get("model") or "")
-                for item in batch.source_spaces_snapshot
-            }
             reservations: set[str] = set()
             output_name_reservations: set[tuple[str, str]] = set()
             output_md5_reservations: set[str] = set()
@@ -959,8 +963,6 @@ class KnowledgeMigrationPlannerService:
                             folders=folders,
                             selected_folder_ids=selected_folder_ids,
                             selected_file_ids=selected_file_ids,
-                            source_models=source_models,
-                            target_model=target_model,
                             overwrite_reservations=reservations,
                             output_name_reservations=(
                                 output_name_reservations

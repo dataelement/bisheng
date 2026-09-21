@@ -22,6 +22,7 @@ from bisheng.core.config.settings import KnowledgeRetrievalRuntimeConf
         "nonportal",
         "success",
         "plain_chat",
+        "uploaded_file",
     ],
 )
 async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(monkeypatch, case):
@@ -37,7 +38,7 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
         config.portal_unified_qa_user_ids = [999]
     monkeypatch.setattr(settings, "async_get_knowledge", AsyncMock(return_value=SimpleNamespace(retrieval=config)))
     monkeypatch.setattr(chat_service.DepartmentFlowService, "resolve_limit_and_dept", AsyncMock(return_value=(0, None)))
-    succeeds = case in {"success", "plain_chat"}
+    succeeds = case in {"success", "plain_chat", "uploaded_file"}
 
     async def answer(messages):
         yield SimpleNamespace(content="answer", additional_kwargs={})
@@ -62,7 +63,7 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
     selected = [{"id": 10, "type": KnowledgeTypeEnum.SPACE.value}]
     if case == "mixed":
         selected.append({"id": 20, "type": KnowledgeTypeEnum.NORMAL.value})
-    elif case in {"empty", "plain_chat"}:
+    elif case in {"empty", "plain_chat", "uploaded_file"}:
         selected = []
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=selected))
     monkeypatch.setattr(
@@ -82,10 +83,18 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
 
         unified.side_effect = None
         unified.return_value = ("authorized context", QaRetrievalResult())
-    if case != "plain_chat":
+    if case not in {"plain_chat", "uploaded_file"}:
         monkeypatch.setattr(chat_service, "_unified_portal_context", unified)
     monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
-    monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [])))
+    if case == "uploaded_file":
+        monkeypatch.setattr(chat_service, "async_file_download", AsyncMock(return_value=("/tmp/attachment.pdf", "attachment.pdf")))
+        monkeypatch.setattr(chat_service, "get_file_content", AsyncMock(return_value="合同约定交货日期为十月一日。"))
+        from bisheng.knowledge.domain.services import portal_qa_retrieval_service
+
+        monkeypatch.setattr(portal_qa_retrieval_service, "retrieve_portal_qa", AsyncMock(side_effect=AssertionError("附件独立问答不得召回知识库")))
+        chat_service._agent_initialize_chat.return_value[4].visual = False
+    else:
+        monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [])))
     monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=1000))
     monkeypatch.setattr(chat_service, "WorkStationService", SimpleNamespace(get_chat_history=AsyncMock(return_value=[])))
     persist = AsyncMock(return_value=SimpleNamespace(id=2))
@@ -95,7 +104,13 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
 
     response = await chat_service.stream_chat_completion(
         None,
-        APIChatCompletion(clientTimestamp="2026-09-17T13:40:00", model="1", text="question"),
+        APIChatCompletion(
+            clientTimestamp="2026-09-17T13:40:00", model="1", text="question",
+            **({
+                "files": [{"filepath": "/tmp/attachment.pdf", "filename": "attachment.pdf"}],
+                "use_knowledge_base": {"knowledge_space_ids": [], "knowledge_scope": {"mode": "none"}},
+            } if case == "uploaded_file" else {}),
+        ),
         SimpleNamespace(user_id=1, tenant_id=7),
         portal_context=case != "nonportal",
     )
@@ -109,9 +124,13 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
         old_retrieve.assert_not_awaited()
         content = llm.astream.call_args.args[0][-1].content
         assert ("authorized context" in content) == (case == "success")
-        if case == "plain_chat":
+        if case in {"plain_chat", "uploaded_file"}:
             assert "retrieved_knowledge_context" not in content
             storage.aresolve_space_shared_routing.assert_not_awaited()
+        if case == "uploaded_file":
+            assert "合同约定交货日期为十月一日" in content
+            chat_service.get_file_content.assert_awaited_once()
+            portal_qa_retrieval_service.retrieve_portal_qa.assert_not_awaited()
         return
     assert "event: error" in body
     llm.astream.assert_not_called()

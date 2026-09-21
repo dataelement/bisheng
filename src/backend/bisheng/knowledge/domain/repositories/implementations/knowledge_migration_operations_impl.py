@@ -11,15 +11,11 @@ from sqlmodel import col, select
 from bisheng.api.services.knowledge_imp import (
     delete_minio_file_snapshot_objects,
     delete_minio_files,
-    delete_vector_files,
 )
-from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.review_tags import ReviewTagDao
 from bisheng.database.models.tag import ResourceTypeEnum, TagDao
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_file_pdf_artifact import (
     KnowledgeFilePdfArtifact,
@@ -32,6 +28,9 @@ from bisheng.knowledge.domain.models.knowledge_migration import (
 from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_runtime_repository_impl import (
     KnowledgeMigrationRuntimeRepositoryImpl,
 )
+from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_shared_projection import (
+    KnowledgeMigrationSharedProjection,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_runtime_repository import (
     MigrationRuntimeContext,
 )
@@ -41,7 +40,6 @@ from bisheng.knowledge.domain.services.file_migration.executor import (
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.domain.services.permission_service import PermissionService
-from bisheng.worker.knowledge.file_worker import copy_vector
 
 
 def _storage_object_names(file: KnowledgeFile) -> dict[str, str]:
@@ -133,65 +131,6 @@ def _storage_exists(object_names: dict[str, str]) -> dict[str, bool]:
         and bool(client.object_exists_sync(client.bucket, name))
         for key, name in object_names.items()
     }
-
-
-def _count_milvus_records(space: Knowledge, file_id: int) -> int:
-    store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        0,
-        knowledge=space,
-        embeddings=FakeEmbeddings(),
-    )
-    if store.col is None:
-        return 0
-    expression = f"document_id=={file_id} && knowledge_id=={space.id}"
-    if hasattr(store.col, "query_iterator"):
-        iterator = store.col.query_iterator(
-            expr=expression,
-            output_fields=["pk"],
-            batch_size=1000,
-        )
-        count = 0
-        try:
-            while True:
-                rows = iterator.next()
-                if not rows:
-                    break
-                count += len(rows)
-        finally:
-            iterator.close()
-        return count
-    return len(
-        store.col.query(
-            expr=expression,
-            output_fields=["pk"],
-            limit=16384,
-        )
-    )
-
-
-def _count_es_records(space: Knowledge, file_id: int) -> int:
-    store = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=space)
-    if store is None or not store.client.indices.exists(index=space.index_name):
-        return 0
-    response = store.client.count(
-        index=space.index_name,
-        query={
-            "bool": {
-                "filter": [
-                    {"term": {"metadata.document_id": file_id}},
-                ]
-            }
-        },
-    )
-    return int(response.get("count", 0))
-
-
-async def _index_counts(space: Knowledge, file_id: int) -> dict[str, int]:
-    milvus, elasticsearch = await asyncio.gather(
-        asyncio.to_thread(_count_milvus_records, space, file_id),
-        asyncio.to_thread(_count_es_records, space, file_id),
-    )
-    return {"milvus": milvus, "elasticsearch": elasticsearch}
 
 
 async def _tag_ids(file_id: int, tenant_id: int) -> dict[str, list[int]]:
@@ -328,6 +267,9 @@ def _target_permissions(
 class KnowledgeMigrationOperationsImpl:
     """按持久 target ID 执行可重投的迁移外部操作。"""
 
+    def __init__(self, *, shared_projection=None):
+        self.shared_projection = shared_projection or KnowledgeMigrationSharedProjection()
+
     @staticmethod
     async def _load_context(unit_id: int) -> MigrationRuntimeContext:
         async with get_async_db_session() as session:
@@ -441,20 +383,7 @@ class KnowledgeMigrationOperationsImpl:
 
     async def build_target_indexes(self, unit: MigrationExecutionUnit) -> None:
         context = await self._load_context(unit.unit_id)
-        for item in context.files:
-            source_space = context.source_spaces[int(item.source.knowledge_id)]
-            await asyncio.to_thread(
-                delete_vector_files,
-                [int(item.target.id)],
-                context.target_space,
-            )
-            await asyncio.to_thread(
-                copy_vector,
-                source_space,
-                context.target_space,
-                int(item.source.id),
-                int(item.target.id),
-            )
+        await self.shared_projection.validate_source(context)
 
     async def write_target_permissions(
         self,
@@ -528,25 +457,6 @@ class KnowledgeMigrationOperationsImpl:
                 raise RuntimeError(
                     f"target storage objects are missing: {sorted(missing)}"
                 )
-            source_counts, target_counts = await asyncio.gather(
-                _index_counts(
-                    context.source_spaces[int(item.source.knowledge_id)],
-                    int(item.source.id),
-                ),
-                _index_counts(context.target_space, int(item.target.id)),
-            )
-            copied_chunk_count = source_counts["milvus"]
-            expected_target_counts = {
-                "milvus": copied_chunk_count,
-                "elasticsearch": copied_chunk_count,
-            }
-            if target_counts != expected_target_counts:
-                raise RuntimeError(
-                    "target index counts do not match copied source chunks: "
-                    f"source={source_counts}, "
-                    f"expected_target={expected_target_counts}, "
-                    f"target={target_counts}"
-                )
             expected_tags = manifest.get("tag_ids") or {
                 "approved": [],
                 "pending": [],
@@ -583,14 +493,9 @@ class KnowledgeMigrationOperationsImpl:
         self,
         unit: MigrationExecutionUnit,
     ) -> None:
+        await self.shared_projection.converge_unit(unit)
         context = await self._load_context(unit.unit_id)
         for item in context.files:
-            source_space = context.source_spaces[int(item.source.knowledge_id)]
-            await asyncio.to_thread(
-                delete_vector_files,
-                [int(item.source.id)],
-                source_space,
-            )
             await asyncio.to_thread(delete_minio_files, item.source)
             await _replace_tags(
                 int(item.source.id),
@@ -612,11 +517,6 @@ class KnowledgeMigrationOperationsImpl:
             overwrite_ids = [
                 int(item["record"]["id"]) for item in overwrite_items
             ]
-            await asyncio.to_thread(
-                delete_vector_files,
-                overwrite_ids,
-                context.target_space,
-            )
             await asyncio.to_thread(
                 delete_minio_file_snapshot_objects,
                 [item["record"] for item in overwrite_items],
@@ -657,11 +557,6 @@ class KnowledgeMigrationOperationsImpl:
                 return
             raise
         for item in context.files:
-            await asyncio.to_thread(
-                delete_vector_files,
-                [int(item.target.id)],
-                context.target_space,
-            )
             await asyncio.to_thread(delete_minio_files, item.target)
             await _replace_tags(
                 int(item.target.id),

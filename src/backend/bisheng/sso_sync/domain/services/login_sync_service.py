@@ -28,6 +28,7 @@ from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
     set_current_tenant_id,
+    strict_tenant_filter,
 )
 from bisheng.database.constants import (
     USER_DISABLE_SOURCE_GATEWAY,
@@ -95,6 +96,8 @@ class LoginSyncService:
         payload: LoginSyncRequest,
         request_ip: str = "",
         row_source: str = DEFAULT_SSO_SYNC_SOURCE,
+        *,
+        record_login: bool = False,
     ) -> LoginSyncResponse:
         ttl = int(getattr(settings.sso_sync, "user_lock_ttl_seconds", 30) or 30)
         lock_key = _USER_LOCK_KEY.format(
@@ -106,11 +109,68 @@ class LoginSyncService:
                 raise SsoUserLockBusyError.http_exception(
                     f"another SSO login for {payload.external_user_id} is in progress"
                 )
-            return await cls._execute_locked(
+            result = await cls._execute_locked(
                 payload,
                 request_ip,
                 row_source,
             )
+            # 只有交互式登录入口开启记录。组织批量同步也复用本服务但不能计为登录。
+            if record_login and result.token:
+                await cls._record_successful_login(result, request_ip)
+            return result
+
+    @classmethod
+    async def _record_successful_login(cls, result: LoginSyncResponse, request_ip: str) -> None:
+        """沿用普通登录的三条记录链路。各来源失败独立处理以免阻断已成功的登录。"""
+        from bisheng.api.services.audit_log import AuditLogService
+        from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+        from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
+        from bisheng.common.services import telemetry_service
+        from bisheng.core.logger import trace_id_var
+        from bisheng.telemetry.domain.mid_table.daily_participation import DailyParticipationFact
+
+        # 同步阶段使用 Root 上下文。登录记录必须归属最终签发令牌的叶租户。
+        token = set_current_tenant_id(result.leaf_tenant_id)
+        try:
+            with strict_tenant_filter():
+                user_name = str(result.user_id)
+                try:
+                    user = await UserDao.aget_user(result.user_id)
+                    if user is not None:
+                        user_name = user.user_name
+                except Exception:
+                    logger.exception("SSO登录记录读取用户名失败。使用用户ID。user_id={}", result.user_id)
+
+                try:
+                    login_user = await LoginUser.init_login_user(
+                        result.user_id,
+                        user_name,
+                        tenant_id=result.leaf_tenant_id,
+                    )
+                    AuditLogService.user_login(login_user, request_ip)
+                except Exception:
+                    logger.exception("SSO登录审计记录失败。user_id={}", result.user_id)
+
+                try:
+                    await telemetry_service.log_event(
+                        user_id=result.user_id,
+                        event_type=BaseTelemetryTypeEnum.USER_LOGIN,
+                        trace_id=trace_id_var.get(),
+                        event_data=UserLoginEventData(method="sso"),
+                    )
+                except Exception:
+                    logger.exception("SSO登录ES事件记录失败。user_id={}", result.user_id)
+
+                try:
+                    await DailyParticipationFact.record_login(
+                        tenant_id=result.leaf_tenant_id,
+                        user_id=result.user_id,
+                        user_name=user_name,
+                    )
+                except Exception:
+                    logger.exception("SSO每日登录事实更新失败。user_id={}", result.user_id)
+        finally:
+            current_tenant_id.reset(token)
 
     @classmethod
     async def _execute_locked(

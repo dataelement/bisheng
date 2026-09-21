@@ -265,6 +265,11 @@ async def query_detail_rows(
 
     metric_config = _metric_config_for(data_config, metric_map)
     filters = DataQueryService.merge_filters(filters, _metric_filter(metric_config))
+    detail_query = _build_bool_query(filters)
+    if metric_config and metric_config.calculation == "login_participation":
+        from .login_participation import LoginSelection
+
+        detail_query = LoginSelection(filters).query(history=False)
 
     identity_columns = [
         DetailColumn(field=field, label=label)
@@ -287,7 +292,7 @@ async def query_detail_rows(
     async for hit in async_scan(
         es_client,
         index=dataset.es_index_name,
-        query={"query": _build_bool_query(filters), "_source": {"includes": sorted(source_fields)}},
+        query={"query": detail_query, "_source": {"includes": sorted(source_fields)}},
         preserve_order=False,
     ):
         source = hit.get("_source") or {}

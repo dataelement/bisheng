@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.services.file_migration.executor import (
 
 
 @pytest.mark.asyncio
-async def test_target_index_verification_uses_copied_milvus_chunks(
+async def test_target_verification_rejects_incomplete_copied_tags(
     monkeypatch,
 ):
     source_space = SimpleNamespace(id=10)
@@ -37,23 +37,15 @@ async def test_target_index_verification_uses_copied_milvus_chunks(
         target_space=target_space,
         target_owner=SimpleNamespace(user_id=7),
     )
-    target_counts = {"milvus": 2, "elasticsearch": 2}
+    target_tags = {"approved": [], "pending": []}
 
     async def load_context(unit_id):
         assert unit_id == 1
         return context
 
-    async def index_counts(space, file_id):
-        if space is source_space:
-            assert file_id == 100
-            return {"milvus": 2, "elasticsearch": 1}
-        assert space is target_space
-        assert file_id == 200
-        return target_counts
-
     async def empty_tags(file_id, tenant_id):
         del file_id, tenant_id
-        return {"approved": [], "pending": []}
+        return target_tags
 
     async def empty_permissions(object_ref):
         del object_ref
@@ -61,7 +53,6 @@ async def test_target_index_verification_uses_copied_milvus_chunks(
 
     operations = KnowledgeMigrationOperationsImpl()
     monkeypatch.setattr(operations, "_load_context", load_context)
-    monkeypatch.setattr(operations_module, "_index_counts", index_counts)
     monkeypatch.setattr(operations_module, "_storage_exists", lambda _: {})
     monkeypatch.setattr(operations_module, "_tag_ids", empty_tags)
     monkeypatch.setattr(
@@ -77,9 +68,9 @@ async def test_target_index_verification_uses_copied_milvus_chunks(
 
     await operations.verify_target(MigrationExecutionUnit(unit_id=1))
 
-    target_counts["elasticsearch"] = 3
+    target_tags["approved"] = [8]
     with pytest.raises(
         RuntimeError,
-        match="target index counts do not match copied source chunks",
+        match="target tags do not match source tags",
     ):
         await operations.verify_target(MigrationExecutionUnit(unit_id=1))
