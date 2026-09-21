@@ -21,6 +21,7 @@ import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
 import { Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 import { ApprovalMenuIcon } from "@/components/bs-icons/menu/approval";
+import { DshDesktopMenuIcon } from "@/components/bs-icons/menu/dshDesktop";
 import { TenantMenuIcon } from "@/components/bs-icons/menu/tenant";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -33,8 +34,9 @@ import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
 import { getBrandAssetUrl } from "../utils/brand";
-import HeaderMenu from "./HeaderMenu";
+import { HeaderMenu } from "./HeaderMenu";
 import { LicenseBanner } from "./LicenseBanner";
+import { useDshBrowserConfig } from "@/hooks/useDshBrowserConfig";
 
 export default function MainLayout() {
     const { dark, setDark } = useContext(darkContext);
@@ -78,6 +80,8 @@ export default function MainLayout() {
     const isChildAdmin = Boolean(user.is_child_admin)
     const canManageWorkbenchConfig = isSuperAdmin || isChildAdmin
     const showSystemNav = isSuperAdmin || isDeptAdmin || isChildAdmin
+    const { config: dshConfig } = useDshBrowserConfig()
+    const showDshNav = !!dshConfig?.management_enabled && canManageWorkbenchConfig
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
     // Admin-area approval scope (falls back to the legacy global flag for
@@ -220,6 +224,15 @@ export default function MainLayout() {
                             showAdminNav('model') &&
                             <NavLink to={isMenu('model') ? '/model' : '/menu-pending?menu=model'} className={pendingNavClass('model')}>
                                 <ModelIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[48px] text-[14px] leading-[48px]">{t('menu.models')}</span>
+                            </NavLink>
+                        }
+                        {
+                            showDshNav &&
+                            <NavLink to='/dsh' aria-label={t('menu.dshDesktop')} className={`navlink inline-flex items-center rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
+                                <DshDesktopMenuIcon aria-hidden="true" className="h-6 w-6 shrink-0" />
+                                <span aria-hidden="true" className="mx-[14px] inline-flex w-[3em] shrink-0 justify-between text-sm">
+                                    {Array.from(t('menu.dshDesktop')).map((character, index) => <span key={index}>{character}</span>)}
+                                </span>
                             </NavLink>
                         }
                         {

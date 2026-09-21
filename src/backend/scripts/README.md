@@ -1088,3 +1088,14 @@ config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --purge --
 # 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
 bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 ```
+
+### `dsh_migrate_role_policies.py`
+
+将当前角色授权的有效额度迁为个人额度，用于切换到部门树授权；执行前后核对每个成员的最终额度，席位和累计用量沿用原记录。
+
+从 `src/backend/` 运行，`config` 与线上服务配置一致。默认输出迁移计划，确认计划后加 `--apply` 保存。
+
+```bash
+python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
+python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
+```

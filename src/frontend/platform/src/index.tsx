@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { rememberDesktopLoginReturnTo } from "./utils/loginReturnTo";
 import ContextWrapper from "./contexts";
 import reportWebVitals from "./reportWebVitals";
 import './i18n';
@@ -40,6 +41,9 @@ import { QueryClient, QueryClientProvider } from "react-query";
     localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
   }
 }
+
+// Preserve consent before UserContext or SSO can redirect an expired session.
+rememberDesktopLoginReturnTo();
 
 const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement

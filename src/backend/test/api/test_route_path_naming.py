@@ -33,6 +33,10 @@ LEGACY_CONFIG_ROUTES = {
     ("PUT", "/api/v1/brand/config"),
     ("GET", "/api/v1/brand/runtime-config"),
     ("GET", "/api/v2/workstation/config"),
+    # Arrived with the DSH line, which predates this rule on its own branch.
+    # Its browser client calls it, so renaming it is the DSH owner's change.
+    ("GET", "/api/v1/dsh/config"),
+    ("GET", "/api/v1/dsh/browser-config"),
 }
 
 

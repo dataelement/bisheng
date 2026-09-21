@@ -1,0 +1,403 @@
+"""覆盖 AC: AC-09, AC-11, AC-25, AC-26, AC-27, AC-28, AC-29, AC-30, AC-33."""
+
+from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+from test.dsh.test_operation_worker import operation_scope  # noqa: F401
+from test.dsh.test_policy_repository import NOW, sql_store  # noqa: F401
+
+
+def build(scope, gateway):
+    from bisheng.dsh.domain.services.admin import DshManagementService
+
+    async def authorize(actor_id, tenant_id, user_id=None):
+        if actor_id != 90 or tenant_id not in (None, 2):
+            raise PermissionError()
+        return {"user_id": "90", "tenant_id": "2", "scope": "tenant"}, 2
+
+    state = {"now": NOW}
+    profiles = AsyncMock(
+        return_value={
+            20: {"tenant_id": "2", "user_id": "20", "username": "Fresh", "display_name": "Fresh", "profile_version": 2}
+        }
+    )
+    service = DshManagementService(
+        repository_scope=scope,
+        gateway=gateway,
+        authorize=authorize,
+        profiles=profiles,
+        policy=SimpleNamespace(),
+        policy_view=AsyncMock(),
+        now=lambda: state["now"],
+    )
+    return service, profiles, state
+
+
+async def test_users_preserves_gateway_pagination_and_batches_current_page(operation_scope):  # noqa: F811
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "items": [
+                    {
+                        "user_id": "20",
+                        "tenant_id": "2",
+                        "seat_id": "seat",
+                        "state": "ASSIGNED",
+                        "grant_version": 1,
+                        "username": "Old",
+                        "display_name": "Old",
+                        "profile_version": 1,
+                        "profile_synced_at": None,
+                        "last_login_at": None,
+                        "last_seen_at": None,
+                        "active_session_count": 0,
+                        "login_state": "NO_SESSIONS",
+                        "created_at": "2026-09-09T00:00:00Z",
+                    }
+                ],
+                "next_cursor": "opaque",
+                "has_more": True,
+            }
+        )
+    )
+    service, profiles, _ = build(operation_scope, gateway)
+    result = await service.users(90, cursor="prior", limit=10)
+    assert result["next_cursor"] == "opaque" and result["has_more"] is True
+    assert result["items"][0]["username"] == "Fresh"
+    profiles.assert_awaited_once_with([20])
+    assert gateway.request.await_args.args[1]["cursor"] == "prior"
+    with pytest.raises(PermissionError):
+        await service.users(91)
+    with pytest.raises(PermissionError):
+        await service.users(90, tenant_id=3)
+
+
+async def test_gateway_failure_is_unavailable_not_zero(operation_scope):  # noqa: F811
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    service, _, _ = build(operation_scope, SimpleNamespace(request=AsyncMock(side_effect=TimeoutError())))
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await service.license(90)
+
+
+@pytest.mark.parametrize(
+    "source,signed_status,seat_limit",
+    [
+        ("builtin", "not_granted", 10),
+        ("builtin", "license_expired", 10),
+        ("builtin", "license_invalid", 10),
+        ("signed", "active", 50),
+        (None, None, 10),
+    ],
+)
+async def test_license_preserves_gateway_entitlement_source(source, signed_status, seat_limit):
+    snapshot = {
+        "status": "active",
+        "seat_limit": seat_limit,
+        "assigned": 3,
+        "available": seat_limit - 3,
+        "as_of": "2026-09-21T00:00:00Z",
+        "license_id": "builtin-dsh-10" if source == "builtin" else "commercial-license",
+        "expires_at": None if source == "builtin" else "2027-09-21T00:00:00Z",
+    }
+    if source is not None:
+        snapshot.update(source=source, signed_license_status=signed_status)
+    service, _, _ = build(None, SimpleNamespace(request=AsyncMock(return_value=snapshot)))
+    result = await service.license(90)
+    assert result["source"] == source
+    assert result["signed_license_status"] == signed_status
+    assert result["status"] == "active"
+    assert result["seat_limit"] == result["limit"] == seat_limit
+    assert result["assigned"] == result["used"] == 3
+    assert result["available"] == seat_limit - 3
+    assert result["valid_until"] == snapshot["expires_at"]
+
+
+async def test_malformed_license_is_not_replaced_by_free_entitlement():
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    service, _, _ = build(None, SimpleNamespace(request=AsyncMock(return_value={"source": "builtin"})))
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await service.license(90)
+
+
+async def test_subject_policy_management_stays_in_authorized_tenant(operation_scope):  # noqa: F811
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "status": "active",
+                "seat_limit": 10,
+                "assigned": 1,
+                "available": 9,
+                "as_of": "2026-09-09T00:00:00Z",
+                "license_id": "license",
+                "expires_at": "2027-09-09T00:00:00Z",
+            }
+        )
+    )
+    service, _, _ = build(operation_scope, gateway)
+    service.subject_policy_view = AsyncMock(
+        return_value={
+            "tenant_id": 2,
+            "model_id": 7,
+            "departments": [
+                {
+                    "subject_type": "DEPARTMENT",
+                    "subject_id": 10,
+                    "name": "研发中心",
+                    "parent_id": None,
+                    "depth": 0,
+                    "version": 0,
+                    "enabled": False,
+                    "monthly_token_limit": 0,
+                }
+            ],
+            "roles": [],
+        }
+    )
+    service.subject_policy_update = AsyncMock(
+        return_value={
+            "subject_type": "DEPARTMENT",
+            "subject_id": 10,
+            "model_id": 7,
+            "name": "研发中心",
+            "version": 1,
+            "enabled": True,
+            "monthly_token_limit": 200,
+        }
+    )
+    inventory = await service.model_subjects(90, 7, tenant_id=2)
+    assert inventory["departments"][0]["name"] == "研发中心"
+    request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
+    result = await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
+    assert result["version"] == 1
+    service.subject_policy_update.assert_awaited_once_with(
+        model_id=7,
+        subject_type="DEPARTMENT",
+        subject_id=10,
+        actor_user_id=90,
+        request=request,
+        seat_limit=None,
+    )
+
+
+@pytest.mark.parametrize(
+    "status,error_name",
+    [
+        ("license_invalid", "DshLicenseInvalidError"),
+        ("license_expired", "DshLicenseExpiredError"),
+        ("dsh_disabled", "DshDshDisabledError"),
+    ],
+)
+async def test_quota_configuration_is_independent_of_commercial_capacity(
+    operation_scope,  # noqa: F811
+    status,
+    error_name,
+):
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "status": status,
+                "seat_limit": 10,
+                "assigned": 1,
+                "available": 9,
+                "as_of": "2026-09-09T00:00:00Z",
+                "license_id": "license",
+                "expires_at": "2027-09-09T00:00:00Z",
+            }
+        )
+    )
+    service, _, _ = build(operation_scope, gateway)
+    service.subject_policy_update = AsyncMock(
+        return_value={
+            "subject_type": "DEPARTMENT",
+            "subject_id": 10,
+            "model_id": 7,
+            "name": "Department",
+            "version": 1,
+            "enabled": True,
+            "monthly_token_limit": 200,
+        }
+    )
+    request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
+    await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
+    assert service.subject_policy_update.await_args.kwargs["seat_limit"] is None
+    gateway.request.assert_not_awaited()
+
+
+async def test_command_timeout_recovers_original_operation_without_new_intent(operation_scope):  # noqa: F811
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            side_effect=[
+                TimeoutError(),
+                {
+                    "operation_id": "00000000-0000-4000-8000-000000000001",
+                    "status": "SUCCEEDED",
+                    "result_grant_version": 2,
+                    "result_code": None,
+                },
+                {
+                    "operation_id": "00000000-0000-4000-8000-000000000001",
+                    "status": "SUCCEEDED",
+                    "result_grant_version": 2,
+                    "result_code": None,
+                },
+            ]
+        )
+    )
+    service, _, state = build(operation_scope, gateway)
+    result = await service.command(90, 20, "REVOKE", "00000000-0000-4000-8000-000000000001", 1, tenant_id=2)
+    assert result["status"] == "PROCESSING"
+    state["now"] += timedelta(seconds=31)
+    result = await service.command(90, 20, "REVOKE", "00000000-0000-4000-8000-000000000001", 1, tenant_id=2)
+    assert result["status"] == "SUCCEEDED"
+    assert result["actor_user_id"] == 90 and result["before_values"] == {"grant_version": 1, "state": "ASSIGNED"}
+    assert gateway.request.await_args_list[1].args == (
+        "operation",
+        {"operation_id": "00000000-0000-4000-8000-000000000001"},
+    )
+    assert result["after_values"] == {"grant_version": 2, "state": "REVOKED"}
+    assert gateway.request.await_count == 3
+    assert gateway.request.await_args_list[2] == gateway.request.await_args_list[0]
+
+
+async def test_foreign_tenant_page_is_refused(operation_scope):  # noqa: F811
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "items": [
+                    {
+                        "user_id": "20",
+                        "tenant_id": "3",
+                        "seat_id": "seat",
+                        "state": "ASSIGNED",
+                        "grant_version": 1,
+                        "username": "Old",
+                        "display_name": "Old",
+                        "profile_version": 1,
+                        "profile_synced_at": None,
+                        "last_login_at": None,
+                        "last_seen_at": None,
+                        "active_session_count": 0,
+                        "login_state": "NO_SESSIONS",
+                        "created_at": "2026-09-09T00:00:00Z",
+                    }
+                ],
+                "next_cursor": None,
+                "has_more": False,
+            }
+        )
+    )
+    service, profiles, _ = build(operation_scope, gateway)
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await service.users(90)
+    profiles.assert_not_awaited()
+
+
+async def test_root_operation_lookup_is_instance_authorized(operation_scope):  # noqa: F811
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "operation_id": "00000000-0000-4000-8000-000000000002",
+                "status": "SUCCEEDED",
+                "result_grant_version": 2,
+                "result_code": None,
+            }
+        )
+    )
+    service, _, _ = build(operation_scope, gateway)
+    await service.command(90, 20, "REVOKE", "00000000-0000-4000-8000-000000000002", 1, tenant_id=2)
+
+    async def root_authorize(*args):
+        return {"user_id": "90", "tenant_id": "1", "scope": "instance"}, None
+
+    service.authorize = root_authorize
+    result = await service.operation(90, "00000000-0000-4000-8000-000000000002")
+    assert result["tenant_id"] == 2 and result["status"] == "SUCCEEDED"
+
+
+async def test_revoked_actor_cannot_send_unexecuted_retry(operation_scope):  # noqa: F811
+    from fastapi import HTTPException
+
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            side_effect=[
+                TimeoutError(),
+                {
+                    "operation_id": "00000000-0000-4000-8000-000000000003",
+                    "status": "UNKNOWN",
+                    "result_grant_version": None,
+                    "result_code": None,
+                },
+            ]
+        )
+    )
+    service, _, state = build(operation_scope, gateway)
+    await service.command(90, 20, "REVOKE", "00000000-0000-4000-8000-000000000003", 1, tenant_id=2)
+    state["now"] += timedelta(seconds=31)
+
+    async def denied(*args):
+        raise HTTPException(403, "Role removed")
+
+    service.authorize = denied
+    result = await service.resume("00000000-0000-4000-8000-000000000003")
+    assert result["status"] == "FAILED" and result["result_code"] == "permission_denied"
+    assert gateway.request.await_count == 2
+
+
+async def test_terminal_lookup_requires_matching_intent_replay(operation_scope):  # noqa: F811
+    from bisheng.dsh.infrastructure.gateway_client import GatewayCommandRejected
+
+    operation_id = "00000000-0000-4000-8000-000000000004"
+    gateway = SimpleNamespace(
+        request=AsyncMock(
+            side_effect=[
+                TimeoutError(),
+                {"operation_id": operation_id, "status": "SUCCEEDED", "result_grant_version": 9, "result_code": None},
+                GatewayCommandRejected(),
+            ]
+        )
+    )
+    service, _, state = build(operation_scope, gateway)
+    original = await service.command(90, 20, "REVOKE", operation_id, 1, tenant_id=2)
+    assert original["status"] == "PROCESSING"
+    state["now"] += timedelta(seconds=31)
+    result = await service.resume(operation_id)
+    assert result["status"] == "FAILED" and result["result_code"] == "authorization_conflict"
+    assert result["payload"] == original["payload"]
+    assert result["after_values"] != {"grant_version": 9}
+    assert gateway.request.await_args_list[0] == gateway.request.await_args_list[2]
+    assert (await service.resume(operation_id))["status"] == "FAILED"
+    assert gateway.request.await_count == 3
+
+
+@pytest.mark.parametrize("code", ["dsh_disabled", "license_invalid", "license_expired", "seat_limit_reached"])
+async def test_durable_failure_replay_finishes_without_replacing_intent(operation_scope, code):  # noqa: F811
+    operation_id = "00000000-0000-4000-8000-000000000005"
+    terminal = {"operation_id": operation_id, "status": "FAILED", "result_grant_version": None, "result_code": code}
+    gateway = SimpleNamespace(request=AsyncMock(side_effect=[TimeoutError(), terminal, terminal]))
+    service, _, state = build(operation_scope, gateway)
+    original = await service.command(90, 20, "REASSIGN", operation_id, 2, tenant_id=2)
+    assert original["status"] == "PROCESSING"
+    state["now"] += timedelta(seconds=31)
+    result = await service.resume(operation_id)
+    assert result["status"] == "FAILED" and result["result_code"] == code
+    assert result["payload"] == original["payload"] and result["actor_user_id"] == 90
+    assert gateway.request.await_args_list[0] == gateway.request.await_args_list[2]
+
+
+async def test_terminal_lookup_does_not_override_unavailable_intent_confirmation(operation_scope):  # noqa: F811
+    operation_id = "00000000-0000-4000-8000-000000000006"
+    terminal = {"operation_id": operation_id, "status": "SUCCEEDED", "result_grant_version": 2, "result_code": None}
+    gateway = SimpleNamespace(request=AsyncMock(side_effect=[TimeoutError(), terminal, TimeoutError()]))
+    service, _, state = build(operation_scope, gateway)
+    await service.command(90, 20, "REVOKE", operation_id, 1, tenant_id=2)
+    state["now"] += timedelta(seconds=31)
+    result = await service.resume(operation_id)
+    assert result["status"] == "PROCESSING"
+    assert result["result_code"] == "authorization_unavailable"

@@ -3,6 +3,9 @@
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
+
+# DSH tasks register without performing network IO; startup owns approved runtimes.
+from bisheng.worker.dsh.registry import register_dsh_tasks
 from bisheng.worker.information.article import dispatch_information_article_poll, sync_information_articles
 from bisheng.worker.information.knowledge_delivery import (
     deliver_information_articles_to_config,
@@ -30,6 +33,7 @@ from bisheng.worker.knowledge.scheduler import (
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
+from bisheng.worker.main import bisheng_celery
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
@@ -43,3 +47,5 @@ from bisheng.worker.telemetry.mid_table import (
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
+
+register_dsh_tasks(bisheng_celery)

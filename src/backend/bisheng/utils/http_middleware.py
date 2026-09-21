@@ -1,5 +1,6 @@
 # Define a custom middleware class
 import http.cookies
+import re
 from collections.abc import Iterable
 from time import time
 
@@ -49,6 +50,29 @@ TENANT_CHECK_EXEMPT_PATHS = (
 
 # v2.5.1 F012: Redis TTL for cached is_global_super FGA check.
 _IS_SUPER_CACHE_TTL_SECONDS = 300
+
+# These exact method/path pairs own their credential checks. This is not a tenant bypass list.
+DSH_CREDENTIAL_ROUTES = frozenset(
+    {
+        ("GET", "/api/v1/dsh/config"),
+        ("GET", "/api/v1/dsh/browser-config"),
+        ("GET", "/api/v1/dsh/models"),
+        ("GET", "/api/v1/dsh/usage"),
+        ("GET", "/api/v1/dsh/market/capabilities"),
+        ("GET", "/api/v1/dsh/market/catalog"),
+        ("POST", "/api/v1/dsh/market/sync"),
+        ("POST", "/api/v1/dsh/chat/completions"),
+        ("POST", "/api/v1/internal/dsh/identity/redeem"),
+        ("POST", "/api/v1/internal/dsh/identity/check"),
+    }
+)
+
+
+def owns_dsh_credential(method: str, path: str) -> bool:
+    return (method, path) in DSH_CREDENTIAL_ROUTES or (
+        method == "GET"
+        and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path) is not None
+    )
 
 
 def _uses_browser_identity(path: str) -> bool:
@@ -354,17 +378,35 @@ class CustomMiddleware(BaseHTTPMiddleware):
         else:
             trace_id = trace_id_generator()
         ip = get_request_ip(request)
-        path = request.url
+        req_path = request.url.path
+        dsh_owned = owns_dsh_credential(request.method, req_path)
+        path = req_path if req_path.startswith(("/api/v1/dsh/", "/api/v1/internal/dsh/")) else request.url
         trace_id_var.set(trace_id)
 
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        # v2 resolves its API credential and v3 uses its default operator.
-        # Browser credentials must not change either channel's identity or errors.
-        token = _extract_http_access_token(request) if _uses_browser_identity(request.url.path) else None
+        # v2 resolves its API credential and v3 uses its default operator, and DSH
+        # owns its own credential. Browser credentials must not change any of
+        # those channels' identity or errors.
+        token = (
+            _extract_http_access_token(request) if _uses_browser_identity(request.url.path) and not dsh_owned else None
+        )
         decoded_subject = _decode_jwt_subject(token) if token else None
-        tenant_id = _set_tenant_context(token, decoded_subject=decoded_subject)
+        tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)
+
+        dsh_scope_tokens = []
+        if dsh_owned:
+            from bisheng.core.context import tenant as tenant_context
+
+            dsh_scope_tokens = [
+                tenant_context.current_tenant_id.set(None),
+                tenant_context.set_visible_tenant_ids(None),
+                tenant_context.set_admin_scope_tenant_id(None),
+                tenant_context.set_is_management_api(False),
+                tenant_context._bypass_tenant_filter.set(False),
+                tenant_context._strict_tenant_filter.set(False),
+            ]
 
         req_path = request.url.path
         is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
@@ -439,6 +481,8 @@ class CustomMiddleware(BaseHTTPMiddleware):
         finally:
             if bypass_token is not None:
                 _bypass_tenant_filter.reset(bypass_token)
+            for scope_token in reversed(dsh_scope_tokens):
+                scope_token.var.reset(scope_token)
 
 
 class WebSocketLoggingMiddleware:

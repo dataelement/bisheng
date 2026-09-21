@@ -52,7 +52,7 @@ def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
-    return user_kwargs if user_kwargs else {}
+    return dict(user_kwargs) if user_kwargs else {}
 
 
 # Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
@@ -136,7 +136,9 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     params["base_url"] = params.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    extra_body = params.pop("extra_body", {}) or params.pop("model_kwargs", {})
+    # Copy: the popped dict can be the stored model config itself, and writing
+    # the derived flags into it would mutate the ORM row (DSH fix).
+    extra_body = dict(params.pop("extra_body", {}) or params.pop("model_kwargs", {}))
 
     extra_body["enable_search"] = model_config.get("enable_web_search", False)
 
@@ -227,6 +229,8 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     streaming: bool | None = Field(default=None, description="Whether to use streaming output", alias="stream")
     temperature: float | None = Field(default=None, description="Model Generated Temperature")
+    # DSH: overrides retries for this client only, never the stored provider config.
+    max_retries: int | None = Field(default=None, ge=0, description="Per-instance client retry override")
 
     llm: BaseChatModel | None = Field(default=None)
 
@@ -268,6 +272,9 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        if self.max_retries is not None:
+            # Override only this client's parameters; never update the ORM config.
+            params["max_retries"] = self.max_retries
         try:
             self.llm = class_object(**params)
         except Exception as e:
