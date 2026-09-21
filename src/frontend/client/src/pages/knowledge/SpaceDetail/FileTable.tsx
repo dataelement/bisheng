@@ -1,3 +1,4 @@
+import { shouldShowFileEntryBadge } from "../fileEntryBadge";
 import {
     TableBody,
     TableCell,
@@ -40,7 +41,7 @@ import {
     resolveFolderReorderNeighbours,
     type FolderDropPosition,
 } from "./resolveFolderReorderNeighbours";
-import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
+import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, SpaceLevel, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
@@ -693,6 +694,7 @@ function FileTableHeader({
 // ============================================================
 
 interface FileTableProps {
+    spaceLevel?: SpaceLevel;
     files: KnowledgeFile[];
     selectedFiles: Set<string>;
     handleSelectAll: (isAllSelected: boolean) => void;
@@ -750,7 +752,7 @@ interface FileTableProps {
     loadMore?: React.ReactNode;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, canReorderFolders = false, onReorderFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel, loadMore }: FileTableProps) {
+export function FileTable({ spaceLevel, files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onAcceptAlias, onRejectAlias, onNavigateFolder, canReorderFolders = false, onReorderFolder, onPreview, onValidateName, onCancelCreate, onRequestPermissions, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, downloadingEntryIds, publishEntryIds, shareEntryIds, onManagePermission, onMove, moveEntryIds, onPublishFile, onShareFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, enableEncodingClassification = false, metadataEditableFileIds, fileCategoryOptions = [], fileCategoryGroups = DEFAULT_PORTAL_FILE_CATEGORY_GROUPS, businessDomainOptions = [], encodingPrefix = DEFAULT_ENCODING_PREFIX, onFileEncodingUpdated, canRetryFile, retryActionLabel, loadMore }: FileTableProps) {
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
@@ -1007,6 +1009,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     <TableBody>
                         {files.map((file) => (
                             <FileRow
+                                spaceLevel={spaceLevel}
                                 key={file.id}
                                 file={file}
                                 isAdmin={isAdmin}
@@ -1109,6 +1112,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 // 行组件
 // ============================================================
 function FileRow({
+    spaceLevel,
     file,
     isSelected,
     onSelect,
@@ -1167,6 +1171,7 @@ function FileRow({
     onRejectAlias,
 }: {
     file: KnowledgeFile;
+    spaceLevel?: SpaceLevel;
     isSelected: boolean;
     onSelect: (val: boolean) => void;
     isAdmin: boolean;
@@ -1546,7 +1551,7 @@ function FileRow({
                     ) : (
                         <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                                {!isFolder && file.entryType && file.entryType !== "normal" && (
+                                {!isFolder && shouldShowFileEntryBadge(file.entryType, spaceLevel, file.entryStatus) && (
                                     <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
                                         {file.entryStatus === "invalid"
                                             ? file.distributionInvalidReason === "manager_file_deleted"

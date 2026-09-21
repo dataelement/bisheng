@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { FileStatus, FileType, SpaceRole, SortDirection, SortType, type KnowledgeFile } from "~/api/knowledge";
+import { FileStatus, FileType, SpaceRole, SpaceLevel, SortDirection, SortType, type KnowledgeFile } from "~/api/knowledge";
 import { FileTable } from "./FileTable";
+import { FileCard } from "./FileCard";
 
 const mockShowToast = jest.fn();
 
@@ -11,6 +12,7 @@ jest.mock("~/hooks", () => ({
         "com_knowledge.edit_tags": "编辑标签",
     }[key] || key),
     useScrollRevealRef: () => jest.fn(),
+    useMediaQuery: () => false,
 }));
 jest.mock("~/hooks/queries/endpoints/queries", () => ({
     useGetBsConfig: () => ({ data: { shougang: { enabled: true } } }),
@@ -21,6 +23,7 @@ jest.mock("~/Providers", () => ({
 jest.mock("~/components", () => {
     return {
         ...jest.requireActual("~/components/ui/DropdownMenu"),
+        Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
         Checkbox: ({ checked, onCheckedChange, ...props }: any) => (
             <input type="checkbox" checked={checked === true}
                 onChange={(event) => onCheckedChange?.(event.currentTarget.checked)} {...props} />
@@ -38,14 +41,14 @@ const file = {
     is_multi_version: true,
 } as KnowledgeFile;
 
-function setup(locked = true) {
+function setup(locked = true, files = [{ ...file, hasPendingPublishApproval: locked }], spaceLevel?: SpaceLevel) {
     const onDownload = jest.fn();
     const onEditTags = jest.fn();
     const onAction = jest.fn();
     const allowedIds = new Set([file.id]);
     const view = render(
         <FileTable
-            files={[{ ...file, hasPendingPublishApproval: locked }]}
+            files={files} spaceLevel={spaceLevel}
             selectedFiles={new Set()} handleSelectAll={jest.fn()} handleSelectFile={jest.fn()}
             isAdmin currentUserRole={SpaceRole.ADMIN}
             onDownload={onDownload} onEditTags={onEditTags} onRename={onAction}
@@ -70,6 +73,19 @@ beforeAll(() => {
         unobserve() {}
         disconnect() {}
     };
+});
+
+test.each(["table", "card"])("个人库 %s 隐藏管理身份并保留分享身份", (mode) => {
+    const manager = { ...file, entryType: "manager" as const };
+    const share = { ...file, id: "shared-file", entryType: "share" as const };
+    if (mode === "table") setup(true, [manager, share], SpaceLevel.PERSONAL);
+    else render(<>{[manager, share].map((item) => (
+        <FileCard key={item.id} file={item} spaceLevel={SpaceLevel.PERSONAL}
+            userRole={SpaceRole.ADMIN} isSelected={false} onSelect={jest.fn()}
+            onDownload={jest.fn()} onRename={jest.fn()} onDelete={jest.fn()} onEditTags={jest.fn()} />
+    ))}</>);
+    expect(screen.queryByText("管理文件")).not.toBeInTheDocument();
+    expect(screen.getByText("分享文件")).toBeInTheDocument();
 });
 
 test("审批中操作禁用，悬浮显示局部提示并在移开后消失，下载仍可用", async () => {

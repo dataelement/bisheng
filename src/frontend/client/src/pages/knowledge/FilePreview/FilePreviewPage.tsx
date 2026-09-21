@@ -19,6 +19,7 @@ import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel"
 import FilePreview from "./index";
 import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { useLocalize } from "~/hooks";
+import { shouldShowFileEntryBadge } from "../fileEntryBadge";
 
 const AI_SPLIT_STORAGE_KEY = "file-preview-ai-split-width";
 const AI_MIN_LEFT = 480;
@@ -310,7 +311,8 @@ export default function FilePreviewPage() {
     // Extra actions injected into FilePreview's TopBar slot.
     const topBarActions = (
         <>
-            {previewData?.entry_type && previewData.entry_type !== "normal" && (
+            {previewData && shouldShowFileEntryBadge(previewData.entry_type, spaceLevel)
+                && (previewData?.entry_type !== "manager" || spaceLevelLoaded) && (
                 <span className="hidden rounded bg-[#f2f3f5] px-2 py-1 text-xs text-[#4e5969] md:inline-flex">
                     {previewData.entry_type === "manager"
                         ? "管理文件"

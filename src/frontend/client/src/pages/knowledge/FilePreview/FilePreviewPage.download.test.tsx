@@ -50,10 +50,12 @@ jest.mock("~/pages/Subscription/AiChat/AiAssistantPanel", () => ({
 
 jest.mock("./index", () => ({
     __esModule: true,
-    default: ({ onDownloadFile, downloadPending }: {
+    default: ({ onDownloadFile, downloadPending, actions }: {
         onDownloadFile?: () => void;
         downloadPending?: boolean;
+        actions?: React.ReactNode;
     }) => (
+        <>{actions}
         <button
             type="button"
             aria-label="下载"
@@ -63,6 +65,7 @@ jest.mock("./index", () => ({
         >
             下载
         </button>
+        </>
     ),
 }));
 
@@ -126,5 +129,32 @@ describe("FilePreviewPage watermarked download", () => {
             }));
             expect(downloadButton).toBeEnabled();
         });
+    });
+
+    test.each([
+        ["personal", "manager", null],
+        ["personal", "publish", "发布文件"],
+        ["personal", "share", "分享文件"],
+        ["department", "manager", "管理文件"],
+    ])("%s 库的 %s 文件身份展示", async (spaceLevel, entry_type, label) => {
+        jest.mocked(getSpaceInfoApi).mockResolvedValue({ spaceLevel } as any);
+        jest.mocked(getFilePreviewApi).mockResolvedValue({
+            preview_url: "https://example.test/preview.pdf", entry_type,
+        } as any);
+        await act(async () => { render(<FilePreviewPage />); });
+        if (label) expect(screen.getByText(label)).toBeInTheDocument();
+        else expect(screen.queryByText("管理文件")).not.toBeInTheDocument();
+    });
+
+    test("知识库类型尚未返回时不闪现管理文件标识", async () => {
+        let resolveSpace!: (space: any) => void;
+        jest.mocked(getSpaceInfoApi).mockReturnValue(new Promise((resolve) => { resolveSpace = resolve; }));
+        jest.mocked(getFilePreviewApi).mockResolvedValue({
+            preview_url: "https://example.test/preview.pdf", entry_type: "manager",
+        } as any);
+        await act(async () => { render(<FilePreviewPage />); });
+        expect(screen.queryByText("管理文件")).not.toBeInTheDocument();
+        await act(async () => { resolveSpace({ spaceLevel: "personal" }); });
+        expect(screen.queryByText("管理文件")).not.toBeInTheDocument();
     });
 });

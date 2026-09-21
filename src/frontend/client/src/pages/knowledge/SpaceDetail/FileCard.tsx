@@ -1,6 +1,7 @@
+import { shouldShowFileEntryBadge } from "../fileEntryBadge";
 import { Download, Edit, FileSearch, GitBranch, History, Loader2, MoreVertical, RefreshCw, Send, Share2, Shield, Tag, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, SpaceRole, SpaceLevel } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
 import { useToastContext } from "~/Providers";
@@ -22,6 +23,7 @@ import { Badge } from "~/components/ui/Badge";
 
 interface FileCardProps {
     file: KnowledgeFile;
+    spaceLevel?: SpaceLevel;
     userRole: SpaceRole;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
@@ -62,6 +64,7 @@ interface FileCardProps {
 
 export function FileCard({
     file,
+    spaceLevel,
     userRole,
     isSelected,
     onSelect,
@@ -266,7 +269,7 @@ export function FileCard({
                 {`V${file.version_no}`}
             </span>
         );
-        const entryBadge = !isFolder && file.entryType && file.entryType !== "normal" && (
+        const entryBadge = !isFolder && shouldShowFileEntryBadge(file.entryType, spaceLevel, file.entryStatus) && (
             <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
                 {file.entryStatus === "invalid"
                     ? file.distributionInvalidReason === "manager_file_deleted"

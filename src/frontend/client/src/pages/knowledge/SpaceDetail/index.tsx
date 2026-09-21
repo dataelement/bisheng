@@ -1851,6 +1851,7 @@ export function KnowledgeSpaceContent({
                                         } : undefined}
                                     >
                                         <FileCard
+                                            spaceLevel={space.spaceLevel}
                                             file={file}
                                             userRole={space.role}
                                             isSelected={selectedFiles.has(file.id)}
@@ -1895,7 +1896,7 @@ export function KnowledgeSpaceContent({
                     ) : (
                         <>
                             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
-                                <FileTable files={displayFiles}
+                                <FileTable spaceLevel={space.spaceLevel} files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
