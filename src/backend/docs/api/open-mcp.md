@@ -114,6 +114,7 @@ open_mcp:
   max_inline_upload_bytes: 52428800
   file_url_allowed_hosts:
     - files.example.com
+  enable_dns_rebinding_protection: false
   transport_allowed_hosts:
     - bisheng.example.com
   transport_allowed_origins:
@@ -123,8 +124,14 @@ open_mcp:
   max_redirects: 3
 ```
 
-allowlist 只写 host，不带 scheme、路径、userinfo 或通配符。反向代理/商业网关的
-body 上限应与后端保持一致，并禁止无限请求缓冲。
+`enable_dns_rebinding_protection` 默认为 `false`，避免默认部署在多级反向代理改写
+`Host` 时拒绝 MCP 请求。若后端直接对客户端开放，或前置代理未校验 `Host` / `Origin`，
+应显式设为 `true` 并配置精确白名单。关闭时 `transport_allowed_hosts` 与
+`transport_allowed_origins` 保留配置但不参与 SDK 传输校验。
+
+allowlist 只写 host，不带 scheme、路径、userinfo 或主机名通配符；仅支持
+`example.com:*` 形式的端口通配。反向代理/商业网关的 body 上限应与后端保持一致，
+并禁止无限请求缓冲。
 
 ## 客户端配置
 
