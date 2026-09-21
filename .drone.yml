@@ -131,10 +131,13 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         from_secret: NEXUS_PASSWORD
     commands:
       # Context is the repo root (Dockerfile COPYs src/backend lock + src/sandbox-runner).
-      # uv sync is not a line-leading RUN; inject tuna ENV immediately before COPY pyproject.
-      - awk '/^COPY src\/backend\/pyproject.toml/ && !x {print "ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; x=1} {print}' docker/bisheng-sandbox/Dockerfile > docker/bisheng-sandbox/Dockerfile.tmp && mv docker/bisheng-sandbox/Dockerfile.tmp docker/bisheng-sandbox/Dockerfile
+      # uv/apt indexes are baked into the Dockerfile; proxy is build-arg only (not in the image).
+      - test -f docker/bisheng-sandbox/Dockerfile
       - docker login -u $docker_user -p $docker_password $docker_registry
-      - docker build -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
+      - export DOCKER_BUILDKIT=1
+      - docker pull $docker_repo:$version || true
+      - docker pull $docker_repo:release || true
+      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
   - name: ssh deploy
@@ -340,9 +343,12 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - echo "old tag is $version"
       - version=$(echo $version | sed 's/\\//_/g')
       - echo "build image tag is $version"
-      - awk '/^COPY src\/backend\/pyproject.toml/ && !x {print "ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; x=1} {print}' docker/bisheng-sandbox/Dockerfile > docker/bisheng-sandbox/Dockerfile.tmp && mv docker/bisheng-sandbox/Dockerfile.tmp docker/bisheng-sandbox/Dockerfile
+      - test -f docker/bisheng-sandbox/Dockerfile
       - docker login -u $docker_user -p $docker_password $docker_registry
-      - docker build -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
+      - export DOCKER_BUILDKIT=1
+      - docker pull $docker_repo:$version || true
+      - docker pull $docker_repo:release || true
+      - cache=""; docker image inspect $docker_repo:$version >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:$version" || true; docker image inspect $docker_repo:release >/dev/null 2>&1 && cache="$cache --cache-from $docker_repo:release" || true; docker build $cache --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg HTTP_PROXY=$http_proxy --build-arg HTTPS_PROXY=$https_proxy --build-arg BUILDKIT_INLINE_CACHE=1 -f docker/bisheng-sandbox/Dockerfile -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
   # - name: ssh deploy backend

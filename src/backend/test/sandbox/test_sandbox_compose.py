@@ -40,9 +40,11 @@ def test_dockerfile_is_single_multiarch_image_without_platform_payload():
     assert "pandoc-3.6.4" in text
     assert "ffmpeg" in text
     assert "uv sync --frozen --no-dev --no-install-project" in text
-    assert "COPY src/sandbox-runner" in text
+    assert "COPY src/sandbox-runner" in text or "COPY --chmod=0555 src/sandbox-runner" in text
     assert "USER 65534" in text
     assert "serve.py" in text
+    assert "pip install --no-cache-dir uv" in text
+    assert "astral.sh" not in text
     assert "playwright install" not in text
     copies = [line for line in text.splitlines() if line.strip().startswith("COPY ")]
     joined = "\n".join(copies)
