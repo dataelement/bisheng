@@ -71,14 +71,11 @@ class LeaseStore:
             os.makedirs(work_dir, exist_ok=True)
             uid = self.default_uid
             if self.enable_uid_isolation:
-                # Distinct uid per session when the supervisor is root; otherwise keep DAC best-effort.
+                # Distinct uid per session. Keep the tree root-owned until exec:
+                # supervisor drops DAC_OVERRIDE, so copy-in cannot write a 0700
+                # directory already chown'ed to the session uid.
                 uid = 10000 + (len(self._leases) % 1000)
                 os.chmod(work_dir, 0o700)
-                try:
-                    if os.geteuid() == 0:
-                        os.chown(work_dir, uid, uid)
-                except OSError:
-                    pass
             else:
                 os.chmod(work_dir, 0o755)
             now = self._now()

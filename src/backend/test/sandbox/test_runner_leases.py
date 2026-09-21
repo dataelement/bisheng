@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 
 import pytest
@@ -71,6 +72,22 @@ def test_foreign_lease_token_cannot_delete_other_session(tmp_path):
             headers={"X-Lease-Token": a["lease_token"]},
         )
         assert resp.status_code == 403
+
+
+def test_isolation_session_dir_stays_writable_for_copy_in(tmp_path):
+    from leases import LeaseStore
+
+    store = LeaseStore(
+        sessions_root=str(tmp_path / "sessions"),
+        max_sessions=2,
+        enable_uid_isolation=True,
+    )
+    lease = store.create()
+    assert lease.uid == 10000
+    probe = os.path.join(lease.work_dir, "celerybeat-schedule")
+    with open(probe, "wb") as fh:
+        fh.write(b"ok")
+    assert os.path.isfile(probe)
 
 
 def test_delete_then_exec_is_404(runner_client: TestClient):

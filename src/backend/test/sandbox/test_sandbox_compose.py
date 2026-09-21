@@ -78,7 +78,7 @@ def test_compose_named_runners_and_hardening():
         assert svc["user"] == "0"
         assert svc["read_only"] is True
         assert svc["cap_drop"] == ["ALL"]
-        assert set(svc.get("cap_add") or []) == {"SETUID", "SETGID", "CHOWN"}
+        assert set(svc.get("cap_add") or []) == {"SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE"}
         assert "no-new-privileges:true" in svc["security_opt"]
         mem = str(svc["mem_limit"]).lower()
         assert mem.endswith("g")

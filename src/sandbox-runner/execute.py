@@ -81,6 +81,15 @@ def _kill_group(proc: subprocess.Popen) -> None:
         proc.kill()
 
 
+def _chown_tree(path: str, uid: int, gid: int) -> None:
+    os.chown(path, uid, gid)
+    for root, dirs, files in os.walk(path):
+        for name in dirs:
+            os.chown(os.path.join(root, name), uid, gid)
+        for name in files:
+            os.chown(os.path.join(root, name), uid, gid)
+
+
 def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
     code = payload.get("code") or ""
     lang = payload.get("lang") or "python"
@@ -93,25 +102,35 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
             fh.write(code)
         cmd = [sys.executable, script] if str(lang).startswith("python") else ["sh", "-c", code]
         started = time.monotonic()
-        proc = subprocess.Popen(
-            cmd,
-            cwd=lease.work_dir,
-            env=_child_env(lease.work_dir),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            start_new_session=True,
-            preexec_fn=lambda uid=lease.uid: _preexec(uid),
-        )
-        timed_out = False
+        dropped = os.geteuid() == 0 and lease.uid != 0
+        if dropped:
+            _chown_tree(lease.work_dir, lease.uid, lease.uid)
         try:
-            stdout, stderr = proc.communicate(timeout=timeout_s)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            _kill_group(proc)
-            stdout, stderr = proc.communicate()
+            proc = subprocess.Popen(
+                cmd,
+                cwd=lease.work_dir,
+                env=_child_env(lease.work_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                start_new_session=True,
+                preexec_fn=lambda uid=lease.uid: _preexec(uid),
+            )
+            timed_out = False
+            try:
+                stdout, stderr = proc.communicate(timeout=timeout_s)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _kill_group(proc)
+                stdout, stderr = proc.communicate()
+        finally:
+            if dropped:
+                try:
+                    _chown_tree(lease.work_dir, 0, 0)
+                except OSError:
+                    pass
         duration_ms = int((time.monotonic() - started) * 1000)
         exitcode = 124 if timed_out else int(proc.returncode if proc.returncode is not None else 1)
         try:

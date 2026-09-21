@@ -266,7 +266,8 @@ services:
     image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
     container_name: bisheng-code-runner-1
     # Isolation mode (sessions > 1): PID 1 is root so it can chown/setuid per session.
-    # User code still drops via SETUID; keep cap_drop ALL and add back only those three.
+    # User code still drops via SETUID. DAC_OVERRIDE is required while the runner
+    # chowns the session dir at lease create (copy-in into 0700/uid 10000).
     user: "0"
     read_only: true
     cap_drop:
@@ -275,6 +276,7 @@ services:
       - SETUID
       - SETGID
       - CHOWN
+      - DAC_OVERRIDE
     security_opt:
       - no-new-privileges:true
     mem_limit: 2g
