@@ -8,6 +8,7 @@ from loguru import logger
 from sqlmodel import select
 
 from bisheng.api.services.flow import FlowService
+from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schemas import FlowVersionCreate, resp_200
@@ -71,11 +72,7 @@ async def check_app_write_auth(
         raise NotFoundError.http_exception()
     if await check_business_action(
         login_user,
-        resource_type=(
-            "assistant"
-            if flow_type == FlowType.ASSISTANT.value
-            else "workflow"
-        ),
+        resource_type=("assistant" if flow_type == FlowType.ASSISTANT.value else "workflow"),
         resource_id=flow_id,
         action="edit",
     ):
@@ -222,14 +219,17 @@ async def upload_report_file(request: Request, data: dict = Body(...)):
         # Non-saved callbacks are not processed
         return {"error": 0}
     logger.info(f"office_callback url={file_url}")
-    file = Requests().get(url=file_url)
+    content = await afetch_office_document(file_url)
+    if content is None:
+        # Non-zero tells the document server the save failed; nothing is stored.
+        return {"error": 1}
     version_key = key.split("_", 1)[0]
 
     minio_client = await get_minio_storage()
     object_name = f"workflow/report/{version_key}.docx"
     await minio_client.put_object(
         object_name=object_name,
-        file=file._content,
+        file=content,
         bucket_name=minio_client.bucket,
         content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )

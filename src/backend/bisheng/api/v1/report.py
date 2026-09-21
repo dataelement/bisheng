@@ -4,68 +4,74 @@ from loguru import logger
 from sqlalchemy import or_
 from sqlmodel import select
 
+from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.report import Report
 from bisheng.utils import generate_uuid
-from bisheng_langchain.utils.requests import Requests
 
 # build router
-router = APIRouter(prefix='/report', tags=['report'])
-mino_prefix = 'report/'
+router = APIRouter(prefix="/report", tags=["report"])
+mino_prefix = "report/"
 
 
-@router.post('/office_token')
+@router.post("/office_token")
 async def get_office_token(payload: dict = Body(...)):
     """Sign the OnlyOffice editorConfig with JWT secret and return the token."""
-    secret = bisheng_settings.get_from_db('office_jwt_secret') or ''
+    secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
     if not secret:
-        return resp_200({'token': ''})
-    token = jwt.encode(payload, secret, algorithm='HS256')
-    return resp_200({'token': token})
+        return resp_200({"token": ""})
+    token = jwt.encode(payload, secret, algorithm="HS256")
+    return resp_200({"token": token})
 
 
-@router.post('/callback')
+@router.post("/callback")
 async def callback(data: dict):
-    status = data.get('status')
-    file_url = data.get('url')
-    key = data.get('key')
-    logger.debug(f'calback={data}')
+    status = data.get("status")
+    file_url = data.get("url")
+    key = data.get("key")
+    logger.debug(f"calback={data}")
     if status in {2, 6}:
         # Save Back
-        logger.info(f'office_callback url={file_url}')
-        file = Requests().get(url=file_url)
-        object_name = mino_prefix + key + '.docx'
+        logger.info(f"office_callback url={file_url}")
+        content = await afetch_office_document(file_url)
+        if content is None:
+            # Non-zero tells the document server the save failed; nothing is stored.
+            return {"error": 1}
+        object_name = mino_prefix + key + ".docx"
         minio_client = await get_minio_storage()
-        await minio_client.put_object(bucket_name=minio_client.bucket,
-                                      object_name=object_name, file=file._content,
-                                      content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')  # noqa
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket,
+            object_name=object_name,
+            file=content,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
         # Duplicate save,key Data Update Error
         with get_sync_db_session() as session:
             db_report = session.exec(
-                select(Report).where(or_(Report.version_key == key,
-                                         Report.newversion_key == key))).first()
+                select(Report).where(or_(Report.version_key == key, Report.newversion_key == key))
+            ).first()
         if not db_report:
-            logger.error(f'report_callback cannot find the flow_id flow_id={key}')
-            raise HTTPException(status_code=500, detail='cannot find the flow_id')
+            logger.error(f"report_callback cannot find the flow_id flow_id={key}")
+            raise HTTPException(status_code=500, detail="cannot find the flow_id")
         db_report.object_name = object_name
         db_report.version_key = key
         db_report.newversion_key = None
         with get_sync_db_session() as session:
             session.add(db_report)
             session.commit()
-    return {'error': 0}
+    return {"error": 0}
 
 
-@router.get('/report_temp')
+@router.get("/report_temp")
 async def get_template(*, flow_id: str):
     with get_sync_db_session() as session:
         db_report = session.exec(
-            select(Report).where(Report.flow_id == flow_id,
-                                 Report.del_yn == 0).order_by(Report.update_time.desc())).first()
-    file_url = ''
+            select(Report).where(Report.flow_id == flow_id, Report.del_yn == 0).order_by(Report.update_time.desc())
+        ).first()
+    file_url = ""
     if not db_report:
         db_report = Report(flow_id=flow_id)
     elif db_report.object_name:
@@ -82,10 +88,10 @@ async def get_template(*, flow_id: str):
     else:
         version_key = db_report.newversion_key
     res = {
-        'flow_id': flow_id,
-        'temp_url': file_url,
-        'original_version': db_report.version_key,
-        'version_key': version_key,
+        "flow_id": flow_id,
+        "temp_url": file_url,
+        "original_version": db_report.version_key,
+        "version_key": version_key,
     }
 
     return resp_200(res)
