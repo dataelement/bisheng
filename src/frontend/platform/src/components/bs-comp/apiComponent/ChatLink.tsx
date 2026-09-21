@@ -97,7 +97,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
     return () => {
       cancelled = true
     }
-  }, [kind, appId])
+  }, [kind, appId, onAvailabilityChange])
 
   useEffect(() => {
     const keyword = operatorQuery.trim()
@@ -298,7 +298,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
     const loginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/workspace/chat/${type}/auth/${id}`
     const noLoginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/workspace/chat/${type === API_TYPE.SKILL ? '' : type + '/'}${id}`
     return noLogin ? noLoginUrl : loginUrl;
-  }, [type, noLogin])
+  }, [type, noLogin, id])
 
   const embedCode = useMemo(() => {
     if (embed) return `<script
