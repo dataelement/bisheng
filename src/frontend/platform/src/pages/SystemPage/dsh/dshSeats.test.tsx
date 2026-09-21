@@ -95,7 +95,7 @@ describe('DSH seat pagination and commands', () => {
         expect(screen.queryByRole('button', { name: 'dsh.next' })).toBeNull()
         unmount()
     })
-    it('renders one page from ten thousand seats and loads sessions independently', async () => {
+    it('renders one page from ten thousand seats without a session entry', async () => {
         const fixtures = Array.from({ length: 10000 }, (_, i) => seat(i + 1))
         vi.mocked(getDshSeats).mockImplementation(async (query) => ({
             items: fixtures.slice(
@@ -105,11 +105,6 @@ describe('DSH seat pagination and commands', () => {
             next_cursor: query.cursor ? '100' : '50',
             has_more: true,
         }))
-        vi.mocked(getDshSessions).mockResolvedValue({
-            items: [],
-            next_cursor: null,
-            has_more: false,
-        })
         const { unmount } = render(
             <SeatsView operations={{}} revision={0} onOperation={vi.fn()} />,
         )
@@ -119,17 +114,8 @@ describe('DSH seat pagination and commands', () => {
         expect(screen.queryByLabelText('dsh.department')).toBeNull()
         expect(vi.mocked(getDshSeats).mock.calls[0][0]).not.toHaveProperty('department_id')
         expect(vi.mocked(getDshSeats).mock.calls[0][0].limit).toBe(50)
-        fireEvent.click(screen.getAllByText('dsh.sessions')[0])
-        await waitFor(() =>
-            expect(getDshSessions).toHaveBeenCalledWith(
-                '1',
-                '1',
-                undefined,
-                expect.any(AbortSignal),
-            ),
-        )
-        expect(screen.getByRole('dialog')).toBeTruthy()
-        fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+        expect(screen.queryByRole('button', { name: 'dsh.sessions' })).toBeNull()
+        expect(getDshSessions).not.toHaveBeenCalled()
         expect(screen.queryByRole('dialog')).toBeNull()
         fireEvent.click(screen.getAllByText('dsh.next')[0])
         await waitFor(() => expect(screen.getByText('User 51')).toBeTruthy())
