@@ -1,4 +1,4 @@
-"""Audit and recover orphaned F068 knowledge-chat entry locations.
+"""Audit and recover orphaned F071 knowledge-chat entry locations.
 
 The script is DB-only. It classifies every knowledge-space session in the
 selected session tenant scope and, in ``--apply`` mode, points active orphaned

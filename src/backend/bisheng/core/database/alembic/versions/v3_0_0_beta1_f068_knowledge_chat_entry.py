@@ -1,4 +1,4 @@
-"""F068: add a visible-entry override for knowledge-space chat sessions.
+"""F071: add a visible-entry override for knowledge-space chat sessions.
 
 Revision ID: f068_knowledge_chat_entry
 Revises: f066_pat_data_scope

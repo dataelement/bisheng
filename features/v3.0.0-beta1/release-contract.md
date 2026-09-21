@@ -12,7 +12,7 @@
 > 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F060 替代 v2.6.0 F031
 > 以租户本地元数据推断远端订阅状态的旧语义，建立平台级订阅对账、公共文章同步和知识空间一次投递。
 > 独立会话增加系统级统一的“打开已结束会话时自动重新运行”能力；F067 仅将中粮 SeedMind Apifox
-> 文档确认的 10 项知识资源/文件 API 以统一远程 MCP 服务交付，不随 F053 其他开放能力自动扩围，且不建立第二套身份与权限合同；F068 在文件/目录删除、空间内容清空或跨空间移出后，
+> 文档确认的 10 项知识资源/文件 API 以统一远程 MCP 服务交付，不随 F053 其他开放能力自动扩围，且不建立第二套身份与权限合同；F071 在文件/目录删除、空间内容清空或跨空间移出后，
 > 将仍存在的知识空间问答历史保留到原空间根目录。
 
 ---
@@ -57,7 +57,7 @@
 | **OpenApiTenantSetting**（既有对象，本体归 F053；**本增量 = `pat_data_scope` 数据范围列 + 租户策略变更操作审计写入**） | **F066-pat-data-scope-and-ai-access** | PRD v2.9 §4.10.7 闸门一之二（D21）。只拥有该列与策略审计的写行为增量；开关 + 默认有效期的既有写行为仍归 F053 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码。**不再拥有**「工作流临时来源是否出角标」的写语义——该条由 F062 取代（仅 `ingest_to_temp_kb` 召回） |
 | —（无新增领域对象） | **F067-unified-remote-mcp-service** | 仅将中粮 SeedMind Apifox 范围基线确认的 10 项知识资源/文件 API 一对一投影为统一远程 MCP 工具；复用 ApiCredential、`audit_log` 的 `open_api.call` 事件、身份、资源权限、PAT 数据范围与业务 Service，不建立第二套凭据、授权、审计或业务对象，也不随 F053 其他路由或 Apifox 后续变更自动扩围 |
-| **MessageSession**（既有对象；本增量 = nullable `entry_flow_id` 展示入口覆盖列） | **F068-knowledge-space-chat-history-retention**（列） | null 时入口沿用原 `flow_id`；文件/目录删除、保留空间的内容清空或跨空间移出的对应 DB commit 后，按纳入范围的 flow 分片 best-effort 异步写原空间根目录，拥有 sticky root 与存量恢复语义；完整删除空间不新派发、不提供可访问入口，但不清理旧 session/entry 或取消已排队任务；在线派发不建设 outbox，不改写原 `flow_id`、ChatMessage 或 MessageCitation，session `update_time` 沿用既有元数据更新机制 |
+| **MessageSession**（既有对象；本增量 = nullable `entry_flow_id` 展示入口覆盖列） | **F071-knowledge-space-chat-history-retention**（列） | null 时入口沿用原 `flow_id`；文件/目录删除、保留空间的内容清空或跨空间移出的对应 DB commit 后，按纳入范围的 flow 分片 best-effort 异步写原空间根目录，拥有 sticky root 与存量恢复语义；完整删除空间不新派发、不提供可访问入口，但不清理旧 session/entry 或取消已排队任务；在线派发不建设 outbox，不改写原 `flow_id`、ChatMessage 或 MessageCitation，session `update_time` 沿用既有元数据更新机制 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第三种来源类型与其载荷） | **F054-unified-citation-entries** | 频道文章 AI 问答接入统一溯源：新增「文章」来源类型及其来源载荷（真实稳定定位标识 = 文章文档标识 / 原文链接，不伪造知识库片段标识）、「来源已失效」状态、来源详情对**无已登录用户**调用一律不返回、工作流输入节点临时文件停止登记来源。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 F041 已登记的 `accessScope` 两档语义，不改灵思任务模式（归 F047），不新增表 / Alembic / 对外 API / 错误码 |
 | —（无新增） | F054-contextual-department-membership | 复用组织域 canonical 成员/祖先事实作为请求时权限输入，消除 OpenFGA 部门子树递归；仅演进 F048 授权模型与运行时装配，不新增组织对象、永久成员闭包或业务接口 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上扩展第四种来源类型与其载荷） | **F062-workflow-temp-kb-citation** | 工作流输入节点「解析并存入临时知识库」召回可点击溯源：新增 `citation_type=temp`（前缀 `tempsearch_`，原件定位 = UUID + F043 `objectName`，不伪造知识库整数 id）。只读 / 调用现有 `MessageCitation` 与 citation 注册 / 解析服务；**不拥有** `message_citation` schema，不改 INV-7 / `view_file`，不把临时来源纳入知识空间 OpenFGA，不新增表 / Alembic / 对外 API / 错误码 |
@@ -66,13 +66,13 @@
 | —（无新增） | F064-kb-list-file-abnormal | 文档知识库外层列表只读展示库级文件解析异常，并支持仅异常筛选；复用既有 `Knowledge` / `KnowledgeFile` 与 F027 游标、F048 可见性，不新增领域对象、表、错误码或不变量。Alembic 仅增加 `knowledgefile` 复合索引 |
 | —（无新增） | F065-model-name-trim | 模型管理写入时去掉 `models[].model_name` 首尾空白；复用既有 `LLMModel` / `POST/PUT /api/v1/llm`，不新增领域对象、表、错误码、不变量或 Alembic |
 | —（无新增领域对象；在既有 `BaseExecutor` 执行后端抽象上新增第三种执行模式，并接管工作流代码节点的执行位置） | **F068-code-execution-sandbox** | 把模型/搭建者写的 Python 从 backend 与 Celery worker 进程搬入受控隔离执行环境，覆盖灵思任务模式、工作台日常会话、助手、工作流 Agent 节点、工作流工具节点五条既有路径，并迁入工作流代码节点。只读 / 调用现有 `ToolExecutor`、`gpts_tools.extra`、灵思任务工作区与 MinIO 产物链路；**不拥有** `gpts_tools` schema、不改工具装配的权限校验、不改日常会话「附件只抽文本进 prompt」语义、不改知识库解析链路的 LibreOffice 调用。不新增表 / Alembic / 对外 API 路径 / 领域对象 / 不变量；新增错误码模块 280 与系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像启动失败） |
-| **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F067-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
-| —（无新增） | F068-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
+| **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F070-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
+| —（无新增） | F072-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上为灵思任务模式增加会话级来源编号表与完成时审计） | **F069-linsight-citation-handles** | 拥有 Redis `linsight:cite_handles:<session_id>` / `linsight:cite_seen:<svid>` 的写入语义与 `output_result.citation_audit` 字段。不拥有 registry item 生成、`message_citation` 写入（仍经 F047 路径）、resolve 与权限过滤 |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
 >
-> ⚠️ **F068 编号冲突未决**：上表两行都占用 F068。`nvdb-security-fixes` 在 `feat/3.0.0-beta2` 取号（且已写明「工作流代码节点沙箱不在本 Feature」），`code-execution-sandbox` 在本提交取号。两行都保留，改哪一个由各自 Feature owner 决定。
+> **F068 曾三方占号，已解决**：统一 3.0.0 分支合并时，`code-execution-sandbox` 保留 F068，`knowledge-space-chat-history-retention` 改为 F071，`nvdb-security-fixes` 改为 F072。F071 的 Alembic revision id 仍是 `f068_knowledge_chat_entry`：它已在测试与定制环境执行过，改 id 会被当成新迁移重跑。
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -115,10 +115,10 @@
 | INV-32 | **开放面权限评估 fail-closed**（INV-19 在开放 API 上的加强）：权限引擎不可用、评估失败或结果不可判定时返回错误，**绝不返回未过滤或部分过滤的结果集**；不存在"缺身份即降级返回某个子集"的路径；P2 的限流 / 配额 / 幂等在 Redis 不可用时同样拒绝 | ApiCredential, PermissionGrant | F053 |
 | INV-33 | **身份模式只有两种、委托是纯替换且必须凭据先行**：权限基准 = 密钥主体（自身身份）或经五道准入的被代表用户（代表他人）；`delegate` 是唯一开关、持有即强制（漏传身份头报错、不落回自身身份）、范围必填且只有 `user` / `department` 两类；委托目标必须是自然人、非超管非租户管理员、同租户、在范围内，判定在调用期；模式 D 下资源与会话归被代表用户且不回授服务账号；三扩展位与 `delegate` 互斥硬阻断；`X-End-User` 不是身份模式、不参与任何权限判定 | ApiCredential | F053 |
 | INV-34 | **个人访问令牌的治理**：主体只能是自然人本人、权限动态继承持有人（不快照）、本期只可授予 `knowledge:read`，`identity:read` 与 `delegate` 永久禁令；随持有人停用 / 删除 5 秒内级联失效（**换租户不失效、随人迁移**——PRD v2.6 D19，原「离开租户级联失效」表述作废）；管理员短路照常生效但可见租户集合恒为密钥所属租户（超管不放开租户过滤），**且「短路照常」仅在默认数据范围（all_visible）下成立——租户级数据范围收窄（PRD v2.9 D21）优先于管理员短路，对含管理员在内的全体持有人一致生效**；两层能力开关默认关、关闭 = 停用不撤销、按主体类型独立（关 PAT 不得影响服务账号密钥）；数据范围同为调用期准入检查、不写凭据行、可逆；管理员台账只返回元数据 | ApiCredential, OpenApiTenantSetting | F053、F066 |
-| INV-35 | **商业授权状态是部署级当前值**：`license_info` 每个 `license_code` 至多一行，不带 `tenant_id`，不存授权密文 / 私钥 / 设备指纹。功能开关（ETL 地址、`BISHENG_DASHBOARD_PRO` 等）不得用来推断是否有效或何时到期。取源失败不得把已有成功记录改写成已过期；未取得不得展示为已过期 | LicenseInfo | F067 |
-| INV-36 | **登录态签名密钥不得来自代码**：`Settings.jwt_secret` 无可用默认值；历史内置默认值（`secret`、`secret_cF2k…`）即使写入 `config.yaml` 也视为未配置。未配置时由首次需要的进程随机生成并持久化到 `config.jwt_secret`，同一部署所有进程共用；轮换只经改 yaml 或删该记录后重启。任何直接拼接 `ORDER BY` / 读取调用方给定本地路径的代码必须先按固定集合 / 固定根目录校验 | Config, KnowledgeFile | F068 |
+| INV-35 | **商业授权状态是部署级当前值**：`license_info` 每个 `license_code` 至多一行，不带 `tenant_id`，不存授权密文 / 私钥 / 设备指纹。功能开关（ETL 地址、`BISHENG_DASHBOARD_PRO` 等）不得用来推断是否有效或何时到期。取源失败不得把已有成功记录改写成已过期；未取得不得展示为已过期 | LicenseInfo | F070 |
+| INV-36 | **登录态签名密钥不得来自代码**：`Settings.jwt_secret` 无可用默认值；历史内置默认值（`secret`、`secret_cF2k…`）即使写入 `config.yaml` 也视为未配置。未配置时由首次需要的进程随机生成并持久化到 `config.jwt_secret`，同一部署所有进程共用；轮换只经改 yaml 或删该记录后重启。任何直接拼接 `ORDER BY` / 读取调用方给定本地路径的代码必须先按固定集合 / 固定根目录校验 | Config, KnowledgeFile | F072 |
 | INV-35 | **统一远程 MCP 只承载已确认的 10 项 API allowlist，既有 API 接口逻辑冻结**：每个指定 API 必须恰好对应一个可调用工具，工具发现不得返回 allowlist 之外的 BISHENG 业务工具，API/Apifox 后续变化不得自动扩围；工具发现和每次执行都必须使用平台既有凭据，并遵守与对应开放 API 相同的服务账号 S/D、PAT、租户与数据范围、资源动作、业务状态、`audit_log` 逐调用审计、结果与错误含义；F067 不得修改已有 API 的校验、分支、调用顺序、副作用、入参、出参或错误处理，协议形态不能原样复用时只允许在 MCP 工具 schema/adapter 内作显式兼容；MCP 成功输出遵循逐工具 `outputSchema`，工具错误遵循 `isError` 并返回明确 `code/message`，不复制 HTTP 状态信封；业务参数不得选择执行主体，任何认证或授权结果不可判定时失败关闭 | ApiCredential, AuditLog, PermissionGrant | F067、F053、F066 |
-| INV-36 | **知识空间问答历史归原空间所有**：关联文件/目录删除、保留空间本身的内容清空或跨空间移出后，未被用户主动删除且仍存在的会话与消息在在线任务正常执行后通过 `MessageSession.entry_flow_id` 在原空间根目录可见并可按全空间范围继续问答，目标空间不得继承；完整删除知识空间不新派发、不提供可访问历史入口，但沿用现状保留旧 session/entry，也不取消此前排队的回收任务，其写入的失效 entry 元数据由空间存在性与权限校验阻断访问；在线回收在每个 hard-delete commit、`clear_space` 子资源删除 commit 或跨空间 move metadata commit 后按 flow 分片 best-effort 投递，允许任务完成前短暂不可见，并接受派发/执行故障、任务扫描后迟到提交及直接 move rows 外的版本 sibling 留下的残余失联；不为此阻塞资源操作、建设 outbox、修改会话创建链路或周期全量扫描；回收不得改写原 `flow_id`、消息/引用内容及其时间，不得改变会话所有者或绕过原空间权限；session `update_time` 可按既有元数据更新机制变化，但不作为知识空间会话排序或最后消息时间；删除覆盖实际硬删除集合，`clear_space` 覆盖删除前已取得的全部子资源，移动覆盖 valid item 的直接 move rows，批量父子输入先规范化，处理保持幂等且回收后不自动回绑，同空间移动不触发；存量发布门禁只要求可恢复失联集合归零，已删除空间会话与其失效 entry 单独报告且不恢复、不清理 | MessageSession, ChatMessage, MessageCitation, Knowledge | F068 |
+| INV-36 | **知识空间问答历史归原空间所有**：关联文件/目录删除、保留空间本身的内容清空或跨空间移出后，未被用户主动删除且仍存在的会话与消息在在线任务正常执行后通过 `MessageSession.entry_flow_id` 在原空间根目录可见并可按全空间范围继续问答，目标空间不得继承；完整删除知识空间不新派发、不提供可访问历史入口，但沿用现状保留旧 session/entry，也不取消此前排队的回收任务，其写入的失效 entry 元数据由空间存在性与权限校验阻断访问；在线回收在每个 hard-delete commit、`clear_space` 子资源删除 commit 或跨空间 move metadata commit 后按 flow 分片 best-effort 投递，允许任务完成前短暂不可见，并接受派发/执行故障、任务扫描后迟到提交及直接 move rows 外的版本 sibling 留下的残余失联；不为此阻塞资源操作、建设 outbox、修改会话创建链路或周期全量扫描；回收不得改写原 `flow_id`、消息/引用内容及其时间，不得改变会话所有者或绕过原空间权限；session `update_time` 可按既有元数据更新机制变化，但不作为知识空间会话排序或最后消息时间；删除覆盖实际硬删除集合，`clear_space` 覆盖删除前已取得的全部子资源，移动覆盖 valid item 的直接 move rows，批量父子输入先规范化，处理保持幂等且回收后不自动回绑，同空间移动不触发；存量发布门禁只要求可恢复失联集合归零，已删除空间会话与其失效 entry 单独报告且不恢复、不清理 | MessageSession, ChatMessage, MessageCitation, Knowledge | F071 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -152,12 +152,12 @@
 | F063-workbench-content-safety | 既有 `sensitive_word` 租户策略（F036）、工作台首页、F035 日常/任务统一 `chat/completions`、商业版 `BISHENG_PRO` | 接线型；新枚举值 `workbench_chat` 一份策略管两种模式。开源版不展示、不审查。不改工作流 Gateway 词表，不审文件/任务输出 |
 | F064-kb-list-file-abnormal | F027、F048、F051 | 文档知识库外层列表增加只读异常标记与 SQL 下推筛选；保持游标分页、可见-first 与行操作懒加载，不改 QA / 知识空间 / 解析写状态 |
 | F065-model-name-trim | 既有模型管理页、`POST/PUT /api/v1/llm` | 写入侧收紧 `model_name` 首尾空白；不改 19802、不回填存量、不新增错误码 |
-| F067-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
-| F068-nvdb-security-fixes | 既有 `Config` 表、`RoleAccess` WEB_MENU（`create_app`）、F027 目录 / 搜索排序参数、知识库 HTML 解析管线、`core/cache/utils` 下载工具 | 安全修复；每处只修根因所在层并加一道数据层再校验；不改前端、不加错误码。升级后全员重新登录 |
+| F070-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
+| F072-nvdb-security-fixes | 既有 `Config` 表、`RoleAccess` WEB_MENU（`create_app`）、F027 目录 / 搜索排序参数、知识库 HTML 解析管线、`core/cache/utils` 下载工具 | 安全修复；每处只修根因所在层并加一道数据层再校验；不改前端、不加错误码。升级后全员重新登录 |
 | F069-linsight-citation-handles | F047（下游契约全部沿用）；F054（AC-07 / AC-12 导出契约，P2 改为烘焙）；F029 / F041（`view_file` 与 INV-7，本 Feature **不改**） | 上游契约替换型：模型只写 `[Sn]`，写盘边界转回私有区标记；下游零改动。不做自动补引用与事后归因写回；kill switch 可整体回退到 F047 契约 |
 | F054-unified-citation-entries | F029、F041（均为 v2.6.0 存量，已上线）；与 F047 共用同一 citation 链路但互不阻塞 | 接线 + 扩展型：新增「文章」来源类型、失效态、匿名收紧、临时文件停发角标（导出烘焙不在本 Feature，归 F047 Phase 2）。**与 F053 有一处待对齐**：F053 把免登录分享页改走 share_link 通道并引入 share-token 会话执行主体，本 Feature AC-14「无已登录用户即不返回来源详情」的判据需与之对齐（见 spec §2.4 待澄清）。灵思任务模式不在本 Feature，归 F047 |
 | F067-unified-remote-mcp-service | F053、F066 | 只为中粮 SeedMind Apifox 范围基线明确列出的 10 项知识资源/文件 API 增加统一 MCP 访问面；凭据、S/D 身份、PAT 数据范围、资源授权、审计和业务语义仍由既有 Feature 定义；F053 其他开放路由不在本期范围 |
-| F068-knowledge-space-chat-history-retention | v2.6.0 F034、F048、既有知识空间问答 | 在文件/文件夹删除及跨空间移动的既有成功语义上增加源空间历史保留；权限继续走 F048，其他会话类型不受影响 |
+| F071-knowledge-space-chat-history-retention | v2.6.0 F034、F048、既有知识空间问答 | 在文件/文件夹删除及跨空间移动的既有成功语义上增加源空间历史保留；权限继续走 F048，其他会话类型不受影响 |
 
 ---
 
@@ -179,10 +179,10 @@
 | F031-channel-source-subscription-reconcile | F060 替代其“各租户 `channel_info_source` 行存在即代表已订阅、按租户分别对账”的运行语义。频道来源意图改为全部活跃租户并集，远端 `/information/subscriptions` 完整分页成为实际订阅真相；`channel_info_source` 改为平台公共展示目录。F031 已交付的频道创建/编辑能力继续保留，但不得再以本地元数据行推断远端订阅状态 |
 | 既有 `/api/v2` 开放 API（`open_endpoints/`）与两个免登录分享页 | F053：全部 43 HTTP + 2 WS 端点接入凭据校验，6 个 `/chat/*` 不暴露，裸 `user_id` 参数移除，`download_statistic` 入参 `file_path → file_name`；分享页改走 share-token；`user` 表加 `user_type`、`_filter_users_statement` 默认排除服务账号（8 处消费点无感）；F048 `authorize_created` 增 `autogrant_user_id` kwarg 与来源值 `SERVICE_ACCOUNT_AUTOGRANT`（非 protected、可撤销） |
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
-| v2.6.0 F037-gateway-license-expiry-reminder | **F067 覆盖其 Banner 数据源与文案合同**。`GET /api/license/status` 与「只拦网关付费接口」的降级范围保持不动；管理后台 Banner 改为先上报 Gateway 状态再读平台聚合接口，文案必须点名授权对象，不再单独按 Gateway `warning/critical` 分色渲染「软件授权」 |
+| v2.6.0 F037-gateway-license-expiry-reminder | **F070 覆盖其 Banner 数据源与文案合同**。`GET /api/license/status` 与「只拦网关付费接口」的降级范围保持不动；管理后台 Banner 改为先上报 Gateway 状态再读平台聚合接口，文案必须点名授权对象，不再单独按 Gateway `warning/critical` 分色渲染「软件授权」 |
 | v3.0.0-beta1 F054-unified-citation-entries | **F069 P2 修订其 AC-07 / AC-12 导出契约**：任务模式报告导出（Word / PDF / 打包 md / 单文件转换 / 前端另存 md）允许出现可见编号 `[n]` 与文末参考资料段，仍不得出现内部引用键、片段标识与协议标记；会话导出（日常模式）不在 F069 范围、维持剥标 |
 | F053 / F066 开放 API 凭据、身份与数据范围 | F067 仅为指定 10 项知识资源/文件 API 增加统一 MCP 访问面，不改变开放 API 的地址、参数、凭据治理、S/D 身份、PAT 能力与数据范围合同，也不自动暴露 F053 其他能力；MCP 工具发现和执行不得成为绕过调用期授权的旁路 |
-| v2.6.0 F034 与既有知识空间问答 | F068 使删除、随 `clear_space` 清空或跨空间移出的文件/目录关联历史回收到源空间根目录并可继续问答；完整删除空间不恢复；同空间移动、资源重命名、目标空间历史和其他会话类型保持原合同 |
+| v2.6.0 F034 与既有知识空间问答 | F071 使删除、随 `clear_space` 清空或跨空间移出的文件/目录关联历史回收到源空间根目录并可继续问答；完整删除空间不恢复；同空间移动、资源重命名、目标空间历史和其他会话类型保持原合同 |
 
 ---
 
@@ -194,12 +194,12 @@
 |----------------|------|---------------|
 | —（不新增） | 既有功能体验优化与引用溯源 | F043 复用工作流/报告既有错误响应；F044 验证失败是业务结果（状态=异常）而非错误响应，不占码；F045/F046 纯前端；F047 复用 citation 子系统与 F029 权限过滤的既有错误响应 |
 | —（不新增） | 工作流会话打开时自动重新运行 | F052 复用既有系统配置、工作流状态与重新运行错误响应 |
-| —（不新增） | 统一远程 MCP 与知识空间历史保留 | F067 复用开放 API 的认证、授权和业务错误语义；F068 复用知识空间、文件/目录操作与会话的既有错误语义 |
+| —（不新增） | 统一远程 MCP 与知识空间历史保留 | F067 复用开放 API 的认证、授权和业务错误语义；F071 复用知识空间、文件/目录操作与会话的既有错误语义 |
 | 250 | ReBAC 权限 Catalog、Grant、投影、迁移与完整枚举 | F048；25001～25014，具体语义见 F048 Design §6.3 |
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
 | 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；落码时按 C5 回写 `docs/constitution.md` |
-| 270 | 商业授权状态聚合与上报 | F067；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
-| —（不新增） | NVDB 漏洞修复 | F068-nvdb-security-fixes 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
+| 270 | 商业授权状态聚合与上报 | F070；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
+| —（不新增） | NVDB 漏洞修复 | F072-nvdb-security-fixes 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
 | 280 | 代码执行沙箱（执行环境可达性、容量、超时、copy-in 超限、代码节点出参序列化、协议不符） | F068-code-execution-sandbox；28001～28006，具体语义见该 Feature Design §4.2。落码时按 C5 回写 `docs/constitution.md`。已按 C5 重新派生占用列表确认 280 空闲；不得占用 11x（灵思）或 150（tool） |
 
 ---
@@ -233,21 +233,22 @@
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常：表 1 标无新领域对象；表 3 记依赖 F027/F048/F051；Alembic 仅加 `knowledgefile` 复合索引，无新增错误码/不变量 | F064、F027、F048、F051 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容：表 1 标无新领域对象；表 3 记依赖既有模型管理写入；无新增错误码/不变量/Alembic；不回填存量脏名 | F065 |
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
-| 2026-09-14 | 登记 F067 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F067、v2.6.0 F037 |
-| 2026-09-14 | 编号冲突改号：`feat/3.0.0-beta1` 合入 beta2 后，beta2 的商业授权统一到期提醒与 beta1 的 PAT 数据范围收窄同占 F066；商业授权一侧改号 **F067**（目录、表 1 归属行、INV-35、表 3 依赖、F037 影响行、错误码 270 归属同步），F066 专指 `pat-data-scope-and-ai-access` | F067、F066 |
-| 2026-09-14 | 登记 F068 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F068-nvdb-security-fixes |
+| 2026-09-14 | 登记 F070 商业授权统一到期提醒：新增 LicenseInfo 与 INV-35；分配错误码模块 270；Banner 数据源改为 `license_info` 聚合，覆盖 F037 的「只直连 Gateway + 软件授权」展示合同，不改 Gateway 降级范围 | F070、v2.6.0 F037 |
+| 2026-09-14 | 编号冲突改号：`feat/3.0.0-beta1` 合入 beta2 后，beta2 的商业授权统一到期提醒与 beta1 的 PAT 数据范围收窄同占 F066；商业授权一侧改号 **F070**（目录、表 1 归属行、INV-35、表 3 依赖、F037 影响行、错误码 270 归属同步），F066 专指 `pat-data-scope-and-ai-access` | F070、F066 |
+| 2026-09-14 | 登记 F072 NVDB 漏洞修复：表 1 标无新领域对象；新增 INV-36（登录态签名密钥不得来自代码）；表 3 记依赖既有 Config / WEB_MENU / 排序参数 / HTML 解析 / 下载工具；无新增错误码、对外 API、Alembic；代码节点沙箱另立 Feature | F072-nvdb-security-fixes |
 | 2026-09-16 | 登记 F068 代码执行沙箱统一底座：表 1 标无新增领域对象（在既有 `BaseExecutor` 抽象上加第三种执行模式 + 接管工作流代码节点执行位置）；分配错误码模块 **280**（28001～28006，已按 C5 重新派生占用列表确认空闲）；新增系统配置段 `sandbox_conf`（发布配置中注释掉，避免旧镜像因未知顶层 key 启动失败）。选定加固容器 + compose 副本池拓扑，**不新建持 docker 的编排控制面**（留给 3.0 应用工场 F103 `runtime-manager`）；不新增表 / Alembic / 对外 API / 领域对象 / 不变量 | F068-code-execution-sandbox |
 | 2026-09-20 | 登记 F069 灵思任务模式引用溯源可靠性（PRD《灵思任务模式引用溯源优化方案》2026-09-20 评审通过，D1～D8）：表 1 标无新领域对象（会话级来源编号表 + `citation_audit` 字段）；表 3 记依赖 F047 / F054 / F029；表 4 记 P2 修订 F054 AC-07 / AC-12 为烘焙措辞；无新增错误码 / 对外 API / 不变量 / Alembic；新增系统开关 `linsight.citation_handles_enabled` | F069、F047、F054 |
 | 2026-09-21 | F069 P0 / P1 已上 release（A/B uncited 44% → 0%）；P2 导出烘焙交付：F054 AC-07 / AC-12 补任务模式报告例外措辞（导出件出现可见编号与参考资料段，来源按导出者 `view_file` 过滤，日常模式会话导出维持剥标）；无新增错误码 / 对外 API / 表 | F069、F054 |
 | 2026-08-31 | 登记 F053 开放 API 鉴权与身份传递（全量 P0+P1+P2，代码底座自 `3.0-vibe` 移植、需求以 PRD v2.4 为准）：新增 ApiCredential / ServiceAccount / OpenApiTenantSetting 领域对象与 ShareLink、MessageSession 增量；新增 INV-29～34；分配错误码模块 260；登记对既有 `/api/v2`、分享页、`user` 表与 F048 `authorize_created` 的影响。早期曾登记独立 OpenApiCallLog，最终 F053 设计已作废该专表并复用 `audit_log` |
 | 2026-09-13 | 登记 F066 PAT 数据范围收窄与「AI 助手接入」界面（PRD v2.9 D21 / D22）：表 1 新增 OpenApiTenantSetting 增量归属行（`pat_data_scope` 列 + 策略变更审计归 F066）；**修订 INV-34**——数据范围收窄优先于管理员短路、「短路照常」仅默认档成立，并同步订正其与 D19 相抵的「离开租户级联失效」残句为「换租户随人迁移」；错误码 260 段补 `26044` | F066、F053 |
-| 2026-09-15 | 登记 0923 PRD §3 / §10：F067 以统一远程 MCP 服务交付开放业务能力，新增 INV-35；F068 新增 KnowledgeChatScope 作用域投影，将删除或跨空间移出后的知识空间问答历史保留到原空间根目录，新增 INV-36；两项均不新增错误码 | F067、F068、F053、F066、F034、F048、既有知识空间问答 |
-| 2026-09-15 | 修订 F068 数据设计：取消 KnowledgeChatScope 新表，改由既有 MessageSession 的 nullable `entry_flow_id` 覆盖展示入口；原 flow 与消息链不变，会话元数据更新时间沿用既有更新机制 | F068、既有知识空间问答 |
-| 2026-09-18 | 修订 F068 在线一致性：资源操作成功后按精确 flow 分片投递定向延时回收；接受短暂不可见与极低概率迟到提交，不增加分布式锁、会话创建复查、跨业务长事务或全量巡检 | F068、F034、既有知识空间问答 |
-| 2026-09-18 | F068 在线回收降级为 best-effort：删除按每个 hard-delete commit、移动按 metadata commit 后触发；不建设 outbox，接受派发/执行残余失联；batch 先规范化父子输入，跨空间移动暂不处理直接 move rows 外的版本 sibling 会话 | F068、F034、既有知识空间问答 |
-| 2026-09-18 | F068 纳入保留空间本身的 `clear_space`，在子资源删除 commit 后按清空前 `child_resources` 回收；完整 `delete_space` 仍不恢复；存量迁移门禁改为可恢复失联集合归零，deleted-space 分类单独报告 | F068、F030、既有知识空间问答 |
-| 2026-09-18 | 明确 F068 接受完整删除空间后保留旧 session/entry 及此前排队任务写入的失效 entry；依赖空间存在性与权限校验保证不可访问，不扩大 `delete_space` 清理职责 | F068、既有知识空间问答 |
+| 2026-09-15 | 登记 0923 PRD §3 / §10：F067 以统一远程 MCP 服务交付开放业务能力，新增 INV-35；F071 新增 KnowledgeChatScope 作用域投影，将删除或跨空间移出后的知识空间问答历史保留到原空间根目录，新增 INV-36；两项均不新增错误码 | F067、F071、F053、F066、F034、F048、既有知识空间问答 |
+| 2026-09-15 | 修订 F071 数据设计：取消 KnowledgeChatScope 新表，改由既有 MessageSession 的 nullable `entry_flow_id` 覆盖展示入口；原 flow 与消息链不变，会话元数据更新时间沿用既有更新机制 | F071、既有知识空间问答 |
+| 2026-09-18 | 修订 F071 在线一致性：资源操作成功后按精确 flow 分片投递定向延时回收；接受短暂不可见与极低概率迟到提交，不增加分布式锁、会话创建复查、跨业务长事务或全量巡检 | F071、F034、既有知识空间问答 |
+| 2026-09-18 | F071 在线回收降级为 best-effort：删除按每个 hard-delete commit、移动按 metadata commit 后触发；不建设 outbox，接受派发/执行残余失联；batch 先规范化父子输入，跨空间移动暂不处理直接 move rows 外的版本 sibling 会话 | F071、F034、既有知识空间问答 |
+| 2026-09-18 | F071 纳入保留空间本身的 `clear_space`，在子资源删除 commit 后按清空前 `child_resources` 回收；完整 `delete_space` 仍不恢复；存量迁移门禁改为可恢复失联集合归零，deleted-space 分类单独报告 | F071、F030、既有知识空间问答 |
+| 2026-09-18 | 明确 F071 接受完整删除空间后保留旧 session/entry 及此前排队任务写入的失效 entry；依赖空间存在性与权限校验保证不可访问，不扩大 `delete_space` 清理职责 | F071、既有知识空间问答 |
 | 2026-09-15 | 按中粮 SeedMind Apifox 范围基线收缩 F067：仅保留 6 项知识资源 API 与 4 项文件 API 的 10 工具 allowlist；F053 其他开放能力和 Apifox 后续变化不自动进入本期范围 | F067、F053、F066 |
 | 2026-09-18 | 清理 F053/F067 审计合同残留：删除 OpenApiCallLog 领域对象引用，统一为既有 `audit_log` 的 `open_api.call` 事件；不新增审计表、清理任务或保留期策略 | F053、F067 |
 | 2026-09-18 | 订正 INV-33 的外部使用者请求头名称为代码、测试及 F053 API 合同实际使用的 `X-End-User`；仅修正文档残留，不改变 API 行为 | F053、F067 |
 | 2026-09-18 | 明确 F067 单向兼容边界：现有 API 的校验、分支、调用顺序、副作用、入参、出参与错误处理全部冻结；无法与 MCP 线格式完全一致的部分只在 MCP 工具 schema/adapter 内兼容，成功与错误分别遵循 MCP structured output 和 error 规范 | F067 |
+| 2026-09-21 | 统一 3.0.0 分支合并三条线后解决跨线编号冲突：F067 归统一远程 MCP 服务（beta1/923 线），F068 归代码执行沙箱（beta2 线）；商业授权统一到期提醒改号 **F070**，知识空间问答历史保留改号 **F071**，NVDB 漏洞修复改号 **F072**。仅改目录名与文档引用，不改 Alembic revision id、错误码模块号与代码行为 | F067、F068、F070、F071、F072 |

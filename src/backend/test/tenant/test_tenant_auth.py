@@ -54,7 +54,7 @@ from bisheng.user.domain.services.auth import AuthJwt, LoginUser
 
 @pytest.fixture(autouse=True)
 def _pin_jwt_secret(monkeypatch):
-    """F068: settings no longer ships a default secret. Pin one so AuthJwt does
+    """F072: settings no longer ships a default secret. Pin one so AuthJwt does
     not try the config table when config_service is the real module (combined
     runs) rather than the pre-mock above (isolated runs)."""
     from bisheng.common.services import config_service as cs

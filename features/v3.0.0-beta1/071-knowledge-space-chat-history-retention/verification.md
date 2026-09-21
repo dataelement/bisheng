@@ -1,4 +1,4 @@
-# Verification: F068 知识空间历史对话按空间保留
+# Verification: F071 知识空间历史对话按空间保留
 
 **日期**：2026-09-18
 **分支 / worktree**：`feat/923-3.0.0-beta1` / `.worktrees/feat-923-3.0.0-beta1`
@@ -21,12 +21,12 @@
 
 | 验证 | 结果 | 说明 |
 |---|---|---|
-| F068 聚焦测试、知识 chat 回归、Celery wiring、迁移图 | `66 passed` | 覆盖 schema、Repository、入口校验、检索范围、worker、触发顺序、迁移脚本和 single head |
+| F071 聚焦测试、知识 chat 回归、Celery wiring、迁移图 | `66 passed` | 覆盖 schema、Repository、入口校验、检索范围、worker、触发顺序、迁移脚本和 single head |
 | `test/chat_session/` | `5 passed` | 通用会话路径回归 |
 | `test/knowledge/ -k "chat or move or filelib"` | `113 passed, 1 skipped` | 1 项为既有环境条件 skip；其余知识问答/移动/filelib 回归通过 |
 | move + v2 filelib + knowledge space service | `43 passed` | 修正旧测试 fixture 漂移后通过 |
-| F068 API E2E 收集 | `4 skipped` | 缺少 `E2E_F068_TOKEN`、运行中 API/worker；按设计不伪造通过 |
-| affected-file Ruff | 通过 | 新增/修改的 F068 Python 文件与测试无新增 lint 问题 |
+| F071 API E2E 收集 | `4 skipped` | 缺少 `E2E_F071_TOKEN`、运行中 API/worker；按设计不伪造通过 |
+| affected-file Ruff | 通过 | 新增/修改的 F071 Python 文件与测试无新增 lint 问题 |
 | `git diff --check` | 通过 | 无 whitespace error |
 | `scripts/arch-guard.sh` | 通过 | 无架构守卫违规 |
 

@@ -25,11 +25,11 @@
 | F063 | [workbench-content-safety](./063-workbench-content-safety/) | P1 | Spec + Design 已确认；tasks 已拆解（16 项 / 6 Wave） | 既有 sensitive_word、工作台聊天入口 |
 | F064 | [kb-list-file-abnormal](./064-kb-list-file-abnormal/) | P1 | Spec / Design / Tasks 已出，实现完成 | F027, F048, F051 |
 | F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec / Design 已确认；实现完成 | 既有模型管理页、`POST/PUT /api/v1/llm` |
-| F067 | [commercial-license-expiry-reminder](./067-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
+| F070 | [commercial-license-expiry-reminder](./070-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
 | F068 | [code-execution-sandbox](./068-code-execution-sandbox/) | P0 | Spec + Design 已出，待 ★ 确认；tasks 未写。讨论用 [沙箱架构设计说明书](./068-code-execution-sandbox/沙箱架构设计说明书.md)。错误码模块 280 | 无（与 3.0 应用工场 F103 sandbox-core 并行，不依赖其交付） |
 | F069 | [linsight-citation-handles](./069-linsight-citation-handles/) | P1 | Spec + Design 已出（PRD 2026-09-20 评审通过），待 ★ 确认；tasks 未写 | F047, F054, F029 |
 | F067 | [unified-remote-mcp-service](./067-unified-remote-mcp-service/) | P1 | Discovery、Spec、Design 已确认，Tasks 未生成 | F053, F066 |
-| F068 | [knowledge-space-chat-history-retention](./068-knowledge-space-chat-history-retention/) | P1 | Discovery、Spec、修订 Design 已确认，Tasks 未生成 | v2.6.0 F034, F048, 既有知识空间问答 |
+| F071 | [knowledge-space-chat-history-retention](./071-knowledge-space-chat-history-retention/) | P1 | Discovery、Spec、修订 Design 已确认，Tasks 未生成 | v2.6.0 F034, F048, 既有知识空间问答 |
 
 ---
 
@@ -85,12 +85,12 @@
 | 2026-09-10 | 登记 F064 文档知识库外层列表文件解析异常。 |
 | 2026-09-10 | 登记 F065 模型名称首尾空格兼容；Design 为《3.0 beta2》§5.7 修改方案。等待 spec + design ★ 确认；tasks 未写。 |
 | 2026-09-10 | 用户确认 F065 spec + design；tasks.md 完成 4 项拆解并落地前后端写入清洗。 |
-| 2026-09-14 | 登记 F067 商业授权统一到期提醒；Spec / Design 按《3.0 beta2》§5.3 与用户裁定的 `license_info` 三路写入写成。等待 spec + design ★ 确认；tasks 未写。 |
-| 2026-09-14 | 用户确认 F067 spec + design；tasks.md 完成 20 项拆解（6 个 Wave）。 |
-| 2026-09-14 | F067 实现完成：`license_info` + 聚合/上报 API + ETL Beat + Banner 改聚合 + 11001 点名 Gateway。 |
+| 2026-09-14 | 登记 F070 商业授权统一到期提醒；Spec / Design 按《3.0 beta2》§5.3 与用户裁定的 `license_info` 三路写入写成。等待 spec + design ★ 确认；tasks 未写。 |
+| 2026-09-14 | 用户确认 F070 spec + design；tasks.md 完成 20 项拆解（6 个 Wave）。 |
+| 2026-09-14 | F070 实现完成：`license_info` + 聚合/上报 API + ETL Beat + Banner 改聚合 + 11001 点名 Gateway。 |
 | 2026-09-16 | 登记 F068 代码执行沙箱统一底座；Spec / Design 按《灵思代码执行沙箱选型调研（私有化场景）》§6 与《3.0 应用工场 产品方案》§5.2 写成，选定加固容器 + compose 副本池拓扑，申领错误码模块 280。等待 spec + design ★ 确认；tasks 未写。 |
 | 2026-09-20 | 登记 F069 灵思任务模式引用溯源可靠性：上游契约换后端短句柄 `[Sn]`、完成时审计与前端一行 i18n 提示、P2 导出烘焙；下游（标记字法 / resolve / message_citation / 两套解析器）冻结。Spec + Design 按《灵思任务模式引用溯源优化方案》D1～D8 写成，待 ★ 确认。 |
-| 2026-09-15 | 登记 F067 统一远程 MCP 服务与 F068 知识空间历史会话保留；Discovery 已确认，Spec 待确认。 |
-| 2026-09-15 | F067/F068 Spec 已确认；形成两项 Design 草案，停在 Design ★ 门禁。 |
-| 2026-09-15 | F068 Design 经讨论取消独立入口投影表，改为 `MessageSession.entry_flow_id` nullable 覆盖字段；修订稿重新停在 Design ★ 门禁。 |
-| 2026-09-15 | 用户确认 F067/F068 Design ★；两项文档就绪，尚未生成 tasks.md 或进入编码。 |
+| 2026-09-15 | 登记 F067 统一远程 MCP 服务与 F071 知识空间历史会话保留；Discovery 已确认，Spec 待确认。 |
+| 2026-09-15 | F067/F071 Spec 已确认；形成两项 Design 草案，停在 Design ★ 门禁。 |
+| 2026-09-15 | F071 Design 经讨论取消独立入口投影表，改为 `MessageSession.entry_flow_id` nullable 覆盖字段；修订稿重新停在 Design ★ 门禁。 |
+| 2026-09-15 | 用户确认 F067/F071 Design ★；两项文档就绪，尚未生成 tasks.md 或进入编码。 |

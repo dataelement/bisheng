@@ -1,4 +1,4 @@
-# Feature: NVDB 漏洞修复（F068）
+# Feature: NVDB 漏洞修复（F072）
 
 > **本文档定位 — 纯 What（需求口径，不随代码漂移）**
 >

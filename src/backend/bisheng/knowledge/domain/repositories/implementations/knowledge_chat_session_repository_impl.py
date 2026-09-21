@@ -19,7 +19,7 @@ SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 
 class KnowledgeChatSessionRepositoryImpl(KnowledgeChatSessionRepository):
-    """SQLModel implementation of F068 session entry queries and updates."""
+    """SQLModel implementation of F071 session entry queries and updates."""
 
     def __init__(self, session_factory: SessionFactory = get_async_db_session):
         self._session_factory = session_factory

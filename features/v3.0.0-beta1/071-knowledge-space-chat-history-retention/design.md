@@ -1,4 +1,4 @@
-# Design: F068 知识空间问答与目录解耦、历史对话按空间保留
+# Design: F071 知识空间问答与目录解耦、历史对话按空间保留
 
 > **本文档定位 — 现状快照（Why this How）**
 >
@@ -22,15 +22,15 @@
 
 ## 2. 关键约束与 Constitution Check
 
-- 遵循 [docs/constitution.md](../../../docs/constitution.md) C1–C8；知识域 Service 负责编排，新增 `KnowledgeChatSessionRepository` 负责 F068 会话查询与批量更新，资源授权仍只经 F048；不为新功能扩展 legacy `MessageSessionDao` entry point。
+- 遵循 [docs/constitution.md](../../../docs/constitution.md) C1–C8；知识域 Service 负责编排，新增 `KnowledgeChatSessionRepository` 负责 F071 会话查询与批量更新，资源授权仍只经 F048；不为新功能扩展 legacy `MessageSessionDao` entry point。
 - 遵守版本契约 **INV-36**：原空间、本人会话、根目录回收、可继续问答、幂等、存量恢复、同空间不触发和回收后不回绑同时成立。
-- `message_session.flow_id` 与 `chat_message.flow_id` 是已有内容链标识，多个会话类型和历史查询都依赖二者相等；F068 不改写它们。
+- `message_session.flow_id` 与 `chat_message.flow_id` 是已有内容链标识，多个会话类型和历史查询都依赖二者相等；F071 不改写它们。
 - `MessageSession.update_time` 当前不是“最后一条消息时间”：知识空间写入/删除消息不会 touch session，知识空间会话列表固定按 `create_time` 排序；更新 `entry_flow_id` 会按 MySQL/DM8 既有机制刷新 session `update_time`，这是会话元数据变化，不影响消息时间、消息顺序或当前列表顺序。
 - `MessageSession.tenant_id` 是用户叶子租户，不等于资源拥有租户；列表继续按 session tenant/owner 过滤，空间可见性由业务权限校验决定。
 - 文件/文件夹删除是硬删除，跨空间移动保留资源 ID 但修改 `knowledge_id`；存量恢复依赖旧 `flow_id` 解析原空间和原资源类型/ID。
 - 同一文件夹可有多个会话，同一文件当前通常复用一个会话；不得假定 `(space, entry)` 唯一，会话唯一键始终是 `chat_id`。
 - Alembic 只增加 nullable 列和索引；存量识别/回填由 `src/backend/scripts/` 独立执行，默认 dry-run。
-- F068 不新增对外 URL、响应字段、错误码段或领域表；存量入口不可判定时失败关闭并记录结构化错误。
+- F071 不新增对外 URL、响应字段、错误码段或领域表；存量入口不可判定时失败关闭并记录结构化错误。
 - 在线删除、`clear_space` 与跨空间移动的会话入口回收采用 best-effort 异步收敛：资源操作不等待任务完成，派发失败也不改变资源结果；允许短暂或在派发/执行故障后持续无展示入口。任务只处理本次操作冻结的 flow 集合，不建设 durable outbox，也不周期扫描全量知识空间会话。
 - 知识空间会话创建、既有重命名和消息生成链路保持原样，不增加锁、资源二次校验或回收状态感知。
 
@@ -81,15 +81,15 @@ OR (entry_flow_id IS NULL AND flow_id = :target)
   - A. 删除/清空/移动与会话入口处于同一事务或以分布式锁阻断新会话——一致性强，但扩大正常业务链路、增加长事务或大子树锁成本。
   - B. 周期任务全量扫描所有知识空间会话——无需传递影响集合，但绝大多数行无需修复，扫描成本与历史总量线性增长。
   - C. 复用资源操作已计算的受影响资源集合，在对应资源 DB 变更提交后按 flow 分片尝试投递短延时回收任务。
-- **选定**：C。删除、清空空间内容和跨空间移动不等待会话回收；文件/目录硬删除的触发点是该次 `KnowledgeFileDao.adelete_batch(...)` 提交返回后，`clear_space` 的触发点是 `KnowledgeDao.async_delete_knowledge(..., only_clear=True)` 提交返回后，跨空间移动的触发点是 `move_items` 元数据 `session.commit()` 返回后。F068 只固定自身派发点，不重排既有文件清理、channel binding 清理、空间更新时间、权限或检索迁移动作；`clear_space` 派发位于既有空索引重建之前，跨空间移动派发仍位于既有 post-commit 权限与检索迁移之前。
-- **执行方式**：派发在隔离的 `try/except` 中 best-effort 执行，失败只记录日志，不改变资源操作结果。F068 沿用平台现有 Celery 发布配置，本期不单独增加 broker 发布超时、发布重试强约束或可用性门禁。成功入队的任务默认短延时 5 秒，以覆盖“资源校验完成、会话稍后提交”的常见竞态；flow 默认每 500 个一批，执行索引驱动的幂等 set-based UPDATE，不读取或更新 `chatmessage/message_citation`。任务使用 `acks_late` 和有界重试提高已入队任务的成功率；不启动全量定时巡检。
+- **选定**：C。删除、清空空间内容和跨空间移动不等待会话回收；文件/目录硬删除的触发点是该次 `KnowledgeFileDao.adelete_batch(...)` 提交返回后，`clear_space` 的触发点是 `KnowledgeDao.async_delete_knowledge(..., only_clear=True)` 提交返回后，跨空间移动的触发点是 `move_items` 元数据 `session.commit()` 返回后。F071 只固定自身派发点，不重排既有文件清理、channel binding 清理、空间更新时间、权限或检索迁移动作；`clear_space` 派发位于既有空索引重建之前，跨空间移动派发仍位于既有 post-commit 权限与检索迁移之前。
+- **执行方式**：派发在隔离的 `try/except` 中 best-effort 执行，失败只记录日志，不改变资源操作结果。F071 沿用平台现有 Celery 发布配置，本期不单独增加 broker 发布超时、发布重试强约束或可用性门禁。成功入队的任务默认短延时 5 秒，以覆盖“资源校验完成、会话稍后提交”的常见竞态；flow 默认每 500 个一批，执行索引驱动的幂等 set-based UPDATE，不读取或更新 `chatmessage/message_citation`。任务使用 `acks_late` 和有界重试提高已入队任务的成功率；不启动全量定时巡检。
 - **失败方向**：本期不建设 durable operation/outbox，不承诺资源提交与 Celery 入队原子，也不承诺派发失败或 worker 终态失败一定自动恢复。失败不回滚、不中断已提交的资源删除、清空或移动；会话和消息仍在原内容链，但入口可能持续不可见。能捕获的派发/执行失败记录 source space、reason 和精确 flow chunk，供人工重试或受控运行迁移脚本；进程在提交后、记录/入队前退出仍属于已接受的 best-effort 缺口。
 - **原因**：并发创建窗口很短且现状已存在竞态，业务接受 best-effort 异步收敛；定向延时任务不修改会话创建链路，也不让上万文件的目录产生上万把锁或全库扫描。
 - **何时该重新考虑**：若线上持续失联超过可接受水平、回收 SLA 成为产品承诺，或 best-effort 缺口无法通过运维修复，再引入 durable operation/outbox 或更强一致性，不预先改造正常问答链路。
 
 ### 决策 4：接受并发残余窗口，生成继续写原内容链
 
-- **选定**：删除、清空和移动不取消在途生成，也不为 F068 修改新建会话。迟到消息继续写原 `chat_id/flow_id`；延时任务执行时已提交且命中受影响 flow 的 session 会被回收到 root，任务扫描之后才提交的极低概率 session 允许保留现状竞态并进入运维修复范围。
+- **选定**：删除、清空和移动不取消在途生成，也不为 F071 修改新建会话。迟到消息继续写原 `chat_id/flow_id`；延时任务执行时已提交且命中受影响 flow 的 session 会被回收到 root，任务扫描之后才提交的极低概率 session 允许保留现状竞态并进入运维修复范围。
 - **原因**：知识空间 session 在 RAG 生成前创建，常见迟到写入可由短延时覆盖；消息写入不会更新 session，首次标题生成使用字段级 UPDATE，不会清空 `entry_flow_id`。用 best-effort 收敛换取不增加创建校验、分布式锁和跨业务事务。
 - **额外约束**：已回收资源日后移回原空间时，单文件会话查找不得只按原 `flow_id` 复用 recovered session；必须要求 effective entry 仍等于当前文件入口，否则创建新会话。
 - **何时该重新考虑**：若产品要求删除资源立即终止相关回答，需要独立内容治理 Feature 明确终止和历史裁剪语义。
@@ -184,7 +184,7 @@ retrieval_scope = whole source space when requested_entry is source root
 
 1. `batch_delete` 在执行任何删除前规范化服务端输入：folder/file ID 各自去重；若选中父文件夹，则从顶层 folder/file 输入中移除已被该父文件夹子树覆盖的后代；随后沿用既有逐项授权。这样父子重复输入不会在父项硬删除后再次查询已消失的子项。
 2. `delete_folder/delete_file` 复用既有子树枚举和版本链扩展结果；在对应 `KnowledgeFileDao.adelete_batch(...)` 前，把该删除单元实际影响的 folder/file ID 冻结为原空间 flow 集合。既有权限 tuple 清理和硬删除顺序保持不变，不把全部批量操作合并成长事务。
-3. 每次 `adelete_batch(...)` 成功提交返回后，立即将该删除单元的 flow 集合去重、分片并 best-effort 投递延时任务；F068 不调整既有清理动作的相对顺序——原本在硬删除 commit 前执行或投递的动作仍在前，原本在 commit 后执行的动作仍在后。F068 自身不等待 commit 后剩余的 channel binding 清理、空间更新时间或整个 batch 全部结束；后续步骤失败时，已经提交的删除单元仍保留其派发结果。
+3. 每次 `adelete_batch(...)` 成功提交返回后，立即将该删除单元的 flow 集合去重、分片并 best-effort 投递延时任务；F071 不调整既有清理动作的相对顺序——原本在硬删除 commit 前执行或投递的动作仍在前，原本在 commit 后执行的动作仍在后。F071 自身不等待 commit 后剩余的 channel binding 清理、空间更新时间或整个 batch 全部结束；后续步骤失败时，已经提交的删除单元仍保留其派发结果。
 4. worker 调用 retention service，以受控跨租户 fan-out 更新这些 flow 下所有会话所有者的活动 session，而不是只处理当前操作者；已回收行保持不变。
 5. 任务重复投递因 `entry_flow_id IS NULL` 保持幂等；派发或执行失败不改变删除结果，并按 best-effort 边界允许会话持续失联。
 
@@ -200,7 +200,7 @@ retrieval_scope = whole source space when requested_entry is source root
 
 1. `clear_space` 继续使用其在清理前已取得的 `child_resources`；按资源类型将其中全部 folder/file ID 冻结为该空间的 flow 集合，不额外扫描会话或在资源删除后反查子树。
 2. 既有 child permission projection、向量/ES/MinIO 清理和 `KnowledgeDao.async_delete_knowledge(..., only_clear=True)` 顺序保持不变；该调用只删除子资源并保留知识空间本身。
-3. `async_delete_knowledge(..., only_clear=True)` 提交返回后，立即对冻结 flow 去重、分片并 best-effort 投递延时任务；空集合不派发。F068 派发完成后再沿用既有流程重建空索引，后续空索引重建失败不撤销已提交清空或已完成派发。
+3. `async_delete_knowledge(..., only_clear=True)` 提交返回后，立即对冻结 flow 去重、分片并 best-effort 投递延时任务；空集合不派发。F071 派发完成后再沿用既有流程重建空索引，后续空索引重建失败不撤销已提交清空或已完成派发。
 4. 完整删除知识空间的 `delete_space` 明确不新派发入口回收任务，也不新增会话清理；此前已排队的删除/`clear_space` 回收任务不取消，即使随后写入指向已删除空间 root 的 `entry_flow_id` 也作为现状兼容残留接受。由于所有列表、历史和继续问答均先校验空间存在性与权限，该元数据不构成可访问入口。
 
 #### 定向任务、批量执行与一致性边界
@@ -267,21 +267,21 @@ space_{space_id}_file_{id>0}       -> 检查 file
 
 - `chatApi.ts` 的 URL、`FolderSession` 类型和请求参数不变，`entry_flow_id` 不返回前端。
 - `useFolderChat` 的 `spaceId/folderId` 变化继续触发 session reload；当前目录删除后导航到根目录，即可读取 recovered session。
-- 删除、清空空间内容或跨空间移动成功后不等待异步回收，也不为 F068 增加前端轮询或全局状态；用户在任务完成前可能暂时看不到回收会话，重新进入或刷新根目录后按现有列表接口读取最终结果。
+- 删除、清空空间内容或跨空间移动成功后不等待异步回收，也不为 F071 增加前端轮询或全局状态；用户在任务完成前可能暂时看不到回收会话，重新进入或刷新根目录后按现有列表接口读取最终结果。
 - 同名会话不合并；UI 继续使用 chat_id 做选择、改名和删除。
-- 会话重命名维持既有通用接口和权限行为，F068 不增加 entry 校验或修改其它会话类型。
+- 会话重命名维持既有通用接口和权限行为，F071 不增加 entry 校验或修改其它会话类型。
 - 无视觉样式变化；实施时若触及 UI 结构，仍须先读当时最新的 `src/frontend/packages/ui/docs/`。
 
 ### 4.6 关键模块职责
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `database/models/session.py` | 只声明 `entry_flow_id` 字段 | 不增加 F068 DAO entry point，不改变通用 flow 语义 |
+| `database/models/session.py` | 只声明 `entry_flow_id` 字段 | 不增加 F071 DAO entry point，不改变通用 flow 语义 |
 | `knowledge_chat_session_repository.py` 及实现 | effective-entry 查询、按精确 flow 集合执行幂等回收 UPDATE | 不解析 HTTP，不决定资源权限，不扫描全量会话 |
 | `knowledge_space_chat_history_retention_service.py` | 校验服务端 flow chunk 与 source root，编排定向幂等更新 | 不直接写 ORM，不决定资源是否可删除、清空或移动 |
 | `knowledge_space_service.py` | 规范化 batch 父子输入，冻结删除/`clear_space`/移动纳入范围的 flow；在每个硬删除 commit、`clear_space` 子资源删除 commit 或 move metadata commit 后立即 best-effort 分片派发 | 不等待回收完成，不从 session 推导资源权限，不为完整 `delete_space` 建立入口，不建设 outbox |
 | `worker/knowledge/knowledge_chat_history_retention.py` | 短延时消费 flow chunk、调用 retention service、重试与记录终态 | 不重新扫描已删除子树，不回滚资源操作 |
-| `worker/__init__.py` | 显式导入 `rehome_knowledge_chat_sessions` 完成 Celery task 注册；任务名保持在 `bisheng.worker.knowledge.*` 命名空间并由既有 router 投递到 `knowledge_celery` | 不为 F068 新增独立 worker、queue 或 broker 发布配置 |
+| `worker/__init__.py` | 显式导入 `rehome_knowledge_chat_sessions` 完成 Celery task 注册；任务名保持在 `bisheng.worker.knowledge.*` 命名空间并由既有 router 投递到 `knowledge_celery` | 不为 F071 新增独立 worker、queue 或 broker 发布配置 |
 | `knowledge_space_chat_service.py` | 列表/打开/继续问答使用 effective entry；消息使用原 flow | 不把 `entry_flow_id` 返回客户端，不动态跟随移回资源 |
 | `chat_session/domain/chat.py` | 使用已验证 session 的真实 flow_id 读取消息 | 不全局放宽 session.flow_id 与 message.flow_id 一致性校验 |
 | `migrate_f068_knowledge_chat_entries.py` | dry-run、校验、仅恢复失联存量、终态对账 | 不恢复消息内容，不访问外部存储或权限引擎 |
@@ -408,6 +408,6 @@ uv run python scripts/migrate_f068_knowledge_chat_entries.py --apply --expected-
 | 2026-09-15 | 按评审改为 `MessageSession.entry_flow_id` nullable 覆盖字段；取消新表与新会话双写，明确 update_time 是元数据时间、知识空间列表按 create_time | 用户确认单字段方案更符合当前需求复杂度 |
 | 2026-09-18 | 改为资源操作成功后按精确 flow 分片投递定向延时回收；新增 Repository 而非扩展 DAO；取消同步门禁、同事务、分布式锁、创建复查和全量巡检 | 用户确认接受低频并发窗口与异步收敛，要求减小对原业务流程的改动 |
 | 2026-09-18 | 在线回收降级为 best-effort；明确删除按每个 hard-delete commit、移动按 metadata commit 后触发；batch 先规范化父子输入；跨空间移动暂不覆盖直接 move rows 外的版本 sibling | 用户确认维持现状一致性级别并接受残余失联风险 |
-| 2026-09-18 | 沿用全局 Celery 发布策略；补充 `worker/__init__.py` 显式注册和 `knowledge_celery` 路由约束；F068 派发不重排各删除路径既有清理顺序 | 用户确认不单独强化发布校验，并采纳任务注册与顺序描述修订 |
+| 2026-09-18 | 沿用全局 Celery 发布策略；补充 `worker/__init__.py` 显式注册和 `knowledge_celery` 路由约束；F071 派发不重排各删除路径既有清理顺序 | 用户确认不单独强化发布校验，并采纳任务注册与顺序描述修订 |
 | 2026-09-18 | 将保留空间本身的 `clear_space` 纳入在线回收，完整 `delete_space` 仍排除；明确迁移可恢复集合、非阻断 deleted-space 分类及稳定 manifest/checkpoint 合同 | 用户采纳设计复审意见 |
 | 2026-09-18 | 接受完整删除空间后保留旧 session，以及此前排队任务写入失效 entry 的现状；以空间存在性/权限阻断访问，不扩大 `delete_space` 清理链路 | 用户确认该残留状态无需治理 |

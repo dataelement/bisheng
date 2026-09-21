@@ -1,4 +1,4 @@
-"""F068: an uploaded HTML must not pull arbitrary server files into the knowledge base.
+"""F072: an uploaded HTML must not pull arbitrary server files into the knowledge base.
 
 ``HTML2MarkdownConverter`` resolves ``<img src>`` against the HTML's own
 directory as a ``file://`` base, so ``file:///etc/passwd`` and a relative

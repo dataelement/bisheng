@@ -13,7 +13,7 @@ class KnowledgeChatSessionRehomeResult:
 
 
 class KnowledgeChatSessionRepository(ABC):
-    """Persistence contract for F068 knowledge-space session entry semantics."""
+    """Persistence contract for F071 knowledge-space session entry semantics."""
 
     @abstractmethod
     async def list_by_effective_entry(

@@ -1,8 +1,8 @@
-# Tasks: F068 知识空间问答与目录解耦、历史对话按空间保留
+# Tasks: F071 知识空间问答与目录解耦、历史对话按空间保留
 
 **关联规格**: [spec.md](./spec.md)
 **设计入口**: [design.md](./design.md)
-**版本**: v3.0.0-beta1 / F068
+**版本**: v3.0.0-beta1 / F071
 
 ---
 
@@ -20,7 +20,7 @@
 ## 开发模式
 
 - 后端按 Test-First 实施：先用 schema、Repository、Service、Worker、资源触发和迁移脚本测试锁定行为，再提交对应实现。
-- 会话入口真相只落在 `message_session.entry_flow_id`；`flow_id`、消息和引用保持原内容链。F068 数据库逻辑只进入新增 `KnowledgeChatSessionRepository`，不得为此扩展 legacy `MessageSessionDao`。
+- 会话入口真相只落在 `message_session.entry_flow_id`；`flow_id`、消息和引用保持原内容链。F071 数据库逻辑只进入新增 `KnowledgeChatSessionRepository`，不得为此扩展 legacy `MessageSessionDao`。
 - 在线回收采用资源提交后的 best-effort 定向 Celery 任务：默认 `countdown=5`、每批最多 500 个 flow、`acks_late`、有界重试；不增加 outbox、分布式锁、创建后复查或全量巡检。
 - 删除、`clear_space` 与跨空间移动共享同一套 flow 冻结和派发合同；完整删除知识空间不新派发、不清理旧会话或入口元数据。
 - 存量恢复由独立 DB-only 脚本完成，Alembic 只做 DDL；脚本默认 dry-run，apply 必须带输入摘要，并支持 checkpoint 分批提交。
@@ -38,7 +38,7 @@
   **文件**: `src/backend/test/knowledge/test_knowledge_chat_entry_schema.py`
   **逻辑**: 先固定 `MessageSession.entry_flow_id` 为 nullable `VARCHAR(255)`、索引名为
   `idx_message_session_entry_flow_id`；验证既有 `flow_id/create_time/update_time` 定义不变，且
-  `MessageSessionDao` 不新增 F068 查询或批量回收入口。对新增 Alembic revision 做 upgrade/downgrade
+  `MessageSessionDao` 不新增 F071 查询或批量回收入口。对新增 Alembic revision 做 upgrade/downgrade
   结构检查，保证 revision 只含列与索引 DDL、可幂等处理模型先建列场景，且迁移图仍为单 head。
   **覆盖 AC**: AC-11, AC-24
   **验证**: `cd src/backend && uv run pytest test/knowledge/test_knowledge_chat_entry_schema.py test/database/test_alembic_single_head.py`
@@ -170,7 +170,7 @@
 
 ### Wave 4：存量恢复脚本
 
-- [x] **T011**: F068 存量迁移脚本测试
+- [x] **T011**: F071 存量迁移脚本测试
   **文件**: `src/backend/test/knowledge/test_migrate_f068_knowledge_chat_entries.py`
   **逻辑**: fixture 覆盖原生 root、资源仍在原空间、missing、moved、deleted space、软删会话、空消息会话、
   已有 entry、非知识空间 flow、未知 grammar 与跨 tenant 事实冲突。验证 manifest 覆盖指定 tenant 的全部
@@ -200,7 +200,7 @@
 
 - [ ] **T013**: Repository/Service/Worker 集成与双数据库验证
   **文件**: `src/backend/test/knowledge/test_knowledge_chat_history_retention_integration.py`,
-  `features/v3.0.0-beta1/068-knowledge-space-chat-history-retention/verification.md`
+  `features/v3.0.0-beta1/071-knowledge-space-chat-history-retention/verification.md`
   **逻辑**: 在可用 MySQL 与 DM8 环境执行 migration、effective-entry 查询和 set-based UPDATE；记录 OR 查询
   执行计划，只有双方言证明确有必要时才按 design §3 决策 2 改为 `UNION ALL` 或补复合索引。贯通
   delete/batch/clear/cross-space move → worker → root list/history/continue，核对只改 session entry，原 flow、
@@ -210,9 +210,9 @@
   **验证**: `cd src/backend && uv run pytest test/knowledge/test_knowledge_chat_history_retention_integration.py`
   **依赖**: T006, T010, T012
 
-- [ ] **T014**: F068 E2E 与前端零改动合同验证
-  **文件**: `features/v3.0.0-beta1/068-knowledge-space-chat-history-retention/e2e-checklist.md`
-  **逻辑**: 执行 `/e2e-test features/v3.0.0-beta1/068-knowledge-space-chat-history-retention`。用两个用户覆盖
+- [ ] **T014**: F071 E2E 与前端零改动合同验证
+  **文件**: `features/v3.0.0-beta1/071-knowledge-space-chat-history-retention/e2e-checklist.md`
+  **逻辑**: 执行 `/e2e-test features/v3.0.0-beta1/071-knowledge-space-chat-history-retention`。用两个用户覆盖
   folder/file 会话的单删、父子批删、`clear_space`、跨空间 move、同空间 move、改名、任务重复、移出再移回；
   等任务完成后从源空间 root 查看/打开/切换/继续/改名/删除，确认检索为源空间全量、目标空间和其他用户
   不可见。验证任务完成前短暂不可见可接受、完整删除空间不可访问、页面与直接 API 一致；确认
@@ -221,8 +221,8 @@
   **依赖**: T013
 
 - [ ] **T015**: 全量质量门禁、迁移演练与交付复核
-  **文件**: 本 Feature 全部改动、`features/v3.0.0-beta1/068-knowledge-space-chat-history-retention/verification.md`
-  **逻辑**: 运行 F068 聚焦测试、knowledge/chat_session 相关回归、ruff、架构守卫与 Alembic single-head；在
+  **文件**: 本 Feature 全部改动、`features/v3.0.0-beta1/071-knowledge-space-chat-history-retention/verification.md`
+  **逻辑**: 运行 F071 聚焦测试、knowledge/chat_session 相关回归、ruff、架构守卫与 Alembic single-head；在
   脱敏快照先 dry-run，核对 DB identity、分类、`unparseable=0`、`cross_tenant_conflict=0` 和 SHA，再以
   expected SHA 演练 apply、checkpoint 续跑、终态对账和第二次零更新。复核 Celery 注册/路由、默认延时、
   retry、日志脱敏与非知识空间回归；把 MySQL/DM8、API/E2E、未执行项和环境限制写入 verification，最后执行

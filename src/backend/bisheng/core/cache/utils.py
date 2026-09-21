@@ -30,7 +30,7 @@ CACHE: dict[str, Any] = {}
 
 CACHE_DIR = user_cache_dir("bisheng", "bisheng")
 
-# F068: a bare local path is only honoured inside the directories this process
+# F072: a bare local path is only honoured inside the directories this process
 # writes downloads to. ``file_download`` / ``async_file_download`` are reachable
 # from user-controlled strings (finetune preset files, chat attachments), so
 # "the file exists" alone turned them into an arbitrary-file read.

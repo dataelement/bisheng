@@ -1,4 +1,4 @@
-# Design: NVDB 漏洞修复（F068）
+# Design: NVDB 漏洞修复（F072）
 
 **关联规格**: [spec.md](./spec.md)
 **版本**: v3.0.0-beta2

@@ -388,7 +388,7 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(async
     assert {a[1] for a in cleared_tags} == {"100", "101"}
     assert {fid for fid, _ in dispatched} == {100, 101}
     assert all(src == 1 for _, src in dispatched)
-    # F068 intentionally freezes only direct move rows. Version-chain sibling
+    # F071 intentionally freezes only direct move rows. Version-chain sibling
     # 101 moves with the document but is outside the online session flow set.
     svc._dispatch_knowledge_chat_rehome.assert_called_once_with(
         source_space_id=1,

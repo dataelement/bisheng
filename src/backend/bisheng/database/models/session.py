@@ -28,7 +28,7 @@ class MessageSessionBase(SQLModelSerializable):
         sa_column=Column(
             String(255),
             nullable=True,
-            comment="F068 knowledge-space visible entry override; null uses flow_id",
+            comment="F071 knowledge-space visible entry override; null uses flow_id",
         ),
     )
     flow_type: int = Field(description="App type. Skills, assistants, workflows")

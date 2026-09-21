@@ -614,7 +614,7 @@ class LoginUser(BaseModel):
 
         Mirrors the gate on the build page: the "new app" entry is hidden for
         everyone else, and the create endpoints must refuse them too rather
-        than trust the UI (NVDB F068 — hidden button, open API).
+        than trust the UI (NVDB F072 — hidden button, open API).
         """
         login_user = await cls.get_login_user(auth_jwt)
         if login_user.is_admin():

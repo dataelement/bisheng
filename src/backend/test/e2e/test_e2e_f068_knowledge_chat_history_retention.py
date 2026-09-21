@@ -1,4 +1,4 @@
-"""E2E coverage for F068 knowledge-chat history retention.
+"""E2E coverage for F071 knowledge-chat history retention.
 
 Prerequisites:
 - API and knowledge Celery worker run the current branch.
@@ -39,7 +39,7 @@ async def _cleanup_spaces(client: httpx.AsyncClient, token: str) -> None:
 async def _create_space(client: httpx.AsyncClient, token: str, suffix: str) -> dict:
     response = await client.post(
         f"{API_BASE}/knowledge/space",
-        json={"name": f"{PREFIX}{suffix}", "description": "F068 E2E"},
+        json={"name": f"{PREFIX}{suffix}", "description": "F071 E2E"},
         headers=auth_headers(token),
     )
     return assert_resp_200(response)

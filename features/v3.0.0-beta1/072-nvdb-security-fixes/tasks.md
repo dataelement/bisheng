@@ -1,4 +1,4 @@
-# Tasks: NVDB 漏洞修复（F068）
+# Tasks: NVDB 漏洞修复（F072）
 
 **关联规格**: [spec.md](./spec.md) · [design.md](./design.md)
 **版本**: v3.0.0-beta2
@@ -46,7 +46,7 @@
 
 - [x] **T006**: 五组单测（见 design §6）+ 修正 `test/tenant/test_tenant_auth.py` 合跑时的密钥来源
 - [x] **T007**: `docker/bisheng/config/config.yaml` 注释示例、`docs/architecture/08-deployment.md` 配置说明与升级 checklist
-- [x] **T008**: `release-contract.md` 登记 F068（表 1 无新增领域对象、INV-36、表 3、变更历史）
+- [x] **T008**: `release-contract.md` 登记 F072（表 1 无新增领域对象、INV-36、表 3、变更历史）
 
 ### Wave 3 — 验证与发版
 

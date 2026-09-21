@@ -1,4 +1,4 @@
-# E2E 验证清单：F068 知识空间历史对话按空间保留
+# E2E 验证清单：F071 知识空间历史对话按空间保留
 
 **状态**：待在已升级的专用测试租户执行
 **前置环境**：API、`knowledge_celery` worker、MySQL/DM8、Redis、Milvus、ES、MinIO、OpenFGA 均运行当前分支；已执行 `alembic upgrade head`
@@ -12,7 +12,7 @@
 ```bash
 cd src/backend
 export E2E_API_BASE=http://localhost:7860/api/v1
-export E2E_F068_TOKEN=<dedicated-test-tenant-jwt>
+export E2E_F071_TOKEN=<dedicated-test-tenant-jwt>
 .venv/bin/pytest test/e2e/test_e2e_f068_knowledge_chat_history_retention.py -v
 ```
 

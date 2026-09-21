@@ -609,7 +609,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 reason=reason,
             )
         except Exception:
-            # F068 recovery is best-effort and never changes the committed resource result.
+            # F071 recovery is best-effort and never changes the committed resource result.
             logger.exception(
                 "knowledge_chat_entry.task_failed stage=prepare source_space={} reason={} resources={}",
                 source_space_id,
