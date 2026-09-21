@@ -62,6 +62,7 @@ export function SeatSessions({ seat, onClose }: SeatSessionsProps) {
                         {seat.display_name || seat.username || seat.user_id}
                     </DialogTitle>
                 </DialogHeader>
+                <p className="text-sm text-muted-foreground">{t('dsh.sessionsHelp')}</p>
                 {!data ? (
                     <p role="status">
                         {t(error ? 'dsh.unavailable' : 'dsh.loading')}
@@ -76,7 +77,7 @@ export function SeatSessions({ seat, onClose }: SeatSessionsProps) {
                                         'clientVersion',
                                         'state',
                                         'lastSeen',
-                                        'expires',
+                                        'sessionExpires',
                                     ].map((key) => (
                                         <TableHead key={key}>
                                             {t(`dsh.${key}`)}
@@ -93,7 +94,9 @@ export function SeatSessions({ seat, onClose }: SeatSessionsProps) {
                                         <TableCell>
                                             {session.client_version || '—'}
                                         </TableCell>
-                                        <TableCell>{session.state}</TableCell>
+                                        <TableCell>{t(`dsh.sessionState.${session.state.toUpperCase()}`, {
+                                            defaultValue: t('dsh.sessionState.UNKNOWN'),
+                                        })}</TableCell>
                                         <TableCell>
                                             {dshTime(session.last_seen_at)}
                                         </TableCell>

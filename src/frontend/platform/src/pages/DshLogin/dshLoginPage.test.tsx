@@ -32,6 +32,7 @@ beforeEach(() => {
     vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
     vi.mocked(request.get).mockResolvedValue({ department_name: null })
     assign.mockClear()
+    vi.mocked(authorizeDsh).mockReset()
     identity.user = null
     const values = new Map<string, string>()
     vi.stubGlobal('localStorage', {
@@ -124,25 +125,29 @@ describe('desktop authorization completion', () => {
         })
     }
 
-    it('returns home silently ten seconds after authorization succeeds', async () => {
+    it('keeps the result and manual fallback available until the ticket expires', async () => {
         await authorize(true)
-        expect(
-            screen.getByRole('button', { name: english.dsh.returnHome }),
-        ).toBeInTheDocument()
-        expect(screen.getByText(english.dsh.ticketHelp)).toBeInTheDocument()
-
-        act(() => vi.advanceTimersByTime(9_999))
+        expect(screen.getByRole('heading', { name: english.dsh.authorizationComplete })).toBeInTheDocument()
+        expect(screen.getByText(english.dsh.returnHelp).closest('details')).not.toHaveAttribute('open')
+        act(() => vi.advanceTimersByTime(10_000))
         expect(assign).not.toHaveBeenCalled()
-        act(() => vi.advanceTimersByTime(1))
-        expect(assign).toHaveBeenCalledWith('/')
+        fireEvent.click(screen.getByText(english.dsh.returnHelp))
+        expect(screen.getByRole('button', { name: english.dsh.copyTicket })).toBeVisible()
+        act(() => vi.advanceTimersByTime(50_000))
+        expect(screen.queryByLabelText(english.dsh.ticket)).toBeNull()
+        expect(screen.getByRole('button', { name: english.dsh.openDesktop })).toBeEnabled()
+        expect(screen.getByText(english.dsh.auth_expired)).toBeInTheDocument()
     })
 
-    it('lets the user return home immediately', async () => {
+    it('opens the configured Desktop protocol with only the platform address', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop-dev://login' })
         await authorize()
-        fireEvent.click(
-            screen.getByRole('button', { name: english.dsh.returnHome }),
-        )
-        expect(assign).toHaveBeenCalledWith('/')
+        fireEvent.click(screen.getByRole('button', { name: english.dsh.openDesktop }))
+        const target = new URL(assign.mock.calls[0][0])
+        expect(target.protocol).toBe('dsh-desktop-dev:')
+        expect([...target.searchParams.entries()]).toEqual([['server', origin]])
+        expect(authorizeDsh).toHaveBeenCalledTimes(1)
+        expect(screen.getByTitle(english.dsh.callback)).toHaveAttribute('src', expect.stringContaining('auth_id=fixture'))
     })
 
     it('stays on the result page when authorization is denied', async () => {
@@ -170,7 +175,7 @@ describe('desktop authorization completion', () => {
         act(() => vi.advanceTimersByTime(10_000))
         expect(assign).not.toHaveBeenCalled()
         expect(
-            screen.queryByRole('button', { name: english.dsh.returnHome }),
+            screen.queryByRole('button', { name: english.dsh.openDesktop }),
         ).toBeNull()
     })
 })
@@ -196,6 +201,7 @@ describe('desktop copy actions', () => {
         })
         render(<DshLogin />)
         fireEvent.click(await screen.findByRole('button', { name: english.dsh.authorize }))
+        fireEvent.click(await screen.findByText(english.dsh.returnHelp))
         return screen.findByRole('button', { name: english.dsh.copyTicket })
     }
 

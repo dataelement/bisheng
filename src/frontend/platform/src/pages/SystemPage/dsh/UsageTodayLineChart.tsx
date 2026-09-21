@@ -32,7 +32,7 @@ export function UsageTodayLineChart({
     const formatValue = (value: number) =>
         metric === 'tokens'
             ? `${formatUsageTokens(value, i18n.language).compact} Token`
-            : t('dsh.heatmapMessageValue', { count: value })
+            : t('dsh.heatmapMessageValue', { value })
     return (
         <div className="h-56 w-full" data-usage-line-chart={metric}>
             <ResponsiveContainer width="100%" height="100%">
@@ -97,7 +97,7 @@ export function UsageTodayLineChart({
                             color: 'hsl(var(--foreground))',
                             fontSize: 12,
                         }}
-                        formatter={(value) => [formatValue(Number(value)), '']}
+                        formatter={(value) => [formatValue(Number(value)), t(metric === 'tokens' ? 'dsh.tokenUsage' : 'dsh.messageCount')]}
                         labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
                         itemStyle={{ color: 'hsl(var(--foreground))' }}
                     />

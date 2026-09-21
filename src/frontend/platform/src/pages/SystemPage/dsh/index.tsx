@@ -232,7 +232,7 @@ function LicensePanel({
                         })}
                     </p>
                     <p className="text-muted-foreground">
-                        {t('dsh.expires')}: {dshTime(license.expires_at)}
+                        {t('dsh.licenseExpires')}: {dshTime(license.expires_at)}
                     </p>
                     {license.license_id && (
                         <p className="text-muted-foreground">
@@ -240,7 +240,7 @@ function LicensePanel({
                         </p>
                     )}
                     <p className="text-muted-foreground">
-                        {t('dsh.asOf')}: {dshTime(license.as_of)}
+                        {t('dsh.licenseUpdated')}: {dshTime(license.as_of)}
                     </p>
                 </div>
             )}

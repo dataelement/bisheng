@@ -59,21 +59,21 @@ export function SettingsPanel({ settings, canEdit }: SettingsPanelProps) {
                 : <p>{t('dsh.settingsAdminOnly')}</p>}
         </div>
         <p className="text-sm text-muted-foreground">{t('dsh.businessSwitchHelp')}</p>
-        <div className="grid gap-3 md:grid-cols-2">
-            <label className="min-w-0 space-y-1">
+        <label className="block max-w-2xl space-y-1">
+            <span>{t('dsh.downloadAddress')}</span>
+            <Input value={download} disabled={!canEdit || saving}
+                onChange={(event) => { dirty.current = true; setDownload(event.target.value); setStatus(null) }} />
+            <p className="text-sm text-muted-foreground">{t('dsh.downloadAddressHelp')}</p>
+        </label>
+        <details className="max-w-2xl space-y-3 rounded-lg border p-3">
+            <summary className="cursor-pointer text-sm font-medium">{t('dsh.advancedSettings')}</summary>
+            <label className="block space-y-1">
                 <span>{t('dsh.launchAddress')}</span>
                 <Input value={launch} disabled={!canEdit || saving}
                     onChange={(event) => { dirty.current = true; setLaunch(event.target.value); setStatus(null) }} />
                 <p className="text-sm text-muted-foreground">{t('dsh.launchAddressHelp')}</p>
             </label>
-            <label className="min-w-0 space-y-1">
-                <span>{t('dsh.downloadAddress')}</span>
-                <Input value={download} disabled={!canEdit || saving}
-                    onChange={(event) => { dirty.current = true; setDownload(event.target.value); setStatus(null) }} />
-                <p className="text-sm text-muted-foreground">{t('dsh.downloadAddressHelp')}</p>
-            </label>
-        </div>
+        </details>
         {status && <p role={status === 'error' ? 'alert' : 'status'}>{t(status === 'saved' ? 'dsh.settingsSaved' : 'dsh.settingsSaveFailed')}</p>}
-        <p className="text-sm text-muted-foreground">{t('dsh.licenseDeploymentOnly')}</p>
     </section>
 }

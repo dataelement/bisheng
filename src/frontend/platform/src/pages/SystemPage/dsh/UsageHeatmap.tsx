@@ -65,7 +65,7 @@ export function UsageHeatmap({ summary, metric = 'tokens' }: UsageHeatmapProps) 
     }
     return (
         <>
-            <div ref={scrollRef} className="w-full overflow-x-auto py-1" data-heatmap-layout={layout.mode}>
+            <div ref={scrollRef} className="w-full overflow-x-auto px-2 py-2" data-heatmap-layout={layout.mode}>
                 <div
                     className="grid w-max gap-y-2"
                     style={{
@@ -109,7 +109,7 @@ export function UsageHeatmap({ summary, metric = 'tokens' }: UsageHeatmapProps) 
                             style={{ gridRow: 2, gridColumn: 1, gridTemplateRows: gridRows, gap: USAGE_TILE_GAP }}
                         >
                             {layout.rowLabels.map(({ label, row }) => (
-                                <span key={`${row}-${label}`} className="whitespace-nowrap" style={{ gridRow: row + 1 }}>
+                                <span key={`${row}-${label}`} className="flex items-center whitespace-nowrap tabular-nums" style={{ gridRow: row + 1 }}>
                                     {label}
                                 </span>
                             ))}

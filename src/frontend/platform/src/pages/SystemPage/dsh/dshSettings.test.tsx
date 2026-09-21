@@ -60,6 +60,7 @@ describe('DSH deployment and business settings', () => {
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit />)
         fireEvent.click(screen.getByRole('switch'))
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.downloadAddress/ }), { target: { value: 'http://downloads.test/dsh' } })
+        fireEvent.click(screen.getByText('dsh.advancedSettings'))
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.launchAddress/ }), { target: { value: 'dsh-desktop-test://login' } })
         fireEvent.click(screen.getByText('dsh.saveSettings'))
         await screen.findByText('dsh.settingsSaved')

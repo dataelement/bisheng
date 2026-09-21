@@ -19,7 +19,7 @@
   "validating": "校验中",
   "failed": "校验失败",
   "resume": "继续校验",
-  "uploadHint": "请选择一个完整离线 ZIP 包，最大 256 MiB。校验通过后即可安装；新版本会替换当前版本，已删除的插件可以重新导入。",
+  "uploadHint": "请选择最大 256 MiB 的完整离线 ZIP 包。校验通过后员工即可安装。首次导入的版本会成为当前版本，请核对版本号后导入。",
   "cancel": "取消",
   "invalidFile": "请选择 256 MiB 以内的 ZIP 发布包",
   "validationFailed": "插件包校验失败",
@@ -32,5 +32,9 @@
   "forbidden": "需要租户管理员权限",
   "delete": "删除",
   "deleteConfirm": "删除 {{name}}？删除后员工将无法新安装或更新，已安装的插件可继续使用。需要时可以重新导入。",
-  "deleted": "插件已删除"
+  "deleted": "插件已删除",
+  "bundleGuide": "获取插件包与更新规则",
+  "bundleSource": "请向插件开发者或企业管理员获取 DSH 企业插件离线发布包。",
+  "bundleFormat": "发布包应包含 manifest.json、对应操作系统的插件与完整依赖，以及文件 SHA-256 校验清单。",
+  "bundleIdentity": "同一企业内按 manifest.json 的 plugin.name 识别插件，按 version 区分版本；同一版本的包内容须保持一致。"
 }

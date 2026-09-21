@@ -31,7 +31,7 @@ export default function DshPage() {
                 onValueChange={(value) => navigate(`/dsh?tab=${value}`)}
                 className="flex min-h-0 w-full flex-1 flex-col"
             >
-                {config?.management_enabled && (
+                {config?.management_enabled && sections.length > 1 && (
                     <div
                         className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 pr-6"
                         data-dsh-header

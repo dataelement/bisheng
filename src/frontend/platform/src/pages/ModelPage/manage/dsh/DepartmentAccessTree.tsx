@@ -69,8 +69,14 @@ function MemberRows({
                             disabled={saving || Boolean(entry?.operationId)}
                             onChange={(limit) => users.change(saved, { limit })}
                         />
-                        <span className="tabular-nums">{formatWanQuota(item.monthly_token_limit)}</span>
+                        <div>
+                            <span className="tabular-nums">{formatWanQuota(item.monthly_token_limit)}</span>
+                            {item.sources.some((source) => source.winning) && <p className="mt-1 text-xs text-muted-foreground">
+                                {t('dsh.quotaSource', { name: item.sources.filter((source) => source.winning).map((source) => source.name).join(', ') })}
+                            </p>}
+                        </div>
                         <Badge
+                            title={status === 'PENDING_LOGIN' ? t('dsh.pendingLoginHelp') : undefined}
                             variant={status === 'AUTHORIZED' ? 'secondary' : 'outline'}
                             className={
                                 'w-fit whitespace-nowrap ' +
@@ -343,6 +349,7 @@ export function DepartmentAccessTree(props: Props) {
     return (
         <AccessMembersProvider modelId={props.modelId} refresh={props.refresh}>
             <div className="min-w-[900px] text-sm leading-5">
+                <p className="px-3 py-2 text-sm text-muted-foreground">{t('dsh.quotaInheritanceHelp')}</p>
                 <div
                     className={
                         columns +

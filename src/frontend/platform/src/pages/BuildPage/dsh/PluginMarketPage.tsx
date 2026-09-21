@@ -144,6 +144,10 @@ function TenantPluginMarket() {
                 }}>{t("resume")}</Button>}</div>)}</section>}
         <Dialog open={uploadOpen} onOpenChange={open => { if (!busy) setUploadOpen(open); }}><DialogContent><DialogHeader>
             <DialogTitle>{t("import")}</DialogTitle><DialogDescription>{t("uploadHint")}</DialogDescription></DialogHeader>
+            <details className="space-y-2 rounded-lg border p-3 text-sm">
+                <summary className="cursor-pointer font-medium">{t("bundleGuide")}</summary>
+                <p>{t("bundleSource")}</p><p>{t("bundleFormat")}</p><p>{t("bundleIdentity")}</p>
+            </details>
             <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={e => setFile(e.target.files?.[0] || null)} />
             {file && <p>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>}
             {progress !== null && <p role="status">{progress < 100 ? `${progress}%` : t("validating")}</p>}
