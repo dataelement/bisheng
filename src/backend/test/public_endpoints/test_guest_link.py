@@ -274,3 +274,105 @@ async def test_patch_keeps_existing_admin_operator(operator_lookups) -> None:
         GuestLinkPatchRequest(enabled=True, user_id=7),
     )
     assert operator_lookups.saved[0].user_id == 7
+
+
+async def test_two_apps_write_distinct_config_rows(monkeypatch) -> None:
+    written: dict[str, str] = {}
+
+    async def insert_or_update(key: str, value: str):
+        written[key] = value
+        return SimpleNamespace(key=key, value=value)
+
+    monkeypatch.setattr(guest_link.ConfigDao, "insert_or_update_config", insert_or_update)
+    await guest_link.save_app_guest_link(
+        "workflow",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        AppGuestLink(enabled=False),
+        updated_by=1,
+    )
+    await guest_link.save_app_guest_link(
+        "assistant",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        AppGuestLink(enabled=True, user_id=7),
+        updated_by=2,
+    )
+    workflow_key = guest_link_config_key("workflow", "a" * 32)
+    assistant_key = guest_link_config_key("assistant", "a" * 32)
+    assert workflow_key != assistant_key
+    assert '"enabled": false' in written[workflow_key]
+    assert '"user_id": 7' in written[assistant_key]
+
+
+def test_delete_app_guest_link_targets_one_row(monkeypatch) -> None:
+    deleted: list[str] = []
+    monkeypatch.setattr(guest_link.ConfigDao, "delete_by_key", lambda key: deleted.append(key))
+    guest_link.delete_app_guest_link("workflow", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    assert deleted == ["guest_link:workflow:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+
+
+def test_guest_skip_does_not_cover_knowledge_or_tools() -> None:
+    token = set_current_public_api_principal(
+        PublicApiPrincipal(
+            tenant_id=23,
+            operator_user_id=41,
+            operator_name="guest",
+            resource_type="assistant",
+            resource_id="asst-1",
+        )
+    )
+    try:
+        assert guest_policy.is_public_published_resource("asst-1", "assistant") is True
+        assert guest_policy.is_public_published_resource("asst-1", "knowledge") is False
+        assert guest_policy.is_public_published_resource("kb-1", "knowledge") is False
+        assert guest_policy.is_public_published_resource("tool-1", "tool") is False
+    finally:
+        reset_current_public_api_principal(token)
+
+
+async def test_use_check_rereads_switch_and_raises_26103(monkeypatch) -> None:
+    from bisheng.permission.application.business_authorization import check_business_action
+
+    token = set_current_public_api_principal(
+        PublicApiPrincipal(
+            tenant_id=23,
+            operator_user_id=41,
+            operator_name="guest",
+            resource_type="workflow",
+            resource_id="flow-1",
+        )
+    )
+
+    async def disabled(_resource_type, _resource_id):
+        raise PublicGuestAccessDisabledError()
+
+    monkeypatch.setattr(guest_policy, "ensure_guest_link_enabled", disabled)
+    try:
+        with pytest.raises(PublicGuestAccessDisabledError) as caught:
+            await check_business_action(
+                SimpleNamespace(),
+                resource_type="workflow",
+                resource_id="flow-1",
+                action="use",
+                actor=SimpleNamespace(super_admin=False, data_scope=None),
+            )
+        assert caught.value.code == 26103
+    finally:
+        reset_current_public_api_principal(token)
+
+
+async def test_get_reports_default_operator_not_in_tenant(operator_lookups) -> None:
+    operator_lookups.memberships.pop((41, 23), None)
+    login = SimpleNamespace(user_id=9, user_name="editor")
+    data = await guest_link.get_guest_link_settings(login, "workflow", "flow-1")
+    assert data["enabled"] is True
+    assert data["follow_system_default"] is True
+    assert data["default_operator_in_tenant"] is False
+    assert data["warnings"]["default_not_in_tenant"] is True
+    assert data["can_edit"] is True
+
+
+async def test_get_is_readable_without_share(operator_lookups) -> None:
+    operator_lookups.share = False
+    login = SimpleNamespace(user_id=9, user_name="viewer")
+    data = await guest_link.get_guest_link_settings(login, "workflow", "flow-1")
+    assert data["can_edit"] is False
