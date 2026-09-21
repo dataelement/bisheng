@@ -70,8 +70,14 @@ const dashboard = {
 
 function renderItem(
   permissionActions: string[],
-  { visible = true, privileged = false } = {},
+  { admin = false } = {},
 ) {
+  vi.mocked(getMyResourcePermissionsApi).mockResolvedValue({
+    mode: "CUSTOM",
+    actions: permissionActions,
+    sources: [],
+    roster_complete: false,
+  })
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),
@@ -85,14 +91,15 @@ function renderItem(
     <locationContext.Provider
       value={{ appConfig: { isDashboardPro: true } } as never}
     >
-      <DashboardListItem
-        dashboard={dashboard}
-        selected={false}
-        permissionActions={permissionActions}
-        visible={visible}
-        privileged={privileged}
-        {...callbacks}
-      />
+      <userContext.Provider
+        value={{ user: { user_id: 7, role: admin ? "admin" : "user" } } as never}
+      >
+        <DashboardListItem
+          dashboard={dashboard}
+          selected={false}
+          {...callbacks}
+        />
+      </userContext.Provider>
     </locationContext.Provider>,
   )
   return callbacks
@@ -133,11 +140,18 @@ describe("F048 dashboard permission UI", () => {
     })
   })
 
-  it("fails closed and never renders a dashboard it was not told is visible", () => {
-    renderItem(["edit", "delete", "manage_permission"], { visible: false })
+  it("renders a server-listed dashboard and loads its actions on demand", async () => {
+    renderItem(["edit"])
 
-    expect(screen.queryByText("Operations")).toBeNull()
-    expect(screen.queryByRole("button", { name: "dashboard.actions" })).toBeNull()
+    expect(screen.getByText("Operations")).toBeInTheDocument()
+    expect(screen.queryByText("rename")).toBeNull()
+    expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
+
+    fireEvent.mouseEnter(screen.getByText("Operations"))
+    expect(await screen.findByText("rename")).toBeInTheDocument()
+    expect(getMyResourcePermissionsApi).toHaveBeenCalledExactlyOnceWith("dashboard", "dashboard-1")
+    expect(screen.queryByText("delete")).toBeNull()
+    expect(screen.queryByText("managePermission")).toBeNull()
   })
 
   it("keeps share, default, and copy behind visibility without implying edit", () => {
@@ -156,10 +170,11 @@ describe("F048 dashboard permission UI", () => {
     expect(callbacks.onShare).toHaveBeenCalledWith("dashboard-1")
   })
 
-  it("uses distinct edit, delete, and manage_permission actions", () => {
+  it("uses distinct edit, delete, and manage_permission actions", async () => {
     renderItem(["edit", "delete", "manage_permission"])
+    fireEvent.mouseEnter(screen.getByText("Operations"))
 
-    expect(screen.getByText("rename")).toBeInTheDocument()
+    expect(await screen.findByText("rename")).toBeInTheDocument()
     expect(screen.getByText("delete")).toBeInTheDocument()
     expect(screen.getByText("managePermission")).toBeInTheDocument()
   })
@@ -200,12 +215,13 @@ describe("F048 dashboard permission UI", () => {
   it("opens every control for an admin, who holds no grants to read", () => {
     // The server waves admins through on identity alone, so their action list
     // comes back empty — reading capability off it hid the whole board.
-    renderItem([], { privileged: true })
+    renderItem([], { admin: true })
 
     expect(screen.getByText("share")).toBeInTheDocument()
     expect(screen.getByText("rename")).toBeInTheDocument()
     expect(screen.getByText("delete")).toBeInTheDocument()
     expect(screen.getByText("managePermission")).toBeInTheDocument()
+    expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
   })
 
   it("does not retain dashboard.write as an editor authorization source", () => {

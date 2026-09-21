@@ -13,7 +13,7 @@ import { getPrivateRouter } from "@/routes"
 type RouteNode = { path?: string; children?: RouteNode[] }
 
 const pathsOf = (routes: RouteNode[]): string[] =>
-  routes.flatMap((route) => [route.path, ...(route.children ? pathsOf(route.children) : [])]).filter(Boolean)
+  routes.flatMap((route) => [route.path, ...(route.children ? pathsOf(route.children) : [])]).filter((path): path is string => typeof path === "string" && path.length > 0)
 
 describe("getPrivateRouter", () => {
   it("filters the same way however many times it is called", () => {
