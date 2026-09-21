@@ -82,9 +82,9 @@ export function OperationStatus({
                         ? 'dsh.rejected'
                         : `dsh.${operation?.status || 'PROCESSING'}`,
                 )}
-                {unavailable && ` · ${t('dsh.unavailable')}`}
+                {!terminal && unavailable && ` · ${t('dsh.unavailable')}`}
             </p>
-            {paused && <p>{t('dsh.pollPaused')}</p>}
+            {!terminal && paused && <p>{t('dsh.pollPaused')}</p>}
             {!terminal && (
                 <Button
                     variant="outline"

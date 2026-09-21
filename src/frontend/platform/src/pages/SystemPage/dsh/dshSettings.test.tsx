@@ -23,6 +23,27 @@ beforeEach(() => {
 })
 
 describe('DSH deployment and business settings', () => {
+    it.each(['builtin', 'signed', undefined] as const)('renders the Gateway license source %s without changing management controls', async (source) => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        vi.mocked(getDshLicense).mockResolvedValue({ status: 'active', source, signed_license_status: source === 'builtin' ? 'not_granted' : 'active', seat_limit: 10, assigned: 1, available: 9, as_of: '2026-09-21T00:00:00Z', expires_at: null, license_id: source === 'builtin' ? 'builtin-dsh-10' : 'license-1' })
+        render(<DshManagement />)
+        const expectedStatus = source === 'builtin' ? 'dsh.licenseStatus.free' : 'dsh.licenseStatus.active'
+        expect(await screen.findByText(expectedStatus)).toBeInTheDocument()
+        expect(screen.getByText('seat-content')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: 'dsh.commercialLicense' })).toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.getCommercialLicense' }))
+        expect(screen.getByRole('dialog')).toHaveTextContent(expectedStatus)
+        expect(screen.getByRole('dialog')).toHaveTextContent('10')
+    })
+
+    it('keeps license request failures unavailable instead of showing a free edition', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        vi.mocked(getDshLicense).mockRejectedValue(new Error('Unavailable'))
+        render(<DshManagement />)
+        expect(await screen.findByRole('alert')).toHaveTextContent('dsh.unavailable')
+        expect(screen.queryByText('dsh.licenseStatus.free')).toBeNull()
+    })
+
     it('renders the license section without a repeated content title', async () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
         vi.mocked(getDshLicense).mockResolvedValue({ status: 'active', seat_limit: 10, assigned: 1, available: 9, as_of: '2026-09-15T00:00:00Z', expires_at: null, license_id: 'license-1' })

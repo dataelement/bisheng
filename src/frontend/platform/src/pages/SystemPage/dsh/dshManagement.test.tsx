@@ -33,6 +33,41 @@ beforeEach(() => {
     vi.useRealTimers()
 })
 describe('DSH admin uncertainty and audit', () => {
+    it.each(['SUCCEEDED', 'FAILED', 'rejected'] as const)(
+        'removes stale polling warnings when the parent supplies %s',
+        async (status) => {
+            vi.useFakeTimers()
+            vi.mocked(getDshOperation).mockRejectedValue(new Error('Unavailable'))
+            const reference = { ...ref, retry: vi.fn() }
+            const onUpdate = vi.fn()
+            const { rerender, unmount } = render(
+                <OperationStatus reference={reference} operation={operation} onUpdate={onUpdate} />,
+            )
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(250000)
+            })
+            expect(screen.getByRole('status').textContent).toContain('dsh.unavailable')
+            expect(screen.getByText('dsh.pollPaused')).toBeTruthy()
+            expect(screen.getByRole('button', { name: 'dsh.retrySame' })).toBeTruthy()
+            rerender(
+                <OperationStatus
+                    reference={{ ...reference, rejected: status === 'rejected' }}
+                    operation={status === 'rejected' ? operation : { ...operation, status }}
+                    onUpdate={onUpdate}
+                />,
+            )
+            expect(screen.getByRole('status').textContent).toBe(`dsh.${status}`)
+            expect(screen.queryByText('dsh.pollPaused')).toBeNull()
+            expect(screen.queryByRole('button', { name: 'dsh.retrySame' })).toBeNull()
+            expect(screen.queryByRole('button', { name: 'dsh.checkOperation' })).toBeNull()
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(10000)
+            })
+            expect(getDshOperation).toHaveBeenCalledTimes(30)
+            unmount()
+            vi.useRealTimers()
+        },
+    )
     it('renders processing audit without success and aborts polling on exit', async () => {
         vi.mocked(getDshOperation).mockResolvedValue(operation)
         const onUpdate = vi.fn()

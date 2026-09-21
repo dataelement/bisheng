@@ -83,6 +83,47 @@ async def test_gateway_failure_is_unavailable_not_zero(operation_scope):  # noqa
         await service.license(90)
 
 
+@pytest.mark.parametrize(
+    "source,signed_status,seat_limit",
+    [
+        ("builtin", "not_granted", 10),
+        ("builtin", "license_expired", 10),
+        ("builtin", "license_invalid", 10),
+        ("signed", "active", 50),
+        (None, None, 10),
+    ],
+)
+async def test_license_preserves_gateway_entitlement_source(source, signed_status, seat_limit):
+    snapshot = {
+        "status": "active",
+        "seat_limit": seat_limit,
+        "assigned": 3,
+        "available": seat_limit - 3,
+        "as_of": "2026-09-21T00:00:00Z",
+        "license_id": "builtin-dsh-10" if source == "builtin" else "commercial-license",
+        "expires_at": None if source == "builtin" else "2027-09-21T00:00:00Z",
+    }
+    if source is not None:
+        snapshot.update(source=source, signed_license_status=signed_status)
+    service, _, _ = build(None, SimpleNamespace(request=AsyncMock(return_value=snapshot)))
+    result = await service.license(90)
+    assert result["source"] == source
+    assert result["signed_license_status"] == signed_status
+    assert result["status"] == "active"
+    assert result["seat_limit"] == result["limit"] == seat_limit
+    assert result["assigned"] == result["used"] == 3
+    assert result["available"] == seat_limit - 3
+    assert result["valid_until"] == snapshot["expires_at"]
+
+
+async def test_malformed_license_is_not_replaced_by_free_entitlement():
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    service, _, _ = build(None, SimpleNamespace(request=AsyncMock(return_value={"source": "builtin"})))
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await service.license(90)
+
+
 async def test_subject_policy_management_stays_in_authorized_tenant(operation_scope):  # noqa: F811
     gateway = SimpleNamespace(
         request=AsyncMock(

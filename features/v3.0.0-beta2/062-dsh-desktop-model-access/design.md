@@ -9,6 +9,14 @@
 **状态**：用户已确认官方链路边界、单 Nginx 入口、接口冻结规则与逐模型修订；当前客户端契约为 `0.5.0`（本次解绑不升版）；逐模型额度、取消未知用量冻结及部门同步/筛选修订已实现；完整发布验收仍独立保留
 **最后更新**：2026-09-11
 
+### 2026-09-21：免费席位与管理接口对齐
+
+本修订覆盖下文“免费席位也必须由签名授权提供”的旧约定。Gateway 内置免费 10 席；商业 License 用于提高席位上限，未配置、无效或过期时的实际授权以 Gateway 有效快照为准，BiSheng 不自行推算或补发席位。
+
+`GET /api/v1/dsh/admin/license` 接收并透传 Gateway 的 `source`（`builtin` / `signed`）与 `signed_license_status`（`active` / `not_granted` / `license_invalid` / `license_expired`）。`status` 仍表示当前有效能力状态；免费基线正常时为 `active`，`seat_limit=10`，`expires_at=null`。`signed_license_status` 单独描述商业签名授权，不覆盖当前有效状态。缺少新增字段的旧响应保留原展示，字段返回 `null`；不得根据席位数为 10 推断免费版。
+
+管理页及商业授权申请弹窗在 `status=active` 且 `source=builtin` 时，原状态标签显示“免费版”；商业授权与其他状态保留原展示。页面结构、按钮、席位操作不变。Gateway 不可达或响应无效时继续报不可用，不得伪造免费 10 席。此次变更不影响桌面客户端登录、令牌或模型调用契约。
+
 ## 1. 目标与非目标
 
 DSH Desktop 完成 BiSheng 用户登录后，用平台已配置的模型驱动客户端 Agent。Gateway 项目中的闭源 DSH 模块管理 License、固定席位和 DSH 会话；BiSheng 提供模型调用、治理和统一管理界面。

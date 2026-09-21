@@ -2293,6 +2293,7 @@
     "applicationInfoCopied": "Application details copied",
     "close": "Close",
     "licenseStatus": {
+      "free": "Free edition",
       "active": "Licensed",
       "expired": "Expired",
       "invalid": "Invalid",

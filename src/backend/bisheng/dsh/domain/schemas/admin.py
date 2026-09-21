@@ -50,6 +50,8 @@ class SessionItem(DshContract):
 
 class LicenseSnapshot(DshContract):
     status: Literal["active", "license_invalid", "license_expired", "dsh_disabled"]
+    source: Literal["builtin", "signed"] | None = None
+    signed_license_status: Literal["active", "not_granted", "license_invalid", "license_expired"] | None = None
     seat_limit: NonnegativeInt
     assigned: NonnegativeInt
     available: NonnegativeInt

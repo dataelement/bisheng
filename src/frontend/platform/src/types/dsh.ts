@@ -47,6 +47,8 @@ export type DshSession = {
 }
 export type DshLicense = {
     status: string
+    source?: 'builtin' | 'signed' | null
+    signed_license_status?: 'active' | 'not_granted' | 'license_invalid' | 'license_expired' | null
     seat_limit: number
     assigned: number
     available: number

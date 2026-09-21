@@ -203,7 +203,7 @@ function LicensePanel({
                                     : 'text-amber-600'
                             }
                         >
-                            {t(`dsh.licenseStatus.${normalizedStatus}`, {
+                            {t(`dsh.licenseStatus.${normalizedStatus === 'active' && license.source === 'builtin' ? 'free' : normalizedStatus}`, {
                                 defaultValue: license.status,
                             })}
                         </Badge>

@@ -2238,6 +2238,7 @@
     "applicationInfoCopied": "申請情報をコピーしました",
     "close": "閉じる",
     "licenseStatus": {
+      "free": "無料版",
       "active": "ライセンス済み",
       "expired": "期限切れ",
       "invalid": "無効",

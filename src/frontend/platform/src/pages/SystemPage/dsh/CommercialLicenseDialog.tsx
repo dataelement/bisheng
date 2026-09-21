@@ -27,7 +27,7 @@ export function CommercialLicenseDialog({
     const deploymentAddress = window.location.origin
     const normalizedStatus = license?.status?.toLocaleLowerCase() || 'unknown'
     const licenseStatus = license
-        ? t(`dsh.licenseStatus.${normalizedStatus}`, {
+        ? t(`dsh.licenseStatus.${normalizedStatus === 'active' && license.source === 'builtin' ? 'free' : normalizedStatus}`, {
               defaultValue: license.status,
           })
         : t('dsh.notConfigured')

@@ -2238,6 +2238,7 @@
     "applicationInfoCopied": "申请信息已复制",
     "close": "关闭",
     "licenseStatus": {
+      "free": "免费版",
       "active": "已授权",
       "expired": "已过期",
       "invalid": "无效",
