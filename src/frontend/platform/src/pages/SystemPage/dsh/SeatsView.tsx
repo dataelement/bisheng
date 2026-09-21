@@ -25,7 +25,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createDshOperationId } from '@/util/dshOperationId'
 import { DshChoice, DshPager, dshTime } from './common'
-import { SeatSessions } from './SeatSessions'
 
 interface SeatsViewProps {
     onOperation: (operation: DshOperationRef, result?: DshOperation) => void
@@ -43,7 +42,6 @@ export function SeatsView({
     const [cursors, setCursors] = useState<string[]>([''])
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
-    const [seat, setSeat] = useState<DshSeat | null>(null)
     const [pending, setPending] = useState<Record<string, string>>({})
     const commandLocks = useRef(new Set<string>())
     useEffect(() => {
@@ -72,7 +70,6 @@ export function SeatsView({
         const abort = new AbortController()
         setData(null)
         setError(false)
-        setSeat(null)
         getDshSeats(
             { ...query, cursor: cursors.at(-1) || undefined, limit: 50 },
             abort.signal,
@@ -241,15 +238,6 @@ export function SeatsView({
                                             <div className="flex gap-2">
                                                 <Button
                                                     size="sm"
-                                                    variant="outline"
-                                                    onClick={() =>
-                                                        setSeat(item)
-                                                    }
-                                                >
-                                                    {t('dsh.sessions')}
-                                                </Button>
-                                                <Button
-                                                    size="sm"
                                                     variant={
                                                         item.state ===
                                                         'ASSIGNED'
@@ -294,7 +282,6 @@ export function SeatsView({
                     setCursors((old) => [...old, data.next_cursor!])
                 }
             />
-            {seat && <SeatSessions key={seat.seat_id} seat={seat} onClose={() => setSeat(null)} />}
         </section>
     )
 }
