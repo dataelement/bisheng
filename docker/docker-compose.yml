@@ -104,8 +104,8 @@ services:
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
@@ -143,14 +143,19 @@ services:
       BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: 'minioadmin'
       BS_MINIO_SECRET_KEY: 'minioadmin'
+      # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
     restart: on-failure
+    networks:
+      - default
+      - sandbox_net
     depends_on:
       mysql:
         condition: service_healthy
@@ -158,6 +163,8 @@ services:
         condition: service_healthy
       openfga:
         condition: service_started
+      # Runners are not on this chain: a missing replica is 28001 at lease time,
+      # not a blocked mysql/redis healthcheck.
 
   frontend:
     container_name: bisheng-frontend
@@ -250,3 +257,35 @@ services:
     depends_on:
       - etcd
       - minio
+
+  # Named replicas (not deploy.replicas): worker DNS is code-runner-{n} from 1.
+  # No ports: — isolation is network unreachability, not hiding a host port.
+  code-runner-1: &code_runner
+    image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
+    container_name: bisheng-code-runner-1
+    user: "65534"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    pids_limit: 256
+    tmpfs:
+      - /tmp:mode=755
+    environment:
+      TZ: Asia/Shanghai
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_MAX_SESSIONS: "1"
+      SANDBOX_LEASE_TTL_S: "900"
+    networks:
+      - sandbox_net
+    restart: on-failure
+
+  code-runner-2:
+    <<: *code_runner
+    container_name: bisheng-code-runner-2
+
+networks:
+  sandbox_net:
+    internal: true

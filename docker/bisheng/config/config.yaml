@@ -163,3 +163,16 @@ logger_conf:
 #   # Set it when the backend sits behind the commercial gateway, a path prefix,
 #   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
 #   public_base_url: https://kb.example.com
+
+# Isolation-environment (sandbox) access. Keep this whole block commented in the
+# shipped file: older images refuse unknown top-level keys at boot.
+# Override any field with BS_SANDBOX_CONF__<FIELD>, e.g. BS_SANDBOX_CONF__TOKEN.
+# Do not add deploy_mode / orchestrator — discovery is the hostname pattern only.
+# sandbox_conf:
+#   discover_host_pattern: "code-runner-{n}"          # K8s: "code-runner-{n}.code-runner"
+#   discover_index_start: 1                           # K8s: 0
+#   discover_ttl_s: 15
+#   token: "..."
+#   pool_lease_ttl_s: 900
+#   max_sessions_per_replica: 1
+#   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery
