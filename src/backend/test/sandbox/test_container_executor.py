@@ -233,3 +233,18 @@ def test_copy_in_keeps_chinese_paths_and_ascii_manifest(tmp_path):
     header = json.dumps({rel: "deadbeef"}, ensure_ascii=True)
     header.encode("ascii")
     assert "\\u" in header
+
+
+def test_execute_code_without_work_dir_does_not_copy_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "secret-from-cwd.py").write_text("should-not-be-uploaded")
+    fake = FakeRunnerClient()
+    fake.add_replica("http://runner-a:8080")
+    exe = _exe(fake)
+    exitcode, logs, _ = exe.execute_code("print(1)")
+    assert exitcode == 0
+    assert "ok" in logs
+    assert exe.copy_in_bytes == 0
+    assert "secret-from-cwd.py" not in fake.last_put_members
+    assert not any(method == "PUT" and url.endswith("/files") for method, url in fake.calls)
+    assert not any(method == "GET" and url.endswith("/files") for method, url in fake.calls)

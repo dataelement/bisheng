@@ -221,4 +221,6 @@ class SandboxCodeParser(CodeParser):
                 keep_session=False,
             ).execute_code
             self._execute_code = fn
-        return fn(code=wrapper, lang="python")
+        # Inputs are inlined in ``wrapper``. Do not pass the worker cwd —
+        # that would copy-in /app (backend sources) as if it were a workspace.
+        return fn(code=wrapper, lang="python", work_dir=None)

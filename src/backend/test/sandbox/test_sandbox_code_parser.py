@@ -98,6 +98,15 @@ def test_code_node_disabled_uses_in_process_exec_not_http(monkeypatch: pytest.Mo
     assert http_calls == []
 
 
+def test_code_node_does_not_pass_process_cwd_as_workspace():
+    fake = _FakeRunner()
+    parser = SandboxCodeParser(_MAIN, execute_code=fake.execute_code)
+    parser.parse_code()
+    assert parser.exec_method("main", x=1, y=2) == {"sum": 3, "x": 1}
+    assert fake.calls
+    assert fake.calls[0]["work_dir"] is None
+
+
 def test_wrapper_is_a_script_the_runner_can_exec_without_knowing_main():
     script = build_code_node_wrapper(_MAIN, "main", {"x": 10, "y": 5})
     buf = io.StringIO()

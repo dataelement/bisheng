@@ -114,9 +114,12 @@ class ContainerExecutor(LocalExecutor):
         lang: str | None = "python",
     ) -> tuple[int, str, str]:
         timeout_s = int(timeout or self.timeout)
-        work_dir = work_dir or os.getcwd()
+        # None / missing dir = code-only (workflow code node). Never fall back
+        # to os.getcwd(): Celery's cwd is /app and would tar the backend tree.
+        workspace = work_dir if work_dir and os.path.isdir(work_dir) else None
         if code is None and filename:
-            path = os.path.join(work_dir, filename) if not os.path.isabs(filename) else filename
+            source_root = workspace or os.getcwd()
+            path = filename if os.path.isabs(filename) else os.path.join(source_root, filename)
             with open(path, encoding="utf-8") as fh:
                 code = fh.read()
         code = code or ""
@@ -126,7 +129,8 @@ class ContainerExecutor(LocalExecutor):
         try:
             self._ensure_lease()
             acquired = True
-            self._copy_in(work_dir)
+            if workspace:
+                self._copy_in(workspace)
             result = self._exec(code, lang or "python", timeout_s)
             exitcode = int(result["exitcode"])
             logs = self._logs_from(result, exitcode)
@@ -135,7 +139,8 @@ class ContainerExecutor(LocalExecutor):
             if exitcode == 124:
                 raise SandboxExecTimeoutError()
             if exitcode == 0:
-                self._copy_out(work_dir)
+                if workspace:
+                    self._copy_out(workspace)
             elif exitcode == 137:
                 self._forget_lease()
             return exitcode, logs, ""
