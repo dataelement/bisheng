@@ -218,3 +218,65 @@ async def test_container_binds_workspace_without_e2b_file_list(monkeypatch: pyte
     assert "file_list" not in bound_row.extra["config"].get("e2b", {})
     tool = _get_native_code_interpreter(minio={}, type="container", config=bound_row.extra["config"])
     assert "skills/" in tool.description
+
+
+async def test_empty_tool_extra_falls_back_to_category_container(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """Built-in-tool UI writes type.extra and NULLs the row; Linsight must still isolate."""
+    row = SimpleNamespace(
+        id=CODE_TOOL_ID,
+        tool_key="bisheng_code_interpreter",
+        extra=None,
+        type=CODE_TOOL_ID,
+    )
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(return_value=row))
+    monkeypatch.setattr(
+        GptsToolsDao,
+        "aget_one_tool_type",
+        AsyncMock(return_value=SimpleNamespace(id=CODE_TOOL_ID, extra=json.dumps({"type": "container"}))),
+    )
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", AsyncMock(return_value=[]))
+
+    await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([CODE_TOOL_ID]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    bound_row = init_one.await_args.kwargs["tool"]
+    assert bound_row.extra["type"] == "container"
+    assert "file_list" not in bound_row.extra["config"].get("e2b", {})
+    assert bound_row.extra["config"]["container"]["local_sync_path"] == str(tmp_path)
+
+
+async def test_tool_row_extra_wins_over_category(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """A non-empty tool row is exclusive, same as parse_preset_tool_params."""
+    row = SimpleNamespace(
+        id=CODE_TOOL_ID,
+        tool_key="bisheng_code_interpreter",
+        extra=json.dumps({"type": "local"}),
+        type=CODE_TOOL_ID,
+    )
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(return_value=row))
+    monkeypatch.setattr(
+        GptsToolsDao,
+        "aget_one_tool_type",
+        AsyncMock(return_value=SimpleNamespace(id=CODE_TOOL_ID, extra=json.dumps({"type": "container"}))),
+    )
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", AsyncMock(return_value=[]))
+
+    await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([CODE_TOOL_ID]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    bound_row = init_one.await_args.kwargs["tool"]
+    assert bound_row.extra["type"] == "local"
+    # local / e2b still pre-scan; category container must not leak into this run.
+    assert "file_list" in bound_row.extra["config"]["e2b"]

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import mimetypes
 import os
 import time
@@ -2155,7 +2154,13 @@ class LinsightWorkbenchImpl:
             return tools
         # Individual initialization code interpreter tool
         selected_tool_ids.remove(bisheng_code_tool.id)
-        code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
+        # Same extra source as ToolExecutor.parse_preset_tool_params: tool row, then
+        # category. Built-in-tool UI writes type.extra and NULLs the row.
+        tool_type = None
+        type_id = getattr(bisheng_code_tool, "type", None)
+        if not bisheng_code_tool.extra and type_id:
+            tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=type_id)
+        code_config = ToolExecutor.parse_preset_extra(bisheng_code_tool, tool_type)
         executor_type = code_config.get("type") or "local"
         if "config" not in code_config:
             code_config["config"] = {}
