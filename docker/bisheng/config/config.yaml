@@ -174,3 +174,13 @@ logger_conf:
 # rejects unknown top-level keys, so enable per deployment or via 系统配置.
 # linsight:
 #   citation_handles_enabled: true   # F069 short citation handles [Sn]; false = F047 verbatim-id contract
+
+# MCP transport security. DNS rebinding protection is disabled by default so
+# multi-hop proxies that rewrite Host work without per-environment configuration.
+# Enable it only together with exact transport Host/Origin allowlists.
+# open_mcp:
+#   enable_dns_rebinding_protection: false
+#   transport_allowed_hosts:
+#     - mcp.example.com
+#   transport_allowed_origins:
+#     - https://mcp.example.com

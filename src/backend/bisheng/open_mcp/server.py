@@ -155,7 +155,7 @@ def _transport_security_settings() -> TransportSecuritySettings:
         if parsed.scheme and parsed.netloc and origin not in allowed_origins:
             allowed_origins.append(origin)
     return TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
+        enable_dns_rebinding_protection=settings.open_mcp.enable_dns_rebinding_protection,
         allowed_hosts=allowed_hosts,
         allowed_origins=allowed_origins,
     )
