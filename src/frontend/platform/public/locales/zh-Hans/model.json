@@ -99,6 +99,11 @@
     "systemConfigInheritedBadge": "继承自 Root",
     "systemConfigFallbackBlockedBanner": "Root 已关闭共享。请联系超管开启共享或在此为本租户独立配置。",
     "supportsImages": "支持图片",
+    "status": "状态",
+    "available": "可用",
+    "actions": "操作",
+    "configureDshPermission": "配置权限",
+    "noOnlineDshModels": "暂无已上线的可用模型",
     "visionRetry": "读取或保存失败，重试",
     "loading": "加载中"
   },
