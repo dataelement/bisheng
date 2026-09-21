@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import pytest
-from pydantic import ValidationError
 
 from bisheng.core.config.settings import SandboxConf, Settings
 
@@ -57,10 +56,7 @@ def test_sandbox_conf_endpoints_default_empty(clean_sandbox_env: None) -> None:
     assert settings.sandbox_conf.endpoints == []
 
 
-def test_sandbox_conf_concurrent_sessions_require_uid_isolation(clean_sandbox_env: None) -> None:
-    with pytest.raises(ValidationError):
-        Settings(sandbox_conf={"max_sessions_per_replica": 2, "enable_uid_isolation": False})
-
-    settings = Settings(sandbox_conf={"max_sessions_per_replica": 2, "enable_uid_isolation": True})
+def test_sandbox_conf_does_not_guard_runner_session_slots(clean_sandbox_env: None) -> None:
+    settings = Settings(sandbox_conf={"max_sessions_per_replica": 2, "enable_uid_isolation": False})
     assert settings.sandbox_conf.max_sessions_per_replica == 2
-    assert settings.sandbox_conf.enable_uid_isolation is True
+    assert settings.sandbox_conf.enable_uid_isolation is False

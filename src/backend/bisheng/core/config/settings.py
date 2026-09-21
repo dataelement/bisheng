@@ -805,25 +805,20 @@ class SandboxConf(BaseModel):
     token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
     pool_lease_ttl_s: int = Field(default=900, description="Idle lease TTL in seconds")
     max_sessions_per_replica: int = Field(default=1, ge=1, description="Concurrent sessions per runner replica")
-    enable_uid_isolation: bool = Field(
-        default=False,
-        description="Required when max_sessions_per_replica > 1 (per-session uid + directory mode)",
-    )
+    enable_uid_isolation: bool = Field(default=False, description="Per-session uid + directory mode")
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
     max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
     code_node_enabled: bool = Field(default=True, description="Run workflow code nodes in the isolation environment")
 
     @model_validator(mode="after")
-    def overlay_env_and_guard_concurrent_sessions(self):
+    def overlay_env(self):
         prefix = "BS_SANDBOX_CONF__"
         for name, field in type(self).model_fields.items():
             raw = os.getenv(f"{prefix}{name.upper()}")
             if raw is None:
                 continue
             object.__setattr__(self, name, _coerce_sandbox_env(field.annotation, raw))
-        if self.max_sessions_per_replica > 1 and not self.enable_uid_isolation:
-            raise ValueError("max_sessions_per_replica > 1 requires enable_uid_isolation=true")
         return self
 
 
