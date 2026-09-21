@@ -2,6 +2,7 @@
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
 import { Button } from '@/components/bs-ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
+import { SearchInput } from '@/components/bs-ui/input';
 import { Label } from '@/components/bs-ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import Skeleton from '@/components/bs-ui/skeleton';
@@ -82,6 +83,8 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
   const { t } = useTranslation()
   const [settings, setSettings] = useState<GuestLinkSettings | null>(null)
   const [saving, setSaving] = useState(false)
+  const [operatorQuery, setOperatorQuery] = useState('')
+  const [searchedCandidates, setSearchedCandidates] = useState<GuestLinkSettings['candidates'] | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -95,6 +98,26 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
       cancelled = true
     }
   }, [kind, appId])
+
+  useEffect(() => {
+    const keyword = operatorQuery.trim()
+    if (!keyword) {
+      setSearchedCandidates(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId, keyword)).then((data) => {
+        if (!cancelled && data) {
+          setSearchedCandidates(data.candidates || [])
+        }
+      })
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [kind, appId, operatorQuery])
 
   const persist = async (patch: { enabled?: boolean; user_id?: number | null }, previous: GuestLinkSettings) => {
     setSaving(true)
@@ -117,8 +140,15 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
   const systemOff = !settings.system_guest_access
   const readOnly = !settings.can_edit || systemOff || saving
   const controlsOff = systemOff || !settings.enabled
-  const candidates = (settings.candidates || []).filter((item) => item?.user_id)
+  const candidates = (searchedCandidates ?? settings.candidates ?? []).filter((item) => item?.user_id)
   const selectValue = settings.operator_user_id ? String(settings.operator_user_id) : undefined
+  const keyword = operatorQuery.trim().toLowerCase()
+  const visibleCandidates = keyword
+    ? candidates.filter((item) => {
+        const name = String(item.user_name || '').toLowerCase()
+        return name.includes(keyword) || String(item.user_id) === selectValue
+      })
+    : candidates
 
   return (
     <>
@@ -151,6 +181,9 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
             <Select
               value={selectValue}
               disabled={readOnly}
+              onOpenChange={(open) => {
+                if (!open) setOperatorQuery('')
+              }}
               onValueChange={(value) => {
                 if (!value) return
                 const previous = settings
@@ -167,8 +200,21 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
               <SelectTrigger className="max-w-sm">
                 <SelectValue placeholder={t('api.guestSelectOperator')} />
               </SelectTrigger>
-              <SelectContent>
-                {candidates.map((item) => (
+              <SelectContent
+                headNode={
+                  <div className="shrink-0 bg-popover p-2" onPointerDown={(event) => event.stopPropagation()}>
+                    <SearchInput
+                      value={operatorQuery}
+                      inputClassName="h-8 dark:border-gray-700"
+                      placeholder={t('api.guestSearchOperator')}
+                      onChange={(event) => setOperatorQuery(event.target.value)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      iconClassName="w-4 h-4"
+                    />
+                  </div>
+                }
+              >
+                {visibleCandidates.map((item) => (
                   <SelectItem key={item.user_id} value={String(item.user_id)}>
                     {item.user_name}
                     {settings.follow_system_default && item.user_id === settings.default_operator_user_id
@@ -176,6 +222,11 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
                       : ''}
                   </SelectItem>
                 ))}
+                {visibleCandidates.length === 0 && (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    {t('api.guestOperatorNotFound')}
+                  </div>
+                )}
               </SelectContent>
             </Select>
             {settings.follow_system_default && (

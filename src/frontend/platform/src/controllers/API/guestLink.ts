@@ -28,8 +28,13 @@ export interface GuestLinkSettings {
 
 export type GuestLinkKind = "workflow" | "assistant"
 
-export function getGuestLinkApi(kind: GuestLinkKind, id: string): Promise<GuestLinkSettings> {
-  return axios.get(`/api/v1/guest-link/${kind}/${id}`)
+export function getGuestLinkApi(
+  kind: GuestLinkKind,
+  id: string,
+  keyword?: string,
+): Promise<GuestLinkSettings> {
+  const query = keyword?.trim()
+  return axios.get(`/api/v1/guest-link/${kind}/${id}`, query ? { params: { keyword: query } } : undefined)
 }
 
 export function patchGuestLinkApi(

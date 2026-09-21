@@ -25,9 +25,10 @@ GuestResourcePath = Literal["workflow", "assistant"]
 async def get_guest_link(
     resource_type: GuestResourcePath,
     resource_id: str,
+    keyword: str | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    data = await get_guest_link_settings(login_user, resource_type, resource_id)
+    data = await get_guest_link_settings(login_user, resource_type, resource_id, keyword=keyword)
     return resp_200(data=data)
 
 

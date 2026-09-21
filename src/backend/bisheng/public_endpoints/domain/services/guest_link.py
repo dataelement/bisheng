@@ -222,11 +222,14 @@ async def _candidate_users(
     tenant_id: int,
     *,
     pinned_ids: set[int],
+    keyword: str | None = None,
 ) -> list[dict[str, Any]]:
+    query = keyword.strip() if keyword else None
     rows, _total = await UserTenantDao.aget_tenant_users(
         tenant_id,
         page=1,
         page_size=_CANDIDATE_PAGE_SIZE,
+        keyword=query or None,
     )
     user_ids = [int(row["user_id"]) for row in rows if row.get("user_id")]
     for pinned in pinned_ids:
@@ -278,6 +281,8 @@ async def get_guest_link_settings(
     login_user: UserPayload,
     resource_type: GuestResourceType,
     resource_id: str,
+    *,
+    keyword: str | None = None,
 ) -> dict[str, Any]:
     _resource, tenant_id, _name, app_id = await _load_resource(resource_type, resource_id)
     await _require_visible(login_user, resource_type, app_id)
@@ -300,7 +305,7 @@ async def get_guest_link_settings(
         action="share",
     )
     pinned = {item for item in (default_operator_id, stored.user_id, operator_id) if item}
-    candidates = await _candidate_users(tenant_id, pinned_ids=pinned)
+    candidates = await _candidate_users(tenant_id, pinned_ids=pinned, keyword=keyword)
     return {
         "enabled": stored.enabled,
         "follow_system_default": follow,

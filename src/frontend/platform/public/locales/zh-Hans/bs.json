@@ -1520,6 +1520,8 @@
     "guestLinkDisabled": "本应用已关闭免登录访问",
     "guestSaved": "已保存",
     "guestSelectOperator": "请选择运行身份",
+    "guestSearchOperator": "搜索用户名",
+    "guestOperatorNotFound": "没有匹配的用户",
     "loginLinkDescription": "需登录链接需要在登录后使用",
     "publishAsStandalonePage": "发布为独立页面",
     "copyLinkToBrowser": "复制链接到浏览器中打开",

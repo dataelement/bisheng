@@ -153,8 +153,8 @@ def operator_lookups(monkeypatch):
     async def forbidden(user_id, _tenant_id):
         return user_id in state.privileged
 
-    async def candidates(_tenant_id, *, pinned_ids):
-        del pinned_ids
+    async def candidates(_tenant_id, *, pinned_ids, keyword=None):
+        del pinned_ids, keyword
         return [{"user_id": 7, "user_name": "alice"}]
 
     async def system_default():
@@ -376,3 +376,44 @@ async def test_get_is_readable_without_share(operator_lookups) -> None:
     login = SimpleNamespace(user_id=9, user_name="viewer")
     data = await guest_link.get_guest_link_settings(login, "workflow", "flow-1")
     assert data["can_edit"] is False
+
+
+async def test_get_forwards_candidate_keyword(operator_lookups, monkeypatch) -> None:
+    seen: dict = {}
+
+    async def candidates(_tenant_id, *, pinned_ids, keyword=None):
+        seen["keyword"] = keyword
+        seen["pinned"] = pinned_ids
+        return [{"user_id": 13, "user_name": "shiyao"}]
+
+    monkeypatch.setattr(guest_link, "_candidate_users", candidates)
+    login = SimpleNamespace(user_id=9, user_name="editor")
+    data = await guest_link.get_guest_link_settings(login, "workflow", "flow-1", keyword="shiyao")
+    assert seen["keyword"] == "shiyao"
+    assert data["candidates"] == [{"user_id": 13, "user_name": "shiyao"}]
+
+
+async def test_candidate_users_forwards_keyword(monkeypatch) -> None:
+    captured: dict = {}
+
+    async def tenant_users(tenant_id, page=1, page_size=20, keyword=None):
+        captured.update(tenant_id=tenant_id, page=page, page_size=page_size, keyword=keyword)
+        return [{"user_id": 13, "user_name": "shiyao"}], 1
+
+    async def users_by_ids(ids):
+        return [SimpleNamespace(user_id=i, user_name="shiyao", delete=0) for i in ids]
+
+    async def roles(_ids):
+        return []
+
+    async def forbidden(_uid, _tid):
+        return False
+
+    monkeypatch.setattr(guest_link.UserTenantDao, "aget_tenant_users", tenant_users)
+    monkeypatch.setattr(guest_link.UserDao, "aget_user_by_ids", users_by_ids)
+    monkeypatch.setattr(guest_link.UserRoleDao, "aget_roles_user", roles)
+    monkeypatch.setattr(guest_link, "_is_forbidden_operator", forbidden)
+    result = await guest_link._candidate_users(23, pinned_ids=set(), keyword="  shiyao ")
+    assert captured["keyword"] == "shiyao"
+    assert captured["page_size"] == 100
+    assert result == [{"user_id": 13, "user_name": "shiyao"}]

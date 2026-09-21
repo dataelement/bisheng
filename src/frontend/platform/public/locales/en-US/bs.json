@@ -1575,6 +1575,8 @@
     "guestLinkDisabled": "Access without signing in is turned off for this app",
     "guestSaved": "Saved",
     "guestSelectOperator": "Select a person",
+    "guestSearchOperator": "Search by name",
+    "guestOperatorNotFound": "No matching person",
     "loginLinkDescription": "The login-required link must be used after logging in",
     "publishAsStandalonePage": "Publish as a standalone page",
     "copyLinkToBrowser": "Copy the link and open it in the browser",

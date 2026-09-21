@@ -1520,6 +1520,8 @@
     "guestLinkDisabled": "このアプリのログイン不要アクセスはオフです",
     "guestSaved": "保存しました",
     "guestSelectOperator": "実行者を選択",
+    "guestSearchOperator": "ユーザー名で検索",
+    "guestOperatorNotFound": "該当するユーザーはありません",
     "loginLinkDescription": "ログイン必要リンクはログイン後に利用できます。",
     "publishAsStandalonePage": "スタンドアロンページとして公開",
     "copyLinkToBrowser": "リンクをコピーしてブラウザで開く",
