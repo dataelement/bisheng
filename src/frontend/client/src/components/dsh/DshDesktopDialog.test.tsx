@@ -42,6 +42,29 @@ it('uses the configured download link', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'dsh_download' }));
   expect(launch).toHaveBeenCalledWith('https://downloads.example.org/dsh.dmg', '_blank', 'noopener,noreferrer');
 });
+it.each([
+  ['https://downloads.example.org/dsh.dmg', 'dsh.launchHelp'],
+  [null, 'dsh.launchHelpNoDownload'],
+])('offers launch guidance with download URL %s without opening a download automatically', async (downloadUrl, helpKey) => {
+  const originalLocation = window.location;
+  const assign = jest.fn();
+  const openWindow = jest.spyOn(window, 'open').mockImplementation(() => null);
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { origin: 'http://localhost:3080', assign },
+  });
+  try {
+    show(downloadUrl);
+    await screen.findByRole('list');
+    expect(screen.queryByText(helpKey!)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'dsh_open' }));
+    expect(assign).toHaveBeenCalledWith('dsh-desktop://login?server=http%3A%2F%2Flocalhost%3A3080');
+    expect(screen.getByRole('status')).toHaveTextContent(helpKey!);
+    expect(openWindow).not.toHaveBeenCalled();
+  } finally {
+    Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+  }
+});
 it('keeps usage unavailable distinct from zero', async () => {
   const unknown = { ...metrics, total_tokens: null, input_tokens: null, output_tokens: null, recorded_usage_count: 0, missing_usage_count: 2 };
   jest.mocked(getDshUsageSummary).mockResolvedValue({ ...summary, totals: unknown, points: [{ ...summary.points[0], ...unknown }] });

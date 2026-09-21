@@ -2337,6 +2337,8 @@
   "dsh_source_unavailable": "用量暂不可用",
   "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。",
   "dsh": {
+    "launchHelp": "若 DSH Desktop 未打开，请点击“下载 DSH Desktop”安装客户端；已安装时，请允许浏览器打开应用，或手动启动客户端。",
+    "launchHelpNoDownload": "若 DSH Desktop 未打开，已安装时请允许浏览器打开应用，或手动启动客户端；未安装时请联系管理员获取下载地址。",
     "heatmapFuture": "未到时间",
     "heatmapMessageValue": "{{value}} 条消息",
     "heatmapOutside": "筛选范围外",

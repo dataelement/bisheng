@@ -2408,6 +2408,8 @@
   "dsh_source_unavailable": "Usage unavailable",
   "dsh_unknown_usage": "Usage was not received for {{count}} calls.",
   "dsh": {
+    "launchHelp": "If DSH Desktop did not open, click “Download DSH Desktop” to install it. If already installed, allow your browser to open the app or start it manually.",
+    "launchHelpNoDownload": "If DSH Desktop did not open and is already installed, allow your browser to open the app or start it manually. If not installed, contact your administrator for a download link.",
     "heatmapFuture": "Upcoming interval",
     "heatmapMessageValue": "{{value}} messages",
     "heatmapOutside": "Outside selected range",

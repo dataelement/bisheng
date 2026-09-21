@@ -2331,6 +2331,8 @@
   "dsh_source_unavailable": "使用量を取得できません",
   "dsh_unknown_usage": "{{count}} 回の呼び出しの使用量が未取得です。",
   "dsh": {
+    "launchHelp": "DSH Desktop が開かない場合は、「DSH Desktop をダウンロード」からインストールしてください。インストール済みの場合は、ブラウザーでアプリを開くことを許可するか、手動で起動してください。",
+    "launchHelpNoDownload": "DSH Desktop が開かず、インストール済みの場合は、ブラウザーでアプリを開くことを許可するか、手動で起動してください。未インストールの場合は、管理者にダウンロード先を確認してください。",
     "heatmapFuture": "まだ到達していない時間",
     "heatmapMessageValue": "{{value}} 件のメッセージ",
     "heatmapOutside": "選択範囲外",
