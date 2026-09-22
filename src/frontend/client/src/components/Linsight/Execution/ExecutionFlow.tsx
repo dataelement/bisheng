@@ -262,6 +262,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 files={fileList}
                                 versionId={versionId}
                                 citations={linsight?.output_result?.citations}
+                                citationAudit={linsight?.output_result?.citation_audit}
                                 messageId={linsight?.message_id ?? undefined}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
@@ -316,6 +317,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 files={workspaceFiles}
                 versionId={versionId}
                 onPreview={(file) => artifactsPanel.openPreview(file, true)}
+                citations={linsight?.output_result?.citations}
             />
             <FilePreviewPanel
                 open={!!artifactsPanel.previewFile}

@@ -20,6 +20,12 @@ database_pool:
     # key_file: /etc/bisheng/certs/mysql-client-key.pem
     # verify_hostname: true
 
+# 登录态 JWT 签名密钥（可选）。
+# 不配置时，首次启动会自动生成一个随机密钥写入系统配置表（config.jwt_secret），所有 api / worker 进程共用。
+# 配置后以这里为准；历史版本代码里自带的默认值已作废，即使写在这里也会被忽略并改用自动生成的密钥。
+# 轮换：改这里的值或删掉配置表中的记录后重启，全员需重新登录。
+# jwt_secret: "replace-with-a-long-random-string"
+
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0
 # 普通模式:
@@ -271,3 +277,8 @@ logger_conf:
 
   # 审核人临时预览实例的存活天数，最小 1（能力后置，先占位）
 #   preview_ttl_days: 7
+
+# Linsight (task mode) runtime knobs. Commented out on purpose: an older image
+# rejects unknown top-level keys, so enable per deployment or via 系统配置.
+# linsight:
+#   citation_handles_enabled: true   # F069 short citation handles [Sn]; false = F047 verbatim-id contract

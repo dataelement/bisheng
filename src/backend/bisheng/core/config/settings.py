@@ -397,6 +397,16 @@ class LinsightConf(BaseModel):
     """Inspiration Configuration"""
 
     debug: bool = Field(default=False, description="Whether to opendebugMode")
+    citation_handles_enabled: bool = Field(
+        default=True,
+        description=(
+            "F069 task-mode citation handles: retrieval results are numbered [Sn] for the model and "
+            "converted back to the private-use citation markers at the workspace write boundary / "
+            "answer path. False reverts the tool output, the rules text, the write boundary and the "
+            "per-turn source table together to the verbatim-id contract (citation.yaml). A session "
+            "keeps the contract it started with (pinned in its handle table)."
+        ),
+    )
     tool_buffer: int = Field(
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
@@ -826,7 +836,9 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    jwt_secret: str = "secret_cF2kD4lW9wY4zL7eX1zX9vS1fA7eW4lQ"
+    # F068: no shipped default. Empty means "generate once and keep in the config
+    # table" — see ``bisheng.user.domain.services.jwt_secret``.
+    jwt_secret: str = ""
     gpts: dict = {}
     openai_conf: dict = {}
     minio_conf: dict = {}

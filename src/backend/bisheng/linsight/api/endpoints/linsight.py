@@ -15,6 +15,7 @@ from starlette.websockets import WebSocket
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
+from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.citation.domain.services.citation_prompt_helper import strip_citation_markers
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -291,6 +292,26 @@ async def start_execute(
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
+    # Persist the bot task turn BEFORE enqueueing so a refresh while the task is
+    # still QUEUED (status stays NOT_STARTED until the worker dequeues it in
+    # _execute_workflow) re-hydrates the task turn from the conversation and keeps
+    # showing the 排队中 QueueCard. Without this the category="task" row is written
+    # only at execution start, so a queued refresh finds just the user question and
+    # the whole task panel (queue badge included) disappears.
+    #
+    # The order matters: the upsert is find-then-insert with no unique key, and
+    # the worker's own start-time call runs the same upsert milliseconds after the
+    # enqueue. Persisting AFTER the enqueue raced it — both found no row, both
+    # inserted, and the conversation showed the task panel twice. Writing the row
+    # first turns the worker's call into a plain in-place update.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version_model)
+    except Exception:
+        # Best-effort: the task still runs; only the reload-while-queued view is
+        # affected if this fails (the worker writes the row at execution start
+        # regardless).
+        logger.exception("Failed to persist queued task turn message")
+
     try:
         await linsight_execute_utils.enqueue_session_for_execution(session_version_model)
 
@@ -298,21 +319,6 @@ async def start_execute(
         logger.error(f"Failed to start the Ideas task: {e!s}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
-
-    # Persist the bot task turn at enqueue time so a refresh while the task is
-    # still QUEUED (status stays NOT_STARTED until the worker dequeues it in
-    # _execute_workflow) re-hydrates the task turn from the conversation and keeps
-    # showing the 排队中 QueueCard. Without this the category="task" row is written
-    # only at execution start, so a queued refresh finds just the user question and
-    # the whole task panel (queue badge included) disappears. Upsert is idempotent:
-    # _execute_workflow's start-time call later updates this same row in place.
-    try:
-        await linsight_execute_utils.persist_task_turn_message(session_version_model)
-    except Exception:
-        # Best-effort: enqueue already succeeded and the task will run; only the
-        # reload-while-queued view is affected if this fails (the worker writes
-        # the row at execution start regardless).
-        logger.exception("Failed to persist queued task turn message")
 
     return resp_200(
         data=True, message="Ideas execution task has started, execution results will be returned via message flow"
@@ -726,13 +732,43 @@ def _strip_citation_markers_in_zip(zip_bytes: bytes) -> bytes:
                 data = src.read(info)
                 if info.filename.lower().endswith(".md"):
                     try:
-                        data = strip_citation_markers(data.decode("utf-8")).encode("utf-8")
+                        # F069: unregistered short handles ([S99]) go too.
+                        data = strip_citation_handles(strip_citation_markers(data.decode("utf-8"))).encode("utf-8")
                     except UnicodeDecodeError:
                         # Not UTF-8 text, so it cannot carry the PUA markers; ship the bytes as-is.
                         logger.warning(
                             "batch download: {} is not utf-8, citation markers left untouched", info.filename
                         )
                 dst.writestr(info, data)
+    return out.getvalue()
+
+
+async def _bake_citations_in_zip(zip_bytes: bytes, login_user) -> bytes:
+    """F069 P2: bake the ``.md`` entries of a download bundle for this exporter.
+
+    Markers become visible ``[n]`` with a references section, filtered by the
+    exporter's permissions; unresolvable ones are stripped. Every other entry
+    is copied through untouched, and a bundle with no markdown is returned as-is.
+    """
+    from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as src:
+        entries = src.infolist()
+        if not any(info.filename.lower().endswith(".md") for info in entries):
+            return zip_bytes
+        payloads: list[tuple[zipfile.ZipInfo, bytes]] = []
+        for info in entries:
+            data = src.read(info)
+            if info.filename.lower().endswith(".md"):
+                try:
+                    data = (await bake_citations_for_export(data.decode("utf-8"), login_user)).encode("utf-8")
+                except UnicodeDecodeError:
+                    logger.warning("batch download: {} is not utf-8, citation markers left untouched", info.filename)
+            payloads.append((info, data))
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for info, data in payloads:
+            dst.writestr(info, data)
     return out.getvalue()
 
 
@@ -754,7 +790,7 @@ async def batch_download_files(
     try:
         # Call to implement class processing batch download
         zip_bytes = await LinsightWorkbenchImpl.batch_download_files(file_info_list)
-        zip_bytes = await util.sync_func_to_async(_strip_citation_markers_in_zip)(zip_bytes)
+        zip_bytes = await _bake_citations_in_zip(zip_bytes, login_user)
 
         zip_name = zip_name if os.path.splitext(zip_name)[-1] == ".zip" else f"{zip_name}.zip"
         # Convert to unicode String
@@ -811,9 +847,12 @@ async def download_md_to_pdf_or_docx(
         # Call the implementation class to process the file download
         file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
 
-        # The conversion output must not carry citation spans: the wrapper chars
-        # are invisible in Word / PDF while the ids would leak as plain text.
-        md_str = strip_citation_markers(file_bytes.decode("utf-8"))
+        # F069 P2: hidden citation spans become visible [n] plus a references
+        # section filtered by this user's permissions; unresolvable spans and
+        # unregistered short handles ([S99]) are stripped as before.
+        from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
+
+        md_str = await bake_citations_for_export(file_bytes.decode("utf-8"), login_user)
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]

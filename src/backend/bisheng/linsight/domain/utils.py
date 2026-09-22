@@ -832,6 +832,7 @@ async def persist_task_turn_message(session_model: LinsightSessionVersion) -> Ch
     existing_rows = await ChatMessageDao.aget_messages_by_chat_id(
         chat_id=session_model.session_id, category_list=["task"], limit=1000
     )
+    matched = []
     for row in existing_rows:
         if not row.is_bot:
             continue
@@ -840,8 +841,21 @@ async def persist_task_turn_message(session_model: LinsightSessionVersion) -> Ch
         except (json.JSONDecodeError, TypeError):
             row_svid = None
         if row_svid == svid:
-            row.message = answer
-            return await ChatMessageDao.aupdate_message_model(row)
+            matched.append(row)
+    if matched:
+        if len(matched) > 1:
+            # The upsert has no unique key, so two writers racing on an empty
+            # conversation each insert a row and the task panel renders twice.
+            # The API-side writers now persist before enqueueing (the worker's
+            # start-time call then only updates), so this should not recur —
+            # log it loudly if it does instead of silently picking one row.
+            logger.warning(
+                f"persist_task_turn_message: {len(matched)} task rows for svid={svid} "
+                f"chat_id={session_model.session_id} ids={[r.id for r in matched]}; updating the first"
+            )
+        row = matched[0]
+        row.message = answer
+        return await ChatMessageDao.aupdate_message_model(row)
 
     return await ChatMessageDao.ainsert_one(
         ChatMessage(

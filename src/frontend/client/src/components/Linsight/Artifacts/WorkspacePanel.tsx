@@ -76,7 +76,7 @@ export function WorkspacePanel({
             </span>
             {/* Always-visible worded action at the row's end — same treatment as
                 the delivery card's rows, so the two file lists read as one. */}
-            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
+            <SaveAsButton file={file} versionId={versionId} variant="labeled" citations={citations} />
         </div>
     );
 
@@ -105,7 +105,7 @@ export function WorkspacePanel({
                         {/* Same action as the file rows, so a markdown deliverable
                             offers md / PDF / Docx here too instead of only the raw
                             source — the two surfaces are one click apart. */}
-                        <SaveAsButton file={previewFile} versionId={versionId} variant="toolbar" />
+                        <SaveAsButton file={previewFile} versionId={versionId} variant="toolbar" citations={citations} />
                         {!hideFullscreenToggle && (
                             <button
                                 type="button"

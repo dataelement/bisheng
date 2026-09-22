@@ -52,7 +52,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import html
 import os
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -160,6 +162,23 @@ _CHAR_PAGE_NOTICE = (
     "{total} pages of {size} characters each. Use offset/limit to page through it — "
     "offset counts pages, not source lines.]\n"
 )
+
+
+# F069 P2 (design decision 8, AC-23): an html deliverable is baked at the
+# write boundary — ``[S3]`` runs become ``<sup>[n]</sup>`` and a references
+# section is appended. The section carries this attribute so a second write of
+# already-baked content is returned byte-identical.
+HTML_REFERENCES_ATTR = "data-f069-references"
+# baked runs / section, restored before re-baking an already-baked html deliverable
+_HTML_BAKED_SUP_RE = re.compile(r'<sup data-f069-h="([^"]*)">.*?</sup>', re.S)
+_HTML_REFERENCES_SECTION_RE = re.compile(rf"\n?<section {HTML_REFERENCES_ATTR}>.*?</section>\n?", re.S)
+# Text nodes only: comments, whole ``<script>`` / ``<style>`` / ``<pre>`` /
+# ``<code>`` elements and every tag (with its attributes) are copied verbatim.
+_HTML_SKIP_RE = re.compile(
+    r"<!--.*?-->|<(script|style|pre|code)\b[^>]*>.*?</\1\s*>|<[^>]*>",
+    re.S | re.I,
+)
+_CJK_RE = re.compile(r"[一-鿿]")
 
 
 def _is_skills_path(rel_path: str) -> bool:
@@ -480,7 +499,7 @@ class WorkspaceBackend(FilesystemBackend):
         file_dir: local cache directory (per-task; safe to clear).
     """
 
-    def __init__(self, svid: str, minio, file_dir: str) -> None:
+    def __init__(self, svid: str, minio, file_dir: str, citation_scope=None) -> None:
         if not _DEEPAGENTS_AVAILABLE:
             # TODO(Wave2): align with deepagents FilesystemBackend once the
             # dependency is installed in this environment.
@@ -493,6 +512,12 @@ class WorkspaceBackend(FilesystemBackend):
         self.svid = str(svid)
         self.minio = minio
         self.file_dir = file_dir
+        # F069 P1: the run's ``LinsightCitationScope``. While it is active
+        # (``enabled`` and a non-empty handle table) every markdown write
+        # converts the model's short handles (``[S3]``) into the private-use
+        # citation markers the rest of the platform understands. ``None`` keeps
+        # the F047 contract: markdown is only unescaped.
+        self.citation_scope = citation_scope
         os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
@@ -600,13 +625,179 @@ class WorkspaceBackend(FilesystemBackend):
         return str(content).encode("utf-8")
 
     @staticmethod
-    def _normalize_markdown_citation_bytes(rel: str, data: bytes) -> bytes:
-        """Rewrite escaped \\ue200 sequences in markdown to real PUA chars.
+    def _is_markdown_path(rel: str) -> bool:
+        return rel.lower().endswith((".md", ".markdown"))
 
-        write_file JSON often stores the six-character escape; the preview and
-        extract_citation_ids_from_text only recognize U+E200/E201/E202.
+    def _citation_handles_active(self) -> bool:
+        """True when the F069 short-handle contract applies to this run."""
+        scope = self.citation_scope
+        if scope is None or not getattr(scope, "enabled", False):
+            return False
+        return bool(getattr(scope, "handles", None))
+
+    def _convert_citation_handles(self, text: str, note: bool = True) -> str:
+        """``[S3]`` -> private-use marker via the scope's handle table.
+
+        Never raises: the write boundary sits inside a tool call and a tool
+        exception kills the whole task (F047 design §2), so any failure returns
+        ``text`` unchanged. ``note=False`` skips the audit bookkeeping — used
+        when converting an ``edit`` argument only to locate it on disk, so the
+        same unknown handle is not counted twice.
         """
-        if not rel.lower().endswith((".md", ".markdown")):
+        if not text or not self._citation_handles_active():
+            return text
+        try:
+            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+
+            result = convert_handles_to_markers(text, self.citation_scope.handles)
+            if note:
+                note_conversion = getattr(self.citation_scope, "note_conversion", None)
+                if note_conversion is not None:
+                    note_conversion(result.converted, result.unknown)
+            return result.text
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-citation] svid={} handle conversion failed, writing text unconverted", self.svid
+            )
+            return text
+
+    @staticmethod
+    def _is_html_path(rel: str) -> bool:
+        return rel.lower().endswith((".html", ".htm"))
+
+    def _bake_html_citation_bytes(self, data: bytes) -> bytes:
+        """F069 P2 write boundary for html deliverables (design decision 8, AC-23).
+
+        Never raises and never touches the bytes when the scope is inactive,
+        the content is not UTF-8, or the baking fails — an html write is a tool
+        call and an exception here would kill the whole task.
+        """
+        if not self._citation_handles_active():
+            return data
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data
+        try:
+            baked = self._bake_html_citation_handles(text)
+        except Exception:
+            logger.opt(exception=True).warning(
+                "[linsight-citation] svid={} html citation baking failed, writing text unbaked", self.svid
+            )
+            return data
+        if baked == text:
+            return data
+        return baked.encode("utf-8")
+
+    def _bake_html_citation_handles(self, text: str) -> str:
+        """``[S3]`` runs -> ``<sup>[n]</sup>`` plus a references section before ``</body>``.
+
+        Numbers are per file, assigned by first appearance and unique per
+        distinct handle; a run is rewritten only when every handle in it is
+        known (a run with an unknown handle stays literal and the unknown
+        handle is reported). Text inside comments, ``<script>`` / ``<style>`` /
+        ``<pre>`` / ``<code>`` elements and inside tags is never rewritten.
+        Already-baked content (carries ``HTML_REFERENCES_ATTR``) is first
+        restored — baked ``<sup data-f069-h="S3,S7">`` runs become ``[S3][S7]``
+        again and the old section is dropped — then baked afresh, so an
+        ``edit`` that adds a handle later still gets numbered and re-baking is
+        idempotent. Nothing is appended when no handle was numbered.
+        """
+        if not text or "[" not in text:
+            return text
+        from bisheng.citation.domain.services.citation_handle_service import _HANDLE_RE, _RUN_RE
+
+        if HTML_REFERENCES_ATTR in text:
+            text = _HTML_BAKED_SUP_RE.sub(lambda m: "".join(f"[{h}]" for h in m.group(1).split(",") if h), text)
+            text = _HTML_REFERENCES_SECTION_RE.sub("", text)
+
+        scope = self.citation_scope
+        handles: dict = scope.handles
+        numbers: dict[str, int] = {}  # handle -> per-file number, by first appearance
+        unknown: list[str] = []
+        numbered_runs = 0
+
+        def _replace(match: re.Match[str]) -> str:
+            nonlocal numbered_runs
+            seen: list[str] = []
+            for handle in _HANDLE_RE.findall(match.group(0)):
+                if handle not in seen:
+                    seen.append(handle)
+            known = [h for h in seen if h in handles]
+            missing = [h for h in seen if h not in handles]
+            for h in missing:
+                if h not in unknown:
+                    unknown.append(h)
+            if not known:
+                return match.group(0)
+            for h in known:
+                if h not in numbers:
+                    numbers[h] = len(numbers) + 1
+            numbered_runs += 1
+            # the handles ride along in a data attribute so a later re-bake can restore them
+            sup = f'<sup data-f069-h="{",".join(known)}">' + "".join(f"[{numbers[h]}]" for h in known) + "</sup>"
+            # an unknown handle stays literal after the baked run (same as markdown)
+            return sup + "".join(f"[{h}]" for h in missing)
+
+        out: list[str] = []
+        last = 0
+        for skip in _HTML_SKIP_RE.finditer(text):
+            if skip.start() > last:
+                out.append(_RUN_RE.sub(_replace, text[last : skip.start()]))
+            out.append(skip.group(0))
+            last = skip.end()
+        if last < len(text):
+            out.append(_RUN_RE.sub(_replace, text[last:]))
+
+        note_conversion = getattr(scope, "note_conversion", None)
+        if note_conversion is not None:
+            note_conversion(numbered_runs, unknown)
+        if not numbers:
+            return text
+
+        by_handle = {e.get("handle"): e for e in (getattr(scope, "entries", None) or []) if isinstance(e, dict)}
+        items: list[str] = []
+        for handle, _number in sorted(numbers.items(), key=lambda kv: kv[1]):
+            entry = by_handle.get(handle) or {}
+            items.append(f"<li>{html.escape(self._html_reference_line(handle, entry))}</li>")
+        heading = "参考资料" if _CJK_RE.search(text) else "References"
+        section = (
+            f"\n<section {HTML_REFERENCES_ATTR}><h2>{heading}</h2><ol>\n" + "\n".join(items) + "\n</ol></section>\n"
+        )
+        baked = "".join(out)
+        idx = baked.lower().rfind("</body>")
+        if idx < 0:
+            return baked + section
+        return baked[:idx] + section + baked[idx:]
+
+    def _html_reference_line(self, handle: str, entry: dict) -> str:
+        """One appendix line: rag/temp -> ``《title》 · loc``; web -> ``title`` (key as fallback)."""
+        key = str(entry.get("key") or self.citation_scope.handles.get(handle) or handle)
+        type_value = entry.get("type")
+        type_name = str(getattr(type_value, "value", type_value) or "").lower()
+        title = str(entry.get("title") or "").strip() or key
+        loc = str(entry.get("loc") or "").strip()
+        if type_name == "web":
+            return title
+        return f"《{title}》 · {loc}" if loc else f"《{title}》"
+
+    def _canonicalize_citation_bytes(self, rel: str, data: bytes) -> bytes:
+        """Bring the citation spelling of a markdown write onto the canonical form.
+
+        1. Rewrite escaped ``\\ue200`` sequences to real PUA chars — write_file
+           JSON often stores the six-character escape while the preview and
+           ``extract_citation_ids_from_text`` only recognize U+E200/E201/E202.
+        2. (F069, scope active) convert the model's short handles ``[S3]`` into
+           markers; unknown handles stay literal and are reported to the scope.
+
+        html deliverables (``.html`` / ``.htm``) take the F069 P2 path instead
+        (``_bake_html_citation_bytes``): handles become superscripts plus an
+        appended references section. Other files (``.txt`` / ``.py`` …) are
+        returned as-is.
+        """
+        if self._is_html_path(rel):
+            return self._bake_html_citation_bytes(data)
+        if not self._is_markdown_path(rel):
             return data
         try:
             text = data.decode("utf-8")
@@ -615,9 +806,13 @@ class WorkspaceBackend(FilesystemBackend):
         from bisheng.citation.domain.services.citation_prompt_helper import unescape_citation_markers
 
         fixed = unescape_citation_markers(text)
+        fixed = self._convert_citation_handles(fixed)
         if fixed == text:
             return data
         return fixed.encode("utf-8")
+
+    # Pre-F069 name; kept so an out-of-tree caller of the old spelling still works.
+    _normalize_markdown_citation_bytes = _canonicalize_citation_bytes
 
     # -- write --------------------------------------------------------------
     def write(self, file_path: str, content) -> WriteResult:
@@ -625,7 +820,7 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
+        data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         # cache first (fast local), then write-through to MinIO (truth).
         self._cache_write(rel, data)
         self._minio_put_sync(rel, data)
@@ -706,6 +901,16 @@ class WorkspaceBackend(FilesystemBackend):
                     f"(doing so would corrupt it). Regenerate it with the code interpreter instead."
                 )
             )
+        if self._is_markdown_path(rel) and self._citation_handles_active():
+            # The disk already holds markers while the model still remembers the
+            # ``[S3]`` it wrote (design §5 #5): convert the arguments first so
+            # ``old_string`` locates the marker text. If the converted form is
+            # not on disk (the model quoted an already-literal passage) fall
+            # back to the verbatim argument.
+            converted_old = self._convert_citation_handles(old_string, note=False)
+            if converted_old != old_string and converted_old in text:
+                old_string = converted_old
+            new_string = self._convert_citation_handles(new_string, note=False)
         if old_string not in text:
             return EditResult(error=f"old_string not found in '{file_path}'")
         if replace_all:
@@ -718,7 +923,7 @@ class WorkspaceBackend(FilesystemBackend):
                 )
             occurrences = 1
             new_text = text.replace(old_string, new_string, 1)
-        new_data = self._normalize_markdown_citation_bytes(rel, new_text.encode("utf-8"))
+        new_data = self._canonicalize_citation_bytes(rel, new_text.encode("utf-8"))
         self._cache_write(rel, new_data)
         self._minio_put_sync(rel, new_data)
         return EditResult(path="/" + rel, occurrences=occurrences)
@@ -856,7 +1061,7 @@ class WorkspaceBackend(FilesystemBackend):
         if _is_skills_path(rel):
             logger.warning("[linsight-skills-readonly] svid={} refused write to {}", self.svid, rel)
             return WriteResult(error=_skills_readonly_error(file_path))
-        data = self._normalize_markdown_citation_bytes(rel, self._to_bytes(content))
+        data = self._canonicalize_citation_bytes(rel, self._to_bytes(content))
         await asyncio.to_thread(self._cache_write, rel, data)
         await self.minio.put_object(
             bucket_name=self._bucket(),
