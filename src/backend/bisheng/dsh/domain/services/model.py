@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import UTC, datetime
 from inspect import isawaitable
-from uuid import uuid4
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from loguru import logger
@@ -15,6 +15,7 @@ from bisheng.common.errcode.dsh import (
     DshMonthlyTokenLimitExceededError,
     DshQuotaUnavailableError,
     DshUnsupportedParameterError,
+    DshUpstreamBillingError,
     DshUpstreamErrorError,
     DshUpstreamTimeoutError,
     DshUsageUnavailableError,
@@ -184,7 +185,26 @@ class DshModelService:
             return error
         if isinstance(error, TimeoutError):
             return DshUpstreamTimeoutError()
-        if getattr(error, "code", None) == "context_length_exceeded":
+        provider_code = getattr(error, "code", None)
+        body = getattr(error, "body", None)
+        if provider_code is None and isinstance(body, dict):
+            detail = body.get("error", body)
+            if isinstance(detail, dict):
+                provider_code = detail.get("code")
+        if provider_code == "Arrearage":
+            # Provider messages can echo credentials or prompts; publish fixed copy
+            # and keep only a validated correlation identifier in the server log.
+            request_id = getattr(error, "request_id", None)
+            provider_request_id = None
+            if isinstance(request_id, str):
+                try:
+                    provider_request_id = str(UUID(request_id))
+                except ValueError:
+                    # Correlation is optional; malformed identifiers stay private.
+                    provider_request_id = None
+            logger.warning("DSH upstream billing rejected; provider_request_id={}", provider_request_id)
+            return DshUpstreamBillingError()
+        if provider_code == "context_length_exceeded":
             return DshContextLengthExceededError()
         return DshUpstreamErrorError()
 

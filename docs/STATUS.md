@@ -1,5 +1,7 @@
 # DSH 企业后台交付状态
 
+- 2026-09-20：修复 DSH 对百炼 `Arrearage` 的错误转换，在现有 `upstream_error` 合同内提示管理员检查模型服务余额和计费状态；日志记录经过 UUID 校验的上游请求编号。普通 HTTP 和 SSE 的 8 项新回归及相关模型服务/API 共 40 项测试通过，2 项外部 Redis 用例排除；Ruff、架构守卫和 diff 检查通过。真实客户端恢复由用户确认；本次提示改动处于 PR 候选，部署验证为 `NOT_RUN`。
+
 - 2026-09-20：上游 PR 候选基于 `feat/3.0.0-beta2-pre@dff62d251`，完整保留企业后台整合，并纳入授权树加载稳定性与模型展示名称修复。753 项相关测试、双前端构建及定向检查通过；管理端全量类型检查有两项上游既有错误，真库与登录态验收为 `NOT_RUN`。完整范围、来源和迁移说明见 [上游交付记录](../features/v3.0.0-beta2/062-dsh-desktop-model-access/upstream-pr-delivery.md)。
 
 - 2026-09-20：模型目录和管理端共用展示名称规则，优先采用管理员配置的 `name`，空白名称使用调用名称 `model_name`。内部模型 ID 继续用于调用、权限和额度。定向回归 48 项通过、2 项 Redis 用例按环境跳过，16 项外部数据库变体排除；Ruff 和架构守卫通过。执行方式与环境边界见 [模型名称修复验证](../features/v3.0.0-beta2/062-dsh-desktop-model-access/model-display-verification.md)。
