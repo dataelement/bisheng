@@ -20,7 +20,6 @@ autogen_coding/
 .claude/docs/
 
 # Local feature planning artifacts
-features/
 
 # VSCode
 .vscode
