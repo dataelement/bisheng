@@ -8,6 +8,9 @@ from sqlmodel import Field
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
+# 包含首次执行; 正常完成一批后的续跑重新获得额度。
+DEPARTMENT_TRANSFER_CLEANUP_MAX_ATTEMPTS = 3
+
 
 class DepartmentTransferCleanupEventStatus:
     PREPARING = "preparing"
@@ -17,8 +20,9 @@ class DepartmentTransferCleanupEventStatus:
     OVERDUE = "overdue"
     SUCCEEDED = "succeeded"
     CANCELLED = "cancelled"
+    DEAD = "dead"
 
-    TERMINAL = frozenset({SUCCEEDED, CANCELLED})
+    TERMINAL = frozenset({SUCCEEDED, CANCELLED, DEAD})
     RETRYABLE = frozenset({PENDING, FAILED, OVERDUE})
 
 

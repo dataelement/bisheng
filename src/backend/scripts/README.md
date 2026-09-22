@@ -124,6 +124,62 @@ employee001,技术员
 - 成功退出码为 0。失败时返回非零，若目录内有 `未完成.txt`，则不能使用其中的部分文件。
   Excel 对账号列可能自动转为数字，带前导零的账号请通过“从文本/CSV”导入并指定文本类型。
 
+### `export_portal_category_usage.py`
+
+只读统计指定租户**全部非个人知识空间**中，各一级分类的知识总数、被系统化调用数量和调用比例。
+从后端根目录执行，使用已有数据库和看板 Elasticsearch 配置，无需安装新依赖：
+
+```bash
+.venv/bin/python scripts/export_portal_category_usage.py \
+  --tenant-id 1 --output-dir /tmp/portal-category-usage
+
+# 指定配置文件（含义与启动后端时的 config 环境变量一致）
+.venv/bin/python scripts/export_portal_category_usage.py \
+  --tenant-id 1 --config config_3002.yaml --output-dir /tmp/portal-category-usage-3002
+
+# 按上传人当前主组织筛选，包含全部子组织；123 替换为实际 department.id
+.venv/bin/python scripts/export_portal_category_usage.py \
+  --tenant-id 1 --department-id 123 \
+  --output-dir /app/portal-category-usage-dept-123 --verbose
+```
+
+- 可选 `--department-id` 为数据库 `department.id`，不是组织名称或外部组织编码。
+  通过组织树路径纳入本组织及所有层级的子组织，按文件 `user_id` 对应上传人的**当前主组织**筛选。
+  不使用原始上传人、上传时组织或兼职组织；不按组织启停状态排除；缺少主组织关联的上传人不计入组织报表。
+  组织不存在、不属于指定租户或路径无效时直接报错；有效空组织输出零数量。
+  不传此参数时保留原来的租户全量统计。组织名称、路径及包含的组织清单写入 `统计口径.json`。
+  任一有效非个人空间入口的上传人符合组织范围，知识即可入选，再按文档 ID 去重。
+  入选知识在**当前租户全部非个人空间**中的预览/下载均计入，包括分享到其他组织的引用及保留的历史入口。
+  用户调动会改变当前组织归属；看板 ES 的组织维度同步前可能与此实时数据库筛选存在暂时差异。
+- 生成 `知识分类调用统计.md`、Excel 可打开的 UTF-8 BOM `知识分类调用统计.csv`、`统计口径.json`。
+  输出目录必须不存在，省略时自动生成时间戳目录；终端也会打印四列表格。
+- 加 `--verbose` 会在终端显示执行脚本路径、数据库候选数、实际 ES 主机和端口，以及每批请求前后日志。
+  只有收到响应后才打印返回数量，不输出账号密码。ES 与看板一致使用 `vector_stores.elasticsearch`，
+  默认模式不显示每次请求日志。
+- 一级分类按租户门户 `document_types` 配置顺序输出，名称不硬编码，保留零库存分类。
+  优先取 `split_rule.file_category_code`，缺失时解析当前文件编码，与看板一致；汇总全部二级分类；缺失或未配置分类另列，避免静默漏数。
+- 知识总数为当前解析成功、未软删除的有效知识文件数，排除文件夹、历史版本、失效引用及退役空间。
+  按文档 ID 去重发布/分享引用；独立上传的文件不按文件名或 MD5 合并。
+  排除个人空间；个人来源知识已发布到非个人空间的有效引用仍计入。
+  此为运维全量盘点，不模拟某个登录用户权限，也不按 `portal_discovery_enabled` 过滤。
+- 调用判定读取看板“知识空间内容统计”数据集 `mid_knowledge_space_content_stat`，
+  按 `file_id` 合并 `preview_daily` 的 `preview_count`、`download_daily` 的 `download_count`。
+  任一累计值大于零即为已调用，同一知识无论次数多少均计 1；不是把次数相加作为知识数量。
+  只取非个人空间记录，忽略 `file`、`favorite_daily`、`portal_engagement_daily` 等其他类型。
+  保留的非个人空间历史版本/旧引用记录也关联到当前文档；个人空间入口的调用排除。
+  数据集已合并调用来源，包含看板已采集的门户及毕昇工作台等来源，不再限定 `shougang_portal`。
+  新版本不再支持旧 `--source` 参数，默认索引也已改为看板数据集；不要继续传原始日志索引。
+- 比例为已调用知识数除以知识总数，两位小数百分比；分母为零输出 `0.00%`。
+  数据库按严格租户上下文读取，ES 只查这些文件 ID（全库唯一主键），不依赖日统计是否具有租户字段。
+  ES 按 400 个候选文件 ID 分批精确聚合，避免 Top N 截断及近似去重误差。
+- **历史留存限制**：未采集、未同步、统计被清理、上报失败、物理删除的历史入口无法还原。
+  “成功”表示服务记录了提供预览或下载，不保证用户读完或下载保存完成。
+  使用查询时已落库的全部历史日统计，不按日期筛选，也不保证秒级截止快照。
+  数据库与 ES 不具备跨系统一致快照，建议低峰期执行；最近事件可能受看板同步和 ES 刷新延迟影响。
+- 不更新数据库、不创建 ES 索引、不调用文件详情或下载接口；仅生成本地报告。
+  索引缺失、查询失败/超时、聚合截断、分类冲突均以非零退出，不能当作零调用。
+  若输出目录留有 `未完成.txt`，其中部分文件不可使用。
+
 ### `unset_admin.py`
 
 指定已有用户 ID, 撤销平台超级管理员: 删除 `AdminRole=1` 和 OpenFGA
@@ -1943,3 +1999,21 @@ bash scripts/backfill_space_file_points.sh \
   --score-per-file 2 \
   --ignore-accounts "admin,system"
 ```
+
+
+### `migrate_knowledge_document_statistics.py`
+
+将知识空间内容统计升级为按文档精确去重，保留个人库选项，新增被系统化调用知识数、调用比例。
+**本次升级使用此脚本，不使用会清空历史日统计的 `rebuild_knowledge_space_content_stat.py`。**
+默认只读预检；正式迁移在新索引重建库存，原样复制全部非库存记录，逐记录摘要和次数校验，克隆并校验源备份后原子切换别名。
+不修改知识业务表、不重放历史事件、不清理 Redis 回放位置。支持有校验保护的回退。
+
+```bash
+# 在后端目录执行；省略 --apply 仅检查，不创建或切换索引。
+.venv/bin/python scripts/migrate_knowledge_document_statistics.py \
+  --config config.yaml \
+  --target-index mid_knowledge_space_content_stat-doc-v1-20260921 \
+  --backup-index mid_knowledge_space_content_stat-backup-20260921
+```
+
+[完整口径、正式迁移、对账和回退步骤](knowledge_document_statistics_migration.md)。

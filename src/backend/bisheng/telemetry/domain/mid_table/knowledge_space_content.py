@@ -20,13 +20,16 @@ from bisheng.knowledge.domain.constants import (
     normalize_file_category_code,
 )
 from bisheng.knowledge.domain.models.knowledge import Knowledge
+from bisheng.knowledge.domain.document_identity import document_identity
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.telemetry.domain.mid_table import queue_retry
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
     CONTENT_DIMENSION_FIELDS,
     OrganizationNameSnapshot,
     build_daily_document_id,
 )
+from bisheng.telemetry.domain.mid_table.retry_budget import MAX_ATTEMPTS, checkpoint
 from bisheng.utils import generate_uuid
 
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
@@ -53,6 +56,8 @@ class KnowledgeSpaceContentRecord(BaseModel):
     space_level: str = "unknown"
     space_level_name: str = SPACE_LEVEL_LABELS["unknown"]
     file_id: int
+    knowledge_identity: str | None = None
+    tenant_id: int = 1
     file_name: str
     file_type: int
     file_category_code: str | None = None
@@ -168,33 +173,26 @@ class KnowledgeSpaceContentStat(BaseMidTable):
     LOCK_TTL_SECONDS: ClassVar[int] = 300
     PROCESSING_LEASE_SECONDS: ClassVar[int] = 240
     FILE_BATCH_SIZE: ClassVar[int] = 500
+    ATTEMPTS_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:attempts"
+    DEAD_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:dead"
+    ERRORS_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:errors"
+    EVENT_ATTEMPTS_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_attempts"
+    EVENT_DEAD_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_dead"
+    EVENT_ERRORS_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_errors"
 
-    CLAIM_SCRIPT: ClassVar[str] = """
-if redis.call('get', KEYS[4]) ~= ARGV[1] then
-  return {}
-end
-local values = redis.call('zrange', KEYS[1], 0, tonumber(ARGV[4]) - 1, 'withscores')
-local claimed = {}
-for index = 1, #values, 2 do
-  local member = values[index]
-  local enqueued_at = values[index + 1]
-  if redis.call('zrem', KEYS[1], member) == 1 then
-    redis.call('zadd', KEYS[2], ARGV[3], member)
-    redis.call('hset', KEYS[3], member, enqueued_at)
-    table.insert(claimed, member)
-    table.insert(claimed, enqueued_at)
-  end
-end
-return claimed
-"""
+    CLAIM_SCRIPT: ClassVar[str] = queue_retry.CLAIM
     ACK_SCRIPT: ClassVar[str] = """
 if redis.call('get', KEYS[3]) ~= ARGV[1] then
   return 0
 end
 local removed = 0
 for index = 2, #ARGV do
-  removed = removed + redis.call('zrem', KEYS[1], ARGV[index])
+  if redis.call('zrem', KEYS[1], ARGV[index]) == 1 then
+    removed = removed + 1
   redis.call('hdel', KEYS[2], ARGV[index])
+  redis.call('hdel', KEYS[4], ARGV[index])
+  redis.call('hdel', KEYS[5], ARGV[index])
+  end
 end
 return removed
 """
@@ -211,18 +209,7 @@ for index = 3, #ARGV do
 end
 return renewed
 """
-    RECLAIM_SCRIPT: ClassVar[str] = """
-local expired = redis.call('zrangebyscore', KEYS[2], '-inf', ARGV[1])
-local reclaimed = 0
-for _, member in ipairs(expired) do
-  local enqueued_at = redis.call('hget', KEYS[3], member) or ARGV[1]
-  redis.call('zadd', KEYS[1], 'NX', enqueued_at, member)
-  redis.call('zrem', KEYS[2], member)
-  redis.call('hdel', KEYS[3], member)
-  reclaimed = reclaimed + 1
-end
-return reclaimed
-"""
+    RECLAIM_SCRIPT: ClassVar[str] = queue_retry.RECLAIM
     RENEW_LOCK_SCRIPT: ClassVar[str] = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
   return redis.call('expire', KEYS[1], ARGV[2])
@@ -241,9 +228,13 @@ if redis.call('get', KEYS[4]) ~= ARGV[1] then
 end
 local removed = 0
 for index = 2, #ARGV do
-  removed = removed + redis.call('zrem', KEYS[1], ARGV[index])
+  if redis.call('zrem', KEYS[1], ARGV[index]) == 1 then
+    removed = removed + 1
   redis.call('hdel', KEYS[2], ARGV[index])
   redis.call('hdel', KEYS[3], ARGV[index])
+  redis.call('hdel', KEYS[5], ARGV[index])
+  redis.call('hdel', KEYS[6], ARGV[index])
+  end
 end
 return removed
 """
@@ -267,6 +258,8 @@ return removed
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
         "file_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        "knowledge_identity": {"type": "keyword"},
+        "tenant_id": {"type": "integer"},
         "file_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "file_type": {"type": "integer"},
         "file_category_code": {"type": "keyword"},
@@ -383,7 +376,9 @@ return removed
         if not mapping:
             return
         redis_client.cluster_nodes(cls.PENDING_KEY)
-        redis_client.connection.zadd(cls.PENDING_KEY, mapping, nx=True)
+        redis_client.connection.eval(
+            queue_retry.ENQUEUE, 2, cls.PENDING_KEY, cls.DEAD_KEY, now_ms or cls._now_ms(), *mapping
+        )
 
     @classmethod
     async def _zadd_pending_async(cls, redis_client, members: Iterable[str], *, now_ms: int | None = None) -> None:
@@ -391,7 +386,9 @@ return removed
         if not mapping:
             return
         await redis_client.acluster_nodes(cls.PENDING_KEY)
-        await redis_client.async_connection.zadd(cls.PENDING_KEY, mapping, nx=True)
+        await redis_client.async_connection.eval(
+            queue_retry.ENQUEUE, 2, cls.PENDING_KEY, cls.DEAD_KEY, now_ms or cls._now_ms(), *mapping
+        )
 
     @classmethod
     def _schedule_pending_sync(cls, redis_client=None, *, countdown: int = SCHEDULE_DELAY_SECONDS) -> None:
@@ -613,6 +610,7 @@ return removed
 
     @classmethod
     def renew_lock_sync(cls, owner_token: str) -> bool:
+        checkpoint()
         try:
             redis_client = get_redis_client_sync()
             redis_client.cluster_nodes(cls.LOCK_KEY)
@@ -660,15 +658,18 @@ return removed
         lease_deadline_ms = claimed_at_ms + cls.PROCESSING_LEASE_SECONDS * 1000
         values = redis_client.connection.eval(
             cls.CLAIM_SCRIPT,
-            4,
+            6,
             cls.PENDING_KEY,
             cls.PROCESSING_KEY,
             cls.PROCESSING_META_KEY,
             cls.LOCK_KEY,
+            cls.ATTEMPTS_KEY,
+            cls.DEAD_KEY,
             owner_token,
             claimed_at_ms,
             lease_deadline_ms,
             min(max(int(batch_size), 1), cls.FILE_BATCH_SIZE),
+            MAX_ATTEMPTS,
         )
         result: list[ProjectionWorkItem] = []
         for index in range(0, len(values or []), 2):
@@ -712,10 +713,12 @@ return removed
         redis_client.cluster_nodes(cls.PROCESSING_KEY)
         removed = redis_client.connection.eval(
             cls.ACK_SCRIPT,
-            3,
+            5,
             cls.PROCESSING_KEY,
             cls.PROCESSING_META_KEY,
             cls.LOCK_KEY,
+            cls.ATTEMPTS_KEY,
+            cls.ERRORS_KEY,
             owner_token,
             *values,
         )
@@ -727,11 +730,14 @@ return removed
         redis_client.cluster_nodes(cls.PENDING_KEY)
         reclaimed = redis_client.connection.eval(
             cls.RECLAIM_SCRIPT,
-            3,
+            5,
             cls.PENDING_KEY,
             cls.PROCESSING_KEY,
             cls.PROCESSING_META_KEY,
+            cls.ATTEMPTS_KEY,
+            cls.DEAD_KEY,
             now_ms or cls._now_ms(),
+            MAX_ATTEMPTS,
         )
         return int(reclaimed or 0)
 
@@ -753,15 +759,18 @@ return removed
         now_ms = cls._now_ms()
         values = redis_client.connection.eval(
             cls.CLAIM_SCRIPT,
-            4,
+            6,
             cls.EVENT_PENDING_KEY,
             cls.EVENT_PROCESSING_KEY,
             cls.EVENT_PROCESSING_META_KEY,
             cls.LOCK_KEY,
+            cls.EVENT_ATTEMPTS_KEY,
+            cls.EVENT_DEAD_KEY,
             owner_token,
             now_ms,
             now_ms + cls.PROCESSING_LEASE_SECONDS * 1000,
             min(max(int(batch_size), 1), cls.FILE_BATCH_SIZE),
+            MAX_ATTEMPTS,
         )
         return [
             event_id
@@ -777,6 +786,69 @@ return removed
         if payload is None:
             return None
         return ContentStatEventEnvelope.model_validate_json(cls._decode_text(payload))
+
+    @classmethod
+    def get_event_payloads_sync(cls, event_ids):
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PAYLOAD_KEY)
+        payloads = redis_client.connection.hmget(cls.EVENT_PAYLOAD_KEY, event_ids)
+        records, errors = {}, {}
+        for event_id, payload in zip(event_ids, payloads, strict=True):
+            try:
+                record = ContentStatEventEnvelope.model_validate_json(cls._decode_text(payload))
+                if record.event_id != event_id:
+                    raise ValueError("Event payload identity mismatch")
+                records[event_id] = record
+            except Exception as exc:
+                errors[event_id] = f"{type(exc).__name__}: {exc}"
+        return records, errors
+
+    def upsert_events_daily_sync(self, groups):
+        """同一日统计 ID 只写一次, 绝对计数单调更新且逐项检查结果。"""
+        if not groups:
+            return {}
+        operations, ids = [], []
+        for envelope, count in groups:
+            field = {
+                "preview_daily": "preview_count",
+                "download_daily": "download_count",
+                "favorite_daily": "favorite_count",
+            }[envelope.record_type]
+            day = datetime.strptime(envelope.local_date, "%Y-%m-%d").date()
+            document = {
+                **envelope.dimensions,
+                "record_type": envelope.record_type,
+                "local_date": envelope.local_date,
+                "timestamp": int(datetime.combine(day, datetime.min.time(), tzinfo=CHINA_STANDARD_TIME).timestamp()),
+                field: count,
+            }
+            ids.append(envelope.daily_id)
+            operations.extend(
+                [
+                    {"update": {"_index": self.INDEX_NAME, "_id": envelope.daily_id, "retry_on_conflict": 3}},
+                    {
+                        "script": {
+                            "lang": "painless",
+                            "source": f"if (ctx._source.{field} == null || ctx._source.{field} < params.count) "
+                            f"{{ ctx._source.{field} = params.count; }} else {{ ctx.op = 'noop'; }}",
+                            "params": {"count": count},
+                        },
+                        "upsert": document,
+                    },
+                ]
+            )
+        response = self._es_client_sync.bulk(operations=operations, refresh=False)
+        items = response.get("items", [])
+        if len(items) != len(ids):
+            raise RuntimeError("Content daily bulk incomplete response")
+        errors = {}
+        for key, item in zip(ids, items, strict=True):
+            result = item.get("update", {})
+            if result.get("_id") != key:
+                raise RuntimeError("Content daily bulk mismatched response")
+            if not 200 <= result.get("status", 0) < 300:
+                errors[key] = str(result.get("error") or result.get("status"))
+        return errors
 
     @classmethod
     def renew_event_claims_sync(
@@ -812,11 +884,13 @@ return removed
         redis_client.cluster_nodes(cls.EVENT_PROCESSING_KEY)
         removed = redis_client.connection.eval(
             cls.ACK_EVENT_SCRIPT,
-            4,
+            6,
             cls.EVENT_PROCESSING_KEY,
             cls.EVENT_PROCESSING_META_KEY,
             cls.EVENT_PAYLOAD_KEY,
             cls.LOCK_KEY,
+            cls.EVENT_ATTEMPTS_KEY,
+            cls.EVENT_ERRORS_KEY,
             owner_token,
             *values,
         )
@@ -828,11 +902,14 @@ return removed
         redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
         reclaimed = redis_client.connection.eval(
             cls.RECLAIM_SCRIPT,
-            3,
+            5,
             cls.EVENT_PENDING_KEY,
             cls.EVENT_PROCESSING_KEY,
             cls.EVENT_PROCESSING_META_KEY,
+            cls.EVENT_ATTEMPTS_KEY,
+            cls.EVENT_DEAD_KEY,
             now_ms or cls._now_ms(),
+            MAX_ATTEMPTS,
         )
         return int(reclaimed or 0)
 
@@ -841,7 +918,7 @@ return removed
         try:
             redis_client = get_redis_client_sync()
             redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
-            return int(redis_client.connection.zcard(cls.EVENT_PENDING_KEY) or 0) > 0
+            return int(redis_client.connection.zcount(cls.EVENT_PENDING_KEY, "-inf", cls._now_ms()) or 0) > 0
         except Exception:
             logger.exception("Failed to inspect knowledge space content event queue.")
             return False
@@ -865,6 +942,7 @@ return removed
                 cls._now_ms() - int(float(oldest_rows[0][1])),
             )
         return {
+            "event_dead_count": int(redis_client.connection.hlen(cls.EVENT_DEAD_KEY)),
             "event_pending_count": pending_count,
             "event_processing_count": processing_count,
             "event_oldest_pending_age_ms": oldest_pending_age_ms,
@@ -926,11 +1004,52 @@ return removed
         )
 
     @classmethod
+    def fail_claimed_sync(cls, owner_token, members, error, *, events=False):
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        prefix = "EVENT_" if events else ""
+        keys = [getattr(cls, prefix + name) for name in ("PENDING_KEY", "PROCESSING_KEY", "PROCESSING_META_KEY")]
+        keys += [cls.LOCK_KEY] + [getattr(cls, prefix + name) for name in ("ATTEMPTS_KEY", "DEAD_KEY", "ERRORS_KEY")]
+        return int(
+            redis_client.connection.eval(
+                queue_retry.FAIL, len(keys), *keys, owner_token, cls._now_ms(), MAX_ATTEMPTS, str(error)[:2000], *members
+            )
+        )
+
+    @classmethod
+    def replay_dead_sync(cls, member, *, events=False):
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.PENDING_KEY)
+        prefix = "EVENT_" if events else ""
+        keys = [
+            getattr(cls, prefix + name)
+            for name in ("PENDING_KEY", "PROCESSING_KEY", "DEAD_KEY", "ATTEMPTS_KEY", "ERRORS_KEY")
+        ]
+        return bool(redis_client.connection.eval(queue_retry.REPLAY, len(keys), *keys, member, cls._now_ms()))
+
+    @classmethod
+    def dead_file_ids_sync(cls, file_ids):
+        if not file_ids:
+            return set()
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.DEAD_KEY)
+        values = redis_client.connection.hmget(cls.DEAD_KEY, [f"file:{key}" for key in file_ids])
+        return {str(key) for key, value in zip(file_ids, values, strict=True) if value is not None}
+
+    def reconcile_file_records_sync(self, records):
+        from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
+
+        checkpoint()
+        return ContentStatReconciler(self._es_client_sync, self.INDEX_NAME).reconcile(
+            {str(record.es_id): record.model_dump(exclude={"es_id"}) for record in records}
+        )
+
+    @classmethod
     def has_pending_sync(cls) -> bool:
         try:
             redis_client = get_redis_client_sync()
             redis_client.cluster_nodes(cls.PENDING_KEY)
-            return int(redis_client.connection.zcard(cls.PENDING_KEY) or 0) > 0
+            return int(redis_client.connection.zcount(cls.PENDING_KEY, "-inf", cls._now_ms()) or 0) > 0
         except Exception:
             logger.exception("Failed to inspect knowledge space content projection pending queue.")
             return False
@@ -945,6 +1064,7 @@ return removed
         current_ms = now_ms or cls._now_ms()
         oldest_pending_age_ms = max(0, current_ms - int(oldest[0][1])) if oldest else 0
         return {
+            "dead_count": int(redis_client.connection.hlen(cls.DEAD_KEY)),
             "pending_count": pending_count,
             "processing_count": processing_count,
             "oldest_pending_age_ms": oldest_pending_age_ms,
@@ -970,6 +1090,7 @@ return removed
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
         sync_run_id: str | None = None,
+        knowledge_identity: str | None = None,
     ) -> KnowledgeSpaceContentRecord:
         uploader_user_id = int(file_record.user_id or 0)
         uploader_user_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
@@ -996,6 +1117,8 @@ return removed
             space_level=normalized_space_level,
             space_level_name=SPACE_LEVEL_LABELS[normalized_space_level],
             file_id=int(file_record.id),
+            knowledge_identity=knowledge_identity or document_identity(file_record.id, getattr(file_record, "reference_document_id", None)),
+            tenant_id=int(getattr(file_record, "tenant_id", None) or getattr(space, "tenant_id", None) or 1),
             file_name=file_record.file_name,
             file_type=int(file_record.file_type),
             file_category_code=file_category_code,
@@ -1062,6 +1185,23 @@ return removed
             download_count=download_count,
             **dimensions,
         )
+
+    def reconcile_delete_file_records_sync(self, file_ids: Iterable[int]) -> int:
+        from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
+
+        reconciler = ContentStatReconciler(self._es_client_sync, self._index_name)
+        observed = reconciler.read([str(key) for key in self._normalize_ids(file_ids)])
+        operations = []
+        for key, item in observed.items():
+            if not item["found"]:
+                continue
+            if item["_source"].get("record_type") != "file":
+                raise RuntimeError(f"Refusing to delete non-file projection {key}")
+            operations.append({"delete": {"_index": self._index_name, "_id": key, **reconciler.version(item)}})
+        result = reconciler.write(operations)
+        if result["conflict_ids"]:
+            raise RuntimeError(f"Content file deletion conflicts: {result['conflict_ids']}")
+        return result["deleted"]
 
     def delete_file_records_sync(self, file_ids: Iterable[int]) -> int:
         ids = self._normalize_ids(file_ids)

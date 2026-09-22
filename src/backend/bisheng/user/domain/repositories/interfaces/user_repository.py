@@ -17,6 +17,10 @@ class UserRepository(BaseRepository[User, int], ABC):
     def get_user_with_groups_and_roles_by_user_id_sync(self, user_id: int) -> UserQuery:
         pass
 
+    def get_users_with_groups_and_roles_by_ids_sync(self, user_ids: list[int]) -> list[User]:
+        """批量加载统计事件所需的用户及关联维度。"""
+        raise NotImplementedError
+
     async def get_primary_department_name(self, user_id: int) -> str | None:
         pass
 

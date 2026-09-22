@@ -1,10 +1,11 @@
 from datetime import date, datetime, timedelta
+from time import monotonic
 from typing import Any, List
 
 from elasticsearch import exceptions as es_exceptions
 from elasticsearch import helpers
 from loguru import logger
-from sqlalchemy import exists, or_
+from sqlalchemy import exists, func, or_
 from sqlmodel import col, select
 
 from bisheng.api.services.workflow import WorkFlowService
@@ -36,7 +37,7 @@ from bisheng.knowledge.domain.models.knowledge_document_version import Knowledge
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpace,
 )
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus, FileType
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao, KnowledgeFileStatus, FileType
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
@@ -49,6 +50,9 @@ from bisheng.knowledge.domain.services.file_classification_label_service import 
 )
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
+from bisheng.telemetry.domain.mid_table.content_stat_reconcile import BatchWriteError, ContentStatReconciler
+from bisheng.telemetry.domain.mid_table.retry_budget import bounded_telemetry_task, checkpoint, frozen_value, recover_due_jobs
+from bisheng.telemetry.domain.mid_table.queue_retry import QueuedProjectionFailure
 from bisheng.telemetry.domain.mid_table.daily_participation import (
     CHINA_STANDARD_TIME,
     DailyParticipationFact,
@@ -58,6 +62,9 @@ from bisheng.telemetry.domain.mid_table.daily_participation import (
 )
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
+from bisheng.telemetry.domain.repositories.implementations.knowledge_statistics_repository_impl import (
+    KnowledgeStatisticsRepositoryImpl as KnowledgeStatisticsRepository,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
     resolve_organization_names,
 )
@@ -148,6 +155,7 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
 def _get_active_participation_users(
     offset: int,
     limit: int,
+    user_ids: list[int] | None = None,
 ) -> list[tuple[User, int]]:
     """Page the current employee roster across active leaf tenants."""
     with bypass_tenant_filter():
@@ -170,75 +178,207 @@ def _get_active_participation_users(
                     .offset(offset)
                     .limit(limit)
                 )
+                if user_ids is not None:
+                    statement = statement.where(col(User.user_id).in_(user_ids))
                 return [(user, int(tenant_id)) for user, tenant_id in session.exec(statement).all()]
 
             statement = select(User).where(User.delete == 0).order_by(User.user_id.asc()).offset(offset).limit(limit)
+            if user_ids is not None:
+                statement = statement.where(col(User.user_id).in_(user_ids))
             return [(user, 1) for user in session.exec(statement).all()]
 
 
-def _reconcile_participation_roster_for_day(
-    target_date: date,
-    *,
-    department_source: str,
-) -> dict[str, int | str]:
-    local_date, day_timestamp = participation_day(target_date)
-    sync_run_id = generate_uuid()
-    sync_started_at = int(datetime.now().timestamp())
-    mid_table = DailyParticipationFact()
-    offset, page_size = 0, 1000
-    synced_count = 0
+def _cleanup_participation_records(fact, dates, started_at, historical_login_keys, roster_keys):
+    """仅核对参与记录, 不触碰共用索引中的其他指标。"""
+    reconciler = ContentStatReconciler(fact._es_client_sync, fact._index_name, str)
+    hits = helpers.scan(
+        fact._es_client_sync,
+        index=fact._index_name,
+        size=1000,
+        seq_no_primary_term=True,
+        query={
+            "_source": ["tenant_id", "local_date", "user_id"],
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"metric_source": "participation"}},
+                        {"terms": {"local_date": dates}},
+                        {"range": {"projection_updated_at": {"lt": started_at}}},
+                    ]
+                }
+            },
+        },
+    )
+    deleted, batch = 0, []
 
-    while True:
-        roster_rows = _get_active_participation_users(offset, page_size)
-        if not roster_rows:
-            break
-        offset += len(roster_rows)
-        primary_department_map = UserDepartmentDao.get_primary_department_map_by_user_ids(
-            [int(user.user_id) for user, _ in roster_rows]
+    def flush(rows):
+        checkpoint()
+        rows = [
+            hit
+            for hit in rows
+            if (int(hit["_source"]["tenant_id"]), int(hit["_source"]["user_id"])) not in roster_keys
+            and (int(hit["_source"]["tenant_id"]), hit["_source"]["local_date"], int(hit["_source"]["user_id"]))
+            not in historical_login_keys
+        ]
+        if not rows:
+            return 0
+        ids = sorted({int(hit["_source"]["user_id"]) for hit in rows})
+        active = set()
+        offset = 0
+        while True:
+            users = _get_active_participation_users(offset, 1000, ids)
+            if not users:
+                break
+            active.update((int(tenant), int(user.user_id)) for user, tenant in users)
+            offset += len(users)
+        operations = []
+        for hit in rows:
+            source = hit["_source"]
+            key = (int(source["tenant_id"]), source["local_date"], int(source["user_id"]))
+            if (key[0], key[2]) not in active and key not in historical_login_keys:
+                operations.append(
+                    {"delete": {"_index": fact._index_name, "_id": hit["_id"], **reconciler.version(hit)}}
+                )
+        result = reconciler.write(operations)
+        if result["conflict_ids"]:
+            raise RuntimeError(f"Participation cleanup conflicts: {result['conflict_ids']}")
+        return result["deleted"]
+
+    try:
+        for hit in hits:
+            batch.append(hit)
+            if len(batch) == 1000:
+                deleted += flush(batch)
+                batch = []
+        if batch:
+            deleted += flush(batch)
+    finally:
+        hits.close()
+    return deleted
+
+
+def _reconcile_participation_days(dates, *, aggregates=None, department_source="current_roster"):
+    started_at = int(datetime.now().timestamp())
+    fact = DailyParticipationFact()
+    logins = dict(aggregates or {})
+    historical_login_keys = set(logins)
+    checked = written = unchanged = roster = 0
+    date_values = [participation_day(day) for day in dates]
+
+    def flush(records):
+        nonlocal checked, written, unchanged
+        checkpoint()
+        result = fact.reconcile_records_sync(records)
+        checked += result["checked"]
+        written += result["created"] + result["updated"]
+        unchanged += result["unchanged"]
+        logger.info(
+            "participation.reconcile.progress days={} checked={} written={} unchanged={}",
+            len(dates),
+            checked,
+            written,
+            unchanged,
         )
-        records = []
-        for user, tenant_id in roster_rows:
-            department = primary_department_map.get(int(user.user_id))
+
+    def build(user_id, tenant, name, department, local_date, timestamp, login):
+        return DailyParticipationRecord(
+            es_id=DailyParticipationFact.build_es_id(tenant, local_date, user_id),
+            tenant_id=tenant,
+            timestamp=timestamp,
+            user_id=user_id,
+            user_name=name,
+            user_group_infos=[],
+            user_role_infos=[],
+            user_department_infos=[],
+            local_date=local_date,
+            active_employee=1,
+            primary_department_id=int(department.id) if department else None,
+            primary_department_name=department.name if department else None,
+            department_source="current_primary_backfill" if login else department_source,
+            projection_updated_at=started_at,
+            **(
+                {key: login[key] for key in ("login_count", "first_login_at", "last_login_at")} | {"logged_in": True}
+                if login
+                else {}
+            ),
+        )
+
+    offset, records = 0, []
+    roster_keys = set()
+    while True:
+        checkpoint()
+        users = _get_active_participation_users(offset, 1000)
+        if not users:
+            break
+        offset += len(users)
+        with bypass_tenant_filter():
+            departments = UserDepartmentDao.get_primary_department_map_by_user_ids(
+                sorted({int(user.user_id) for user, _ in users})
+            )
+        for user, tenant in users:
+            user_id = int(user.user_id)
+            roster_keys.add((tenant, user_id))
+            for local_date, timestamp in date_values:
+                login = logins.pop((tenant, local_date, user_id), None)
+                records.append(
+                    build(user_id, tenant, user.user_name, departments.get(user_id), local_date, timestamp, login)
+                )
+                roster += 1
+                if len(records) == 1000:
+                    flush(records)
+                    records = []
+    # 保留不在当前名单中但确有历史登录的人员, 避免优化改变历史补算结果。
+    remaining = list(logins.values())
+    for offset in range(0, len(remaining), 1000):
+        checkpoint()
+        batch = remaining[offset : offset + 1000]
+        with bypass_tenant_filter():
+            departments = UserDepartmentDao.get_primary_department_map_by_user_ids(
+                sorted({row["user_id"] for row in batch})
+            )
+        for login in batch:
             records.append(
-                DailyParticipationRecord(
-                    es_id=DailyParticipationFact.build_es_id(tenant_id, local_date, int(user.user_id)),
-                    tenant_id=tenant_id,
-                    timestamp=day_timestamp,
-                    user_id=int(user.user_id),
-                    user_name=user.user_name,
-                    user_group_infos=[],
-                    user_role_infos=[],
-                    user_department_infos=[],
-                    local_date=local_date,
-                    active_employee=1,
-                    primary_department_id=(int(department.id) if department else None),
-                    primary_department_name=(department.name if department else None),
-                    department_source=department_source,
-                    sync_run_id=sync_run_id,
-                    projection_updated_at=sync_started_at,
+                build(
+                    login["user_id"],
+                    login["tenant_id"],
+                    login["user_name"],
+                    departments.get(login["user_id"]),
+                    login["local_date"],
+                    participation_day(date.fromisoformat(login["local_date"]))[1],
+                    login,
                 )
             )
-        mid_table.upsert_roster_records_sync(records)
-        synced_count += len(records)
-
-    deleted_count = mid_table.delete_stale_roster_records_sync(
-        local_date=local_date,
-        sync_run_id=sync_run_id,
-        sync_started_at=sync_started_at,
+            if len(records) == 1000:
+                flush(records)
+                records = []
+    if records:
+        flush(records)
+    deleted = _cleanup_participation_records(
+        fact, [value[0] for value in date_values], started_at, historical_login_keys, roster_keys
     )
     return {
-        "local_date": local_date,
-        "synced": synced_count,
-        "deleted": deleted_count,
+        "days": len(dates),
+        "roster": roster,
+        "login_facts": len(historical_login_keys),
+        "checked": checked,
+        "written": written,
+        "unchanged": unchanged,
+        "deleted": deleted,
     }
 
 
+def _reconcile_participation_roster_for_day(target_date: date, *, department_source: str):
+    result = _reconcile_participation_days([target_date], department_source=department_source)
+    return {**result, "local_date": target_date.isoformat(), "synced": result["roster"]}
+
+
 @bisheng_celery.task()
+@bounded_telemetry_task
 def sync_mid_user_daily_participation_fact():
     """Reconcile today's denominator while preserving real-time login counters."""
     DailyParticipationFact.clear_roster_reconcile_scheduled()
     trace_id_var.set(f"sync_mid_user_daily_participation_fact_task_{generate_uuid()}")
-    today = datetime.now(CHINA_STANDARD_TIME).date()
+    today = date.fromisoformat(frozen_value("today", lambda: datetime.now(CHINA_STANDARD_TIME).date().isoformat()))
     result = _reconcile_participation_roster_for_day(
         today,
         department_source="current_roster",
@@ -289,17 +429,28 @@ def _scan_historical_login_events(
         },
         size=1000,
     )
-    return aggregate_historical_login_hits(hits)
+
+    def guarded_hits():
+        try:
+            for offset, hit in enumerate(hits):
+                if offset % 1000 == 0:
+                    checkpoint()
+                yield hit
+        finally:
+            hits.close()
+
+    return aggregate_historical_login_hits(guarded_hits())
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def backfill_mid_user_daily_participation_fact(
     lookback_days: int = 30,
 ) -> dict[str, int]:
     """Best-effort history using current roster and durable login telemetry."""
     trace_id_var.set(f"backfill_mid_user_daily_participation_fact_task_{generate_uuid()}")
     normalized_days = max(1, min(int(lookback_days), 365))
-    today = datetime.now(CHINA_STANDARD_TIME).date()
+    today = date.fromisoformat(frozen_value("today", lambda: datetime.now(CHINA_STANDARD_TIME).date().isoformat()))
     start_date = today - timedelta(days=normalized_days)
     start_timestamp = participation_day(start_date)[1]
     end_timestamp = participation_day(today)[1]
@@ -311,66 +462,13 @@ def backfill_mid_user_daily_participation_fact(
         logger.info("Skipped participation history backfill because telemetry index is absent.")
         return {"days": 0, "roster": 0, "login_facts": 0}
 
-    roster_count = 0
-    for day_offset in range(normalized_days):
-        result = _reconcile_participation_roster_for_day(
-            start_date + timedelta(days=day_offset),
-            department_source="current_roster_backfill",
-        )
-        roster_count += int(result["synced"])
-
-    user_ids = sorted({key[2] for key in aggregates})
-    departments = {}
-    with bypass_tenant_filter():
-        for offset in range(0, len(user_ids), 1000):
-            departments.update(
-                UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids[offset : offset + 1000])
-            )
-    projection_updated_at = int(datetime.now().timestamp())
-    records = []
-    for aggregate in aggregates.values():
-        department = departments.get(aggregate["user_id"])
-        records.append(
-            DailyParticipationRecord(
-                es_id=DailyParticipationFact.build_es_id(
-                    aggregate["tenant_id"],
-                    aggregate["local_date"],
-                    aggregate["user_id"],
-                ),
-                tenant_id=aggregate["tenant_id"],
-                timestamp=participation_day(date.fromisoformat(aggregate["local_date"]))[1],
-                user_id=aggregate["user_id"],
-                user_name=aggregate["user_name"],
-                user_group_infos=[],
-                user_role_infos=[],
-                user_department_infos=[],
-                local_date=aggregate["local_date"],
-                active_employee=1,
-                logged_in=True,
-                login_count=aggregate["login_count"],
-                first_login_at=aggregate["first_login_at"],
-                last_login_at=aggregate["last_login_at"],
-                primary_department_id=(int(department.id) if department else None),
-                primary_department_name=(department.name if department else None),
-                department_source="current_primary_backfill",
-                projection_updated_at=projection_updated_at,
-            )
-        )
-    fact = DailyParticipationFact()
-    for offset in range(0, len(records), 1000):
-        fact.upsert_login_backfill_records_sync(records[offset : offset + 1000])
-
-    logger.info(
-        "Backfilled participation history. days={}, roster={}, login_facts={}",
-        normalized_days,
-        roster_count,
-        len(records),
+    result = _reconcile_participation_days(
+        [start_date + timedelta(days=offset) for offset in range(normalized_days)],
+        aggregates=aggregates,
+        department_source="current_roster_backfill",
     )
-    return {
-        "days": normalized_days,
-        "roster": roster_count,
-        "login_facts": len(records),
-    }
+    logger.info("Backfilled participation history. {}", result)
+    return result
 
 
 def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
@@ -392,17 +490,63 @@ def _current_primary_file_predicate():
     return or_(~exists(any_version), exists(primary_version))
 
 
+def _content_stat_file_predicates() -> tuple[Any, ...]:
+    return (
+        Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+        Knowledge.is_favorite == False,  # noqa: E712
+        KnowledgeFile.file_type == FileType.FILE.value,
+        KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+        KnowledgeFileDao.active_inventory_predicate(),
+        or_(Knowledge.state.is_(None), Knowledge.state != 5),
+    )
+
+
+def _get_content_stat_reconcile_scope() -> tuple[int, int]:
+    """冻结本轮 ID 上界; 总数用于进度估算, 不持有长事务快照。"""
+    statement = (
+        select(func.count(KnowledgeFile.id), func.max(KnowledgeFile.id))
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(*_content_stat_file_predicates())
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            total, max_id = session.exec(statement).one()
+    return int(total), int(max_id or 0)
+
+
+def _get_content_stat_reconcile_rows(after_id: int, max_id: int, limit: int) -> list[tuple[KnowledgeFile, Knowledge]]:
+    """用 ID 游标防止并发删除导致 offset 跳过仍有效的文件。"""
+    statement = (
+        select(KnowledgeFile, Knowledge)
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(*_content_stat_file_predicates(), KnowledgeFile.id > after_id, KnowledgeFile.id <= max_id)
+        .order_by(KnowledgeFile.id.asc())
+        .limit(limit)
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return session.exec(statement).all()
+
+
+def _get_content_stat_valid_file_ids(file_ids: list[int]) -> set[int]:
+    if not file_ids:
+        return set()
+    statement = (
+        select(KnowledgeFile.id)
+        .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+        .where(*_content_stat_file_predicates(), KnowledgeFile.id.in_(file_ids))
+    )
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            return {int(file_id) for file_id in session.exec(statement).all()}
+
+
 def _get_success_space_file_rows(page: int, page_size: int):
     statement = (
         select(KnowledgeFile, Knowledge)
         .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
         .where(
-            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.is_favorite == False,  # noqa: E712
-            KnowledgeFile.file_type == FileType.FILE.value,
-            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            col(KnowledgeFile.deleted_at).is_(None),
-            _current_primary_file_predicate(),
+            *_content_stat_file_predicates(),
         )
         .order_by(KnowledgeFile.id.asc())
         .offset((page - 1) * page_size)
@@ -423,8 +567,8 @@ def _get_success_space_file_rows_by_space_id(space_id: int, page: int, page_size
             Knowledge.is_favorite == False,  # noqa: E712
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            col(KnowledgeFile.deleted_at).is_(None),
-            _current_primary_file_predicate(),
+            KnowledgeFileDao.active_inventory_predicate(),
+            or_(Knowledge.state.is_(None), Knowledge.state != 5),
         )
         .order_by(KnowledgeFile.id.asc())
         .offset((page - 1) * page_size)
@@ -443,8 +587,8 @@ def _get_knowledge_space_content_rows_by_file_ids(file_ids: List[int]):
         .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
         .where(
             KnowledgeFile.id.in_(file_ids),
-            col(KnowledgeFile.deleted_at).is_(None),
-            _current_primary_file_predicate(),
+            KnowledgeFileDao.active_inventory_predicate(),
+            or_(Knowledge.state.is_(None), Knowledge.state != 5),
         )
     )
     with bypass_tenant_filter():
@@ -613,6 +757,8 @@ def _build_knowledge_space_content_records(
 ):
     if not rows:
         return [], user_map
+    with bypass_tenant_filter():
+        identity_map = KnowledgeStatisticsRepository.identities([int(file_record.id) for file_record, _ in rows])
     space_scope_map = space_scope_map if space_scope_map is not None else {}
     space_department_map = space_department_map if space_department_map is not None else {}
     original_space_scope_map = original_space_scope_map if original_space_scope_map is not None else {}
@@ -736,6 +882,7 @@ def _build_knowledge_space_content_records(
                 file_category_labels=category_labels,
                 file_subcategory_labels=subcategory_labels,
                 sync_run_id=sync_run_id,
+                knowledge_identity=identity_map[int(file_record.id)],
             )
         )
     return records, user_map
@@ -978,11 +1125,14 @@ def rebuild_knowledge_space_content_download_projection(
 
 
 def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[str, Any]:
-    """Rebuild current file snapshots while the caller owns the projection lock."""
+    """分批对账当前文件快照, 仅写差异; 历史日聚合仍由事件链路维护。"""
     sync_started_ms = KnowledgeSpaceContentStat._now_ms()
+    started = monotonic()
     mid_table = KnowledgeSpaceContentStat()
     sync_run_id = generate_uuid()
-    page, page_size = 1, 1000
+    reconciler = ContentStatReconciler(mid_table._es_client_sync, mid_table.INDEX_NAME)
+    page_size = 1000
+    after_id = batch = 0
     user_map = {}
     space_scope_map = {}
     space_department_map = {}
@@ -990,15 +1140,48 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     original_space_department_map = {}
     primary_department_map = {}
     category_label_cache = {}
-    synced_count = 0
+    counters = {"checked": 0, "unchanged": 0, "created": 0, "updated": 0, "conflicts": 0, "blocked": 0}
 
-    while True:
+    def guard() -> None:
         if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
             raise RuntimeError("Knowledge space content full projection owner lock lost")
-        rows = _get_success_space_file_rows(page, page_size)
-        page += 1
+
+    def write(operations: list[dict]) -> dict[str, Any]:
+        guard()
+        entries, offset = [], 0
+        while offset < len(operations):
+            kind, metadata = next(iter(operations[offset].items()))
+            size = 1 if kind == "delete" else 2
+            entries.append((str(metadata["_id"]), operations[offset : offset + size]))
+            offset += size
+        blocked = KnowledgeSpaceContentStat.dead_file_ids_sync([key for key, _ in entries])
+        if blocked:
+            counters["blocked"] += len(blocked)
+            logger.error("content_stat.reconcile.dead_items_skipped ids={}", sorted(blocked))
+        operations = [operation for key, entry in entries if key not in blocked for operation in entry]
+        outcome = reconciler.write(operations)
+        conflict_ids = outcome["conflict_ids"]
+        counters["conflicts"] += len(conflict_ids)
+        if conflict_ids and not KnowledgeSpaceContentStat.enqueue_file_stat_sync(conflict_ids):
+            raise RuntimeError("Content stat reconciliation conflict enqueue failed")
+        return outcome
+
+    guard()
+    total, max_id = _get_content_stat_reconcile_scope()
+    logger.info(
+        "content_stat.reconcile.start run_id={} total={} batch_size={} max_id={}", sync_run_id, total, page_size, max_id
+    )
+
+    while True:
+        guard()
+        rows = _get_content_stat_reconcile_rows(after_id, max_id, page_size)
         if not rows:
             break
+        next_id = int(rows[-1][0].id)
+        if next_id <= after_id:
+            raise RuntimeError("Content stat reconciliation cursor did not advance")
+        after_id = next_id
+        batch += 1
 
         records, user_map = _build_knowledge_space_content_records(
             rows,
@@ -1011,21 +1194,79 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
-        if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
-            raise RuntimeError("Knowledge space content full projection owner lock lost before write")
-        mid_table.insert_records_sync(records)
-        synced_count += len(records)
+        guard()
+        operations, differences, unchanged = reconciler.compare(records)
+        if differences:
+            logger.info(
+                "content_stat.reconcile.differences run_id={} batch={} records={}", sync_run_id, batch, differences
+            )
+        outcome = write(operations)
+        counters["checked"] += len(records)
+        counters["unchanged"] += unchanged
+        counters["created"] += outcome["created"]
+        counters["updated"] += outcome["updated"]
+        progress = min(100.0, counters["checked"] * 100.0 / total) if total else 100.0
+        logger.info(
+            "content_stat.reconcile.progress run_id={} batch={} checked={} total={} progress={:.2f}% "
+            "batch_size={} differences={} created={} updated={} unchanged={} conflicts={} elapsed_s={:.2f}",
+            sync_run_id,
+            batch,
+            counters["checked"],
+            total,
+            progress,
+            len(records),
+            len(differences),
+            counters["created"],
+            counters["updated"],
+            counters["unchanged"],
+            counters["conflicts"],
+            monotonic() - started,
+        )
 
-    if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
-        raise RuntimeError("Knowledge space content full projection owner lock lost before cleanup")
-    deleted_count = mid_table.delete_stale_file_records_sync(sync_run_id)
-    deleted_favorite_count = mid_table.delete_space_records_sync(
-        _get_favorite_space_ids()
-    )
+    # 未变化的记录不会更新轮次标记, 失效项必须反查数据库判定, 不能按旧 sync_run_id 删除。
+    deleted_count = reverse_checked = 0
+    scan = reconciler.file_batches(guard, batch_size=page_size)
+    try:
+        for reverse_batch, hits in enumerate(scan, start=1):
+            ids = [int(hit["_id"]) for hit in hits]
+            valid_ids = _get_content_stat_valid_file_ids(ids)
+            operations = reconciler.deletion_operations(hits, valid_ids)
+            if operations:
+                logger.info(
+                    "content_stat.reconcile.stale run_id={} batch={} file_ids={}",
+                    sync_run_id,
+                    reverse_batch,
+                    [op["delete"]["_id"] for op in operations],
+                )
+            outcome = write(operations)
+            deleted_count += outcome["deleted"]
+            reverse_checked += len(hits)
+            logger.info(
+                "content_stat.reconcile.cleanup_progress run_id={} batch={} checked={} deleted={} elapsed_s={:.2f}",
+                sync_run_id,
+                reverse_batch,
+                reverse_checked,
+                deleted_count,
+                monotonic() - started,
+            )
+    finally:
+        scan.close()
+    guard()
+    deleted_favorite_count = mid_table.delete_space_records_sync(_get_favorite_space_ids())
     queue_status = KnowledgeSpaceContentStat.queue_status_sync()
+    logger.info(
+        "content_stat.reconcile.completed run_id={} total={} counters={} deleted_stale={} elapsed_s={:.2f}",
+        sync_run_id,
+        total,
+        counters,
+        deleted_count,
+        monotonic() - started,
+    )
     return {
         **queue_status,
-        "synced": synced_count,
+        **counters,
+        "total": total,
+        "synced": counters["created"] + counters["updated"],
         "deleted_stale": deleted_count,
         "deleted_favorite": deleted_favorite_count,
         "reclaimed_count": 0,
@@ -1033,11 +1274,12 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
         "projection_lag_ms": queue_status["oldest_pending_age_ms"],
         "last_success_at": int(datetime.now().timestamp()),
         "failure_stage": None,
-        "degraded": False,
+        "degraded": counters["conflicts"] > 0 or counters["blocked"] > 0,
     }
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str = None):
     del start_date, end_date
     trace_id_var.set(f"sync_mid_knowledge_space_content_stat_task_{generate_uuid()}")
@@ -1071,12 +1313,12 @@ def sync_mid_knowledge_space_content_stat(start_date: str = None, end_date: str 
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def sync_pending_knowledge_space_content_stat():
     trace_id_var.set(f"sync_pending_knowledge_space_content_stat_task_{generate_uuid()}")
     KnowledgeSpaceContentStat.clear_scheduled_sync()
     owner_token = KnowledgeSpaceContentStat.acquire_lock_sync()
     if owner_token is None:
-        KnowledgeSpaceContentStat._schedule_pending_sync(countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS)
         logger.warning(
             "Knowledge space content incremental projection deferred. degraded=true failure_stage=owner_lock"
         )
@@ -1084,6 +1326,7 @@ def sync_pending_knowledge_space_content_stat():
 
     batch_started_ms = KnowledgeSpaceContentStat._now_ms()
     failure_stage = None
+    claimed = []
     try:
         mid_table = KnowledgeSpaceContentStat()
         user_map = {}
@@ -1103,11 +1346,7 @@ def sync_pending_knowledge_space_content_stat():
         space_items = [item for item in claimed if item.kind == "space"]
         user_items = [item for item in claimed if item.kind == "user"]
         department_items = [item for item in claimed if item.kind == "department"]
-        invalid_items = [
-            item
-            for item in claimed
-            if item.kind not in {"file", "space", "user", "department"}
-        ]
+        invalid_items = [item for item in claimed if item.kind not in {"file", "space", "user", "department"}]
 
         if invalid_items:
             failure_stage = "invalid_work_item"
@@ -1115,11 +1354,9 @@ def sync_pending_knowledge_space_content_stat():
                 "Knowledge space content projection has invalid work items. items={}",
                 [item.member for item in invalid_items],
             )
-            if not KnowledgeSpaceContentStat.ack_claimed_sync(
-                owner_token,
-                [item.member for item in invalid_items],
-            ):
-                raise RuntimeError("Failed to acknowledge invalid knowledge space content work items")
+            KnowledgeSpaceContentStat.fail_claimed_sync(
+                owner_token, [item.member for item in invalid_items], "Unsupported work item kind"
+            )
 
         for item in user_items:
             failure_stage = "user_projection_expand"
@@ -1181,9 +1418,11 @@ def sync_pending_knowledge_space_content_stat():
                 category_label_cache=category_label_cache,
             )
             if records:
-                mid_table.insert_records_sync(records)
+                mid_table.reconcile_file_records_sync(records)
             if stale_file_ids:
-                mid_table.delete_file_records_sync(stale_file_ids)
+                if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
+                    raise RuntimeError("Knowledge space content owner lock lost before file deletion")
+                mid_table.reconcile_delete_file_records_sync(stale_file_ids)
             if not KnowledgeSpaceContentStat.renew_lock_sync(owner_token):
                 raise RuntimeError("Knowledge space content projection owner lock lost before file ack")
             if not KnowledgeSpaceContentStat.ack_claimed_sync(
@@ -1217,9 +1456,7 @@ def sync_pending_knowledge_space_content_stat():
                     owner_token,
                     [item.member],
                 ):
-                    raise RuntimeError(
-                        "Knowledge space content projection lease lost during space projection"
-                    )
+                    raise RuntimeError("Knowledge space content projection lease lost during space projection")
                 rows = _get_success_space_file_rows_by_space_id(space_id, page, page_size)
                 page += 1
                 if not rows:
@@ -1235,7 +1472,7 @@ def sync_pending_knowledge_space_content_stat():
                     category_label_cache=category_label_cache,
                 )
                 if records:
-                    mid_table.insert_records_sync(records)
+                    mid_table.reconcile_file_records_sync(records)
                     space_synced_count += len(records)
             if space_synced_count == 0:
                 mid_table.delete_space_records_sync([space_id])
@@ -1260,16 +1497,30 @@ def sync_pending_knowledge_space_content_stat():
             "projection_lag_ms": projection_lag_ms,
             "last_success_at": int(datetime.now().timestamp()),
             "failure_stage": None,
-            "degraded": status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
-            "processed_count": len(members),
+            "degraded": bool(invalid_items)
+            or status.get("dead_count", 0) > 0
+            or status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
+            "processed_count": len(members) - len(invalid_items),
+            "failed_count": len(invalid_items),
         }
         logger.info("Knowledge space content incremental projection completed. {}", result)
         return result
-    except Exception:
+    except Exception as exc:
         logger.exception(
             "Knowledge space content incremental projection failed. degraded=true failure_stage={}",
             failure_stage or "unknown",
         )
+        if claimed:
+            if isinstance(exc, BatchWriteError) and failure_stage == "file_projection":
+                successful = [
+                    item.member
+                    for item in claimed
+                    if item.kind == "file" and str(item.resource_id) in exc.successful_ids
+                ]
+                if successful and not KnowledgeSpaceContentStat.ack_claimed_sync(owner_token, successful):
+                    raise RuntimeError("Failed to acknowledge successful projection batch items") from exc
+            KnowledgeSpaceContentStat.fail_claimed_sync(owner_token, [item.member for item in claimed], exc)
+            raise QueuedProjectionFailure(str(exc)) from exc
         raise
     finally:
         KnowledgeSpaceContentStat.release_lock_sync(owner_token)
@@ -1327,56 +1578,148 @@ def _count_content_stat_raw_events(envelope) -> int:
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def sync_pending_knowledge_space_content_events():
     """Persist raw events and reconcile daily aggregates with at-least-once delivery."""
     KnowledgeSpaceContentStat.clear_event_scheduled_sync()
     owner_token = KnowledgeSpaceContentStat.acquire_lock_sync()
     if owner_token is None:
-        KnowledgeSpaceContentStat.schedule_event_pending_sync_now(
-            countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS,
-        )
         return {"degraded": True, "failure_stage": "owner_lock"}
-    processed = 0
+    processed = failed = 0
+    event_ids = []
+    active_ids = set()
+
+    def guard():
+        checkpoint()
+        if not KnowledgeSpaceContentStat.renew_lock_sync(
+            owner_token
+        ) or not KnowledgeSpaceContentStat.renew_event_claims_sync(owner_token, sorted(active_ids)):
+            raise RuntimeError("Knowledge space content event projection lease lost")
+
+    def reject(errors):
+        nonlocal failed
+        for event_id, reason in errors.items():
+            if KnowledgeSpaceContentStat.fail_claimed_sync(owner_token, [event_id], reason, events=True) != 1:
+                raise RuntimeError(f"Failed to return event claim {event_id}")
+            active_ids.discard(event_id)
+            failed += 1
+            logger.error("content_stat.event.failed event_id={} reason={}", event_id, reason)
+
     try:
         event_ids = KnowledgeSpaceContentStat.claim_event_pending_sync(owner_token)
-        for event_id in event_ids:
-            if not KnowledgeSpaceContentStat.renew_lock_sync(
-                owner_token
-            ) or not KnowledgeSpaceContentStat.renew_event_claims_sync(
-                owner_token,
-                [event_id],
-            ):
-                raise RuntimeError("Knowledge space content event projection lease lost")
-            envelope = KnowledgeSpaceContentStat.get_event_payload_sync(event_id)
-            if envelope is None:
-                KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id])
-                continue
-            if envelope.occurred_at < KnowledgeSpaceContentStat.get_replay_floor_sync():
-                KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id])
-                continue
-            event_type, event_data = _content_stat_event_data(envelope)
-            telemetry_service.record_event_sync_strict(
-                event_id=envelope.event_id,
-                user_id=envelope.user_id,
-                event_type=event_type,
-                timestamp=envelope.occurred_at,
-                trace_id=trace_id_var.get(),
-                event_data=event_data,
+        active_ids.update(event_ids)
+        if event_ids:
+            guard()
+            envelopes, errors = KnowledgeSpaceContentStat.get_event_payloads_sync(event_ids)
+            reject(errors)
+            floor = KnowledgeSpaceContentStat.get_replay_floor_sync()
+            expired = [key for key, envelope in envelopes.items() if envelope.occurred_at < floor]
+            if expired:
+                if not KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, expired):
+                    raise RuntimeError("Failed to acknowledge events before replay floor")
+                active_ids.difference_update(expired)
+            events, errors = [], {}
+            for key in sorted(active_ids):
+                envelope = envelopes[key]
+                try:
+                    event_type, event_data = _content_stat_event_data(envelope)
+                    events.append(
+                        {
+                            "event_id": key,
+                            "user_id": envelope.user_id,
+                            "event_type": event_type,
+                            "timestamp": envelope.occurred_at,
+                            "trace_id": trace_id_var.get(),
+                            "event_data": event_data,
+                        }
+                    )
+                except Exception as exc:
+                    errors[key] = str(exc)
+            reject(errors)
+            raw_errors = telemetry_service.record_events_sync_strict(events, guard=guard)
+            reject(raw_errors)
+            groups = {}
+            for key in sorted(active_ids):
+                envelope = envelopes[key]
+                groups.setdefault((envelope.event_type, envelope.daily_id), []).append(key)
+            searches = []
+            for event_type, daily_id in groups:
+                searches.extend(
+                    [
+                        {"index": telemetry_service.index_name},
+                        {
+                            "size": 0,
+                            "track_total_hits": True,
+                            "query": {
+                                "bool": {
+                                    "filter": [
+                                        {"term": {"event_type": event_type}},
+                                        {"term": {f"event_data.{event_type}_content_stat_schema_version": 2}},
+                                        {"term": {f"event_data.{event_type}_content_stat_daily_id.keyword": daily_id}},
+                                    ]
+                                }
+                            },
+                        },
+                    ]
+                )
+            updates, errors = [], {}
+            if searches:
+                guard()
+                responses = get_statistics_es_connection_sync().msearch(searches=searches).get("responses", [])
+                if len(responses) != len(groups):
+                    raise RuntimeError("Content event count batch incomplete response")
+                for keys, response in zip(groups.values(), responses, strict=True):
+                    total = response.get("hits", {}).get("total", {})
+                    if (
+                        response.get("error")
+                        or response.get("timed_out")
+                        or response.get("_shards", {}).get("failed", 0)
+                        or total.get("relation") != "eq"
+                        or total.get("value", -1) < len(keys)
+                    ):
+                        errors.update(dict.fromkeys(keys, "Raw event count unavailable or incomplete"))
+                    else:
+                        updates.append((envelopes[keys[0]], int(total["value"])))
+                reject(errors)
+                guard()
+                daily_errors = KnowledgeSpaceContentStat().upsert_events_daily_sync(updates)
+                reject(
+                    {
+                        key: daily_errors[envelopes[key].daily_id]
+                        for key in list(active_ids)
+                        if envelopes[key].daily_id in daily_errors
+                    }
+                )
+            if active_ids:
+                guard()
+                if not KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, sorted(active_ids)):
+                    raise RuntimeError("Failed to acknowledge content event batch")
+                processed = len(active_ids)
+                active_ids.clear()
+            logger.info(
+                "content_stat.events.progress claimed={} groups={} processed={} failed={}",
+                len(event_ids),
+                len(groups),
+                processed,
+                failed,
             )
-            count = _count_content_stat_raw_events(envelope)
-            KnowledgeSpaceContentStat().upsert_event_daily_sync(envelope, count)
-            if not KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id]):
-                raise RuntimeError(f"Failed to acknowledge content stat event {event_id}")
-            processed += 1
         status = KnowledgeSpaceContentStat.event_queue_status_sync()
         return {
             **status,
             "processed_count": processed,
+            "failed_count": failed,
             "degraded": (
-                status["event_pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+                failed > 0
+                or status.get("event_dead_count", 0) > 0
+                or status["event_pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
                 or status["event_oldest_pending_age_ms"] >= 300_000
             ),
         }
+    except Exception as exc:
+        if event_ids:
+            KnowledgeSpaceContentStat.fail_claimed_sync(owner_token, event_ids, exc, events=True)
+            raise QueuedProjectionFailure(str(exc)) from exc
+        raise
     finally:
         KnowledgeSpaceContentStat.release_lock_sync(owner_token)
         if KnowledgeSpaceContentStat.has_event_pending_sync():
@@ -1384,6 +1727,7 @@ def sync_pending_knowledge_space_content_events():
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def recover_knowledge_space_content_stat_leases():
     trace_id_var.set(f"recover_knowledge_space_content_stat_leases_task_{generate_uuid()}")
     try:
@@ -1401,15 +1745,18 @@ def recover_knowledge_space_content_stat_leases():
             "last_success_at": int(datetime.now().timestamp()),
             "failure_stage": None,
             "degraded": (
-                status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+                status.get("dead_count", 0) > 0
+                or event_status.get("event_dead_count", 0) > 0
+                or status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
                 or event_status["event_pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
                 or event_status["event_oldest_pending_age_ms"] >= 300_000
             ),
         }
-        if reclaimed_count or status["pending_count"]:
+        if KnowledgeSpaceContentStat.has_pending_sync():
             KnowledgeSpaceContentStat.schedule_pending_sync_now()
-        if reclaimed_event_count or KnowledgeSpaceContentStat.has_event_pending_sync():
+        if KnowledgeSpaceContentStat.has_event_pending_sync():
             KnowledgeSpaceContentStat.schedule_event_pending_sync_now()
+        result["recovered_jobs"] = recover_due_jobs()
         logger.info("Knowledge space content lease recovery completed. {}", result)
         return result
     except Exception:

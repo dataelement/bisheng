@@ -153,6 +153,7 @@ function sumChildRows(groupLabel: string, childRows: PivotTableRow[]): PivotSubt
 export function groupCrossTabRows(
   rows: PivotTableRow[],
   groupDimensionIndex: number | null,
+  exactTotals?: Record<string, { values: number[]; total: number }>,
 ): GroupedPivotRows[] | null {
   if (groupDimensionIndex === null) return null
 
@@ -172,7 +173,9 @@ export function groupCrossTabRows(
       groupKey: groupLabel,
       groupLabel,
       childRows,
-      subtotalRow: sumChildRows(groupLabel, childRows),
+      subtotalRow: exactTotals?.[groupLabel]
+        ? { groupLabel, ...exactTotals[groupLabel] }
+        : sumChildRows(groupLabel, childRows),
     }
   })
 }

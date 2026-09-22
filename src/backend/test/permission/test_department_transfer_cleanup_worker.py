@@ -76,7 +76,10 @@ def test_tasks_are_late_acknowledged_and_permission_route_is_forced():
     assert config.task_routers["bisheng.worker.permission.*"] == {"queue": "celery"}
     scan = config.beat_schedule["scan_department_transfer_permission_cleanup"]
     assert scan["task"].endswith(".scan_due_events")
-    assert scan["schedule"] == 30.0
+    assert scan["schedule"] == 300.0
+    retry = config.beat_schedule["retry_failed_tuples"]
+    assert retry["task"] == "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples"
+    assert retry["schedule"] == 300.0
 
 
 @pytest.mark.asyncio

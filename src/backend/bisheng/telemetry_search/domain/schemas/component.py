@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import Enum
 from typing import Optional, Dict, Any, List, Literal
 
@@ -97,11 +97,11 @@ class TimeFilter(BaseModel):
         self,
         *,
         include_today: bool = False,
-        timezone=None,
+        timezone: tzinfo | None = None,
     ) -> (Optional[int], Optional[int]):
         if self.mode == TimeRangeMode.DYNAMIC:
             recent_days = max(int(self.recent_days or 1), 1)
-            now = datetime.now(timezone)
+            now = datetime.now(timezone) if timezone else datetime.now()
             if include_today:
                 start = datetime(
                     year=now.year,
@@ -113,10 +113,10 @@ class TimeFilter(BaseModel):
                     year=now.year,
                     month=now.month,
                     day=now.day,
+                    tzinfo=timezone,
                     hour=23,
                     minute=59,
                     second=59,
-                    tzinfo=timezone,
                 )
                 start_date = int(start.timestamp() * 1000)
                 end_date = int(end.timestamp() * 1000)
@@ -187,6 +187,7 @@ class ComponentDataConfig(BaseModel):
 
 
 class DataQueryResult(BaseModel):
+    rollups: List[dict] = Field(default_factory=list, description="按文档重新去重的服务端合计，非单元格相加")
     value: List[List] = Field(default_factory=list, description="metrics value list", examples=[[1], [2], [3]])
     dimensions: List[List] = Field(default_factory=list, description="metrics dimensions list",
                                    examples=[["flow_1"], ["flow_2"], ["flow_3"]])

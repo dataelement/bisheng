@@ -191,7 +191,7 @@ class CeleryConf(BaseModel):
         if "telemetry_sync_mid_knowledge_space_content_stat" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_knowledge_space_content_stat"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("10 1 * * *"),  # 每天 01:10，与每日统计错峰
             }
         if "telemetry_recover_knowledge_space_content_stat_leases" not in self.beat_schedule:
             self.beat_schedule["telemetry_recover_knowledge_space_content_stat_leases"] = {
@@ -204,7 +204,7 @@ class CeleryConf(BaseModel):
                     "bisheng.worker.telemetry.mid_table."
                     "sync_mid_user_daily_participation_fact"
                 ),
-                "schedule": crontab.from_string("*/5 * * * *"),
+                "schedule": crontab.from_string("0,30 * * * *"),  # 每半小时兜底人员对账
             }
         if "telemetry_backfill_mid_user_daily_participation_fact" not in self.beat_schedule:
             self.beat_schedule["telemetry_backfill_mid_user_daily_participation_fact"] = {
@@ -221,7 +221,7 @@ class CeleryConf(BaseModel):
                     "bisheng.worker.telemetry.realtime_dashboard."
                     "sync_mid_realtime_qa_question_fact"
                 ),
-                "schedule": crontab.from_string("*/10 * * * *"),
+                "schedule": crontab.from_string("15,45 * * * *"),  # 与人员对账错开 15 分钟
             }
         if "telemetry_sync_mid_active_user" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_active_user"] = {
@@ -266,12 +266,12 @@ class CeleryConf(BaseModel):
         if "retry_failed_tuples" not in self.beat_schedule:
             self.beat_schedule["retry_failed_tuples"] = {
                 "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
-                "schedule": 30.0,  # Every 30 seconds
+                "schedule": 300.0,  # 每 5 分钟扫描一次
             }
         if "scan_department_transfer_permission_cleanup" not in self.beat_schedule:
             self.beat_schedule["scan_department_transfer_permission_cleanup"] = {
                 "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
-                "schedule": 30.0,
+                "schedule": 300.0,
             }
         if "fanout_shared_storage_reconcile" not in self.beat_schedule:
             self.beat_schedule["fanout_shared_storage_reconcile"] = {

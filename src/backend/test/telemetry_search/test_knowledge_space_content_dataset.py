@@ -64,7 +64,7 @@ def test_knowledge_space_content_dataset_exposes_single_query_time_contribution_
 
     assert metric["name"] == "知识贡献占比"
     assert metric["is_virtual"] is True
-    assert metric["calculation"] == "share_of_total"
+    assert metric["calculation"] == "document_statistics"
     assert "share_dimension_hierarchy" not in metric
     assert metric["default_number_format"] == {
         "type": "percent",
@@ -80,16 +80,9 @@ def test_knowledge_space_content_dataset_exposes_single_query_time_contribution_
             "value": ["public", "department", "team", "team_ks", "personal"],
         },
     ]
-    assert metric["aggregations"] == [
-        {
-            "name": field,
-            "type": "value_count",
-            "field": "file_id",
-            "custom_params": None,
-            "time_interval": None,
-            "aggs": None,
-        }
-    ]
+    assert metric["aggregations"] is None
+    for field in ("total_file_count", "new_file_count", "called_document_count", "document_usage_ratio"):
+        assert metrics[field]["calculation"] == "document_statistics"
     assert not {
         "uploader_knowledge_contribution_ratio",
         "belonging_knowledge_contribution_ratio",

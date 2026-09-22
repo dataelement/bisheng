@@ -77,7 +77,8 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         for metric in knowledge_dataset.schema_config["metrics"]
     }
     assert knowledge_metrics["total_file_count"]["sum_type"] == "value_count"
-    assert knowledge_metrics["new_file_count"]["aggregations"][0]["type"] == "value_count"
+    assert knowledge_metrics["new_file_count"]["calculation"] == "document_statistics"
+    assert knowledge_metrics["new_file_count"]["aggregations"] is None
     assert knowledge_metrics["preview_count"]["filter"]["filters"] == [
         {"operator": "term", "field": "record_type", "value": "preview_daily"},
         {

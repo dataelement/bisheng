@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Union
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from bisheng.common.errcode.telemetry import (
     QueryAggregationNotFoundError,
@@ -48,12 +48,15 @@ from .search_engine_service import SearchEngineService, SearchParameters
 
 TIMESTAMP_FIELD = "timestamp"
 REALTIME_TEMPORAL_DATASETS = {
+    "mid_knowledge_space_content_stat",
     "mid_realtime_qa_question_fact",
     "mid_user_daily_participation",
 }
 
 
 class DataQueryService(BaseModel):
+    _document_statistics: Any = PrivateAttr(default=None)
+    _document_bounds: tuple = PrivateAttr(default=(None, None))
     dataset_code: str = Field(description="dataset code")
     data_config: ComponentDataConfig = Field(description="component data configuration")
     time_filters: List[TimeFilter] | None = Field(default=None, description="time filters")
@@ -133,7 +136,37 @@ class DataQueryService(BaseModel):
 
         res.dimensions, res.value = await self.sort_metrics(dimension_index, query_result, timestamp_dimension_index,
                                                             timestamp_dimension, time_range)
+        if self._document_statistics is not None:
+            res.rollups = await self.document_rollups(query_dimensions, stack_dimension)
         return res
+
+    async def document_rollups(self, dimensions, stack_dimension) -> list[dict]:
+        from .knowledge_document_statistics import DOCUMENT_METRICS
+
+        all_dimensions = [*dimensions, *([stack_dimension] if stack_dimension else [])]
+        row_count = len(self.data_config.dimensions)
+        row_indices = tuple(range(row_count))
+        col_indices = tuple(range(row_count, len(all_dimensions)))
+        subsets = {(), row_indices, col_indices}
+        for index in row_indices:
+            subsets.update({(index,), (index, *col_indices)})
+        result = []
+        start, end = self._document_bounds
+        for metric_index, metric in enumerate(self.data_config.metrics):
+            if metric.field_id not in DOCUMENT_METRICS:
+                continue
+            for indices in sorted(subsets):
+                selected = [(all_dimensions[i].field, all_dimensions[i].time_interval) for i in indices]
+                rows = self._document_statistics.aggregate(selected, metric.field_id, start=start, end=end)
+                rendered = []
+                for row in rows:
+                    keys = row[:-1]
+                    for i, index in enumerate(indices):
+                        if all_dimensions[index].field == TIMESTAMP_FIELD:
+                            keys[i] = self.format_timestamp(keys[i], all_dimensions[index], timezone=CHINA)
+                    rendered.append({"dimensions": keys, "value": row[-1]})
+                result.append({"metric_index": metric_index, "dimension_indexes": list(indices), "rows": rendered})
+        return result
 
     async def query_all_metrics(self, metric_map: Dict[str, MetricConfig], dimension_index: int, index_name: str,
                                 dimensions: List[AggregationExpression], stack_dimension: AggregationExpression | None,
@@ -141,6 +174,26 @@ class DataQueryService(BaseModel):
         all_dimensions = {}
         res = []
         login_population = None
+        from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from .knowledge_document_reader import document_reader, split_time_filters
+        from .knowledge_document_statistics import DOCUMENT_METRICS
+
+        self._document_statistics = None
+        if self.dataset_code == KNOWLEDGE_SPACE_CONTENT_STAT_INDEX and any(
+            metric.field_id in DOCUMENT_METRICS for metric in self.data_config.metrics
+        ):
+            document_filters, start, end = split_time_filters(filters or [])
+            document_filters.extend([
+                {"term": {"tenant_id": get_current_tenant_id() or 1}},
+                {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+            ])
+            async with document_reader(index_name) as reader:
+                self._document_statistics = await reader.load(
+                    document_filters,
+                    include_usage=any(metric.field_id in {"called_document_count", "document_usage_ratio"} for metric in self.data_config.metrics),
+                )
+            self._document_bounds = (start, end)
         for metric_index, metric in enumerate(self.data_config.metrics):
             metric_config = metric_map.get(metric.field_id)
             if not metric_config:
@@ -190,9 +243,22 @@ class DataQueryService(BaseModel):
 
     async def query_one_metric(self, metric_config: MetricConfig, aggregation: AggregationType,
                                dimension_index: int, **search_kwargs) -> List[List]:
+        from .knowledge_document_statistics import DOCUMENT_METRICS
+
+        if self._document_statistics is not None and metric_config.field in DOCUMENT_METRICS:
+            dimensions = [*search_kwargs.get("dimensions", [])]
+            if search_kwargs.get("stack_dimension"):
+                dimensions.append(search_kwargs["stack_dimension"])
+            start, end = self._document_bounds
+            return self._document_statistics.aggregate(
+                [(item.field, item.time_interval) for item in dimensions],
+                metric_config.field, start=start, end=end,
+            )
         if metric_config.is_virtual:
             if metric_config.calculation == VirtualMetricCalculationEnum.LOGIN_PARTICIPATION:
                 return await query_login_participation(metric_config.field, **search_kwargs)
+            if metric_config.calculation == VirtualMetricCalculationEnum.DOCUMENT_STATISTICS:
+                raise ValueError("文档统计必须通过完整的精确查询上下文执行")
             # need query twice from telemetry mid table
             if metric_config.calculation == VirtualMetricCalculationEnum.SHARE_OF_TOTAL:
                 return await self.query_share_of_total_metric(
@@ -449,7 +515,7 @@ class DataQueryService(BaseModel):
         for one in res:
             if dimension_index >= 0:
                 # need filter some data by time range
-                if time_dimension_index >= 0 and not self.in_time_range(time_range, one[time_dimension_index],
+                if self._document_statistics is None and time_dimension_index >= 0 and not self.in_time_range(time_range, one[time_dimension_index],
                                                                         timestamp_dimension):
                     continue
                 one_dimension = one[:dimension_index + 1]
@@ -457,7 +523,7 @@ class DataQueryService(BaseModel):
                 if time_dimension_index >= 0:
                     one_dimension[time_dimension_index] = self.format_timestamp(
                         one_dimension[time_dimension_index], timestamp_dimension,
-                        timezone=CHINA if self.uses_login_participation else None)
+                        timezone=CHINA if self.uses_login_participation or self._document_statistics is not None else None)
 
                 final_dimensions.append(one_dimension)
                 final_values.append(one[dimension_index + 1:])
@@ -632,7 +698,7 @@ class DataQueryService(BaseModel):
         for one in all_time_filters:
             start_date, end_date = one.get_start_end_date(
                 include_today=self.dataset_code in REALTIME_TEMPORAL_DATASETS or self.uses_login_participation,
-                timezone=CHINA if self.uses_login_participation else None,
+                timezone=CHINA if self.uses_login_participation or self.dataset_code == "mid_knowledge_space_content_stat" else None,
             )
             if start_date and end_date:
                 time_range.append([start_date, end_date])

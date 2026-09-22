@@ -1,6 +1,6 @@
 """Celery beat task: retry failed OpenFGA tuple operations (T10, AC-04).
 
-Runs every 30 seconds via beat schedule. Uses a Redis distributed lock to
+Runs every 5 minutes via beat schedule. Uses a Redis distributed lock to
 prevent concurrent processing of the same pending tuples.
 
 Retry policy:

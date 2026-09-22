@@ -11,12 +11,29 @@ from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
+from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
 from bisheng.telemetry.domain.mid_table.user_engagement_shared import (
     METRIC_SOURCE_PARTICIPATION,
     USER_ENGAGEMENT_ES_INDEX,
 )
 
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
+
+
+def merge_participation_document(current: dict, desired: dict) -> dict:
+    result = {**current, **desired}
+    roster_only = desired.get("department_source") in {"current_roster", "current_roster_backfill"}
+    preserved = set()
+    if roster_only:
+        preserved.update({"logged_in", "login_count", "first_login_at", "last_login_at"})
+    if (roster_only and current.get("logged_in")) or current.get("department_source") == "event_time":
+        preserved.update({"primary_department_id", "primary_department_name", "department_source"})
+    for field in preserved:
+        if field in current:
+            result[field] = current[field]
+        elif current:
+            result.pop(field, None)
+    return result
 
 
 def participation_day(
@@ -139,6 +156,12 @@ class DailyParticipationFact(BaseMidTable):
     @staticmethod
     def build_es_id(tenant_id: int, local_date: str, user_id: int) -> str:
         return f"participation_{tenant_id}_{local_date}_{user_id}"
+
+    def reconcile_records_sync(self, records: list[DailyParticipationRecord]) -> dict:
+        return ContentStatReconciler(self._es_client_sync, self._index_name, str).reconcile(
+            {record.es_id: record.model_dump(exclude={"es_id"}) for record in records},
+            merge_participation_document,
+        )
 
     @classmethod
     def schedule_roster_reconcile_sync(cls, countdown: int = 2) -> None:

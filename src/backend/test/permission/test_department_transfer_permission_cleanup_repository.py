@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,6 +15,125 @@ from bisheng.permission.domain.models.department_transfer_permission_cleanup imp
 from bisheng.permission.domain.repositories.implementations.department_transfer_permission_cleanup_repository_impl import (
     DepartmentTransferPermissionCleanupRepositoryImpl,
 )
+from bisheng.permission.domain.services.department_transfer_permission_cleanup_service import (
+    DepartmentTransferPermissionCleanupService,
+)
+
+
+async def _retry_scenario(session, *, item_count=1, snapshot_complete=True):
+    repository = DepartmentTransferPermissionCleanupRepositoryImpl(session)
+    now = datetime.now()
+    event = await repository.create_or_get_event(
+        tenant_id=1,
+        event_key="retry-cap",
+        user_id=7,
+        old_department_id=10,
+        new_department_id=20,
+        trigger_source="local",
+        requested_at=now,
+    )
+    await repository.activate_event(event.id, changed_at=now, deadline_at=now + timedelta(minutes=5))
+    await repository.set_snapshot_complete(event.id, complete=snapshot_complete)
+    for index in range(item_count):
+        await repository.upsert_item(
+            tenant_id=1,
+            event_id=event.id,
+            item_key=f"file:{index}",
+            item_type=DepartmentTransferCleanupItemType.REBAC_TUPLE,
+            user_id=7,
+            resource_type="knowledge_file",
+            resource_id=str(index),
+            root_space_id=100,
+            relation="viewer",
+            source_ref=None,
+            snapshot={},
+        )
+    permission = SimpleNamespace(authorize=AsyncMock())
+    snapshot = SimpleNamespace(capture=AsyncMock())
+    service = DepartmentTransferPermissionCleanupService(
+        session=session,
+        repository=repository,
+        permission_service=permission,
+        snapshot_service=snapshot,
+        binding_service=SimpleNamespace(),
+        file_grant_repository=SimpleNamespace(),
+        cache_invalidator=AsyncMock(),
+        projection_refresher=AsyncMock(),
+        audit_writer=SimpleNamespace(),
+        lock_factory=lambda _user_id: asyncio.Lock(),
+    )
+    await session.commit()
+    return repository, event, service, permission, snapshot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["permission", "snapshot", "cache"])
+async def test_cleanup_stops_after_three_failed_rounds(async_db_session, caplog, failure_stage):
+    repository, event, service, permission, snapshot = await _retry_scenario(
+        async_db_session,
+        snapshot_complete=failure_stage != "snapshot",
+    )
+    failing_call = {
+        "permission": permission.authorize,
+        "snapshot": snapshot.capture,
+        "cache": service.cache_invalidator,
+    }[failure_stage]
+    failing_call.side_effect = RuntimeError("dependency unavailable")
+    event_id = event.id
+    for _ in range(3):
+        result = await service.process_event(event_id)
+        assert result.succeeded is False
+        event = await repository.find_by_id(event_id)
+        if event.next_retry_at is not None:
+            event.next_retry_at = datetime.now() - timedelta(seconds=1)
+            await async_db_session.commit()
+
+    assert event.status == "dead"
+    assert event.retry_count == 3
+    assert event.next_retry_at is None
+    assert await repository.list_due_event_ids(now=datetime.now(), limit=100) == []
+    assert (await service.process_event(event_id)).succeeded is False
+    assert failing_call.await_count == 3
+    if failure_stage != "snapshot":
+        assert permission.authorize.await_count == 3
+        assert all(call.kwargs["record_failures"] is False for call in permission.authorize.await_args_list)
+    assert any(record.levelname == "CRITICAL" and f"event_id={event_id}" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_interrupted_cleanup_stops_before_fourth_execution(async_db_session):
+    repository, event, service, permission, _ = await _retry_scenario(async_db_session)
+    for _ in range(3):
+        assert await repository.claim_event(event.id, now=datetime.now())
+        event.next_retry_at = datetime.now() - timedelta(seconds=1)
+        await async_db_session.commit()
+
+    assert (await service.process_event(event.id)).succeeded is False
+    permission.authorize.assert_not_awaited()
+    await async_db_session.refresh(event)
+    assert event.status == "dead"
+    assert await repository.list_due_event_ids(now=datetime.now(), limit=100) == []
+    await repository.activate_event(event.id, changed_at=datetime.now(), deadline_at=datetime.now())
+    await repository.mark_event_succeeded(event.id, completed_at=datetime.now())
+    assert event.status == "dead"
+
+
+@pytest.mark.asyncio
+async def test_successful_batches_do_not_exhaust_retry_budget(async_db_session):
+    _, event, service, permission, _ = await _retry_scenario(async_db_session, item_count=401)
+    # 兼容旧版本将正常分批也累计进 retry_count 的事件。
+    event.retry_count = 8
+    event.status = DepartmentTransferCleanupEventStatus.FAILED
+    event.last_error = "batch_remaining"
+    await async_db_session.commit()
+
+    for _ in range(5):
+        result = await service.process_event(event.id)
+
+    assert result.succeeded is True
+    assert permission.authorize.await_count == 401
+    assert event.status == DepartmentTransferCleanupEventStatus.SUCCEEDED
+    assert event.revoked_count == 401
 
 
 @pytest.mark.asyncio

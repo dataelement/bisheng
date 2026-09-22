@@ -50,6 +50,18 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
         user = result.first()
         return user
 
+    def get_users_with_groups_and_roles_by_ids_sync(self, user_ids: list[int]) -> list[User]:
+        ids = sorted(set(user_ids))
+        users = []
+        for offset in range(0, len(ids), 1000):
+            statement = (
+                select(User)
+                .where(col(User.user_id).in_(ids[offset : offset + 1000]))
+                .options(selectinload(User.groups), selectinload(User.roles), selectinload(User.departments))
+            )
+            users.extend(self.session.exec(statement).all())
+        return users
+
     async def get_primary_department_name(self, user_id: int) -> str | None:
         statement = (
             select(Department.name)

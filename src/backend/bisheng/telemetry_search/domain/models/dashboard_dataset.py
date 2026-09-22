@@ -35,6 +35,8 @@ class VirtualMetricCalculationEnum(str, Enum):
     SHARE_OF_TOTAL = "share_of_total"
     LOGIN_PARTICIPATION = "login_participation"
 
+    DOCUMENT_STATISTICS = "document_statistics"
+
 
 class MetricConfig(BaseModel):
     """
