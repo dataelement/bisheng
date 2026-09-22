@@ -2,8 +2,9 @@
 
 A follow-up turn runs under a fresh session_version_id with an empty workspace,
 so it can't see the prior turn's deliverables. ``seed_workspace_from_previous``
-server-side copies the previous version's ``output/`` + ``uploads/`` into the
-new turn's prefix so read_file/ls transparently surface them.
+server-side copies the previous version's ``output/`` + ``uploads/`` +
+``large_tool_results/`` into the new turn's prefix so read_file/ls (and the
+code interpreter after the local sync) transparently surface them.
 """
 
 from unittest.mock import MagicMock
@@ -39,11 +40,12 @@ def _minio(listing: dict[str, list[str]]) -> MagicMock:
     return minio
 
 
-async def test_seed_copies_output_and_uploads_skips_scratch():
+async def test_seed_copies_output_uploads_and_large_tool_results_skips_scratch():
     minio = _minio(
         {
             f"workspace/{SRC}/output/": [f"workspace/{SRC}/output/report.md"],
             f"workspace/{SRC}/uploads/": [f"workspace/{SRC}/uploads/doc/index.md"],
+            f"workspace/{SRC}/large_tool_results/": [f"workspace/{SRC}/large_tool_results/call_abc"],
             # scratch present but must NOT be queried/copied
             f"workspace/{SRC}/scratch/": [f"workspace/{SRC}/scratch/notes.txt"],
         }
@@ -59,12 +61,17 @@ async def test_seed_copies_output_and_uploads_skips_scratch():
 
     n = await seed_workspace_from_previous(minio, src_svid=SRC, dst_svid=DST)
 
-    assert n == 2
+    assert n == 3
     assert (f"workspace/{SRC}/output/report.md", f"workspace/{DST}/output/report.md") in copied
     assert (f"workspace/{SRC}/uploads/doc/index.md", f"workspace/{DST}/uploads/doc/index.md") in copied
-    # scratch/ was never even listed (continuity carries deliverables + sources only)
+    assert (
+        f"workspace/{SRC}/large_tool_results/call_abc",
+        f"workspace/{DST}/large_tool_results/call_abc",
+    ) in copied
+    # scratch/ was never even listed (continuity skips intermediates)
     queried_prefixes = [c.kwargs.get("prefix") for c in minio.minio_client_sync.list_objects.call_args_list]
     assert all("scratch" not in (p or "") for p in queried_prefixes)
+    assert any("large_tool_results" in (p or "") for p in queried_prefixes)
 
 
 async def test_seed_noop_when_destination_not_empty():

@@ -223,6 +223,7 @@ def test_description_guides_to_installed_pdf_and_data_libs():
     [
         "open('/skills/html-ppt-templates/SKILL.md')",
         'Path("/uploads/report.xlsx").read_bytes()',
+        "open('/large_tool_results/call_abc')",
         "open('/skills')",
         "open('/uploads')",
     ],

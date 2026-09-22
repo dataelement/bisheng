@@ -42,7 +42,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
+from bisheng.linsight.domain.services.workspace_backend import LARGE_TOOL_RESULTS_DIR, UPLOADS_DIR
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -1167,8 +1167,8 @@ class LinsightWorkflowTask:
         which is empty on a follow-up ("总结一下刚才那个表") — the originals only
         exist in the workspace, copied there by the seed. The code interpreter's
         file list is built from the local ``file_dir``, so without this step the
-        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
-        it can compute on it, and then finds nothing in the sandbox.
+        model sees ``uploads/x.xlsx`` (or ``large_tool_results/<call_id>``) in
+        ``ls``, is told it can open them, and then finds nothing in the sandbox.
 
         Runs after the seed and before tools are built. Idempotent: on a fresh turn
         the prefetch already wrote these files and ``_materialize`` serves them from
@@ -1179,22 +1179,27 @@ class LinsightWorkflowTask:
 
             minio = await get_minio_storage()
             backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
-            ls_res = await backend.als(UPLOADS_DIR)
-            if getattr(ls_res, "error", None):
-                return
-
+            # uploads/ originals: the code interpreter computes on the raw xlsx/docx.
+            # large_tool_results/: FilesystemMiddleware dumps oversized tool payloads
+            # here and the prompt forbids re-running that call. A follow-up that
+            # `open('large_tool_results/<call_id>')` must find the file in cwd.
             synced: list[str] = []
-            for entry in ls_res.entries or []:
-                rel = str(entry.get("path") or "").lstrip("/")
-                # Markdown views are already local (or are read through read_file,
-                # which goes to MinIO anyway); only the originals need a local copy.
-                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+            for zone, skip_md in ((UPLOADS_DIR, True), (LARGE_TOOL_RESULTS_DIR, False)):
+                ls_res = await backend.als(zone)
+                if getattr(ls_res, "error", None):
                     continue
-                local_path = os.path.join(self.file_dir, rel)
-                if os.path.exists(local_path):
-                    continue
-                if await asyncio.to_thread(backend.ensure_local, rel):
-                    synced.append(local_path)
+                for entry in ls_res.entries or []:
+                    rel = str(entry.get("path") or "").lstrip("/")
+                    if not rel.startswith(f"{zone}/"):
+                        continue
+                    # Markdown views of uploads are read through read_file (MinIO).
+                    if skip_md and rel.endswith(".md"):
+                        continue
+                    local_path = os.path.join(self.file_dir, rel)
+                    if os.path.exists(local_path):
+                        continue
+                    if await asyncio.to_thread(backend.ensure_local, rel):
+                        synced.append(local_path)
 
             if synced:
                 # These arrived AFTER _init_file_directory took the baseline, so

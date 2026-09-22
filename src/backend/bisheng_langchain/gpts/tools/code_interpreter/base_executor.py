@@ -26,7 +26,7 @@ _ABSOLUTE_DELIVERABLE_RE = re.compile(r"""['"]/(?:output|scratch)(?:/|['"])""")
 # copying those into code prefixes the container root — ``open()`` then raises
 # FileNotFoundError. Nothing is lost, so the write-side wording ("DISCARDED") would
 # be actively misleading here; hence a separate pattern and a separate notice.
-_ABSOLUTE_PROVISIONED_RE = re.compile(r"""['"]/(?:skills|uploads)(?:/|['"])""")
+_ABSOLUTE_PROVISIONED_RE = re.compile(r"""['"]/(?:skills|uploads|large_tool_results)(?:/|['"])""")
 
 ABSOLUTE_PATH_NOTICE = (
     "\n\n[SYSTEM NOTICE] Your code wrote file(s) to an ABSOLUTE path "
@@ -45,7 +45,8 @@ ABSOLUTE_PROVISIONED_PATH_NOTICE = (
     "so a leading slash sends open() to the container root and raises "
     "FileNotFoundError. Nothing was lost or discarded — the file simply was not "
     "read. Re-run with the same path minus the leading slash, e.g. "
-    "`skills/<name>/SKILL.md` or `uploads/<file>`."
+    "`skills/<name>/SKILL.md`, `uploads/<file>`, or "
+    "`large_tool_results/<call_id>`."
 )
 
 # --- Workspace escape ------------------------------------------------------
@@ -112,7 +113,10 @@ def path_namespace_rules(include_skills: bool = True) -> str:
     BEFORE skills are materialised, so `skills/` genuinely is not there and promising
     it would just point the model at nothing.
     """
-    zones = "`/output/x` is `output/x`, `/scratch/x` is `scratch/x`, `/uploads/x` is `uploads/x`"
+    zones = (
+        "`/output/x` is `output/x`, `/scratch/x` is `scratch/x`, "
+        "`/uploads/x` is `uploads/x`, `/large_tool_results/x` is `large_tool_results/x`"
+    )
     # Every example has to stay inside the zone set this executor actually has, or
     # the guidance points at something that is not there.
     read_example = "`open('/skills/...')`" if include_skills else "`open('/uploads/...')`"
