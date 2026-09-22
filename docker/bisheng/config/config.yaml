@@ -169,3 +169,13 @@ logger_conf:
 #   # Set it when the backend sits behind the commercial gateway, a path prefix,
 #   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
 #   public_base_url: https://kb.example.com
+
+# MCP transport security. DNS rebinding protection is disabled by default so
+# multi-hop proxies that rewrite Host work without per-environment configuration.
+# Enable it only together with exact transport Host/Origin allowlists.
+# open_mcp:
+#   enable_dns_rebinding_protection: false
+#   transport_allowed_hosts:
+#     - mcp.example.com
+#   transport_allowed_origins:
+#     - https://mcp.example.com

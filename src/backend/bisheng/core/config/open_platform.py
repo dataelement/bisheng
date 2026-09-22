@@ -69,6 +69,7 @@ class OpenMcpConf(BaseModel):
 
     max_inline_upload_bytes: int = Field(default=50 * 1024 * 1024, ge=1)
     file_url_allowed_hosts: list[str] = Field(default_factory=list)
+    enable_dns_rebinding_protection: bool = False
     transport_allowed_hosts: list[str] = Field(
         default_factory=lambda: [
             "127.0.0.1",
