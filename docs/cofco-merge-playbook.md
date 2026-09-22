@@ -145,6 +145,27 @@ print(authorization_model_checksum(build_authorization_model_f048()))"
 **⚠️ 必查同名命名空间**:两条线可能各自新建了同名的顶层块,合并后 JSON 只保留后一块,
 **另一块的 key 会静默变成空**。这时 JSON 仍然合法,`pnpm check-i18n` 也照样通过。检查方法见 §3 第 ④ 步。
 
+### 2.8 知识空间问答服务 `knowledge_space_chat_service.py`(主线一动这条链路就冲突)
+
+**原因**:中粮线为模型限流恢复重写了整条问答链路。主线的 `space_rag` 把检索、prompt、流式、
+落库、结束事件全部内联在一个方法里;中粮线把渲染抽到 `_render_rag_response`,`space_rag` 只做
+检索再委托,并在旁边多了一个 `recover_attempt`。三方合并对不齐,主线在这条链路上的任何改动都会
+冲突,而且冲突块的位置会错位(主线 `space_rag` 的开头会去撞中粮的 `recover_attempt`)。
+
+**原则**:结构取中粮,主线的行为改动**逐行搬进 `_render_rag_response`**,不要整文件取某一侧。
+主线给 `space_rag` 新加的参数要同时加到 `_render_rag_response` 的签名和两个调用点
+(`space_rag` 与 `chat_folder`)。
+
+**⚠️ 结束事件的 message_id 会静默合错**:主线一次插入两条消息、用 `messages[1].id`;中粮线单独
+插入回答、用 `answer_message.id`。主线改这个 payload 时这几行常常自动合并、不报冲突,合过来就成了
+`messages[1].id`,而中粮线这个作用域里根本没有 `messages`。合并后必查:
+
+```bash
+grep -n "messages\[1\]\.id" src/backend/bisheng/knowledge/domain/services/knowledge_space_chat_service.py
+```
+
+输出非空就是合错了,改成 `answer_message.id`。
+
 ---
 
 ## 3. 合并后检查清单
