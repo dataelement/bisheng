@@ -100,8 +100,8 @@ services:
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
       BS_MINIO_SHAREPOINT: 'minio:9000'
-      BS_MINIO_ACCESS_KEY: 'minioadmin'
-      BS_MINIO_SECRET_KEY: 'minioadmin'
+      BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
@@ -139,8 +139,8 @@ services:
       BS_MINIO_CERT_CHECK: 'false'
       BS_MINIO_ENDPOINT: 'minio:9000'
       BS_MINIO_SHAREPOINT: 'minio:9000'
-      BS_MINIO_ACCESS_KEY: 'minioadmin'
-      BS_MINIO_SECRET_KEY: 'minioadmin'
+      BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
@@ -207,11 +207,19 @@ services:
     container_name: bisheng-milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
+    # Object storage holds every uploaded document, knowledge-base file and
+    # report template.
+    #   9000 - data API. Published because the document server runs as its own
+    #          compose project and cannot resolve `minio`, so BS_MINIO_SHAREPOINT
+    #          has to name the host for report templates to load. Restrict it to
+    #          the networks that need it and put it behind TLS.
+    #   9001 - admin console, deliberately NOT published: it is a full web UI
+    #          over every stored file and nothing in the stack needs it. Reach
+    #          it with `ssh -L 9001:localhost:9001 <host>` when required.
     ports:
       - "9100:9000"
-      - "9101:9001"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
@@ -232,6 +240,10 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
+      # Without these Milvus falls back to its built-in minioadmin default and
+      # cannot open its own segments.
+      MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus:/var/lib/milvus

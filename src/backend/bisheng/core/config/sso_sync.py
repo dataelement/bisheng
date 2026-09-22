@@ -11,37 +11,35 @@ class SSOSyncConf(BaseModel):
     """
 
     gateway_hmac_secret: str = Field(
-        default='',
+        default="",
         description=(
-            'Shared secret for HMAC-SHA256 signing between the Gateway and '
-            'bisheng. Empty value blocks all traffic on the two SSO sync '
-            'endpoints (fail-closed). Override via env '
-            'BS_SSO_SYNC__GATEWAY_HMAC_SECRET.'
+            "Shared secret for HMAC-SHA256 signing between the Gateway and "
+            "bisheng, set in config.yaml and matched to the gateway. An empty "
+            "value blocks all traffic on the SSO sync endpoints (fail-closed). "
+            "Settings is a plain BaseModel, so there is no environment "
+            "override: only config.yaml (or an !env tag inside it) is read."
         ),
     )
 
     signature_header: str = Field(
-        default='X-Signature',
+        default="X-Signature",
         description=(
-            'HTTP header name carrying the hex-lowercase HMAC-SHA256 digest. '
+            "HTTP header name carrying the hex-lowercase HMAC-SHA256 digest. "
             'Signing string: METHOD + "\\n" + PATH + "\\n" + raw_body.'
         ),
     )
 
     user_lock_ttl_seconds: int = Field(
         default=30,
-        description=(
-            'Redis SETNX TTL for per-user concurrent login dedup '
-            '(key: user:sso_lock:{external_user_id}).'
-        ),
+        description=("Redis SETNX TTL for per-user concurrent login dedup (key: user:sso_lock:{external_user_id})."),
     )
 
     orphan_config_id: int = Field(
         default=9999,
         description=(
-            'Fixed OrgSyncConfig id reserved for SSO realtime logs. Seeded by '
-            'the F014 migration. Stable across environments so `org_sync_log` '
-            'rows from Gateway-push flows can always be joined back to this '
-            'synthetic config row.'
+            "Fixed OrgSyncConfig id reserved for SSO realtime logs. Seeded by "
+            "the F014 migration. Stable across environments so `org_sync_log` "
+            "rows from Gateway-push flows can always be joined back to this "
+            "synthetic config row."
         ),
     )
