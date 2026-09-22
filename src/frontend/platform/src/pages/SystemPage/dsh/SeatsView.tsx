@@ -13,6 +13,7 @@ import {
     commandDshSeat,
     getDshSeats,
     isDshRequestRejected,
+    isDshSeatLimitReached,
 } from '@/controllers/API/dsh'
 import type {
     DshOperation,
@@ -43,6 +44,7 @@ export function SeatsView({
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
     const [pending, setPending] = useState<Record<string, string>>({})
+    const [commandErrors, setCommandErrors] = useState<Record<string, string>>({})
     const commandLocks = useRef(new Set<string>())
     useEffect(() => {
         for (const [seatId, operationId] of Object.entries(pending)) {
@@ -100,6 +102,11 @@ export function SeatsView({
                 }
                 const operationId = createDshOperationId()
                 commandLocks.current.add(item.seat_id)
+                setCommandErrors((old) => {
+                    const nextErrors = { ...old }
+                    delete nextErrors[item.seat_id]
+                    return nextErrors
+                })
                 setPending((old) => ({ ...old, [item.seat_id]: operationId }))
                 const ref: DshOperationRef = {
                     operation_id: operationId,
@@ -119,6 +126,12 @@ export function SeatsView({
                         )
                     } catch (failure) {
                         if (isDshRequestRejected(failure)) {
+                            setCommandErrors((old) => ({
+                                ...old,
+                                [item.seat_id]: isDshSeatLimitReached(failure)
+                                    ? 'dsh.seatLimitGrantHelp'
+                                    : 'dsh.rejected',
+                            }))
                             onOperation({ ...ref, rejected: true })
                             commandLocks.current.delete(item.seat_id)
                             setPending((old) => {
@@ -202,6 +215,11 @@ export function SeatsView({
                             {data.items.map((item) => {
                                 const operation =
                                     operations[pending[item.seat_id]]
+                                const commandError = operation?.status === 'FAILED'
+                                    ? isDshSeatLimitReached(operation)
+                                        ? 'dsh.seatLimitGrantHelp'
+                                        : 'dsh.FAILED'
+                                    : commandErrors[item.seat_id]
                                 const busy =
                                     !!pending[item.seat_id] &&
                                     (!operation ||
@@ -259,6 +277,11 @@ export function SeatsView({
                                                     )}
                                                 </Button>
                                             </div>
+                                            {commandError && (
+                                                <p role="alert" className="mt-1 max-w-xs text-xs text-red-600">
+                                                    {t(commandError)}
+                                                </p>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )

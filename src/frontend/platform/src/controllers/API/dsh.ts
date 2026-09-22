@@ -703,6 +703,7 @@ export async function getDshOperation(
 }
 
 export function isDshRequestRejected(error: unknown): boolean {
+    if (isDshSeatLimitReached(error)) return true
     if (!error || typeof error !== 'object' || !('response' in error))
         return false
     const response = error.response
@@ -733,6 +734,8 @@ export function isDshSeatLimitReached(error: unknown): boolean {
         ? response.data : error
     if (!data || typeof data !== 'object') return false
     if ('status_code' in data && Number(data.status_code) === 26112) return true
+    if ('status' in data && data.status === 'FAILED' && 'result_code' in data)
+        return data.result_code === 'seat_limit_reached'
     const failure = 'error' in data ? data.error : data
     return !!failure && typeof failure === 'object'
         && 'code' in failure && failure.code === 'seat_limit_reached'
