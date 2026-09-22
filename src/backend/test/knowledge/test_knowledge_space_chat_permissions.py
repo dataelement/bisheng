@@ -172,11 +172,11 @@ def chat_service():
     service = _load_chat_service_class()(MagicMock(), _make_login_user())
     service.chat_session_repo = MagicMock()
     service.chat_session_repo.find_first_by_effective_entry = AsyncMock(
-        return_value=SimpleNamespace(chat_id="chat-1", flow_id="flow-1")
+        return_value=SimpleNamespace(chat_id="chat-1", flow_id="flow-1", name="already named")
     )
     service.chat_session_repo.list_by_effective_entry = AsyncMock(return_value=[])
     service.chat_session_repo.get_by_chat_and_effective_entry = AsyncMock(
-        return_value=SimpleNamespace(chat_id="chat-1", flow_id="flow-1")
+        return_value=SimpleNamespace(chat_id="chat-1", flow_id="flow-1", name="already named")
     )
     return service
 
@@ -206,7 +206,7 @@ class TestKnowledgeSpaceChatPermissions:
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
                 new_callable=AsyncMock,
-                return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1")],
+                return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1", name="already named")],
             ),
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
@@ -314,7 +314,7 @@ class TestKnowledgeSpaceChatPermissions:
     async def test_chat_folder_requires_view_folder(self, chat_service):
         space = _make_space(space_id=1)
         folder = _make_file(file_id=22, knowledge_id=1, file_type=FileType.DIR.value, file_name="folder")
-        session = [SimpleNamespace(chat_id="chat-1")]
+        session = [SimpleNamespace(chat_id="chat-1", name="already named")]
 
         async def _empty_space_rag(*args, **kwargs):
             if False:

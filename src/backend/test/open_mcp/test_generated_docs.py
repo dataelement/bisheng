@@ -28,3 +28,6 @@ def test_public_doc_covers_contract_and_security_boundaries():
     assert "不转成 `permission_ids`" in content
     assert "TagItem[]" in content
     assert "<BISHENG_API_KEY>" in content
+    assert "关键输出字段语义" in content
+    assert "`is_released` (不是 `is_release`)" in content
+    assert "仅 `type=3` 有业务意义" in content

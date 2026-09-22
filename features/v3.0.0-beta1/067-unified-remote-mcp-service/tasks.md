@@ -87,7 +87,7 @@
   **文件**: `src/backend/test/open_mcp/test_registry.py`, `src/backend/test/open_mcp/test_contracts.py`
   **逻辑**:
   - 对 design §4.3 allowlist 与 registry 做双向差集，断言工具恰好 10 个、名称唯一、source route/scope/modes/PAT/handler 全部一一对应，禁止从 `OPEN_API_SCOPES` 自动扩展。
-  - 逐工具校验 `title/description/inputSchema/outputSchema/annotations`，排除 `authorization/user_id/tenant_id/on_behalf_of/file_path` 等身份或本地路径字段。
+  - 逐工具校验 `title/description/inputSchema/outputSchema/annotations`，并递归断言每个成功输出 property 都有业务语义与适用范围说明；排除 `authorization/user_id/tenant_id/on_behalf_of/file_path` 等身份或本地路径字段。
   - 固定批量删除 `{"file_ids": [...]}`、上传 base64/file_url 二选一、知识资源 `actions`、结构化 `TagItem[]` 和逐工具 output model；禁止 `actions → permission_ids`、`TagItem → name`。
   **测试**: `uv run pytest test/open_mcp/test_registry.py test/open_mcp/test_contracts.py`
   **覆盖 AC**: AC-04～AC-06, AC-13, AC-24～AC-26
@@ -96,7 +96,7 @@
 - [x] **T007**: 实现 MCP 合同模型与固定 allowlist registry
   **文件**: `src/backend/bisheng/open_mcp/contracts.py`, `src/backend/bisheng/open_mcp/registry.py`
   **逻辑**:
-  - 为 10 个工具定义显式输入与成功输出 DTO；所有模型都以 JSON object 为根，并与 `tool-contracts.md` 完全一致。
+  - 为 10 个工具定义显式输入与成功输出 DTO；所有模型都以 JSON object 为根，每个成功输出字段均声明业务含义、枚举和适用资源类型，并与 `tool-contracts.md` 完全一致。
   - registry 显式声明工具元数据、source route、scope、modes、PAT 可用性、annotations、handler 和结果类型；范围不随路由或 SDK 自动发现增长。
   **测试**: T006 全部通过
   **覆盖 AC**: AC-04～AC-06, AC-24～AC-26

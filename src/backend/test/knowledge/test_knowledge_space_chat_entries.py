@@ -81,6 +81,7 @@ async def test_recovered_root_chat_uses_whole_space_retrieval():
         chat_id="chat-1",
         flow_id="space_3_file_99",
         entry_flow_id="space_3_folder_0",
+        name="already named",
     )
     service.chat_session_repo.get_by_chat_and_effective_entry.return_value = recovered
     service._require_space_view_permission = AsyncMock()

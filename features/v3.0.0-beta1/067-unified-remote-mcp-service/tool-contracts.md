@@ -11,6 +11,7 @@
 - `X-On-Behalf-Of` 与 `X-End-User` 互斥；身份、租户、`user_id`、`tenant_id` 和凭据不得由工具参数指定。
 - MCP schema 保持 Apifox 对应 API 的业务字段含义、必填语义、默认值、枚举和限制；凡因 path/query/body、顶层数组、文件载体或 MCP schema 约束无法原样复用的字段名称/类型/结构，必须按 §2.4 显式转换。现有 API 的接口逻辑、校验、调用顺序、入参、出参、错误信封和 HTTP 状态均不随 MCP schema 改动。
 - 为兼容本期 SDK 协商的 MCP 2025-11-25 协议，所有 `inputSchema` 与成功 `outputSchema` 均以 JSON object 为根；列表放入具名字段，资源变体在 object schema 内使用 `oneOf/$defs`，不返回裸数组或裸 `null`。
+- 每个成功输出 property 必须在 `tools/list` 的 `outputSchema` 中提供非空 `description`，明确字段业务含义、枚举值和资源形态适用范围。资源公共 DTO 中不适用于当前 `type` 的字段可能仍返回固定值或 `null`，客户端必须先按 `type` 判断资源形态，不得仅以字段存在与否推断能力。
 - 成功调用直接把下表声明的输出对象写入 MCP `structuredContent`，并同时提供内容等价的 JSON `TextContent` 作为兼容回退；不复制 HTTP API 的 `status_code/status_message/data` 信封，也不新增 `ok/http_status` 字段。
 - `outputSchema` 只校验成功时的 `structuredContent`。删除、清空等原 API 成功数据为空的操作，在 MCP 中统一返回 `OperationResult`，保证成功结果仍是可校验的 JSON object：
 
@@ -145,6 +146,17 @@ creation_payload_hash?: string | null
 ```
 
 实现使用一个显式的 MCP 专用 `KnowledgeResource` DTO：`id/name/type` 与公共布尔字段固定，知识库视图和知识空间持久化形态的差异字段按上表声明为可选；不得直接把 ORM/SQLModel 当作 MCP 输出模型。这样保持 `outputSchema` 的 object 根节点，也不会因 source API 某一分支缺少装饰字段而伪造值。映射器从现有 API/业务返回对象读取当前字段生成 MCP DTO，但现有 HTTP adapter 继续沿用原响应模型，不切换为 MCP DTO。
+
+关键资源字段语义固定如下；实际字段名为 `is_released`，不是 `is_release`：
+
+| 字段 | 含义与适用范围 |
+|---|---|
+| `type` | `0` 文档知识库、`1` 问答知识库、`3` 知识空间 |
+| `is_released` | 是否发布到知识广场；仅 `type=3` 有业务意义，`type=0/1` 不使用，调用方应忽略 |
+| `auth_type` | 知识空间访问方式；仅 `type=3` 有业务意义，`type=0/1` 不使用 |
+| `model / collection_name / index_name / state` | 知识库模型、存储索引和处理状态；知识空间不使用 |
+| `actions` | 当前身份的有效业务动作代码，不是 `permission_ids` |
+| `is_pinned / is_followed / subscription_status / user_role` | 当前身份在知识空间上的个人状态；仅 `type=3` 使用 |
 
 ### `ResourceListData`
 

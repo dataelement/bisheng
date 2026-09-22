@@ -172,7 +172,24 @@ export default function useFolderChat(
                     return msgs;
                 });
             },
-            onFinal: (fullText, realMessageId) => {
+            onFinal: (fullText, realMessageId, sessionName) => {
+                // The backend names a conversation from its first question and
+                // returns that name on the closing event. The history list is only
+                // fetched when the panel mounts, so apply it here — otherwise the
+                // conversation keeps showing the "new chat" placeholder until the
+                // user navigates away and back.
+                if (sessionName) {
+                    const namedChatId = payload.chat_id as string | undefined;
+                    if (namedChatId) {
+                        setSessions((prev) =>
+                            prev.map((s) =>
+                                s.chat_id === namedChatId && !s.name
+                                    ? { ...s, name: sessionName }
+                                    : s
+                            )
+                        );
+                    }
+                }
                 setMessages((prev) => {
                     const msgs = [...prev];
                     const idx = msgs.findIndex(

@@ -168,7 +168,7 @@ MCP SDK 所需的协议头由 SDK 处理；服务端不从 MCP session id 推导
 
 #### 工具输入
 
-- 每个 registry 项必须显式声明 `title / description / input_model / output_model / scope / modes / annotations`；`tools/list` 输出的 `inputSchema` 和 `outputSchema` 由这些模型生成，不返回无字段说明的空泛 schema。10 个工具的 `readOnlyHint / destructiveHint / idempotentHint / openWorldHint` 固定值见 [tool-contracts.md §2.3](./tool-contracts.md#23-工具行为-annotations)，annotations 只影响客户端风险提示，不替代服务端授权。
+- 每个 registry 项必须显式声明 `title / description / input_model / output_model / scope / modes / annotations`；`tools/list` 输出的 `inputSchema` 和 `outputSchema` 由这些模型生成，不返回无字段说明的空泛 schema。每个成功输出 property 必须带 `description`，明确业务含义、枚举值和知识库/知识空间、文件/文件夹适用范围，使客户端不必从字段名猜测语义。10 个工具的 `readOnlyHint / destructiveHint / idempotentHint / openWorldHint` 固定值见 [tool-contracts.md §2.3](./tool-contracts.md#23-工具行为-annotations)，annotations 只影响客户端风险提示，不替代服务端授权。
 - path/query/body 业务字段扁平为一个 JSON object，字段名、类型、必填项、默认值、枚举和上限以中粮 SeedMind Apifox 合同为对外基线，并由对应 Pydantic model 落地。
 - Apifox 中的 `X-On-Behalf-Of` / `X-End-User` 只作为 MCP HTTP 请求头，不进入 tool arguments。`user_id`、`tenant_id`、`on_behalf_of`、`authorization`、服务器 `file_path` 也不进入任何工具 schema；业务主体只由受信任认证上下文确定。
 - `bisheng_knowledge_files_delete` 将原 API 的顶层 `array<integer>` 包装为 MCP object `{"file_ids": integer[]}`，避免对输入字段产生多种实现。
