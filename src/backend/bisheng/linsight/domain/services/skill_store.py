@@ -57,11 +57,11 @@ LEGACY_TENANT_SKILLS_DIR = "data/skills"
 
 _MB = 1024 * 1024
 # Upload payload limit (default): the .md / .zip / .skill bytes that arrive over HTTP.
-MAX_BUNDLE_SIZE = 10 * _MB
+MAX_BUNDLE_SIZE = 200 * _MB
 # Unpacked limit (default): sum of every extracted file's size (also the GitHub
 # import's total download size). Deliberately larger than the upload limit — an
-# archive of pptx templates/fonts/images compresses well and expands past 10MB while
-# the .zip itself is far below it. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md
+# archive of pptx templates/fonts/images compresses well and can expand past the
+# upload cap while the .zip itself stays under it. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md
 # cap, unrelated.)
 MAX_UNPACKED_SIZE = 500 * _MB
 # Hard ceiling no configuration can lift. A bundle is held in memory whole — at upload

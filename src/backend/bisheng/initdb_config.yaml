@@ -136,7 +136,7 @@ linsight:
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
   # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它。
-  skill_upload_max_size_mb: 10
+  skill_upload_max_size_mb: 200
   # 技能包解压后全部文件的总大小上限，单位 MB。实际生效值不低于上面的上传上限，
   # 也不超过 1024（每个选用该技能的任务启动时都会把整包拷进任务工作区，调大会拖慢任务启动）。
   skill_unpacked_max_size_mb: 500

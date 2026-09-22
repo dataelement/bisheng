@@ -57,7 +57,7 @@ FILE_COUNT=$(find "${SRC}" -type f -not -path '*/__pycache__/*' -not -name '*.py
 
 # Defaults of 系统配置 linsight.skill_upload_max_size_mb / skill_unpacked_max_size_mb;
 # a deployment may have raised either.
-MAX_ZIP=$((10 * 1024 * 1024))
+MAX_ZIP=$((200 * 1024 * 1024))
 MAX_RAW=$((500 * 1024 * 1024))
 
 printf '%s\n' "[OK] ${ZIP_PATH}"
@@ -68,7 +68,7 @@ printf '     unpacked    : %s bytes (limit %s)\n' "${RAW_BYTES}" "${MAX_RAW}"
 
 STATUS=0
 if [ "${ZIP_BYTES}" -gt "${MAX_ZIP}" ]; then
-  echo "[FAIL] zip exceeds the default 10MB upload cap (error 11052)" >&2
+  echo "[FAIL] zip exceeds the default 200MB upload cap (error 11052)" >&2
   STATUS=1
 fi
 if [ "${RAW_BYTES}" -gt "${MAX_RAW}" ]; then
