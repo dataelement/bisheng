@@ -299,6 +299,6 @@ describe('model-scoped authorization', () => {
         await screen.findByRole('heading', { name: 'Root Organization' })
         expect(screen.getByRole('dialog')).toHaveAccessibleName('qwen-max')
         expect(screen.queryByRole('tab')).toBeNull()
-        expect(screen.getByRole('textbox', { name: 'dsh.searchDepartmentsAndUsers' })).toBeTruthy()
+        expect(screen.getByRole('textbox', { name: 'dsh.searchUsername' })).toBeTruthy()
     })
 })

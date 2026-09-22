@@ -107,7 +107,7 @@ it('selects another department and fetches its direct members', async () => {
 it('searches users across departments and shows their department names', async () => {
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
     await screen.findByText('Alice')
-    fireEvent.change(screen.getByLabelText('dsh.searchDepartmentsAndUsers'), { target: { value: 'Alice' } })
+    fireEvent.change(screen.getByLabelText('dsh.searchUsername'), { target: { value: 'Alice' } })
     await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledWith(7, expect.objectContaining({ keyword: 'Alice', department_id: undefined }), expect.any(AbortSignal)))
     expect(screen.getByRole('heading', { name: 'dsh.quotaSearchResults' })).toBeTruthy()
     expect(await screen.findByText('Alice')).toBeTruthy()

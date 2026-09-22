@@ -78,11 +78,15 @@ it.each(['command', 'poll', 'recovery', 'http'])(
         expect(screen.queryByRole('alert')).toBeNull()
     },
 )
-it('keeps other authorization failures distinct from seat capacity', async () => {
+it.each([
+    ['license_expired', 'api_errors:26115'],
+    ['authorization_unavailable', 'api_errors:26125'],
+    ['unknown_failure', 'dsh.reauthorizeFailed'],
+])('keeps %s distinct from seat capacity', async (code, key) => {
     vi.mocked(getDshSeats).mockResolvedValue({ items: [seat], has_more: false, next_cursor: null } as never)
-    vi.mocked(commandDshSeat).mockResolvedValue({ status: 'FAILED', result_code: 'license_expired' } as never)
+    vi.mocked(commandDshSeat).mockResolvedValue({ status: 'FAILED', result_code: code } as never)
     const done = mount()
     fireEvent.click(screen.getByRole('button'))
-    expect(await screen.findByRole('alert')).toHaveTextContent('dsh.reauthorizeFailed')
+    expect(await screen.findByRole('alert')).toHaveTextContent(key)
     expect(done).toHaveBeenCalledTimes(0)
 })

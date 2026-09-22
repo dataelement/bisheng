@@ -1,6 +1,7 @@
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { Button } from '@/components/bs-ui/button'
-import { commandDshSeat, getDshSeats, isDshRequestRejected, isDshSeatLimitReached } from '@/controllers/API/dsh'
+import { commandDshSeat, getDshSeats, isDshRequestRejected } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { createDshOperationId } from '@/util/dshOperationId'
 import { createContext, useContext, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -44,10 +45,10 @@ export function ReauthorizeSeat({ userId, name, disabled }: ReauthorizeSeatProps
             }
             operation.current = null
             if (result.status === 'SUCCEEDED') scope.onRestored()
-            else setError(isDshSeatLimitReached(result) ? 'dsh.seatLimitGrantHelp' : 'dsh.reauthorizeFailed')
+            else setError(getDshRequestErrorKey(result) ?? 'dsh.reauthorizeFailed')
         } catch (failure) {
             if (isDshRequestRejected(failure)) operation.current = null
-            setError(isDshSeatLimitReached(failure) ? 'dsh.seatLimitGrantHelp' : 'dsh.reauthorizeFailed')
+            setError(getDshRequestErrorKey(failure) ?? 'dsh.reauthorizeFailed')
         } finally {
             locked.current = false
             setBusy(false)

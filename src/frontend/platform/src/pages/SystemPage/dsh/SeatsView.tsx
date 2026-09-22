@@ -13,8 +13,8 @@ import {
     commandDshSeat,
     getDshSeats,
     isDshRequestRejected,
-    isDshSeatLimitReached,
 } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type {
     DshOperation,
     DshOperationRef,
@@ -102,17 +102,17 @@ export function SeatsView({
                 }
                 const operationId = createDshOperationId()
                 commandLocks.current.add(item.seat_id)
-                setCommandErrors((old) => {
-                    const nextErrors = { ...old }
-                    delete nextErrors[item.seat_id]
-                    return nextErrors
-                })
                 setPending((old) => ({ ...old, [item.seat_id]: operationId }))
                 const ref: DshOperationRef = {
                     operation_id: operationId,
                     tenant_id: item.tenant_id,
                 }
                 ref.retry = async () => {
+                    setCommandErrors((old) => {
+                        const nextErrors = { ...old }
+                        delete nextErrors[item.seat_id]
+                        return nextErrors
+                    })
                     try {
                         onOperation(
                             ref,
@@ -125,13 +125,15 @@ export function SeatsView({
                             ),
                         )
                     } catch (failure) {
-                        if (isDshRequestRejected(failure)) {
+                        const rejected = isDshRequestRejected(failure)
+                        const errorKey = getDshRequestErrorKey(failure)
+                        if (errorKey || rejected) {
                             setCommandErrors((old) => ({
                                 ...old,
-                                [item.seat_id]: isDshSeatLimitReached(failure)
-                                    ? 'dsh.seatLimitGrantHelp'
-                                    : 'dsh.rejected',
+                                [item.seat_id]: errorKey ?? 'dsh.rejected',
                             }))
+                        }
+                        if (rejected) {
                             onOperation({ ...ref, rejected: true })
                             commandLocks.current.delete(item.seat_id)
                             setPending((old) => {
@@ -216,10 +218,10 @@ export function SeatsView({
                                 const operation =
                                     operations[pending[item.seat_id]]
                                 const commandError = operation?.status === 'FAILED'
-                                    ? isDshSeatLimitReached(operation)
-                                        ? 'dsh.seatLimitGrantHelp'
-                                        : 'dsh.FAILED'
-                                    : commandErrors[item.seat_id]
+                                    ? getDshRequestErrorKey(operation) ?? 'dsh.FAILED'
+                                    : operation?.status === 'SUCCEEDED'
+                                        ? undefined
+                                        : commandErrors[item.seat_id]
                                 const busy =
                                     !!pending[item.seat_id] &&
                                     (!operation ||
