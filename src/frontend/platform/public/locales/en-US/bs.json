@@ -2405,6 +2405,7 @@
     "userMonthlyLimit": "Monthly token quota for {{name}}",
     "seatLimitTitle": "Insufficient seats",
     "seatLimitGrantHelp": "Not enough seats. This authorization was not applied. Add seats or release existing seats, then try again.",
+    "seatRevokedGrantHelp": "Selected members include revoked seats. Reassign their seats in License & seats, then save the authorization.",
     "goToLicenseAndSeats": "Go to license & seats",
     "userUsage": "Usage statistics",
     "usageScope": "Select a user in the current tenant to view token usage, messages, and completed Q&A over a time range.",

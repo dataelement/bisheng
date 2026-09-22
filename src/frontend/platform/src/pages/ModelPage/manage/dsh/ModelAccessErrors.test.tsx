@@ -41,6 +41,7 @@ afterEach(() => {
 
 it.each([
     [26112, 'dsh.seatLimitGrantHelp'],
+    [26113, 'dsh.seatRevokedGrantHelp'],
     [11001, 'api_errors:11001'],
     [26115, 'api_errors:26115'],
     [26125, 'api_errors:26125'],

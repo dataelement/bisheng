@@ -1,5 +1,6 @@
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
+import { message } from '@/components/bs-ui/toast/use-toast'
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import {
     Table,
@@ -22,7 +23,7 @@ import type {
     DshSeat,
     DshSeatQuery,
 } from '@/types/dsh'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createDshOperationId } from '@/util/dshOperationId'
 import { DshChoice, DshPager, dshTime } from './common'
@@ -44,18 +45,26 @@ export function SeatsView({
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
     const [pending, setPending] = useState<Record<string, string>>({})
-    const [commandErrors, setCommandErrors] = useState<Record<string, string>>({})
+    const commandFeedback = useRef(new Map<string, { name: string; errors: Set<string> }>())
+    const notifyCommandError = useCallback((operationId: string, errorKey: string) => {
+        const feedback = commandFeedback.current.get(operationId)
+        if (!feedback || feedback.errors.has(errorKey)) return
+        feedback.errors.add(errorKey)
+        message({ variant: 'error', description: `${feedback.name}: ${t(errorKey)}` })
+    }, [t])
     const commandLocks = useRef(new Set<string>())
     useEffect(() => {
         for (const [seatId, operationId] of Object.entries(pending)) {
-            if (
-                ['SUCCEEDED', 'FAILED'].includes(
-                    operations[operationId]?.status,
-                )
-            )
+            const operation = operations[operationId]
+            if (operation?.status === 'FAILED') {
+                notifyCommandError(operationId, getDshRequestErrorKey(operation) ?? 'dsh.FAILED')
+            }
+            if (['SUCCEEDED', 'FAILED'].includes(operation?.status)) {
                 commandLocks.current.delete(seatId)
+                commandFeedback.current.delete(operationId)
+            }
         }
-    }, [pending, operations])
+    }, [pending, operations, notifyCommandError])
     useEffect(() => {
         const normalizedKeyword = keyword.trim() || undefined
         if (normalizedKeyword === query.keyword) return
@@ -101,6 +110,10 @@ export function SeatsView({
                     return
                 }
                 const operationId = createDshOperationId()
+                commandFeedback.current.set(operationId, {
+                    name: item.display_name || item.username || item.user_id,
+                    errors: new Set(),
+                })
                 commandLocks.current.add(item.seat_id)
                 setPending((old) => ({ ...old, [item.seat_id]: operationId }))
                 const ref: DshOperationRef = {
@@ -108,11 +121,6 @@ export function SeatsView({
                     tenant_id: item.tenant_id,
                 }
                 ref.retry = async () => {
-                    setCommandErrors((old) => {
-                        const nextErrors = { ...old }
-                        delete nextErrors[item.seat_id]
-                        return nextErrors
-                    })
                     try {
                         onOperation(
                             ref,
@@ -128,14 +136,12 @@ export function SeatsView({
                         const rejected = isDshRequestRejected(failure)
                         const errorKey = getDshRequestErrorKey(failure)
                         if (errorKey || rejected) {
-                            setCommandErrors((old) => ({
-                                ...old,
-                                [item.seat_id]: errorKey ?? 'dsh.rejected',
-                            }))
+                            notifyCommandError(operationId, errorKey ?? 'dsh.rejected')
                         }
                         if (rejected) {
                             onOperation({ ...ref, rejected: true })
                             commandLocks.current.delete(item.seat_id)
+                            commandFeedback.current.delete(operationId)
                             setPending((old) => {
                                 const nextPending = { ...old }
                                 delete nextPending[item.seat_id]
@@ -151,7 +157,7 @@ export function SeatsView({
         })
     }
     return (
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
             <div className="flex items-center justify-end gap-2">
                 <Input
                     boxClassName="w-56 shrink-0"
@@ -217,11 +223,6 @@ export function SeatsView({
                             {data.items.map((item) => {
                                 const operation =
                                     operations[pending[item.seat_id]]
-                                const commandError = operation?.status === 'FAILED'
-                                    ? getDshRequestErrorKey(operation) ?? 'dsh.FAILED'
-                                    : operation?.status === 'SUCCEEDED'
-                                        ? undefined
-                                        : commandErrors[item.seat_id]
                                 const busy =
                                     !!pending[item.seat_id] &&
                                     (!operation ||
@@ -279,11 +280,6 @@ export function SeatsView({
                                                     )}
                                                 </Button>
                                             </div>
-                                            {commandError && (
-                                                <p role="alert" className="mt-1 max-w-xs text-xs text-red-600">
-                                                    {t(commandError)}
-                                                </p>
-                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )
