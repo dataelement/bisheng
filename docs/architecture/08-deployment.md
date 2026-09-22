@@ -14,7 +14,7 @@ BiSheng 采用 Docker Compose 编排全部基础设施和应用服务。生产�
 | `bisheng-backend-worker` | `dataelement/bisheng-backend:v2.4.0` | (无) | Celery 全部 Worker + Beat，通过 `entrypoint.sh worker` 启动 |
 | `bisheng-frontend` | `dataelement/bisheng-frontend:v2.4.0` | 3001:3001 | Nginx 托管前端静态资源 |
 | `bisheng-milvus-etcd` | `quay.io/coreos/etcd:v3.5.5` | (无) | Milvus 元数据存储（ETCD） |
-| `bisheng-milvus-minio` | `minio/minio:RELEASE.2023-03-20T20-16-18Z` | 9100:9000, 9101:9001 | Milvus 数据存储（MinIO），同时作为业务对象存储 |
+| `bisheng-milvus-minio` | `minio/minio:RELEASE.2023-03-20T20-16-18Z` | 9100:9000 | Milvus 数据存储（MinIO），同时作为业务对象存储。管理台端口 9001 不对外映射，见 [对象存储凭证与端口](#对象存储凭证与端口) |
 | `bisheng-milvus-standalone` | `milvusdb/milvus:v2.5.10` | 19530:19530, 9091:9091 | 向量数据库，依赖 ETCD 和 MinIO |
 | `bisheng-es` | `bitnamilegacy/elasticsearch:8.12.0` | 9200:9200, 9300:9300 | 全文检索引擎 |
 
@@ -77,6 +77,29 @@ bisheng-milvus-standalone
 │  (100s TTL)     │     避免每次请求都查询数据库
 └─────────────────┘
 ```
+
+### 对象存储凭证与端口
+
+MinIO 保存全部上传文档、知识库文件、报告模板与对话附件，Milvus 的向量段也存在同一个 bucket 里。
+
+**凭证来自 `docker/.env`，compose 不提供默认值**（从 `docker/.env.example` 复制）：
+
+```bash
+cd docker && cp .env.example .env
+echo "MINIO_ROOT_USER=$(openssl rand -hex 8)"      >> .env
+echo "MINIO_ROOT_PASSWORD=$(openssl rand -hex 16)" >> .env
+```
+
+未设置时 `docker compose up` 直接拒绝启动并提示变量名。这一份凭证被 MinIO 服务、后端、异步 worker 和 Milvus 四处引用，compose 已统一注入，无需手工同步。**Milvus 尤其要注意**：不给它凭证时它会回落到内置的厂商默认值，服务照常启动、健康检查照常通过，只有读取向量集合时才报错。轮换凭证后务必做一次知识库检索验证。
+
+**端口**：
+
+| 端口 | 说明 |
+|---|---|
+| 9100 → 9000 | 数据接口，**保留映射**。文档服务（OnlyOffice）是独立的 compose 项目，访问不到容器网络里的 `minio`，报告模板必须通过宿主机地址下载，因此 `BS_MINIO_SHAREPOINT` 需指向宿主机。请限制可访问来源并配置 TLS |
+| 9101 → 9001 | 管理台，**不映射**。它是覆盖全部文件的网页界面，技术栈中无组件依赖它。排查问题用 SSH 隧道：`ssh -L 9001:localhost:9001 <host>`，再访问 `http://localhost:9001` |
+
+**从 3.0.0-beta3 之前的版本升级**：旧版 compose 写死 `minioadmin/minioadmin` 并映射了两个端口。升级时要么把原凭证填进 `.env` 先恢复启动（安全问题未解决，至少确认 9101 已不对外），要么停机轮换成新凭证后再启动并验证检索。
 
 ### 密码加密
 
