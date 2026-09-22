@@ -15,7 +15,7 @@ from loguru import logger
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
 from bisheng.common.services.llm_error_classifier import classify_for_event
-from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
+from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async, resolve_inside
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
 from bisheng.core.logger import trace_id_var
@@ -993,10 +993,13 @@ class LinsightWorkflowTask:
         if not object_name:
             raise ValueError("file entry missing markdown_file_path")
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
-        file_path = os.path.join(target_dir, file_name)
         # ``markdown_filename`` carries the folder-upload sub-path (``年报/2024/Q1.md``)
         # for files that came in as part of a directory, so the parent dirs have to
-        # exist before the write. os.makedirs on the flat case is a no-op.
+        # exist before the write -- which is exactly what would turn a traversing
+        # name into a write anywhere on disk. Producers sanitize the name today;
+        # this refuses one that escaped anyway, instead of trusting every future
+        # producer to remember.
+        file_path = str(resolve_inside(target_dir, file_name))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         try:
@@ -1030,7 +1033,7 @@ class LinsightWorkflowTask:
         the workspace, so it needs no local path parity.
         """
         object_name = file_info["original_file_path"]
-        file_path = os.path.join(target_dir, UPLOADS_DIR, file_info["raw_filename"])
+        file_path = str(resolve_inside(target_dir, UPLOADS_DIR, file_info["raw_filename"]))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         minio_client = await get_minio_storage()
         file_url = await minio_client.get_share_link(object_name, clear_host=False)
@@ -2112,7 +2115,9 @@ class LinsightWorkflowTask:
             scope.note_conversion(result.converted, result.unknown)
             return result.text
         except Exception:
-            logger.opt(exception=True).warning("answer citation handle conversion failed; keeping the answer as written")
+            logger.opt(exception=True).warning(
+                "answer citation handle conversion failed; keeping the answer as written"
+            )
             return answer
 
     def _audit_report_citations(self, session_model, answer: str, final_files: list[dict] | None) -> dict:
