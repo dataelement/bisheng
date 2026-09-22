@@ -33,6 +33,7 @@ async def test_mixed_grants_save_and_recover_original_operation(sql_store, quota
     service = DshAdminService(
         repository_scope=scope,
         quota=quota,
+        allocate=AsyncMock(),
         authorize=AsyncMock(return_value=True),
         validate_models=AsyncMock(return_value=True),
         now=lambda: clock,

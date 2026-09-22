@@ -53,7 +53,8 @@ async def users(
     cursor: Annotated[str | None, Query(max_length=2048)] = None,
     limit: Limit = 50,
     keyword: Annotated[str | None, Query(max_length=128)] = None,
-    seat_state: Literal["ASSIGNED", "REVOKED"] = "ASSIGNED",
+    seat_state: Literal["ASSIGNED", "REVOKED"] | None = None,
+    user_id: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
     login_state: Literal["HAS_SESSIONS", "NO_SESSIONS"] | None = None,
 ):
     return resp_200(
@@ -64,6 +65,7 @@ async def users(
             limit=limit,
             keyword=keyword,
             seat_state=seat_state,
+            user_id=user_id,
             login_state=login_state,
         )
     )

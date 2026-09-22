@@ -30,6 +30,17 @@ export const importMarketBundle = (file: File, tenant: number, signal: AbortSign
     const body = new FormData();
     body.append("file", file);
     return request.post<unknown, MarketImport>(`${base}/imports`, body, {
-        signal, headers: tenantHeaders(tenant), onUploadProgress: (event) => onProgress(Math.round((event.loaded / (event.total || file.size)) * 100)),
+        signal, timeout: 300000, headers: tenantHeaders(tenant), onUploadProgress: (event) => onProgress(Math.round((event.loaded / (event.total || file.size)) * 100)),
+    });
+};
+
+export interface MarketPreview {
+    name: string; display_name: string; current_version: string | null; incoming_version: string;
+    allowed: boolean; reason: string; duplicate: boolean;
+}
+export const previewMarketBundle = (file: File, tenant: number, signal: AbortSignal) => {
+    const body = new FormData(); body.append("file", file);
+    return request.post<unknown, MarketPreview>(`${base}/imports/preview`, body, {
+        signal, timeout: 300000, headers: tenantHeaders(tenant),
     });
 };

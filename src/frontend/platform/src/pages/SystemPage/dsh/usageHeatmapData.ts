@@ -78,10 +78,7 @@ export function buildUsageHeatmap(summary: DshUsageTimeSummary, now = Date.now()
     const columnLabels: UsageHeatmapLayout['columnLabels'] = []
     const rowLabels: UsageHeatmapLayout['rowLabels'] =
         mode === 'month'
-            ? Array.from({ length: 6 }, (_, row) => ({
-                  label: `${twoDigits(row * 4)}–${twoDigits((row + 1) * 4)}`,
-                  row,
-              }))
+            ? [0, 12, 24].map((hour) => ({ label: `${String(hour).padStart(2, '0')}:00`, row: hour / 4 }))
             : []
     const tiles: UsageTile[] = []
     let previousMonth = ''

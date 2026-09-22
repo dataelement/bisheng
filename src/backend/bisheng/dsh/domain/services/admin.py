@@ -67,8 +67,8 @@ class DshManagementService:
         usage_summary_view=None,
         usage_overview_view=None,
         subject_policy_view=None,
-        subject_policy_update=None,
         audit_view=None,
+        subject_grant=None,
     ):
         self.repository_scope, self.gateway, self.authorize = repository_scope, gateway, authorize
         self.profiles, self.policy, self.policy_view, self.now = profiles, policy, policy_view, now
@@ -78,8 +78,8 @@ class DshManagementService:
         self.usage_summary_view = usage_summary_view
         self.usage_overview_view = usage_overview_view
         self.subject_policy_view = subject_policy_view
-        self.subject_policy_update = subject_policy_update
         self.audit_view = audit_view
+        self.subject_grant = subject_grant
 
     async def audit_records(self, actor_id, *, tenant_id=None, cursor=None, limit=20, action=None, status=None):
         from bisheng.core.context.tenant import get_current_tenant_id
@@ -116,18 +116,21 @@ class DshManagementService:
     ):
         from bisheng.core.context.tenant import get_current_tenant_id
 
-        _actor, tenant = await self.authorize(actor_id, tenant_id)
+        actor, tenant = await self.authorize(actor_id, tenant_id)
         tenant = tenant if tenant is not None else get_current_tenant_id()
-        if tenant is None or self.subject_policy_update is None:
+        if tenant is None or self.subject_grant is None:
             raise DshAuthorizationUnavailableError()
         with profile_scope(tenant):
-            result = await self.subject_policy_update(
+            if self.subject_grant is None:
+                raise DshAuthorizationUnavailableError()
+            result = await self.subject_grant(
+                actor=actor,
+                tenant=tenant,
+                actor_id=actor_id,
                 model_id=model_id,
                 subject_type=subject_type,
                 subject_id=subject_id,
-                actor_user_id=actor_id,
                 request=request,
-                seat_limit=None,
             )
         return SubjectPolicyUpdateResult.model_validate(result).model_dump()
 
@@ -225,29 +228,34 @@ class DshManagementService:
         cursor=None,
         limit=50,
         keyword=None,
-        seat_state="ASSIGNED",
+        seat_state=None,
+        user_id=None,
         login_state=None,
     ):
-        actor, target_tenant = await self.authorize(actor_id, tenant_id)
+        from bisheng.dsh.domain.services.seat_pages import read_seat_page
+
+        actor, target_tenant = await self.authorize(actor_id, tenant_id, user_id)
+        target = {"tenant_id": str(target_tenant) if target_tenant else None}
+        if user_id is not None:
+            target["user_id"] = str(user_id)
         result = self._page(
-            await self._request(
-                "management",
-                {
-                    "resource": "seats",
-                    "actor": actor,
-                    "target": {"tenant_id": str(target_tenant) if target_tenant else None},
-                    "cursor": cursor,
-                    "limit": limit,
-                    "keyword": keyword,
-                    "seat_state": seat_state,
-                    "login_state": login_state,
-                },
+            await read_seat_page(
+                self._request,
+                actor=actor,
+                target=target,
+                cursor=cursor,
+                limit=limit,
+                keyword=keyword,
+                seat_state=seat_state,
+                login_state=login_state,
             )
         )
         try:
             result["items"] = [SeatItem.model_validate(row).model_dump() for row in result["items"]]
             if target_tenant is not None and any(int(row["tenant_id"]) != target_tenant for row in result["items"]):
                 raise ValueError("Foreign tenant in management page")
+            if user_id is not None and any(int(row["user_id"]) != user_id for row in result["items"]):
+                raise ValueError("Foreign user in seat lookup")
             ids = [int(row["user_id"]) for row in result["items"]]
             if len(ids) > limit or len(set(ids)) != len(ids):
                 raise ValueError()

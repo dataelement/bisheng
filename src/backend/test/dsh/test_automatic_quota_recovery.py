@@ -3,6 +3,7 @@
 import os
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import create_engine, inspect, select
@@ -295,7 +296,12 @@ async def test_first_policy_and_mid_update_redis_loss_resume_same_intent(
         monkeypatch.setattr(quota, lose_at, lose_once)
     now = datetime(2026, 9, 11)
     service = DshAdminService(
-        repository_scope=scope, quota=quota, authorize=permitted, validate_models=permitted, now=lambda: now
+        repository_scope=scope,
+        quota=quota,
+        allocate=AsyncMock(),
+        authorize=permitted,
+        validate_models=permitted,
+        now=lambda: now,
     )
     result = await service.update_policy(
         user_id=20,

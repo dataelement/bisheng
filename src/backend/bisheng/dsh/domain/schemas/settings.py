@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class DshManagementSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    enabled: bool = Field(default=False, description="Allow new DSH logins and model requests across the instance.")
+    enabled: bool = Field(
+        default=True, description="Compatibility field; deployed DSH business access is always enabled."
+    )
     download_url: str | None = Field(
         default=None, max_length=2048, description="Optional Desktop download HTTP(S) URL."
     )

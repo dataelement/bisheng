@@ -1,4 +1,4 @@
-"""Two independent DSH gates; API flow uses an isolated real configuration table."""
+"""Always-on business settings with deployment and administrator boundaries."""
 
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -41,7 +41,7 @@ async def settings_app(tmp_path, monkeypatch):
     app.dependency_overrides[dependencies.get_settings] = lambda: deployment
     app.dependency_overrides[settings_api.settings_admin] = lambda: SimpleNamespace(user_id=1)
     app.dependency_overrides[identity.browser_user] = lambda: SimpleNamespace(user_id=1, tenant_id=1)
-    # Existing initialized resources must not bypass later switch changes.
+    # Existing runtime resources are reused within the deployment boundary.
     app.state.dsh_runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock()))
     try:
         yield app, deployment, sessions
@@ -49,64 +49,35 @@ async def settings_app(tmp_path, monkeypatch):
         await engine.dispose()
 
 
-async def test_default_off_enable_disable_and_reopen_preserves_other_configuration(settings_app, dsh_contracts):
+async def test_always_enabled_settings_preserve_addresses_and_other_configuration(settings_app):
     app, deployment, sessions = settings_app
     async with sessions() as session:
         session.add(Config(key="other_config", value="keep"))
+        session.add(Config(key="dsh_management", value='{"enabled":false,"download_url":null}'))
         await session.commit()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        assert (await client.get("/api/v1/dsh/config")).json() == {"enabled": False}
+        assert (await client.get("/api/v1/dsh/config")).json()["enabled"] is True
         browser = await client.get("/api/v1/dsh/browser-config")
-        assert browser.json()["data"] == {
-            "management_enabled": True,
-            "enabled": False,
-            "download_url": None,
-            "launch_url": "dsh-desktop://login",
-        }
+        assert browser.json()["data"]["enabled"] is True
         assert browser.headers["cache-control"] == "no-store"
         url = "/api/v1/dsh/admin/settings"
-        assert (await client.get(url)).json()["data"]["enabled"] is False
         value = {
-            "enabled": True,
+            "enabled": False,
             "download_url": "http://downloads.test/desktop/latest",
             "launch_url": "dsh-desktop-test://login",
         }
-        assert (await client.put(url, json=value)).json()["data"] == value
-        expected_config = next(
-            endpoint["response"]["body"]
-            for endpoint in dsh_contracts["client-0.5.0"]["endpoints"]
-            if endpoint["path"] == "/api/v1/dsh/config"
-        )
-        # Verify the actual endpoint with real deployment defaults, not a mocked version.
-        assert (await client.get("/api/v1/dsh/config")).json() == expected_config
+        expected = {**value, "enabled": True}
+        assert (await client.put(url, json=value)).json()["data"] == expected
+        assert (await client.get(url)).json()["data"] == expected
         request = Request({"type": "http", "app": app})
-        runtime = await dependencies.get_runtime(request, deployment)
-        value["enabled"] = False
-        assert (await client.put(url, json=value)).json()["data"] == value
-        for method, path, body in [
-            ("GET", "/dsh/models", None),
-            ("GET", "/dsh/usage", None),
-            (
-                "POST",
-                "/dsh/chat/completions",
-                {"model": "bisheng:1", "messages": [{"role": "user", "content": "test"}]},
-            ),
-            ("POST", "/dsh/authorize", {"auth_id": "test"}),
-            ("POST", "/internal/dsh/identity/check", {"installation_id": "test", "tenant_id": "1", "user_id": "1"}),
-            ("POST", "/internal/dsh/identity/redeem", {}),
-        ]:
-            response = await client.request(method, "/api/v1" + path, json=body)
-            assert response.status_code == 403, response.text
-            assert response.json()["error"]["code"] == "dsh_disabled"
-        runtime.access.authenticate.assert_not_awaited()
-        assert (await client.get(url)).json()["data"] == value
-        value["enabled"] = True
-        await client.put(url, json=value)
-        assert await dependencies.get_runtime(request, deployment) is runtime
+        assert await dependencies.get_runtime(request, deployment) is app.state.dsh_runtime
     async with sessions() as session:
         rows = (await session.exec(select(Config))).all()
         assert {row.key for row in rows} == {"other_config", "dsh_management"}
         assert next(row.value for row in rows if row.key == "other_config") == "keep"
+        assert DshManagementSettings.model_validate_json(
+            next(row.value for row in rows if row.key == "dsh_management")
+        ).enabled
 
 
 async def test_deployment_gate_wins_without_reading_database(settings_app, monkeypatch):
@@ -139,14 +110,14 @@ async def test_rejected_writes_leave_current_value_unchanged(settings_app):
             assert (
                 await client.put("/api/v1/dsh/admin/settings", json={"enabled": True, "download_url": value})
             ).status_code == 400
-        assert (await client.get("/api/v1/dsh/admin/settings")).json()["data"]["enabled"] is False
+        assert (await client.get("/api/v1/dsh/admin/settings")).json()["data"]["enabled"] is True
 
         def deny():
             raise HTTPException(403)
 
         app.dependency_overrides[settings_api.settings_admin] = deny
         assert (await client.put("/api/v1/dsh/admin/settings", json={"enabled": True})).status_code == 403
-        assert not (await DshSettingsService().read()).enabled
+        assert (await DshSettingsService().read()).enabled
 
 
 async def test_unreadable_settings_fail_closed():

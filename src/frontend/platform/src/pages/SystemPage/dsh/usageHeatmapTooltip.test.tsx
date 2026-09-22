@@ -68,6 +68,16 @@ function renderHeatmap(
 }
 
 describe('heatmap daily Token tooltip', () => {
+    it('aligns start, noon and end labels to the heatmap bounds and center', () => {
+        renderHeatmap({}, true)
+        for (const [hour, position, offset] of [[0, '0%', '0%'], [12, '50%', '-50%'], [24, '100%', '-100%']] as const) {
+            const label = screen.getByText(`${String(hour).padStart(2, '0')}:00`)
+            expect(label.style.top).toBe(position)
+            expect(label.style.transform).toBe(`translateY(${offset})`)
+        }
+        expect(screen.getByRole('list')).toHaveAttribute('data-rows', '6')
+    })
+
     it.each([undefined, 1_200_000_000])('keeps a daily tile in its fixed band with outlier %s', (outlier) => {
         renderHeatmap({}, false, outlier)
         expect(screen.getAllByRole('button')[0]).toHaveAttribute('data-heat-level', '1')

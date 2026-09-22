@@ -39,7 +39,7 @@ class MarketRepository:
                     else None
                 )
                 if existing.status == "failed" or (
-                    plugin and (plugin.deleted or plugin.disabled or plugin.current_version_id is None)
+                    plugin and (plugin.deleted or plugin.disabled or plugin.current_version_id != existing.version_id)
                 ):
                     existing.status, existing.error = "validating", ""
                     existing.actor_id, existing.created_at = actor, now()
@@ -76,6 +76,42 @@ class MarketRepository:
             ).first()
             return row.model_dump() if row else None
 
+    @staticmethod
+    def version_preview(db, tenant, meta, digest):
+        plugin = db.exec(
+            select(MarketPlugin).where(MarketPlugin.tenant_id == tenant, MarketPlugin.name == meta["name"])
+        ).first()
+        versions = (
+            list(
+                db.exec(
+                    select(MarketVersion).where(MarketVersion.tenant_id == tenant, MarketVersion.plugin_id == plugin.id)
+                ).all()
+            )
+            if plugin
+            else []
+        )
+        highest = max(versions, key=lambda row: tuple(map(int, row.version.split("."))), default=None)
+        current = next((row for row in versions if row.id == plugin.current_version_id), None) if plugin else None
+        same = next((row for row in versions if row.version == meta["version"]), None)
+        reason = ""
+        if highest and tuple(map(int, meta["version"].split("."))) < tuple(map(int, highest.version.split("."))):
+            reason = "lower_version"
+        elif same and same.digest != digest:
+            reason = "version_conflict"
+        return {
+            "name": meta["name"],
+            "display_name": meta["display_name"],
+            "current_version": current.version if current else None,
+            "incoming_version": meta["version"],
+            "allowed": not reason,
+            "reason": reason,
+            "duplicate": bool(same and same.digest == digest),
+        }
+
+    def preview(self, tenant, manifest, digest):
+        with self.sessions() as db:
+            return self.version_preview(db, tenant, manifest["plugin"], digest)
+
     def finish_import(self, tenant, task_id, manifest=None, size=0, error=""):
         with self.sessions() as db:
             task = db.exec(
@@ -110,7 +146,10 @@ class MarketRepository:
                         MarketVersion.version == meta["version"],
                     )
                 ).first()
-                if version and version.digest != task.digest:
+                preview = self.version_preview(db, tenant, meta, task.digest)
+                if not preview["allowed"]:
+                    task.status, task.error = "failed", preview["reason"]
+                elif version and version.digest != task.digest:
                     task.status, task.error = "failed", "Version already exists with a different digest"
                 else:
                     before = {

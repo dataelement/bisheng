@@ -19,9 +19,9 @@
   "validating": "校验中",
   "failed": "校验失败",
   "resume": "继续校验",
-  "uploadHint": "请选择一个完整离线 ZIP 包，最大 256 MiB。校验通过后即可安装；新版本会替换当前版本，已删除的插件可以重新导入。",
+  "uploadHint": "请选择完整离线 ZIP 包，最大 512 MiB；解压后最大 1 GiB。同一插件支持更高版本更新。",
   "cancel": "取消",
-  "invalidFile": "请选择 256 MiB 以内的 ZIP 发布包",
+  "invalidFile": "请选择 512 MiB 以内的 ZIP 发布包",
   "validationFailed": "插件包校验失败",
   "imported": "导入完成",
   "versions": "版本记录",
@@ -32,5 +32,13 @@
   "forbidden": "需要租户管理员权限",
   "delete": "删除",
   "deleteConfirm": "删除 {{name}}？删除后员工将无法新安装或更新，已安装的插件可继续使用。需要时可以重新导入。",
-  "deleted": "插件已删除"
+  "deleted": "插件已删除",
+  "bundleHelp": "请向插件提供方获取 DSH 离线安装包。包内须包含 manifest.json、对应系统的插件及必要依赖；版本号使用 1.2.3 格式。",
+  "previewing": "正在校验安装包并读取版本…",
+  "previewFailed": "无法预览安装包，请检查 ZIP 格式、文件大小及网络后重新选择。",
+  "newPlugin": "首次导入",
+  "lowerVersion": "导入版本低于已导入版本，请选择更高版本。",
+  "versionConflict": "此版本已有不同内容，请使用新的版本号。",
+  "duplicateVersion": "此版本已导入，重复导入会复用已有版本。",
+  "versionReady": "确认导入后，此版本将供员工安装。"
 }

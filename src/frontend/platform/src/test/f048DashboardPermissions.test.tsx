@@ -14,6 +14,12 @@ import { resolve } from "node:path"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const lazyPermission = vi.hoisted(() => ({ actions: [] as string[], privileged: false }))
+vi.mock("@/pages/Dashboard/hook", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/pages/Dashboard/hook")>(),
+  useLazyDashboardPermission: () => ({ ...lazyPermission, ensureLoaded: vi.fn() }),
+}))
+
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: vi.fn(),
 }))
@@ -70,8 +76,10 @@ const dashboard = {
 
 function renderItem(
   permissionActions: string[],
-  { visible = true, privileged = false } = {},
+  { privileged = false } = {},
 ) {
+  lazyPermission.actions = permissionActions
+  lazyPermission.privileged = privileged
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),
@@ -88,9 +96,6 @@ function renderItem(
       <DashboardListItem
         dashboard={dashboard}
         selected={false}
-        permissionActions={permissionActions}
-        visible={visible}
-        privileged={privileged}
         {...callbacks}
       />
     </locationContext.Provider>,
@@ -133,11 +138,11 @@ describe("F048 dashboard permission UI", () => {
     })
   })
 
-  it("fails closed and never renders a dashboard it was not told is visible", () => {
-    renderItem(["edit", "delete", "manage_permission"], { visible: false })
+  it("renders server-visible rows while mutation permissions are unresolved", () => {
+    renderItem([])
 
-    expect(screen.queryByText("Operations")).toBeNull()
-    expect(screen.queryByRole("button", { name: "dashboard.actions" })).toBeNull()
+    expect(screen.getByText("Operations")).toBeInTheDocument()
+    expect(screen.queryByText("delete")).toBeNull()
   })
 
   it("keeps share, default, and copy behind visibility without implying edit", () => {

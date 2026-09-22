@@ -35,16 +35,6 @@ export type DshSeat = {
     login_state: 'HAS_SESSIONS' | 'NO_SESSIONS' | 'UNAVAILABLE'
     created_at: string
 }
-export type DshSession = {
-    session_id: string
-    seat_id: string
-    device_label: string | null
-    client_version: string | null
-    state: string
-    expires_at: string
-    last_seen_at: string | null
-    created_at: string
-}
 export type DshLicense = {
     status: string
     source?: 'builtin' | 'signed' | null
@@ -121,6 +111,7 @@ export type DshOperation = {
     result_payload: Record<string, unknown> | null
 }
 export type DshSeatQuery = {
+    user_id?: string
     tenant_id?: string
     cursor?: string
     limit?: number
