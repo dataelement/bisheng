@@ -24,11 +24,8 @@ def test_sandbox_conf_defaults_without_yaml_section(clean_sandbox_env: None) -> 
     assert conf.discover_host_pattern == "code-runner-{n}"
     assert conf.discover_index_start == 1
     assert conf.discover_ttl_s == 60
-    assert conf.pool_lease_ttl_s == 900
-    assert conf.max_sessions_per_replica == 1
     assert conf.code_node_enabled is True
     assert conf.endpoints == []
-    assert conf.enable_uid_isolation is False
 
 
 def test_sandbox_conf_env_overrides_discover_host_pattern(
@@ -56,7 +53,18 @@ def test_sandbox_conf_endpoints_default_empty(clean_sandbox_env: None) -> None:
     assert settings.sandbox_conf.endpoints == []
 
 
-def test_sandbox_conf_does_not_guard_runner_session_slots(clean_sandbox_env: None) -> None:
-    settings = Settings(sandbox_conf={"max_sessions_per_replica": 2, "enable_uid_isolation": False})
-    assert settings.sandbox_conf.max_sessions_per_replica == 2
-    assert settings.sandbox_conf.enable_uid_isolation is False
+def test_sandbox_conf_ignores_runner_only_knobs(clean_sandbox_env: None) -> None:
+    assert "pool_lease_ttl_s" not in SandboxConf.model_fields
+    assert "max_sessions_per_replica" not in SandboxConf.model_fields
+    assert "enable_uid_isolation" not in SandboxConf.model_fields
+    settings = Settings(
+        sandbox_conf={
+            "pool_lease_ttl_s": 60,
+            "max_sessions_per_replica": 2,
+            "enable_uid_isolation": False,
+        }
+    )
+    dumped = settings.sandbox_conf.model_dump()
+    assert "pool_lease_ttl_s" not in dumped
+    assert "max_sessions_per_replica" not in dumped
+    assert "enable_uid_isolation" not in dumped

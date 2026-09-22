@@ -100,8 +100,9 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
     return BearlyInterpreterTool(**kwargs).as_tool()
 
 
-# Isolation-environment pool knobs live on Settings.sandbox_conf, never extra
-# (AC-22 / pitfall 7). Stripped so a pasted container/e2b block cannot override.
+# Isolation-environment access knobs live on Settings.sandbox_conf, never extra
+# (AC-22 / pitfall 7). Runner-only keys are stripped so leftover tool config
+# cannot override session TTL / slots / uid isolation.
 _CONTAINER_POOL_KEYS = (
     "endpoints",
     "token",

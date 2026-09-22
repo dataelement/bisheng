@@ -785,7 +785,11 @@ class MetricLogConf(BaseModel):
 
 
 class SandboxConf(BaseModel):
-    """Isolation-environment (sandbox) access and capacity settings.
+    """Isolation-environment (sandbox) access settings on worker/backend.
+
+    Session capacity, idle TTL and uid isolation live on the runner
+    (``SANDBOX_MAX_SESSIONS`` / ``SANDBOX_LEASE_TTL_S`` /
+    ``SANDBOX_ENABLE_UID_ISOLATION``), not here.
 
     Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
     ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
@@ -805,9 +809,6 @@ class SandboxConf(BaseModel):
     )
     discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
     token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
-    pool_lease_ttl_s: int = Field(default=900, description="Idle lease TTL in seconds")
-    max_sessions_per_replica: int = Field(default=1, ge=1, description="Concurrent sessions per runner replica")
-    enable_uid_isolation: bool = Field(default=False, description="Per-session uid + directory mode")
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
     max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
