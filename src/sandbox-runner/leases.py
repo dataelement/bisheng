@@ -11,6 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from logutil import get_logger
+
+_log = get_logger()
+
 
 @dataclass
 class Lease:
@@ -59,7 +63,7 @@ class LeaseStore:
         with self._guard:
             expired = [sid for sid, lease in self._leases.items() if now - lease.last_active > self.lease_ttl_s]
         for sid in expired:
-            self.delete(sid, lease_token=None, force=True)
+            self.delete(sid, lease_token=None, force=True, reason="idle")
 
     def create(self) -> Lease:
         self.reap_expired()
@@ -88,7 +92,15 @@ class LeaseStore:
                 uid=uid,
             )
             self._leases[session_id] = lease
-            return lease
+        _log.info(
+            "session created session_id=%s uid=%s slots=%s/%s isolation=%s",
+            session_id,
+            uid,
+            len(self._leases),
+            self.max_sessions,
+            self.enable_uid_isolation,
+        )
+        return lease
 
     def get(self, session_id: str, lease_token: str) -> Lease:
         self.reap_expired()
@@ -101,7 +113,14 @@ class LeaseStore:
         lease.last_active = self._now()
         return lease
 
-    def delete(self, session_id: str, lease_token: str | None, *, force: bool = False) -> None:
+    def delete(
+        self,
+        session_id: str,
+        lease_token: str | None,
+        *,
+        force: bool = False,
+        reason: str = "",
+    ) -> None:
         with self._guard:
             lease = self._leases.get(session_id)
             if lease is None:
@@ -111,7 +130,15 @@ class LeaseStore:
             if not force and lease.lease_token != lease_token:
                 raise ForbiddenLeaseError()
             self._leases.pop(session_id, None)
+            remaining = len(self._leases)
         shutil.rmtree(lease.work_dir, ignore_errors=True)
+        _log.info(
+            "session deleted session_id=%s reason=%s slots=%s/%s",
+            session_id,
+            reason or ("force" if force else "client"),
+            remaining,
+            self.max_sessions,
+        )
 
     def expires_at_iso(self, lease: Lease) -> str:
         wall = datetime.now(UTC).timestamp() + max(self.lease_ttl_s - (self._now() - lease.last_active), 0)

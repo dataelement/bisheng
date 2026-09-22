@@ -6,6 +6,7 @@ import os
 
 import uvicorn
 from app import create_app
+from logutil import configure, get_logger
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -28,12 +29,22 @@ def build_app():
 
 
 def main() -> None:
+    configure()
+    port = int(os.environ.get("SANDBOX_PORT") or "8080")
+    get_logger().info(
+        "starting host=0.0.0.0 port=%s max_sessions=%s lease_ttl_s=%s isolation=%s",
+        port,
+        os.environ.get("SANDBOX_MAX_SESSIONS") or "1",
+        os.environ.get("SANDBOX_LEASE_TTL_S") or "900",
+        _bool_env("SANDBOX_ENABLE_UID_ISOLATION", True),
+    )
     app = build_app()
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=int(os.environ.get("SANDBOX_PORT") or "8080"),
+        port=port,
         workers=1,
+        log_level=(os.environ.get("SANDBOX_LOG_LEVEL") or "info").lower(),
     )
 
 

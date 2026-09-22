@@ -11,6 +11,9 @@ import time
 
 from files import snapshot_tree
 from leases import Lease, LeaseStore
+from logutil import get_logger
+
+_log = get_logger()
 
 _ENV_ALLOW = (
     "PATH",
@@ -94,6 +97,13 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
     code = payload.get("code") or ""
     lang = payload.get("lang") or "python"
     timeout_s = float(payload.get("timeout_s") or 600)
+    _log.info(
+        "exec start session_id=%s lang=%s timeout_s=%s code_bytes=%s",
+        lease.session_id,
+        lang,
+        timeout_s,
+        len(code.encode("utf-8")),
+    )
     with lease.lock:
         lease.pre_exec_snapshot = snapshot_tree(lease.work_dir)
         lease.copy_out_allowed = False
@@ -138,7 +148,14 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
         except OSError:
             pass
         if exitcode == 137:
-            store.delete(lease.session_id, lease.lease_token, force=True)
+            _log.error(
+                "exec oom session_id=%s duration_ms=%s stdout_bytes=%s stderr_bytes=%s",
+                lease.session_id,
+                duration_ms,
+                len(stdout or ""),
+                len(stderr or ""),
+            )
+            store.delete(lease.session_id, lease.lease_token, force=True, reason="oom")
             return {
                 "exitcode": 137,
                 "stdout": stdout or "",
@@ -147,6 +164,15 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
             }
         if not timed_out:
             lease.copy_out_allowed = True
+        _log.info(
+            "exec done session_id=%s exitcode=%s duration_ms=%s stdout_bytes=%s stderr_bytes=%s timed_out=%s",
+            lease.session_id,
+            exitcode,
+            duration_ms,
+            len(stdout or ""),
+            len(stderr or ""),
+            timed_out,
+        )
         return {
             "exitcode": exitcode,
             "stdout": stdout or "",

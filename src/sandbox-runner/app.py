@@ -8,6 +8,7 @@ from collections.abc import Callable
 from execute import handle_exec
 from files import ZipSlipError, handle_get_files, handle_put_files
 from leases import CapacityError, ForbiddenLeaseError, LeaseStore, UnknownLeaseError
+from logutil import configure, get_logger
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -34,12 +35,21 @@ def create_app(
 ) -> Starlette:
     if not token:
         raise RuntimeError("runner token must not be empty")
+    configure()
+    log = get_logger()
     store = LeaseStore(
         sessions_root=sessions_root,
         max_sessions=max_sessions,
         lease_ttl_s=lease_ttl_s,
         enable_uid_isolation=enable_uid_isolation,
         clock=clock,
+    )
+    log.info(
+        "ready sessions_root=%s max_sessions=%s lease_ttl_s=%s isolation=%s",
+        sessions_root,
+        max_sessions,
+        lease_ttl_s,
+        enable_uid_isolation,
     )
 
     async def health(_request: Request) -> Response:
@@ -56,10 +66,16 @@ def create_app(
 
     async def create_session(request: Request) -> Response:
         if _bearer(request) != token:
+            log.warning("auth failed action=create_session")
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         try:
             lease = store.create()
         except CapacityError:
+            log.warning(
+                "session rejected reason=capacity slots=%s/%s",
+                max_sessions,
+                max_sessions,
+            )
             return JSONResponse({"error": "capacity exceeded"}, status_code=503)
         return JSONResponse(
             {
@@ -72,10 +88,12 @@ def create_app(
     async def delete_session(request: Request) -> Response:
         session_id = request.path_params["id"]
         try:
-            store.delete(session_id, _lease_token(request))
+            store.delete(session_id, _lease_token(request), reason="client")
         except UnknownLeaseError:
+            log.warning("session missing action=delete session_id=%s", session_id)
             return JSONResponse({"error": "not found"}, status_code=404)
         except ForbiddenLeaseError:
+            log.warning("lease forbidden action=delete session_id=%s", session_id)
             return JSONResponse({"error": "forbidden"}, status_code=403)
         return JSONResponse({"ok": True})
 
@@ -84,8 +102,10 @@ def create_app(
         try:
             lease = store.get(session_id, _lease_token(request))
         except UnknownLeaseError:
+            log.warning("session missing action=copy-in session_id=%s", session_id)
             return JSONResponse({"error": "not found"}, status_code=404)
         except ForbiddenLeaseError:
+            log.warning("lease forbidden action=copy-in session_id=%s", session_id)
             return JSONResponse({"error": "forbidden"}, status_code=403)
         body = await request.body()
         raw_manifest = request.headers.get("x-file-manifest") or "{}"
@@ -98,7 +118,15 @@ def create_app(
         try:
             result = handle_put_files(lease, body, manifest, max_copy_in_bytes)
         except ZipSlipError as exc:
+            log.warning("copy-in rejected session_id=%s error=%s", session_id, exc)
             return JSONResponse({"error": str(exc)}, status_code=400)
+        log.info(
+            "copy-in session_id=%s bytes=%s written=%s skipped=%s",
+            session_id,
+            len(body),
+            len(result.get("written") or []),
+            len(result.get("skipped") or []),
+        )
         return JSONResponse(result)
 
     async def get_files(request: Request) -> Response:
@@ -106,10 +134,13 @@ def create_app(
         try:
             lease = store.get(session_id, _lease_token(request))
         except UnknownLeaseError:
+            log.warning("session missing action=copy-out session_id=%s", session_id)
             return JSONResponse({"error": "not found"}, status_code=404)
         except ForbiddenLeaseError:
+            log.warning("lease forbidden action=copy-out session_id=%s", session_id)
             return JSONResponse({"error": "forbidden"}, status_code=403)
         payload = handle_get_files(lease)
+        log.info("copy-out session_id=%s bytes=%s", session_id, len(payload))
         return Response(payload, media_type="application/gzip")
 
     async def exec_code(request: Request) -> Response:
@@ -117,12 +148,15 @@ def create_app(
         try:
             lease = store.get(session_id, _lease_token(request))
         except UnknownLeaseError:
+            log.warning("session missing action=exec session_id=%s", session_id)
             return JSONResponse({"error": "not found"}, status_code=404)
         except ForbiddenLeaseError:
+            log.warning("lease forbidden action=exec session_id=%s", session_id)
             return JSONResponse({"error": "forbidden"}, status_code=403)
         try:
             payload = await request.json()
         except Exception:
+            log.warning("exec rejected session_id=%s error=invalid json", session_id)
             return JSONResponse({"error": "invalid json"}, status_code=400)
         result = handle_exec(store, lease, payload)
         return JSONResponse(result)
