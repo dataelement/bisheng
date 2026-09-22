@@ -138,6 +138,16 @@ print(authorization_model_checksum(build_authorization_model_f048()))"
 **原则**:高度用 `var(--bs-dvh,100dvh)`,宽度用 `var(--bs-vw,100vw)`,这是信创 webview 的修复,
 **不能退回** `100dvh` / `100vw`;文案和 i18n key 取主线的。
 
+**⚠️ 主线把尺寸抽成公共常量/函数时会静默退回。** 冲突只出现在原来那行 class 上;主线新建的
+helper(2026-09-22 是 `citationUtils.ts` 里的 `resolveCitationOverlayLayout`)整段是新增,
+三方合并直接采纳,里面的 `100vw` 不报冲突就进来了。**只扫本次合并动过的文件**(全仓扫会命中
+几十处本来就没做过信创修复的组件,没有参考价值),有输出就对照 diff 判断是不是被换掉的:
+
+```bash
+git diff --name-only <合并前的中粮tip> -- 'src/frontend/**' \
+  | xargs grep -n "100dvh\|100vw" 2>/dev/null | grep -v "bs-dvh\|bs-vw"
+```
+
 ### 2.7 前端 i18n 文件 `client/src/locales/*/translation.json`
 
 **常规处理**:两侧都在同一位置新增 key,双方都保留(注意补逗号)。
