@@ -108,7 +108,20 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     side="right"
                     align="start"
                     sideOffset={8}
-                    className="max-w-[260px] whitespace-normal break-words leading-[18px]"
+                    // Keep it off the viewport edge so the height Radix reports
+                    // leaves a margin rather than ending flush against it.
+                    collisionPadding={12}
+                    // A long description on a row near the bottom of the list grew
+                    // taller than the space below it and simply ran off screen, so
+                    // the text meant to rescue the truncated row was itself cut
+                    // off. Worst inside the customer app, where the larger font
+                    // makes the same description several lines taller. Radix can
+                    // shift the panel but not shrink it, so it has to be told what
+                    // room there is.
+                    className={cn(
+                        'max-w-[260px] whitespace-normal break-words leading-[18px]',
+                        'max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto overscroll-contain',
+                    )}
                 >
                     <p className="font-medium">{skill.display_name}</p>
                     {skill.description && (

@@ -97,6 +97,7 @@
 | 知识空间 AI dock 引用条 | `grep -c selectedContent src/frontend/client/src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiBottomDock.tsx` |
 | F045 部门空间显示管理员而非创建者 | `grep -c "never surfaces on a" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
 | F045 无管理员时拦住申请加入 | `grep -c "ensure_space_not_pending_admin(space.id)" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
+| 技能说明气泡限高(客户 app 大字号) | `grep -c "radix-tooltip-content-available-height" src/frontend/client/src/components/Linsight/Input/SkillSelector.tsx` |
 
 守卫测试:`src/backend/test/cofco/test_cofco_department_space_admin.py`(这两处调用)、
 `src/backend/test/cofco/test_cofco_config_customizations.py`(配置)。
