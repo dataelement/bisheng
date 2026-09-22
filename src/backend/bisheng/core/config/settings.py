@@ -812,7 +812,7 @@ class SandboxConf(BaseModel):
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
     max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
-    code_node_enabled: bool = Field(default=True, description="Run workflow code nodes in the isolation environment")
+    code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
 
     @model_validator(mode="after")
     def overlay_env(self):

@@ -173,4 +173,5 @@ logger_conf:
 #   discover_index_start: 1                           # K8s: 0
 #   discover_ttl_s: 60                            # background refresh interval, not list expiry
 #   token: "..."
+#   code_node_enabled: false                      # workflow code node → sandbox
 #   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery
