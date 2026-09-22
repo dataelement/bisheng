@@ -108,19 +108,27 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     side="right"
                     align="start"
                     sideOffset={8}
-                    // Keep it off the viewport edge so the height Radix reports
-                    // leaves a margin rather than ending flush against it.
                     collisionPadding={12}
-                    // A long description on a row near the bottom of the list grew
-                    // taller than the space below it and simply ran off screen, so
-                    // the text meant to rescue the truncated row was itself cut
-                    // off. Worst inside the customer app, where the larger font
-                    // makes the same description several lines taller. Radix can
-                    // shift the panel but not shrink it, so it has to be told what
-                    // room there is.
+                    // The row clamps its description to one line, so this tooltip is
+                    // the only place it can be read in full — and a long one on a row
+                    // near the bottom of the list grew taller than the space under it
+                    // and ran off screen, cutting off the very text meant to rescue
+                    // the clamped row. The COFCO page-scale levels make it routine:
+                    // "large" is a 110% zoom on <body>, so the same description comes
+                    // out several lines taller.
+                    //
+                    // Radix can shift a panel away from an edge but cannot shrink it,
+                    // so the fix is to keep the panel shorter than the window and let
+                    // the shift do the rest. Deliberately NOT Radix's own
+                    // --radix-tooltip-content-available-height: that number is
+                    // measured from getBoundingClientRect, while the popper wrapper
+                    // re-applies the page scale underneath it, so the two are quoted
+                    // in different pixel spaces and the cap lands ~10% out under zoom.
+                    // --bs-dvh is already the zoom-compensated viewport height, in the
+                    // units a length written here lays out in (utils/fontSize).
                     className={cn(
                         'max-w-[260px] whitespace-normal break-words leading-[18px]',
-                        'max-h-[var(--radix-tooltip-content-available-height)] overflow-y-auto overscroll-contain',
+                        'max-h-[calc(var(--bs-dvh,100dvh)-48px)] overflow-y-auto overscroll-contain',
                     )}
                 >
                     <p className="font-medium">{skill.display_name}</p>
