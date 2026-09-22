@@ -1,11 +1,12 @@
 import jwt
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from loguru import logger
 from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.v1.schemas import resp_200
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -18,8 +19,17 @@ mino_prefix = "report/"
 
 
 @router.post("/office_token")
-async def get_office_token(payload: dict = Body(...)):
-    """Sign the OnlyOffice editorConfig with JWT secret and return the token."""
+async def get_office_token(
+    payload: dict = Body(...),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Sign the OnlyOffice editorConfig with JWT secret and return the token.
+
+    Signing is only ever requested by the browser before it boots the editor --
+    the document server never calls this. Without a login this was a signing
+    oracle: anyone could have any payload signed with `office_jwt_secret` and
+    hand the document server an editor config of their choosing.
+    """
     secret = bisheng_settings.get_from_db("office_jwt_secret") or ""
     if not secret:
         return resp_200({"token": ""})
