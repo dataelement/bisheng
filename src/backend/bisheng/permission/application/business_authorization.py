@@ -39,6 +39,15 @@ async def check_business_action(
     """Check one business-verified resource through the sole F048 facade."""
 
     actor = actor or await resolve_permission_actor(login_user)
+    if action in {"visible", "use"} and resource_type in {"workflow", "assistant"}:
+        from bisheng.public_endpoints.domain.services.guest_policy import (
+            ensure_guest_link_enabled,
+            is_public_published_resource,
+        )
+
+        if is_public_published_resource(str(resource_id), resource_type):
+            await ensure_guest_link_enabled(resource_type, str(resource_id))
+            return True
     if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer allows a super admin unconditionally, but only after
         # the target is resolved. Resolution runs business data-validity guards

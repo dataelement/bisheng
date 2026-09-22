@@ -24,7 +24,6 @@ from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
 from bisheng.linsight.domain.services.skill_store import (
     MAX_BUNDLE_SIZE,
-    MAX_UNPACKED_SIZE,
     SKILL_MD,
     SkillStore,
 )
@@ -189,8 +188,9 @@ class TestCreate:
         detail = await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
         assert {f.path for f in detail.files} == {SKILL_MD, "assets/template.bin"}
 
-    async def test_unpacked_oversize_rejected(self, service):
-        asset = b"x" * (MAX_UNPACKED_SIZE + 1)
+    async def test_unpacked_oversize_rejected(self, service, monkeypatch):
+        monkeypatch.setattr(service_module, "resolve_skill_unpacked_limit", AsyncMock(return_value=1024 * 1024))
+        asset = b"x" * (1024 * 1024 + 1)
         data = _zip_bytes(
             {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/bomb.bin": asset},
             compression=zipfile.ZIP_DEFLATED,
@@ -198,6 +198,30 @@ class TestCreate:
         assert len(data) < MAX_BUNDLE_SIZE  # passes the upload gate, must trip the unpacked one
         with pytest.raises(SkillBundleTooLargeError):
             await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
+
+    async def test_unpacked_cap_follows_the_setting_on_replace_too(self, service, monkeypatch):
+        await service.create_from_upload(TENANT, USER, "demo-skill.md", _md_bytes())
+        monkeypatch.setattr(service_module, "resolve_skill_unpacked_limit", AsyncMock(return_value=1024 * 1024))
+        data = _zip_bytes(
+            {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/bomb.bin": b"x" * (1024 * 1024 + 1)},
+            compression=zipfile.ZIP_DEFLATED,
+        )
+        with pytest.raises(SkillBundleTooLargeError):
+            await service.update_from_upload(TENANT, "demo-skill", "demo-skill.zip", data)
+
+    async def test_corrupted_archive_is_a_validation_error(self, service):
+        data = bytearray(
+            _zip_bytes(
+                {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/a.bin": b"y" * 4096},
+                compression=zipfile.ZIP_DEFLATED,
+            )
+        )
+        # Flip a byte inside the deflated payload of a.bin: the directory still parses,
+        # reading the entry fails its CRC / inflate step.
+        payload_at = data.find(b"assets/a.bin") + len(b"assets/a.bin") + 4
+        data[payload_at] ^= 0xFF
+        with pytest.raises(SkillValidationError, match="corrupted zip archive"):
+            await service.create_from_upload(TENANT, USER, "demo-skill.zip", bytes(data))
 
     async def test_unsupported_extension_rejected(self, service):
         with pytest.raises(SkillValidationError, match="unsupported"):
