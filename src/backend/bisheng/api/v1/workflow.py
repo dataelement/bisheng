@@ -256,9 +256,11 @@ async def force_save_report_file(
         return AppWriteAuthError.return_resp()
 
     owner_id = report_template.owner_workflow_id(version_key)
-    if owner_id and owner_id != workflow_id:
+    if owner_id != workflow_id:
         # Otherwise a manual save would mint an edit session for someone else's
-        # template under a workflow the caller happens to own.
+        # template under a workflow the caller happens to own. An unowned key is
+        # refused too: opening the editor adopts it first, so a legitimate save
+        # always arrives under this workflow's own key.
         logger.warning(
             "report force save refused: key={!r} belongs to workflow {!r}, not {!r}",
             report_template.storage_key(version_key),

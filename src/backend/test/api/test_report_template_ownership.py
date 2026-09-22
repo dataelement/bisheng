@@ -334,3 +334,22 @@ async def test_force_saving_someone_elses_template_is_refused(monkeypatch):
     assert result.status_code != 200
     # Crucially it must not mint an edit session for the foreign key.
     remember.assert_not_called()
+
+
+async def test_force_saving_an_unowned_template_is_refused(monkeypatch):
+    """Otherwise a manual save mints an edit session for a legacy key and the
+    callback then accepts an overwrite of somebody else's template."""
+    monkeypatch.setattr(workflow.FlowDao, "aget_flow_by_id", AsyncMock(return_value=MagicMock()))
+    _permissions(monkeypatch, edit=True)
+    remember = AsyncMock()
+    monkeypatch.setattr(report_template, "aremember_edit_session", remember)
+
+    result = await workflow.force_save_report_file(
+        MagicMock(),
+        login_user=MagicMock(),
+        workflow_id=WORKFLOW_A,
+        version_key=LEGACY_KEY,
+    )
+
+    assert result.status_code != 200
+    remember.assert_not_called()
