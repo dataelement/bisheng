@@ -48,13 +48,41 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 | `bisheng_knowledge_files_delete` | `knowledge:write` | 否 | `file_ids` | `{"success":true}` |
 
 完整的字段类型、枚举、默认值、上限和 `inputSchema` / `outputSchema` 由
-`tools/list` 返回。下列约束容易被客户端忽略：
+`tools/list` 返回。每个成功输出字段都在 `outputSchema` 中带有 `description`，说明其
+业务含义、枚举值以及只适用于知识库、知识空间、文件或文件夹的条件。下列约束容易被
+客户端忽略：
 
 - `type` 为 `0` 或 `1` 时，创建工具的 `model` 必填。
 - 批量删除在 MCP 中为 object：`{"file_ids":[5001,5002]}`，不是顶层数组。
 - 上传不接受服务器本地 `file_path`；`content_base64` 和 `file_url` 必须二选一。
 - 成功返回的知识资源动作字段保留为 `actions`，文件标签保留为结构化
   `TagItem[]`，不转成 `permission_ids` 或标签名数组。
+
+### 关键输出字段语义
+
+实际字段名是 `is_released` (不是 `is_release`)。资源类型不同但复用同一个
+`KnowledgeResource` 输出模型时，不适用的字段会返回固定值或 `null`；客户端应先根据
+`type` 判断资源形态，不应仅凭某个公共字段是否存在来推断能力。
+
+| 字段 | 含义与适用范围 |
+|---|---|
+| `type` | `0`=文档知识库，`1`=问答知识库，`3`=知识空间 |
+| `is_released` | 知识空间是否发布到知识广场；仅 `type=3` 有业务意义，`type=0/1` 不使用，调用方应忽略 |
+| `auth_type` | 知识空间访问方式：`public/private/approval`；仅 `type=3` 有业务意义，`type=0/1` 不使用 |
+| `model` | 文档/问答知识库使用的模型标识；知识空间不使用，通常为 `null` |
+| `state` | 知识库状态：`0` 未发布、`1` 可用、`2` 复制中、`3` 重建中、`4` 重建失败；知识空间不使用 |
+| `actions` | 当前身份对资源拥有的有效业务动作代码，不是角色 ID 或 `permission_ids` |
+| `is_pinned/is_followed/subscription_status/user_role` | 当前身份在知识空间上的个人状态；仅 `type=3` 使用 |
+| `file_type` | `0`=文件夹，`1`=文件 |
+| `status` | 文件处理状态：`1` 处理中、`2` 成功、`3` 失败、`4` 重建中、`5` 排队中、`6` 超时、`7` 内容安全违规 |
+| `writeable` | 当前身份是否可向本次文件列表所查询的目录上传文件 |
+| `tags` | 文件关联的结构化标签列表 `TagItem[]`；不是标签名称数组 |
+| `has_failed_files/has_abnormal_files` | 文件夹后代异常汇总；后者是知识空间创建者可见的提示，文件条目不适用 |
+| `approval_* / is_pending_approval` | 部门知识空间上传审批信息；无需审批的资源不适用 |
+| `version_no/is_multi_version/has_similar` | 文件多版本和相似文件状态；文件夹不适用 |
+
+其余存储对象名、目录路径、元数据、分页游标和检索分段字段的含义，以客户端实际收到的
+`outputSchema.properties.<field>.description` 为准。
 
 ## 成功与错误输出
 

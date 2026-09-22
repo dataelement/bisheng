@@ -79,7 +79,7 @@
 - **AC-22** — WHEN MCP 工具调用被接受或拒绝, THE SYSTEM SHALL 形成与开放 API 同等级别、可关联实际凭据与执行主体的调用审计，同时不得记录明文凭据、认证头、请求文件内容或其它受保护输入。
 - **AC-23** — IF MCP 调用在完成业务操作前失败, THEN THE SYSTEM SHALL 返回明确失败，不得把未执行、部分执行或结果未知报告为成功；业务操作自身的既有幂等与恢复语义保持不变。
 - **AC-24** — THE SYSTEM SHALL 保持所有未进入本期 10 项 allowlist 的能力在 F067 MCP 中不可发现、不可调用，即使它们已经是其他开放 API 的正式能力。
-- **AC-25** — THE SYSTEM SHALL 为每个工具提供可校验的 MCP `outputSchema`，并为不能原样表达的业务结果提供逐工具兼容映射；schema 只校验成功时的 MCP `structuredContent`，不得要求或修改现有 API 输出。MCP 输出直接保留业务能力提供的 `actions` 与结构化 `TagItem[]`；不得无依据地转换为 `permission_ids` 或标签名称数组。
+- **AC-25** — THE SYSTEM SHALL 为每个工具提供可校验的 MCP `outputSchema`，其中每个成功输出字段都必须通过 `description` 明确业务含义、枚举值和资源类型适用范围，并为不能原样表达的业务结果提供逐工具兼容映射；schema 只校验成功时的 MCP `structuredContent`，不得要求或修改现有 API 输出。MCP 输出直接保留业务能力提供的 `actions` 与结构化 `TagItem[]`；不得无依据地转换为 `permission_ids` 或标签名称数组。
 - **AC-26** — THE SYSTEM SHALL 为每个工具声明与实际副作用一致的只读、破坏性、幂等和开放世界 annotations；这些提示不得作为跳过服务端鉴权、资源动作检查或人工确认的依据。
 
 ---

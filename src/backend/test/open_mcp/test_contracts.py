@@ -3,6 +3,23 @@ from bisheng.open_mcp.registry import TOOL_DEFINITIONS
 FORBIDDEN_ARGUMENTS = {"authorization", "user_id", "tenant_id", "on_behalf_of", "file_path"}
 
 
+def _properties_without_descriptions(node, path="$"):
+    missing = []
+    if isinstance(node, dict):
+        for name, schema in node.get("properties", {}).items():
+            property_path = f"{path}.{name}"
+            if not schema.get("description"):
+                missing.append(property_path)
+            missing.extend(_properties_without_descriptions(schema, property_path))
+        for key, value in node.items():
+            if key != "properties":
+                missing.extend(_properties_without_descriptions(value, f"{path}.{key}"))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            missing.extend(_properties_without_descriptions(value, f"{path}[{index}]"))
+    return missing
+
+
 def test_every_tool_exposes_object_schemas_and_annotations():
     for definition in TOOL_DEFINITIONS:
         tool = definition.to_mcp_tool()
@@ -13,6 +30,25 @@ def test_every_tool_exposes_object_schemas_and_annotations():
         assert FORBIDDEN_ARGUMENTS.isdisjoint(tool.inputSchema.get("properties", {}))
         assert tool.annotations is not None
         assert tool.annotations.openWorldHint is not None
+
+
+def test_every_output_field_explains_its_business_meaning():
+    for definition in TOOL_DEFINITIONS:
+        schema = definition.to_mcp_tool().outputSchema
+        assert not _properties_without_descriptions(schema), definition.name
+
+
+def test_knowledge_space_only_fields_explain_applicability():
+    tools = {definition.name: definition.to_mcp_tool() for definition in TOOL_DEFINITIONS}
+    create_tool = tools["bisheng_knowledge_create"]
+
+    input_description = create_tool.inputSchema["properties"]["is_released"]["description"]
+    output_description = create_tool.outputSchema["properties"]["is_released"]["description"]
+
+    assert "知识广场" in input_description
+    assert "type=3" in input_description
+    assert "知识广场" in output_description
+    assert "type=0/1" in output_description
 
 
 def test_batch_delete_and_upload_are_mcp_object_adaptations():
