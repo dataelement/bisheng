@@ -2294,7 +2294,7 @@
       "validation": "Validation failed: invalid frontmatter or skill ID",
       "validationDetail": "Validation failed: {{detail}}",
       "tooLarge": "Uploaded file exceeds the {{size}}MB limit, please trim it and retry",
-      "bundleTooLarge": "Unpacked bundle contents exceed the 100MB limit, please trim the bundled assets and retry",
+      "bundleTooLarge": "Unpacked bundle contents exceed the {{unpacked}}MB limit, please trim the bundled assets and retry",
       "notFound": "Skill not found",
       "noPermission": "No permission for this operation",
       "duplicate": "A skill with the same display name or skill ID already exists",

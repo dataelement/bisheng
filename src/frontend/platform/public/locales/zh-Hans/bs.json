@@ -2239,7 +2239,7 @@
       "validation": "校验失败：frontmatter 或技能 ID 不合规",
       "validationDetail": "校验失败：{{detail}}",
       "tooLarge": "上传文件超过 {{size}}MB 上限，请精简后重传",
-      "bundleTooLarge": "压缩包解压后内容超过 100MB 上限，请精简附属文件后重传",
+      "bundleTooLarge": "压缩包解压后内容超过 {{unpacked}}MB 上限，请精简附属文件后重传",
       "notFound": "技能不存在",
       "noPermission": "无权限执行该操作",
       "duplicate": "已存在同名技能（显示名称或技能 ID 重复），请换一个",
