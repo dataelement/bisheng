@@ -5,6 +5,10 @@ describe('seat capacity HTTP contract', () => {
     it('recognizes the DSH real HTTP error envelope', () => {
         expect(isDshSeatLimitReached({ response: { status: 403, data: { error: { code: 'seat_limit_reached' } } } })).toBe(true)
     })
+    it('recognizes the direct business envelope rejected by silent requests', () => {
+        expect(isDshSeatLimitReached({ status_code: 26112, status_message: 'DSH seat limit reached' })).toBe(true)
+        expect(isDshSeatLimitReached({ status_code: 26101 })).toBe(false)
+    })
     it('recognizes a failed durable allocation receipt', () => {
         expect(isDshSeatLimitReached({ code: 'seat_limit_reached' })).toBe(true)
     })

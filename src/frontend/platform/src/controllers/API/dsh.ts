@@ -725,15 +725,17 @@ export function isDshRequestRejected(error: unknown): boolean {
 }
 
 export function isDshSeatLimitReached(error: unknown): boolean {
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'seat_limit_reached') return true
-    if (!error || typeof error !== 'object' || !('response' in error)) return false
-    const response = error.response
-    if (!response || typeof response !== 'object' || !('data' in response)) return false
-    const data = response.data
+    if (!error || typeof error !== 'object') return false
+    // Silent requests reject HTTP 200 business envelopes directly; HTTP errors
+    // retain the Axios response. Decode the business payload in either case.
+    const response = 'response' in error ? error.response : undefined
+    const data = response && typeof response === 'object' && 'data' in response
+        ? response.data : error
     if (!data || typeof data !== 'object') return false
-    if ('error' in data && data.error && typeof data.error === 'object'
-        && 'code' in data.error && data.error.code === 'seat_limit_reached') return true
-    return 'status_code' in data && Number(data.status_code) === 26112
+    if ('status_code' in data && Number(data.status_code) === 26112) return true
+    const failure = 'error' in data ? data.error : data
+    return !!failure && typeof failure === 'object'
+        && 'code' in failure && failure.code === 'seat_limit_reached'
 }
 
 export async function getDshModelPolicy(
