@@ -130,7 +130,19 @@ def storage(monkeypatch):
     return minio
 
 
-async def test_workflow_callback_refuses_and_stores_nothing(monkeypatch, storage):
+@pytest.fixture
+def editor_session(monkeypatch):
+    """An editor opened by someone with edit rights; see test_report_template_ownership."""
+    from bisheng.api.services import report_template
+
+    monkeypatch.setattr(
+        report_template,
+        "aget_edit_session",
+        AsyncMock(return_value={"workflow_id": "wf", "can_edit": True}),
+    )
+
+
+async def test_workflow_callback_refuses_and_stores_nothing(monkeypatch, storage, editor_session):
     from bisheng.api.v1 import workflow
 
     monkeypatch.setattr(workflow, "afetch_office_document", AsyncMock(return_value=None))
@@ -145,7 +157,7 @@ async def test_workflow_callback_refuses_and_stores_nothing(monkeypatch, storage
     storage.put_object.assert_not_called()
 
 
-async def test_workflow_callback_stores_the_downloaded_document(monkeypatch, storage):
+async def test_workflow_callback_stores_the_downloaded_document(monkeypatch, storage, editor_session):
     from bisheng.api.v1 import workflow
 
     monkeypatch.setattr(workflow, "afetch_office_document", AsyncMock(return_value=b"saved-docx"))

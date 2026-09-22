@@ -7,6 +7,7 @@ from fastapi import status as http_status
 from loguru import logger
 from sqlmodel import select
 
+from bisheng.api.services import report_template
 from bisheng.api.services.flow import FlowService
 from bisheng.api.services.office_callback import afetch_office_document
 from bisheng.api.services.workflow import WorkFlowService
@@ -101,14 +102,45 @@ async def get_report_file(
     ):
         return UnAuthorizedError.return_resp()
 
+    # Saving is decided here, not in the callback: the document server posts the
+    # callback itself and carries no user identity. A viewer may open the
+    # template, but the save is refused.
+    can_edit = await check_business_action(
+        login_user,
+        resource_type="workflow",
+        resource_id=workflow_id,
+        action="edit",
+    )
+
+    minio_client = await get_minio_storage()
+    version_key = report_template.storage_key(version_key)
+    owner_id = report_template.owner_workflow_id(version_key)
     if not version_key:
-        #  Regenerate aversion_key
-        version_key = generate_uuid()
-    else:
-        version_key = version_key.split("_", 1)[0]
+        version_key = report_template.mint_version_key(workflow_id)
+    elif owner_id and owner_id != workflow_id:
+        # The key names another workflow's template. Reading it here would let
+        # anyone who once saw that workflow keep its template forever.
+        logger.warning(
+            "report template refused: key={!r} belongs to workflow {!r}, not {!r}",
+            version_key,
+            owner_id,
+            workflow_id,
+        )
+        return UnAuthorizedError.return_resp()
+    elif owner_id is None and can_edit:
+        # Minted before templates had an owner. Adopt it into this workflow so
+        # it stops being readable from any workflow; the frontend stores the
+        # returned key back onto the node.
+        version_key = await _adopt_unowned_template(minio_client, version_key, workflow_id)
+
+    await report_template.aremember_edit_session(
+        version_key=version_key,
+        workflow_id=workflow_id,
+        can_edit=can_edit,
+    )
+
     file_url = ""
     object_name = f"workflow/report/{version_key}.docx"
-    minio_client = await get_minio_storage()
     if await minio_client.object_exists(minio_client.bucket, object_name):
         file_url = await minio_client.get_share_link(object_name, clear_host=False)
 
@@ -120,6 +152,40 @@ async def get_report_file(
     )
 
 
+async def _adopt_unowned_template(minio_client, version_key: str, workflow_id: str) -> str:
+    """Re-home a pre-ownership template under a key naming its workflow."""
+    adopted_key = report_template.mint_version_key(workflow_id)
+    object_name = f"workflow/report/{version_key}.docx"
+    if await minio_client.object_exists(minio_client.bucket, object_name):
+        await minio_client.copy_object(
+            source_object=object_name,
+            dest_object=f"workflow/report/{adopted_key}.docx",
+            source_bucket=minio_client.bucket,
+            dest_bucket=minio_client.bucket,
+        )
+    logger.info("report template adopted: {!r} -> {!r} for workflow {!r}", version_key, adopted_key, workflow_id)
+    return adopted_key
+
+
+async def _may_read_template_source(login_user: UserPayload, version_key: str) -> bool:
+    """Whether this user may take a copy of the template behind ``version_key``."""
+    owner_id = report_template.owner_workflow_id(version_key)
+    if owner_id is None:
+        # Minted before templates had an owner; there is nothing to check
+        # against. Adoption converts these as they are opened.
+        return True
+    if await check_business_action(
+        login_user,
+        resource_type="workflow",
+        resource_id=owner_id,
+        action="visible",
+    ):
+        return True
+    # Starting an app from a published template copies a node authored in a
+    # workflow the user was never meant to see.
+    return await report_template.ais_app_template_asset(version_key)
+
+
 @router.post("/report/copy", status_code=200)
 async def copy_report_file(
     request: Request,
@@ -127,7 +193,13 @@ async def copy_report_file(
     version_key: str = Body(..., embed=True, description="minioright of privacyobject_name"),
 ):
     """SalinreportTemplate file for the node"""
-    version_key = version_key.split("_", 1)[0]
+    version_key = report_template.storage_key(version_key)
+    if not await _may_read_template_source(login_user, version_key):
+        logger.warning("report template copy refused: key={!r}", version_key)
+        return UnAuthorizedError.return_resp()
+    # The copy is not owned yet: the caller is duplicating a node, importing a
+    # flow or starting from a template, and the workflow it lands in may not
+    # exist. It is adopted the first time it is opened there.
     new_version_key = generate_uuid()
     object_name = f"workflow/report/{version_key}.docx"
     new_object_name = f"workflow/report/{new_version_key}.docx"
@@ -170,6 +242,24 @@ async def force_save_report_file(
         action="edit",
     ):
         return AppWriteAuthError.return_resp()
+
+    owner_id = report_template.owner_workflow_id(version_key)
+    if owner_id and owner_id != workflow_id:
+        # Otherwise a manual save would mint an edit session for someone else's
+        # template under a workflow the caller happens to own.
+        logger.warning(
+            "report force save refused: key={!r} belongs to workflow {!r}, not {!r}",
+            report_template.storage_key(version_key),
+            owner_id,
+            workflow_id,
+        )
+        return AppWriteAuthError.return_resp()
+    # Refreshes the session so an editor left open past the TTL can still save.
+    await report_template.aremember_edit_session(
+        version_key=version_key,
+        workflow_id=workflow_id,
+        can_edit=True,
+    )
 
     # The editor is opened with a per-session key (`<version_key>_<ts>`); the
     # command service needs that exact key, so keep whatever the client sent.
@@ -219,11 +309,25 @@ async def upload_report_file(request: Request, data: dict = Body(...)):
         # Non-saved callbacks are not processed
         return {"error": 0}
     logger.info(f"office_callback url={file_url}")
+    # The callback carries no user identity, so it cannot be authorized on its
+    # own. It is accepted only for a template the backend handed to an editor,
+    # and only when that editor was opened by someone with edit rights.
+    session = await report_template.aget_edit_session(key)
+    if not session:
+        logger.warning("office callback refused: no editor session for key={!r}", report_template.storage_key(key))
+        return {"error": 1}
+    if not session.get("can_edit"):
+        logger.warning(
+            "office callback refused: key={!r} was opened without edit rights on workflow {!r}",
+            report_template.storage_key(key),
+            session.get("workflow_id"),
+        )
+        return {"error": 1}
     content = await afetch_office_document(file_url)
     if content is None:
         # Non-zero tells the document server the save failed; nothing is stored.
         return {"error": 1}
-    version_key = key.split("_", 1)[0]
+    version_key = report_template.storage_key(key)
 
     minio_client = await get_minio_storage()
     object_name = f"workflow/report/{version_key}.docx"
