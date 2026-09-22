@@ -6,7 +6,7 @@ import { getModelListApi } from '@/controllers/API/finetune'
 import { SettingsPanel } from './SettingsPanel'
 import { DshManagement } from './index'
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string, values?: Record<string, unknown>) => key === 'dsh.seatSummary' ? `Seats ${values?.assigned} / ${values?.limit}` : key }) }))
 vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn(), saveDshManagementSettings: vi.fn() }))
 vi.mock('@/controllers/API/dsh', () => ({ getDshLicense: vi.fn() }))
 vi.mock('@/controllers/API/finetune', () => ({ getModelListApi: vi.fn() }))
@@ -27,13 +27,16 @@ describe('DSH deployment and business settings', () => {
         vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
         vi.mocked(getDshLicense).mockResolvedValue({ status: 'active', source, signed_license_status: source === 'builtin' ? 'not_granted' : 'active', seat_limit: 10, assigned: 1, available: 9, as_of: '2026-09-21T00:00:00Z', expires_at: null, license_id: source === 'builtin' ? 'builtin-dsh-10' : 'license-1' })
         render(<DshManagement />)
-        const expectedStatus = source === 'builtin' ? 'dsh.licenseStatus.free' : 'dsh.licenseStatus.active'
+        const expectedStatus = source === 'builtin' ? 'dsh.licenseStatus.free' : source === 'signed' ? 'dsh.licenseStatus.commercial' : 'dsh.licenseStatus.active'
         expect(await screen.findByText(expectedStatus)).toBeInTheDocument()
         expect(screen.getByText('seat-content')).toBeInTheDocument()
+        expect(screen.getByText('Seats 1 / 10')).toBeInTheDocument()
+        expect(screen.queryByText('dsh.licenseId')).toBeNull()
+        expect(screen.queryByText('dsh.expires')).toBeNull()
         expect(screen.getByRole('heading', { name: 'dsh.commercialLicense' })).toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'dsh.getCommercialLicense' }))
         expect(screen.getByRole('dialog')).toHaveTextContent(expectedStatus)
-        expect(screen.getByRole('dialog')).toHaveTextContent('10')
+        expect(screen.getByRole('dialog')).toHaveTextContent('bisheng@dataelem.com')
     })
 
     it('keeps license request failures unavailable instead of showing a free edition', async () => {
@@ -64,8 +67,8 @@ describe('DSH deployment and business settings', () => {
 
     it('keeps settings accessible while business is disabled and avoids license/seat calls', async () => {
         render(<DshManagement />)
-        await screen.findByRole('switch')
-        expect(screen.getByRole('switch')).not.toBeChecked()
+        await screen.findByRole('textbox', { name: /dsh.launchAddress/ })
+        expect(screen.queryByRole('switch')).toBeNull()
         expect(screen.queryByText('seat-content')).toBeNull()
         expect(getDshLicense).not.toHaveBeenCalled()
     })
@@ -79,7 +82,6 @@ describe('DSH deployment and business settings', () => {
     it('saves the typed fields and never submits License settings', async () => {
         vi.mocked(saveDshManagementSettings).mockResolvedValue({ enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop-test://login' })
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit />)
-        fireEvent.click(screen.getByRole('switch'))
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.downloadAddress/ }), { target: { value: 'http://downloads.test/dsh' } })
         fireEvent.change(screen.getByRole('textbox', { name: /dsh.launchAddress/ }), { target: { value: 'dsh-desktop-test://login' } })
         fireEvent.click(screen.getByText('dsh.saveSettings'))
@@ -97,7 +99,7 @@ describe('DSH deployment and business settings', () => {
     })
     it('prevents tenant administrators from editing global settings', () => {
         render(<SettingsPanel settings={{ enabled: false, download_url: null, launch_url: 'dsh-desktop://login' }} canEdit={false} />)
-        expect(screen.getByRole('switch')).toBeDisabled()
+        expect(screen.queryByRole('switch')).toBeNull()
         expect(screen.getByRole('textbox', { name: /dsh.downloadAddress/ })).toBeDisabled()
         expect(screen.queryByText('dsh.saveSettings')).toBeNull()
     })
@@ -108,6 +110,6 @@ describe('DSH deployment and business settings', () => {
         await screen.findByText('seat-content')
         await act(async () => { window.dispatchEvent(new Event('dsh-settings-changed')) })
         await waitFor(() => expect(screen.queryByText('seat-content')).toBeNull())
-        expect(screen.getByRole('switch')).toBeTruthy()
+        expect(screen.getByRole('textbox', { name: /dsh.launchAddress/ })).toBeTruthy()
     })
 })

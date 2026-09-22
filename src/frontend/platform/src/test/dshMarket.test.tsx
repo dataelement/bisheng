@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import { PluginMarketPage } from "@/pages/BuildPage/dsh/PluginMarketPage";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { deleteMarketPlugin, getMarketContext, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins } from "@/controllers/API/dshMarket";
+import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins } from "@/controllers/API/dshMarket";
 import type { MarketPlugin } from "@/controllers/API/dshMarket";
 
-vi.mock("@/controllers/API/dshMarket", () => ({ deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn() }));
+vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn() }));
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }));
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({ toast: vi.fn() }));
 
@@ -22,6 +22,7 @@ function view(admin = true, tenant = 2) {
 }
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(previewMarketBundle).mockResolvedValue({ name: "company-demo", display_name: "Company Demo", current_version: "1.0.0", incoming_version: "1.1.0", allowed: true, reason: "", duplicate: false });
     vi.mocked(getMarketContext).mockResolvedValue({ tenant_id: 2 });
     vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 1 });
     vi.mocked(listMarketImports).mockResolvedValue([]);
@@ -55,8 +56,28 @@ describe("DSH market administration", () => {
         render(view()); await screen.findByText("Company Demo"); fireEvent.click(screen.getByRole("button", { name: "import" }));
         const file = new File(["bundle"], "plugin.zip", { type: "application/zip" });
         fireEvent.change(screen.getByLabelText("import", { selector: "input" }), { target: { files: [file] } });
+        await screen.findByText("1.0.0 → 1.1.0");
         fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "import" }));
         await waitFor(() => expect(importMarketBundle).toHaveBeenCalledWith(file, 2, expect.any(AbortSignal), expect.any(Function)));
+    });
+    it("blocks confirmation for an older version", async () => {
+        vi.mocked(previewMarketBundle).mockResolvedValue({ name: "company-demo", display_name: "Company Demo", current_version: "1.1.0", incoming_version: "1.0.0", allowed: false, reason: "lower_version", duplicate: false });
+        render(view()); await screen.findByText("Company Demo");
+        fireEvent.click(screen.getByRole("button", { name: "import" }));
+        fireEvent.change(screen.getByLabelText("import", { selector: "input" }), { target: { files: [new File(["bundle"], "plugin.zip")] } });
+        await screen.findByText("lowerVersion");
+        expect(within(screen.getByRole("dialog")).getByRole("button", { name: "import" })).toBeDisabled();
+        expect(importMarketBundle).not.toHaveBeenCalled();
+    });
+    it("waits for preview and rejects oversized bundles before uploading", async () => {
+        render(view()); await screen.findByText("Company Demo");
+        fireEvent.click(screen.getByRole("button", { name: "import" }));
+        const file = new File(["bundle"], "plugin.zip");
+        Object.defineProperty(file, "size", { value: 512 * 1024 * 1024 + 1 });
+        fireEvent.change(screen.getByLabelText("import", { selector: "input" }), { target: { files: [file] } });
+        await screen.findByText("previewFailed");
+        expect(previewMarketBundle).not.toHaveBeenCalled();
+        expect(within(screen.getByRole("dialog")).getByRole("button", { name: "import" })).toBeDisabled();
     });
     it("deletes after confirmation using the displayed revision and refreshes the list", async () => {
         render(view()); await screen.findByText("Company Demo");

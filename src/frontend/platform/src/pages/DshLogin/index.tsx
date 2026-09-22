@@ -1,3 +1,4 @@
+import { CircleCheck, ArrowUpRight } from 'lucide-react'
 import { dshLaunchUrl } from '@/utils/dshLaunch'
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
@@ -36,13 +37,6 @@ export function DshLogin() {
     }
     const flow = useDshAuthorization(authId)
     useEffect(() => {
-        if (flow.status !== 'issued') return
-        const timer = window.setTimeout(() => {
-            location.assign(homeUrl)
-        }, 10_000)
-        return () => window.clearTimeout(timer)
-    }, [flow.status, homeUrl])
-    useEffect(() => {
         const meta = document.createElement('meta')
         meta.name = 'referrer'
         meta.content = 'no-referrer'
@@ -68,13 +62,26 @@ export function DshLogin() {
     const departmentName = profile?.department_name?.trim()
     const base = location.origin
     const download = config?.download_url
+    const completed = !invalid && !failed && config?.enabled && !!user?.user_id && flow.status === 'issued'
     return (
         <main className="flex min-h-screen items-center justify-center bg-background p-4">
-            <section className="flex w-full max-w-xl flex-col gap-4 rounded-lg border bg-background p-6">
-                <h1 className="text-xl font-semibold">{t('dsh.title')}</h1>
-                <p className="break-all text-sm text-muted-foreground">
-                    {base}
-                </p>
+            <section className="flex w-full max-w-xl flex-col gap-5 rounded-2xl border bg-background p-6 shadow-sm sm:p-8">
+                {completed ? (
+                    <header role="status" aria-live="polite" className="flex flex-col items-center gap-3 text-center">
+                        <p className="text-sm font-medium text-muted-foreground">{t('dsh.title')}</p>
+                        <div className="mt-2 flex h-14 w-14 items-center justify-center rounded-full bg-green-50 text-green-600 dark:bg-green-950">
+                            <CircleCheck aria-hidden className="h-8 w-8" />
+                        </div>
+                        <h1 className="text-2xl font-semibold tracking-tight">{t('dsh.authorizationComplete')}</h1>
+                        <p className="text-sm leading-6 text-muted-foreground">{t('dsh.authorizationCompleteHelp')}</p>
+                        <p className="text-sm font-medium">{user.user_name}{departmentName && ` · ${departmentName}`}</p>
+                    </header>
+                ) : (
+                    <>
+                        <h1 className="text-xl font-semibold">{t('dsh.title')}</h1>
+                        <p className="break-all text-sm text-muted-foreground">{base}</p>
+                    </>
+                )}
                 {invalid || failed ? (
                     <p role="alert">{t('dsh.unavailable')}</p>
                 ) : !config ? (
@@ -127,12 +134,12 @@ export function DshLogin() {
                             </Button>
                         ) : (
                             <>
-                                <p>
+                                {!completed && <p>
                                     {t(departmentName ? 'dsh.authorizeWithDepartment' : 'dsh.authorize_without_tenant', {
                                         name: user.user_name,
                                         department: departmentName,
                                     })}
-                                </p>
+                                </p>}
                                 {flow.status === 'idle' && (
                                     <div className="flex flex-wrap gap-2">
                                         <Button onClick={flow.handleAuthorize}>
@@ -146,16 +153,16 @@ export function DshLogin() {
                                         </Button>
                                     </div>
                                 )}
-                                <p role="status">
-                                    {flow.status !== 'idle' &&
-                                        t(`dsh.auth_${flow.status}`)}
-                                </p>
+                                {!completed && <p role="status">
+                                    {flow.status !== 'idle' && t(`dsh.auth_${flow.status}`)}
+                                </p>}
                                 {flow.status === 'issued' && (
                                     <Button
-                                        variant="outline"
-                                        onClick={() => location.assign(homeUrl)}
+                                        className="h-11 w-full gap-2"
+                                        onClick={() => location.assign(dshLaunchUrl(config.launch_url))}
                                     >
-                                        {t('dsh.returnHome')}
+                                        {t('dsh.returnDesktop')}
+                                        <ArrowUpRight aria-hidden className="h-4 w-4" />
                                     </Button>
                                 )}
                                 {flow.denialUrl && (
@@ -177,29 +184,33 @@ export function DshLogin() {
                                                 flow.authorization,
                                             )}
                                         />
-                                        <p>
-                                            {t('dsh.ticketHelp')}
-                                        </p>
-                                        <Input
-                                            type="password"
-                                            autoComplete="off"
-                                            aria-label={t('dsh.ticket')}
-                                            readOnly
-                                            value={
-                                                flow.authorization
-                                                    .identity_ticket
-                                            }
-                                        />
-                                        <Button
-                                            onClick={() =>
-                                                handleCopy(
-                                                    flow.authorization!
-                                                        .identity_ticket,
-                                                )
-                                            }
-                                        >
-                                            {t('dsh.copyTicket')}
-                                        </Button>
+                                        <details className="rounded-lg border border-dashed p-4 text-sm">
+                                            <summary className="cursor-pointer text-muted-foreground">{t('dsh.manualLoginFallback')}</summary>
+                                            <div className="mt-4 flex flex-col gap-3">
+                                                <p className="leading-6 text-muted-foreground">{t('dsh.ticketHelp')}</p>
+                                                <Input
+                                                    type="password"
+                                                    autoComplete="off"
+                                                    aria-label={t('dsh.ticket')}
+                                                    readOnly
+                                                    value={
+                                                        flow.authorization
+                                                            .identity_ticket
+                                                    }
+                                                />
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        handleCopy(
+                                                            flow.authorization!
+                                                                .identity_ticket,
+                                                        )
+                                                    }
+                                                >
+                                                    {t('dsh.copyTicket')}
+                                                </Button>
+                                            </div>
+                                        </details>
                                     </>
                                 )}
                             </>
@@ -208,6 +219,7 @@ export function DshLogin() {
                         {copyStatus === 'failed' && <p role="alert">{t('dsh.copyFailed')}</p>}
                     </>
                 )}
+                {completed && <p className="break-all border-t pt-4 text-center text-xs text-muted-foreground">{base}</p>}
             </section>
         </main>
     )

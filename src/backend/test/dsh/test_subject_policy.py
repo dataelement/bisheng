@@ -93,7 +93,7 @@ def update(repository, subject_type, subject_id, limit, *, expected=0, enabled=T
     )
 
 
-def test_parent_department_future_member_and_role_overlap_use_highest_limit(subject_store):
+def test_personal_override_precedes_department_and_role_quotas(subject_store):
     with Session(subject_store) as session, session.begin():
         repository = DshSubjectPolicyRepository(session)
         update(repository, "DEPARTMENT", 10, 100)
@@ -115,7 +115,7 @@ def test_parent_department_future_member_and_role_overlap_use_highest_limit(subj
         repository = DshSubjectPolicyRepository(session)
         policy = repository.effective(20)
         assert policy.allowed_model_ids == [7]
-        assert policy.rows[0].monthly_token_limit == 300
+        assert policy.rows[0].monthly_token_limit == 200
         session.exec(delete(UserRole).where(UserRole.user_id == 20, UserRole.role_id == 41))
         session.flush()
         assert repository.effective(20).rows[0].monthly_token_limit == 200
@@ -177,14 +177,14 @@ def test_user_permission_page_explains_department_role_and_legacy_sources(subjec
         assert admin["department_match"] == "DESCENDANT"
         assert admin["departments"] == [{"id": 11, "name": "平台组", "is_primary": True}]
         assert admin["roles"] == [{"id": 41, "name": "产品经理"}]
-        assert admin["authorized"] is True and admin["monthly_token_limit"] == 300
+        assert admin["authorized"] is True and admin["monthly_token_limit"] == 200
         assert {
             (source["subject_type"], source["monthly_token_limit"], source["inherited"], source["winning"])
             for source in admin["sources"]
         } == {
             ("DEPARTMENT", 100, True, False),
-            ("ROLE", 300, False, True),
-            ("USER", 200, False, False),
+            ("ROLE", 300, False, False),
+            ("USER", 200, False, True),
         }
         assert page["items"][1]["authorized"] is False
         assert repository.department_scope_ids(10, include_descendants=False) == [10]

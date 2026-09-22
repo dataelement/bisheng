@@ -40,6 +40,10 @@ class MarketService:
             }
         )
 
+    def preview_bundle(self, tenant, data):
+        manifest = validate_bundle(data)
+        return self.repository.preview(tenant, manifest, hashlib.sha256(data).hexdigest())
+
     def import_bundle(self, tenant, actor, data):
         digest = hashlib.sha256(data).hexdigest()
         self.storage.put(tenant, digest, data)

@@ -38,7 +38,7 @@ export function SeatsView({
 }: SeatsViewProps) {
     const { t } = useTranslation()
     const [keyword, setKeyword] = useState('')
-    const [query, setQuery] = useState<DshSeatQuery>({ seat_state: 'ASSIGNED' })
+    const [query, setQuery] = useState<DshSeatQuery>({})
     const [cursors, setCursors] = useState<string[]>([''])
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
@@ -147,14 +147,14 @@ export function SeatsView({
                 />
                 <DshChoice
                     label={t('dsh.seatState')}
-                    value={query.seat_state!}
-                    options={['ASSIGNED', 'REVOKED'].map((value) => ({
+                    value={query.seat_state || 'ALL'}
+                    options={['ALL', 'ASSIGNED', 'REVOKED'].map((value) => ({
                         value,
-                        label: t(`dsh.${value}`),
+                        label: value === 'ALL' ? t('dsh.allSeats') : t(`dsh.${value}`),
                     }))}
                     onChange={(value) =>
                         handleFilter({
-                            seat_state: value as DshSeatQuery['seat_state'],
+                            seat_state: value === 'ALL' ? undefined : value as DshSeatQuery['seat_state'],
                         })
                     }
                 />

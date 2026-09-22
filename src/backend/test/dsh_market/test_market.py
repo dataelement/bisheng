@@ -460,3 +460,32 @@ def test_deleted_column_migration_upgrades_old_rows_and_replays():
             migration["upgrade"]()
             migration["upgrade"]()
         assert connection.execute(text("SELECT id, deleted FROM dsh_market_plugin")).one() == ("existing", 0)
+
+
+def test_preview_is_read_only_and_lower_versions_are_rejected(service):
+    data = bundle("1.10.0")
+    preview = service.preview_bundle(2, data)
+    assert preview["current_version"] is None and preview["allowed"]
+    assert service.imports(2) == []
+    assert service.repository.list(2)["total"] == 0
+    assert service.import_bundle(2, 20, data)["status"] == "completed"
+    older = bundle("1.2.0")
+    assert service.preview_bundle(2, older)["reason"] == "lower_version"
+    result = service.import_bundle(2, 20, older)
+    assert result["status"] == "failed"
+    assert service.preview_bundle(2, bundle("1.11.0"))["allowed"]
+    assert service.import_bundle(2, 20, bundle("1.11.0"))["status"] == "completed"
+    assert service.import_bundle(2, 20, data)["status"] == "failed"
+    assert service.preview_bundle(3, older)["allowed"]
+
+
+def test_preview_rechecks_version_after_other_import(service):
+    assert service.preview_bundle(2, bundle("1.1.0"))["allowed"]
+    service.import_bundle(2, 20, bundle("2.0.0"))
+    assert service.import_bundle(2, 20, bundle("1.1.0"))["status"] == "failed"
+
+
+def test_market_upload_limit_is_512_mib():
+    from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES
+
+    assert MAX_UPLOAD_BYTES == 512 * 1024 * 1024

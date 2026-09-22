@@ -3,7 +3,7 @@ import { Button, LoadButton } from '@/components/bs-ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog'
 import { Input } from '@/components/bs-ui/input'
 import { useToast } from '@/components/bs-ui/toast/use-toast'
-import { getDshModelSubjects, getDshModelUserPermissions, saveDshSubjectPolicy } from '@/controllers/API/dsh'
+import { getDshModelSubjects, getDshModelUserPermissions, isDshSeatLimitReached, saveDshSubjectPolicy } from '@/controllers/API/dsh'
 import type { DshModelUserPermission, DshSubjectPolicyInventory, DshSubjectPolicy } from '@/types/dsh'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -21,10 +21,11 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
     const [drafts, setDrafts] = useState<PolicyDrafts>({})
     const [query, setQuery] = useState('')
     const [loadError, setLoadError] = useState(false)
-    const [saveError, setSaveError] = useState(false)
+    const [saveError, setSaveError] = useState<string | null>(null)
     const [saving, setSaving] = useState(false)
     const [refresh, setRefresh] = useState(0)
     const [membersVersion, setMembersVersion] = useState(0)
+    const [savedRevision, setSavedRevision] = useState(0)
     const busy = useRef(false)
     const modelId = model?.id
     const reloadUser = useCallback(
@@ -53,7 +54,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
     useEffect(() => {
         setDrafts({})
         setQuery('')
-        setSaveError(false)
+        setSaveError(null)
     }, [modelId])
     useEffect(() => {
         if (!modelId) return
@@ -82,7 +83,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
     const hasChanges = dirty.length > 0 || users.hasChanges
     const valid = users.valid && dirty.every((item) => quotaValid(drafts[policyKey(item)].limit))
     const changeDepartment = (item: DshSubjectPolicy, value: string) => {
-        setSaveError(false)
+        setSaveError(null)
         setDrafts((current) => ({
             ...current,
             [policyKey(item)]: { limit: value, enabled: Number(value) > 0 },
@@ -106,7 +107,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
         if (!modelId || !inventory || busy.current || !valid || (!hasChanges && !users.hasPending)) return
         busy.current = true
         setSaving(true)
-        setSaveError(false)
+        setSaveError(null)
         let complete = true
         try {
             // Each successful item advances independently and remains committed on retry.
@@ -139,15 +140,17 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                 })
             }
             setMembersVersion((value) => value + 1)
-            setSaveError(!complete)
+            if (complete) setSavedRevision((value) => value + 1)
+            setSaveError(complete ? null : 'dsh.policySaveFailed')
             message({
                 variant: complete ? 'success' : 'error',
                 description: t(complete ? 'dsh.policySaved' : 'dsh.policySaveFailed'),
             })
-        } catch {
-            setSaveError(true)
+        } catch (error) {
+            const errorKey = isDshSeatLimitReached(error) ? 'dsh.seatLimitGrantHelp' : 'dsh.policySaveFailed'
+            setSaveError(errorKey)
             setMembersVersion((value) => value + 1)
-            message({ variant: 'error', description: t('dsh.policySaveFailed') })
+            message({ variant: 'error', description: t(errorKey) })
         } finally {
             busy.current = false
             setSaving(false)
@@ -161,9 +164,9 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
             await users.refresh()
             setInventory(await withinSaveDeadline(getDshModelSubjects(modelId)))
             setMembersVersion((value) => value + 1)
-            setSaveError(false)
+            setSaveError(null)
         } catch {
-            setSaveError(true)
+            setSaveError('dsh.policySaveFailed')
         } finally {
             busy.current = false
             setSaving(false)
@@ -216,7 +219,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                         {saveError && (
                             <div className="flex items-center justify-end gap-2 text-sm">
                                 <span role="alert" className="text-destructive">
-                                    {t('dsh.policySaveFailed')}
+                                    {t(saveError)}
                                 </span>
                                 <Button size="sm" variant="outline" disabled={saving} onClick={reload}>
                                     {t('dsh.refresh')}
@@ -225,14 +228,17 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                         )}
                         <div className="min-h-0 flex-1 overflow-auto overscroll-contain rounded-lg border">
                             <DepartmentAccessTree
+                                tenantId={inventory.tenant_id}
                                 key={modelId}
                                 modelId={modelId}
                                 items={departments}
                                 drafts={drafts}
                                 query={query}
+                                onQueryClear={() => setQuery('')}
                                 users={users}
                                 saving={saving}
                                 refresh={membersVersion}
+                                savedRevision={savedRevision}
                                 onDepartmentChange={changeDepartment}
                             />
                         </div>

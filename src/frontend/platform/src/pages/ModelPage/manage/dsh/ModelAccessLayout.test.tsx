@@ -98,11 +98,11 @@ describe('model access layout', () => {
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
         await screen.findByText('Engineering')
         expect(screen.queryByText('Platform')).toBeNull()
-        const root = screen.getByRole('button', { name: 'Organization' })
+        const root = screen.getByRole('button', { name: 'Organization · ▾' })
         expect(root).toHaveAttribute('aria-expanded', 'true')
-        const child = screen.getByRole('button', { name: 'Engineering' })
+        const child = screen.getByRole('button', { name: 'Engineering · ▾' })
         expect(child).toHaveAttribute('aria-expanded', 'false')
-        expect(screen.getByRole('dialog').querySelector('.border-l')).toBeTruthy()
+        expect(screen.getByRole('navigation')).toBeTruthy()
         await waitFor(() =>
             expect(getDshModelUserPermissions).toHaveBeenCalledWith(
                 7,
@@ -133,7 +133,7 @@ describe('model access layout', () => {
         })
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
         await screen.findByText('Engineering')
-        await screen.findByText('ID: 1')
+        await waitFor(() => expect(screen.getByRole('button', { name: 'save' })).toBeEnabled())
         expect(screen.queryByText('dsh.savePendingHelp')).toBeNull()
         const save = screen.getByRole('button', { name: 'save' })
         expect(save).toBeEnabled()

@@ -19,9 +19,9 @@
   "validating": "Validating",
   "failed": "Validation failed",
   "resume": "Resume validation",
-  "uploadHint": "Choose a complete offline ZIP, up to 256 MiB. Validated plugins become available immediately. New versions replace the current version; deleted plugins can be imported again.",
+  "uploadHint": "Complete offline ZIP, up to 512 MiB; extracted size up to 1 GiB. Higher versions can update an existing plugin.",
   "cancel": "Cancel",
-  "invalidFile": "Select a ZIP bundle up to 256 MiB",
+  "invalidFile": "Select a ZIP bundle up to 512 MiB",
   "validationFailed": "Bundle validation failed",
   "imported": "Import complete",
   "versions": "Version history",
@@ -32,5 +32,13 @@
   "forbidden": "Tenant administrator access is required",
   "delete": "Delete",
   "deleteConfirm": "Delete {{name}}? New installations and updates will stop. Existing installations can continue running. You can import the plugin again later.",
-  "deleted": "Plugin deleted"
+  "deleted": "Plugin deleted",
+  "bundleHelp": "Obtain a DSH offline bundle from the plugin provider. Include manifest.json, platform files and dependencies. Use versions such as 1.2.3.",
+  "previewing": "Validating bundle and reading versions…",
+  "previewFailed": "Preview failed. Check ZIP format, size and connection, then select the file again.",
+  "newPlugin": "New plugin",
+  "lowerVersion": "Choose a higher version; older versions are unsupported.",
+  "versionConflict": "This version already has different content. Use a new version number.",
+  "duplicateVersion": "Already imported. The existing version will be reused.",
+  "versionReady": "Confirm import to make this version available to employees."
 }

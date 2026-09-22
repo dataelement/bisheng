@@ -41,7 +41,7 @@ export function UserPermissionRow({ item, draft, disabled, pending, onDraftChang
                     placeholder="0"
                     value={draft.limit}
                     disabled={disabled || pending}
-                    onChange={(event) => onDraftChange({ limit: event.target.value })}
+                    onChange={(event) => onDraftChange({ enabled: true, limit: event.target.value })}
                 />
                 {!valid && (
                     <p role="alert" className="mt-1 text-xs text-destructive">

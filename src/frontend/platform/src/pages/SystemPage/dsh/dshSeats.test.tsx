@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SeatsView } from './SeatsView'
 import {
     getDshSeats,
-    getDshSessions,
     commandDshSeat,
 } from '@/controllers/API/dsh'
 import type { DshPage, DshSeat } from '@/types/dsh'
@@ -12,7 +11,6 @@ vi.mock('react-i18next', () => ({
 }))
 vi.mock('@/controllers/API/dsh', () => ({
     getDshSeats: vi.fn(),
-    getDshSessions: vi.fn(),
     commandDshSeat: vi.fn(),
     isDshRequestRejected: () => false,
 }))
@@ -57,6 +55,7 @@ describe('DSH seat pagination and commands', () => {
             <SeatsView operations={{}} revision={0} onOperation={vi.fn()} />,
         )
         await screen.findByText('User 1')
+        expect(vi.mocked(getDshSeats).mock.calls.at(-1)![0].seat_state).toBeUndefined()
         const search = screen.getByLabelText('dsh.searchUsers')
         const filters = search.parentElement!.parentElement!
         expect(search.parentElement!.classList.contains('w-56')).toBe(true)
@@ -115,7 +114,6 @@ describe('DSH seat pagination and commands', () => {
         expect(vi.mocked(getDshSeats).mock.calls[0][0]).not.toHaveProperty('department_id')
         expect(vi.mocked(getDshSeats).mock.calls[0][0].limit).toBe(50)
         expect(screen.queryByRole('button', { name: 'dsh.sessions' })).toBeNull()
-        expect(getDshSessions).not.toHaveBeenCalled()
         expect(screen.queryByRole('dialog')).toBeNull()
         fireEvent.click(screen.getAllByText('dsh.next')[0])
         await waitFor(() => expect(screen.getByText('User 51')).toBeTruthy())

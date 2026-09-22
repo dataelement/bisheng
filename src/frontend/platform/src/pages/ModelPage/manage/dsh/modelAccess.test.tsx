@@ -296,7 +296,7 @@ describe('model-scoped authorization', () => {
 
     it('uses the model name and a single department tree authorization entry', async () => {
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-        await screen.findByText('Root Organization')
+        await screen.findByRole('heading', { name: 'Root Organization' })
         expect(screen.getByRole('dialog')).toHaveAccessibleName('qwen-max')
         expect(screen.queryByRole('tab')).toBeNull()
         expect(screen.getByRole('textbox', { name: 'dsh.searchDepartmentsAndUsers' })).toBeTruthy()

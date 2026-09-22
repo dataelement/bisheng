@@ -13,7 +13,6 @@ import type {
     DshPolicyInput,
     DshSeat,
     DshSeatQuery,
-    DshSession,
     DshUsageMetrics,
     DshUsageOverviewPage,
     DshUsageTimeSummary,
@@ -141,17 +140,15 @@ export async function getDshModelUserPermissions(
                     (Boolean(row.sources.length) &&
                         row.monthly_token_limit > 0) ||
                 row.monthly_token_limit !==
-                    Math.max(
+                    (row.direct_enabled ? row.direct_monthly_token_limit : Math.max(
                         0,
-                        ...row.sources.map(
-                            (source) => source.monthly_token_limit,
-                        ),
-                    ) ||
+                        ...row.sources.map((source) => source.monthly_token_limit),
+                    )) ||
                 row.sources.some(
                     (source) =>
                         source.winning !==
-                        (source.monthly_token_limit ===
-                            row.monthly_token_limit),
+                        ((!row.direct_enabled || source.subject_type === 'USER') &&
+                            source.monthly_token_limit === row.monthly_token_limit),
                 ) ||
                 ![null, 'DIRECT', 'DESCENDANT'].includes(
                     row.department_match,
@@ -240,6 +237,7 @@ export async function saveDshSubjectPolicy(
     const config = {
         params: { tenant_id: tenantId },
         preserveError: true,
+        silent: true,
     }
     const data: DshSubjectPolicy = await request.put(
         `${admin}/models/${modelId}/subjects/${subjectType}/${subjectId}/policy`,
@@ -423,22 +421,6 @@ export async function getDshLicense(signal?: AbortSignal): Promise<DshLicense> {
     )
         throw malformed()
     return data
-}
-export async function getDshSessions(
-    userId: string,
-    tenantId: string,
-    cursor?: string,
-    signal?: AbortSignal,
-): Promise<DshPage<DshSession>> {
-    return validatePage(
-        await request.get(
-            `${admin}/users/${encodeURIComponent(userId)}/sessions`,
-            {
-                params: { tenant_id: tenantId, cursor, limit: 20 },
-                signal,
-            },
-        ),
-    )
 }
 export async function getDshPolicy(
     userId: string,
@@ -743,16 +725,15 @@ export function isDshRequestRejected(error: unknown): boolean {
 }
 
 export function isDshSeatLimitReached(error: unknown): boolean {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'seat_limit_reached') return true
     if (!error || typeof error !== 'object' || !('response' in error)) return false
     const response = error.response
     if (!response || typeof response !== 'object' || !('data' in response)) return false
     const data = response.data
-    return (
-        !!data &&
-        typeof data === 'object' &&
-        'status_code' in data &&
-        Number(data.status_code) === 26112
-    )
+    if (!data || typeof data !== 'object') return false
+    if ('error' in data && data.error && typeof data.error === 'object'
+        && 'code' in data.error && data.error.code === 'seat_limit_reached') return true
+    return 'status_code' in data && Number(data.status_code) === 26112
 }
 
 export async function getDshModelPolicy(

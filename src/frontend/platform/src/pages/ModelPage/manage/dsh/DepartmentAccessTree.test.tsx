@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import {
     getDshModelSubjects,
@@ -49,8 +49,8 @@ beforeEach(() => {
                   {
                       user_id: 20,
                       user_name: 'Alice',
-                      direct_version: 0,
-                      direct_enabled: false,
+                      direct_version: vi.mocked(saveDshPolicy).mock.calls.length ? 1 : 0,
+                      direct_enabled: vi.mocked(saveDshPolicy).mock.calls.length > 0,
                       direct_monthly_token_limit: 0,
                       direct_pending_operation_id: null,
                       departments: [{ id: 31, name: 'Organization', is_primary: true }],
@@ -70,194 +70,85 @@ beforeEach(() => {
     }))
 })
 
-it('uses one expanded department tree and shows confirmed effective quota and login eligibility', async () => {
+it('separates the selected department default from member effective quotas', async () => {
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
     expect(await screen.findByText('Alice')).toBeTruthy()
-    expect(screen.queryByRole('tab')).toBeNull()
-    expect(screen.getByText('dsh.access_PENDING_LOGIN')).toBeTruthy()
-    expect(screen.getAllByText('10')).toHaveLength(2)
-    expect(screen.getByLabelText('Organization · dsh.configuredQuotaWan')).toHaveValue('10')
-    expect(screen.getByText('dsh.authorizationAndStatus')).toBeTruthy()
-    expect(screen.getByText('ID: 20')).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'dsh.quotaDepartments' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Organization' })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByText('dsh.departmentDefaultQuota')).toBeTruthy()
+    expect(screen.getByText('dsh.wanPerPersonMonth')).toBeTruthy()
+    expect(screen.queryByLabelText('Organization · dsh.configuredQuotaWan')).toBeNull()
+    expect(screen.queryByLabelText('Alice · dsh.configuredQuotaWan')).toBeNull()
 })
 
-it('keeps department changes as drafts and saves empty as zero', async () => {
+it('opens the department editor and saves the staged quota', async () => {
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const input = await screen.findByLabelText('Organization · dsh.configuredQuotaWan')
-    fireEvent.change(input, { target: { value: '' } })
-    fireEvent.blur(input)
+    fireEvent.click(await screen.findByRole('button', { name: 'Organization · dsh.editQuota' }))
+    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), { target: { value: '0.6' } })
     expect(saveDshSubjectPolicy).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'save' }))
-    await waitFor(() =>
-        expect(saveDshSubjectPolicy).toHaveBeenCalledWith(7, 'DEPARTMENT', 31, 2, {
-            expected_version: 1,
-            enabled: false,
-            monthly_token_limit: 0,
-        }),
-    )
-})
-
-it('saves a personal quota from the tree only after the unified save action', async () => {
-    vi.mocked(saveDshPolicy).mockImplementation(async (_user, _model, _tenant, input) => ({
-        operation_id: input.operation_id,
-        status: 'SUCCEEDED',
-        tenant_id: 2,
-        user_id: 20,
-        actor_user_id: 90,
-        action: 'USER_POLICY_UPDATE',
-        before_values: null,
-        after_values: null,
-        expected_grant_version: null,
-        expected_policy_version: 0,
-        committed_at: null,
-        effective_at: null,
-        result_code: null,
-        result_payload: null,
+    await waitFor(() => expect(saveDshSubjectPolicy).toHaveBeenCalledWith(7, 'DEPARTMENT', 31, 2, {
+        expected_version: 1, enabled: true, monthly_token_limit: 6000,
     }))
-    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const input = await screen.findByLabelText('Alice · dsh.configuredQuotaWan')
-    fireEvent.change(input, { target: { value: '100' } })
-    fireEvent.blur(input)
-    expect(saveDshPolicy).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'save' }))
-    await waitFor(() =>
-        expect(saveDshPolicy).toHaveBeenCalledWith(
-            '20',
-            7,
-            '2',
-            expect.objectContaining({
-                expected_version: 0,
-                enabled: true,
-                monthly_token_limit: 1000000,
-            }),
-        ),
-    )
+    await waitFor(() => expect(screen.queryByLabelText('Organization · dsh.configuredQuotaWan')).toBeNull())
 })
 
-it('saves fractional wan quotas as exact integer Tokens', async () => {
+it('selects another department and fetches its direct members', async () => {
+    vi.mocked(getDshModelSubjects).mockResolvedValue({ tenant_id: 2, model_id: 7, roles: [], departments: [department, { ...department, subject_id: 32, parent_id: 31, name: 'Child' }] })
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const input = await screen.findByLabelText('Organization · dsh.configuredQuotaWan')
-    fireEvent.change(input, { target: { value: '0.6' } })
-    expect(input).toHaveValue('0.6')
-    fireEvent.click(screen.getByRole('button', { name: 'save' }))
-    await waitFor(() =>
-        expect(saveDshSubjectPolicy).toHaveBeenCalledWith(7, 'DEPARTMENT', 31, 2, {
-            expected_version: 1,
-            enabled: true,
-            monthly_token_limit: 6000,
-        }),
-    )
-    await waitFor(() => expect(screen.getByRole('button', { name: 'save' })).toBeDisabled())
-    expect(input).toHaveValue('0.6')
-})
-
-it('uses saved ancestor quota for department status until Save succeeds', async () => {
-    vi.mocked(getDshModelSubjects).mockResolvedValue({
-        tenant_id: 2,
-        model_id: 7,
-        roles: [],
-        departments: [
-            department,
-            {
-                ...department,
-                subject_id: 32,
-                parent_id: 31,
-                name: 'Child',
-                enabled: false,
-                monthly_token_limit: 0,
-            },
-        ],
-    })
-    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const child = await screen.findByRole('button', { name: 'Child' })
-    const row = within(child.parentElement!.parentElement!)
-    expect(row.getByText('10')).toBeTruthy()
-    expect(row.getByText('dsh.access_AUTHORIZED')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), {
-        target: { value: '' },
-    })
-    expect(row.getByText('dsh.access_AUTHORIZED')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'save' }))
-    expect(await row.findByText('dsh.access_UNAUTHORIZED')).toBeTruthy()
-    expect(row.getByText('0')).toBeTruthy()
-})
-
-it('renders empty department branches without member placeholders', async () => {
-    vi.mocked(getDshModelUserPermissions).mockResolvedValue({
-        tenant_id: 2,
-        model: { ...model, is_root_shared: false },
-        next_cursor: null,
-        has_more: false,
-        items: [],
-    })
-    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    await screen.findByRole('button', { name: 'Organization' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Child' }))
+    await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledWith(7, expect.objectContaining({ department_id: 32, membership: 'DIRECT' }), expect.any(AbortSignal)))
+    expect(screen.getByRole('heading', { name: 'Child' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'dsh.unassignedDepartment' }))
-    await waitFor(() =>
-        expect(getDshModelUserPermissions).toHaveBeenCalledWith(
-            7,
-            expect.objectContaining({ unassigned_only: true }),
-            expect.any(AbortSignal),
-        ),
-    )
-    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
-    expect(screen.queryByText('dsh.noDirectMembers')).toBeNull()
+    await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledWith(7, expect.objectContaining({ unassigned_only: true }), expect.any(AbortSignal)))
+    expect(screen.queryByText('dsh.departmentDefaultQuota')).toBeNull()
 })
 
-it('uses the same search to find a user and preserves the department path', async () => {
+it('searches users across departments and shows their department names', async () => {
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
     await screen.findByText('Alice')
     fireEvent.change(screen.getByLabelText('dsh.searchDepartmentsAndUsers'), { target: { value: 'Alice' } })
-    await waitFor(() =>
-        expect(getDshModelUserPermissions).toHaveBeenCalledWith(
-            7,
-            expect.objectContaining({
-                keyword: 'Alice',
-                include_seats: true,
-            }),
-            expect.any(AbortSignal),
-        ),
-    )
+    await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledWith(7, expect.objectContaining({ keyword: 'Alice', department_id: undefined }), expect.any(AbortSignal)))
+    expect(screen.getByRole('heading', { name: 'dsh.quotaSearchResults' })).toBeTruthy()
     expect(await screen.findByText('Alice')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Organization' })).toBeTruthy()
+    expect(screen.getAllByText('Organization').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/ID: 20/)).toBeNull()
 })
 
-it('keeps loading feedback inside the department row and reuses results after reopening', async () => {
-    let complete!: (value: Awaited<ReturnType<typeof getDshModelUserPermissions>>) => void
-    vi.mocked(getDshModelUserPermissions).mockReturnValueOnce(
-        new Promise((resolve) => {
-            complete = resolve
-        }),
-    )
+it('expands a member editor and saves an explicit zero override', async () => {
+    vi.mocked(saveDshPolicy).mockImplementation(async (_user, _model, _tenant, input) => ({ operation_id: input.operation_id, status: 'SUCCEEDED' }) as Awaited<ReturnType<typeof saveDshPolicy>>)
     render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const departmentButton = await screen.findByRole('button', { name: 'Organization' })
-    const indicator = await screen.findByRole('status')
-    expect(departmentButton.contains(indicator)).toBe(true)
-    expect(indicator.tagName.toLowerCase()).toBe('svg')
-    complete({
-        tenant_id: 2,
-        model: { ...model, is_root_shared: false },
-        items: [],
-        has_more: false,
-        next_cursor: null,
-    })
-    await waitFor(() => expect(departmentButton).toHaveAttribute('aria-busy', 'false'))
-    fireEvent.click(departmentButton)
-    fireEvent.click(departmentButton)
-    await waitFor(() => expect(departmentButton).toHaveAttribute('aria-busy', 'false'))
-    expect(getDshModelUserPermissions).toHaveBeenCalledTimes(1)
-})
-
-it('keeps existing member rows visible and read-only while refreshing after a save', async () => {
-    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
-    const memberQuota = await screen.findByLabelText('Alice · dsh.configuredQuotaWan')
-    vi.mocked(getDshModelUserPermissions).mockReturnValue(new Promise(() => {}))
-    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), {
-        target: { value: '20' },
-    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Alice · dsh.editQuota' }))
+    fireEvent.change(screen.getByLabelText('Alice · dsh.configuredQuotaWan'), { target: { value: '0' } })
     fireEvent.click(screen.getByRole('button', { name: 'save' }))
-    await waitFor(() => expect(getDshModelUserPermissions).toHaveBeenCalledTimes(2))
-    expect(screen.getByText('Alice')).toBeTruthy()
-    expect(memberQuota).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Organization' })).toHaveAttribute('aria-busy', 'true')
+    await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledWith('20', 7, '2', expect.objectContaining({ enabled: true, monthly_token_limit: 0 })))
+    await waitFor(() => expect(screen.queryByLabelText('Alice · dsh.configuredQuotaWan')).toBeNull())
+})
+
+it('previews department changes for default members and preserves individual overrides', async () => {
+    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+    await screen.findByText('Alice')
+    fireEvent.click(screen.getByRole('button', { name: 'Organization · dsh.editQuota' }))
+    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), { target: { value: '20' } })
+    expect(screen.getByText('20')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Alice · dsh.editQuota' }))
+    const input = screen.getByLabelText('Alice · dsh.configuredQuotaWan')
+    expect(input).toHaveValue('20')
+    fireEvent.change(input, { target: { value: '5' } })
+    expect(screen.getByText('dsh.individualQuota')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), { target: { value: '30' } })
+    expect(input).toHaveValue('5')
+    fireEvent.click(screen.getByRole('button', { name: 'dsh.useDepartmentQuota' }))
+    expect(screen.getByText('30')).toBeTruthy()
+    expect(screen.queryByText('dsh.individualQuota')).toBeNull()
+})
+
+it('keeps the department editor open when saving fails', async () => {
+    vi.mocked(saveDshSubjectPolicy).mockRejectedValue(new Error('failed'))
+    render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Organization · dsh.editQuota' }))
+    fireEvent.change(screen.getByLabelText('Organization · dsh.configuredQuotaWan'), { target: { value: '20' } })
+    fireEvent.click(screen.getByRole('button', { name: 'save' }))
+    await screen.findByRole('alert')
+    expect(screen.getByLabelText('Organization · dsh.configuredQuotaWan')).toHaveValue('20')
 })
