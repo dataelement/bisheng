@@ -13,6 +13,10 @@ const errorCodeByReason: Record<string, number> = {
     authorization_unavailable: 26125,
 }
 
+function managementErrorKey(code: number): string {
+    return code === 26113 ? 'dsh.seatRevokedGrantHelp' : `api_errors:${code}`
+}
+
 /** Resolve known service failures through the shared error-code locale catalog. */
 export function getDshRequestErrorKey(error: unknown): string | undefined {
     if (isDshSeatLimitReached(error)) return 'dsh.seatLimitGrantHelp'
@@ -24,7 +28,7 @@ export function getDshRequestErrorKey(error: unknown): string | undefined {
     if ('status_code' in data) {
         const code = Number(data.status_code)
         if (code === 11001 || (Number.isInteger(code) && code >= 26101 && code <= 26130))
-            return `api_errors:${code}`
+            return managementErrorKey(code)
     }
     const failure = 'error' in data ? data.error : data
     if (!failure || typeof failure !== 'object') return
@@ -32,5 +36,5 @@ export function getDshRequestErrorKey(error: unknown): string | undefined {
         ? failure.result_code
         : 'code' in failure ? failure.code : undefined
     const code = typeof reason === 'string' ? errorCodeByReason[reason] : undefined
-    if (typeof code === 'number') return `api_errors:${code}`
+    if (typeof code === 'number') return managementErrorKey(code)
 }

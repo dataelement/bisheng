@@ -2350,6 +2350,7 @@
     "userMonthlyLimit": "{{name}} の月間トークン上限",
     "seatLimitTitle": "シート不足",
     "seatLimitGrantHelp": "シート数が不足しているため、権限は反映されませんでした。シートを追加するか、既存のシートを解放して再試行してください。",
+    "seatRevokedGrantHelp": "選択したメンバーに取り消されたシートがあります。「ライセンスとシート」で再割り当てしてから、権限を保存してください。",
     "goToLicenseAndSeats": "ライセンスとシートへ",
     "userUsage": "使用統計",
     "usageScope": "現在のテナントからユーザーを選択し、期間内のトークン使用量、メッセージ数、完了した Q&A を確認します。",

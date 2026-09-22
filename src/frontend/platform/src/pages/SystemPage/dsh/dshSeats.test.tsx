@@ -211,7 +211,7 @@ function SeatCommandHarness() {
 }
 
 it.each(['receipt', 'http', 'business'])(
-    'shows seat capacity from a %s failure beside the seat and unlocks a fresh retry',
+    'shows seat capacity from a %s failure above the table and unlocks a fresh retry',
     async (source) => {
         vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), state: 'REVOKED' }], has_more: false, next_cursor: null })
         if (source === 'receipt') {
@@ -225,7 +225,9 @@ it.each(['receipt', 'http', 'business'])(
         const { unmount } = render(<SeatCommandHarness />)
         fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
         expect(await screen.findByRole('alert')).toHaveTextContent('dsh.seatLimitGrantHelp')
-        expect(screen.getByRole('alert').closest('tr')).toHaveTextContent('dsh.REVOKED')
+        expect(screen.getByRole('alert')).toHaveTextContent('User 1')
+        expect(screen.getByRole('alert').closest('table')).toBeNull()
+        expect(screen.getByRole('table')).not.toHaveTextContent('dsh.seatLimitGrantHelp')
         expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
         const previousId = vi.mocked(commandDshSeat).mock.calls[0][3]
         vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'SUCCEEDED', result_code: null } as DshOperation)

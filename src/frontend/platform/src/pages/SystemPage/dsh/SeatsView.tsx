@@ -150,8 +150,17 @@ export function SeatsView({
             },
         })
     }
+    const feedback = (data?.items ?? []).flatMap((item) => {
+        const operation = operations[pending[item.seat_id]]
+        const errorKey = operation?.status === 'FAILED'
+            ? getDshRequestErrorKey(operation) ?? 'dsh.FAILED'
+            : operation?.status === 'SUCCEEDED'
+                ? undefined
+                : commandErrors[item.seat_id]
+        return errorKey ? [{ item, errorKey }] : []
+    })
     return (
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
             <div className="flex items-center justify-end gap-2">
                 <Input
                     boxClassName="w-56 shrink-0"
@@ -189,6 +198,16 @@ export function SeatsView({
                     }
                 />
             </div>
+            {feedback.length > 0 && (
+                <div className="sticky top-0 z-10 space-y-2">
+                    {feedback.map(({ item, errorKey }) => (
+                        <div key={item.seat_id} role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600 dark:border-red-900 dark:bg-red-950">
+                            <span className="break-words font-medium">{item.display_name || item.username || item.user_id}: </span>
+                            {t(errorKey)}
+                        </div>
+                    ))}
+                </div>
+            )}
             {!data ? (
                 <p role="status">
                     {t(error ? 'dsh.unavailable' : 'dsh.loading')}
@@ -217,11 +236,6 @@ export function SeatsView({
                             {data.items.map((item) => {
                                 const operation =
                                     operations[pending[item.seat_id]]
-                                const commandError = operation?.status === 'FAILED'
-                                    ? getDshRequestErrorKey(operation) ?? 'dsh.FAILED'
-                                    : operation?.status === 'SUCCEEDED'
-                                        ? undefined
-                                        : commandErrors[item.seat_id]
                                 const busy =
                                     !!pending[item.seat_id] &&
                                     (!operation ||
@@ -279,11 +293,6 @@ export function SeatsView({
                                                     )}
                                                 </Button>
                                             </div>
-                                            {commandError && (
-                                                <p role="alert" className="mt-1 max-w-xs text-xs text-red-600">
-                                                    {t(commandError)}
-                                                </p>
-                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )

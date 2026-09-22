@@ -2350,6 +2350,7 @@
     "userMonthlyLimit": "{{name}} 每月 Token 额度",
     "seatLimitTitle": "席位不足",
     "seatLimitGrantHelp": "席位不足，本次授权未生效。请扩充席位或释放已有席位后重试。",
+    "seatRevokedGrantHelp": "所选成员包含已撤销席位，请先在“授权与席位”中重新分配，再保存授权。",
     "goToLicenseAndSeats": "前往授权与席位",
     "userUsage": "使用统计",
     "usageScope": "选择当前租户的用户，查看指定时间范围内的 Token 用量、消息数和问答次数。",

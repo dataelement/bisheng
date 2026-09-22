@@ -6,6 +6,7 @@ vi.mock('@/controllers/request', () => ({ default: {} }))
 describe('DSH management error messages', () => {
     it.each([
         [26112, 'dsh.seatLimitGrantHelp'],
+        [26113, 'dsh.seatRevokedGrantHelp'],
         [11001, 'api_errors:11001'],
         [26115, 'api_errors:26115'],
         [26125, 'api_errors:26125'],
@@ -16,6 +17,7 @@ describe('DSH management error messages', () => {
     })
     it.each([
         ['seat_limit_reached', 'dsh.seatLimitGrantHelp'],
+        ['seat_revoked', 'dsh.seatRevokedGrantHelp'],
         ['license_expired', 'api_errors:26115'],
         ['authorization_unavailable', 'api_errors:26125'],
         ['authorization_conflict', 'api_errors:26120'],
