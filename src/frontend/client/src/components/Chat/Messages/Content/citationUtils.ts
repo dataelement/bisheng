@@ -643,3 +643,42 @@ export function buildCitationReferenceItems({
 
   return items;
 }
+
+
+/**
+ * How the references list and a cited document share the screen in overlay mode.
+ *
+ * Both are fixed to the right edge at the same width, so opening a document on
+ * top of the list used to bury it: the click looked like it did nothing. Wide
+ * enough, the two sit side by side and the list shrinks to an index, which is
+ * what makes comparing several citations one click instead of three. Too narrow
+ * for both, the document the user just asked for wins and the list steps aside
+ * until they close it.
+ */
+export const CITATION_PAIRED_LAYOUT_BREAKPOINT = 1280;
+export const CITATION_REFERENCES_PAIRED_WIDTH_PX = 360;
+
+export interface CitationOverlayLayout {
+  showReferencesPanel: boolean;
+  /** Literal Tailwind class: the JIT never sees an interpolated one. */
+  referencesWidthClass: string;
+  /** Pixels in from the right edge, or null to keep the document on the edge. */
+  documentRightOffsetPx: number | null;
+}
+
+export function resolveCitationOverlayLayout({
+  referencesOpen,
+  documentOpen,
+  canPair,
+}: {
+  referencesOpen: boolean;
+  documentOpen: boolean;
+  canPair: boolean;
+}): CitationOverlayLayout {
+  const paired = referencesOpen && documentOpen && canPair;
+  return {
+    showReferencesPanel: referencesOpen && (!documentOpen || canPair),
+    referencesWidthClass: paired ? 'w-[360px]' : 'w-[min(520px,calc(var(--bs-vw,100vw)-24px))]',
+    documentRightOffsetPx: paired ? CITATION_REFERENCES_PAIRED_WIDTH_PX : null,
+  };
+}
