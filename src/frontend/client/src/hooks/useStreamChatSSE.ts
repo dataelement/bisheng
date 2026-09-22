@@ -29,8 +29,16 @@ export interface StreamChatSSESubmission {
      * (with :::thinking::: markers if reasoning_content is present).
      */
     onMessage: (text: string) => void;
-    /** Called when the stream ends (type: "end") with final full text */
-    onFinal: (text: string, messageId?: string | number) => void;
+    /**
+     * Called when the stream ends (type: "end") with final full text.
+     * `sessionName` carries the title the backend generated for this
+     * conversation, and is only present on the round that named it.
+     */
+    onFinal: (
+        text: string,
+        messageId?: string | number,
+        sessionName?: string
+    ) => void;
     /** Called on connection or parse errors */
     onError: (error: string) => void;
     /** Called when the SSE lifecycle is fully done */
@@ -83,7 +91,11 @@ export default function useStreamChatSSE(
                     // send final accumulated text plus the real persisted answer id
                     // (backend end event) so the caller can swap out the temporary
                     // placeholder id and feedback/like targets the right row.
-                    onFinal(buildFullText(), data?.message?.message_id);
+                    onFinal(
+                        buildFullText(),
+                        data?.message?.message_id,
+                        data?.message?.session_name
+                    );
                     onEnd();
                     return;
                 }

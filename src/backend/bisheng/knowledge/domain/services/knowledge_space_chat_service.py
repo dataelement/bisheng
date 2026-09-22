@@ -51,6 +51,13 @@ from bisheng.utils import generate_uuid
 
 _background_tasks: set[asyncio.Task[Any]] = set()
 
+# How long the round may wait for the title before finalizing without it. Kept
+# short on purpose: the answer is already on screen by then and the input stays
+# locked until the closing event, so this is dead time the user can feel. It only
+# ever applies to the first round of a conversation, and since the title starts
+# generating before retrieval it is normally ready well before the wait begins.
+SESSION_TITLE_WAIT_SECONDS = 2.0
+
 
 class KnowledgeSpaceChatService:
     """Service class for handling Knowledge Space AI Chat operations"""
@@ -182,6 +189,7 @@ class KnowledgeSpaceChatService:
     async def space_rag(
         self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None
     ) -> AsyncIterator[ChatResponse]:
+        title_task = self._start_session_title_task(session, query)
         llm, space_conf = await self.get_space_llm_config(model_id=model_id)
 
         retriever_tool = KnowledgeRetrieverTool(
@@ -276,40 +284,43 @@ class KnowledgeSpaceChatService:
             chat_id=session.chat_id,
             flow_id=session.flow_id,
         )
-        if not session.name:
-            title_task = asyncio.create_task(
-                self.generate_conversation(
-                    user_id=self.login_user.user_id,
-                    chat_id=session.chat_id,
-                    question=query,
-                    answer=answer,
-                )
-            )
-            _background_tasks.add(title_task)
-            title_task.add_done_callback(_background_tasks.discard)
+        end_message: dict[str, Any] = {
+            "content": answer,
+            "reasoning_content": reasoning_content,
+            # Real persisted answer ChatMessage id: the client renders the
+            # streamed answer under a temporary placeholder id; sending the
+            # real id on the end event lets it swap in immediately so
+            # like/dislike writes to the right row (previously a like clicked
+            # before a page refresh was lost, since it hit the placeholder id).
+            "message_id": messages[1].id,
+        }
+        # Generated conversation title, when it is ready in time: the history list
+        # is only fetched when the panel mounts, so without this the freshly named
+        # conversation kept showing the "new chat" placeholder until the user
+        # navigated away and back.
+        session_name = await self._resolve_session_title(title_task)
+        if session_name:
+            end_message["session_name"] = session_name
 
         yield ChatResponse(
             category=MessageCategory.STREAM,
-            message={
-                "content": answer,
-                "reasoning_content": reasoning_content,
-                # Real persisted answer ChatMessage id: the client renders the
-                # streamed answer under a temporary placeholder id; sending the
-                # real id on the end event lets it swap in immediately so
-                # like/dislike writes to the right row (previously a like clicked
-                # before a page refresh was lost, since it hit the placeholder id).
-                "message_id": messages[1].id,
-            },
+            message=end_message,
             citations=cited_items,
             type="end",
         )
 
     @staticmethod
-    async def generate_conversation(user_id: int, chat_id: str, question: str, answer: str | None = None):
+    async def generate_conversation(user_id: int, chat_id: str, question: str) -> str | None:
+        """Name a conversation after its question and persist the name.
+
+        The answer is deliberately not an input: the question already carries the
+        topic, and waiting for a reply that may never arrive would only delay the
+        name.
+        """
         llm_conf = await LLMService.get_workbench_llm()
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
             logger.debug("not found chat title llm")
-            return
+            return None
         llm = await LLMService.get_bisheng_llm(
             model_id=llm_conf.chat_title_llm.id,
             app_id=ApplicationTypeEnum.DAILY_CHAT.value,
@@ -319,6 +330,50 @@ class KnowledgeSpaceChatService:
         )
         title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(chat_id, title)
+        return title
+
+    def _start_session_title_task(self, session, query: str) -> asyncio.Task[str | None] | None:
+        """Start naming the conversation as soon as the question is known.
+
+        The title is derived from the question alone, so it does not have to wait
+        for the answer: starting here lets it be generated while retrieval and the
+        answer stream are still running, and by the time the round finishes it is
+        usually ready to travel back on the closing event. Returns ``None`` when
+        the conversation already has a name.
+        """
+        if session.name:
+            return None
+        title_task = asyncio.create_task(
+            self.generate_conversation(
+                user_id=self.login_user.user_id,
+                chat_id=session.chat_id,
+                question=query,
+            )
+        )
+        _background_tasks.add(title_task)
+        title_task.add_done_callback(_background_tasks.discard)
+        return title_task
+
+    @staticmethod
+    async def _resolve_session_title(title_task: asyncio.Task[str | None] | None) -> str | None:
+        """Collect the generated title if it lands before the round is finalized.
+
+        ``asyncio.wait`` rather than ``wait_for``: a timeout must leave the task
+        running, otherwise a slow title model would lose the name entirely instead
+        of just missing this round's closing event.
+        """
+        if title_task is None:
+            return None
+        done, _ = await asyncio.wait({title_task}, timeout=SESSION_TITLE_WAIT_SECONDS)
+        if title_task not in done:
+            return None
+        try:
+            return title_task.result()
+        except Exception:
+            # Naming a conversation is cosmetic; the answer itself is already
+            # streamed and persisted, so a failure here must not fail the round.
+            logger.exception("conversation title generation failed")
+            return None
 
     async def single_file_history(
         self, knowledge_id: int, file_id: int, page_size: int = 20
@@ -577,6 +632,7 @@ class KnowledgeSpaceChatService:
         query: str,
         model_id: int,
         tags: Any = None,
+        title_task: asyncio.Task[str | None] | None = None,
     ) -> AsyncIterator[ChatResponse]:
         """F029: prompt rendering + LLM streaming, given pre-fetched docs.
 
@@ -669,30 +725,27 @@ class KnowledgeSpaceChatService:
             chat_id=session.chat_id,
             flow_id=session.flow_id,
         )
-        if not session.name:
-            title_task = asyncio.create_task(
-                self.generate_conversation(
-                    user_id=self.login_user.user_id,
-                    chat_id=session.chat_id,
-                    question=query,
-                    answer=answer,
-                )
-            )
-            _background_tasks.add(title_task)
-            title_task.add_done_callback(_background_tasks.discard)
+        end_message: dict[str, Any] = {
+            "content": answer,
+            "reasoning_content": reasoning_content,
+            # Real persisted answer ChatMessage id: the client renders the
+            # streamed answer under a temporary placeholder id; sending the
+            # real id on the end event lets it swap in immediately so
+            # like/dislike writes to the right row (previously a like clicked
+            # before a page refresh was lost, since it hit the placeholder id).
+            "message_id": messages[1].id,
+        }
+        # Generated conversation title, when it is ready in time: the history list
+        # is only fetched when the panel mounts, so without this the freshly named
+        # conversation kept showing the "new chat" placeholder until the user
+        # navigated away and back.
+        session_name = await self._resolve_session_title(title_task)
+        if session_name:
+            end_message["session_name"] = session_name
 
         yield ChatResponse(
             category=MessageCategory.STREAM,
-            message={
-                "content": answer,
-                "reasoning_content": reasoning_content,
-                # Real persisted answer ChatMessage id: the client renders the
-                # streamed answer under a temporary placeholder id; sending the
-                # real id on the end event lets it swap in immediately so
-                # like/dislike writes to the right row (previously a like clicked
-                # before a page refresh was lost, since it hit the placeholder id).
-                "message_id": messages[1].id,
-            },
+            message=end_message,
             citations=cited_items,
             type="end",
         )
@@ -727,6 +780,8 @@ class KnowledgeSpaceChatService:
         if not session:
             raise NotFoundError(msg="Folder session not found")
 
+        title_task = self._start_session_title_task(session, query)
+
         target_file_ids = None
 
         if folder_id:
@@ -760,7 +815,7 @@ class KnowledgeSpaceChatService:
             max_content=space_conf.max_chunk_size,
         )
 
-        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags):
+        async for one in self._render_rag_response(session, finally_docs, query, model_id, tags, title_task=title_task):
             yield one
 
     async def get_space_llm_config(self, model_id: int) -> tuple[BaseChatModel, KnowledgeSpaceConfig]:
