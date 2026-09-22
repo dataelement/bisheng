@@ -210,15 +210,16 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}
     # Object storage holds every uploaded document, knowledge-base file and
-    # report template. The backend, Milvus and the document server all reach it
-    # over the compose network, and browsers go through the frontend's /minio
-    # proxy, so neither port has to be published.
-    #   9000 - data API. Publish it only if you point BS_MINIO_SHAREPOINT at
-    #          the host instead of `minio:9000`, and put it behind TLS.
-    #   9001 - admin console. Never publish this: it is a full web UI over
-    #          every stored file.
-    # ports:
-    #   - "9100:9000"
+    # report template.
+    #   9000 - data API. Published because the document server runs as its own
+    #          compose project and cannot resolve `minio`, so BS_MINIO_SHAREPOINT
+    #          has to name the host for report templates to load. Restrict it to
+    #          the networks that need it and put it behind TLS.
+    #   9001 - admin console, deliberately NOT published: it is a full web UI
+    #          over every stored file and nothing in the stack needs it. Reach
+    #          it with `ssh -L 9001:localhost:9001 <host>` when required.
+    ports:
+      - "9100:9000"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/milvus-minio:/minio_data
