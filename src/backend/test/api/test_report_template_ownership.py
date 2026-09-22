@@ -228,8 +228,8 @@ async def test_a_viewer_does_not_re_home_an_unowned_template(monkeypatch, report
     report_env.copy_object.assert_not_called()
 
 
-async def test_the_edit_session_records_whether_saving_is_allowed(monkeypatch, report_env):
-    _permissions(monkeypatch, visible=True, edit=False)
+async def test_an_editor_leaves_a_ticket_for_the_save_callback(monkeypatch, report_env):
+    _permissions(monkeypatch, edit=True)
     remember = AsyncMock()
     monkeypatch.setattr(report_template, "aremember_edit_session", remember)
 
@@ -240,7 +240,26 @@ async def test_the_edit_session_records_whether_saving_is_allowed(monkeypatch, r
         workflow_id=WORKFLOW_A,
     )
 
-    assert remember.call_args.kwargs["can_edit"] is False
+    assert remember.call_args.kwargs["can_edit"] is True
+
+
+async def test_a_viewer_leaves_no_ticket_and_cannot_clobber_an_editors(monkeypatch, report_env):
+    """One ticket per template: a viewer writing one would refuse the save of
+    whoever is editing that same template right now."""
+    _permissions(monkeypatch, visible=True, edit=False)
+    remember = AsyncMock()
+    monkeypatch.setattr(report_template, "aremember_edit_session", remember)
+
+    result = await workflow.get_report_file(
+        MagicMock(),
+        login_user=MagicMock(),
+        version_key=f"{WORKFLOW_A}-{RANDOM}",
+        workflow_id=WORKFLOW_A,
+    )
+
+    # The viewer still gets to open the template.
+    assert result.data["url"] == "http://minio/x.docx"
+    remember.assert_not_called()
 
 
 @pytest.fixture

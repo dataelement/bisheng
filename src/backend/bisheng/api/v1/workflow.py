@@ -133,11 +133,16 @@ async def get_report_file(
         # returned key back onto the node.
         version_key = await _adopt_unowned_template(minio_client, version_key, workflow_id)
 
-    await report_template.aremember_edit_session(
-        version_key=version_key,
-        workflow_id=workflow_id,
-        can_edit=can_edit,
-    )
+    if can_edit:
+        # Only an editor leaves a ticket. A viewer writing one would overwrite
+        # the ticket of whoever is editing the same template right now, and
+        # their save would then be refused; with no ticket at all the viewer's
+        # own save is refused anyway, which is the whole point.
+        await report_template.aremember_edit_session(
+            version_key=version_key,
+            workflow_id=workflow_id,
+            can_edit=True,
+        )
 
     file_url = ""
     object_name = f"workflow/report/{version_key}.docx"
