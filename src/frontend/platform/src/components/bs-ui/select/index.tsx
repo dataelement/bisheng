@@ -69,9 +69,15 @@ const SelectScrollDownButton = React.forwardRef<
 SelectScrollDownButton.displayName =
     SelectPrimitive.ScrollDownButton.displayName
 
+type SelectContentProps = React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+    headNode?: React.ReactNode
+    footerNode?: React.ReactNode
+    auto?: boolean
+}
+
 const SelectContent = React.forwardRef<
     React.ElementRef<typeof SelectPrimitive.Content>,
-    React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
+    SelectContentProps
 >(({ className, children, headNode = null, footerNode = null, auto, position = "popper", ...props }, ref) => (
     <SelectPrimitive.Portal>
         <SelectPrimitive.Content
@@ -81,6 +87,7 @@ const SelectContent = React.forwardRef<
                 // falling back to 24rem when the variable isn't set, so dropdowns become scrollable
                 // instead of getting clipped when the trigger is mid-viewport.
                 "relative z-[120] max-h-[min(24rem,var(--radix-select-content-available-height,24rem))] min-w-[8rem] overflow-hidden rounded-md border border-[#DEE3EF] dark:border-[#484B57] bg-popover text-popover-foreground dark:text-gray-200 shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+                headNode && "flex flex-col",
                 position === "popper" &&
                 "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
                 className
@@ -94,6 +101,7 @@ const SelectContent = React.forwardRef<
             <SelectPrimitive.Viewport
                 className={cname(
                     "p-1",
+                    headNode && "min-h-0 flex-1 overflow-y-auto",
                     position === "popper" && !auto &&
                     "w-full min-w-[var(--radix-select-trigger-width)]"
                 )}
