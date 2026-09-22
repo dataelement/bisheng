@@ -1,7 +1,9 @@
-"""The skill upload cap is read from 系统配置 (linsight.skill_upload_max_size_mb).
+"""The skill upload and unpacked caps are read from 系统配置.
 
-MAX_BUNDLE_SIZE is only the fallback; both the endpoint's early read check and the
-service's parse step must honour the configured value, and /upload-limit must report it.
+``linsight.skill_upload_max_size_mb`` / ``linsight.skill_unpacked_max_size_mb``;
+MAX_BUNDLE_SIZE / MAX_UNPACKED_SIZE are only the fallbacks. Both the endpoint's early
+read check and the service's parse step must honour the configured upload value, and
+/upload-limit must report the effective values of both.
 """
 
 from types import SimpleNamespace
@@ -16,12 +18,16 @@ from bisheng.linsight.domain.services.skill_service import SkillService
 MB = 1024 * 1024
 
 
-def _conf(monkeypatch, megabytes):
+def _conf(monkeypatch, megabytes, unpacked_megabytes=None):
     # bisheng_settings is a pydantic BaseModel with validate_assignment=True, so an
     # instance-level setattr on a method is rejected ("no such attribute" — pydantic
     # only allows assigning declared fields). Patch the class method instead.
+    fields = {"skill_upload_max_size_mb": megabytes}
+    if unpacked_megabytes is not None:
+        fields["skill_unpacked_max_size_mb"] = unpacked_megabytes
+
     async def _aget_linsight_conf(self):
-        return SimpleNamespace(skill_upload_max_size_mb=megabytes)
+        return SimpleNamespace(**fields)
 
     monkeypatch.setattr(type(skill_store.bisheng_settings), "aget_linsight_conf", _aget_linsight_conf)
 
@@ -67,8 +73,34 @@ async def test_upload_limit_route_precedes_the_name_route_and_reports_the_cap(mo
     paths = [route.path for route in skill_endpoint.router.routes]
     assert paths.index("/skill/upload-limit") < paths.index("/skill/{name}")
 
-    _conf(monkeypatch, 7)
+    _conf(monkeypatch, 7, unpacked_megabytes=300)
     body = await skill_endpoint.get_upload_limit(login_user=SimpleNamespace(user_id=1, tenant_id=1))
     data = body.data if hasattr(body, "data") else body["data"]
     assert data["max_size_mb"] == 7 and data["max_size_bytes"] == 7 * MB
-    assert data["max_unpacked_bytes"] == skill_store.MAX_UNPACKED_SIZE
+    assert data["max_unpacked_mb"] == 300 and data["max_unpacked_bytes"] == 300 * MB
+
+
+async def test_unpacked_limit_comes_from_system_config(monkeypatch):
+    _conf(monkeypatch, 10, unpacked_megabytes=300)
+    assert await skill_store.resolve_skill_unpacked_limit() == 300 * MB
+
+
+async def test_unpacked_limit_falls_back_to_the_default(monkeypatch):
+    # A deployment whose stored 系统配置 predates the key: only the upload cap is present.
+    _conf(monkeypatch, 10)
+    assert await skill_store.resolve_skill_unpacked_limit() == skill_store.MAX_UNPACKED_SIZE
+
+    _conf(monkeypatch, 10, unpacked_megabytes=0)
+    assert await skill_store.resolve_skill_unpacked_limit() == skill_store.MAX_UNPACKED_SIZE
+
+
+async def test_unpacked_limit_never_below_the_upload_limit(monkeypatch):
+    # Raising only the upload cap must not strand files that pass it (a stored,
+    # uncompressed archive unpacks to about its own size).
+    _conf(monkeypatch, 800, unpacked_megabytes=100)
+    assert await skill_store.resolve_skill_unpacked_limit() == 800 * MB
+
+
+async def test_unpacked_limit_clamped_to_the_ceiling(monkeypatch):
+    _conf(monkeypatch, 10, unpacked_megabytes=50_000)
+    assert await skill_store.resolve_skill_unpacked_limit() == skill_store.MAX_UNPACKED_CEILING

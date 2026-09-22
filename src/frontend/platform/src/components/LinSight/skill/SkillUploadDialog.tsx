@@ -2,8 +2,9 @@
 // must contain SKILL.md) or from a public GitHub directory URL. The size check here
 // covers the uploaded bytes only; the cap comes from 系统配置
 // (linsight.skill_upload_max_size_mb) via /skill/upload-limit, so the copy and the
-// server agree on the number. The backend separately caps the unpacked contents and
-// reports that as its own error code — do not merge the two.
+// server agree on the number. The backend separately caps the unpacked contents
+// (linsight.skill_unpacked_max_size_mb, reported by the same endpoint) and reports that
+// as its own error code — do not merge the two.
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
@@ -21,8 +22,8 @@ const ACCEPTED_SUFFIXES = ['.md', '.zip', '.skill'];
 const DEFAULT_UPLOAD_LIMIT: SkillUploadLimit = {
     max_size_bytes: 10 * 1024 * 1024,
     max_size_mb: 10,
-    max_unpacked_bytes: 100 * 1024 * 1024,
-    max_unpacked_mb: 100,
+    max_unpacked_bytes: 500 * 1024 * 1024,
+    max_unpacked_mb: 500,
 };
 const GITHUB_URL_PREFIX = 'https://github.com/';
 
@@ -111,7 +112,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            toast({ variant: 'error', description: getSkillErrorMessage(err, t) });
+            toast({ variant: 'error', description: getSkillErrorMessage(err, t, limit) });
         } finally {
             setUploading(false);
         }
@@ -129,7 +130,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            toast({ variant: 'error', description: getSkillErrorMessage(err, t) });
+            toast({ variant: 'error', description: getSkillErrorMessage(err, t, limit) });
         } finally {
             setImporting(false);
         }

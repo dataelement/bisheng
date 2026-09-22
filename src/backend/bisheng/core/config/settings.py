@@ -458,6 +458,12 @@ class LinsightConf(BaseModel):
         ge=1,
         description="Upload cap for a skill bundle (.md/.zip/.skill), in MB. 系统配置 linsight.skill_upload_max_size_mb",
     )
+    skill_unpacked_max_size_mb: int = Field(
+        default=500,
+        ge=1,
+        description="Cap on a skill bundle's total unpacked size, in MB. Never below the upload cap; clamped to "
+        "a 1024MB hard ceiling (skill_store.MAX_UNPACKED_CEILING). 系统配置 linsight.skill_unpacked_max_size_mb",
+    )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"
     )
