@@ -1,6 +1,7 @@
 // @ts-strict-ignore
 import { Outlined } from 'bisheng-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -29,6 +30,11 @@ type CitationDocumentPreviewDrawerProps = {
   preview: CitationDocumentPreviewState | null;
   onClose: () => void;
   manageMobileNavVisibility?: boolean;
+  /**
+   * Park the drawer this many pixels in from the right edge, next to an open
+   * references list instead of on top of it. Null keeps the right edge.
+   */
+  pairedRightOffsetPx?: number | null;
 };
 
 type CitationDocumentPreviewContentProps = {
@@ -143,6 +149,7 @@ export default function CitationDocumentPreviewDrawer({
   preview,
   onClose,
   manageMobileNavVisibility = true,
+  pairedRightOffsetPx = null,
 }: CitationDocumentPreviewDrawerProps) {
   const localize = useLocalize();
   const isNarrowLayout = usePrefersMobileLayout();
@@ -156,6 +163,16 @@ export default function CitationDocumentPreviewDrawer({
   const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState('');
   const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl);
   const canRenderPreview = !!preview && isRagCitation(preview.detail);
+  // Declared, not merely referenced: the outside-click handler below reads it, so
+  // without it every pointerdown threw instead of dismissing the preview.
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const isPaired = pairedRightOffsetPx != null && !isFullBleedMobile;
+  // The references panel portals itself to <body>. A document rendered inside the
+  // message tree can never sit above it reliably, whatever z-index it carries, so
+  // it went under the very list that opened it. Both citation entry points render
+  // this drawer, so the escape is unconditional rather than tied to the
+  // side-by-side layout.
+  const shouldPortal = !isFullBleedMobile;
 
   useEffect(() => {
     if (!canRenderPreview || !isFullBleedMobile) return;
@@ -238,12 +255,19 @@ export default function CitationDocumentPreviewDrawer({
 
   const drawer = (
     <aside
+      ref={drawerRef}
+      data-citation-popover-surface
       className={cn(
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+          'z-[140] inset-y-0 border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        // Paired: parked left of the references list and narrowed so both fit.
+        // Otherwise it owns the right edge on its own, as before.
+        isPaired && 'w-[min(520px,calc(100vw-384px))]',
+        !isFullBleedMobile && !isPaired && 'right-0 w-[min(520px,calc(100vw-24px))]',
       )}
+      style={isPaired ? { right: `${pairedRightOffsetPx}px` } : undefined}
       aria-label="文档预览"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
@@ -310,5 +334,5 @@ export default function CitationDocumentPreviewDrawer({
     return drawer;
   }
 
-  return drawer;
+  return shouldPortal ? createPortal(drawer, document.body) : drawer;
 }

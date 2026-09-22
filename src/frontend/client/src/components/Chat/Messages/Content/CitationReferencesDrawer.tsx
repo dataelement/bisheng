@@ -17,6 +17,8 @@ import {
   getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
+  resolveCitationOverlayLayout,
+  CITATION_PAIRED_LAYOUT_BREAKPOINT,
   resolveCitationDownloadUrl,
   toAbsolutePreviewUrl,
   type CitationPreview,
@@ -232,6 +234,7 @@ export default function CitationReferencesDrawer({
   const isFullBleedMobile = isPhoneViewport;
   const isMobileLikeViewport = isNarrowLayout;
   const matchesExpandedDesktopPreview = useMediaQuery(`(min-width: ${CITATION_PANEL_EXPANDED_BREAKPOINT + 1}px)`);
+  const canPairCitationPanels = useMediaQuery(`(min-width: ${CITATION_PAIRED_LAYOUT_BREAKPOINT}px)`);
   const useExpandedDesktopPreview = desktopPreviewVariant === 'expanded'
     ? true
     : desktopPreviewVariant === 'standard'
@@ -406,6 +409,15 @@ export default function CitationReferencesDrawer({
     && (panelOnly || !!onDesktopOpen || typeof open === 'boolean' || !!onOpenChange);
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
+  // Mirrors what the document drawer will actually render: a citation it cannot
+  // preview must not make the references list step aside for nothing.
+  const isOverlayDocumentOpen =
+    !isDesktopInlinePanel && !!documentPreview && isRagCitation(documentPreview.detail);
+  const overlayLayout = resolveCitationOverlayLayout({
+    referencesOpen: isOpen,
+    documentOpen: isOverlayDocumentOpen,
+    canPair: canPairCitationPanels,
+  });
 
   // Only the full-screen references view (<=576) hides MobileNav; the tablet-width
   // drawer keeps the top bar title, and its z-[120] already sits above MobileNav z-[60].
@@ -734,7 +746,7 @@ export default function CitationReferencesDrawer({
 
       {citationOverlayPortalReady &&
         !isDesktopInlinePanel &&
-        isOpen &&
+        overlayLayout.showReferencesPanel &&
         createPortal(
           isFullBleedMobile ? (
             <aside
@@ -745,9 +757,12 @@ export default function CitationReferencesDrawer({
             </aside>
           ) : (
             <aside
+              data-citation-popover-surface
               className={cn(
-                'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
+                'fixed inset-y-0 right-0 z-[130] flex min-h-0 min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
                 'rounded-tl-lg',
+                // Alongside a document it is an index, not the main surface.
+                overlayLayout.referencesWidthClass,
               )}
               aria-label={localize('com_message.source_panel_label')}
               onClick={(event) => event.stopPropagation()}
@@ -763,6 +778,7 @@ export default function CitationReferencesDrawer({
           preview={documentPreview}
           onClose={() => setDocumentPreview(null)}
           manageMobileNavVisibility={false}
+          pairedRightOffsetPx={overlayLayout.documentRightOffsetPx}
         />
       )}
     </>
