@@ -95,14 +95,9 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
         _clear_workflow_obj(redis_callback.unique_id)
 
 
-@bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
-    """Implementationworkflow"""
-    trace_id_var.set(unique_id)
-    start_time = time.time()
+def _log_workflow_telemetry(workflow_id: str, chat_id: str, user_id: int, start_time: float):
+    """Record best-effort workflow telemetry without changing task outcome."""
     try:
-        _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
-    finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
         telemetry_service.log_event_sync(
@@ -119,6 +114,20 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: in
                 process_time=int((end_time - start_time) * 1000),
             ),
         )
+    except Exception:
+        # Telemetry is opportunistic and must not reverse the workflow task outcome.
+        logger.exception("failed to record workflow telemetry for workflow_id={}", workflow_id)
+
+
+@bisheng_celery.task
+def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+    """Implementationworkflow"""
+    trace_id_var.set(unique_id)
+    start_time = time.time()
+    try:
+        _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
+    finally:
+        _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
 
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
@@ -154,22 +163,7 @@ def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
     try:
         _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
-        end_time = time.time()
-        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
-        telemetry_service.log_event_sync(
-            user_id=user_id,
-            event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
-            trace_id=trace_id_var.get(),
-            event_data=ApplicationProcessEventData(
-                app_id=workflow_id,
-                app_name=workflow_info.name if workflow_info else workflow_id,
-                app_type=ApplicationTypeEnum.WORKFLOW,
-                chat_id=chat_id,
-                start_time=int(start_time),
-                end_time=int(end_time),
-                process_time=int((end_time - start_time) * 1000),
-            ),
-        )
+        _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
 
 @bisheng_celery.task
