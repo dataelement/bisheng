@@ -162,6 +162,8 @@ async def test_a_new_template_is_minted_under_the_workflow(monkeypatch, report_e
 
 async def test_an_unowned_template_is_adopted_by_an_editor(monkeypatch, report_env):
     _permissions(monkeypatch, edit=True)
+    # Nothing has been adopted yet: only the legacy document is in storage.
+    report_env.object_exists = AsyncMock(side_effect=lambda bucket, name: name.endswith(f"{LEGACY_KEY}.docx"))
 
     result = await workflow.get_report_file(
         MagicMock(),
@@ -174,6 +176,42 @@ async def test_an_unowned_template_is_adopted_by_an_editor(monkeypatch, report_e
     assert report_template.owner_workflow_id(adopted) == WORKFLOW_A
     # The stored document follows the key, otherwise the template would vanish.
     assert report_env.copy_object.call_args.kwargs["source_object"] == f"workflow/report/{LEGACY_KEY}.docx"
+
+
+async def test_adopting_the_same_template_twice_lands_on_the_same_key(monkeypatch, report_env):
+    """The node keeps the legacy key until the workflow is saved, so every open adopts again."""
+    _permissions(monkeypatch, edit=True)
+
+    first = await workflow.get_report_file(
+        MagicMock(), login_user=MagicMock(), version_key=LEGACY_KEY, workflow_id=WORKFLOW_A
+    )
+    second = await workflow.get_report_file(
+        MagicMock(), login_user=MagicMock(), version_key=LEGACY_KEY, workflow_id=WORKFLOW_A
+    )
+
+    assert report_template.storage_key(first.data["version_key"]) == report_template.storage_key(
+        second.data["version_key"]
+    )
+
+
+async def test_re_opening_an_adopted_template_keeps_the_edits(monkeypatch, report_env):
+    """Re-copying the legacy document would roll the template back to its old content."""
+    _permissions(monkeypatch, edit=True)
+    adopted = report_template.adopted_version_key(WORKFLOW_A, LEGACY_KEY)
+    # The adopted object now exists: it was saved through the editor after the
+    # first adoption, while the workflow itself was never saved.
+    report_env.object_exists = AsyncMock(
+        side_effect=lambda bucket, name: (
+            name == f"workflow/report/{adopted}.docx" or name.endswith(f"{LEGACY_KEY}.docx")
+        )
+    )
+
+    result = await workflow.get_report_file(
+        MagicMock(), login_user=MagicMock(), version_key=LEGACY_KEY, workflow_id=WORKFLOW_A
+    )
+
+    assert result.data["version_key"].startswith(f"{adopted}_")
+    report_env.copy_object.assert_not_called()
 
 
 async def test_a_viewer_does_not_re_home_an_unowned_template(monkeypatch, report_env):

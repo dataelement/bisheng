@@ -153,13 +153,25 @@ async def get_report_file(
 
 
 async def _adopt_unowned_template(minio_client, version_key: str, workflow_id: str) -> str:
-    """Re-home a pre-ownership template under a key naming its workflow."""
-    adopted_key = report_template.mint_version_key(workflow_id)
+    """Re-home a pre-ownership template under a key naming its workflow.
+
+    The adopted name is derived from the pair, not drawn at random, and the
+    document is copied only when the adopted object is missing. The node keeps
+    pointing at the old key until the workflow itself is saved, so the same
+    template gets adopted again on every open until then -- a random name would
+    strand each round of edits under a key nothing references, and re-copying
+    over an existing one would roll the template back to its pre-adoption
+    content.
+    """
+    adopted_key = report_template.adopted_version_key(workflow_id, version_key)
+    adopted_object = f"workflow/report/{adopted_key}.docx"
     object_name = f"workflow/report/{version_key}.docx"
-    if await minio_client.object_exists(minio_client.bucket, object_name):
+    if not await minio_client.object_exists(minio_client.bucket, adopted_object) and await minio_client.object_exists(
+        minio_client.bucket, object_name
+    ):
         await minio_client.copy_object(
             source_object=object_name,
-            dest_object=f"workflow/report/{adopted_key}.docx",
+            dest_object=adopted_object,
             source_bucket=minio_client.bucket,
             dest_bucket=minio_client.bucket,
         )

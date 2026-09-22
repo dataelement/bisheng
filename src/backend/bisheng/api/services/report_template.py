@@ -18,6 +18,7 @@ the browser -- so "may this person save?" is decided when the editor URL is
 handed out (which is authenticated) and remembered for the callback to read.
 """
 
+import hashlib
 import json
 import re
 
@@ -42,6 +43,18 @@ def storage_key(version_key: str) -> str:
 def mint_version_key(workflow_id: str) -> str:
     """Name a new template after the workflow that owns it."""
     return f"{workflow_id}-{generate_uuid()}"
+
+
+def adopted_version_key(workflow_id: str, legacy_key: str) -> str:
+    """Name an adopted pre-ownership template, deterministically.
+
+    Derived from the pair rather than random so that adopting the same template
+    twice lands on the same object: until the workflow is saved its node still
+    points at the legacy key, and every open adopts again. A fresh random name
+    each time would leave each round of edits under a key nothing references.
+    """
+    digest = hashlib.sha256(f"{workflow_id}:{storage_key(legacy_key)}".encode()).hexdigest()
+    return f"{workflow_id}-{digest[:32]}"
 
 
 def owner_workflow_id(version_key: str) -> str | None:
