@@ -168,23 +168,27 @@ class TestCreate:
         with pytest.raises(SkillValidationError, match="SKILL.md"):
             await service.create_from_upload(TENANT, USER, "x.zip", _zip_bytes({"readme.md": b"x"}))
 
-    async def test_oversize_rejected(self, service):
+    async def test_oversize_rejected(self, service, monkeypatch):
+        monkeypatch.setattr(service_module, "resolve_skill_upload_limit", AsyncMock(return_value=1024 * 1024))
         with pytest.raises(SkillFileTooLargeError):
-            await service.create_from_upload(TENANT, USER, "big.md", b"x" * (MAX_BUNDLE_SIZE + 1))
+            await service.create_from_upload(TENANT, USER, "big.md", b"x" * (1024 * 1024 + 1))
 
-    async def test_well_compressing_bundle_over_upload_limit_when_unpacked_accepted(self, service):
+    async def test_well_compressing_bundle_over_upload_limit_when_unpacked_accepted(self, service, monkeypatch):
         """Regression: an archive under the upload limit whose contents expand past it.
 
-        A pptx/font/image bundle compresses well — the .zip stays at a few MB while the
-        extracted files exceed 10MB. That used to be rejected as "file exceeds 10MB",
-        which reads as a bug on a 7MB file. Only the unpacked limit may reject it now.
+        A pptx/font/image bundle compresses well — the .zip stays small while the
+        extracted files exceed the upload cap. That used to be rejected as "file exceeds
+        the limit", which reads as a bug on a file under it. Only the unpacked limit may
+        reject it now.
         """
-        asset = b"x" * (MAX_BUNDLE_SIZE + 1)  # deflates to a few KB
+        upload_cap = 1024 * 1024
+        monkeypatch.setattr(service_module, "resolve_skill_upload_limit", AsyncMock(return_value=upload_cap))
+        asset = b"x" * (upload_cap + 1)  # deflates to a few KB
         data = _zip_bytes(
             {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/template.bin": asset},
             compression=zipfile.ZIP_DEFLATED,
         )
-        assert len(data) < MAX_BUNDLE_SIZE
+        assert len(data) < upload_cap
         detail = await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
         assert {f.path for f in detail.files} == {SKILL_MD, "assets/template.bin"}
 
