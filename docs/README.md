@@ -9,6 +9,7 @@
 | [`constitution.md`](constitution.md) | 架构铁律 C1–C7(双 DB / 多租户 / 权限 / 分层 / 错误码 / 安全)——不可违反 |
 | [`SDD-Guide.md`](SDD-Guide.md) | 开发流程总纲:流程分级、★ 暂停点、偏差处理、测试分层、harness 现状 |
 | `../AGENTS.md` | 全局 agent 规则入口(各子项目规则按目录自动加载) |
+| [`security-response.md`](security-response.md) | 漏洞报告怎么接、怎么定级、怎么修、怎么发公告;对外承诺见根目录 `SECURITY.md` |
 
 ## 架构(子系统深度)
 
