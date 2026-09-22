@@ -4,6 +4,7 @@
 
 .git
 .coaligne
+docker
 node_modules
 __pycache__
 .venv
