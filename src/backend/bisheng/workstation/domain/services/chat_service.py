@@ -1481,12 +1481,25 @@ async def _agent_stream_chat_completion(
 
             # ---- Step 3: process uploaded files ----
             failure_stage = 'document'
+            stream_stage['value'] = 'document'
+            stream_stage['deadline'] = None
+            document_started = time.monotonic()
+            if data.files:
+                logger.info('portal_qa_document_started file_count={}', len(data.files))
             file_context, image_bases64 = await _process_agent_files(
                 data, model_info, login_user, ws_config,
             )
+            document_elapsed = time.monotonic() - document_started
+            # 附件处理只受问答总期限约束。保留知识检索的剩余预算。
+            if retrieval_deadline is not None:
+                retrieval_deadline += document_elapsed
+            if data.files:
+                logger.info('portal_qa_document_completed elapsed_ms={}', int(document_elapsed * 1000))
 
             # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
             failure_stage = 'retrieval'
+            stream_stage['value'] = 'retrieval'
+            stream_stage['deadline'] = retrieval_deadline
             if portal_context:
                 retrieved_knowledge_context, retrieval_result = await _unified_portal_context(
                     request, data, login_user, department_file_view_access_service,
@@ -1978,6 +1991,8 @@ async def _agent_stream_chat_completion(
                                 int((time.monotonic() - stream_stage.get('model_started', request_started)) * 1000))
                 yield chunk
         except asyncio.TimeoutError:
+            logger.warning('portal_qa_timeout stage={} elapsed_ms={}',
+                           stream_stage['value'], int((time.monotonic() - request_started) * 1000))
             yield stream_error_sse(RuntimeError('question budget exhausted'),
                                    stage=stream_stage['value'], had_output=stream_stage['had_output'])
         finally:

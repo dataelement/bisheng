@@ -40,6 +40,8 @@ def repository():
         repo.Department,
         repo.Membership,
         repo.Dictionary,
+        repo.Comment,
+        repo.AnswerVote,
     ]
     for model in models:
         model.__table__.create(engine, checkfirst=True)
@@ -264,6 +266,9 @@ def test_export_counts_identity_dates_and_csv_round_trip(repository, tmp_path):
     assert details[1]["专家账号"] == details[1]["专家岗位"] == details[1]["专家组织路径"] == ""
     assert details[2]["回答ID"] == details[2]["专家姓名"] == ""
     assert summaries[1]["首个有效回答时间"] == ""
+    assert summaries[1]["其它用户首次追问时间"] == summaries[1]["首次有用点击时间"] == ""
+    assert details[0]["其它用户首次点赞时间"] == details[0]["首次有用点击时间"] == ""
+    assert details[2]["其它用户首次点赞时间"] == details[2]["首次有用点击时间"] == ""
     assert (output / "回答明细.csv").read_bytes().startswith(b"\xef\xbb\xbf")
     assert not (output / "未完成.txt").exists()
     assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
@@ -371,3 +376,78 @@ def test_empty_selection_still_writes_headers(repository, tmp_path):
     totals = export_csv(repo, output, date(2030, 1, 1), date(2030, 1, 2))
     assert totals == {"问题数": 0, "有效回答数": 0, "明细行数": 0}
     assert rows(output / "问题汇总.csv") == rows(output / "回答明细.csv") == []
+
+
+def test_first_interactions_exclude_self_comments_and_inactive_answers(repository, tmp_path):
+    repo, statements = repository
+    with repo.session.bind.begin() as connection:
+        connection.execute(
+            repo.Comment.__table__.insert(),
+            [
+                {
+                    "question_id": qid,
+                    "answer_id": 0,
+                    "tenant_id": tid,
+                    "user_id": uid,
+                    "is_follow_up": followup,
+                    "content": "追问或评论",
+                    "created_at": datetime(2026, 9, 20, hour),
+                }
+                for qid, tid, uid, followup, hour in [
+                    (1, 1, 10, True, 8),  # 原提问人的更早追问不计入。
+                    (1, 1, 30, False, 9),  # 其他用户的普通评论不计入。
+                    (1, 1, 30, True, 13),
+                    (1, 1, 40, True, 12),  # 最早的其他用户追问。
+                    (1, 2, 50, True, 7),  # 其他租户的记录不计入。
+                    (2, 1, 10, True, 8),
+                ]
+            ],
+        )
+        connection.execute(
+            repo.AnswerVote.__table__.insert(),
+            [
+                {"answer_id": aid, "user_id": uid, "vote_type": kind, "created_at": datetime(2026, 9, 20, hour)}
+                for aid, uid, kind, hour in [
+                    (11, 20, "helpful", 11),  # 作者自己点击有用。
+                    (11, 30, "helpful", 15),
+                    (11, 40, "helpful", 14),  # 最早的其他用户点击有用。
+                    (11, 50, "support", 8),  # 历史支持记录不能冒充有用。
+                    (12, 20, "helpful", 10),  # 另一条匿名回答的自赞，汇总仍计入。
+                    (13, 30, "helpful", 7),  # 已删除回答不计入。
+                    (14, 30, "helpful", 6),  # 其他租户的回答不计入。
+                ]
+            ],
+        )
+    statements.clear()
+    output = tmp_path / "interactions"
+    export_csv(repo, output, date(2026, 9, 20), date(2026, 9, 20))
+    summaries, details = rows(output / "问题汇总.csv"), rows(output / "回答明细.csv")
+    assert summaries[0]["其它用户首次追问时间"] == "2026-09-20 12:00:00"
+    assert summaries[0]["首次有用点击时间"] == "2026-09-20 10:00:00"
+    assert details[0]["其它用户首次点赞时间"] == "2026-09-20 14:00:00"
+    assert details[0]["首次有用点击时间"] == "2026-09-20 11:00:00"
+    assert details[1]["其它用户首次点赞时间"] == ""
+    assert details[1]["首次有用点击时间"] == "2026-09-20 10:00:00"
+    assert summaries[1]["其它用户首次追问时间"] == summaries[1]["首次有用点击时间"] == ""
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+
+
+@pytest.mark.parametrize("expert_id,expected", [(1, "2026-09-20 13:00:00"), (None, "")])
+def test_first_other_vote_resolves_legacy_author_or_leaves_blank(repository, tmp_path, expert_id, expected):
+    repo, _ = repository
+    with repo.session.bind.begin() as connection:
+        connection.execute(
+            repo.Answer.__table__.update().where(repo.Answer.id == 11).values(user_id=None, expert_id=expert_id)
+        )
+        connection.execute(
+            repo.AnswerVote.__table__.insert(),
+            [
+                {"answer_id": 11, "user_id": uid, "vote_type": "helpful", "created_at": datetime(2026, 9, 20, hour)}
+                for uid, hour in [(20, 12), (30, 13)]
+            ],
+        )
+    output = tmp_path / "legacy-author"
+    export_csv(repo, output)
+    detail = rows(output / "回答明细.csv")[0]
+    assert detail["其它用户首次点赞时间"] == expected
+    assert detail["首次有用点击时间"] == "2026-09-20 12:00:00"

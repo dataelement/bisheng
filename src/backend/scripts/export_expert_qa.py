@@ -53,6 +53,8 @@ DETAIL_FIELDS = (
         "提问人组织路径",
         "专家组织路径",
         "采纳时间说明",
+        "其它用户首次点赞时间",
+        "首次有用点击时间",
     ]
 )
 SUMMARY_FIELDS = [
@@ -65,6 +67,8 @@ SUMMARY_FIELDS = [
     "提问人账号",
     "提问人组织路径",
     "采纳时间说明",
+    "其它用户首次追问时间",
+    "首次有用点击时间",
 ]
 CAREER_TYPES = {
     "major": "expert_major",
@@ -145,13 +149,14 @@ class ExportRepository:
 
     def __init__(self, session: Any) -> None:
         from bisheng.database.models.department import Department, UserDepartment
-        from bisheng.database.models.qa_expert import Answer, AnswerAdopt, Expert, Question
+        from bisheng.database.models.qa_expert import Answer, AnswerAdopt, AnswerVote, Comment, Expert, Question
         from bisheng.dictionary.domain.models.system_dictionary import SystemDictionary
         from bisheng.user.domain.models.user import User
 
         self.session = session
         self.Question, self.Answer, self.Adopt = Question, Answer, AnswerAdopt
         self.Expert, self.User = Expert, User
+        self.Comment, self.AnswerVote = Comment, AnswerVote
         self.Department, self.Membership, self.Dictionary = Department, UserDepartment, SystemDictionary
 
     def rows(self, statement: Any) -> list[dict]:
@@ -221,7 +226,12 @@ class ExportRepository:
             user_ids = {row["user_id"] for row in questions + answers + experts if row.get("user_id")}
             users = self.lookup(self.User, "user_id user_name external_id", "user_id", user_ids)
             memberships = self.lookup(self.Membership, "user_id department_id is_primary", "user_id", user_ids)
-            yield questions, answers, adopts, experts, users, memberships
+            comments = self.lookup(self.Comment, "question_id user_id is_follow_up created_at", "question_id", ids)
+            # 投票表没有租户字段，仅查询本租户已筛选的有效回答，避免无关或已删除回答参与统计。
+            votes = self.lookup(
+                self.AnswerVote, "answer_id user_id vote_type created_at", "answer_id", {row["id"] for row in answers}
+            )
+            yield questions, answers, adopts, experts, users, memberships, comments, votes
             last_id = questions[-1]["id"]
 
 
@@ -259,7 +269,7 @@ def organization_fields(department_id: Any, departments: dict) -> dict[str, str]
 
 
 def build_rows(batch: tuple, departments: dict, dictionaries: dict, people: dict):
-    questions, answers, adopts, experts, users, memberships = batch
+    questions, answers, adopts, experts, users, memberships, comments, votes = batch
     expert_map = {row["id"]: row for row in experts}
     user_map = {row["user_id"]: row for row in users}
     primary = defaultdict(list)
@@ -270,6 +280,14 @@ def build_rows(batch: tuple, departments: dict, dictionaries: dict, people: dict
     for answer in answers:
         grouped[answer["question_id"]].append(answer)
     adopt_map = {row["answer_id"]: row for row in adopts}
+    followups = defaultdict(list)
+    for comment in comments:
+        if comment["is_follow_up"]:
+            followups[comment["question_id"]].append(comment)
+    helpful_votes = defaultdict(list)
+    for vote in votes:
+        if vote["vote_type"] == "helpful":
+            helpful_votes[vote["answer_id"]].append(vote)
 
     def identity(
         user_id: int | None,
@@ -335,12 +353,20 @@ def build_rows(batch: tuple, departments: dict, dictionaries: dict, people: dict
             "有用总数": sum(row["vote_count"] or 0 for row in active),
             "状态": "已解决" if accepted else "待采纳" if active else "待回答",
             "采纳时间说明": TIME_NOTE if question["resolved_at"] else "",
+            "其它用户首次追问时间": min(
+                (row["created_at"] for row in followups[question["id"]] if row["user_id"] != question["user_id"]),
+                default="",
+            ),
+            "首次有用点击时间": min(
+                (vote["created_at"] for answer in active for vote in helpful_votes[answer["id"]]), default=""
+            ),
         }
         details = []
         for answer in active:
             expert = expert_map.get(answer["expert_id"], {})
+            author_id = answer["user_id"] or expert.get("user_id")
             author = identity(
-                answer["user_id"] or expert.get("user_id"),
+                author_id,
                 answer["expert_name"],
                 answer["anonymous"],
                 answer["reveal_on_public"],
@@ -361,6 +387,15 @@ def build_rows(batch: tuple, departments: dict, dictionaries: dict, people: dict
                     "采纳时间": adoption.get("created_at", ""),
                     "有用数": answer["vote_count"] or 0,
                     "采纳时间说明": TIME_NOTE if adoption else "缺少采纳时间记录" if adopted else "",
+                    "其它用户首次点赞时间": min(
+                        (
+                            vote["created_at"]
+                            for vote in helpful_votes[answer["id"]]
+                            if author_id is not None and vote["user_id"] != author_id
+                        ),
+                        default="",
+                    ),
+                    "首次有用点击时间": min((vote["created_at"] for vote in helpful_votes[answer["id"]]), default=""),
                 }
             )
         if not details:
@@ -400,9 +435,13 @@ def export_csv(
         csv.writer(stream).writerow(["external_id", "岗位"])
     (output / "导出口径.txt").write_text(
         "按提问日期筛选，结束日期包含当天；回答、采纳、计数为导出时的当前数据，不是历史时点快照。\n"
-        "每个问题一行汇总；每个有效回答一行明细；未回答问题保留一行。评论、追问和已删除回答不计入。\n"
+        "每个问题一行汇总；每个有效回答一行明细；未回答问题保留一行。评论、追问和已删除回答不计入回答数。\n"
         "回答明细中的问题回答数、采纳数、浏览数重复展示，汇总请使用问题汇总.csv。\n"
         "时间按数据库保存的北京时间输出；首次有效回答时间按当前未删除回答计算。\n"
+        "其它用户首次追问时间：该问题 is_follow_up=true 的最早记录，排除原提问人，不含普通评论。\n"
+        "其它用户首次点赞时间：本回答最早的 helpful 记录，排除回答作者；作者无法确认时留空。\n"
+        "首次有用点击时间：本回答最早的 helpful 记录，包含作者；问题汇总取所有有效回答的最早值。\n"
+        "回答点赞与有用在当前后端为同一操作；上述时间仅依据现存记录，取消或删除的历史操作无法还原。\n"
         "首次采纳时间取问题 resolved_at；回答采纳时间取独立采纳记录。" + TIME_NOTE + "。\n"
         "姓名、组织、专家岗位取当前档案；部门、科室沿主组织父链按 org_level=dept/office 自动查询。\n"
         "未打标时继续向上查找至根节点，找不到部门或科室的对应字段留空；补充 CSV 仅填补缺失岗位。\n"
