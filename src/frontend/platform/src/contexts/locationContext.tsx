@@ -92,7 +92,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           enableEtl4lm: res.enable_etl4lm,
           multiTenantEnabled: !!res.multi_tenant_enabled,
           personalTokenEnabled: !!res.personal_token_enabled,
-          openApiManagementEnabled: !!res.open_api_management_enabled
+          openApiManagementEnabled: !!res.open_api_management_enabled,
+          // Off unless an operator turned it on: the builder marks the node as
+          // disabled rather than letting the author discover it at run time.
+          codeNodeEnabled: !!res.workflow?.code_node_enabled
         }));
 
         // backend version
