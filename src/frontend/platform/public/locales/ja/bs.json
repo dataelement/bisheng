@@ -2061,7 +2061,7 @@
     "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
   },
   "dsh": {
-    "searchDepartmentsAndUsers": "部門・ユーザー・IDを検索",
+    "searchUsername": "ユーザー名で検索",
     "departmentAndMember": "部門 / メンバー",
     "configuredQuota": "設定枠（Token/月）",
     "configuredQuotaWan": "設定枠（万 Token/月）",

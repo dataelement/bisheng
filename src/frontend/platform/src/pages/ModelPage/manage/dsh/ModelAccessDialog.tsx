@@ -3,7 +3,8 @@ import { Button, LoadButton } from '@/components/bs-ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/bs-ui/dialog'
 import { Input } from '@/components/bs-ui/input'
 import { useToast } from '@/components/bs-ui/toast/use-toast'
-import { getDshModelSubjects, getDshModelUserPermissions, isDshSeatLimitReached, saveDshSubjectPolicy } from '@/controllers/API/dsh'
+import { getDshModelSubjects, getDshModelUserPermissions, saveDshSubjectPolicy } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type { DshModelUserPermission, DshSubjectPolicyInventory, DshSubjectPolicy } from '@/types/dsh'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -151,7 +152,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                 description: t(complete ? 'dsh.policySaved' : 'dsh.policySaveFailed'),
             })
         } catch (error) {
-            const errorKey = isDshSeatLimitReached(error) ? 'dsh.seatLimitGrantHelp' : 'dsh.policySaveFailed'
+            const errorKey = getDshRequestErrorKey(error) ?? 'dsh.policySaveFailed'
             setSaveError(errorKey)
             setMembersVersion((value) => value + 1)
             message({ variant: 'error', description: t(errorKey) })
@@ -169,8 +170,8 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
             setInventory(await withinSaveDeadline(getDshModelSubjects(modelId)))
             setMembersVersion((value) => value + 1)
             setSaveError(null)
-        } catch {
-            setSaveError('dsh.policySaveFailed')
+        } catch (error) {
+            setSaveError(getDshRequestErrorKey(error) ?? 'dsh.policySaveFailed')
         } finally {
             busy.current = false
             setSaving(false)
@@ -206,8 +207,8 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                         <div className="flex shrink-0 justify-end gap-2">
                             <Input
                                 boxClassName="w-72"
-                                aria-label={t('dsh.searchDepartmentsAndUsers')}
-                                placeholder={t('dsh.searchDepartmentsAndUsers')}
+                                aria-label={t('dsh.searchUsername')}
+                                placeholder={t('dsh.searchUsername')}
                                 value={query}
                                 disabled={saving}
                                 onChange={(event) => setQuery(event.target.value)}

@@ -1,18 +1,19 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SeatsView } from './SeatsView'
+import { useState } from 'react'
 import {
     getDshSeats,
     commandDshSeat,
 } from '@/controllers/API/dsh'
-import type { DshPage, DshSeat } from '@/types/dsh'
+import type { DshOperation, DshOperationRef, DshPage, DshSeat } from '@/types/dsh'
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({ t: (key: string) => key }),
 }))
-vi.mock('@/controllers/API/dsh', () => ({
+vi.mock('@/controllers/API/dsh', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@/controllers/API/dsh')>(),
     getDshSeats: vi.fn(),
     commandDshSeat: vi.fn(),
-    isDshRequestRejected: () => false,
 }))
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({
     bsConfirm: ({ onOk }: { onOk: (next: () => void) => void }) =>
@@ -198,5 +199,72 @@ it('shows department and omits a zero count after no sessions', async () => {
     await screen.findByText('Engineering')
     expect(screen.getByText('dsh.NO_SESSIONS').closest('td')?.textContent?.trim()).toBe('dsh.NO_SESSIONS')
     expect(screen.queryByRole('columnheader', { name: 'dsh.tenant' })).toBeNull()
+    unmount()
+})
+
+function SeatCommandHarness() {
+    const [operations, setOperations] = useState<Record<string, DshOperation>>({})
+    function handleOperation(ref: DshOperationRef, result?: DshOperation) {
+        if (result) setOperations((old) => ({ ...old, [ref.operation_id]: result }))
+    }
+    return <SeatsView operations={operations} revision={0} onOperation={handleOperation} />
+}
+
+it.each(['receipt', 'http', 'business'])(
+    'shows seat capacity from a %s failure beside the seat and unlocks a fresh retry',
+    async (source) => {
+        vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), state: 'REVOKED' }], has_more: false, next_cursor: null })
+        if (source === 'receipt') {
+            vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'FAILED', result_code: 'seat_limit_reached' } as DshOperation)
+        } else {
+            vi.mocked(commandDshSeat).mockRejectedValueOnce({ response: {
+                status: source === 'http' ? 403 : 200,
+                data: source === 'http' ? { error: { code: 'seat_limit_reached' } } : { status_code: 26112 },
+            } })
+        }
+        const { unmount } = render(<SeatCommandHarness />)
+        fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
+        expect(await screen.findByRole('alert')).toHaveTextContent('dsh.seatLimitGrantHelp')
+        expect(screen.getByRole('alert').closest('tr')).toHaveTextContent('dsh.REVOKED')
+        expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
+        const previousId = vi.mocked(commandDshSeat).mock.calls[0][3]
+        vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'SUCCEEDED', result_code: null } as DshOperation)
+        fireEvent.click(screen.getByRole('button', { name: 'dsh.reassign' }))
+        await waitFor(() => expect(commandDshSeat).toHaveBeenCalledTimes(2))
+        expect(vi.mocked(commandDshSeat).mock.calls[1][3]).not.toBe(previousId)
+        expect(screen.queryByRole('alert')).toBeNull()
+        unmount()
+    },
+)
+
+it('shows a capacity failure delivered after an operation was accepted', async () => {
+    vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), state: 'REVOKED' }], has_more: false, next_cursor: null })
+    vi.mocked(commandDshSeat).mockResolvedValue({ status: 'PROCESSING' } as DshOperation)
+    const onOperation = vi.fn()
+    const { rerender, unmount } = render(<SeatsView operations={{}} revision={0} onOperation={onOperation} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
+    await waitFor(() => expect(onOperation).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('alert')).toBeNull()
+    const id = vi.mocked(commandDshSeat).mock.calls[0][3]
+    rerender(<SeatsView operations={{ [id]: { status: 'FAILED', result_code: 'seat_limit_reached' } as DshOperation }} revision={0} onOperation={onOperation} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('dsh.seatLimitGrantHelp')
+    expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
+    unmount()
+})
+
+it('shows a service error while preserving the pending operation and clears it on confirmed success', async () => {
+    vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), state: 'REVOKED' }], has_more: false, next_cursor: null })
+    vi.mocked(commandDshSeat).mockRejectedValue({ response: { status: 503, data: { error: { code: 'authorization_unavailable' } } } })
+    const onOperation = vi.fn()
+    const { rerender, unmount } = render(<SeatsView operations={{}} revision={0} onOperation={onOperation} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('api_errors:26125')
+    expect(screen.getByRole('button', { name: 'dsh.PROCESSING' })).toBeDisabled()
+    expect(onOperation).toHaveBeenCalledTimes(1)
+    expect(onOperation.mock.calls[0][0].rejected).toBeUndefined()
+    const id = vi.mocked(commandDshSeat).mock.calls[0][3]
+    rerender(<SeatsView operations={{ [id]: { status: 'SUCCEEDED', result_code: null } as DshOperation }} revision={0} onOperation={onOperation} />)
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
     unmount()
 })

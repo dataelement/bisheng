@@ -14,6 +14,7 @@ import {
     getDshSeats,
     isDshRequestRejected,
 } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type {
     DshOperation,
     DshOperationRef,
@@ -43,6 +44,7 @@ export function SeatsView({
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
     const [pending, setPending] = useState<Record<string, string>>({})
+    const [commandErrors, setCommandErrors] = useState<Record<string, string>>({})
     const commandLocks = useRef(new Set<string>())
     useEffect(() => {
         for (const [seatId, operationId] of Object.entries(pending)) {
@@ -106,6 +108,11 @@ export function SeatsView({
                     tenant_id: item.tenant_id,
                 }
                 ref.retry = async () => {
+                    setCommandErrors((old) => {
+                        const nextErrors = { ...old }
+                        delete nextErrors[item.seat_id]
+                        return nextErrors
+                    })
                     try {
                         onOperation(
                             ref,
@@ -118,7 +125,15 @@ export function SeatsView({
                             ),
                         )
                     } catch (failure) {
-                        if (isDshRequestRejected(failure)) {
+                        const rejected = isDshRequestRejected(failure)
+                        const errorKey = getDshRequestErrorKey(failure)
+                        if (errorKey || rejected) {
+                            setCommandErrors((old) => ({
+                                ...old,
+                                [item.seat_id]: errorKey ?? 'dsh.rejected',
+                            }))
+                        }
+                        if (rejected) {
                             onOperation({ ...ref, rejected: true })
                             commandLocks.current.delete(item.seat_id)
                             setPending((old) => {
@@ -202,6 +217,11 @@ export function SeatsView({
                             {data.items.map((item) => {
                                 const operation =
                                     operations[pending[item.seat_id]]
+                                const commandError = operation?.status === 'FAILED'
+                                    ? getDshRequestErrorKey(operation) ?? 'dsh.FAILED'
+                                    : operation?.status === 'SUCCEEDED'
+                                        ? undefined
+                                        : commandErrors[item.seat_id]
                                 const busy =
                                     !!pending[item.seat_id] &&
                                     (!operation ||
@@ -259,6 +279,11 @@ export function SeatsView({
                                                     )}
                                                 </Button>
                                             </div>
+                                            {commandError && (
+                                                <p role="alert" className="mt-1 max-w-xs text-xs text-red-600">
+                                                    {t(commandError)}
+                                                </p>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 )

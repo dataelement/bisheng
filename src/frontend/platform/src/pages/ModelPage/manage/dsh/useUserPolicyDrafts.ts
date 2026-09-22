@@ -7,6 +7,7 @@ import {
 } from '@/controllers/API/dsh'
 import type { DshModelUserPermission, DshOperation } from '@/types/dsh'
 import { createDshOperationId } from '@/util/dshOperationId'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type { PolicyDraft } from './SubjectPolicyControls'
 
 type Entry = {
@@ -161,19 +162,22 @@ export function useUserPolicyDrafts(
                         setEntry({ ...entry, operationId: null })
                         throw failure
                     }
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             } else {
                 try {
                     result = await resolveOperation(entry.operationId, tenantId)
-                } catch {
+                } catch (failure) {
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             }
             if (result.status !== 'SUCCEEDED' && result.status !== 'FAILED') {
                 try {
                     result = await resolveOperation(entry.operationId!, tenantId)
-                } catch {
+                } catch (failure) {
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             }
@@ -192,7 +196,8 @@ export function useUserPolicyDrafts(
                     operationId: null,
                     operationVersion: saved.direct_version,
                 })
-            } catch {
+            } catch (failure) {
+                if (getDshRequestErrorKey(failure)) throw failure
                 return false
             }
             return true

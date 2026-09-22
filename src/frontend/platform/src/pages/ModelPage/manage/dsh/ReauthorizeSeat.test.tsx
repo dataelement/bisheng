@@ -5,7 +5,10 @@ import { resolveOperation } from './useUserPolicyDrafts'
 import { ReauthorizeSeat, SeatRestoreContext } from './ReauthorizeSeat'
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({ bsConfirm: ({onOk}: {onOk:(done:()=>void)=>void}) => onOk(()=>{}) }))
-vi.mock('@/controllers/API/dsh', () => ({ commandDshSeat: vi.fn(), getDshSeats: vi.fn(), isDshRequestRejected: () => false }))
+vi.mock('@/controllers/API/dsh', async (importOriginal) => ({
+    ...await importOriginal<typeof import('@/controllers/API/dsh')>(),
+    commandDshSeat: vi.fn(), getDshSeats: vi.fn(),
+}))
 vi.mock('./useUserPolicyDrafts', () => ({ resolveOperation: vi.fn(), withinSaveDeadline: (promise: Promise<unknown>) => promise }))
 const seat = { user_id: '20', tenant_id: '2', state: 'REVOKED', grant_version: 4 }
 function mount() {
@@ -39,4 +42,51 @@ it('resolves the original operation after an ambiguous response instead of issui
     await waitFor(()=>expect(done).toHaveBeenCalledOnce())
     expect(commandDshSeat).toHaveBeenCalledOnce()
     expect(resolveOperation).toHaveBeenCalledWith(vi.mocked(commandDshSeat).mock.calls[0][3],2)
+})
+
+it.each(['command', 'poll', 'recovery', 'http'])(
+    'shows capacity guidance from the %s response and permits a fresh authorization after failure',
+    async (source) => {
+        const failure = { status: 'FAILED', result_code: 'seat_limit_reached' }
+        vi.mocked(getDshSeats).mockResolvedValue({ items: [seat], has_more: false, next_cursor: null } as never)
+        if (source === 'command') vi.mocked(commandDshSeat).mockResolvedValueOnce(failure as never)
+        if (source === 'poll') {
+            vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'PROCESSING' } as never)
+            vi.mocked(resolveOperation).mockResolvedValueOnce(failure as never)
+        }
+        if (source === 'recovery') {
+            vi.mocked(commandDshSeat).mockRejectedValueOnce(new Error('connection lost'))
+            vi.mocked(resolveOperation).mockResolvedValueOnce(failure as never)
+        }
+        if (source === 'http') {
+            vi.mocked(commandDshSeat).mockRejectedValueOnce({ response: { status: 403, data: { error: { code: 'seat_limit_reached' } } } })
+        }
+        const done = mount()
+        fireEvent.click(screen.getByRole('button'))
+        if (source === 'recovery') {
+            await screen.findByText('dsh.reauthorizeFailed')
+            fireEvent.click(screen.getByRole('button'))
+        }
+        expect(await screen.findByRole('alert')).toHaveTextContent('dsh.seatLimitGrantHelp')
+        expect(screen.queryByText('dsh.reauthorizeFailed')).toBeNull()
+        expect(done).toHaveBeenCalledTimes(0)
+        const previousId = vi.mocked(commandDshSeat).mock.calls[0][3]
+        vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'SUCCEEDED' } as never)
+        fireEvent.click(screen.getByRole('button'))
+        await waitFor(() => expect(done).toHaveBeenCalledOnce())
+        expect(vi.mocked(commandDshSeat).mock.calls[1][3]).not.toBe(previousId)
+        expect(screen.queryByRole('alert')).toBeNull()
+    },
+)
+it.each([
+    ['license_expired', 'api_errors:26115'],
+    ['authorization_unavailable', 'api_errors:26125'],
+    ['unknown_failure', 'dsh.reauthorizeFailed'],
+])('keeps %s distinct from seat capacity', async (code, key) => {
+    vi.mocked(getDshSeats).mockResolvedValue({ items: [seat], has_more: false, next_cursor: null } as never)
+    vi.mocked(commandDshSeat).mockResolvedValue({ status: 'FAILED', result_code: code } as never)
+    const done = mount()
+    fireEvent.click(screen.getByRole('button'))
+    expect(await screen.findByRole('alert')).toHaveTextContent(key)
+    expect(done).toHaveBeenCalledTimes(0)
 })

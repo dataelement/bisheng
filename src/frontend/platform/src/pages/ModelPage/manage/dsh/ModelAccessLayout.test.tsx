@@ -113,7 +113,7 @@ describe('model access layout', () => {
         )
         fireEvent.click(root)
         expect(screen.queryByText('Engineering')).toBeNull()
-        fireEvent.change(screen.getByRole('textbox', { name: 'dsh.searchDepartmentsAndUsers' }), {
+        fireEvent.change(screen.getByRole('textbox', { name: 'dsh.searchUsername' }), {
             target: { value: 'Platform' },
         })
         expect(screen.getByText('Organization')).toBeTruthy()

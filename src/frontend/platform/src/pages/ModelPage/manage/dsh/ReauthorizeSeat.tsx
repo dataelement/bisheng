@@ -1,6 +1,7 @@
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { Button } from '@/components/bs-ui/button'
 import { commandDshSeat, getDshSeats, isDshRequestRejected } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import { createDshOperationId } from '@/util/dshOperationId'
 import { createContext, useContext, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,18 +9,24 @@ import { resolveOperation, withinSaveDeadline } from './useUserPolicyDrafts'
 
 export const SeatRestoreContext = createContext<{ tenantId: number; onRestored: () => void } | null>(null)
 
-export function ReauthorizeSeat({ userId, name, disabled }: { userId: number; name: string; disabled: boolean }) {
+interface ReauthorizeSeatProps {
+    userId: number
+    name: string
+    disabled: boolean
+}
+
+export function ReauthorizeSeat({ userId, name, disabled }: ReauthorizeSeatProps) {
     const { t } = useTranslation()
     const scope = useContext(SeatRestoreContext)
     const operation = useRef<string | null>(null)
     const locked = useRef(false)
     const [busy, setBusy] = useState(false)
-    const [error, setError] = useState(false)
+    const [error, setError] = useState<string | null>(null)
     async function restore() {
         if (!scope || locked.current) return
         locked.current = true
         setBusy(true)
-        setError(false)
+        setError(null)
         try {
             let result
             if (operation.current) {
@@ -38,10 +45,10 @@ export function ReauthorizeSeat({ userId, name, disabled }: { userId: number; na
             }
             operation.current = null
             if (result.status === 'SUCCEEDED') scope.onRestored()
-            else setError(true)
+            else setError(getDshRequestErrorKey(result) ?? 'dsh.reauthorizeFailed')
         } catch (failure) {
             if (isDshRequestRejected(failure)) operation.current = null
-            setError(true)
+            setError(getDshRequestErrorKey(failure) ?? 'dsh.reauthorizeFailed')
         } finally {
             locked.current = false
             setBusy(false)
@@ -60,7 +67,7 @@ export function ReauthorizeSeat({ userId, name, disabled }: { userId: number; na
             <Button size="sm" variant="outline" className="h-6 py-0 leading-none" disabled={disabled || busy || !scope} onClick={handleRestore}>
                 {t(busy ? 'dsh.reauthorizePending' : 'dsh.reauthorize')}
             </Button>
-            {error && <p role="alert" className="text-xs text-red-600">{t('dsh.reauthorizeFailed')}</p>}
+            {error && <p role="alert" className="text-xs text-red-600">{t(error)}</p>}
         </div>
     )
 }

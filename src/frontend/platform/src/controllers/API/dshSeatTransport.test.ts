@@ -1,9 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/components/bs-ui/toast/use-toast', () => ({ toast: vi.fn() }))
 import request from '@/controllers/request'
-import { isDshSeatLimitReached, saveDshSubjectPolicy } from './dsh'
+import { commandDshSeat, isDshSeatLimitReached, saveDshSubjectPolicy } from './dsh'
 
 describe('seat errors through the platform HTTP interceptor', () => {
+    it('exposes a failed reassign receipt from a successful HTTP response', async () => {
+        vi.stubGlobal('localStorage', { getItem: () => null })
+        const previous = request.defaults.adapter
+        const receipt = { operation_id: 'reassign-full', status: 'FAILED', result_code: 'seat_limit_reached' }
+        request.defaults.adapter = async (config) => ({
+            status: 200, statusText: 'OK', headers: {}, config,
+            data: { status_code: 200, data: receipt },
+        })
+        try {
+            const result = await commandDshSeat('20', '2', 'reassign', receipt.operation_id, 4)
+            expect(result).toEqual(receipt)
+            expect(isDshSeatLimitReached(result)).toBe(true)
+        } finally {
+            request.defaults.adapter = previous
+            vi.unstubAllGlobals()
+        }
+    })
     it('preserves capacity rejection from an HTTP 200 business response', async () => {
         vi.stubGlobal('localStorage', { getItem: () => null })
         const previous = request.defaults.adapter
