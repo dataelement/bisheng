@@ -101,7 +101,7 @@ bash scripts/pack_linsight_skill.sh src/backend/bisheng/linsight/builtin_skills/
 ```
 
 脚本会先校验后端在导入时会卡的那几条（SKILL.md 在包根、frontmatter `name` 等于目录名且是 kebab-case、
-zip ≤10MB、解包 ≤500MB，均为系统配置默认值），失败在本地就报出来，不用等管理端返回 11051/11052/11059。
+zip ≤200MB、解包 ≤500MB，均为系统配置默认值），失败在本地就报出来，不用等管理端返回 11051/11052/11059。
 两个上限可在系统配置里调：`linsight.skill_upload_max_size_mb`、`linsight.skill_unpacked_max_size_mb`
 （解包上限不低于上传上限，最高 1024MB）。
 

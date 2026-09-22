@@ -20,8 +20,8 @@ import { getSkillErrorMessage } from "./skillErrors";
 const ACCEPTED_SUFFIXES = ['.md', '.zip', '.skill'];
 // Fallback only — mirrors the backend default; the live value is fetched when the dialog opens.
 const DEFAULT_UPLOAD_LIMIT: SkillUploadLimit = {
-    max_size_bytes: 10 * 1024 * 1024,
-    max_size_mb: 10,
+    max_size_bytes: 200 * 1024 * 1024,
+    max_size_mb: 200,
     max_unpacked_bytes: 500 * 1024 * 1024,
     max_unpacked_mb: 500,
 };
