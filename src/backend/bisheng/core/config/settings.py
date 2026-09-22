@@ -165,9 +165,26 @@ class WorkflowConf(BaseModel):
         description="Auto rerun an already-ended standalone workflow conversation when opened",
     )
 
+    code_node_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether workflows may run their Code node. Off unless an operator turns it on: "
+            "the node executes user-supplied Python with this process's privileges and there "
+            "is no execution sandbox yet, so while it is on, everyone who can edit a workflow "
+            "can run commands on the server."
+        ),
+    )
+
     @field_validator("auto_rerun_on_open", mode="before")
     @classmethod
     def validate_auto_rerun_on_open(cls, value: object) -> bool:
+        return value if isinstance(value, bool) else False
+
+    @field_validator("code_node_enabled", mode="before")
+    @classmethod
+    def validate_code_node_enabled(cls, value: object) -> bool:
+        # Anything but a literal `true` leaves the node off: a typo in the
+        # config must not be the thing that opens code execution.
         return value if isinstance(value, bool) else False
 
 
