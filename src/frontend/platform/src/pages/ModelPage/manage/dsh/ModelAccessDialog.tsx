@@ -81,6 +81,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
         )
     })
     const hasChanges = dirty.length > 0 || users.hasChanges
+    const canSave = hasChanges || users.hasPending || Object.keys(drafts).length > 0
     const valid = users.valid && dirty.every((item) => quotaValid(drafts[policyKey(item)].limit))
     const changeDepartment = (item: DshSubjectPolicy, value: string) => {
         setSaveError(null)
@@ -104,7 +105,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
         else onClose()
     }
     async function save() {
-        if (!modelId || !inventory || busy.current || !valid || (!hasChanges && !users.hasPending)) return
+        if (!modelId || !inventory || busy.current || !valid || !canSave) return
         busy.current = true
         setSaving(true)
         setSaveError(null)
@@ -140,7 +141,10 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                 })
             }
             setMembersVersion((value) => value + 1)
-            if (complete) setSavedRevision((value) => value + 1)
+            if (complete) {
+                setDrafts({})
+                setSavedRevision((value) => value + 1)
+            }
             setSaveError(complete ? null : 'dsh.policySaveFailed')
             message({
                 variant: complete ? 'success' : 'error',
@@ -210,7 +214,7 @@ export function ModelAccessDialog({ model, onClose }: { model: DshAccessModel | 
                             />
                             <LoadButton
                                 loading={saving}
-                                disabled={(!hasChanges && !users.hasPending) || !valid}
+                                disabled={!canSave || !valid}
                                 onClick={save}
                             >
                                 {t(saving ? 'dsh.savingPolicies' : 'save')}

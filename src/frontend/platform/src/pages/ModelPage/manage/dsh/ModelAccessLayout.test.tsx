@@ -5,6 +5,7 @@ import {
     getDshModelUserPermissions,
     getDshOperation,
     saveDshPolicy,
+    saveDshSubjectPolicy,
 } from '@/controllers/API/dsh'
 import { ModelAccessDialog } from './ModelAccessDialog'
 import type { DshSubjectPolicyInventory, DshModelUserPermissionPage } from '@/types/dsh'
@@ -118,6 +119,21 @@ describe('model access layout', () => {
         expect(screen.getByText('Organization')).toBeTruthy()
         expect(screen.getByText('Engineering')).toBeTruthy()
         expect(screen.getByText('Platform')).toBeTruthy()
+    })
+    it('finishes editing after a rejected grant is changed back to zero', async () => {
+        vi.mocked(saveDshSubjectPolicy).mockRejectedValue({ status_code: 26112 })
+        render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+        fireEvent.click(await screen.findByRole('button', { name: 'Organization · dsh.editQuota' }))
+        const input = screen.getByRole('textbox', { name: 'Organization · dsh.configuredQuotaWan' })
+        fireEvent.change(input, { target: { value: '1000' } })
+        fireEvent.click(screen.getByRole('button', { name: 'save' }))
+        await waitFor(() => expect(saveDshSubjectPolicy).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(screen.getByRole('button', { name: 'save' })).toBeEnabled())
+        fireEvent.change(input, { target: { value: '0' } })
+        fireEvent.click(screen.getByRole('button', { name: 'save' }))
+        await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Organization · dsh.configuredQuotaWan' })).toBeNull())
+        expect(saveDshSubjectPolicy).toHaveBeenCalledTimes(1)
+        expect(screen.getByRole('button', { name: 'save' })).toBeDisabled()
     })
     it('keeps the single scrolling tree inside the bounded dialog', async () => {
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
