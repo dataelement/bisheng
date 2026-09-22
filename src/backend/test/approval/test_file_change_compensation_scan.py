@@ -511,3 +511,115 @@ async def test_compensation_recovered_hint_cannot_bypass_authoritative_completio
         current = await session.get(KnowledgeSpaceFileChangeRequest, 202)
     assert current is not None
     assert current.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED
+
+
+def _upload_stage(
+    *,
+    row_id: int,
+    upload_id: str,
+    state: str,
+    expire_at: datetime,
+):
+    return KnowledgeSpaceUploadStage(
+        id=row_id,
+        upload_id=upload_id,
+        tenant_id=11,
+        space_id=8,
+        uploader_user_id=7,
+        object_name=f"internal/{upload_id}",
+        file_name=f"{upload_id}.pdf",
+        file_size=100,
+        content_hash=f"{upload_id}-hash",
+        state=state,
+        expire_at=expire_at,
+    )
+
+
+async def test_cleanup_reclaims_upload_stages_that_would_otherwise_hold_quota(compensation_engine):
+    """A staged upload keeps charging the uploader's quota until it is reclaimed.
+
+    Two ways used to leave one charging forever: a rejected upload whose cleanup
+    never got past its recorded intent, and an upload that failed permanently and
+    was then abandoned past the stage's own expiry.
+    """
+    now = datetime.utcnow()
+    async with AsyncSession(compensation_engine) as session:
+        session.add_all(
+            [
+                _upload_stage(
+                    row_id=411,
+                    upload_id="rejected-never-started",
+                    state=KnowledgeSpaceUploadStageState.ATTACHED,
+                    expire_at=now + timedelta(days=1),
+                ),
+                _request(
+                    row_id=131,
+                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.CLOSED,
+                    execution_token=None,
+                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
+                    upload_stage_id=411,
+                    result_snapshot={"decision_action": "rejected", "cleanup_state": "pending"},
+                ),
+                _upload_stage(
+                    row_id=412,
+                    upload_id="failed-and-abandoned",
+                    state=KnowledgeSpaceUploadStageState.ATTACHED,
+                    expire_at=now - timedelta(days=1),
+                ),
+                _request(
+                    row_id=132,
+                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
+                    execution_token=None,
+                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
+                    upload_stage_id=412,
+                ),
+                # Still inside its retry window: the applicant can retry, so the
+                # bytes stay reserved and this is not cleanup work yet.
+                _upload_stage(
+                    row_id=413,
+                    upload_id="failed-but-retryable",
+                    state=KnowledgeSpaceUploadStageState.ATTACHED,
+                    expire_at=now + timedelta(days=1),
+                ),
+                _request(
+                    row_id=133,
+                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
+                    execution_token=None,
+                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
+                    upload_stage_id=413,
+                ),
+                # Already reclaimed; picking it up again would be pointless work.
+                _upload_stage(
+                    row_id=414,
+                    upload_id="failed-already-reclaimed",
+                    state=KnowledgeSpaceUploadStageState.CLEANED,
+                    expire_at=now - timedelta(days=1),
+                ),
+                _request(
+                    row_id=134,
+                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
+                    execution_token=None,
+                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.SUCCESS,
+                    upload_stage_id=414,
+                ),
+            ]
+        )
+        await session.commit()
+
+        rows, _has_more, _next_after_id = await KnowledgeSpaceFileChangeCompensationRepository(
+            session
+        ).list_cleanup_candidates(
+            tenant_id=11,
+            after_request_id=0,
+            now=now,
+            limit=10,
+        )
+
+    assert [(row.request_id, row.kind, row.upload_id) for row in rows] == [
+        (131, "stage", "rejected-never-started"),
+        (132, "stage", "failed-and-abandoned"),
+    ]

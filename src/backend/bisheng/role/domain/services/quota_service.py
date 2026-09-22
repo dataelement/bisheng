@@ -111,6 +111,11 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
 }
 
 
+# Usage for these is bytes-of-storage converted to GB, and both share the same
+# staged-upload reservations.
+_STORAGE_RESOURCE_TYPES = ("knowledge_space_file", "storage_gb")
+
+
 class QuotaResourceType:
     """Supported resource types for quota enforcement."""
 
@@ -400,12 +405,25 @@ class QuotaService:
             asyncio.gather(*(cls.get_user_resource_count(user_id, rt) for rt in resource_types)),
         )
 
+        # Both storage rows read the same reservations, so resolve them once.
+        reserved_tenant_gb, reserved_user_gb = (
+            await asyncio.gather(
+                cls._reserved_storage_gb("tenant_id", tenant_id),
+                cls._reserved_storage_gb("user_id", user_id),
+            )
+            if any(rt in _STORAGE_RESOURCE_TYPES for rt in resource_types)
+            else (0.0, 0.0)
+        )
+
         items = []
         for i, resource_type in enumerate(resource_types):
             role_q = role_quotas.get(resource_type, DEFAULT_ROLE_QUOTA.get(resource_type, -1))
             tenant_q = tenant_config.get(resource_type, -1)
             tenant_used = tenant_counts[i]
             user_used = user_counts[i]
+            if resource_type in _STORAGE_RESOURCE_TYPES:
+                tenant_used += reserved_tenant_gb
+                user_used += reserved_user_gb
 
             if is_admin:
                 effective = -1
@@ -624,6 +642,34 @@ class QuotaService:
         except Exception as e:
             logger.warning("Failed to count resource %s for %s=%s: %s", resource_type, col, val, e)
             return 0
+
+    @classmethod
+    async def _reserved_storage_gb(cls, col: str, val) -> float:
+        """Storage held by uploads that are staged but not yet a knowledge file.
+
+        The upload path charges these bytes (see the staged-upload capacity
+        check), so a usage figure that leaves them out reads as free space the
+        caller cannot actually use: the panel said 60 MB were left while every
+        upload came back over quota.
+        """
+        from sqlalchemy import text
+
+        from bisheng.core.database import get_async_db_session
+
+        stage_col = "uploader_user_id" if col == "user_id" else col
+        sql = (
+            "SELECT COALESCE(SUM(file_size), 0) FROM knowledge_space_upload_stage "
+            f"WHERE {stage_col}=:id_val AND state IN ('uploaded', 'attaching', 'attached')"
+        )
+        try:
+            async with get_async_db_session() as session:
+                result = await session.execute(text(sql), {"id_val": val})
+                return float(result.scalar() or 0) / (1024 * 1024 * 1024)
+        except Exception as exc:
+            # Usage display must not fail on a reservation lookup; the authoritative
+            # capacity check runs on the write path either way.
+            logger.warning("Failed to read reserved storage for %s=%s: %s", col, val, exc)
+            return 0.0
 
     @classmethod
     async def _count_knowledge_space(cls, col: str, val) -> int:

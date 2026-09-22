@@ -229,6 +229,8 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             select(
                 upload_stage_table.c.id.label("stage_id"),
                 upload_stage_table.c.upload_id.label("upload_id"),
+                upload_stage_table.c.state.label("stage_state"),
+                upload_stage_table.c.expire_at.label("stage_expire_at"),
             )
             .where(upload_stage_table.c.tenant_id == tenant_id)
             .subquery("tenant_upload_stages")
@@ -245,18 +247,42 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                 ),
             )
         )
-        cleanup_retry_requested = KnowledgeSpaceFileChangeRequest.cleanup_state.in_(
+        # Anything short of a recorded success is outstanding cleanup work. NONE
+        # has to be included: the subscriber records its intent in the result
+        # snapshot before promoting the column, so a subscriber that dies in
+        # between leaves a rejected upload whose stage nothing would ever
+        # release — it keeps holding the uploader's storage quota forever.
+        cleanup_not_done = KnowledgeSpaceFileChangeRequest.cleanup_state.in_(
             (
+                KnowledgeSpaceFileChangeCleanupState.NONE,
                 KnowledgeSpaceFileChangeCleanupState.PENDING,
                 KnowledgeSpaceFileChangeCleanupState.FAILED,
             )
+        )
+        # A permanently failed upload (duplicate name, missing parent, …) keeps
+        # its stage so the applicant can retry. Past the stage's own expiry that
+        # promise has lapsed, and holding the quota further only punishes the
+        # uploader for a change that will never be applied.
+        abandoned_failed_upload = and_(
+            KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED,
+            tenant_upload_stages.c.stage_expire_at <= now,
+            tenant_upload_stages.c.stage_state.in_(
+                (
+                    KnowledgeSpaceUploadStageState.UPLOADED,
+                    KnowledgeSpaceUploadStageState.ATTACHING,
+                    KnowledgeSpaceUploadStageState.ATTACHED,
+                )
+            ),
         )
         terminal_upload = and_(
             KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.UPLOAD,
             KnowledgeSpaceFileChangeRequest.upload_stage_id.is_not(None),
             tenant_upload_stages.c.stage_id.is_not(None),
-            KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.CLOSED,
-            cleanup_retry_requested,
+            or_(
+                KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.CLOSED,
+                abandoned_failed_upload,
+            ),
+            cleanup_not_done,
         )
         delete_purge = and_(
             KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.DELETE,
