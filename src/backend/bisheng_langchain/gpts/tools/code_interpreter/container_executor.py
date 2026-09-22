@@ -22,7 +22,7 @@ from bisheng.common.errcode.sandbox import (
     SandboxUnreachableError,
 )
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import path_namespace_rules
-from bisheng_langchain.gpts.tools.code_interpreter.discover import ReplicaDiscoverer
+from bisheng_langchain.gpts.tools.code_interpreter.discover import shared_discoverer
 from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LOCAL_DESCRIPTION, LocalExecutor
 
 _LEASE_FIELDS = ("session_id", "lease_token", "lease_expires_at")
@@ -81,7 +81,7 @@ class ContainerExecutor(LocalExecutor):
         self.discover_ttl_s = float(
             kwargs.get("discover_ttl_s")
             if kwargs.get("discover_ttl_s") is not None
-            else getattr(conf, "discover_ttl_s", 15)
+            else getattr(conf, "discover_ttl_s", 60)
         )
         self.discover_port = int(
             kwargs.get("discover_port")
@@ -155,26 +155,16 @@ class ContainerExecutor(LocalExecutor):
         if self.endpoints:
             return list(self.endpoints)
         if self.discoverer is None:
-            probe_kwargs = {}
-            if self.client is not None:
-                probe_kwargs["health_probe"] = self._probe_health
-            self.discoverer = ReplicaDiscoverer(
-                endpoints=[],
+            # Same worker process / same scan params → one TTL cache. A new
+            # ContainerExecutor per workflow code node must not rescan DNS.
+            self.discoverer = shared_discoverer(
                 discover_host_pattern=self.discover_host_pattern,
                 discover_index_start=self.discover_index_start,
                 discover_max=self.discover_max,
                 discover_ttl_s=self.discover_ttl_s,
                 discover_port=self.discover_port,
-                **probe_kwargs,
             )
         return self.discoverer.urls()
-
-    def _probe_health(self, host: str, port: int) -> bool:
-        try:
-            resp = self.client.request("GET", f"http://{host}:{port}/health")
-        except (OSError, ConnectionError, httpx.HTTPError):
-            return False
-        return getattr(resp, "status_code", 0) == 200
 
     def _ensure_lease(self) -> None:
         if self.keep_session and self._session_id and self._bound_url:

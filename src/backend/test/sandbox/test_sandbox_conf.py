@@ -23,7 +23,7 @@ def test_sandbox_conf_defaults_without_yaml_section(clean_sandbox_env: None) -> 
     conf = settings.sandbox_conf
     assert conf.discover_host_pattern == "code-runner-{n}"
     assert conf.discover_index_start == 1
-    assert 15 <= conf.discover_ttl_s <= 30
+    assert conf.discover_ttl_s == 60
     assert conf.pool_lease_ttl_s == 900
     assert conf.max_sessions_per_replica == 1
     assert conf.code_node_enabled is True

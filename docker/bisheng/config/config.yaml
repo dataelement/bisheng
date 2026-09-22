@@ -171,7 +171,7 @@ logger_conf:
 # sandbox_conf:
 #   discover_host_pattern: "code-runner-{n}"          # K8s: "code-runner-{n}.code-runner"
 #   discover_index_start: 1                           # K8s: 0
-#   discover_ttl_s: 15
+#   discover_ttl_s: 60                            # background refresh interval, not list expiry
 #   token: "..."
 #   pool_lease_ttl_s: 900
 #   max_sessions_per_replica: 1

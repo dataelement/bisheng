@@ -800,7 +800,9 @@ class SandboxConf(BaseModel):
     discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
     discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
     discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
-    discover_ttl_s: int = Field(default=15, description="Cache discovered hostnames for this many seconds")
+    discover_ttl_s: int = Field(
+        default=60, description="Background refresh interval for discovered runner URLs (seconds)"
+    )
     discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
     token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
     pool_lease_ttl_s: int = Field(default=900, description="Idle lease TTL in seconds")

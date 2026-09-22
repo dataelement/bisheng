@@ -145,8 +145,6 @@ services:
       BS_MINIO_SECRET_KEY: 'minioadmin'
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
-      BS_SANDBOX_CONF__MAX_SESSIONS_PER_REPLICA: "2"
-      BS_SANDBOX_CONF__ENABLE_UID_ISOLATION: "true"
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
