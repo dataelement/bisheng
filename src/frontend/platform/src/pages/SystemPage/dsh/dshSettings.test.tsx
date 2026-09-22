@@ -65,6 +65,19 @@ describe('DSH deployment and business settings', () => {
         expect(screen.queryByText('seat-content')).toBeNull()
     })
 
+    it('refreshes assigned seats when returning from model authorization', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+        const snapshot = { status: 'active', seat_limit: 10, assigned: 2, available: 8, as_of: '', expires_at: null, license_id: 'test' }
+        vi.mocked(getDshLicense).mockResolvedValue(snapshot)
+        const view = render(<DshManagement section="license" />)
+        expect(await screen.findByText('Seats 2 / 10')).toBeInTheDocument()
+        view.rerender(<DshManagement section="models" />)
+        await screen.findByText('model-content')
+        vi.mocked(getDshLicense).mockResolvedValue({ ...snapshot, assigned: 3, available: 7 })
+        view.rerender(<DshManagement section="license" />)
+        expect(await screen.findByText('Seats 3 / 10')).toBeInTheDocument()
+    })
+
     it('keeps settings accessible while business is disabled and avoids license/seat calls', async () => {
         render(<DshManagement />)
         await screen.findByRole('textbox', { name: /dsh.launchAddress/ })

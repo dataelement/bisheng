@@ -97,7 +97,7 @@ function DshManagementContent({
                 if (!abort.signal.aborted) setLicenseError(true)
             })
         return () => abort.abort()
-    }, [config.enabled, revision])
+    }, [config.enabled, revision, activeSection])
 
     const handleOperation = useCallback(
         (ref: DshOperationRef, result?: DshOperation) => {
