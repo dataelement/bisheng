@@ -271,6 +271,7 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
         execution_token="runtime-token",
     )
     target_ids = {int(item.control.source_file_id): int(item.target.id) for item in prepared.files}
+    assert target_ids == {1001: 1001, 1002: 1002}
 
     if fail_switch_commit:
 
@@ -338,7 +339,7 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
     )
     assert migrated_document.knowledge_id == 20
     assert migrated_document.primary_version_id == 702
-    assert migrated_document.content_generation == 1
+    assert migrated_document.content_generation == 0
     assert [row.id for row in migrated_versions] == [701, 702]
     assert [row.knowledge_file_id for row in migrated_versions] == [
         target_ids[1001],
@@ -365,9 +366,9 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
     ).one()
     assert published.reference_document_id == 501
     assert published.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
-    assert published.desired_content_generation == 1
+    assert published.desired_content_generation == 0
     assert published.projection_status == "pending"
-    assert manager_entries[0].desired_content_generation == 1
+    assert manager_entries[0].desired_content_generation == 0
     assert manager_entries[0].projection_status == "pending"
     switched_unit = await runtime_session.get(
         KnowledgeMigrationUnit,
@@ -402,6 +403,7 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
 
     writer = FakeSharedSpaceStorageWriter()
     writer.schema_spec = SimpleNamespace(embedding_model_id="7")
+    writer.content[(1, 501, 702, 0)] = {0: {"text": "canonical content", "vector": [0.1, 0.2]}}
     loader = AsyncMock(return_value=[SharedContentChunk(chunk_index=0, text="canonical content")])
     adapter = KnowledgeMigrationSharedProjection(
         session_factory=session_factory, components_factory=lambda _: (writer, None), content_loader=loader,
@@ -416,7 +418,8 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
     writer.update_membership = real_update
     await adapter.converge_unit(execution)
     assert writer.membership_of(1, 501) == (20, 30)
-    assert loader.await_args.args[0].id == target_ids[1002]
+    loader.assert_not_awaited()
+    assert writer.content[(1, 501, 702, 0)][0]["vector"] == [0.1, 0.2]
     calls = list(writer.calls)
     await adapter.converge_unit(execution)
     assert writer.calls == calls
@@ -445,7 +448,7 @@ async def test_version_chain_switch_preserves_document_and_version_ids(
             )
         )
     ).all()
-    assert remaining_source_ids == []
+    assert set(remaining_source_ids) == {1001, 1002}
 
 
 async def test_preserve_link_creates_planned_directory_and_records_switch(runtime_session, monkeypatch):
@@ -477,6 +480,11 @@ async def test_preserve_link_creates_planned_directory_and_records_switch(runtim
         source_space_name="source", source_file_name="a.pdf", target_space_id=20, target_space_name="target",
         target_file_name="a.pdf")
     runtime_session.add_all([attempt, row])
+    source_document = KnowledgeDocument(id=91, knowledge_id=10, primary_version_id=1)
+    source_version = KnowledgeDocumentVersion(
+        id=1, document_id=91, knowledge_file_id=100, version_no=1, is_primary=True
+    )
+    runtime_session.add_all([source_document, source_version])
     await runtime_session.commit()
     repository = KnowledgeMigrationRuntimeRepositoryImpl(runtime_session)
     args = {"attempt_id": attempt.id, "execution_token": "link-token"}
@@ -500,10 +508,33 @@ async def test_preserve_link_creates_planned_directory_and_records_switch(runtim
     assert unit.checkpoint == row.checkpoint == "db_switched"
     assert row.target_file_id == 100
     assert row.target_resource_manifest["publish_entry_id"] == 777
-    runtime_session.add(KnowledgeDocument(id=92, knowledge_id=20, primary_version_id=2))
+    source_identity = dict(row.source_resource_manifest["shared_content"])
+    runtime_session.add(KnowledgeDocument(id=92, knowledge_id=20, primary_version_id=1))
+    await runtime_session.delete(source_document)
+    source_version.document_id = 92
+    runtime_session.add(source_version)
+    runtime_session.add(
+        KnowledgeFile(
+            id=100,
+            knowledge_id=20,
+            user_id=1,
+            user_name="owner",
+            updater_id=1,
+            updater_name="owner",
+            file_name="a.pdf",
+            reference_document_id=92,
+            entry_type="manager",
+            entry_status="active",
+            status=2,
+        )
+    )
     await runtime_session.commit()
     await repository.record_preserve_link_result(unit.id,
         SimpleNamespace(document_id=92, publish_entry_id=777), **args)
+    # 模拟发布已提交但迁移目标清单被补偿清空；来源身份仍可恢复。
+    row.target_resource_manifest = None
+    await repository._snapshot_source_content(unit, [row])
+    assert row.target_resource_manifest["source_content"] == source_identity
     plan = await repository.shared_projection_plan(unit.id, **args)
     assert plan["document_id"] == 92
     assert plan["deleted_document_ids"] == [91]

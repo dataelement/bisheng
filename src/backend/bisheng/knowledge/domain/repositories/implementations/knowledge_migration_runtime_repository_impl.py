@@ -69,6 +69,16 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             trigger_type="knowledge_migration_updated",
         )
 
+    async def find_batch_modes(self, unit_ids: list[int]) -> dict[int, bool]:
+        rows = (
+            await self.session.exec(
+                select(KnowledgeMigrationUnit.id, KnowledgeMigrationBatch.preserve_link)
+                .join(KnowledgeMigrationBatch, KnowledgeMigrationBatch.id == KnowledgeMigrationUnit.batch_id)
+                .where(col(KnowledgeMigrationUnit.id).in_(unit_ids))
+            )
+        ).all()
+        return {int(unit_id): bool(mode) for unit_id, mode in rows}
+
     async def _control_rows(
         self,
         unit_id: int,
@@ -174,19 +184,11 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         source_files = {
             int(row.id): row
             for row in (
-                await self.session.exec(
-                    select(KnowledgeFile).where(col(KnowledgeFile.id).in_(source_ids))
-                )
+                await self.session.exec(select(KnowledgeFile).where(col(KnowledgeFile.id).in_(source_ids | target_ids)))
             ).all()
         }
-        target_files = {
-            int(row.id): row
-            for row in (
-                await self.session.exec(
-                    select(KnowledgeFile).where(col(KnowledgeFile.id).in_(target_ids))
-                )
-            ).all()
-        }
+        target_files = {file_id: source_files[file_id] for file_id in target_ids if file_id in source_files}
+        source_files = {file_id: source_files[file_id] for file_id in source_ids if file_id in source_files}
         if set(source_files) != source_ids:
             raise RuntimeError("one or more source files are missing")
         if target_ids != set(target_files):
@@ -252,6 +254,102 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             target_owner=owner,
             created_folders=tuple(created_folders),
         )
+
+    async def load_contexts(self, unit_ids: list[int]) -> dict[int, MigrationRuntimeContext]:
+        """一页单元共用控制行、文件、空间和所有者查询。"""
+        if not unit_ids:
+            return {}
+        units = list(
+            (
+                await self.session.exec(
+                    select(KnowledgeMigrationUnit).where(col(KnowledgeMigrationUnit.id).in_(unit_ids))
+                )
+            ).all()
+        )
+        batches = {
+            row.id: row
+            for row in (
+                await self.session.exec(
+                    select(KnowledgeMigrationBatch).where(
+                        col(KnowledgeMigrationBatch.id).in_({unit.batch_id for unit in units})
+                    )
+                )
+            ).all()
+        }
+        controls = list(
+            (
+                await self.session.exec(
+                    select(KnowledgeMigrationFile)
+                    .where(col(KnowledgeMigrationFile.unit_id).in_(unit_ids))
+                    .order_by(KnowledgeMigrationFile.id)
+                )
+            ).all()
+        )
+        ids = {row.source_file_id for row in controls} | {row.target_file_id for row in controls if row.target_file_id}
+        folder_ids = {
+            int(value["target_folder_id"])
+            for unit in units
+            for value in unit.folder_mapping_snapshot or []
+            if value.get("action") == "created" and value.get("target_folder_id")
+        }
+        files = {
+            row.id: row
+            for row in (
+                await self.session.exec(select(KnowledgeFile).where(col(KnowledgeFile.id).in_(ids | folder_ids)))
+            ).all()
+        }
+        space_ids = {file.knowledge_id for file in files.values()} | {
+            batch.target_space_id for batch in batches.values()
+        }
+        spaces = {
+            row.id: row
+            for row in (await self.session.exec(select(Knowledge).where(col(Knowledge.id).in_(space_ids)))).all()
+        }
+        owners = {
+            row.user_id: row
+            for row in (
+                await self.session.exec(
+                    select(User).where(
+                        col(User.user_id).in_({space.user_id for space in spaces.values()}), User.delete == 0
+                    )
+                )
+            ).all()
+        }
+        result = {}
+        for unit in units:
+            batch = batches[unit.batch_id]
+            control_files = [row for row in controls if row.unit_id == unit.id]
+            target_space = spaces.get(batch.target_space_id)
+            if (
+                not control_files
+                or target_space is None
+                or target_space.user_id not in owners
+                or any(row.source_file_id not in files or row.target_file_id not in files for row in control_files)
+            ):
+                # 缺失状态交给该单元自己的校验，不能使其他单元失败。
+                continue
+            result[int(unit.id)] = MigrationRuntimeContext(
+                batch=batch,
+                unit=unit,
+                files=tuple(
+                    MigrationRuntimeFile(row, files[row.source_file_id], files[row.target_file_id])
+                    for row in control_files
+                ),
+                source_spaces={
+                    key: value
+                    for key, value in spaces.items()
+                    if key != batch.target_space_id
+                    and key in {files[row.source_file_id].knowledge_id for row in control_files}
+                },
+                target_space=target_space,
+                target_owner=owners[target_space.user_id],
+                created_folders=tuple(
+                    files[int(value["target_folder_id"])]
+                    for value in unit.folder_mapping_snapshot or []
+                    if value.get("action") == "created" and value.get("target_folder_id") in files
+                ),
+            )
+        return result
 
     async def load_context(self, unit_id: int) -> MigrationRuntimeContext:
         batch, unit, control_files = await self._control_rows(unit_id)
@@ -410,6 +508,8 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             execution_token=execution_token,
         )
         if control_files and all(row.target_file_id is not None for row in control_files):
+            await self._snapshot_source_content(unit, control_files)
+            await self._commit()
             return await self._runtime_context(batch, unit, control_files)
         if any(row.target_file_id is not None for row in control_files):
             raise RuntimeError("partial target-row manifest is not recoverable")
@@ -485,56 +585,52 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             raise RuntimeError("source and target must be active spaces in the same tenant")
         if unit.source_document_id is None:
             raise RuntimeError("shared migration requires a canonical document")
-        source_artifacts = list(
-            (
-                await self.session.exec(
-                    select(KnowledgeFilePdfArtifact).where(
-                        col(KnowledgeFilePdfArtifact.knowledge_file_id).in_(
-                            source_ids
-                        )
-                    )
-                )
-            ).all()
-        )
-        artifacts_by_source = {
-            int(artifact.knowledge_file_id): artifact
-            for artifact in source_artifacts
-        }
+        await self._snapshot_source_content(unit, control_files)
         for control in control_files:
             source = sources[control.source_file_id]
-            target = self._target_file_clone(
-                source,
-                batch=batch,
-                owner=owner,
-                parent_path=parent_path,
-                level=level,
-            )
-            self.session.add(target)
-            await self.session.flush()
-            control.target_file_id = int(target.id)
+            # 原位迁移保留所有物理标识与对象；目标目录仅在切换时生效。
+            control.target_file_id = int(source.id)
             control.target_folder_id = target_folder_id
             control.target_resource_manifest = {
+                **(control.target_resource_manifest or {}),
+                "metadata_only": True,
                 "target_file_level_path": parent_path,
+                "target_level": level,
                 "created_folder_ids": [
-                    int(item["target_folder_id"])
-                    for item in mapping
-                    if item["action"] == "created"
+                    int(item["target_folder_id"]) for item in mapping if item["action"] == "created"
                 ],
             }
             self.session.add(control)
-            source_artifact = artifacts_by_source.get(control.source_file_id)
-            if source_artifact is not None:
-                artifact_payload = source_artifact.model_dump()
-                artifact_payload.pop("id", None)
-                artifact_payload.pop("create_time", None)
-                artifact_payload.pop("update_time", None)
-                artifact_payload["knowledge_file_id"] = int(target.id)
-                self.session.add(KnowledgeFilePdfArtifact(**artifact_payload))
         unit.planned_target_folder_id = target_folder_id
         unit.folder_mapping_snapshot = mapping
         self.session.add(unit)
         await self._commit()
         return await self.load_context(unit_id)
+
+    async def _snapshot_source_content(self, unit, files) -> None:
+        if files and all((row.source_resource_manifest or {}).get("shared_content") for row in files):
+            for row in files:
+                row.target_resource_manifest = {
+                    **(row.target_resource_manifest or {}),
+                    "source_content": row.source_resource_manifest["shared_content"],
+                }
+                self.session.add(row)
+            return
+        document = await self.session.get(KnowledgeDocument, unit.source_document_id)
+        version = await self.session.get(KnowledgeDocumentVersion, document.primary_version_id) if document else None
+        if version is None:
+            raise RuntimeError("migration source content identity is unavailable")
+        identity = {
+            "document_id": int(document.id),
+            "version_id": int(version.id),
+            "file_id": int(version.knowledge_file_id),
+            "generation": int(document.content_generation),
+        }
+        for row in files:
+            # 来源身份独立于可被补偿清空的目标清单，合并提交后的重试仍可恢复。
+            row.source_resource_manifest = {**(row.source_resource_manifest or {}), "shared_content": identity}
+            row.target_resource_manifest = {**(row.target_resource_manifest or {}), "source_content": identity}
+            self.session.add(row)
 
     @staticmethod
     def _fingerprint(file: KnowledgeFile | dict[str, Any]) -> dict[str, Any]:
@@ -860,11 +956,21 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         )
         if len(sources) != len(source_ids) or len(targets) != len(target_ids):
             raise RuntimeError("source or target rows changed before switch")
+        metadata_only = all(row.target_file_id == row.source_file_id for row in control_files)
+        manifests = {row.source_file_id: row.target_resource_manifest or {} for row in control_files}
+        planned_targets = (
+            [
+                row.model_copy(update={"file_level_path": manifests[int(row.id)].get("target_file_level_path", "")})
+                for row in targets
+            ]
+            if metadata_only
+            else targets
+        )
         await self._validate_current_conflicts(
             batch=batch,
             unit=unit,
             sources=sources,
-            targets=targets,
+            targets=planned_targets,
         )
         await self._apply_overwrite_switch(unit)
         target_by_id = {int(row.id): row for row in targets}
@@ -920,27 +1026,33 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
                 ]
                 self.session.add(version)
             document.knowledge_id = batch.target_space_id
-            document.content_generation += 1
-            document.file_level_path = (
-                next(iter(target_by_id.values())).file_level_path or ""
-            )
-            document.level = next(iter(target_by_id.values())).level
+            # 内容未改变，迁移只推进入口代次。
+            document.file_level_path = planned_targets[0].file_level_path or ""
+            document.level = manifests[int(sources[0].id)].get("target_level", planned_targets[0].level)
             self.session.add(document)
+        target_space = await self.session.get(Knowledge, batch.target_space_id)
+        target_owner = await self.session.get(User, target_space.user_id)
         for control in control_files:
             source = source_by_id[control.source_file_id]
             target = target_by_id[int(control.target_file_id)]
             target.status = KnowledgeFileStatus.SUCCESS.value
+            if metadata_only:
+                target.knowledge_id = batch.target_space_id
+                target.file_level_path = manifests[int(source.id)].get("target_file_level_path", "")
+                target.level = manifests[int(source.id)].get("target_level", 0)
+                target.user_id, target.user_name = int(target_owner.user_id), target_owner.user_name
+                target.updater_id, target.updater_name = int(target_owner.user_id), target_owner.user_name
             if source.entry_type == KnowledgeFileEntryType.MANAGER.value:
                 target.reference_document_id = source.reference_document_id
                 target.entry_type = KnowledgeFileEntryType.MANAGER.value
                 target.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
-                source.entry_status = KnowledgeFileEntryStatus.DELETING.value
-                # The migration owns old physical-resource cleanup. Exclude it
-                # from the concurrent canonical deletion worker.
-                source.reference_document_id = None
-                source.entry_type = None
+                if not metadata_only:
+                    source.entry_status = KnowledgeFileEntryStatus.DELETING.value
+                    source.reference_document_id = None
+                    source.entry_type = None
                 target.desired_entry_generation += 1
-            source.status = KnowledgeFileStatus.PROCESSING.value
+            if not metadata_only:
+                source.status = KnowledgeFileStatus.PROCESSING.value
             self.session.add(source)
             self.session.add(target)
         if unit.source_document_id is not None:
@@ -952,6 +1064,12 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             await KnowledgeFileRepositoryImpl(self.session).mark_document_entries_content_generation(
                 int(unit.source_document_id), int(document.content_generation),
             )
+            # 元数据迁移由迁移检查点恢复，禁止普通投影任务抢先解析。
+            for entry in [*active_entries, *targets]:
+                if entry.reference_document_id == document.id and entry.entry_status == "active":
+                    entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+                    entry.projection_next_retry_at = datetime(9999, 1, 1)
+                    self.session.add(entry)
         unit.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
         self.session.add(unit)
         for control in control_files:
@@ -966,7 +1084,15 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         if unit.checkpoint not in {"db_switched", "source_external_cleaned", "source_rows_cleaned", "completed"}:
             raise RuntimeError("shared projection cannot run before the migration switch")
         document_id = unit.target_document_id or unit.source_document_id
-        document = await self.session.get(KnowledgeDocument, document_id) if document_id else None
+        document = (
+            (
+                await self.session.exec(
+                    select(KnowledgeDocument).where(KnowledgeDocument.id == document_id).with_for_update()
+                )
+            ).first()
+            if document_id
+            else None
+        )
         if (document is None or int(document.tenant_id or 1) != int(batch.tenant_id)
                 or document.knowledge_id != batch.target_space_id or document.lifecycle_status != "active"):
             raise RuntimeError("migration canonical destination changed")
@@ -991,8 +1117,84 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             if remaining is not None:
                 raise RuntimeError("overwrite canonical document still has active entries")
             deleted_document_ids.append(old_id)
-        return {"tenant_id": int(batch.tenant_id), "document_id": int(document_id),
-                "deleted_document_ids": deleted_document_ids}
+        source_content = next(
+            (
+                (row.source_resource_manifest or {}).get("shared_content")
+                or (row.target_resource_manifest or {}).get("source_content")
+                for row in _files
+                if (row.source_resource_manifest or {}).get("shared_content")
+                or (row.target_resource_manifest or {}).get("source_content")
+            ),
+            None,
+        )
+        if source_content is None:
+            raise RuntimeError("migration source content snapshot is missing; explicit recovery is required")
+        version = await self.session.get(KnowledgeDocumentVersion, document.primary_version_id)
+        entries = list(
+            (
+                await self.session.exec(
+                    select(KnowledgeFile)
+                    .where(
+                        KnowledgeFile.reference_document_id == document_id,
+                        KnowledgeFile.entry_status == "active",
+                        col(KnowledgeFile.entry_type).in_({"manager", "publish", "share"}),
+                    )
+                    .order_by(KnowledgeFile.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        if version is None or not entries:
+            raise RuntimeError("migration destination has no primary version or active entries")
+        if any(entry.projection_lease_owner for entry in entries):
+            raise RuntimeError("migration destination has an active projection lease")
+        return {
+            "tenant_id": int(batch.tenant_id),
+            "document_id": int(document_id),
+            "manager_knowledge_id": int(document.knowledge_id),
+            "deleted_document_ids": deleted_document_ids,
+            "source_content": source_content,
+            "target_content": {
+                "document_id": int(document.id),
+                "version_id": int(version.id),
+                "file_id": int(version.knowledge_file_id),
+                "generation": int(document.content_generation),
+            },
+            "knowledge_ids": tuple(sorted({int(entry.knowledge_id) for entry in entries})),
+            "membership_generation": max(
+                int(document.content_generation), *(int(entry.desired_entry_generation) for entry in entries)
+            ),
+            "entries": [
+                (int(entry.id), int(entry.desired_content_generation), int(entry.desired_entry_generation))
+                for entry in entries
+            ],
+            "ready": all(
+                entry.projection_status == "ready"
+                and entry.applied_content_generation >= document.content_generation
+                and entry.applied_entry_generation >= entry.desired_entry_generation
+                for entry in entries
+            ),
+        }
+
+    async def finish_shared_projection(
+        self, unit_id: int, plan: dict, *, attempt_id: int, execution_token: str
+    ) -> None:
+        fresh = await self.shared_projection_plan(unit_id, attempt_id=attempt_id, execution_token=execution_token)
+        if any(
+            fresh[key] != plan[key] for key in ("target_content", "knowledge_ids", "membership_generation", "entries")
+        ):
+            raise RuntimeError("migration destination changed during metadata projection")
+        for entry_id, content_generation, entry_generation in plan["entries"]:
+            entry = await self.session.get(KnowledgeFile, entry_id)
+            entry.applied_content_generation = content_generation
+            entry.applied_entry_generation = entry_generation
+            entry.projection_status = KnowledgeFileProjectionStatus.READY.value
+            entry.projection_next_retry_at = None
+            entry.projection_retry_count = 0
+            entry.projection_last_error = None
+            entry.projection_previous_file_id = None
+            self.session.add(entry)
+        await self._commit()
 
     async def prepare_preserve_link_folders(self, unit_id: int, *, attempt_id: int, execution_token: str):
         batch, unit, files = await self._active_control_rows(
@@ -1003,6 +1205,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         if owner is None or owner.delete:
             raise RuntimeError("target knowledge-space owner is disabled or missing")
         folder_id, _parent_path, _, mapping = await self._prepare_target_folder(batch, unit, owner)
+        await self._snapshot_source_content(unit, files)
         unit.planned_target_folder_id = folder_id
         unit.folder_mapping_snapshot = mapping
         for row in files:
@@ -1034,7 +1237,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             unit_id,
             for_update=True,
         )
-        source_ids = {row.source_file_id for row in control_files}
+        source_ids = {row.source_file_id for row in control_files if row.source_file_id != row.target_file_id}
         source_space_ids = {row.source_space_id for row in control_files}
         await self.session.exec(
             delete(KnowledgeFilePdfArtifact).where(
@@ -1072,7 +1275,11 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             attempt_id=attempt_id,
             execution_token=execution_token,
         )
-        target_ids = {int(row.target_file_id) for row in control_files if row.target_file_id is not None}
+        target_ids = {
+            int(row.target_file_id)
+            for row in control_files
+            if row.target_file_id is not None and row.target_file_id != row.source_file_id
+        }
         if target_ids:
             await self.session.exec(
                 delete(KnowledgeFilePdfArtifact).where(

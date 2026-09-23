@@ -871,11 +871,12 @@ class KnowledgeSpaceSharedStorageConf(BaseModel):
         description="旧库只读 quarantine 保留天数（LEGACY_PURGED 前不得物理删除）",
     )
     projection_max_retries: int = Field(
-        default=8,
+        default=4,
         ge=1,
         le=100,
-        description="共享存储投影失败后的最大自动重试次数",
+        description="共享存储投影最大失败尝试次数，含首次执行；默认首次加三次重试",
     )
+    projection_batch_size: int = Field(default=100, ge=1, le=500, description="一个投影任务内部每批文档数")
 
 
 class IntelligenceCenterConf(BaseModel):

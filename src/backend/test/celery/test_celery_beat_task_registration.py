@@ -25,6 +25,20 @@ missing_tasks = [
     if task_name not in bisheng_celery.tasks
 ]
 
+required = {
+    "bisheng.worker.knowledge.portal_recommendation.rebuild_portal_recommendation_pools",
+    "bisheng.worker.knowledge.portal_recommendation.refresh_portal_recommendation_projection_batch",
+    "bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
+}
+removed = {
+    "bisheng.worker.knowledge.portal_recommendation.prepare_pool_rebuild",
+    "bisheng.worker.knowledge.portal_recommendation.refresh_portal_recommendation_projection",
+    "bisheng.worker.knowledge.portal_hot_search.trigger_portal_hot_search_rebuild",
+    "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
+}
+missing_tasks.extend(sorted(required - set(bisheng_celery.tasks)))
+assert not removed.intersection(bisheng_celery.tasks), "obsolete knowledge tasks remain registered"
+
 print("MISSING_BEAT_TASKS=" + json.dumps(missing_tasks, ensure_ascii=False))
 raise SystemExit(1 if missing_tasks else 0)
 """

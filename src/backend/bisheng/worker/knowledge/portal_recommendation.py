@@ -10,6 +10,7 @@ from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import uuid4
 
 from loguru import logger
 
@@ -51,6 +52,8 @@ from bisheng.worker.main import bisheng_celery
 
 DEFAULT_QUEUE = "celery"
 PROJECTION_PAGE_SIZE = 500
+PROJECTION_BATCH_SIZE = 100
+POOL_REQUEST_RETENTION_SECONDS = 7 * 86400
 
 
 def recommendation_config_fingerprint(half_life_days: int, source_weight: float) -> str:
@@ -84,14 +87,13 @@ def enqueue_portal_recommendation_projection_refresh(
     resolved_tenant_id = int(tenant_id or get_current_tenant_id() or DEFAULT_TENANT_ID)
     if deleted and projection_version is None:
         projection_version = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
-    refresh_projection_celery.apply_async(
-        kwargs={
+    _publish_projection_refresh_events(
+        [{
             "file_id": int(file_id),
             "projection_version": projection_version,
             "deleted": bool(deleted),
-        },
-        headers={"tenant_id": resolved_tenant_id},
-        queue=DEFAULT_QUEUE,
+        }],
+        tenant_id=resolved_tenant_id,
     )
 
 
@@ -106,15 +108,53 @@ def enqueue_portal_recommendation_projection_refresh_batch(
         return
     resolved_tenant_id = int(tenant_id or get_current_tenant_id() or DEFAULT_TENANT_ID)
     projection_version = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
-    refresh_projection_batch_celery.apply_async(
-        kwargs={
-            "file_ids": normalized_ids,
+    _publish_projection_refresh_events(
+        [{
+            "file_id": file_id,
             "projection_version": projection_version,
             "deleted": bool(deleted),
-        },
-        headers={"tenant_id": resolved_tenant_id},
-        queue=DEFAULT_QUEUE,
+        } for file_id in normalized_ids],
+        tenant_id=resolved_tenant_id,
     )
+
+
+def _normalize_projection_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized = []
+    seen = set()
+    for event in events:
+        file_id = event["file_id"]
+        version = event.get("projection_version")
+        deleted = event.get("deleted", False)
+        if type(file_id) is not int or file_id <= 0 or type(deleted) is not bool:
+            raise ValueError("invalid projection refresh event")
+        if version is not None and (type(version) is not int or version < 0):
+            raise ValueError("invalid projection event version")
+        if deleted and version is None:
+            raise ValueError("projection delete requires an event version")
+        key = (file_id, version, deleted)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append({"file_id": file_id, "projection_version": version, "deleted": deleted})
+    return normalized
+
+
+def _publish_projection_refresh_events(events: list[dict[str, Any]], *, tenant_id: int) -> None:
+    normalized = _normalize_projection_events(events)
+    for offset in range(0, len(normalized), PROJECTION_BATCH_SIZE):
+        batch = normalized[offset:offset + PROJECTION_BATCH_SIZE]
+        try:
+            refresh_projection_batch_celery.apply_async(
+                kwargs={"events": batch},
+                headers={"tenant_id": int(tenant_id)},
+                queue=DEFAULT_QUEUE,
+            )
+        except Exception:
+            logger.exception(
+                "recommendation batch publish failed tenant_id={} offset={} batch_size={} total={}",
+                tenant_id, offset, len(batch), len(normalized),
+            )
+            raise
 
 
 def enqueue_portal_recommendation_resource_refresh(
@@ -166,68 +206,29 @@ def enqueue_portal_recommendation_config_post_commit(
             queue=DEFAULT_QUEUE,
         )
     if rebuild_pools:
-        prepare_pool_rebuild_celery.apply_async(
-            headers=headers,
-            queue=DEFAULT_QUEUE,
-        )
+        enqueue_portal_recommendation_pool_rebuild(tenant_id=tenant_id)
 
 
 def enqueue_portal_recommendation_pool_rebuild(*, tenant_id: int | None = None) -> None:
     resolved_tenant_id = int(tenant_id or get_current_tenant_id() or DEFAULT_TENANT_ID)
-    prepare_pool_rebuild_celery.apply_async(
+    request_id = uuid4().hex
+    rebuild_shared_pools_celery.apply_async(
+        kwargs={"request_id": request_id, "requested_at": time.time()},
+        task_id=request_id,
         headers={"tenant_id": resolved_tenant_id},
         queue=DEFAULT_QUEUE,
     )
 
 
-async def _refresh_projection_async(
-    *,
-    file_id: int,
-    projection_version: int | None,
-    deleted: bool,
-) -> bool:
-    async with get_async_db_session() as session:
-        service = PortalRecommendationProjectionService(
-            source_repository=PortalRecommendationSourceRepositoryImpl(session),
-            projection_repository=PortalRecommendationRepositoryImpl(session),
-        )
-        async with session.begin():
-            return await service.refresh_file(
-                int(file_id),
-                projection_version=projection_version,
-                deleted=deleted,
-            )
-
-
-@bisheng_celery.task(
-    bind=True,
-    name="bisheng.worker.knowledge.portal_recommendation.refresh_portal_recommendation_projection",
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 5},
-    acks_late=True,
-)
-def refresh_projection_celery(
-    _task,
-    file_id: int,
-    projection_version: int | None = None,
-    deleted: bool = False,
-):
-    return run_async_task(
-        lambda: _refresh_projection_async(
-            file_id=file_id,
-            projection_version=projection_version,
-            deleted=deleted,
-        )
-    )
-
-
 async def _refresh_projection_batch_async(
     *,
-    file_ids: list[int],
-    projection_version: int,
-    deleted: bool,
+    events: list[dict[str, Any]],
 ) -> int:
+    if len(events) > PROJECTION_BATCH_SIZE:
+        raise ValueError("projection refresh batch exceeds limit")
+    normalized = _normalize_projection_events(events)
+    if not normalized:
+        return 0
     changed = 0
     async with get_async_db_session() as session:
         service = PortalRecommendationProjectionService(
@@ -235,12 +236,12 @@ async def _refresh_projection_batch_async(
             projection_repository=PortalRecommendationRepositoryImpl(session),
         )
         async with session.begin():
-            for file_id in sorted({int(value) for value in file_ids}):
+            for event in normalized:
                 changed += int(
                     await service.refresh_file(
-                        file_id,
-                        projection_version=projection_version,
-                        deleted=deleted,
+                        event["file_id"],
+                        projection_version=event["projection_version"],
+                        deleted=event["deleted"],
                     )
                 )
     return changed
@@ -256,16 +257,10 @@ async def _refresh_projection_batch_async(
 )
 def refresh_projection_batch_celery(
     _task,
-    file_ids: list[int],
-    projection_version: int,
-    deleted: bool = False,
+    events: list[dict[str, Any]],
 ):
     return run_async_task(
-        lambda: _refresh_projection_batch_async(
-            file_ids=file_ids,
-            projection_version=projection_version,
-            deleted=deleted,
-        )
+        lambda: _refresh_projection_batch_async(events=events)
     )
 
 
@@ -762,46 +757,53 @@ async def _rebuild_shared_pools_async(
 )
 def rebuild_shared_pools_celery(
     _task,
-    generation: int,
-    config_version: int,
-    fingerprint: str,
+    request_id: str,
+    requested_at: float,
 ):
     return run_async_task(
-        lambda: _rebuild_shared_pools_async(
-            generation=generation,
-            config_version=config_version,
-            fingerprint=fingerprint,
+        lambda: _rebuild_pool_request_async(
+            request_id=request_id,
+            requested_at=requested_at,
         )
     )
 
 
-async def _prepare_pool_rebuild_async() -> bool:
-    tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
-    config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
-    if config is None:
+async def _rebuild_pool_request_async(*, request_id: str, requested_at: float) -> bool:
+    now = time.time()
+    if not math.isfinite(requested_at) or requested_at > now + 60:
+        raise ValueError("invalid pool rebuild request timestamp")
+    ttl_seconds = math.ceil(requested_at + POOL_REQUEST_RETENTION_SECONDS - now)
+    if ttl_seconds <= 0:
+        logger.info("portal recommendation pool request expired request_id={}", request_id)
         return False
-    recommendation = config.portal.recommendation
+    tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
     redis_repository = PortalRecommendationRedisRepositoryImpl()
-    generation = await redis_repository.increment_desired_generation(tenant_id)
-    fingerprint = recommendation_config_fingerprint(
-        recommendation.hot_half_life_days,
-        recommendation.home_entry_source_weight,
+    context = await redis_repository.get_pool_rebuild_request(tenant_id, request_id)
+    if context is None:
+        config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
+        if config is None:
+            return False
+        recommendation = config.portal.recommendation
+        context = await redis_repository.get_or_create_pool_rebuild_request(
+            tenant_id,
+            request_id,
+            config_version=int(config.version),
+            fingerprint=recommendation_config_fingerprint(
+                recommendation.hot_half_life_days,
+                recommendation.home_entry_source_weight,
+            ),
+            ttl_seconds=ttl_seconds,
+        )
+    state = await redis_repository.get_pool_state(tenant_id)
+    if state.desired_generation != context.generation:
+        return False
+    if state.active_generation == context.generation:
+        return True
+    return await _rebuild_shared_pools_async(
+        generation=context.generation,
+        config_version=context.config_version,
+        fingerprint=context.fingerprint,
     )
-    rebuild_shared_pools_celery.apply_async(
-        kwargs={
-            "generation": generation,
-            "config_version": int(config.version),
-            "fingerprint": fingerprint,
-        },
-        headers={"tenant_id": tenant_id},
-        queue=DEFAULT_QUEUE,
-    )
-    return True
-
-
-@bisheng_celery.task(name="bisheng.worker.knowledge.portal_recommendation.prepare_pool_rebuild")
-def prepare_pool_rebuild_celery():
-    return run_async_task(_prepare_pool_rebuild_async)
 
 
 async def _reconcile_incremental_async() -> int:
@@ -1002,7 +1004,7 @@ def invalidate_user_ids_celery(_task, user_ids: list[int]):
 
 
 _MAINTENANCE_TASKS = {
-    "pools": prepare_pool_rebuild_celery,
+    "pools": rebuild_shared_pools_celery,
     "incremental": reconcile_incremental_celery,
     "full": reconcile_full_celery,
     "purge": purge_expired_searches_celery,
@@ -1014,7 +1016,11 @@ async def _fanout_maintenance_async(kind: str) -> int:
     if task is None:
         raise ValueError("unknown portal recommendation maintenance kind")
     tenant_ids = [DEFAULT_TENANT_ID, *(await TenantDao.aget_children_ids_active(DEFAULT_TENANT_ID))]
-    _dispatch_task_for_tenants(task, tenant_ids)
+    if kind == "pools":
+        for tenant_id in sorted(set(tenant_ids)):
+            enqueue_portal_recommendation_pool_rebuild(tenant_id=tenant_id)
+    else:
+        _dispatch_task_for_tenants(task, tenant_ids)
     return len(set(tenant_ids))
 
 

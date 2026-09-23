@@ -1,4 +1,7 @@
+import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -147,6 +150,69 @@ class _FakeAsyncRedis:
 class _FakeRedisClient:
     def __init__(self):
         self.async_connection = _FakeAsyncRedis()
+
+
+def test_pool_request_lua_is_idempotent_and_preserves_activation_order():
+    # A clean process loads the real Redis client before conftest pre-mocks it.
+    script = r'''
+import asyncio
+import redis.asyncio
+import fakeredis.aioredis
+from types import SimpleNamespace
+from test.fixtures.mock_services import premock_import_chain
+premock_import_chain()
+from bisheng.core.context.tenant import current_tenant_id
+from bisheng.knowledge.domain.repositories.implementations.portal_recommendation_redis_repository import PortalRecommendationRedisRepositoryImpl
+
+async def main():
+    client = fakeredis.aioredis.FakeRedis()
+    repo = PortalRecommendationRedisRepositoryImpl(redis_client=SimpleNamespace(async_connection=client))
+    token = current_tenant_id.set(5)
+    try:
+        assert await repo.get_pool_rebuild_request(5, "first") is None
+        async def claim(version):
+            return await repo.get_or_create_pool_rebuild_request(
+                5, "first", config_version=version, fingerprint=str(version), ttl_seconds=60,
+            )
+        contexts = await asyncio.gather(*(claim(version) for version in range(1, 21)))
+        assert all(value == contexts[0] for value in contexts)
+        first = contexts[0]
+        assert first.generation == 1
+        assert (await repo.get_pool_state(5)).desired_generation == 1
+        key = repo.pool_rebuild_request_key(5, "first")
+        assert "{5}" in key and 0 < await client.ttl(key) <= 60
+        assert await repo.get_pool_rebuild_request(5, "first") == first
+        second = await repo.get_or_create_pool_rebuild_request(
+            5, "second", config_version=22, fingerprint="new", ttl_seconds=60,
+        )
+        assert second.generation == 2
+        assert not await repo.activate_pool_if_current(5, 1, "1", first.fingerprint)
+        assert await repo.activate_pool_if_current(5, 2, "2", second.fingerprint)
+        assert not await repo.activate_pool_if_current(5, 1, "1", first.fingerprint)
+        try:
+            await repo.get_pool_rebuild_request(6, "first")
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("tenant mismatch accepted")
+        await client.set(key, '{"generation": "broken"}')
+        try:
+            await claim(99)
+        except (KeyError, ValueError):
+            pass
+        else:
+            raise AssertionError("corrupt context accepted")
+        assert (await repo.get_pool_state(5)).desired_generation == 2
+    finally:
+        current_tenant_id.reset(token)
+        await client.aclose()
+asyncio.run(main())
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", script], cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 @pytest.fixture()

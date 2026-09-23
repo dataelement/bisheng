@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import delete, or_
 from sqlmodel import col, select
@@ -103,6 +104,7 @@ class PublishKnowledgeDocumentCommand:
     target_file_level_path: str = ""
     target_level: int = 0
     target_document_id: int | None = None
+    metadata_only_migration: bool = False
 
 
 @dataclass(frozen=True)
@@ -1728,7 +1730,8 @@ class KnowledgeDocumentDistributionService:
         if len(physical_files) != len(physical_file_ids):
             raise KnowledgeDocumentDistributionError("canonical document has missing physical versions")
 
-        document.content_generation += 1
+        if not command.metadata_only_migration:
+            document.content_generation += 1
         document.knowledge_id = command.target_space_id
         document.file_level_path = command.target_file_level_path
         document.level = command.target_level
@@ -1766,6 +1769,11 @@ class KnowledgeDocumentDistributionService:
             command.document_id,
             document.content_generation,
         )
+        if command.metadata_only_migration:
+            entries = await self.file_repository.find_distribution_entries_by_document_id(command.document_id)
+            for entry in entries:
+                entry.projection_next_retry_at = datetime(9999, 1, 1)
+                self.session.add(entry)
         await self._commit()
 
     async def _activate_publish_merge(
@@ -1894,6 +1902,11 @@ class KnowledgeDocumentDistributionService:
             int(target_document.id),
             target_document.content_generation,
         )
+        if command.metadata_only_migration:
+            entries = await self.file_repository.find_distribution_entries_by_document_id(int(target_document.id))
+            for entry in entries:
+                entry.projection_next_retry_at = datetime(9999, 1, 1)
+                self.session.add(entry)
         await self.session.delete(source_document)
         await self.session.flush()
         await self._commit()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime, timezone
+from random import randrange
 
 from loguru import logger
 
@@ -48,7 +49,12 @@ DEFAULT_QUEUE = "celery"
 
 def _dispatch_task_for_tenants(task, tenant_ids: list[int]) -> None:
     for tenant_id in sorted({int(value) for value in tenant_ids if int(value) > 0}):
-        task.apply_async(headers={"tenant_id": tenant_id}, queue=DEFAULT_QUEUE)
+        task.apply_async(
+            kwargs={"trigger": "scheduled"},
+            headers={"tenant_id": tenant_id},
+            queue=DEFAULT_QUEUE,
+            time_limit=1800,
+        )
 
 
 def _build_llm_invoke(tenant_id: int) -> Callable[[str], str] | None:
@@ -127,24 +133,19 @@ async def _rebuild_async(now: datetime | None = None) -> str:
 @bisheng_celery.task(
     bind=True,
     name="bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 3},
-    time_limit=1800,
     acks_late=True,
 )
-def rebuild_portal_hot_search_snapshot_celery(_task):
-    return run_async_task(_rebuild_async)
-
-
-@bisheng_celery.task(
-    bind=True,
-    name="bisheng.worker.knowledge.portal_hot_search.trigger_portal_hot_search_rebuild",
-    acks_late=True,
-)
-def trigger_portal_hot_search_rebuild_celery(_task):
-    """Manual single-tenant rerun (AC-34); reuses the same pipeline and lock."""
-    return run_async_task(_rebuild_async)
+def rebuild_portal_hot_search_snapshot_celery(_task, trigger: str = "scheduled"):
+    if trigger not in {"manual", "scheduled"}:
+        raise ValueError("unknown hot-search rebuild trigger")
+    try:
+        return run_async_task(_rebuild_async)
+    except Exception as exc:
+        if trigger == "manual":
+            raise
+        # Preserve Celery's capped exponential backoff with full jitter.
+        countdown = randrange(min(600, 2 ** _task.request.retries) + 1)
+        raise _task.retry(exc=exc, countdown=countdown, max_retries=3)
 
 
 async def _fanout_async() -> int:

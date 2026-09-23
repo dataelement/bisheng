@@ -538,15 +538,13 @@ async def _refresh_file_similarity_candidates(file_id: int) -> int:
             return await service.refresh_similar_candidates_for_file(file_id)
 
 
-@bisheng_celery.task(acks_late=True)
-def refresh_file_similarity_candidates_celery(file_id: int) -> int:
-    trace_id_var.set(f"refresh_file_similarity_candidates_{file_id}")
-    logger.info("refresh_file_similarity_candidates_celery start file_id={}", file_id)
+def refresh_file_similarity_candidates(file_id: int) -> int:
+    logger.info("refresh_file_similarity_candidates start file_id={}", file_id)
     from bisheng.worker._asyncio_utils import run_async_task
 
     count = run_async_task(lambda: _refresh_file_similarity_candidates(file_id))
     logger.info(
-        "refresh_file_similarity_candidates_celery done file_id={} candidate_count={}",
+        "refresh_file_similarity_candidates done file_id={} candidate_count={}",
         file_id,
         count,
     )
@@ -604,8 +602,15 @@ def _try_enqueue_auto_publish(file_record: KnowledgeFile) -> None:
         if not getattr(file_record, "file_subcategory_code", None):
             return
 
-        # Skip if file is already an F059 distribution entry
-        if getattr(file_record, "entry_type", None) is not None:
+        # 共享入库会创建 manager, 不能据此判定文件已经发布.
+        entry_type = getattr(file_record, "entry_type", None)
+        if entry_type not in (None, KnowledgeFileEntryType.MANAGER.value):
+            return
+        if entry_type == KnowledgeFileEntryType.MANAGER.value and (
+            getattr(file_record, "entry_status", None) != KnowledgeFileEntryStatus.ACTIVE.value
+            or getattr(file_record, "reference_document_id", None) is None
+            or getattr(file_record, "deleted_at", None) is not None
+        ):
             return
 
         # Skip non-files (directories)

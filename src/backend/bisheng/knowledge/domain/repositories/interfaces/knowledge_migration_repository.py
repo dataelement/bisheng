@@ -121,6 +121,20 @@ class KnowledgeMigrationRepository(ABC):
     ) -> MigrationPage: ...
 
     @abstractmethod
+    async def claim_next_units(
+        self, *, batch_id: int, round_no: int, execution_token: str, worker_task_id: str | None, limit: int = 20
+    ): ...
+
+    @abstractmethod
+    async def active_attempts(self, attempt_ids: list[int], execution_token: str): ...
+
+    @abstractmethod
+    async def update_checkpoints(self, updates: dict[int, str], *, execution_token: str) -> bool: ...
+
+    @abstractmethod
+    async def finish_attempts(self, results: list[dict], *, execution_token: str) -> bool: ...
+
+    @abstractmethod
     async def claim_next_unit(
         self,
         *,

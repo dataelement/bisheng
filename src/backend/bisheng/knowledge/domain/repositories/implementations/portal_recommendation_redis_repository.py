@@ -9,6 +9,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.storage.tenant_storage import get_redis_key_prefix
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_redis_repository import (
+    PortalRecommendationPoolRebuildRequest,
     PortalRecommendationPoolVersionState,
     PortalRecommendationRedisRepository,
 )
@@ -24,6 +25,16 @@ class PortalRecommendationRedisRepositoryImpl(PortalRecommendationRedisRepositor
     # The readiness manifest must disappear before any versioned pool key can
     # expire; otherwise online traffic could keep trusting a partial version.
     POOL_READY_TTL_SECONDS = POOL_VERSION_TTL_SECONDS - 5 * 60
+    _CLAIM_POOL_REQUEST_SCRIPT = """
+local existing = redis.call('GET', KEYS[2])
+if existing then
+  return existing
+end
+local generation = redis.call('HINCRBY', KEYS[1], 'desired_generation', 1)
+local payload = cjson.encode({generation=generation, config_version=tonumber(ARGV[1]), fingerprint=ARGV[2]})
+redis.call('SET', KEYS[2], payload, 'EX', ARGV[3])
+return payload
+"""
     _RECORD_READ_SCRIPT = """
 local current = redis.call('ZSCORE', KEYS[1], ARGV[1])
 if (not current) or (tonumber(ARGV[2]) > tonumber(current)) then
@@ -92,6 +103,12 @@ return redis.call('INCR', KEYS[2])
     @classmethod
     def pool_state_key(cls, tenant_id: int) -> str:
         return cls._key(tenant_id, f"sg:rec:v1:pool:{{{tenant_id}}}:active_version")
+
+    @classmethod
+    def pool_rebuild_request_key(cls, tenant_id: int, request_id: str) -> str:
+        if not request_id or len(request_id) > 128:
+            raise ValueError("invalid pool rebuild request id")
+        return cls._key(tenant_id, f"sg:rec:v1:pool:{{{tenant_id}}}:request:{request_id}")
 
     @classmethod
     def pool_key(cls, tenant_id: int, pool_version: str, pool_name: str) -> str:
@@ -497,6 +514,46 @@ return redis.call('INCR', KEYS[2])
                 1,
             )
         )
+
+    @staticmethod
+    def _decode_pool_rebuild_request(raw: str | bytes) -> PortalRecommendationPoolRebuildRequest:
+        payload = json.loads(raw)
+        generation = payload["generation"]
+        config_version = payload["config_version"]
+        fingerprint = payload["fingerprint"]
+        if (
+            type(generation) is not int or generation <= 0
+            or type(config_version) is not int or config_version < 0
+            or not isinstance(fingerprint, str) or not fingerprint
+        ):
+            raise ValueError("invalid pool rebuild request context")
+        return PortalRecommendationPoolRebuildRequest(generation, config_version, fingerprint)
+
+    async def get_pool_rebuild_request(
+        self, tenant_id: int, request_id: str,
+    ) -> PortalRecommendationPoolRebuildRequest | None:
+        self._assert_current_tenant(tenant_id)
+        redis = await self._redis()
+        raw = await redis.async_connection.get(self.pool_rebuild_request_key(tenant_id, request_id))
+        return None if raw is None else self._decode_pool_rebuild_request(raw)
+
+    async def get_or_create_pool_rebuild_request(
+        self, tenant_id: int, request_id: str, *, config_version: int, fingerprint: str, ttl_seconds: int,
+    ) -> PortalRecommendationPoolRebuildRequest:
+        self._assert_current_tenant(tenant_id)
+        if config_version < 0 or not fingerprint or ttl_seconds <= 0:
+            raise ValueError("invalid pool rebuild request parameters")
+        redis = await self._redis()
+        raw = await redis.async_connection.eval(
+            self._CLAIM_POOL_REQUEST_SCRIPT,
+            2,
+            self.pool_state_key(tenant_id),
+            self.pool_rebuild_request_key(tenant_id, request_id),
+            int(config_version),
+            fingerprint,
+            int(ttl_seconds),
+        )
+        return self._decode_pool_rebuild_request(raw)
 
     async def get_pool_state(self, tenant_id: int) -> PortalRecommendationPoolVersionState:
         self._assert_current_tenant(tenant_id)

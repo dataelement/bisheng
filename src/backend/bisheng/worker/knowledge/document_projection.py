@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, or_
@@ -16,6 +17,7 @@ from bisheng.approval.domain.models.approval_instance import (
 from bisheng.approval.domain.repositories.approval_instance_repository import (
     ApprovalInstanceRepository,
 )
+from bisheng.core.config.celery_queues import KNOWLEDGE_PARSE_QUEUE
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.tenant import TenantDao
@@ -60,7 +62,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_QUEUE = "celery"
 SCAN_PAGE_SIZE = 100
 
-# 测试可注入 writer；生产始终要求已初始化的共享目标。
+# 测试可注入 writer; 生产始终要求已初始化的共享目标。
 shared_storage_writer_factory = None
 
 
@@ -82,10 +84,10 @@ async def _build_document_projection_service(
     deleting_entry_finalizer=None,
     tenant_id: int | None = None,
 ):
+    from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
     from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
         KnowledgeDocumentProjectionService,
     )
-    from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError, SharedStorageErrorCode
     from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 
     if tenant_id is None:
@@ -462,9 +464,6 @@ async def _process_projection_async(
 @bisheng_celery.task(
     bind=True,
     acks_late=True,
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 5},
     name=(
         "bisheng.worker.knowledge.document_projection."
         "process_document_projection"
@@ -473,16 +472,106 @@ async def _process_projection_async(
 def process_document_projection(
     task,
     tenant_id: int,
-    entry_id: int,
-) -> str:
-    lease_owner = f"{task.request.id or uuid.uuid4()}:{entry_id}"
+    entry_id: int | None = None,
+    *,
+    entry_ids: list[int] | None = None,
+) -> dict:
+    if entry_id is not None and entry_ids is not None:
+        raise ValueError("use entry_ids or entry_id, not both")
+    ids = entry_ids if entry_ids is not None else ([entry_id] if entry_id is not None else [])
+    if not isinstance(ids, list) or any(type(value) is not int or value <= 0 for value in ids):
+        raise ValueError("projection entry_ids must be positive integers")
+    if int(get_current_tenant_id() or DEFAULT_TENANT_ID) != int(tenant_id):
+        raise ValueError("projection tenant header mismatch")
+    # 每次交付使用唯一所有者, 旧执行者不能在消息重投后写回结果。
+    lease_owner = f"batch:{uuid.uuid4().hex}"
     return run_async_task(
-        lambda: _process_projection_async(
-            tenant_id=int(tenant_id),
-            entry_id=int(entry_id),
-            lease_owner=lease_owner,
-        )
+        lambda: _process_projection_batch_async(int(tenant_id), list(dict.fromkeys(ids)), lease_owner)
     )
+
+
+@bisheng_celery.task(
+    bind=True, acks_late=True, queue=KNOWLEDGE_PARSE_QUEUE,
+    name="bisheng.worker.knowledge.document_projection.rebuild_document_content",
+)
+def rebuild_document_content(
+    task, tenant_id: int, entry_ids: list[int], rebuild_owner: str, content_manifests: list[dict] | None = None,
+) -> dict:
+    """内容重建由文件解析 Worker 执行, 接管交接租约后再次核验实际内容。"""
+    if not isinstance(entry_ids, list) or any(type(value) is not int or value <= 0 for value in entry_ids):
+        raise ValueError("projection entry_ids must be positive integers")
+    if int(get_current_tenant_id() or DEFAULT_TENANT_ID) != int(tenant_id):
+        raise ValueError("projection tenant header mismatch")
+    if not isinstance(rebuild_owner, str) or not rebuild_owner.startswith("rebuild:"):
+        raise ValueError("invalid content rebuild reservation")
+    return run_async_task(lambda: _process_projection_batch_async(
+        int(tenant_id), list(dict.fromkeys(entry_ids)), f"content:{uuid.uuid4().hex}",
+        allow_content_rebuild=True, handoff_owner=rebuild_owner,
+        content_manifests=content_manifests,
+    ))
+
+
+async def _dispatch_content_rebuild(
+    tenant_id: int, entry_ids: list[int], reservation: str, *, content_manifests: list[dict] | None = None,
+) -> None:
+    payload = {"tenant_id": tenant_id, "entry_ids": entry_ids, "rebuild_owner": reservation}
+    if content_manifests:
+        payload["content_manifests"] = content_manifests
+    await asyncio.to_thread(
+        rebuild_document_content.apply_async,
+        kwargs=payload,
+        headers={"tenant_id": tenant_id}, queue=KNOWLEDGE_PARSE_QUEUE, task_id=reservation, retry=False,
+    )
+
+
+async def _process_projection_batch_async(
+    tenant_id: int, entry_ids: list[int], owner: str, *,
+    allow_content_rebuild: bool = False, handoff_owner: str | None = None,
+    content_manifests: list[dict] | None = None,
+) -> dict:
+    from bisheng.knowledge.domain.repositories.implementations.document_projection_batch_repository import (
+        DocumentProjectionBatchRepository,
+    )
+    from bisheng.knowledge.domain.services.document_projection_batch_service import DocumentProjectionBatchService
+    from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
+
+    if not entry_ids:
+        return {"total": 0, "results": {}}
+
+    @asynccontextmanager
+    async def repository_factory():
+        async with get_async_db_session() as session:
+            yield DocumentProjectionBatchRepository(session)
+
+    conf = get_shared_storage_conf()
+    writer = (shared_storage_writer_factory or _default_shared_storage_writer_factory)(tenant_id=tenant_id)
+    if writer is None:
+        raise RuntimeError("shared projection writer is unavailable")
+    loaders = {}
+    if allow_content_rebuild:
+        from bisheng.knowledge.domain.services.shared_space_content_loader import (
+            embed_shared_content_chunks,
+            load_shared_content_from_original,
+        )
+        loaders = {"chunk_loader": load_shared_content_from_original, "chunk_embedder": embed_shared_content_chunks}
+    service = DocumentProjectionBatchService(
+        repository_factory=repository_factory, writer=writer,
+        finalizer=_finalize_deleting_entry, rebuild_dispatch=_dispatch_content_rebuild,
+        allow_content_rebuild=allow_content_rebuild, handoff_owner=handoff_owner,
+        content_manifests=content_manifests,
+        batch_size=int(conf.projection_batch_size), max_attempts=int(conf.projection_max_retries),
+        **loaders,
+    )
+    results = await service.run(tenant_id, entry_ids, owner)
+    logger.info("projection batch completed tenant_id=%s total=%s failed=%s", tenant_id, len(results),
+                sum(status in {"failed", "exhausted"} for status in results.values()))
+    return {
+        "total": len(results), "results": results,
+        "status": (
+            "completed_with_failures" if any(status in {"failed", "exhausted"} for status in results.values())
+            else "completed_with_pending" if "rebuild_queued" in results.values() else "completed"
+        ),
+    }
 
 
 async def _reconcile_permission_candidates(
@@ -692,15 +781,7 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
                 )
             ).all()
         )
-    for entry_id in entry_ids:
-        process_document_projection.apply_async(
-            kwargs={
-                "tenant_id": int(tenant_id),
-                "entry_id": int(entry_id),
-            },
-            headers={"tenant_id": int(tenant_id)},
-            queue=DEFAULT_QUEUE,
-        )
+    enqueue_document_projection_entries(tenant_id=tenant_id, entry_ids=entry_ids)
     # 固定截止时间并按主键翻页, 陈旧 deleting 不再挡住后续 preparing。
     cutoff = datetime.now() - timedelta(minutes=5)
     after_id = 0
@@ -802,11 +883,12 @@ def enqueue_document_projection_entries(
             queue=DEFAULT_QUEUE,
         )
         return
-    for entry_id in sorted({int(item) for item in entry_ids}):
+    normalized_ids = sorted({int(item) for item in entry_ids})
+    if normalized_ids:
         process_document_projection.apply_async(
             kwargs={
                 "tenant_id": int(tenant_id),
-                "entry_id": entry_id,
+                "entry_ids": normalized_ids,
             },
             headers={"tenant_id": int(tenant_id)},
             queue=DEFAULT_QUEUE,

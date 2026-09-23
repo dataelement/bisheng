@@ -56,6 +56,60 @@ def _batch(request_id: str = "request-1") -> KnowledgeMigrationBatch:
     )
 
 
+async def test_batch_claim_and_checkpoint_use_bounded_queries_and_fence_stale_attempts(migration_session):
+    from sqlalchemy import event
+
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch = _batch("bulk")
+    batch.status = "running"
+    migration_session.add(batch)
+    await migration_session.flush()
+    units = [
+        KnowledgeMigrationUnit(
+            batch_id=batch.id, unit_key=f"document:{index}", source_space_id=10, source_space_name="source"
+        )
+        for index in range(25)
+    ]
+    migration_session.add_all(units)
+    await migration_session.commit()
+    selects = []
+
+    def count_select(_conn, _cursor, statement, *_):
+        if statement.lstrip().upper().startswith("SELECT"):
+            selects.append(statement)
+
+    engine = migration_session.bind.sync_engine
+    event.listen(engine, "before_cursor_execute", count_select)
+    try:
+        claimed = await repository.claim_next_units(
+            batch_id=batch.id, round_no=1, execution_token="current", worker_task_id="task", limit=20
+        )
+        await repository.commit()
+        assert len(claimed) == 20
+        assert len(selects) == 2
+        updates = {attempt.id: "target_rows_created" for _, attempt in claimed}
+        assert not await repository.update_checkpoints(updates, execution_token="stale")
+        assert all(unit.checkpoint == "planned" for unit, _ in claimed)
+        selects.clear()
+        assert await repository.update_checkpoints(updates, execution_token="current")
+        await repository.commit()
+        assert len(selects) == 1
+        assert await repository.finish_attempts(
+            [
+                {"attempt_id": attempt.id, "unit_status": "succeeded", "checkpoint": "completed", "result": "succeeded"}
+                for _, attempt in claimed
+            ],
+            execution_token="current",
+        )
+        await repository.commit()
+        remaining = await repository.claim_next_units(
+            batch_id=batch.id, round_no=1, execution_token="current", worker_task_id="task", limit=20
+        )
+        assert len(remaining) == 5
+    finally:
+        event.remove(engine, "before_cursor_execute", count_select)
+
+
 @pytest.mark.asyncio
 async def test_repository_idempotent_create_plan_claim_checkpoint_and_retry(migration_session):
     repo = KnowledgeMigrationRepositoryImpl(migration_session)

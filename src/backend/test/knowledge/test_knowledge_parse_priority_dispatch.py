@@ -197,7 +197,6 @@ def test_parse_tasks_declare_medium_default_priority() -> None:
         BACKEND_DIR / "bisheng/worker/knowledge/file_worker.py",
     )
     target_names = {
-        "extract_knowledge_file_title_celery",
         "parse_knowledge_file_celery",
         "retry_knowledge_file_celery",
     }
@@ -225,7 +224,6 @@ def test_parse_tasks_declare_medium_default_priority() -> None:
 
 def test_production_code_has_no_direct_parse_task_publish_bypass() -> None:
     forbidden = {
-        "extract_knowledge_file_title_celery",
         "parse_knowledge_file_celery",
         "retry_knowledge_file_celery",
     }

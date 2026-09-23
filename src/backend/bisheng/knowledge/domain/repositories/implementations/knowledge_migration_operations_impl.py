@@ -269,9 +269,25 @@ class KnowledgeMigrationOperationsImpl:
 
     def __init__(self, *, shared_projection=None):
         self.shared_projection = shared_projection or KnowledgeMigrationSharedProjection()
+        self._contexts = {}
 
-    @staticmethod
-    async def _load_context(unit_id: int) -> MigrationRuntimeContext:
+    async def prepare_stage(self, units, stage):
+        self._contexts.clear()
+        if stage in {
+            "copy_target_objects",
+            "build_target_indexes",
+            "write_target_permissions",
+            "verify_target",
+            "cleanup_source_external",
+        }:
+            async with get_async_db_session() as session:
+                self._contexts = await KnowledgeMigrationRuntimeRepositoryImpl(session).load_contexts(
+                    [unit.unit_id for unit in units]
+                )
+
+    async def _load_context(self, unit_id: int) -> MigrationRuntimeContext:
+        if unit_id in self._contexts:
+            return self._contexts[unit_id]
         async with get_async_db_session() as session:
             repository = KnowledgeMigrationRuntimeRepositoryImpl(session)
             return await repository.load_context(unit_id)
@@ -288,6 +304,9 @@ class KnowledgeMigrationOperationsImpl:
             )
 
     async def copy_target_objects(self, unit: MigrationExecutionUnit) -> None:
+        context = await self._load_context(unit.unit_id)
+        if all(item.source.id == item.target.id for item in context.files):
+            return
         copy_jobs: list[
             tuple[dict[str, str], dict[str, str], dict[str, bool]]
         ] = []
@@ -390,6 +409,14 @@ class KnowledgeMigrationOperationsImpl:
         unit: MigrationExecutionUnit,
     ) -> None:
         context = await self._load_context(unit.unit_id)
+        if all(item.source.id == item.target.id for item in context.files) and context.unit.checkpoint not in {
+            "db_switched",
+            "source_external_cleaned",
+            "source_rows_cleaned",
+            "completed",
+        }:
+            # 原文件仍在来源库时不能提前替换它的权限。
+            return
         owner_id = int(context.target_owner.user_id)
         tag_updates: dict[int, dict[str, list[int]]] = {}
         for folder in context.created_folders:
@@ -432,9 +459,17 @@ class KnowledgeMigrationOperationsImpl:
                 control.target_resource_manifest = manifest
                 session.add(control)
             await session.commit()
+        self._contexts.pop(unit.unit_id, None)
 
     async def verify_target(self, unit: MigrationExecutionUnit) -> None:
         context = await self._load_context(unit.unit_id)
+        if all(item.source.id == item.target.id for item in context.files) and context.unit.checkpoint not in {
+            "db_switched",
+            "source_external_cleaned",
+            "source_rows_cleaned",
+            "completed",
+        }:
+            return
         owner_id = int(context.target_owner.user_id)
         for item in context.files:
             if int(item.target.knowledge_id) != int(context.target_space.id):
@@ -493,9 +528,14 @@ class KnowledgeMigrationOperationsImpl:
         self,
         unit: MigrationExecutionUnit,
     ) -> None:
-        await self.shared_projection.converge_unit(unit)
         context = await self._load_context(unit.unit_id)
+        if all(item.source.id == item.target.id for item in context.files):
+            await self.write_target_permissions(unit)
+            await self.verify_target(unit)
+        await self.shared_projection.converge_unit(unit)
         for item in context.files:
+            if item.source.id == item.target.id:
+                continue
             await asyncio.to_thread(delete_minio_files, item.source)
             await _replace_tags(
                 int(item.source.id),
@@ -557,6 +597,8 @@ class KnowledgeMigrationOperationsImpl:
                 return
             raise
         for item in context.files:
+            if item.source.id == item.target.id:
+                continue
             await asyncio.to_thread(delete_minio_files, item.target)
             await _replace_tags(
                 int(item.target.id),

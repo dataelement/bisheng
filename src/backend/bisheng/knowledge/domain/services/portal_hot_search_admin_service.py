@@ -54,15 +54,16 @@ class PortalHotSearchAdminService:
             scope="tenant",
             tenant_id=tenant_id,
             task_id=task_id,
-            task_name="bisheng.worker.knowledge.portal_hot_search.trigger_portal_hot_search_rebuild",
+            task_name="bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
             message="Hot-search rebuild dispatched for current tenant",
         )
 
     @staticmethod
     def _dispatch_tenant_rebuild(tenant_id: int) -> str:
-        from bisheng.worker.knowledge.portal_hot_search import trigger_portal_hot_search_rebuild_celery
+        from bisheng.worker.knowledge.portal_hot_search import rebuild_portal_hot_search_snapshot_celery
 
-        async_result = trigger_portal_hot_search_rebuild_celery.apply_async(
+        async_result = rebuild_portal_hot_search_snapshot_celery.apply_async(
+            kwargs={"trigger": "manual"},
             headers={"tenant_id": tenant_id},
             queue=DEFAULT_QUEUE,
         )

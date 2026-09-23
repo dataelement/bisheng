@@ -93,6 +93,7 @@ from bisheng.knowledge.domain.services.department_file_view_lifecycle_service im
     DepartmentFileViewLifecycleService,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_file_cleanup_policy import needs_legacy_file_cleanup
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -2021,24 +2022,31 @@ class KnowledgeService(KnowledgeUtils):
         # Delete Audit Log for Knowledge Base Files
         cls.delete_knowledge_file_hook(request, login_user, db_knowledge.id, knowledge_file)
 
-        # 5Minutes to check if the file was actually deleted
-        file_worker.delete_knowledge_file_celery.apply_async(
-            args=(
-                file_ids,
-                knowledge_file[0].knowledge_id,
-                True,
-                [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
-                knowledge_file_snapshots,
-            ),
-            headers={
-                "tenant_id": int(
-                    file_tenant_id
-                    or getattr(db_knowledge, "tenant_id", None)
-                    or DEFAULT_TENANT_ID
-                )
-            },
-            countdown=300,
-        )
+        pdf_snapshot_payload = [snapshot.to_dict() for snapshot in pdf_artifact_snapshots]
+        if needs_legacy_file_cleanup(
+            db_knowledge,
+            file_ids,
+            pdf_artifact_snapshots=pdf_snapshot_payload,
+            knowledge_file_snapshots=knowledge_file_snapshots,
+        ):
+            # 有实际清理工作时, 五分钟后执行补删.
+            file_worker.delete_knowledge_file_celery.apply_async(
+                args=(
+                    file_ids,
+                    knowledge_file[0].knowledge_id,
+                    True,
+                    pdf_snapshot_payload,
+                    knowledge_file_snapshots,
+                ),
+                headers={
+                    "tenant_id": int(
+                        file_tenant_id
+                        or getattr(db_knowledge, "tenant_id", None)
+                        or DEFAULT_TENANT_ID
+                    )
+                },
+                countdown=300,
+            )
 
         return True
 

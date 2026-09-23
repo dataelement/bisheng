@@ -246,6 +246,113 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         ).all()
         return MigrationPage(items=items, total=total, page=page, page_size=page_size)
 
+    async def claim_next_units(
+        self, *, batch_id: int, round_no: int, execution_token: str, worker_task_id: str | None, limit: int = 20
+    ):
+        batch = await self.find_batch_by_id(batch_id, for_update=True)
+        if batch is None or batch.status != "running":
+            return []
+        units = list(
+            (
+                await self.session.exec(
+                    select(KnowledgeMigrationUnit)
+                    .where(
+                        KnowledgeMigrationUnit.batch_id == batch_id,
+                        KnowledgeMigrationUnit.current_round_no == round_no,
+                        col(KnowledgeMigrationUnit.status).in_({"planned", "unprocessed"}),
+                    )
+                    .order_by(KnowledgeMigrationUnit.id)
+                    .limit(max(1, min(limit, 100)))
+                    .with_for_update()
+                )
+            ).all()
+        )
+        claimed = []
+        now = datetime.now()
+        for unit in units:
+            unit.status = "running"
+            unit.attempt_count += 1
+            unit.started_at = unit.started_at or now
+            attempt = KnowledgeMigrationAttempt(
+                batch_id=batch_id,
+                unit_id=unit.id,
+                round_no=round_no,
+                attempt_no=unit.attempt_count,
+                worker_task_id=worker_task_id,
+                execution_token=execution_token,
+                start_checkpoint=unit.checkpoint,
+                started_at=now,
+            )
+            self.session.add_all([unit, attempt])
+            claimed.append((unit, attempt))
+        await self.session.flush()
+        return claimed
+
+    async def active_attempts(self, attempt_ids: list[int], execution_token: str):
+        if not attempt_ids:
+            return {}
+        rows = (
+            await self.session.exec(
+                select(KnowledgeMigrationAttempt, KnowledgeMigrationUnit)
+                .join(KnowledgeMigrationUnit, KnowledgeMigrationUnit.id == KnowledgeMigrationAttempt.unit_id)
+                .join(KnowledgeMigrationBatch, KnowledgeMigrationBatch.id == KnowledgeMigrationUnit.batch_id)
+                .where(
+                    col(KnowledgeMigrationAttempt.id).in_(attempt_ids),
+                    KnowledgeMigrationAttempt.execution_token == execution_token,
+                    KnowledgeMigrationAttempt.result == "running",
+                    KnowledgeMigrationUnit.status == "running",
+                    KnowledgeMigrationBatch.status == "running",
+                    KnowledgeMigrationUnit.attempt_count == KnowledgeMigrationAttempt.attempt_no,
+                )
+                .with_for_update()
+            )
+        ).all()
+        return {int(attempt.id): (attempt, unit) for attempt, unit in rows}
+
+    async def update_checkpoints(self, updates: dict[int, str], *, execution_token: str) -> bool:
+        active = await self.active_attempts(list(updates), execution_token)
+        if set(active) != set(updates):
+            return False
+        groups = {}
+        for attempt_id, checkpoint in updates.items():
+            _, unit = active[attempt_id]
+            if _CHECKPOINT_ORDER[checkpoint] < _CHECKPOINT_ORDER[unit.checkpoint]:
+                raise ValueError("migration checkpoint cannot move backwards")
+            unit.checkpoint = checkpoint
+            self.session.add(unit)
+            groups.setdefault(checkpoint, []).append(unit.id)
+        for checkpoint, ids in groups.items():
+            await self.session.exec(
+                update(KnowledgeMigrationFile)
+                .where(col(KnowledgeMigrationFile.unit_id).in_(ids))
+                .values(checkpoint=checkpoint)
+            )
+        await self.session.flush()
+        return True
+
+    async def finish_attempts(self, results: list[dict], *, execution_token: str) -> bool:
+        active = await self.active_attempts([row["attempt_id"] for row in results], execution_token)
+        if len(active) != len(results):
+            return False
+        groups = {}
+        now = datetime.now()
+        for value in results:
+            attempt, unit = active[value["attempt_id"]]
+            unit.status, unit.checkpoint = value["unit_status"], value["checkpoint"]
+            unit.reason_code, unit.summary, unit.finished_at = value.get("reason_code"), value.get("error_summary"), now
+            attempt.end_checkpoint, attempt.result = unit.checkpoint, value["result"]
+            attempt.reason_code, attempt.error_summary, attempt.finished_at = unit.reason_code, unit.summary, now
+            self.session.add_all([unit, attempt])
+            groups.setdefault((unit.status, unit.checkpoint, unit.reason_code, unit.summary), []).append(unit.id)
+        for (status, checkpoint, reason, summary), ids in groups.items():
+            await self.session.exec(
+                update(KnowledgeMigrationFile)
+                .where(col(KnowledgeMigrationFile.unit_id).in_(ids))
+                .values(status=status, checkpoint=checkpoint, reason_code=reason, summary=summary)
+            )
+        await self.session.flush()
+        return True
+
     async def claim_next_unit(
         self,
         *,

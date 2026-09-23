@@ -45,6 +45,7 @@ from bisheng.knowledge.domain.schemas.knowledge_recycle import (
     RecycleRestorePreviewResponse,
     RecycleRestoreRequest,
 )
+from bisheng.knowledge.domain.services.knowledge_file_cleanup_policy import needs_legacy_file_cleanup
 from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
     KnowledgeFulltextFileRef,
     request_file_delete_intents,
@@ -636,12 +637,15 @@ class KnowledgeRecycleService:
             knowledge_ids = {int(i.knowledge_id) for i in all_items}
             await _plan_canonical_purge(session, file_ids)
 
-        # Hard-delete vectors + minio + DB rows via existing celery path per knowledge
+        # 此路径未携带对象快照, 仅为仍需旧向量清理的知识库投递任务.
         from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
 
+        knowledge_by_id = {
+            knowledge.id: knowledge for knowledge in await KnowledgeDao.aget_list_by_ids(list(knowledge_ids))
+        }
         for kid in knowledge_ids:
             kids_files = [int(i.file_id) for i in all_items if int(i.knowledge_id) == kid]
-            if not kids_files:
+            if not needs_legacy_file_cleanup(knowledge_by_id.get(kid), kids_files):
                 continue
             delete_knowledge_file_celery.apply_async(
                 kwargs={

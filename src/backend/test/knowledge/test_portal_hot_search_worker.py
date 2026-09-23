@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -20,13 +20,46 @@ portal_hot_search = importlib.import_module("bisheng.worker.knowledge.portal_hot
 from bisheng.core.context.tenant import current_tenant_id
 
 
+@pytest.mark.parametrize("trigger", ["scheduled", "manual"])
+def test_rebuild_keeps_source_specific_retry_policy(monkeypatch, trigger):
+    spec = importlib.util.spec_from_file_location("hot_search_task_test", portal_hot_search.__file__)
+    worker = importlib.util.module_from_spec(spec)
+    with patch.dict(sys.modules, {
+        "bisheng.worker.main": SimpleNamespace(
+            bisheng_celery=SimpleNamespace(task=lambda **_kwargs: lambda fn: fn),
+        ),
+    }):
+        spec.loader.exec_module(worker)
+    failure = RuntimeError("rebuild unavailable")
+    monkeypatch.setattr(worker, "run_async_task", MagicMock(side_effect=failure))
+    task = SimpleNamespace(request=SimpleNamespace(retries=2), retry=MagicMock(side_effect=failure))
+    with pytest.raises(RuntimeError, match="rebuild unavailable"):
+        worker.rebuild_portal_hot_search_snapshot_celery(task, trigger=trigger)
+    if trigger == "scheduled":
+        task.retry.assert_called_once()
+        assert task.retry.call_args.kwargs["max_retries"] == 3
+        assert 0 <= task.retry.call_args.kwargs["countdown"] <= 4
+    else:
+        task.retry.assert_not_called()
+
+
+def test_admin_dispatches_unified_task_with_manual_source(monkeypatch):
+    from bisheng.knowledge.domain.services.portal_hot_search_admin_service import PortalHotSearchAdminService
+
+    publish = MagicMock(return_value=SimpleNamespace(id="manual-task"))
+    monkeypatch.setattr(portal_hot_search.rebuild_portal_hot_search_snapshot_celery, "apply_async", publish)
+    assert PortalHotSearchAdminService._dispatch_tenant_rebuild(7) == "manual-task"
+    assert publish.call_args.kwargs["kwargs"] == {"trigger": "manual"}
+    assert publish.call_args.kwargs["headers"] == {"tenant_id": 7}
+
+
 def test_worker_package_imports_module_explicitly():
     source = (_BACKEND / "bisheng/worker/__init__.py").read_text(encoding="utf-8")
     assert "worker.knowledge.portal_hot_search" in source
 
 
 def test_tasks_and_beat_registered_by_worker_package():
-    """Beat publishes the fanout task and the worker package registers all three.
+    """Beat publishes fanout and the worker package registers the unified task.
 
     Runs in a subprocess so the celery app / settings validation happen in a
     clean process, matching test_celery_beat_task_registration.
@@ -39,7 +72,6 @@ from bisheng.worker.main import bisheng_celery
 required = [
     "bisheng.worker.knowledge.portal_hot_search.fanout_portal_hot_search_rebuild",
     "bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
-    "bisheng.worker.knowledge.portal_hot_search.trigger_portal_hot_search_rebuild",
 ]
 missing = [name for name in required if name not in bisheng_celery.tasks]
 entry = settings.celery_task.beat_schedule.get("portal_hot_search_rebuild_daily")
@@ -61,7 +93,9 @@ raise SystemExit(0 if (not missing and beat_ok) else 1)
 async def test_fanout_dispatches_per_tenant_with_headers():
     dispatched = []
 
-    def _capture(*, kwargs=None, headers=None, queue=None):
+    def _capture(*, kwargs=None, headers=None, queue=None, time_limit=None):
+        assert kwargs == {"trigger": "scheduled"}
+        assert time_limit == 1800
         dispatched.append((headers, queue))
 
     original_dao = portal_hot_search.TenantDao

@@ -45,8 +45,10 @@ from bisheng.knowledge.domain.contracts.metadata_schema import (
 from bisheng.knowledge.domain.contracts.retrieval_scope import CanonicalChunkHit
 from bisheng.knowledge.domain.contracts.shared_space_storage import (
     ContentDeleteRequest,
+    ContentProjectionIdentity,
     ContentUpsertRequest,
     MembershipUpdateRequest,
+    ProjectionContentInspection,
     SharedSpaceStorageWriter,
     validate_knowledge_ids,
 )
@@ -1099,6 +1101,23 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             script=script,
         )
 
+    async def relocate_content(self, request) -> None:
+        from bisheng.knowledge.rag.shared_space_metadata_migration import relocate_content
+
+        await relocate_content(self, request)
+
+    async def apply_projection_batch(self, requests, *, guard) -> dict[int, str]:
+        from bisheng.knowledge.rag.shared_space_projection_batch import apply_projection_batch
+
+        return await apply_projection_batch(self, requests, guard=guard)
+
+    async def inspect_projection_content(
+        self, identities: Sequence[ContentProjectionIdentity], *, guard,
+    ) -> dict[int, ProjectionContentInspection]:
+        from bisheng.knowledge.rag.shared_space_projection_probe import inspect_projection_content
+
+        return await inspect_projection_content(self, identities, guard=guard)
+
     async def delete_content(self, request: ContentDeleteRequest) -> None:
         if int(request.tenant_id) != self.tenant_id:
             raise ValueError(
@@ -1114,7 +1133,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             content_generation=request.content_generation,
         )
         await self._run_milvus("delete", expr=expr)
-        await self._run_es(
+        response = await self._run_es(
             "delete_by_query",
             index=self._es_index(snapshot),
             query=self._es_doc_query(
@@ -1124,6 +1143,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 content_generation=request.content_generation,
             ),
         )
+
+        if response is not None and (response.get("failures") or response.get("timed_out")):
+            raise RuntimeError("shared content deletion was incomplete in Elasticsearch")
 
 
 def build_shared_space_components_for_tenant(

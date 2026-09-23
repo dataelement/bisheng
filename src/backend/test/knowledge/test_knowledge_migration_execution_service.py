@@ -13,6 +13,39 @@ from bisheng.knowledge.domain.services.knowledge_migration_executor import (
 
 
 class FakeRepository:
+    async def claim_next_units(self, *, limit, **kwargs):
+        values = []
+        for _ in range(limit):
+            value = await self.claim_next_unit(**kwargs)
+            if value is None:
+                break
+            values.append(value)
+        return values
+
+    async def active_attempts(self, attempt_ids, execution_token):
+        return {
+            attempt_id: None
+            for attempt_id in attempt_ids
+            if await self.is_attempt_active(attempt_id=attempt_id, execution_token=execution_token)
+        }
+
+    async def update_checkpoints(self, updates, *, execution_token):
+        for attempt_id, checkpoint in updates.items():
+            if not await self.update_checkpoint(
+                self.attempt_by_id[attempt_id].unit_id,
+                checkpoint,
+                attempt_id=attempt_id,
+                execution_token=execution_token,
+            ):
+                return False
+        return True
+
+    async def finish_attempts(self, results, *, execution_token):
+        for result in results:
+            if not await self.finish_attempt(**result, execution_token=execution_token):
+                return False
+        return True
+
     def __init__(self):
         self.batch = SimpleNamespace(
             id=1,
@@ -304,6 +337,28 @@ async def test_execution_uses_oldest_batch_and_continues_after_unit_failure():
     ]
     assert (11, "switch_database") in operations.calls
     assert lock.released is True
+
+
+async def test_batch_stale_attempt_stops_before_database_switch():
+    repository = FakeRepository()
+    operations = FakeOperations()
+    original = operations._call
+
+    async def lose_attempt(name, unit):
+        await original(name, unit)
+        if unit.unit_id == 11 and name == "verify_target":
+            repository.attempt_by_id[unit.attempt_id].execution_token = "replacement"
+
+    operations._call = lose_attempt
+    service = KnowledgeMigrationExecutionService(
+        repository_factory=FakeRepositoryFactory(repository),
+        lock_repository=FakeLock(),
+        operations=operations,
+        dispatcher=FakeDispatcher(),
+    )
+    result = await service.execute(requested_batch_id=1, requested_round_no=1)
+    assert result["status"] == "lease_lost"
+    assert (11, "switch_database") not in operations.calls
 
 
 @pytest.mark.asyncio

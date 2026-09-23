@@ -33,6 +33,14 @@ class MigrationRuntimeContext:
 
 class KnowledgeMigrationRuntimeRepository(ABC):
     @abstractmethod
+    async def find_batch_modes(self, unit_ids: list[int]) -> dict[int, bool]: ...
+
+    @abstractmethod
+    async def finish_shared_projection(
+        self, unit_id: int, plan: dict, *, attempt_id: int, execution_token: str
+    ) -> None: ...
+
+    @abstractmethod
     async def shared_projection_plan(self, unit_id: int, *, attempt_id: int, execution_token: str) -> dict: ...
 
     @abstractmethod
@@ -52,6 +60,9 @@ class KnowledgeMigrationRuntimeRepository(ABC):
 
     @abstractmethod
     async def load_context(self, unit_id: int) -> MigrationRuntimeContext: ...
+
+    @abstractmethod
+    async def load_contexts(self, unit_ids: list[int]) -> dict[int, MigrationRuntimeContext]: ...
 
     @abstractmethod
     async def activate_switch(

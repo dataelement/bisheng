@@ -7,7 +7,6 @@ import yaml
 
 from bisheng.core.config.celery_queues import (
     DEFAULT_CELERY_QUEUE,
-    KNOWLEDGE_PARSE_COMPAT_TASKS,
     KNOWLEDGE_PARSE_QUEUE,
     KNOWLEDGE_PARSE_ROUTED_TASKS,
     KNOWLEDGE_PARSE_TASKS,
@@ -53,15 +52,8 @@ def test_production_parse_queue_whitelist_contains_parse_lifecycles_and_fulltext
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
         "bisheng.worker.knowledge.fulltext_index.repair_source",
         "bisheng.worker.knowledge.fulltext_reconcile.reparse_file",
+        "bisheng.worker.knowledge.document_projection.rebuild_document_content",
     }
-    assert KNOWLEDGE_PARSE_COMPAT_TASKS == {
-        "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
-    }
-
-
-@pytest.mark.parametrize("task_name", sorted(KNOWLEDGE_PARSE_COMPAT_TASKS))
-def test_legacy_title_task_remains_routed_for_rolling_compatibility(task_name: str):
-    assert _resolve_queue(task_name, build_celery_task_routes({})) == KNOWLEDGE_PARSE_QUEUE
 
 
 @pytest.mark.parametrize(
@@ -69,7 +61,6 @@ def test_legacy_title_task_remains_routed_for_rolling_compatibility(task_name: s
     [
         "bisheng.worker.knowledge.file_worker.delete_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.copy_knowledge_file_celery",
-        "bisheng.worker.knowledge.file_worker.refresh_file_similarity_candidates_celery",
         "bisheng.worker.knowledge.rebuild_knowledge_worker.rebuild_knowledge_celery",
         "bisheng.worker.knowledge.qa.rebuild_qa_knowledge_celery",
         "bisheng.worker.knowledge.file_migration.execute_knowledge_migration",
@@ -213,6 +204,7 @@ def test_non_parse_production_dispatches_do_not_target_knowledge_queue():
     allowed_files = {
         BACKEND_DIR / "bisheng/knowledge/domain/services/knowledge_parse_dispatch_service.py",
         BACKEND_DIR / "bisheng/worker/knowledge/fulltext_index.py",
+        BACKEND_DIR / "bisheng/worker/knowledge/document_projection.py",
     }
     violations: list[str] = []
 
