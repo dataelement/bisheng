@@ -56,4 +56,26 @@ describe("knowledge space list entry mapping", () => {
         expect(mine[0].spaceKind).toBe("normal");
         expect(joined[0].spaceKind).toBe("normal");
     });
+
+    it("maps the configured department-space responsible user", async () => {
+        mockedRequest.get.mockResolvedValueOnce({
+            ...spacePayload("department"),
+            data: [
+                {
+                    ...spacePayload("department").data[0],
+                    admin_user_id: 150028,
+                    admin_user_name: "responsible-user",
+                    pending_admin: false,
+                },
+            ],
+        });
+
+        const spaces = await getDepartmentSpacesApi();
+
+        expect(spaces[0]).toMatchObject({
+            adminUserId: 150028,
+            adminUserName: "responsible-user",
+            pendingAdmin: false,
+        });
+    });
 });

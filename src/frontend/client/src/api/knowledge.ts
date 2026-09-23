@@ -148,6 +148,10 @@ export interface KnowledgeSpace {
     spaceKind?: "normal" | "department";
     departmentId?: number;
     departmentName?: string;
+    /** Department-space responsible user; absent while pending configuration. */
+    adminUserId?: number;
+    adminUserName?: string;
+    pendingAdmin?: boolean;
     approvalEnabled?: boolean;
     /** 909 only: the Catalog still has the download action switched on. */
     downloadActionEnabled?: boolean;
@@ -274,6 +278,14 @@ interface RawKnowledgeSpace {
     subscription_status?: string;
     initial_permission_result?: RawInitialPermissionResult | null;
     actions?: string[];
+    space_kind?: "normal" | "department";
+    department_id?: number | null;
+    department_name?: string | null;
+    admin_user_id?: number | null;
+    admin_user_name?: string | null;
+    pending_admin?: boolean | null;
+    approval_enabled?: boolean | null;
+    sensitive_check_enabled?: boolean | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -607,16 +619,19 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).subscription_status ??
             (raw as any).subscriptionStatus ??
             undefined,
-        spaceKind: (raw as any).space_kind || "normal",
-        departmentId: (raw as any).department_id ?? undefined,
-        departmentName: (raw as any).department_name ?? undefined,
+        spaceKind: raw.space_kind || "normal",
+        departmentId: raw.department_id ?? undefined,
+        departmentName: raw.department_name ?? undefined,
+        adminUserId: raw.admin_user_id ?? undefined,
+        adminUserName: raw.admin_user_name ?? undefined,
+        pendingAdmin: raw.pending_admin ?? undefined,
         approvalEnabled:
-            (raw as any).approval_enabled !== undefined
-                ? Boolean((raw as any).approval_enabled)
+            raw.approval_enabled !== undefined && raw.approval_enabled !== null
+                ? Boolean(raw.approval_enabled)
                 : undefined,
         sensitiveCheckEnabled:
-            (raw as any).sensitive_check_enabled !== undefined
-                ? Boolean((raw as any).sensitive_check_enabled)
+            raw.sensitive_check_enabled !== undefined && raw.sensitive_check_enabled !== null
+                ? Boolean(raw.sensitive_check_enabled)
                 : undefined,
         // 909 only: absent on older backends, and "download is on" is the safe
         // default there because that is how this line behaved before the flag.

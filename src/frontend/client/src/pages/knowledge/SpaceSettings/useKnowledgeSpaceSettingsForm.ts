@@ -104,8 +104,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [canEdit, setCanEdit] = useState(mode === "create");
-  // Set for department spaces only: their creator holds no grant, so the roster
-  // shows them as a display-only row (see departmentSpaceCreator).
+  // In a department space, the configured responsible user is the user-facing
+  // creator. The audit creator must stay hidden, especially while no responsible
+  // user has been configured.
   const [departmentCreator, setDepartmentCreator] =
     useState<DepartmentSpaceCreator | null>(null);
   const [canManagePermissions, setCanManagePermissions] = useState(false);
@@ -224,10 +225,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           throw new Error("Knowledge space settings access denied");
         }
         setCanEdit(canEditSpace);
-        const creatorId = Number(space.creatorId);
+        const creatorId = Number(space.adminUserId);
         setDepartmentCreator(
           space.spaceKind === "department" && creatorId > 0
-            ? { id: creatorId, name: space.creator || space.creatorId }
+            ? { id: creatorId, name: space.adminUserName || String(creatorId) }
             : null,
         );
         setForm({

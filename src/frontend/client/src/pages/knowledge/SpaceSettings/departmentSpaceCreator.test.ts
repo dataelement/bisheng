@@ -1,7 +1,6 @@
 /**
- * Department space roster: the 创建者 tag belongs to the super admin who created
- * the space, not to the space admin who owns it (the owner grant is recorded
- * with a "creator" source), and the creator stays visible without a grant.
+ * Department space roster: the 创建者 tag belongs to the configured responsible
+ * user. The super admin recorded as the audit creator never appears here.
  */
 
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
@@ -11,16 +10,15 @@ import {
   restoreDepartmentSpaceRows,
 } from "./departmentSpaceCreator";
 
-const creator = { id: 1, name: "admin" };
+const creator = { id: 7, name: "zhang" };
 
 const owner: PermissionDraftRow = {
   subjectType: "user",
   subjectId: 7,
   subjectName: "zhang",
-  modelKey: "owner",
+  modelKey: "manager",
   assigneeId: "a-owner",
-  sourceType: "CREATOR",
-  protected: true,
+  sourceType: "DIRECT",
 };
 
 const viewer: PermissionDraftRow = {
@@ -38,30 +36,27 @@ describe("decorateDepartmentSpaceRows", () => {
     expect(decorateDepartmentSpaceRows(rows, null)).toBe(rows);
   });
 
-  it("moves the creator tag off the owner and lists the creator first", () => {
-    const [first, ownerRow, viewerRow] = decorateDepartmentSpaceRows([owner, viewer], creator);
+  it("tags the configured responsible user as the creator", () => {
+    const [ownerRow, viewerRow] = decorateDepartmentSpaceRows([owner, viewer], creator);
+    expect(ownerRow).toMatchObject({ subjectId: 7, modelKey: "manager", sourceType: "creator" });
+    expect(viewerRow).toEqual(viewer);
+  });
+
+  it("does not show the audit creator when no responsible user is configured", () => {
+    const rows = [viewer];
+    expect(decorateDepartmentSpaceRows(rows, null)).toBe(rows);
+  });
+
+  it("adds a display row only for a configured responsible user whose grant is missing", () => {
+    const [first, viewerRow] = decorateDepartmentSpaceRows([viewer], creator);
     expect(first).toMatchObject({
-      subjectId: 1,
-      subjectName: "admin",
+      subjectId: 7,
+      subjectName: "zhang",
       modelKey: CREATOR_DISPLAY_MODEL_KEY,
       sourceType: "creator",
       protected: true,
     });
-    expect(ownerRow).toMatchObject({ subjectId: 7, modelKey: "owner", sourceType: undefined });
     expect(viewerRow).toEqual(viewer);
-  });
-
-  it("tags the creator's own row instead of adding a second one", () => {
-    const creatorGrant: PermissionDraftRow = { ...viewer, subjectType: "user", subjectId: 1, assigneeId: "a-admin" };
-    const rows = decorateDepartmentSpaceRows([owner, creatorGrant], creator);
-    expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ subjectId: 1, sourceType: "creator" });
-  });
-
-  it("keeps the tag when the space admin is the creator", () => {
-    const rows = decorateDepartmentSpaceRows([{ ...owner, subjectId: 1 }], creator);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ modelKey: "owner", sourceType: "creator" });
   });
 });
 

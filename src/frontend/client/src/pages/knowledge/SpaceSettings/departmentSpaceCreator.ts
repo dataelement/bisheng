@@ -1,14 +1,11 @@
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 
 /**
- * Department knowledge spaces: show the creator next to the owner.
+ * Department knowledge spaces: the configured responsible user is the creator.
  *
- * A department space is created by a super admin but owned by its designated
- * space admin, and the creator deliberately holds no grant on it (so the super
- * admin is not pulled into every department's approvals). The owner grant is
- * still recorded with a "creator" source, which put the 创建者 tag on the space
- * admin. For display only: the tag moves to the real creator, who is listed as
- * a read-only row when no grant of theirs is already on the roster.
+ * Knowledge.user_id only records the super admin who operated the creation and
+ * must not surface in this roster. The caller passes the configured
+ * admin_user_id instead; when it is absent, no creator row is synthesized.
  */
 
 export interface DepartmentSpaceCreator {
@@ -16,7 +13,7 @@ export interface DepartmentSpaceCreator {
   name: string;
 }
 
-/** Marks the display-only creator row; never a real permission model. */
+/** Marks a configured responsible user whose grant projection is temporarily absent. */
 export const CREATOR_DISPLAY_MODEL_KEY = "__department_space_creator__";
 
 const CREATOR_SOURCE = "creator";

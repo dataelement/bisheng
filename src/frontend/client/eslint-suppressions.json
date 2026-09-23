@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 62
+      "count": 55
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -324,10 +324,7 @@
   },
   "src/components/Chat/Input/AttachmentBar.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 1
+      "count": 12
     }
   },
   "src/components/Chat/Input/AudioRecorder.tsx": {
