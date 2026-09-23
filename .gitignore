@@ -319,3 +319,5 @@ src/backend/migration_reports
 # packages/ui/docs (entry: root AGENTS.md §4), so a second unmaintained copy
 # only invites the two to disagree.
 .impeccable.md
+# Local tooling
+.cursor/

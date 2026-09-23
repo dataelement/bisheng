@@ -21,7 +21,20 @@
   "pnpm": {
     "overrides": {
       "rollup@>=4.45.0": "4.44.1",
-      "vite@>=6.4.2": "6.4.1"
+      "vite@>=6.4.2": "6.4.1",
+      "@xmldom/xmldom@0.8.13": "0.8.15",
+      "@xmldom/xmldom@0.9.10": "0.9.12",
+      "brace-expansion@1.1.16": "1.1.18",
+      "brace-expansion@2.1.2": "2.1.4",
+      "js-yaml@4.3.0": "4.3.2",
+      "dompurify@3.4.12": "3.4.13",
+      "prismjs@1.27.0": "1.30.0",
+      "js-yaml@3.15.0": "3.15.2",
+      "brace-expansion@5.0.7": "5.0.9",
+      "fast-uri@3.1.4": "3.1.6",
+      "qs@6.15.3": "6.16.0",
+      "postcss@8.5.22": "8.5.23",
+      "nanoid@3.3.16": "3.3.18"
     }
   },
   "devDependencies": {

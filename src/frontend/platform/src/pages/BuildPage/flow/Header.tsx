@@ -25,7 +25,7 @@ import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { unstable_useBlocker as useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { useBlocker, useLocation, useNavigate } from "react-router-dom";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
