@@ -317,6 +317,38 @@ MCP（Model Context Protocol）集成模块位于 `src/backend/bisheng/mcp_manag
 }
 ```
 
+### 远程示例：Parallel Search
+
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) 提供 `web_search`（搜索公开网页）和 `web_fetch`（提取网页内容），匿名连接不需要 Parallel 账号或 API Key，免费使用有速率限制。
+
+在工具页面选择「MCP工具」→「添加MCP服务器」，填写服务名称，并将下面的 JSON 粘贴到 MCP 服务配置中。`type` 必须为 `streamable`；省略后会按 SSE 连接，无法使用此端点。每次添加一个服务器：
+
+```json
+{
+  "mcpServers": {
+    "parallel-search": {
+      "type": "streamable",
+      "name": "Parallel Search",
+      "description": "搜索公开网页并提取网页内容",
+      "url": "https://search.parallel.ai/mcp"
+    }
+  }
+}
+```
+
+配置框失去焦点或点击刷新时，BiSheng 就会连接 Parallel 获取工具列表，不必等到保存。确认「可用工具」中出现 `web_search` 和 `web_fetch` 后，可点击工具旁的测试按钮。在 `web_search` 的测试窗口，按参数分别填写下面的值，`search_queries` 使用 JSON 数组：
+
+```json
+{
+  "objective": "查找 Parallel Search MCP 的官方使用文档",
+  "search_queries": ["Parallel Search MCP documentation"]
+}
+```
+
+保存后，在需要联网检索的 Agent 或工作流中选择这些工具。Agent 获得工具后可能自行调用；搜索词、请求的 URL，以及传入的目标、上下文和元数据会发送给 Parallel。请只传入允许发送给该服务的内容。此配置不会替换现有搜索工具或更改权限，也不需要设置认证请求头。
+
+停止使用时，先从相关 Agent 或工作流中移除这些工具；不再需要该连接时，可由有权限的用户在 MCP 服务器编辑页删除它。
+
 ### 传输层实现
 
 所有客户端继承自 `BaseMcpClient` 抽象基类，统一实现 `get_transport()` 方法返回读写流，由基类的 `initialize()` 方法建立 `ClientSession`。
