@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.openfga import OpenFGAConf
@@ -783,6 +784,10 @@ class Settings(BaseModel):
     environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated
     debug: bool = False
+    dsh: DshSettings = Field(
+        default_factory=DshSettings,
+        description="DSH Desktop access, gateway trust, verified model capabilities and quota infrastructure configuration.",
+    )
     database_url: str | None = None
     redis_url: Union[str, dict] | None = None
     celery_redis_url: Union[str, dict] | None = None
@@ -893,7 +898,7 @@ class Settings(BaseModel):
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key != "dev" and not value:
+            if key not in {"dev", "dsh"} and not value:
                 values[key] = []
         return values
 

@@ -1,0 +1,253 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createContext } from 'react'
+import english from '../../../public/locales/en-US/bs.json'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DshLogin } from './index'
+import { consumeLoginReturnTo } from '@/utils/loginReturnTo'
+import { getDshBrowserConfig } from '@/controllers/API/dshSettings'
+import request from '@/controllers/request'
+import { authorizeDsh, denyDsh } from '@/controllers/API/dsh'
+vi.mock('@/controllers/request', () => ({ default: { get: vi.fn() } }))
+
+const identity = vi.hoisted(() => ({ user: null as null | {
+    user_id: number; user_name: string; tenant_name?: string | null; leaf_tenant_name?: string | null;
+} }))
+vi.mock('@/contexts/userContext', () => ({ userContext: createContext(identity) }))
+vi.mock('react-i18next', async () => {
+    const { createInstance } = await import('i18next')
+    const { default: messages } = await import('../../../public/locales/en-US/bs.json')
+    const i18n = createInstance()
+    await i18n.init({ lng: 'en', resources: { en: { translation: messages } } })
+    return { useTranslation: () => ({ t: i18n.t.bind(i18n) }) }
+})
+vi.mock('@/controllers/API/dsh', () => ({
+    getDshConfig: vi.fn().mockResolvedValue({ enabled: true, client_id: 'dsh-desktop', contract_version: '0.4.0' }),
+    authorizeDsh: vi.fn(),
+    denyDsh: vi.fn(),
+}))
+vi.mock('@/controllers/API/dshSettings', () => ({ getDshBrowserConfig: vi.fn() }))
+const origin = 'http://192.168.106.109:13001'
+const assign = vi.fn()
+beforeEach(() => {
+    vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: null, launch_url: 'dsh-desktop://login' })
+    vi.mocked(request.get).mockResolvedValue({ department_name: null })
+    assign.mockClear()
+    vi.mocked(authorizeDsh).mockClear()
+    identity.user = null
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+        removeItem: (key: string) => values.delete(key),
+    })
+})
+afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+})
+describe('desktop HTTP login entry', () => {
+    it('uses the saved HTTP download address without a frontend build variable', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: true, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
+        render(<DshLogin />)
+        expect(await screen.findByRole('link', { name: english.dsh.download })).toHaveAttribute('href', 'http://downloads.test/dsh')
+    })
+    it('removes download and launch actions when the business switch closes', async () => {
+        vi.mocked(getDshBrowserConfig).mockResolvedValue({ management_enabled: true, enabled: false, download_url: 'http://downloads.test/dsh', launch_url: 'dsh-desktop://login' })
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', search: '', assign })
+        render(<DshLogin />)
+        await screen.findByText(english.dsh.disabled)
+        expect(screen.queryByRole('button', { name: english.dsh.openDesktop })).toBeNull()
+        expect(screen.queryByRole('link', { name: english.dsh.download })).toBeNull()
+    })
+    it('returns to the complete authorization URL after the explicit login action', async () => {
+        const search = '?auth_id=fixture-authorization'
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login' + search, search, assign })
+        render(<DshLogin />)
+        fireEvent.click(await screen.findByRole('button', { name: english.dsh.login }))
+        expect(assign).toHaveBeenCalledWith('/')
+        expect(consumeLoginReturnTo()).toBe(origin + '/desktop-login' + search)
+    })
+    it('allows launching Desktop with the HTTP platform address', async () => {
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login', search: '', assign })
+        render(<DshLogin />)
+        const launch = await screen.findByRole('button', { name: english.dsh.openDesktop })
+        expect(launch).toBeEnabled()
+        fireEvent.click(launch)
+        const link = new URL(assign.mock.calls[0][0])
+        expect(link.protocol).toBe('dsh-desktop:')
+        expect(link.searchParams.get('server')).toBe(origin)
+    })
+})
+
+
+describe('desktop consent identity', () => {
+    it.each([
+        { department: 'Engineering', expected: 'dshadmin (Engineering)' },
+        { department: null, expected: 'dshadmin.' },
+        { department: '  ', expected: 'dshadmin.' },
+    ])('shows the primary department without tenant or empty parentheses: $expected', async ({ expected, department }) => {
+        vi.mocked(request.get).mockResolvedValue({ department_name: department })
+        identity.user = { user_id: 1, user_name: 'dshadmin', tenant_name: 'Hidden Tenant' }
+        vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login?auth_id=fixture', search: '?auth_id=fixture', assign })
+        render(<DshLogin />)
+        await screen.findByRole('button', { name: english.dsh.authorize })
+        await waitFor(() => expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected))
+        expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
+        expect(screen.getByText(/Authorize DSH Desktop as/).textContent).not.toContain('()')
+    })
+})
+
+describe('desktop authorization completion', () => {
+    async function authorize(useFakeTimers = false) {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', {
+            origin,
+            pathname: '/desktop-login',
+            href: origin + '/desktop-login?auth_id=fixture',
+            search: '?auth_id=fixture',
+            assign,
+        })
+        vi.mocked(authorizeDsh).mockResolvedValue({
+            identity_ticket: 'fixture-one-time-ticket',
+            expires_in: 60,
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        const authorizeButton = await screen.findByRole('button', {
+            name: english.dsh.authorize,
+        })
+        if (useFakeTimers) vi.useFakeTimers()
+        await act(async () => {
+            fireEvent.click(authorizeButton)
+        })
+    }
+
+    it('keeps the authorization result and manual fallback available after ten seconds', async () => {
+        await authorize(true)
+        expect(
+            screen.getByRole('button', { name: english.dsh.returnDesktop }),
+        ).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: english.dsh.authorizationComplete })).toBeInTheDocument()
+        expect(screen.getByText(english.dsh.manualLoginFallback).closest('details')).not.toHaveAttribute('open')
+        fireEvent.click(screen.getByText(english.dsh.manualLoginFallback))
+        expect(screen.getByText(english.dsh.ticketHelp)).toBeVisible()
+
+        act(() => vi.advanceTimersByTime(9_999))
+        expect(assign).not.toHaveBeenCalled()
+        act(() => vi.advanceTimersByTime(1))
+        expect(assign).not.toHaveBeenCalled()
+        expect(screen.getByLabelText(english.dsh.ticket)).toHaveValue('fixture-one-time-ticket')
+        expect(screen.getByTitle(english.dsh.callback)).toHaveAttribute('src', expect.stringContaining('http://127.0.0.1:12345/callback'))
+    })
+
+    it('returns to DSH through the configured desktop protocol', async () => {
+        await authorize()
+        fireEvent.click(
+            screen.getByRole('button', { name: english.dsh.returnDesktop }),
+        )
+        expect(assign).toHaveBeenCalledWith('dsh-desktop://login?server=' + encodeURIComponent(origin))
+        expect(authorizeDsh).toHaveBeenCalledTimes(1)
+    })
+
+    it('stays on the result page when authorization is denied', async () => {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', {
+            origin,
+            pathname: '/desktop-login',
+            href: origin + '/desktop-login?auth_id=fixture',
+            search: '?auth_id=fixture',
+            assign,
+        })
+        vi.mocked(denyDsh).mockResolvedValue({
+            error: 'access_denied',
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        const denyButton = await screen.findByRole('button', {
+            name: english.dsh.cancel,
+        })
+        vi.useFakeTimers()
+        await act(async () => {
+            fireEvent.click(denyButton)
+        })
+        act(() => vi.advanceTimersByTime(10_000))
+        expect(assign).not.toHaveBeenCalled()
+        expect(
+            screen.queryByRole('button', { name: english.dsh.returnDesktop }),
+        ).toBeNull()
+    })
+})
+
+describe('desktop copy actions', () => {
+    const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand')
+    afterEach(() => {
+        if (originalExecCommand) {
+            Object.defineProperty(document, 'execCommand', originalExecCommand)
+        } else {
+            Reflect.deleteProperty(document, 'execCommand')
+        }
+    })
+
+    async function renderIssuedTicket() {
+        identity.user = { user_id: 1, user_name: 'dshadmin' }
+        vi.stubGlobal('location', { origin, search: '?auth_id=fixture', assign })
+        vi.mocked(authorizeDsh).mockResolvedValue({
+            identity_ticket: 'fixture-one-time-ticket',
+            expires_in: 60,
+            redirect_uri: 'http://127.0.0.1:12345/callback',
+            state: 'fixture-state',
+        })
+        render(<DshLogin />)
+        fireEvent.click(await screen.findByRole('button', { name: english.dsh.authorize }))
+        fireEvent.click(await screen.findByText(english.dsh.manualLoginFallback))
+        return screen.findByRole('button', { name: english.dsh.copyTicket })
+    }
+
+    it('copies the actual ticket using the existing DOM fallback on HTTP', async () => {
+        vi.stubGlobal('navigator', { clipboard: undefined })
+        const execCommand = vi.fn(() => {
+            const textarea = document.querySelector('textarea')
+            expect(textarea?.value).toBe('fixture-one-time-ticket')
+            expect(window.getSelection()?.containsNode(textarea!, true)).toBe(true)
+            return true
+        })
+        Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand })
+        fireEvent.click(await renderIssuedTicket())
+        await screen.findByText(english.dsh.copied)
+        expect(execCommand).toHaveBeenCalledWith('copy')
+        expect(document.querySelector('textarea')).toBeNull()
+        expect(screen.getByLabelText(english.dsh.ticket)).toHaveAttribute('type', 'password')
+    })
+
+    it('uses the same HTTP fallback to copy the server address', async () => {
+        vi.stubGlobal('navigator', { clipboard: undefined })
+        vi.stubGlobal('location', { origin, search: '', assign })
+        Object.defineProperty(document, 'execCommand', { configurable: true, value: vi.fn(() => {
+            expect(document.querySelector('textarea')?.value).toBe(origin)
+            return true
+        }) })
+        render(<DshLogin />)
+        fireEvent.click(await screen.findByRole('button', { name: english.dsh.copyServer }))
+        await screen.findByText(english.dsh.copied)
+        expect(document.querySelector('textarea')).toBeNull()
+    })
+
+    it('shows success only after the Clipboard API completes', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined)
+        vi.stubGlobal('navigator', { clipboard: { writeText } })
+        fireEvent.click(await renderIssuedTicket())
+        await screen.findByText(english.dsh.copied)
+        expect(writeText).toHaveBeenCalledWith('fixture-one-time-ticket')
+    })
+
+    it('shows a visible error when clipboard access rejects instead of failing silently', async () => {
+        vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } })
+        fireEvent.click(await renderIssuedTicket())
+        expect(await screen.findByRole('alert')).toHaveTextContent(english.dsh.copyFailed)
+        expect(screen.queryByText(english.dsh.copied)).toBeNull()
+    })
+})

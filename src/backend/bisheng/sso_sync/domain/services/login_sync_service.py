@@ -282,7 +282,7 @@ class LoginSyncService:
                     user = legacy
                 cls._apply_user_attrs(user, attrs)
                 cls._touch_user_sync_time(user)
-                await UserDao.aupdate_user(user)
+                user = await UserService.apersist_profile_update(user)
                 if write_migration_audit:
                     await AuditLogDao.ainsert_v2(
                         tenant_id=ROOT_TENANT_ID,
@@ -358,7 +358,7 @@ class LoginSyncService:
                     raise UserForbiddenError.http_exception()
             cls._apply_user_attrs(user, attrs)
             cls._touch_user_sync_time(user)
-            await UserDao.aupdate_user(user)
+            user = await UserService.apersist_profile_update(user)
 
         # Gateway org sync: optional explicit account enable/disable
         if payload.account_disabled is not None:
@@ -366,7 +366,7 @@ class LoginSyncService:
             if int(getattr(user, "delete", 0) or 0) != want:
                 user.delete = want
                 user.disable_source = cls._disable_source_for_row(row_source, want)
-                await UserDao.aupdate_user(user)
+                user = await UserService.apersist_profile_update(user)
 
         if int(getattr(user, "delete", 0) or 0) == 1 and payload.account_disabled is not True:
             raise UserForbiddenError.http_exception()

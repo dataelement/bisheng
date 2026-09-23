@@ -180,6 +180,11 @@ customAxios.interceptors.response.use(function (response) {
         requestInterceptor.remoteLoginFuc(response.data.status_message)
         return Promise.reject(errorMessage);
     }
+    if (response.config.preserveError) {
+        return Promise.reject(Object.assign(new Error(errorMessage), {
+            response: { status: response.status, data: response.data },
+        }));
+    }
     return Promise.reject(errorMessage);
 }, function (error) {
     console.error('application error :>> ', error);
@@ -195,7 +200,7 @@ customAxios.interceptors.response.use(function (response) {
         if (thirdPartyLoginUrl) {
             localStorage.removeItem('UUR_INFO');
             window.location.href = thirdPartyLoginUrl;
-            return Promise.reject('登录过期');
+            return Promise.reject(i18next.t('request.session_expired'));
         }
         localStorage.removeItem('UUR_INFO');
         // 仅「曾有过登录态」时再回根路径，避免深路径 URL 上叠登录页且状态错乱。
@@ -203,7 +208,7 @@ customAxios.interceptors.response.use(function (response) {
             const base = (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
             window.location.href = `${base}/`;
         }
-        return Promise.reject('登录过期,请重新登录');
+        return Promise.reject(i18next.t('request.sign_in_again'));
     }
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
     // Silent mode: skip toast, let the caller handle it
@@ -220,7 +225,7 @@ customAxios.interceptors.response.use(function (response) {
             variant: 'error',
             description: coerceErrorMessage(errorMessage),
         })
-        return Promise.reject(null);
+        return Promise.reject(error.config?.preserveError ? error : null);
     }
     // app 弹窗
     toast({
@@ -228,8 +233,8 @@ customAxios.interceptors.response.use(function (response) {
         variant: 'error',
         description: coerceErrorMessage(error?.message || error)
     })
-    // window.errorAlerts([error.message])
-    return Promise.reject(null);
+    // Preserve opt-in transport evidence after the shared error handling.
+    return Promise.reject(error.config?.preserveError ? error : null);
 })
 
 export default customAxios

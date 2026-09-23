@@ -2,8 +2,8 @@ from enum import Enum
 
 
 class StatusEnum(str, Enum):
-    SUCCESS = 'success'
-    FAILED = 'failed'
+    SUCCESS = "success"
+    FAILED = "failed"
 
 
 # Generalized application type enumeration
@@ -31,6 +31,7 @@ class ApplicationTypeEnum(str, Enum):
     ASR = "asr"
     # TTS
     TTS = "tts"
+    DSH_DESKTOP = "dsh_desktop"
 
     UNKNOWN = "unknown"
 

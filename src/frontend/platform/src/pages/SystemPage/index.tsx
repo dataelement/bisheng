@@ -15,9 +15,8 @@ import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
 
-export default function index() {
+export default function SystemPage() {
   const { user } = useContext(userContext)
-
   const { t } = useTranslation()
   const isSuperAdmin = user?.role === "admin"
   const isDeptAdmin = !!user?.is_department_admin
@@ -31,7 +30,7 @@ export default function index() {
    *  instance-level CSS vars/logo. Neither has per-Tenant semantics,
    *  so restrict to global super admin only. */
   const canAccessSystemConfig = isSuperAdmin
-  /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
+  /** Organization sync is visible only to the global administrator. */
   const showOrgSyncTab = isSuperAdmin
   /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
    *  flips can_manage_user_groups true for Child Admin too; the explicit
@@ -70,7 +69,7 @@ export default function index() {
             <TabsTrigger value="role">{t("system.roleAndPermissions")}</TabsTrigger>
           )}
           {showOrgSyncTab && (
-            <TabsTrigger value="orgSync">{t("orgSync:title", "组织同步")}</TabsTrigger>
+            <TabsTrigger value="orgSync">{t("orgSync:title")}</TabsTrigger>
           )}
           {canAccessSystemConfig && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>

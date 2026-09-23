@@ -1185,7 +1185,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 2
     }
   },
   "src/i18n.js": {
@@ -1319,11 +1319,6 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/layout/HeaderMenu.tsx": {
-    "no-empty-pattern": {
       "count": 1
     }
   },
@@ -3337,9 +3332,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -3497,14 +3489,6 @@
       "count": 1
     }
   },
-  "src/pages/SystemPage/index.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 2
-    }
-  },
   "src/pages/SystemPage/theme/Example.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3625,11 +3609,6 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 2
-    }
-  },
-  "src/test/headerMenuChildAdmin.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
       "count": 2
     }
   },

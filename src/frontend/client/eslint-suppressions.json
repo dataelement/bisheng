@@ -2414,9 +2414,6 @@
   "src/layouts/UserPopMenu.tsx": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/locales/i18n.ts": {

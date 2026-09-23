@@ -99,7 +99,15 @@
     "systemConfigTenantBanner": "Configuring {{tenantName}}. Unconfigured items inherit from {{rootName}} (when {{rootName}} sharing is on).",
     "systemConfigChildOwnBanner": "Configuring your tenant's system models. Unconfigured items inherit from {{rootName}} (when {{rootName}} sharing is on).",
     "systemConfigInheritedBadge": "Inherited from Root",
-    "systemConfigFallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly."
+    "systemConfigFallbackBlockedBanner": "Root sharing is off. Ask the super admin to enable sharing or configure this tenant directly.",
+    "supportsImages": "Image input",
+    "status": "Status",
+    "available": "Available",
+    "actions": "Actions",
+    "configureDshPermission": "Configure permissions",
+    "noOnlineDshModels": "No online models available yet",
+    "visionRetry": "Load or save failed. Retry",
+    "loading": "Loading"
   },
   "finetune": {
     "rtServiceManagement": "FT Service Management",
