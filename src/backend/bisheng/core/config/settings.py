@@ -665,9 +665,18 @@ class IntelligenceCenterConf(BaseModel):
 
 
 class McpConf(BaseModel):
-    """MCP Configure"""
+    """MCP Configure.
 
-    enable_stdio: bool = Field(default=True, description="Whether to enable stdio")
+    ``enable_stdio`` is frozen off. YAML / env cannot re-enable STDIO MCP —
+    ClientManager refuses that transport regardless of this field.
+    """
+
+    enable_stdio: bool = Field(default=False, description="Frozen off; STDIO MCP is not supported")
+
+    @field_validator("enable_stdio", mode="after")
+    @classmethod
+    def force_stdio_off(cls, _value: bool) -> bool:
+        return False
 
 
 class CofcoForwardingConf(BaseModel):

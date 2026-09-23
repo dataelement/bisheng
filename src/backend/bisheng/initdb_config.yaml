@@ -163,7 +163,7 @@ information_conf:
   information_business_timezone: Asia/Shanghai
 
 mcp:
-  enable_stdio: true
+  enable_stdio: false
 
 knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
