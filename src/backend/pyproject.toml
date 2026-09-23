@@ -88,6 +88,8 @@ dependencies = [
     "sympy>=1.14.0",
     "transformers==4.57.1",
     "uvicorn>=0.38.0",
+    # 停在 2.6.3. 2.7.0 会改跨源重定向时的请求头转发, 本轮不升.
+    "urllib3==2.6.3",
     "weaviate-client>=4.17.0",
     "websockets>=15.0.1",
     "xlrd>=2.0.2",
