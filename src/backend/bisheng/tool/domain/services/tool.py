@@ -23,7 +23,6 @@ from bisheng.common.errcode.tool import (
     ToolTypeNotExistsError,
     ToolTypeRepeatError,
 )
-from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.constant import McpClientType
@@ -35,6 +34,15 @@ from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsT
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng.utils import get_request_ip, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
+
+
+def _flatten_mcp_error(exc: BaseException) -> str:
+    """MCP SDK wraps transport failures in ExceptionGroup (BaseException, not Exception)."""
+    nested = getattr(exc, "exceptions", None)
+    if nested:
+        parts = [_flatten_mcp_error(sub) for sub in nested]
+        return "; ".join(part for part in parts if part) or str(exc)
+    return str(exc).strip() or type(exc).__name__
 
 
 class ToolServices(BaseModel):
@@ -371,15 +379,19 @@ class ToolServices(BaseModel):
                 openapi_schema=file_content,
                 children=[],
             )
-            mcp_conf = await settings.get_mcp_conf()
-            if not mcp_conf.enable_stdio:
-                client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
-                if client_type == McpClientType.STDIO.value:
-                    raise ToolMcpStdioError()
-            # Instantiatemcpservice object, getting a list of tools
-            client = await ClientManager.connect_mcp_from_json(result)
-
-            tools = await client.list_tools()
+            client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
+            if client_type == McpClientType.STDIO.value:
+                raise ToolMcpStdioError()
+            try:
+                client = await ClientManager.connect_mcp_from_json(result)
+                tools = await client.list_tools()
+            except BaseErrorCode:
+                raise
+            except BaseException as e:
+                if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                    raise
+                logger.exception("mcp tool connect/list error")
+                raise ToolMcpSchemaError(exception=Exception(_flatten_mcp_error(e))) from e
 
             for one in tools:
                 tool_type.children.append(
