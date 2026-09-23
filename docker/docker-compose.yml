@@ -22,9 +22,7 @@ services:
 
   openfga-migrate:
     container_name: bisheng-openfga-migrate
-    # Formal deployments set OPENFGA_IMAGE to the reviewed v1.15.1 tag@digest.
-    # The default remains version-pinned for local development; ``latest`` is forbidden.
-    image: ${OPENFGA_IMAGE:-openfga/openfga:v1.15.1}
+    image: cr.dataelem.com/dataelement/openfga:v1.15.2-dm
     command: migrate
     environment:
       OPENFGA_DATASTORE_ENGINE: mysql
@@ -35,7 +33,7 @@ services:
 
   openfga:
     container_name: bisheng-openfga
-    image: ${OPENFGA_IMAGE:-openfga/openfga:v1.15.1}
+    image: cr.dataelem.com/dataelement/openfga:v1.15.2-dm
     command: run
     environment:
       OPENFGA_DATASTORE_METRICS_ENABLED: "true"
