@@ -102,7 +102,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           // F053: personal access tokens (user-side) and the service-account /
           // personal-token management tabs on the system page.
           personalTokenEnabled: !!res.personal_token_enabled,
-          openApiManagementEnabled: !!res.open_api_management_enabled
+          openApiManagementEnabled: !!res.open_api_management_enabled,
+          // Off unless an operator turned it on: the builder marks the node as
+          // disabled rather than letting the author discover it at run time.
+          codeNodeEnabled: !!res.workflow?.code_node_enabled
         }));
 
         // backend version
