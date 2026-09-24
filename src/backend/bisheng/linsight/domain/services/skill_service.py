@@ -41,16 +41,18 @@ from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_fi
 from bisheng.linsight.domain.services.skill_store import (
     DISPLAY_NAME_META_KEY,
     MAX_BUNDLE_SIZE,
-    resolve_skill_upload_limit,
     MAX_DESCRIPTION_LEN,
     MAX_DISPLAY_NAME_LEN,
     MAX_UNPACKED_SIZE,
     SKILL_MD,
+    BundleTooLargeError,
     SkillStore,
     compose_skill_md,
     parse_skill_md,
     render_skill_md,
     slugify_pinyin,
+    resolve_skill_unpacked_limit,
+    resolve_skill_upload_limit,
     unpack_zip_bytes,
     validate_skill_name,
 )
@@ -184,7 +186,12 @@ class SkillService:
         return await self._create(tenant_id, user_id, form.name, form.display_name, form.description, files)
 
     async def create_from_upload(self, tenant_id: int, user_id: int, filename: str, data: bytes) -> SkillDetail:
-        meta, files = self._parse_upload(filename, data, max_size=await resolve_skill_upload_limit())
+        meta, files = self._parse_upload(
+            filename,
+            data,
+            max_size=await resolve_skill_upload_limit(),
+            max_unpacked=await resolve_skill_unpacked_limit(),
+        )
         detail = await self._create(tenant_id, user_id, meta.name, meta.display_name, meta.description, files)
         detail.normalized_from = meta.normalized_from
         return detail
@@ -236,7 +243,12 @@ class SkillService:
     async def update_from_upload(self, tenant_id: int, name: str, filename: str, data: bytes) -> SkillDetail:
         """Whole-bundle replacement; frontmatter name (after normalization) must equal the path name."""
         skill = await self._get_or_404(name)
-        meta, files = self._parse_upload(filename, data, max_size=await resolve_skill_upload_limit())
+        meta, files = self._parse_upload(
+            filename,
+            data,
+            max_size=await resolve_skill_upload_limit(),
+            max_unpacked=await resolve_skill_unpacked_limit(),
+        )
         if meta.name != name:
             raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
@@ -268,18 +280,24 @@ class SkillService:
         return skill
 
     def _parse_upload(
-        self, filename: str, data: bytes, *, max_size: int = MAX_BUNDLE_SIZE
+        self,
+        filename: str,
+        data: bytes,
+        *,
+        max_size: int = MAX_BUNDLE_SIZE,
+        max_unpacked: int = MAX_UNPACKED_SIZE,
     ) -> tuple[SkillMeta, dict[str, bytes]]:
         if len(data) > max_size:
             raise SkillFileTooLargeError()
         lower = (filename or "").lower()
         if lower.endswith(_ARCHIVE_SUFFIXES):
             try:
-                files = unpack_zip_bytes(data)
+                # The unpacked cap is checked inside, before anything is decompressed.
+                files = unpack_zip_bytes(data, max_unpacked=max_unpacked)
+            except BundleTooLargeError:
+                raise SkillBundleTooLargeError()
             except ValueError as exc:
                 raise SkillValidationError(msg=str(exc))
-            if sum(len(c) for c in files.values()) > MAX_UNPACKED_SIZE:
-                raise SkillBundleTooLargeError()
         elif lower.endswith(".md"):
             files = {SKILL_MD: data}
         else:

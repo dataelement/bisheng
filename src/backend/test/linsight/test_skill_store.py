@@ -1,6 +1,7 @@
 """F035 Track D — SkillStore / slugify / frontmatter / zip unit tests (TD-3)."""
 
 import io
+import struct
 import zipfile
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from bisheng.linsight.domain.services import skill_store as skill_store_module
 from bisheng.linsight.domain.services.skill_store import (
     SKILL_MD,
+    BundleTooLargeError,
     SkillStore,
     bundle_content_hash,
     compose_skill_md,
@@ -145,6 +147,59 @@ class TestUnpackZip:
             unpack_zip_bytes(b"not a zip at all")
 
 
+def _understate_declared_size(archive: bytes, name: str, declared: int) -> bytes:
+    """Rewrite ``name``'s uncompressed size in the central directory (header offset 24)."""
+    raw = bytearray(archive)
+    pos = raw.find(b"PK\x01\x02")
+    while pos != -1:
+        name_len = struct.unpack_from("<H", raw, pos + 28)[0]
+        if bytes(raw[pos + 46 : pos + 46 + name_len]) == name.encode():
+            struct.pack_into("<I", raw, pos + 24, declared)
+        pos = raw.find(b"PK\x01\x02", pos + 4)
+    return bytes(raw)
+
+
+class TestUnpackZipSizeCap:
+    """The unpacked cap is enforced from declared sizes, before anything inflates."""
+
+    def _bomb(self, size: int) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(SKILL_MD, b"x")
+            zf.writestr("assets/bomb.bin", b"\0" * size)
+        return buf.getvalue()
+
+    def test_over_cap_refused_before_any_entry_is_decompressed(self, monkeypatch):
+        data = self._bomb(2 * 1024 * 1024)
+        assert len(data) < 64 * 1024  # a small archive that inflates 30x+
+
+        def _no_read(*_args, **_kwargs):
+            raise AssertionError("an entry was decompressed before the size check")
+
+        monkeypatch.setattr(zipfile.ZipFile, "read", _no_read)
+        with pytest.raises(BundleTooLargeError, match="exceeds"):
+            unpack_zip_bytes(data, max_unpacked=1024 * 1024)
+
+    def test_at_cap_accepted(self):
+        files = unpack_zip_bytes(self._bomb(1024), max_unpacked=1024 + 1)
+        assert len(files["assets/bomb.bin"]) == 1024
+
+    def test_understated_declared_size_is_an_invalid_archive_not_a_bypass(self):
+        """Lying about the size cannot smuggle more bytes past the cap.
+
+        ``zipfile`` stops at the declared size and the CRC check fails; that must
+        surface as a ValueError (→ 11051), not an uncaught BadZipFile (→ 500).
+        """
+        data = _understate_declared_size(self._bomb(2 * 1024 * 1024), "assets/bomb.bin", 16)
+        with pytest.raises(ValueError, match="corrupted zip archive"):
+            unpack_zip_bytes(data, max_unpacked=1024 * 1024)
+
+    def test_default_cap_is_the_hard_ceiling(self, monkeypatch):
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 4)
+        with pytest.raises(BundleTooLargeError):
+            unpack_zip_bytes(_zip_bytes({SKILL_MD: b"0123456789"}))
+
+
 class TestUnpackZipNameEncoding:
     """Chinese filenames must survive archives that mislabel their name encoding.
 
@@ -270,11 +325,31 @@ class TestSkillStore:
 
     def test_materializing_an_oversized_object_is_refused(self, store, tmp_path, monkeypatch):
         ref = store.write_bundle(1, "demo-skill", {SKILL_MD: b"x"})
-        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_SIZE", 4)
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 4)
         store.minio.store[(store.minio.bucket, ref.object_key)] = _zip_bytes({SKILL_MD: b"0123456789"})
         cold = SkillStore(root=tmp_path / "cold2", minio=store.minio)
         with pytest.raises(ValueError, match="exceeds"):
             cold.read_text(1, "demo-skill", ref.content_hash)
+
+    def test_write_and_materialize_check_the_ceiling_not_the_setting(self, store, tmp_path, monkeypatch):
+        """A bundle accepted under a larger setting stays usable after an admin lowers it.
+
+        The configured cap is an ingress rule (upload / GitHub import). Re-publishing on
+        edit and fetching back on a cold node must only answer to the hard ceiling.
+        """
+
+        async def _tiny_setting(self):
+            return type("Conf", (), {"skill_unpacked_max_size_mb": 1, "skill_upload_max_size_mb": 1})()
+
+        monkeypatch.setattr(type(skill_store_module.bisheng_settings), "aget_linsight_conf", _tiny_setting)
+        big = {SKILL_MD: b"x", "assets/a.bin": b"y" * (2 * 1024 * 1024)}
+        ref = store.write_bundle(1, "demo-skill", big)
+        cold = SkillStore(root=tmp_path / "cold3", minio=store.minio)
+        assert cold.read_bytes(1, "demo-skill", ref.content_hash, "assets/a.bin") == big["assets/a.bin"]
+
+        monkeypatch.setattr(skill_store_module, "MAX_UNPACKED_CEILING", 1024)
+        with pytest.raises(BundleTooLargeError):
+            store.write_bundle(1, "demo-skill", big)
 
     def test_bundle_requires_skill_md(self, store):
         with pytest.raises(ValueError, match="SKILL.md"):

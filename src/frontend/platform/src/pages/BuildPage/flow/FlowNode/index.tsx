@@ -3,10 +3,11 @@ import { LoadingIcon } from '@/components/bs-icons/loading';
 import { Card, CardContent } from '@/components/bs-ui/card';
 import { useToast } from '@/components/bs-ui/toast/use-toast';
 import { cname } from '@/components/bs-ui/utils';
+import { locationContext } from '@/contexts/locationContext';
 import { WorkflowNode } from '@/types/flow';
 import { Handle, NodeToolbar, Position } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Sidebar from '../Sidebar';
 import EditText from './EditText';
 import NodeLogo from './NodeLogo';
@@ -111,6 +112,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
     const { message } = useToast()
     const [currentTab, setCurrentTab] = useState<undefined | string>(node.tab && node.tab.value)
     const { t } = useTranslation('flow')
+    const { appConfig } = useContext(locationContext)
 
     // 检查知识库检索设置
     const hasKnowledgeSearchEnabled = useMemo(() => {
@@ -305,6 +307,14 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                         <p className='text-xs text-muted-foreground mt-2 min-h-4'>{node.description}</p>
                     </EditText>
                 </div>
+                {/* The Code node runs unsandboxed Python, so it ships switched off.
+                    Say so here rather than letting the author find out from a failed run. */}
+                {node.type === 'code' && !appConfig.codeNodeEnabled && (
+                    <div className='px-4 py-2 text-xs text-orange-600 bg-orange-50 dark:bg-orange-950/40'>
+                        {t('node.code.disabledHint')}
+                    </div>
+                )}
+
                 {/* body */}
                 <div className='-nowheel bg-[#F7F8FB] dark:bg-background pb-5 rounded-b-[20px]'>
                     <div className={expend || ['output', 'condition', 'end'].includes(node.type) ? `` : 'h-0 overflow-hidden'}>

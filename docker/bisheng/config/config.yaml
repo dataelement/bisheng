@@ -175,3 +175,8 @@ logger_conf:
 #   token: "..."
 #   code_node_enabled: false                      # workflow code node → sandbox
 #   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery
+
+# Linsight (task mode) runtime knobs. Commented out on purpose: an older image
+# rejects unknown top-level keys, so enable per deployment or via 系统配置.
+# linsight:
+#   citation_handles_enabled: true   # F069 short citation handles [Sn]; false = F047 verbatim-id contract

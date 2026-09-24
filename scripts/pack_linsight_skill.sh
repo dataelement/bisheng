@@ -55,8 +55,10 @@ ZIP_BYTES=$(wc -c < "${ZIP_PATH}" | tr -d ' ')
 RAW_BYTES=$(find "${SRC}" -type f -not -path '*/__pycache__/*' -not -name '*.pyc' -not -name '.DS_Store' -exec wc -c {} + | tail -1 | awk '{print $1}')
 FILE_COUNT=$(find "${SRC}" -type f -not -path '*/__pycache__/*' -not -name '*.pyc' -not -name '.DS_Store' | wc -l | tr -d ' ')
 
-MAX_ZIP=$((10 * 1024 * 1024))
-MAX_RAW=$((100 * 1024 * 1024))
+# Defaults of 系统配置 linsight.skill_upload_max_size_mb / skill_unpacked_max_size_mb;
+# a deployment may have raised either.
+MAX_ZIP=$((200 * 1024 * 1024))
+MAX_RAW=$((500 * 1024 * 1024))
 
 printf '%s\n' "[OK] ${ZIP_PATH}"
 printf '     name        : %s\n' "${NAME}"
@@ -66,11 +68,11 @@ printf '     unpacked    : %s bytes (limit %s)\n' "${RAW_BYTES}" "${MAX_RAW}"
 
 STATUS=0
 if [ "${ZIP_BYTES}" -gt "${MAX_ZIP}" ]; then
-  echo "[FAIL] zip exceeds the 10MB upload cap (error 11052)" >&2
+  echo "[FAIL] zip exceeds the default 200MB upload cap (error 11052)" >&2
   STATUS=1
 fi
 if [ "${RAW_BYTES}" -gt "${MAX_RAW}" ]; then
-  echo "[FAIL] unpacked bundle exceeds the 100MB cap (error 11059)" >&2
+  echo "[FAIL] unpacked bundle exceeds the default 500MB cap (error 11059)" >&2
   STATUS=1
 fi
 

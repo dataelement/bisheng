@@ -1,5 +1,4 @@
 import { LoadingIcon } from '@/components/bs-icons/loading';
-import { Alert, AlertDescription } from '@/components/bs-ui/alert';
 import { hasResourceAction, useResourceActions } from '@/components/bs-comp/permission/useResourceActions';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -73,10 +72,10 @@ const ApiMainPage = ({ type = API_TYPE.ASSISTANT }: ApiMainPageProps) => {
 
     if (!canManageShare) {
         return (
-            <div className="p-4">
-                <Alert>
-                    <AlertDescription>{t('noOperationPermission', { ns: 'knowledge' })}</AlertDescription>
-                </Alert>
+            <div className="flex size-full bg-background-main">
+                <main className="flex-1 overflow-y-auto p-2">
+                    <ChatLink noLogin type={type} />
+                </main>
             </div>
         );
     }

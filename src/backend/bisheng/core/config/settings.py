@@ -165,9 +165,26 @@ class WorkflowConf(BaseModel):
         description="Auto rerun an already-ended standalone workflow conversation when opened",
     )
 
+    code_node_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether workflows may run their Code node. Off unless an operator turns it on: "
+            "the node executes user-supplied Python with this process's privileges and there "
+            "is no execution sandbox yet, so while it is on, everyone who can edit a workflow "
+            "can run commands on the server."
+        ),
+    )
+
     @field_validator("auto_rerun_on_open", mode="before")
     @classmethod
     def validate_auto_rerun_on_open(cls, value: object) -> bool:
+        return value if isinstance(value, bool) else False
+
+    @field_validator("code_node_enabled", mode="before")
+    @classmethod
+    def validate_code_node_enabled(cls, value: object) -> bool:
+        # Anything but a literal `true` leaves the node off: a typo in the
+        # config must not be the thing that opens code execution.
         return value if isinstance(value, bool) else False
 
 
@@ -396,6 +413,16 @@ class LinsightConf(BaseModel):
     """Inspiration Configuration"""
 
     debug: bool = Field(default=False, description="Whether to opendebugMode")
+    citation_handles_enabled: bool = Field(
+        default=True,
+        description=(
+            "F069 task-mode citation handles: retrieval results are numbered [Sn] for the model and "
+            "converted back to the private-use citation markers at the workspace write boundary / "
+            "answer path. False reverts the tool output, the rules text, the write boundary and the "
+            "per-turn source table together to the verbatim-id contract (citation.yaml). A session "
+            "keeps the contract it started with (pinned in its handle table)."
+        ),
+    )
     tool_buffer: int = Field(
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
@@ -453,9 +480,15 @@ class LinsightConf(BaseModel):
         "cut off by finish_reason=length (with a 'write in smaller parts' corrective nudge) before giving up.",
     )
     skill_upload_max_size_mb: int = Field(
-        default=10,
+        default=200,
         ge=1,
         description="Upload cap for a skill bundle (.md/.zip/.skill), in MB. 系统配置 linsight.skill_upload_max_size_mb",
+    )
+    skill_unpacked_max_size_mb: int = Field(
+        default=500,
+        ge=1,
+        description="Cap on a skill bundle's total unpacked size, in MB. Never below the upload cap; clamped to "
+        "a 1024MB hard ceiling (skill_store.MAX_UNPACKED_CEILING). 系统配置 linsight.skill_unpacked_max_size_mb",
     )
     retry_num: int = Field(
         default=3, description="Number of times the model call was retried during the execution of the Ideas task"

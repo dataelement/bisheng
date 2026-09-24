@@ -52,7 +52,11 @@ function parseToValue(input, paramItem) {
         });
         return result;
     };
-    return traverseNodes(tempDiv);
+    // Typing a space next to an inserted variable makes the browser write a
+    // non-breaking space (U+00A0) instead, because a plain one would collapse
+    // against the chip. It looks identical and reaches the tool verbatim, so a
+    // query built this way fails with a syntax error nobody can see.
+    return traverseNodes(tempDiv).replace(/\u00A0/g, ' ');
 }
 
 export default function VarInput({

@@ -582,7 +582,8 @@
       },
       "code_output": {
         "label": "Output Parameters"
-      }
+      },
+      "disabledHint": "The Code node is currently disabled; a workflow will fail when it reaches this node. An administrator can enable workflow.code_node_enabled in the system settings."
     },
     "condition": {
       "name": "Condition",

@@ -166,3 +166,42 @@ def test_researcher_subagent_injects_rules_for_web_search():
     assert prompt_has_citation_rules(spec["system_prompt"])
     spec_plain = _build_researcher_subagent([_FakeOther()])
     assert not prompt_has_citation_rules(spec_plain["system_prompt"])
+
+
+# ---------------------------------------------------------------------------
+# F069 P1: the short-handle contract selects a second wording everywhere
+# ---------------------------------------------------------------------------
+def test_handle_rules_replace_verbatim_rules_when_enabled():
+    from bisheng.citation.domain.services.citation_handle_service import prompt_has_handle_rules
+
+    with_handles = _with_citation_rules("system prompt", True, handles=True)
+    assert prompt_has_handle_rules(with_handles)
+    assert not prompt_has_citation_rules(with_handles)  # no U+E200 markers shown to the model
+    assert "[S3][S7]" in with_handles
+    assert "不得" not in with_handles.split("# 来源编号")[1]  # commission-style, no prohibition list
+    # idempotent + the gate still applies
+    assert _with_citation_rules(with_handles, True, handles=True) == with_handles
+    assert _with_citation_rules("system prompt", False, handles=True) == "system prompt"
+
+
+def test_handles_off_keeps_the_verbatim_contract():
+    assert _with_citation_rules("system prompt", True, handles=False) == ensure_citation_rules("system prompt")
+
+
+def test_researcher_handoff_uses_handles_when_enabled():
+    kb = _build_researcher_prompt(True, citation_handles=True)
+    assert "[S3]" in kb
+    assert "chunk_id" not in kb
+    assert "__CITATION_HANDOFF_LINE__" not in kb
+    # the F047 wording is untouched for the verbatim contract
+    assert "chunk_id" in _build_researcher_prompt(True)
+
+
+def test_researcher_subagent_follows_the_contract():
+    from bisheng.citation.domain.services.citation_handle_service import prompt_has_handle_rules
+
+    spec = _build_researcher_subagent([_FakeWeb()], citation_handles=True)
+    assert prompt_has_handle_rules(spec["system_prompt"])
+    assert not prompt_has_citation_rules(spec["system_prompt"])
+    spec_verbatim = _build_researcher_subagent([_FakeWeb()])
+    assert prompt_has_citation_rules(spec_verbatim["system_prompt"])

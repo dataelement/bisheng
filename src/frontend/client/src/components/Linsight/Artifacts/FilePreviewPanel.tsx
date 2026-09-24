@@ -69,7 +69,7 @@ export function FilePreviewPanel({
                     <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
                         {file.file_name}
                     </span>
-                    <SaveAsButton file={file} versionId={versionId} variant="toolbar" />
+                    <SaveAsButton file={file} versionId={versionId} variant="toolbar" citations={citations} />
                     <button
                         type="button"
                         aria-label={localize('com_ui_close')}

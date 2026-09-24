@@ -4,8 +4,16 @@
  * (MinIO share url → backend resolve → blob save), same behaviour as the
  * legacy task flow but kept here so P5 can delete the Sop components.
  */
+import i18next from 'i18next';
 import { getLinsightFileDownloadApi } from '~/api/chat/data-service';
-import { stripCitationMarkers } from '~/components/Chat/Messages/Content/citationUtils';
+import { type ChatCitation, resolveCitationDetails } from '~/api/chatApi';
+import {
+    bakeCitationsForExport,
+    createCitationDetailMap,
+    stripCitationHandles,
+    stripCitationMarkers,
+    transformPrivateCitations,
+} from '~/components/Chat/Messages/Content/citationUtils';
 import { getShareTokenFromPath } from '~/utils/shareToken';
 
 /** Output file shape of `output_result.final_files` (= store `file_list`). */
@@ -374,8 +382,60 @@ export function applyHtmlViewerTabIdentity(htmlContent: string): void {
     }
 }
 
+/** Options shared by the download and the knowledge-space save. */
+export interface ArtifactBlobOptions {
+  /**
+   * F069 P2: the run's `output_result.citations` — the seed the preview badges
+   * were resolved from. Given, the markdown export bakes citations into `[n]`
+   * plus a reference list instead of stripping them.
+   */
+  citations?: ChatCitation[] | null;
+}
+
+/** Old (P1) behaviour: drop every span, id included, then unresolved handles. */
+function stripCitationsForExport(text: string): string {
+  return stripCitationHandles(stripCitationMarkers(text));
+}
+
 /**
- * Decode a markdown artifact and drop its citation markers.
+ * Bake the citations of a markdown deliverable for export (F069 P2, design
+ * decision 8): no new endpoint — the details come from the run's citation
+ * seed plus the resolve cache the preview already warmed (`resolveCitationDetails`
+ * answers from memory for those). Ids nothing can resolve are dropped, and
+ * when nothing at all resolves (seed absent, resolve failing or forbidden,
+ * AC-22) the P1 strip is applied so the export never fails or leaks an id.
+ * Text without a marker is returned exactly as the P1 path returned it.
+ */
+export async function prepareMarkdownForExport(
+  text: string,
+  citations?: ChatCitation[] | null,
+): Promise<string> {
+  const { citationMap } = transformPrivateCitations(text);
+  const citationIds = Array.from(new Set(Object.values(citationMap).map((data) => data.citationId)));
+  if (!citationIds.length) {
+    return stripCitationsForExport(text);
+  }
+  const details = createCitationDetailMap(citations);
+  const missingIds = citationIds.filter((citationId) => !details[citationId]);
+  if (missingIds.length) {
+    try {
+      const resolved = await resolveCitationDetails(missingIds);
+      resolved.forEach((detail) => {
+        if (detail?.citationId) details[detail.citationId] = detail;
+      });
+    } catch (e) {
+      // AC-22: a failed resolve degrades to stripping, it never blocks the export.
+      console.warn('[artifactUtils] citation resolve for export failed, stripping markers:', e);
+    }
+  }
+  if (!citationIds.some((citationId) => details[citationId])) {
+    return stripCitationsForExport(text);
+  }
+  return bakeCitationsForExport(text, details, i18next.t('com_linsight_export_references'));
+}
+
+/**
+ * Decode a markdown artifact and bake (or drop) its citation markers.
  *
  * Task-mode deliverables carry citations as private-use-area spans
  * `\ue200<sourceId>[\ue201<sourceId>...]\ue202` (see citationUtils). The in-app
@@ -383,13 +443,23 @@ export function applyHtmlViewerTabIdentity(htmlContent: string): void {
  * seeing them - it fetches the object itself (usePreviewSource) and never comes
  * through here. As a FILE, though, the span is just invisible wrapper chars
  * around a bare `knowledgesearch_xxx:0` id, so the local download and the
- * knowledge-space save hand out the markdown with every span removed, ids
- * included - the same rule clipboard copy applies via stripCitationMarkers.
- * Decoded with Response.text() so the result is a proper UTF-8 text blob.
+ * knowledge-space save hand out the markdown with every span replaced: baked
+ * into `[n]` plus a reference list when the source details are known
+ * (prepareMarkdownForExport, F069 P2), removed outright otherwise - the same
+ * rule clipboard copy applies via stripCitationMarkers. A short handle the
+ * backend could not resolve (`[S99]`, F069) stays literal in the file the
+ * model wrote; the saved copy drops those too (stripCitationHandles) - only
+ * here, the copy path and the preview keep them. Decoded with Response.text()
+ * so the result is a proper UTF-8 text blob.
  */
-async function readCitationFreeMarkdown(response: Response): Promise<Blob> {
+async function readCitationFreeMarkdown(
+  response: Response,
+  citations?: ChatCitation[] | null,
+): Promise<Blob> {
   const text = await response.text();
-  return new Blob([stripCitationMarkers(text)], { type: 'text/markdown;charset=utf-8' });
+  return new Blob([await prepareMarkdownForExport(text, citations)], {
+    type: 'text/markdown;charset=utf-8',
+  });
 }
 
 /**
@@ -409,6 +479,7 @@ async function readCitationFreeMarkdown(response: Response): Promise<Blob> {
 export async function fetchArtifactBlob(
   file: ArtifactFile,
   versionId: string,
+  options?: ArtifactBlobOptions,
 ): Promise<{ blob: Blob; fileName: string }> {
   const url = await resolveArtifactUrl(file.file_url, versionId);
   const response = await fetch(url);
@@ -417,7 +488,9 @@ export async function fetchArtifactBlob(
   }
   const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
   const isMarkdown = isUploadMarkdown || MARKDOWN_EXTS.includes(getFileExtension(file.file_name));
-  const blob = isMarkdown ? await readCitationFreeMarkdown(response) : await response.blob();
+  const blob = isMarkdown
+    ? await readCitationFreeMarkdown(response, options?.citations)
+    : await response.blob();
   return {
     blob,
     fileName: isUploadMarkdown
@@ -427,8 +500,12 @@ export async function fetchArtifactBlob(
 }
 
 /** Download the original artifact file ("save as" action). */
-export async function downloadArtifactFile(file: ArtifactFile, versionId: string): Promise<void> {
-  const { blob: data, fileName } = await fetchArtifactBlob(file, versionId);
+export async function downloadArtifactFile(
+  file: ArtifactFile,
+  versionId: string,
+  options?: ArtifactBlobOptions,
+): Promise<void> {
+  const { blob: data, fileName } = await fetchArtifactBlob(file, versionId, options);
   // CSV needs a UTF-8 BOM so Excel opens it with the right encoding. Download
   // only — a BOM prepended to a file entering knowledge-base parsing would
   // corrupt its first cell, so it stays out of fetchArtifactBlob.

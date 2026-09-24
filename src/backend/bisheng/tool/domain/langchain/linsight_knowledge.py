@@ -1,4 +1,6 @@
 import json
+import re
+from typing import Any
 
 from langchain_core.tools import BaseTool
 from loguru import logger
@@ -48,6 +50,11 @@ class SearchKnowledgeBase(BaseTool):
     # that id would reach ``KnowledgeDao.query_by_id`` directly and leak another
     # tenant's / unauthorised KB content.
     allowed_knowledge_ids: set[str] | None = None
+    # F069: per-run citation scope (LinsightCitationScope). Every registered hit is
+    # reported so the completion audit can count sources seen in BOTH the main
+    # graph and the researcher sub-graph (they share this tool instance). None
+    # keeps the pre-F069 behaviour.
+    citation_scope: Any | None = None
 
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
@@ -109,7 +116,19 @@ class SearchKnowledgeBase(BaseTool):
             annotated = annotate_rag_documents_with_citations(documents)
             items = collect_rag_citation_registry_items(annotated)
             await cache_citation_registry_items(items)
+            handles: dict[str, str] = {}
+            if self.citation_scope is not None:
+                await self.citation_scope.record_seen(items)
+                if getattr(self.citation_scope, "enabled", False):
+                    from bisheng.citation.domain.services.citation_handle_service import assign_handles
+
+                    handles = await assign_handles(self.citation_scope, items)
             formatted = [KnowledgeUtils.format_retrieved_chunk(doc, knowledge_name) for doc in annotated]
+            if handles:
+                # F069 P1: the model sees a short handle instead of the registry key.
+                # format_retrieved_chunk itself is shared platform-wide and untouched;
+                # an allocation failure (empty mapping) keeps the F047 shape.
+                formatted = [_swap_chunk_id_for_handle(chunk, handles) for chunk in formatted]
             return json.dumps({"状态": "成功", "结果": formatted}, ensure_ascii=False, indent=2)
         except Exception:
             logger.opt(exception=True).warning("search_knowledge_base citation annotate failed; returning bare chunks")
@@ -140,3 +159,15 @@ class SearchKnowledgeBase(BaseTool):
             knowledge_id=knowledge_id,
             knowledge_name=knowledge_info.name or "",
         )
+
+
+_CHUNK_ID_RE = re.compile(r"<chunk_id>(.*?)</chunk_id>", re.S)
+
+
+def _swap_chunk_id_for_handle(chunk: str, handles: dict[str, str]) -> str:
+    def _repl(match: re.Match[str]) -> str:
+        key = match.group(1).strip()
+        handle = handles.get(key)
+        return f"<ref>{handle}</ref>" if handle else match.group(0)
+
+    return _CHUNK_ID_RE.sub(_repl, chunk)

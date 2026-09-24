@@ -1,4 +1,6 @@
 import request from '~/api/request';
+import { type ChatCitation, resolveCitationDetails } from '~/api/chatApi';
+import { stripCitationHandles } from '~/components/Chat/Messages/Content/citationUtils';
 import {
     type ArtifactFile,
     applyHtmlViewerTabIdentity,
@@ -17,6 +19,29 @@ jest.mock('~/api/request', () => ({
     __esModule: true,
     default: { post: jest.fn() },
 }));
+
+// F069 P2: the export bake asks the resolver only for ids the seed lacks.
+jest.mock('~/api/chatApi', () => ({
+    __esModule: true,
+    resolveCitationDetails: jest.fn(),
+}));
+
+// The reference-list labels are i18n copy; render the key with its argument
+// so the fixtures stay ASCII.
+jest.mock('i18next', () => ({
+    __esModule: true,
+    default: {
+        t: (key: string, options?: Record<string, unknown>) =>
+            options && '0' in options ? `${key}:${String(options[0])}` : key,
+    },
+}));
+
+// Default: nothing more resolves than the seed. The P1 strip suites below
+// never seed anything, so they exercise the AC-22 fallback and must keep
+// producing the same bytes they did before baking existed.
+beforeEach(() => {
+    (resolveCitationDetails as jest.Mock).mockResolvedValue([]);
+});
 
 const mkArtifact = (over: Partial<ArtifactFile>): ArtifactFile => ({
     file_id: over.file_id ?? Math.random().toString(36).slice(2),
@@ -462,5 +487,212 @@ describe('fetchArtifactBlob citation stripping', () => {
         expect(fileName).toBe('report.docx');
         expect(blob).toBe(raw);
         expect(text).not.toHaveBeenCalled();
+    });
+});
+
+describe('stripCitationHandles (unresolved short-handle grammar)', () => {
+    // Strip cases: every run shape the backend grammar (_RUN_RE) recognises.
+    it.each([
+        ['single group', 'Claim A. [S3] Next.', 'Claim A.  Next.'],
+        ['adjacent groups', 'Claim A. [S3][S7] Next.', 'Claim A.  Next.'],
+        ['adjacent groups with whitespace between', 'Claim A. [S3] [S7] Next.', 'Claim A.  Next.'],
+        ['comma list', 'Claim A. [S3, S7]', 'Claim A. '],
+        ['full-width comma list', 'Claim A. [S3\uff0cS7]', 'Claim A. '],
+        ['ideographic comma list', 'Claim A. [S3\u3001S7]', 'Claim A. '],
+        ['inner whitespace inside a group', 'Claim A. [ S3 , S7 ]', 'Claim A. '],
+        ['two separate runs', 'A. [S3] B. [S7]', 'A.  B. '],
+        ['four-digit handle', 'A. [S1234]', 'A. '],
+        ['run right after a table pipe', '|cell|[S3]|', '|cell||'],
+        ['run at the start of the text', '[S3] leading', ' leading'],
+    ])('strips %s', (_label, input, expected) => {
+        expect(stripCitationHandles(input)).toBe(expected);
+    });
+
+    // Keep cases: everything the grammar explicitly excludes.
+    it.each([
+        ['a bare number', 'Bare [3] stays.'],
+        ['a footnote reference', 'Footnote [^3] stays.'],
+        ['a markdown link label', 'Link [S3](https://x) stays.'],
+        ['a markdown link label with a space before the url', 'Link [S3] (https://x) stays.'],
+        ['a fenced code block', '```\n[S3]\n```'],
+        ['a tilde-fenced code block', '~~~\n[S3]\n~~~'],
+        ['an inline code span', 'Inline `[S3]` stays.'],
+        ['a definition line with a colon', '[S3]: Knowledge base rule'],
+        ['a definition line with a full-width colon', '[S3]\uff1a Knowledge base rule'],
+        ['an indented definition line', '  [S3]  : rule'],
+        ['a five-digit handle', 'A. [S12345]'],
+        ['a lowercase prefix', 'A. [s3]'],
+        ['a handle glued to an ascii word', 'word[S3]'],
+        ['a handle glued to another bracket', '[[S3]]'],
+        ['an empty string', ''],
+    ])('keeps %s', (_label, input) => {
+        expect(stripCitationHandles(input)).toBe(input);
+    });
+
+    it('strips runs around a definition line and around code without touching them', () => {
+        const text = 'A. [S3][S7] B. [S99] `[S3]` [S3](u)\n[S3]: def';
+        expect(stripCitationHandles(text)).toBe('A.  B.  `[S3]` [S3](u)\n[S3]: def');
+    });
+
+    it('only strips outside code even when prose and code alternate', () => {
+        const text = 'x [S1] `[S2]` y [S3]\n```\n[S4]\n```\nz [S5]';
+        expect(stripCitationHandles(text)).toBe('x  `[S2]` y \n```\n[S4]\n```\nz ');
+    });
+
+    it('does not touch a definition line when the same handle is cited in the body', () => {
+        const text = 'Body cites [S3] here.\n[S3]: def\nAnd [S3] again.';
+        expect(stripCitationHandles(text)).toBe('Body cites  here.\n[S3]: def\nAnd  again.');
+    });
+
+    it('does not treat a definition-like fragment mid-line as a definition', () => {
+        expect(stripCitationHandles('prose [S3]: not a def')).toBe('prose : not a def');
+    });
+});
+
+describe('fetchArtifactBlob unresolved-handle stripping', () => {
+    const origFetch = global.fetch;
+
+    const readBlobText = (blob: Blob) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(blob);
+        });
+
+    beforeEach(() => {
+        (request.post as jest.Mock).mockResolvedValue({
+            status_code: 200,
+            data: { file_path: '/presigned/x' },
+        });
+    });
+
+    afterEach(() => {
+        global.fetch = origFetch;
+    });
+
+    it('drops an unresolved [S99] from the saved markdown while a bare [3] stays', async () => {
+        const body =
+            'Resolved\ue200knowledgesearch_18f5868b:0\ue202 and unresolved [S99] and bare [3].\n' +
+            '[S99]: def line stays\n' +
+            'code `[S99]` stays';
+        const text = jest.fn().mockResolvedValue(body);
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, text, blob: jest.fn() }) as unknown as typeof fetch;
+
+        const { blob } = await fetchArtifactBlob(
+            { file_id: '5', file_name: 'report.md', file_url: 'output/report.md', source: 'output' },
+            'SV-1',
+        );
+
+        const saved = await readBlobText(blob);
+        expect(saved).toBe(
+            'Resolved and unresolved  and bare [3].\n' +
+            '[S99]: def line stays\n' +
+            'code `[S99]` stays',
+        );
+        expect(saved).not.toMatch(/[\ue200\ue201\ue202]/);
+        expect(saved).not.toContain('knowledgesearch_');
+    });
+});
+
+/**
+ * F069 P2 (AC-20 / AC-22): with the run's citation seed the saved markdown
+ * carries visible `[n]` markers and a reference list; without any detail the
+ * P1 strip above still applies byte for byte.
+ */
+describe('fetchArtifactBlob citation baking', () => {
+    const origFetch = global.fetch;
+
+    const readBlobText = (blob: Blob) =>
+        new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(blob);
+        });
+
+    const mockFetchText = (body: string) => {
+        const text = jest.fn().mockResolvedValue(body);
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, text, blob: jest.fn() }) as unknown as typeof fetch;
+    };
+
+    const seed: ChatCitation[] = [
+        {
+            citationId: 'knowledgesearch_18f5868b',
+            type: 'knowledgeSearch',
+            sourcePayload: {
+                documentName: 'handbook.pdf',
+                knowledgeName: 'HR',
+                items: [{ itemId: '0', page: 12 }],
+            },
+        },
+    ];
+
+    const report = { file_id: '6', file_name: 'report.md', file_url: 'output/report.md', source: 'output' as const };
+
+    beforeEach(() => {
+        (request.post as jest.Mock).mockResolvedValue({
+            status_code: 200,
+            data: { file_path: '/presigned/x' },
+        });
+    });
+
+    afterEach(() => {
+        global.fetch = origFetch;
+    });
+
+    it('bakes [n] plus a reference list from the seed and the resolve cache', async () => {
+        mockFetchText(
+            'Claimknowledgesearch_18f5868b:0 and webwebsearch_ab12cd34:3 and [S99].',
+        );
+        (resolveCitationDetails as jest.Mock).mockResolvedValue([
+            {
+                citationId: 'websearch_ab12cd34',
+                type: 'webSearch',
+                sourcePayload: { title: 'Example', source: 'example.com', url: 'https://example.com/x' },
+            },
+        ]);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: seed });
+
+        // Only the id missing from the seed goes to the resolver.
+        expect(resolveCitationDetails).toHaveBeenCalledWith(['websearch_ab12cd34']);
+        const saved = await readBlobText(blob);
+        expect(saved).toBe(
+            'Claim[1] and web[2] and .\n\n## com_linsight_export_references\n\n' +
+            '1. 《handbook.pdf》 · com_linsight_export_page:12 · HR\n' +
+            '2. Example · example.com · https://example.com/x\n',
+        );
+        expect(saved).not.toMatch(/[]/);
+        expect(saved).not.toContain('knowledgesearch_');
+    });
+
+    it('falls back to the P1 strip when there is no seed and the resolve fails (AC-22)', async () => {
+        mockFetchText('Claimknowledgesearch_18f5868b:0 and [S99] and bare [3].');
+        (resolveCitationDetails as jest.Mock).mockRejectedValue(new Error('network'));
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1');
+
+        expect(await readBlobText(blob)).toBe('Claim and  and bare [3].');
+        expect(warn).toHaveBeenCalled();
+    });
+
+    it('does not touch the resolver when the markdown has no markers', async () => {
+        mockFetchText('Plain [S99] text.');
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: seed });
+
+        expect(resolveCitationDetails).not.toHaveBeenCalled();
+        expect(await readBlobText(blob)).toBe('Plain  text.');
+    });
+
+    it('drops a span the resolver cannot answer for and adds no section (forbidden source)', async () => {
+        mockFetchText('Claimknowledgesearch_forbidden:0 end.');
+        (resolveCitationDetails as jest.Mock).mockResolvedValue([]);
+
+        const { blob } = await fetchArtifactBlob(report, 'SV-1', { citations: [] });
+
+        expect(await readBlobText(blob)).toBe('Claim end.');
     });
 });
