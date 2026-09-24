@@ -108,7 +108,11 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     side="right"
                     align="start"
                     sideOffset={8}
-                    className="max-w-[260px] whitespace-normal break-words leading-[18px]"
+                    // Large system fonts can make a long description taller than the
+                    // viewport. Keep the tooltip within Radix's collision boundary
+                    // and make the remainder reachable by scrolling.
+                    collisionPadding={8}
+                    className="max-h-[var(--radix-tooltip-content-available-height)] max-w-[260px] overflow-y-auto whitespace-normal break-words leading-[18px]"
                 >
                     <p className="font-medium">{skill.display_name}</p>
                     {skill.description && (
