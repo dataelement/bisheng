@@ -10,6 +10,9 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
 
 class KnowledgeFulltextIndexRepository(ABC):
     @abstractmethod
+    async def apply_batch(self, documents: dict[int, KnowledgeFulltextDocument | None]) -> dict[int, str | None]: ...
+
+    @abstractmethod
     async def validate_read_index(self) -> None: ...
 
     @abstractmethod

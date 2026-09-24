@@ -168,13 +168,11 @@ def test_delete_flows_snapshot_artifacts_before_parent_rows() -> None:
         "delete_version",
     )
     assert service_source.index("get_pdf_artifact_deletion_snapshots_sync") < service_source.index(
-        "KnowledgeFileDao.delete_batch"
+        "_delete_knowledge_file_rows_atomic"
     )
     assert "knowledge_file_snapshots" in service_source
-    assert space_source.index("get_pdf_artifact_deletion_snapshots") < space_source.index(
-        "KnowledgeFileDao.adelete_batch"
-    )
-    assert "knowledge_file_snapshots" in space_source
+    assert "recycle.soft_delete_file_ids" in space_source
+    assert "delete_minio" not in space_source
     assert version_source.index("get_pdf_artifact_deletion_snapshots") < version_source.index(
         "knowledge_file_repo.delete"
     )
@@ -184,4 +182,6 @@ def test_delete_flows_snapshot_artifacts_before_parent_rows() -> None:
         "delete_knowledge_file_celery",
     )
     assert "knowledge_file_snapshots" in delayed_task_source
-    assert "delete_minio_file_snapshot_objects" in delayed_task_source
+    assert "request_delete" in delayed_task_source
+    assert "KnowledgeBackgroundService" in delayed_task_source
+    assert "finally:" not in delayed_task_source

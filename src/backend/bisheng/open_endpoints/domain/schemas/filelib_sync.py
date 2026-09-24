@@ -14,13 +14,13 @@ class FilelibSyncParams(BaseModel):
     department_id: str | None = Field(default=None, min_length=1, max_length=128)
     responsible_person: str | None = Field(
         default=None,
-        description="Responsible person external_id in user table",
+        description="Responsible person identifier: match user.external_id first, then user.external_code if not found",
     )
     responsible_person_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=128,
-        description="Responsible person external_id in user table",
+        description="Responsible person identifier: match user.external_id first, then user.external_code if not found",
     )
     tags: list[str] = Field(default_factory=list, description="Tag names applied to the synced file")
 

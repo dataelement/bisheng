@@ -8,6 +8,9 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
 
 class KnowledgeFulltextChunkRepository(ABC):
     @abstractmethod
+    async def list_many(self, sources: list[KnowledgeFulltextChunkSource]) -> dict[int, list[KnowledgeFulltextChunk] | Exception]: ...
+
+    @abstractmethod
     async def list_all(
         self,
         *,

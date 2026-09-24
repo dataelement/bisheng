@@ -224,8 +224,23 @@ class KnowledgeMigrationRepository(ABC):
         statuses: set[str],
         *,
         older_than: datetime,
+        now: datetime,
         limit: int,
     ) -> list[KnowledgeMigrationBatch]: ...
+
+    @abstractmethod
+    async def claim_reconcile_batch(
+        self,
+        batch_id: int,
+        *,
+        expected_status: str,
+        expected_round_no: int,
+        older_than: datetime,
+        now: datetime,
+        max_recoveries: int,
+    ) -> KnowledgeMigrationBatch | None:
+        """原子领取恢复预算; 超限时终止批次, 不返回待投递对象。"""
+        ...
 
     @abstractmethod
     async def recover_stale_running_batch(

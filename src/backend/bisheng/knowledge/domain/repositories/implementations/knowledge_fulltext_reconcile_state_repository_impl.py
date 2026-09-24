@@ -116,7 +116,7 @@ class FulltextReconcileStateRepository:
         )
         row = rows[0] if rows else Issue(run_id="repair", file_id=file_id, updated_at=now)
         if row.fingerprint != fingerprint:
-            if row.status == "processing":
+            if row.status in {"processing", "waiting_projection"}:
                 return row
             row.fingerprint, row.reason = fingerprint, kind
             row.status, row.attempts, row.task_id = "pending", 0, uuid4().hex
@@ -142,7 +142,7 @@ class FulltextReconcileStateRepository:
         await self.session.flush()
         return bool(result.rowcount)
 
-    async def finish_repair(self, file_id: int, fingerprint: str, task_id: str, success: bool, now: datetime) -> None:
+    async def finish_repair(self, file_id: int, fingerprint: str, task_id: str, success: bool | None, now: datetime) -> None:
         await self.session.execute(
             update(Issue)
             .where(
@@ -152,10 +152,39 @@ class FulltextReconcileStateRepository:
                 Issue.task_id == task_id,
                 Issue.status == "processing",
             )
-            .values(status="resolved" if success else "exhausted", updated_at=now)
+            .values(
+                status="waiting_projection" if success is None else "resolved" if success else "exhausted",
+                updated_at=now,
+            )
         )
 
     async def pending_repairs(self, now: datetime, limit: int = 100) -> list[Issue]:
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+        # 解析工作由投影队列负责; 这里只结算结果, 不再次投递或重置解析重试预算。
+        waiting = await self._rows(
+            select(Issue)
+            .where(Issue.run_id == "repair", Issue.status == "waiting_projection")
+            .order_by(Issue.next_retry_at, Issue.file_id)
+            .limit(limit)
+            .with_for_update()
+        )
+        if waiting:
+            files = {file.id: file for file in await self._rows(
+                select(KnowledgeFile).where(col(KnowledgeFile.id).in_([row.file_id for row in waiting]))
+            )}
+            for row in waiting:
+                file = files.get(row.file_id)
+                if file is None or file.deleted_at is not None or file.projection_status == "failed":
+                    row.status = "exhausted"
+                elif file.status == 2 and file.projection_status == "ready":
+                    row.status = "resolved"
+                elif row.updated_at < now - timedelta(hours=2):
+                    row.status = "exhausted"
+                # 保留开始等待的时间, 同时轮转检查顺序, 避免前一批长期占据扫描窗口。
+                row.next_retry_at = now + timedelta(minutes=5)
+                self.session.add(row)
+            await self.session.flush()
         # 超时进程结果不明时禁止再次解析; 记录耗尽, 交由后续对账/人工处理。
         await self.session.execute(
             update(Issue)

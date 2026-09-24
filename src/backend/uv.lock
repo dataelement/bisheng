@@ -602,7 +602,7 @@ requires-dist = [
     { name = "qdrant-client", specifier = ">=1.15.1" },
     { name = "rapidfuzz", specifier = ">=3.14.3" },
     { name = "redis", specifier = ">=7.0.1" },
-    { name = "scipy", specifier = ">=1.15.3" },
+    { name = "scipy", specifier = ">=1.14.1" },
     { name = "shapely", specifier = ">=2.1.2" },
     { name = "simhash", specifier = ">=2.1.2" },
     { name = "sqlmodel", specifier = ">=0.0.27" },

@@ -17,12 +17,18 @@ async def dispatch_knowledge_fulltext_outbox_async(
     repository: KnowledgeFulltextOutboxRepository,
     sender: Callable[..., object],
     now: datetime | None = None,
+    batch_sender: Callable[..., object] | None = None,
 ) -> int:
     constants.ensure_runtime_compatible(multi_tenant_enabled=multi_tenant_enabled)
     rows = await repository.list_dispatchable(
         now=now or datetime.now(),
         limit=constants.KNOWLEDGE_FULLTEXT_DISPATCH_BATCH_SIZE,
     )
+    if batch_sender is not None:
+        for start in range(0, len(rows), 100):
+            batch_sender(items=[{"outbox_id": int(row.id), "revision": int(row.desired_revision)}
+                                for row in rows[start:start + 100]])
+        return len(rows)
     dispatched = 0
     for row in rows:
         sender(

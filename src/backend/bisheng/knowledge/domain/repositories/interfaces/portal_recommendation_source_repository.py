@@ -11,6 +11,9 @@ from bisheng.knowledge.domain.services.portal_recommendation_projection_service 
 
 class PortalRecommendationSourceRepository(ABC):
     @abstractmethod
+    async def primary_department_user_ids(self, department_ids: Sequence[int]) -> list[int]: ...
+
+    @abstractmethod
     async def find_by_id(self, file_id: int) -> PortalRecommendationSourceFile | None: ...
 
     @abstractmethod

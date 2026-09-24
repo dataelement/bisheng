@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -243,7 +244,12 @@ def test_auto_repair_worker_keeps_minimal_message_cas_and_retry_lifecycle_contra
     assert "run_retry_knowledge_parse_lifecycle(file_id)" in runner
 
 
-def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatch):
+@pytest.mark.parametrize("projection_status,waiting_minutes,outcome", [
+    ("ready", None, True), ("pending", None, None),
+    ("pending", 10, None), ("ready", 10, True), ("failed", 10, False), ("pending", 121, False),
+    ("parsing", 10, None),
+])
+def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatch, projection_status, waiting_minutes, outcome):
     from bisheng.knowledge.domain.models.knowledge_file import (
         KnowledgeFileDao,
         KnowledgeFileEntryType,
@@ -255,9 +261,7 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
     from bisheng.knowledge.domain.services.knowledge_fulltext_auto_repair_service import (
         KnowledgeFulltextAutoRepairService,
     )
-    from bisheng.knowledge.domain.services.knowledge_fulltext_document_service import (
-        KnowledgeFulltextProjectionAction,
-    )
+    from test.knowledge.fulltext.test_fulltext_reconcile_service import snapshot
 
     celery_stub = MagicMock()
     celery_stub.task = lambda *args, **kwargs: lambda function: function
@@ -293,11 +297,12 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
     entry = SimpleNamespace(
         id=830,
         tenant_id=1,
-        status=KnowledgeFileStatus.SUCCESS.value,
+        status=KnowledgeFileStatus.PROCESSING.value if projection_status == "parsing" else KnowledgeFileStatus.SUCCESS.value,
         entry_type=KnowledgeFileEntryType.SHARE.value,
         object_name=None,
+        projection_status="ready" if projection_status == "parsing" else projection_status,
     )
-    projection_repair = AsyncMock(return_value=True)
+    projection_repair = AsyncMock(return_value=outcome)
     parse_repair = MagicMock()
     update_status = MagicMock()
 
@@ -309,17 +314,18 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
     monkeypatch.setattr(
         fulltext_index,
         "_claim_auto_repair",
-        AsyncMock(return_value=SimpleNamespace(aggregate_id=830)),
+        AsyncMock(return_value=SimpleNamespace(aggregate_id=830, payload_snapshot={
+            "fulltext_auto_repair": {} if waiting_minutes is None else {
+                "projection_requested_at": (datetime.now() - timedelta(minutes=waiting_minutes)).isoformat(),
+            },
+        })),
     )
     monkeypatch.setattr(
         fulltext_index,
         "_load_auto_repair_context",
-        AsyncMock(return_value=(source, MagicMock())),
-    )
-    monkeypatch.setattr(
-        fulltext_index.KnowledgeFulltextDocumentService,
-        "decide",
-        MagicMock(return_value=KnowledgeFulltextProjectionAction.UPSERT),
+        AsyncMock(return_value=(source, snapshot(
+            830, logical_document_id=12, entry_type="share", entry_status="active", projection_status=projection_status,
+        ))),
     )
     monkeypatch.setattr(
         fulltext_index,
@@ -344,9 +350,32 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
         outbox_id=76,
         revision=1,
         fingerprint=fingerprint,
-    )
-    projection_repair.assert_awaited_once()
-    assert projection_repair.await_args.kwargs["file_id"] == 830
-    assert projection_repair.await_args.kwargs["tenant_id"] == 1
+    ) is (outcome is True)
+    assert fulltext_index._finish_auto_repair.await_args.kwargs["success"] is outcome
+    if waiting_minutes is None:
+        projection_repair.assert_awaited_once()
+        assert projection_repair.await_args.kwargs["file_id"] == 830
+        assert projection_repair.await_args.kwargs["tenant_id"] == 1
+    else:
+        projection_repair.assert_not_awaited()
     update_status.assert_not_called()
     parse_repair.assert_not_called()
+
+
+@pytest.mark.parametrize("result,expected", [("ready", True), ("rebuild_queued", None), ("not_claimed", None)])
+async def test_projection_repair_reuses_batch_probe_and_handoff(monkeypatch, result, expected):
+    monkeypatch.setitem(sys.modules, "bisheng.worker.main", SimpleNamespace(
+        bisheng_celery=SimpleNamespace(task=lambda **_: lambda function: function, conf=SimpleNamespace(beat_schedule={})),
+    ))
+    monkeypatch.setitem(sys.modules, "bisheng.worker._asyncio_utils", SimpleNamespace(run_async_task=MagicMock()))
+    batch = AsyncMock(return_value={"results": {830: result}})
+    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge.rebuild_knowledge_worker", SimpleNamespace(
+        _rebuild_shared_files=batch,
+    ))
+    spec = importlib.util.spec_from_file_location(
+        "fulltext_batch_handoff_under_test", Path(__file__).parents[3] / "bisheng/worker/knowledge/fulltext_index.py",
+    )
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    assert await worker._run_logical_entry_projection_repair(file_id=830, tenant_id=1, lease_owner="repair") is expected
+    batch.assert_awaited_once_with(1, [830])

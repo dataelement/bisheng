@@ -193,9 +193,14 @@ async def test_projection_batches_preserve_versions_and_rollback_only_failed_bat
             raise RuntimeError("source temporarily unavailable")
         return PortalRecommendationSourceFile(
             file_id=file_id, space_id=2, file_type=1, status=2, split_rule=None,
-            file_encoding=None, file_level_path=None, source_update_time=source_time,
+            file_encoding=None, file_level_path=None, source_update_time=None if file_id == 45 else source_time,
             is_primary=True, space_level="public",
         )
+
+    async def find_by_ids(file_ids):
+        return [await find_by_id(file_id) for file_id in file_ids]
+
+    source_batch = AsyncMock(side_effect=find_by_ids)
 
     @asynccontextmanager
     async def session_factory():
@@ -204,7 +209,7 @@ async def test_projection_batches_preserve_versions_and_rollback_only_failed_bat
 
     monkeypatch.setattr(worker, "get_async_db_session", session_factory)
     monkeypatch.setattr(worker, "PortalRecommendationSourceRepositoryImpl", lambda _session: SimpleNamespace(
-        find_by_id=find_by_id,
+        find_by_ids=source_batch,
     ))
     monkeypatch.setattr(PortalRecommendationProjectionService, "load_bindings_strict", AsyncMock(return_value=[]))
 
@@ -215,10 +220,15 @@ async def test_projection_batches_preserve_versions_and_rollback_only_failed_bat
     try:
         initial = [event(41, 200), event(42)]
         assert await worker._refresh_projection_batch_async(events=initial) == 2
+        source_batch.assert_awaited_once_with([41, 42])
         assert await worker._refresh_projection_batch_async(events=initial) == 0
         assert await worker._refresh_projection_batch_async(events=[event(41, 199, True)]) == 0
         with pytest.raises(RuntimeError, match="temporarily unavailable"):
             await worker._refresh_projection_batch_async(events=[event(43, 100), event(44, 100)])
+        from sqlalchemy.exc import IntegrityError
+
+        with pytest.raises(IntegrityError):
+            await worker._refresh_projection_batch_async(events=[event(43, 100), event(45, 100)])
         async with session_factory() as session:
             records = await PortalRecommendationRepositoryImpl(session).find_by_file_ids([41, 42, 43])
             assert {record.file_id: record.projection_version for record in records} == {
@@ -226,6 +236,13 @@ async def test_projection_batches_preserve_versions_and_rollback_only_failed_bat
             }
         assert await worker._refresh_projection_batch_async(events=[event(41, 300, True)]) == 1
         assert await worker._refresh_projection_batch_async(events=[event(41, 300, True)]) == 0
+        # 同文件在一批内先删除再写入, 保持事件顺序和版本语义。
+        assert await worker._refresh_projection_batch_async(
+            events=[event(42, 10**18, True), event(42, 500), event(42, 499, True)]
+        ) == 2
+        async with session_factory() as session:
+            record = (await PortalRecommendationRepositoryImpl(session).find_by_file_ids([42]))[0]
+            assert record.projection_version == 500
     finally:
         current_tenant_id.reset(token)
 
@@ -253,7 +270,7 @@ def test_acl_event_version_advances_projection_even_when_file_time_is_unchanged(
 
 @pytest.mark.asyncio
 async def test_full_reconcile_deletes_only_orphan_projections_idempotently():
-    projection_repository = SimpleNamespace(delete=AsyncMock(side_effect=[True, False]))
+    projection_repository = SimpleNamespace(apply_batch=AsyncMock(side_effect=[1, 0]))
     source_repository = SimpleNamespace(
         find_by_ids=AsyncMock(return_value=[SimpleNamespace(file_id=11)])
     )
@@ -274,8 +291,9 @@ async def test_full_reconcile_deletes_only_orphan_projections_idempotently():
     )
 
     assert (first, second) == (1, 0)
-    assert projection_repository.delete.await_args_list[0].args == (12, 21)
-    assert projection_repository.delete.await_count == 2
+    changes = projection_repository.apply_batch.await_args_list[0].args[0]
+    assert [(value.file_id, value.projection_version) for value in changes] == [(12, 21)]
+    assert projection_repository.apply_batch.await_count == 2
 
 
 def test_tenant_fanout_always_uses_explicit_headers_and_knowledge_queue():
@@ -349,8 +367,8 @@ async def test_interest_worker_merges_current_query_even_before_es_refresh(monke
 
 def test_worker_task_imports_are_registered_explicitly():
     source = __import__("pathlib").Path(
-        "src/backend/bisheng/worker/__init__.py"
-    ).read_text(encoding="utf-8")
+        __file__
+    ).resolve().parents[2].joinpath("bisheng/worker/__init__.py").read_text(encoding="utf-8")
 
     assert "worker.knowledge.portal_recommendation" in source
 
@@ -414,3 +432,65 @@ def test_worker_rotation_excludes_day_fifteen_through_seventeen_then_recovers_an
     )
     assert original_hot_keys & {candidate.key for candidate in recovered["hot"]}
     assert len(states) <= 1_000
+
+
+@pytest.mark.parametrize("domain", [False, True])
+def test_bounded_pool_matches_full_ranking_and_rotation(domain):
+    from bisheng.knowledge.domain.services.portal_recommendation_pool_service import PortalRecommendationPoolState
+
+    worker = sys.modules["bisheng.worker.knowledge.portal_recommendation"]
+    today = date(2026, 9, 24)
+    source = [PortalRecommendationCandidate(
+        space_id=10, file_id=i, hot_score=float(i % 123), fresh_score=float(i % 137),
+    ) for i in range(1, 4001)]
+    states = {candidate.key: PortalRecommendationPoolState(active_since=today - timedelta(days=14))
+              for candidate in source[-700:]}
+    expected, expected_states, _ = _assemble_rotated_pool(source, previous_states=states, today=today, domain=domain)
+    builder = worker._BoundedPoolCandidates(states, today=today)
+    for candidate in source:
+        builder.add(candidate)
+    actual, actual_states = builder.finish(domain=domain)
+    assert actual == expected
+    assert actual_states == expected_states
+    assert len(builder.hot) <= 500 and len(builder.fresh) <= 500
+
+
+async def test_pool_snapshot_pages_preserve_heat_domains_and_personal_exclusion(monkeypatch):
+    worker = sys.modules["bisheng.worker.knowledge.portal_recommendation"]
+    now = datetime(2026, 9, 24, tzinfo=timezone.utc)
+    records = [SimpleNamespace(
+        id=i, file_id=i, space_id=20 if i % 5 == 0 else 10, recommendable=i % 7 != 0,
+        source_update_time=now - timedelta(days=i % 70), business_domain_code="BD1" if i % 2 else "BD2",
+    ) for i in range(1, 1201)]
+    repository = SimpleNamespace(list_page=AsyncMock(
+        side_effect=lambda after_id, limit: [record for record in records if record.id > after_id][:limit],
+    ))
+
+    @asynccontextmanager
+    async def session_factory():
+        yield object()
+
+    monkeypatch.setattr(worker, "get_async_db_session", session_factory)
+    monkeypatch.setattr(worker, "PortalRecommendationRepositoryImpl", lambda _: repository)
+    redis = SimpleNamespace(get_hot_rotation_states=AsyncMock(return_value={}))
+    decayed = {i: float(i % 37) for i in range(1, 1201)}
+    pools, count, excluded = await worker._prepare_pool_candidates(
+        redis_repository=redis, tenant_id=5, previous_pool_version="1", now=now,
+        personal_space_ids={20}, decayed=decayed,
+    )
+    eligible = [record for record in records if record.recommendable and record.space_id != 20]
+    assert count == len(eligible)
+    assert excluded == sum(record.recommendable and record.space_id == 20 for record in records)
+    assert repository.list_page.await_count == 4
+    assert redis.get_hot_rotation_states.await_count == 3
+    p95 = worker._p95([decayed[record.file_id] for record in eligible])
+    import math
+
+    for name, builder in pools.items():
+        candidates = [worker._candidate_from_projection(
+            record, hot_score=min(math.log1p(decayed[record.file_id]) / math.log1p(p95), 1.0) * 100, now=now,
+        ) for record in eligible if name == "generic" or name == f"domain:{record.business_domain_code}"]
+        expected, states, _ = worker._assemble_rotated_pool(
+            candidates, previous_states={}, today=now.date(), domain=name != "generic",
+        )
+        assert builder.finish(domain=name != "generic") == (expected, states)

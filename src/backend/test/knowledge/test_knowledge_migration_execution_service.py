@@ -199,9 +199,10 @@ class FakeRepository:
         statuses,
         *,
         older_than,
+        now,
         limit,
     ):
-        del older_than, limit
+        del older_than, now, limit
         return [self.batch] if self.batch.status in statuses else []
 
     async def recover_stale_running_batch(
@@ -362,11 +363,18 @@ async def test_batch_stale_attempt_stops_before_database_switch():
 
 
 @pytest.mark.asyncio
-async def test_reconcile_does_not_take_over_while_global_lease_exists():
+@pytest.mark.parametrize("status", ["queued", "running"])
+@pytest.mark.parametrize("lease_arrives_after_check", [False, True])
+async def test_reconcile_does_not_take_over_while_global_lease_exists(status, lease_arrives_after_check):
     repository = FakeRepository()
-    repository.batch.status = "running"
+    repository.batch.status = status
     lock = FakeLock()
     lock.value = "active-token"
+    if lease_arrives_after_check:
+        async def stale_lock_read():
+            return False
+
+        lock.is_locked = stale_lock_read
     service = KnowledgeMigrationReconcileService(
         repository_factory=FakeRepositoryFactory(repository),
         lock_repository=lock,
@@ -378,4 +386,5 @@ async def test_reconcile_does_not_take_over_while_global_lease_exists():
 
     assert recovered == 0
     assert repository.recovered_running == 0
-    assert repository.batch.status == "running"
+    assert repository.batch.status == status
+    assert lock.value == "active-token"

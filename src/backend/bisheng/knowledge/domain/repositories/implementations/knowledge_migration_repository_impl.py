@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -685,6 +685,21 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         }:
             return None
         next_round = batch.round_no + 1
+        if batch.last_error_code == "preflight_recovery_exhausted":
+            # 预检未完成时必须重新预检, 不能将残缺计划直接送入正式执行。
+            batch.round_no = next_round
+            batch.status = KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
+            batch.current_stage = batch.status
+            batch.reconcile_count = 0
+            batch.next_reconcile_at = None
+            batch.last_error_code = None
+            batch.last_error_summary = None
+            batch.preflight_task_id = None
+            batch.finished_at = None
+            batch.update_time = queued_at
+            self.session.add(batch)
+            await self.session.flush()
+            return batch
         result = await self.session.exec(
             update(KnowledgeMigrationUnit)
             .where(
@@ -711,6 +726,11 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         batch.current_stage = KnowledgeMigrationBatchStatus.QUEUED.value
         batch.queued_at = queued_at
         batch.finished_at = None
+        batch.reconcile_count = 0
+        batch.next_reconcile_at = None
+        batch.last_error_code = None
+        batch.last_error_summary = None
+        batch.update_time = queued_at
         self.session.add(batch)
         await self.session.flush()
         return batch
@@ -754,6 +774,7 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         statuses: set[str],
         *,
         older_than: datetime,
+        now: datetime,
         limit: int,
     ) -> list[KnowledgeMigrationBatch]:
         return list(
@@ -763,6 +784,10 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
                     .where(
                         col(KnowledgeMigrationBatch.status).in_(statuses),
                         KnowledgeMigrationBatch.update_time < older_than,
+                        or_(
+                            KnowledgeMigrationBatch.next_reconcile_at.is_(None),
+                            KnowledgeMigrationBatch.next_reconcile_at <= now,
+                        ),
                         KnowledgeMigrationBatch.deleted_at.is_(None),
                     )
                     .order_by(KnowledgeMigrationBatch.update_time, KnowledgeMigrationBatch.id)
@@ -770,6 +795,79 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
                 )
             ).all()
         )
+
+    async def claim_reconcile_batch(
+        self,
+        batch_id: int,
+        *,
+        expected_status: str,
+        expected_round_no: int,
+        older_than: datetime,
+        now: datetime,
+        max_recoveries: int,
+    ) -> KnowledgeMigrationBatch | None:
+        batch = (
+            await self.session.exec(
+                select(KnowledgeMigrationBatch)
+                .where(KnowledgeMigrationBatch.id == batch_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        if batch is None:
+            return None
+        count = int(batch.reconcile_count)
+        exhausted = count >= max_recoveries
+        preflight = expected_status in {"preflight_queued", "preflighting"}
+        error_code = "preflight_recovery_exhausted" if preflight else "migration_recovery_exhausted"
+        summary = f"自动恢复已达 {max_recoveries} 次上限, 已停止自动投递, 请检查后手动重试"
+        values = {"update_time": now}
+        if exhausted:
+            values.update(
+                status="failed",
+                current_stage="failed",
+                finished_at=now,
+                last_error_code=error_code,
+                last_error_summary=summary,
+                next_reconcile_at=None,
+            )
+        else:
+            # 领取即计数: 即使发布失败或进程退出, 也不能绕过累计预算。
+            values.update(
+                reconcile_count=count + 1,
+                next_reconcile_at=now + timedelta(seconds=1800 * (2 ** min(count, 3))),
+            )
+        result = await self.session.exec(
+            update(KnowledgeMigrationBatch)
+            .where(
+                KnowledgeMigrationBatch.id == batch_id,
+                KnowledgeMigrationBatch.status == expected_status,
+                KnowledgeMigrationBatch.round_no == expected_round_no,
+                KnowledgeMigrationBatch.reconcile_count == count,
+                KnowledgeMigrationBatch.update_time < older_than,
+                KnowledgeMigrationBatch.deleted_at.is_(None),
+                or_(
+                    KnowledgeMigrationBatch.next_reconcile_at.is_(None),
+                    KnowledgeMigrationBatch.next_reconcile_at <= now,
+                ),
+            )
+            .values(**values)
+        )
+        if int(result.rowcount or 0) != 1:
+            return None
+        if exhausted:
+            if not preflight:
+                await self.mark_remaining_unprocessed(
+                    batch_id, round_no=expected_round_no, reason_code=error_code, summary=summary
+                )
+                await self.recompute_progress(batch_id)
+            return None
+        if expected_status == "running":
+            await self.recover_stale_running_batch(batch_id, queued_at=now)
+        elif expected_status == "preflighting":
+            await self.recover_stale_preflight_batch(batch_id)
+        await self.session.refresh(batch)
+        return batch
 
     async def recover_stale_running_batch(
         self,

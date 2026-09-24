@@ -84,6 +84,15 @@ class AutoPublishService:
                 skip_reason="file not found",
             )
 
+        if int(db_file.tenant_id or 1) != tenant_id or db_file.deleted_at is not None:
+            return AutoPublishResult(published=False, skipped=True, skip_reason="file no longer eligible")
+        if db_file.status != 2:
+            raise RuntimeError("auto_publish_source_not_ready")
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao, KnowledgeSpaceLevelEnum
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(db_file.knowledge_id))
+        if scope is None or scope.level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+            return AutoPublishResult(published=False, skipped=True, skip_reason="source is not department space")
+
         file_category_code = get_file_category_code_from_split_rule(getattr(db_file, "split_rule", None))
         file_subcategory_code = getattr(db_file, "file_subcategory_code", None) or ""
 
@@ -132,11 +141,7 @@ class AutoPublishService:
                 file_category_code,
                 matched_rule.id,
             )
-            return AutoPublishResult(
-                published=False,
-                skipped=True,
-                skip_reason="target space not resolved",
-            )
+            raise RuntimeError("auto_publish_target_space_not_resolved")
 
         target = await AutoPublishTargetResolver.resolve_or_create_target_folder(
             target_space_id=target_space_id,

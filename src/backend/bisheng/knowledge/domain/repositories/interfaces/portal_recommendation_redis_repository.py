@@ -93,6 +93,9 @@ class PortalRecommendationRedisRepository(ABC):
     async def invalidate_user(self, tenant_id: int, user_id: int) -> None: ...
 
     @abstractmethod
+    async def invalidate_users(self, tenant_id: int, user_ids: Sequence[int]) -> int: ...
+
+    @abstractmethod
     async def set_top_n(
         self,
         tenant_id: int,

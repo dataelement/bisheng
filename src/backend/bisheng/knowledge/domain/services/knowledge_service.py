@@ -1941,6 +1941,7 @@ class KnowledgeService(KnowledgeUtils):
         space_id: int,
         file_ids: list[int],
         login_user: UserPayload,
+        cleanup_payload: dict | None = None,
     ) -> None:
         async with get_async_db_session() as session:
             lifecycle_service = DepartmentFileViewLifecycleService(
@@ -1949,6 +1950,10 @@ class KnowledgeService(KnowledgeUtils):
                 grant_repository=DepartmentFileViewGrantRepositoryImpl(session),
             )
             try:
+                if cleanup_payload is not None:
+                    from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import KnowledgeBackgroundRepositoryImpl
+                    await session.run_sync(lambda sync: KnowledgeBackgroundRepositoryImpl(sync).request_delete(
+                        tenant_id=tenant_id, **cleanup_payload))
                 await lifecycle_service.prepare_file_delete(
                     tenant_id=int(tenant_id),
                     space_id=int(space_id),
@@ -2000,11 +2005,6 @@ class KnowledgeService(KnowledgeUtils):
             for file in knowledge_file
         ]
 
-        # <g id="Bold">Medical Treatment:</g>vectordb
-        delete_knowledge_file_vectors(
-            file_ids,
-            pdf_artifact_snapshots=pdf_artifact_snapshots,
-        )
         asyncio.run(
             cls._delete_knowledge_file_rows_atomic(
                 tenant_id=int(
@@ -2015,6 +2015,8 @@ class KnowledgeService(KnowledgeUtils):
                 space_id=int(knowledge_file[0].knowledge_id),
                 file_ids=file_ids,
                 login_user=login_user,
+                cleanup_payload={"knowledge": db_knowledge, "files": knowledge_file_snapshots,
+                                 "artifacts": [snapshot.to_dict() for snapshot in pdf_artifact_snapshots]},
             )
         )
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
@@ -2029,24 +2031,27 @@ class KnowledgeService(KnowledgeUtils):
             pdf_artifact_snapshots=pdf_snapshot_payload,
             knowledge_file_snapshots=knowledge_file_snapshots,
         ):
-            # 有实际清理工作时, 五分钟后执行补删.
-            file_worker.delete_knowledge_file_celery.apply_async(
-                args=(
-                    file_ids,
-                    knowledge_file[0].knowledge_id,
-                    True,
-                    pdf_snapshot_payload,
-                    knowledge_file_snapshots,
-                ),
-                headers={
-                    "tenant_id": int(
-                        file_tenant_id
-                        or getattr(db_knowledge, "tenant_id", None)
-                        or DEFAULT_TENANT_ID
-                    )
-                },
-                countdown=300,
-            )
+            # 清理意图已提交; 消息只用于加速, 投递失败由扫描任务恢复。
+            try:
+                file_worker.delete_knowledge_file_celery.apply_async(
+                    args=(
+                        file_ids,
+                        knowledge_file[0].knowledge_id,
+                        True,
+                        pdf_snapshot_payload,
+                        knowledge_file_snapshots,
+                    ),
+                    headers={
+                        "tenant_id": int(
+                            file_tenant_id
+                            or getattr(db_knowledge, "tenant_id", None)
+                            or DEFAULT_TENANT_ID
+                        )
+                    },
+                    countdown=300,
+                )
+            except Exception:
+                logger.exception("delete_file_cleanup_dispatch_failed file_ids={}", file_ids)
 
         return True
 

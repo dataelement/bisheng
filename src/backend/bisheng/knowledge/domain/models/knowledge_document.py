@@ -112,3 +112,16 @@ class KnowledgeDocumentRead(KnowledgeDocumentBase):
 
 class KnowledgeDocumentCreate(KnowledgeDocumentBase):
     pass
+
+
+class KnowledgeDocumentRepairState(SQLModelSerializable, table=True):
+    """同一内容和目标配置的修复预算, 不随扫描时间或入口状态重置。"""
+
+    __tablename__ = "knowledge_document_repair_state"
+    document_id: int = Field(primary_key=True)
+    tenant_id: int = Field(default_factory=_default_document_tenant_id, index=True)
+    fingerprint: str = Field(sa_column=Column(String(64), nullable=False))
+    attempts: int = Field(default=0)
+    rebuild_attempts: int = Field(default=0)
+    next_retry_at: datetime | None = Field(default=None)
+    status: str = Field(default="pending", sa_column=Column(String(16), nullable=False))

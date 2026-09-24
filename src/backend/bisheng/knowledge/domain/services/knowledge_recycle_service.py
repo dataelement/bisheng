@@ -319,6 +319,14 @@ class KnowledgeRecycleService:
             )
             for item in items:
                 session.add(item)
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import KnowledgeBackgroundRepositoryImpl
+            for folder_id in folder_ids:
+                folder = by_id.get(int(folder_id))
+                if folder is not None:
+                    ancestors = {int(part) for part in str(folder.file_level_path or "").split("/") if part.isdigit()}
+                    if ancestors.intersection(folder_ids):
+                        continue
+                    await session.run_sync(lambda sync, folder=folder: KnowledgeBackgroundRepositoryImpl(sync).request_container(folder, now))
             await request_file_delete_intents(
                 session,
                 [
@@ -637,30 +645,21 @@ class KnowledgeRecycleService:
             knowledge_ids = {int(i.knowledge_id) for i in all_items}
             await _plan_canonical_purge(session, file_ids)
 
-        # 此路径未携带对象快照, 仅为仍需旧向量清理的知识库投递任务.
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
-
-        knowledge_by_id = {
-            knowledge.id: knowledge for knowledge in await KnowledgeDao.aget_list_by_ids(list(knowledge_ids))
-        }
-        for kid in knowledge_ids:
-            kids_files = [int(i.file_id) for i in all_items if int(i.knowledge_id) == kid]
-            if not needs_legacy_file_cleanup(knowledge_by_id.get(kid), kids_files):
-                continue
-            delete_knowledge_file_celery.apply_async(
-                kwargs={
-                    "file_ids": kids_files,
-                    "knowledge_id": kid,
-                    "clear_minio": True,
-                },
-                headers={"tenant_id": int(self.login_user.tenant_id)},
-            )
-
         async with get_async_db_session() as session:
             version_ids, document_ids = await _plan_canonical_purge(
                 session,
                 file_ids,
             )
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import KnowledgeBackgroundRepositoryImpl
+            from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import get_pdf_artifact_deletion_snapshots
+            artifacts = [item.to_dict() for item in await get_pdf_artifact_deletion_snapshots(int(self.login_user.tenant_id), file_ids)]
+            source_files = await session.run_sync(lambda sync: KnowledgeBackgroundRepositoryImpl(sync).files(file_ids))
+            knowledges = {knowledge.id: knowledge for knowledge in await KnowledgeDao.aget_list_by_ids(list(knowledge_ids))}
+            for knowledge_id in knowledge_ids:
+                knowledge = knowledges.get(knowledge_id)
+                snapshots = [file.model_dump() for file in source_files if file.knowledge_id == knowledge_id]
+                await session.run_sync(lambda sync, knowledge=knowledge, snapshots=snapshots: KnowledgeBackgroundRepositoryImpl(sync).request_delete(
+                    tenant_id=int(self.login_user.tenant_id), knowledge=knowledge, files=snapshots, artifacts=artifacts))
             await _apply_canonical_purge_plan(
                 session,
                 version_ids=version_ids,

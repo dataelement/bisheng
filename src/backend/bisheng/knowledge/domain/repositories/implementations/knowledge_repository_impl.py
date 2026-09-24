@@ -20,6 +20,14 @@ class KnowledgeRepositoryImpl(BaseRepositoryImpl[Knowledge, int], KnowledgeRepos
     def __init__(self, session: Union[AsyncSession, Session]):
         super().__init__(session, Knowledge)
 
+    async def find_retiring_spaces(self, *, after_id: int, limit: int) -> list[Knowledge]:
+        result = await self.session.execute(
+            select(Knowledge)
+            .where(Knowledge.state == KnowledgeState.DELETING.value, Knowledge.id > after_id)
+            .order_by(Knowledge.id.asc()).limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def personal_space_name_exists_globally(self, name: str) -> bool:
         statement = (
             select(Knowledge.id)

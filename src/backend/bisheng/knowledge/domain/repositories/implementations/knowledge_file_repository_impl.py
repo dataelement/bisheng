@@ -543,6 +543,27 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         await self.session.flush()
         return int(result.rowcount or 0)
 
+    async def request_projection_checks(self, entry_ids: list[int]) -> int:
+        changed = 0
+        ids = sorted(set(entry_ids))
+        for offset in range(0, len(ids), 500):
+            result = await self.session.execute(
+                update(KnowledgeFile)
+                .where(
+                    col(KnowledgeFile.id).in_(ids[offset:offset + 500]),
+                    KnowledgeFile.reference_document_id.is_not(None),
+                    col(KnowledgeFile.entry_type).in_(["manager", "publish", "share"]),
+                    KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFile.deleted_at.is_(None),
+                    KnowledgeFile.projection_status == KnowledgeFileProjectionStatus.READY.value,
+                    KnowledgeFile.projection_lease_owner.is_(None),
+                )
+                .values(projection_status=KnowledgeFileProjectionStatus.PENDING.value)
+            )
+            changed += int(result.rowcount or 0)
+        await self.session.flush()
+        return changed
+
     async def request_projection_rebuild(self, entry_id: int) -> bool:
         result = await self.session.execute(
             update(KnowledgeFile)
@@ -632,12 +653,13 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         now: datetime,
         limit: int,
         max_retries: int | None = None,
+        after_id: int = 0,
     ) -> list[KnowledgeFile]:
         if limit <= 0:
             return []
         result = await self.session.execute(
             select(KnowledgeFile)
-            .where(self._projection_candidate_predicate(now, max_retries))
+            .where(self._projection_candidate_predicate(now, max_retries), KnowledgeFile.id > after_id)
             .order_by(KnowledgeFile.id.asc())
             .limit(limit)
             .execution_options(populate_existing=True)
@@ -876,6 +898,17 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             .execution_options(populate_existing=True)
         )
         return list(result.scalars().all())
+
+    async def has_preparing_approval_entries(self, approval_instance_id: int) -> bool:
+        result = await self.session.execute(
+            select(KnowledgeFile.id).where(
+                KnowledgeFile.approval_instance_id == approval_instance_id,
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.PREPARING.value,
+                KnowledgeFile.reference_document_id.is_not(None),
+                KnowledgeFile.deleted_at.is_(None),
+            ).limit(1)
+        )
+        return result.first() is not None
 
     async def find_main_version_files_in_space(
         self,

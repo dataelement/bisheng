@@ -1,100 +1,80 @@
+"""在隔离解释器执行真实 Lua, 避免全局测试桩替换 Redis SDK。"""
+import ast
+import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 
-from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_engagement_repository_impl import (
-    KnowledgeFulltextEngagementQueueRepositoryImpl,
-)
+import pytest
+
+ISOLATED = os.environ.get("ENGAGEMENT_QUEUE_LUA_TEST") == "1"
+if ISOLATED:
+    import fakeredis.aioredis
+    source = Path(__file__).parents[3] / "bisheng/knowledge/domain/repositories/implementations/knowledge_fulltext_engagement_repository_impl.py"
+    tree = ast.parse(source.read_text())
+    node = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name.endswith("QueueRepositoryImpl"))
+    namespace = dict(KnowledgeFulltextEngagementQueueRepository=object,
+                     constants=SimpleNamespace(KNOWLEDGE_FULLTEXT_ENGAGEMENT_DELAY_SECONDS=300,
+                                               KNOWLEDGE_FULLTEXT_ENGAGEMENT_LEASE_SECONDS=600))
+    module = ast.Module(body=[ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0), node], type_ignores=[])
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+    Repository = namespace[node.name]
 
 
-class InMemoryRedis:
-    def __init__(self):
-        self.pending: dict[str, int] = {}
-        self.processing: dict[str, int] = {}
-        self.owners: dict[str, str] = {}
-
-    async def zadd(self, _key, mapping, nx=False):
-        added = 0
-        for member, score in mapping.items():
-            if nx and member in self.pending:
-                continue
-            added += member not in self.pending
-            self.pending[member] = int(score)
-        return added
-
-    async def eval(self, script, _key_count, *args):
-        if script == KnowledgeFulltextEngagementQueueRepositoryImpl.CLAIM_SCRIPT:
-            now_epoch, lease_until, owner, limit = int(args[3]), int(args[4]), str(args[5]), int(args[6])
-            members = [
-                member
-                for member, _score in sorted(self.pending.items(), key=lambda item: (item[1], item[0]))
-                if self.pending[member] <= now_epoch
-            ][:limit]
-            for member in members:
-                self.pending.pop(member)
-                self.processing[member] = lease_until
-                self.owners[member] = owner
-            return members
-        if script == KnowledgeFulltextEngagementQueueRepositoryImpl.ACK_SCRIPT:
-            member, owner = str(args[2]), str(args[3])
-            if self.owners.get(member) != owner:
-                return 0
-            self.processing.pop(member, None)
-            self.owners.pop(member, None)
-            return 1
-        if script == KnowledgeFulltextEngagementQueueRepositoryImpl.RETRY_SCRIPT:
-            member, owner, ready_at = str(args[3]), str(args[4]), int(args[5])
-            if self.owners.get(member) != owner:
-                return 0
-            self.processing.pop(member, None)
-            self.owners.pop(member, None)
-            self.pending.setdefault(member, ready_at)
-            return 1
-        if script == KnowledgeFulltextEngagementQueueRepositoryImpl.RECLAIM_SCRIPT:
-            now_epoch = int(args[3])
-            members = [member for member, lease_until in self.processing.items() if lease_until <= now_epoch]
-            for member in members:
-                self.pending.setdefault(member, now_epoch)
-                self.processing.pop(member, None)
-                self.owners.pop(member, None)
-            return len(members)
-        raise AssertionError("unexpected Lua script")
+@pytest.fixture
+async def repository():
+    if not ISOLATED:
+        pytest.skip("由隔离子进程执行 Lua")
+    redis = fakeredis.aioredis.FakeRedis()
+    yield Repository(redis_client=SimpleNamespace(async_connection=redis))
+    await redis.aclose()
 
 
-def _repository() -> KnowledgeFulltextEngagementQueueRepositoryImpl:
-    redis = InMemoryRedis()
-    return KnowledgeFulltextEngagementQueueRepositoryImpl(
-        redis_client=SimpleNamespace(async_connection=redis),
-        delay_seconds=300,
-        lease_seconds=600,
-    )
-
-
-async def test_pending_window_deduplicates_without_extending_first_deadline():
-    repository = _repository()
-
-    await repository.enqueue(file_id=11, now_epoch=1000)
-    await repository.enqueue(file_id=11, now_epoch=1100)
-
-    assert await repository.claim(now_epoch=1299, lease_owner="worker-a", limit=10) == []
-    assert await repository.claim(now_epoch=1300, lease_owner="worker-a", limit=10) == [11]
-
-
-async def test_event_during_processing_survives_ack_as_next_window():
-    repository = _repository()
-    await repository.enqueue(file_id=11, now_epoch=1000)
-    assert await repository.claim(now_epoch=1300, lease_owner="worker-a", limit=10) == [11]
-
+async def test_event_during_processing_cannot_steal_lease_and_survives_ack(repository):
+    await repository.enqueue_many(file_ids=[11, 11, 12], now_epoch=1000)
+    assert await repository.claim(now_epoch=1299, lease_owner="a", limit=10) == []
+    assert await repository.claim(now_epoch=1300, lease_owner="a", limit=10) == [11, 12]
     await repository.enqueue(file_id=11, now_epoch=1310)
-    assert await repository.ack(file_id=11, lease_owner="worker-a") is True
+    assert await repository.claim(now_epoch=1610, lease_owner="b", limit=10) == []
+    assert not await repository.ack(file_id=11, lease_owner="b")
+    assert await repository.ack_many(file_ids=[11, 12], lease_owner="a") == 2
+    assert await repository.claim(now_epoch=1900, lease_owner="b", limit=10) == [11]
 
-    assert await repository.claim(now_epoch=1609, lease_owner="worker-b", limit=10) == []
-    assert await repository.claim(now_epoch=1610, lease_owner="worker-b", limit=10) == [11]
+
+@pytest.mark.parametrize("crash", [False, True])
+async def test_budget_survives_scans_events_and_new_repository(repository, crash):
+    now = 1000
+    await repository.enqueue(file_id=11, now_epoch=now - 300)
+    for attempt in range(8):
+        assert await repository.claim(now_epoch=now, lease_owner="a", limit=10) == [11]
+        await repository.enqueue(file_id=11, now_epoch=now)
+        if crash:
+            assert await repository.reclaim_expired(now_epoch=now + 600) == 1
+        else:
+            assert await repository.retry(file_id=11, lease_owner="a", now_epoch=now)
+        assert await repository.claim(now_epoch=now + 1, lease_owner="b", limit=10) == []
+        now += 7200
+    fresh = Repository(redis_client=repository.redis_client)
+    assert not await fresh.enqueue(file_id=11, now_epoch=now)
+    assert await fresh.claim(now_epoch=now + 7200, lease_owner="b", limit=10) == []
+    redis = fresh.redis_client.async_connection
+    assert await redis.hget(fresh.ATTEMPTS_KEY, "11") == b"8"
+    assert await redis.ttl(fresh.DEAD_KEY) == -1
+    assert await fresh.restore_dead(file_ids=[11], now_epoch=now) == 1
+    assert await fresh.claim(now_epoch=now + 300, lease_owner="c", limit=10) == [11]
+    assert not await fresh.ack(file_id=11, lease_owner="a")
 
 
-async def test_expired_claim_is_reclaimed_and_wrong_owner_cannot_ack():
-    repository = _repository()
-    await repository.enqueue(file_id=11, now_epoch=1000)
-    assert await repository.claim(now_epoch=1300, lease_owner="worker-a", limit=10) == [11]
+async def test_bulk_has_no_total_input_limit(repository):
+    assert await repository.enqueue_many(file_ids=list(range(1500)), now_epoch=0) == 1500
+    assert len(await repository.claim(now_epoch=300, lease_owner="a", limit=1500)) == 1500
+    assert await repository.ack_many(file_ids=list(range(1500)), lease_owner="a") == 1500
 
-    assert await repository.ack(file_id=11, lease_owner="worker-b") is False
-    assert await repository.reclaim_expired(now_epoch=1900) == 1
-    assert await repository.claim(now_epoch=1900, lease_owner="worker-b", limit=10) == [11]
+
+def test_isolated_lua_protocol():
+    if ISOLATED:
+        pytest.skip("不递归启动子进程")
+    result = subprocess.run([sys.executable, "-m", "pytest", "--noconftest", str(Path(__file__).resolve()), "-q"],
+                            env={**os.environ, "ENGAGEMENT_QUEUE_LUA_TEST": "1"}, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

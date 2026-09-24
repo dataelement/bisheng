@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import heapq
 import json
 import math
 import time
 from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from tempfile import TemporaryFile
 from typing import Any
 from uuid import uuid4
 
@@ -16,7 +18,6 @@ from loguru import logger
 
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.department import UserDepartmentDao
 from bisheng.database.models.tenant import TenantDao
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
@@ -33,6 +34,9 @@ from bisheng.knowledge.domain.repositories.implementations.portal_recommendation
 )
 from bisheng.knowledge.domain.repositories.implementations.portal_recommendation_telemetry_repository_impl import (
     PortalRecommendationTelemetryRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_repository import (
+    PortalRecommendationProjectionDelete,
 )
 from bisheng.knowledge.domain.services.portal_recommendation_behavior_service import (
     PortalRecommendationBehaviorService,
@@ -236,14 +240,7 @@ async def _refresh_projection_batch_async(
             projection_repository=PortalRecommendationRepositoryImpl(session),
         )
         async with session.begin():
-            for event in normalized:
-                changed += int(
-                    await service.refresh_file(
-                        event["file_id"],
-                        projection_version=event["projection_version"],
-                        deleted=event["deleted"],
-                    )
-                )
+            changed = await service.refresh_batch(normalized)
     return changed
 
 
@@ -294,17 +291,11 @@ async def _refresh_projection_resource_async(
                     after_id=after_id,
                     limit=PROJECTION_PAGE_SIZE,
                 )
-                for source in page:
-                    processed += int(
-                        await service.refresh_file(
-                            source.file_id,
-                            projection_version=_projection_version_for_event(
-                                service,
-                                source,
-                                event_version,
-                            ),
-                        )
-                    )
+                processed += await service.refresh_batch([
+                    {"file_id": source.file_id,
+                     "projection_version": _projection_version_for_event(service, source, event_version)}
+                    for source in page
+                ], sources=page)
             if not page:
                 return processed
             after_id = page[-1].file_id
@@ -401,14 +392,13 @@ def _p95(values: list[float]) -> float:
     return ordered[max(math.ceil(len(ordered) * 0.95) - 1, 0)]
 
 
-async def _load_all_projections(repository: PortalRecommendationRepositoryImpl) -> list[Any]:
-    result = []
+async def _projection_pages(repository: PortalRecommendationRepositoryImpl):
     after_id = 0
     while True:
         page = await repository.list_page(after_id=after_id, limit=PROJECTION_PAGE_SIZE)
         if not page:
-            return result
-        result.extend(page)
+            return
+        yield page
         after_id = page[-1].id
 
 
@@ -480,6 +470,90 @@ def _assemble_rotated_pool(
     return {"merged": merged, "hot": hot_entries, "fresh": fresh}, next_states, filtered_count
 
 
+class _BoundedPoolCandidates:
+    """每个池只保留热度和新鲜度前 500 项, 冷却状态单独保留。"""
+
+    def __init__(self, previous_states, *, today):
+        self.previous_states = previous_states
+        self.today = today
+        self.hot = []
+        self.fresh = []
+        self.cooldown_states = {}
+
+    @staticmethod
+    def _offer(heap, candidate, score):
+        value = (score, candidate.file_id, candidate)
+        if len(heap) < 500:
+            heapq.heappush(heap, value)
+        elif value[:2] > heap[0][:2]:
+            heapq.heapreplace(heap, value)
+
+    def add(self, candidate):
+        previous = self.previous_states.get(candidate.key)
+        if previous is not None:
+            state = PortalRecommendationPoolService.advance_rotation(previous, self.today)
+            if not PortalRecommendationPoolService.is_rotation_active(state, self.today):
+                self.cooldown_states[candidate.key] = state
+                return
+        self._offer(self.hot, candidate, candidate.hot_score)
+        self._offer(self.fresh, candidate, candidate.fresh_score)
+
+    def finish(self, *, domain):
+        candidates = {item[2].key: item[2] for item in [*self.hot, *self.fresh]}
+        assembled, states, _ = _assemble_rotated_pool(
+            list(candidates.values()), previous_states=self.previous_states, today=self.today, domain=domain,
+        )
+        return assembled, {**self.cooldown_states, **states}
+
+
+async def _prepare_pool_candidates(
+    *, redis_repository, tenant_id, previous_pool_version, now, personal_space_ids, decayed,
+):
+    pools = {}
+
+    async def pool(name):
+        if name not in pools:
+            states = await redis_repository.get_hot_rotation_states(tenant_id, previous_pool_version, name)
+            pools[name] = _BoundedPoolCandidates(states, today=PortalRecommendationPoolService.business_date(now))
+        return pools[name]
+
+    await pool("generic")
+    heat_values = []
+    excluded = 0
+    # 保存轻量快照到临时文件, 避免全部 ORM 投影及候选常驻内存, 也避免两遍查库读到不同版本。
+    with TemporaryFile(mode="w+t", encoding="utf-8") as snapshot:
+        async with get_async_db_session() as session:
+            async for page in _projection_pages(PortalRecommendationRepositoryImpl(session)):
+                for record in page:
+                    if not record.recommendable:
+                        continue
+                    if int(record.space_id) in personal_space_ids:
+                        excluded += 1
+                        continue
+                    heat = decayed.get(int(record.file_id), 0.0)
+                    heat_values.append(heat)
+                    candidate = _candidate_from_projection(record, hot_score=0, now=now)
+                    snapshot.write(json.dumps([
+                        candidate.space_id, candidate.file_id, candidate.fresh_score,
+                        record.business_domain_code, heat,
+                    ]) + "\n")
+        count = len(heat_values)
+        p95 = _p95(heat_values)
+        del heat_values
+        snapshot.seek(0)
+        for line in snapshot:
+            space_id, file_id, fresh_score, domain, heat = json.loads(line)
+            candidate = PortalRecommendationCandidate(
+                space_id=space_id, file_id=file_id, fresh_score=fresh_score,
+                hot_score=0.0 if p95 <= 0 else min(math.log1p(heat) / math.log1p(p95), 1.0) * 100,
+                is_public=False, normal_acl=False, eligible=True,
+            )
+            pools["generic"].add(candidate)
+            if domain:
+                (await pool(f"domain:{domain}")).add(candidate)
+    return pools, count, excluded
+
+
 async def _pool_counts_match(
     repository: PortalRecommendationRedisRepositoryImpl,
     *,
@@ -535,23 +609,12 @@ async def _rebuild_shared_pools_async(
         log_result("skipped", "config_fingerprint_changed")
         return False
 
-    async with get_async_db_session() as session:
-        recommendable_projections = [
-            record
-            for record in await _load_all_projections(PortalRecommendationRepositoryImpl(session))
-            if record.recommendable
-        ]
     personal_space_ids = {
         int(space_id)
         for space_id in await KnowledgeSpaceScopeDao.aget_space_ids_by_level(
             KnowledgeSpaceLevelEnum.PERSONAL
         )
     }
-    projections = _exclude_personal_space_projections(
-        recommendable_projections,
-        personal_space_ids,
-    )
-    personal_projection_excluded_count = len(recommendable_projections) - len(projections)
     telemetry = PortalRecommendationTelemetryRepositoryImpl()
     now = datetime.now(timezone.utc)
     views = await telemetry.list_recent_document_views(
@@ -560,48 +623,32 @@ async def _rebuild_shared_pools_async(
         now,
         None,
     )
-    views_by_file: dict[int, list] = defaultdict(list)
+    recent_view_count = len(views)
+    decayed: dict[int, float] = defaultdict(float)
+    # 仓储已经按用户、文件、业务日去重; 直接累计, 避免再次建立全量分组列表。
     for view in views:
-        views_by_file[int(view.file_id)].append(view)
-    decayed = {
-        int(record.file_id): PortalRecommendationPoolService.decayed_view_count(
-            views_by_file.get(int(record.file_id), []),
+        decayed[int(view.file_id)] += PortalRecommendationPoolService.decayed_view_count(
+            [view],
             now=now,
             half_life_days=float(recommendation.hot_half_life_days),
             recommendation_source_weight=float(recommendation.home_entry_source_weight),
         )
-        for record in projections
-    }
-    p95 = _p95(list(decayed.values()))
-
-    candidates: list[PortalRecommendationCandidate] = []
-    record_by_key = {}
-    for record in projections:
-        count = decayed[int(record.file_id)]
-        hot_score = 0.0 if p95 <= 0 else min(math.log1p(count) / math.log1p(p95), 1.0) * 100
-        candidate = _candidate_from_projection(record, hot_score=hot_score, now=now)
-        candidates.append(candidate)
-        record_by_key[candidate.key] = record
+    del views
 
     redis_repository = PortalRecommendationRedisRepositoryImpl()
     pool_version = str(int(generation))
     previous_pool_state = await redis_repository.get_pool_state(tenant_id)
     previous_pool_version = previous_pool_state.active_pool_version or ""
+    pools, projection_count, personal_projection_excluded_count = await _prepare_pool_candidates(
+        redis_repository=redis_repository, tenant_id=tenant_id, previous_pool_version=previous_pool_version,
+        now=now, personal_space_ids=personal_space_ids, decayed=decayed,
+    )
+    del decayed
     built_counts: dict[str, int] = {}
     projection_samples: set[tuple[int, int]] = set()
 
-    async def write_pool(name: str, source: list[PortalRecommendationCandidate], *, domain: bool) -> None:
-        previous_states = await redis_repository.get_hot_rotation_states(
-            tenant_id,
-            previous_pool_version,
-            name,
-        )
-        assembled, next_states, _filtered_count = _assemble_rotated_pool(
-            source,
-            previous_states=previous_states,
-            today=PortalRecommendationPoolService.business_date(now),
-            domain=domain,
-        )
+    async def write_pool(name: str, source: _BoundedPoolCandidates, *, domain: bool) -> None:
+        assembled, next_states = source.finish(domain=domain)
         merged = assembled["merged"]
         streams = {
             name: merged,
@@ -625,22 +672,12 @@ async def _rebuild_shared_pools_async(
         for candidate in merged[:3]:
             projection_samples.add(candidate.key)
 
-    await write_pool("generic", candidates, domain=False)
-    domain_codes = sorted(
-        {
-            str(record.business_domain_code)
-            for record in projections
-            if record.business_domain_code
-        }
-    )
+    await write_pool("generic", pools["generic"], domain=False)
+    domain_codes = sorted(name.removeprefix("domain:") for name in pools if name.startswith("domain:"))
     for domain_code in domain_codes:
         await write_pool(
             f"domain:{domain_code}",
-            [
-                candidate
-                for candidate in candidates
-                if record_by_key[candidate.key].business_domain_code == domain_code
-            ],
+            pools[f"domain:{domain_code}"],
             domain=True,
         )
 
@@ -650,7 +687,7 @@ async def _rebuild_shared_pools_async(
             "discarded",
             "config_missing_after_build",
             domain_count=len(domain_codes),
-            projection_count=len(projections),
+            projection_count=projection_count,
         )
         return False
     if int(latest.version) != int(config_version):
@@ -659,7 +696,7 @@ async def _rebuild_shared_pools_async(
             "config_version_changed_after_build",
             actual_config_version=int(latest.version),
             domain_count=len(domain_codes),
-            projection_count=len(projections),
+            projection_count=projection_count,
         )
         return False
     latest_fingerprint = recommendation_config_fingerprint(
@@ -671,7 +708,7 @@ async def _rebuild_shared_pools_async(
             "discarded",
             "config_fingerprint_changed_after_build",
             domain_count=len(domain_codes),
-            projection_count=len(projections),
+            projection_count=projection_count,
         )
         return False
     if not await _pool_counts_match(
@@ -684,9 +721,9 @@ async def _rebuild_shared_pools_async(
             "discarded",
             "pool_count_mismatch",
             built_pool_count=len(built_counts),
-            candidate_count=len(candidates),
+            candidate_count=projection_count,
             domain_count=len(domain_codes),
-            projection_count=len(projections),
+            projection_count=projection_count,
         )
         return False
     if projection_samples:
@@ -704,9 +741,9 @@ async def _rebuild_shared_pools_async(
             log_result(
                 "discarded",
                 "projection_sample_invalid",
-                candidate_count=len(candidates),
+                candidate_count=projection_count,
                 domain_count=len(domain_codes),
-                projection_count=len(projections),
+                projection_count=projection_count,
                 sample_count=len(projection_samples),
             )
             return False
@@ -719,10 +756,10 @@ async def _rebuild_shared_pools_async(
             "discarded",
             "generation_superseded",
             active_generation=int(latest_pool_state.active_generation),
-            candidate_count=len(candidates),
+            candidate_count=projection_count,
             desired_generation=int(latest_pool_state.desired_generation),
             domain_count=len(domain_codes),
-            projection_count=len(projections),
+            projection_count=projection_count,
         )
         return False
     await redis_repository.mark_pool_version_ready(tenant_id, pool_version)
@@ -736,12 +773,12 @@ async def _rebuild_shared_pools_async(
         "success" if activated else "discarded",
         "activated" if activated else "activation_cas_failed",
         built_pool_count=len(built_counts),
-        candidate_count=len(candidates),
+        candidate_count=projection_count,
         domain_count=len(domain_codes),
         pool_entry_count=sum(built_counts.values()),
         personal_projection_excluded_count=personal_projection_excluded_count,
-        projection_count=len(projections),
-        recent_view_count=len(views),
+        projection_count=projection_count,
+        recent_view_count=recent_view_count,
     )
     return activated
 
@@ -825,11 +862,11 @@ async def _reconcile_incremental_async() -> int:
                     file_id=file_id,
                     limit=PROJECTION_PAGE_SIZE,
                 )
-                for source in page:
-                    await projection_service.refresh_file(
-                        source.file_id,
-                        projection_version=projection_service.projection_version_for(source),
-                    )
+                await projection_service.refresh_batch([
+                    {"file_id": source.file_id,
+                     "projection_version": projection_service.projection_version_for(source)}
+                    for source in page
+                ], sources=page)
             if not page:
                 return processed
             update_time, file_id = page[-1].source_update_time, page[-1].file_id
@@ -859,17 +896,10 @@ async def _delete_orphan_projection_page(
         source.file_id
         for source in await source_repository.find_by_ids([record.file_id for record in page])
     }
-    deleted = 0
-    for record in page:
-        if record.file_id in present_ids:
-            continue
-        deleted += int(
-            await projection_repository.delete(
-                record.file_id,
-                int(record.projection_version) + 1,
-            )
-        )
-    return deleted
+    return await projection_repository.apply_batch([
+        PortalRecommendationProjectionDelete(record.file_id, int(record.projection_version) + 1)
+        for record in page if record.file_id not in present_ids
+    ])
 
 
 async def _reconcile_full_async() -> int:
@@ -885,15 +915,11 @@ async def _reconcile_full_async() -> int:
             )
             async with session.begin():
                 page = await source_repository.list_page(after_id=after_id, limit=PROJECTION_PAGE_SIZE)
-                for source in page:
-                    await projection_service.refresh_file(
-                        source.file_id,
-                        projection_version=_projection_version_for_event(
-                            projection_service,
-                            source,
-                            reconcile_version,
-                        ),
-                    )
+                await projection_service.refresh_batch([
+                    {"file_id": source.file_id,
+                     "projection_version": _projection_version_for_event(projection_service, source, reconcile_version)}
+                    for source in page
+                ], sources=page)
             if not page:
                 break
             after_id = page[-1].file_id
@@ -955,15 +981,9 @@ def purge_expired_searches_celery(_task):
 
 async def _invalidate_department_users_async(department_ids: list[int]) -> int:
     tenant_id = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
-    user_ids: set[int] = set()
-    for department_id in sorted({int(value) for value in department_ids}):
-        user_ids.update(
-            await UserDepartmentDao.aget_user_ids_by_department(
-                department_id,
-                is_primary=True,
-            )
-        )
-    return await _invalidate_user_ids_async(sorted(user_ids), tenant_id=tenant_id)
+    async with get_async_db_session() as session:
+        user_ids = await PortalRecommendationSourceRepositoryImpl(session).primary_department_user_ids(department_ids)
+    return await _invalidate_user_ids_async(user_ids, tenant_id=tenant_id)
 
 
 async def _invalidate_user_ids_async(
@@ -974,9 +994,7 @@ async def _invalidate_user_ids_async(
     resolved_tenant_id = int(tenant_id or get_current_tenant_id() or DEFAULT_TENANT_ID)
     repository = PortalRecommendationRedisRepositoryImpl()
     normalized_ids = sorted({int(value) for value in user_ids})
-    for user_id in normalized_ids:
-        await repository.invalidate_user(resolved_tenant_id, user_id)
-    return len(normalized_ids)
+    return await repository.invalidate_users(resolved_tenant_id, normalized_ids)
 
 
 @bisheng_celery.task(

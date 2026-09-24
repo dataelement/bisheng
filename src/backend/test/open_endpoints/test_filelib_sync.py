@@ -199,6 +199,7 @@ async def test_unknown_responsible_external_id_is_rejected():
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
         find_department_by_id=AsyncMock(return_value=caller_department),
         find_users_by_external_id=AsyncMock(return_value=[]),
+        find_users_by_external_code=AsyncMock(return_value=[]),
     )
     params = FilelibSyncParams(
         external_file_id="ext-1",
@@ -274,6 +275,51 @@ async def test_responsible_person_id_resolves_user_by_external_id():
     assert identity.responsible_user_id == 2
     assert identity.responsible_user_external_id == "gzx01"
     repository.find_users_by_external_id.assert_awaited_once_with("gzx01", tenant_id=1)
+
+
+@pytest.mark.parametrize("field", ["responsible_person_id", "responsible_person"])
+async def test_responsible_person_falls_back_to_external_code(field: str):
+    responsible_user = SimpleNamespace(user_id=2, user_name="owner", external_id="person-2")
+    repository = SimpleNamespace(
+        find_users_by_external_id=AsyncMock(return_value=[]),
+        find_users_by_external_code=AsyncMock(return_value=[responsible_user]),
+    )
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="a.pdf", **{field: " EMP002 "})
+
+    result = await _service(repository)._resolve_responsible_user(params)
+
+    assert result == (2, "owner", "person-2")
+    repository.find_users_by_external_id.assert_awaited_once_with("EMP002", tenant_id=1)
+    repository.find_users_by_external_code.assert_awaited_once_with("EMP002", tenant_id=1)
+
+
+@pytest.mark.parametrize("ambiguous", [False, True])
+async def test_responsible_external_id_match_never_falls_back(ambiguous: bool):
+    owner = SimpleNamespace(user_id=2, user_name="owner", external_id="EMP002")
+    other = SimpleNamespace(user_id=3, user_name="other", external_id="person-3")
+    repository = SimpleNamespace(
+        find_users_by_external_id=AsyncMock(return_value=[owner, other] if ambiguous else [owner]),
+        find_users_by_external_code=AsyncMock(return_value=[other]),
+    )
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="a.pdf", responsible_person_id="EMP002")
+
+    if ambiguous:
+        with pytest.raises(FilelibSyncInvalidParamsError, match="responsible person is ambiguous"):
+            await _service(repository)._resolve_responsible_user(params)
+    else:
+        assert await _service(repository)._resolve_responsible_user(params) == (2, "owner", "EMP002")
+    repository.find_users_by_external_code.assert_not_awaited()
+
+
+async def test_responsible_external_code_ambiguity_is_rejected():
+    repository = SimpleNamespace(
+        find_users_by_external_id=AsyncMock(return_value=[]),
+        find_users_by_external_code=AsyncMock(return_value=[SimpleNamespace(user_id=2), SimpleNamespace(user_id=3)]),
+    )
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="a.pdf", responsible_person_id="EMP002")
+
+    with pytest.raises(FilelibSyncInvalidParamsError, match="responsible person is ambiguous"):
+        await _service(repository)._resolve_responsible_user(params)
 
 
 async def test_main_department_name_without_id_must_match_caller_department():

@@ -1148,6 +1148,23 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise RuntimeError("shared content deletion was incomplete in Elasticsearch")
 
 
+def verify_shared_space_storage_ready(tenant_id: int) -> None:
+    """只校验管理员预建的共享目标, 不允许空间初始化修改共享索引。"""
+    snapshot = require_initialized_shared_routing(tenant_id, load_tenant_routing_snapshot(tenant_id))
+    writer, _reader = build_shared_space_components_for_tenant(
+        tenant_id, routing_provider=lambda _: snapshot,
+    )
+    try:
+        if not writer.es_client.indices.exists(index=snapshot.index_name):
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.SCHEMA_FINGERPRINT_MISMATCH,
+                "shared Elasticsearch index does not exist; run the admin bootstrap",
+                tenant_id=tenant_id,
+            )
+    finally:
+        writer.es_client.close()
+
+
 def build_shared_space_components_for_tenant(
     tenant_id: int,
     *,

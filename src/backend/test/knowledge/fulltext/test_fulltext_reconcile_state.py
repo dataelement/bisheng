@@ -49,6 +49,32 @@ async def test_same_source_repair_is_not_reset_by_new_scan_or_delivery(state_ses
     assert exhausted.attempts == 1
 
 
+@pytest.mark.parametrize("final_status,minutes,expected", [
+    ("ready", 10, "resolved"), ("failed", 10, "exhausted"), ("pending", 121, "exhausted"),
+])
+async def test_projection_handoff_waits_and_settles_without_republishing(state_session, final_status, minutes, expected):
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+    await state_session.run_sync(lambda s: KnowledgeFile.__table__.create(s.connection()))
+    file = KnowledgeFile(id=12, knowledge_id=1, file_name="sample.txt", status=2, projection_status="pending", tenant_id=1)
+    state_session.add(file)
+    repo = FulltextReconcileStateRepository(state_session)
+    now = datetime(2026, 9, 24, 1)
+    ticket = await repo.request_repair(12, "fingerprint", "projection", now)
+    assert await repo.claim_repair(12, "fingerprint", ticket.task_id, now)
+    await repo.finish_repair(12, "fingerprint", ticket.task_id, None, now)
+    await state_session.refresh(ticket)
+    assert ticket.status == "waiting_projection"
+    assert await repo.pending_repairs(now + timedelta(minutes=5)) == []
+    file.projection_status = final_status
+    state_session.add(file)
+    await state_session.flush()
+    assert await repo.pending_repairs(now + timedelta(minutes=minutes)) == []
+    await state_session.refresh(ticket)
+    assert ticket.status == expected
+    assert ticket.attempts == 1
+
+
 async def test_complete_round_scans_both_directions_and_retries_only_failed_file(state_session):
     from contextlib import asynccontextmanager
     from unittest.mock import AsyncMock

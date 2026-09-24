@@ -38,8 +38,8 @@ def scan_portal_course_media_cleanup() -> int:
     soft_time_limit=150,
     name="bisheng.worker.portal_course.tasks.process_portal_course_media_cleanup",
 )
-def process_portal_course_media_cleanup(job_id: str, tenant_id: int) -> bool:
-    return run_async_task(lambda: _process_cleanup_job(job_id=job_id, tenant_id=tenant_id))
+def process_portal_course_media_cleanup(job_id: str, tenant_id: int, lease_until: str | None = None) -> bool:
+    return run_async_task(lambda: _process_cleanup_job(job_id=job_id, tenant_id=tenant_id, lease_until=lease_until))
 
 
 async def _scan_cleanup_jobs(limit: int = 100) -> int:
@@ -50,23 +50,36 @@ async def _scan_cleanup_jobs(limit: int = 100) -> int:
             with bypass_tenant_filter():
                 await repository.recover_expired_cleanup_leases(now=now)
                 jobs = await repository.claim_cleanup_jobs(now=now, limit=limit)
-                refs = [(job.id, job.tenant_id) for job in jobs]
-    for job_id, tenant_id in refs:
-        process_portal_course_media_cleanup.apply_async(
-            args=(job_id, tenant_id),
-            headers={"tenant_id": tenant_id},
-        )
+                refs = [(job.id, job.tenant_id, job.lease_until.isoformat()) for job in jobs]
+    for job_id, tenant_id, lease_until in refs:
+        try:
+            process_portal_course_media_cleanup.apply_async(
+                args=(job_id, tenant_id, lease_until), headers={"tenant_id": tenant_id},
+            )
+        except Exception:
+            # 意图和已消耗次数已提交, 扫描器会在租约到期后有限恢复。
+            logger.exception("course cleanup delivery failed job_id=%s", job_id)
     return len(refs)
 
 
-async def _process_cleanup_job(*, job_id: str, tenant_id: int) -> bool:
+async def _process_cleanup_job(*, job_id: str, tenant_id: int, lease_until: str | None = None) -> bool:
     token = set_current_tenant_id(tenant_id)
     try:
+        if lease_until is None:
+            async with get_async_db_session() as session:
+                async with session.begin():
+                    lease = await PortalCourseRepository(session).claim_cleanup_job(
+                        tenant_id=tenant_id, job_id=job_id, now=datetime.now(),
+                    )
+            if lease is None:
+                return False
+        else:
+            lease = datetime.fromisoformat(lease_until)
         storage = await get_minio_storage()
         async with get_async_db_session() as session:
             service = PortalCourseCleanupService(session, storage)
             async with session.begin():
-                return await service.process_job(tenant_id=tenant_id, job_id=job_id)
+                return await service.process_job(tenant_id=tenant_id, job_id=job_id, lease_until=lease)
     finally:
         current_tenant_id.reset(token)
 

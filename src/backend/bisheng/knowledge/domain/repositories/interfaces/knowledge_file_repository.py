@@ -150,12 +150,17 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """Atomically reopen one ready active logical entry for projection."""
         ...
 
+    async def request_projection_checks(self, entry_ids: list[int]) -> int:
+        """批量重新核验已完成的入口, 保留在途任务及失败重试预算。"""
+        ...
+
     async def find_projection_candidates(
         self,
         *,
         now: datetime,
         limit: int,
         max_retries: int | None = None,
+        after_id: int = 0,
     ) -> list[KnowledgeFile]:
         """Return due F059 projection rows using the complete retry predicate."""
         ...
@@ -231,6 +236,10 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     ) -> dict[int | None, list[dict[str, Any]] | None]:
         """according knowledge_idAndknowledge_file_ids Dapatkanuser_metadata Data field"""
         pass
+
+    async def has_preparing_approval_entries(self, approval_instance_id: int) -> bool:
+        """恢复消息执行前确认仍有等待审批落地的文档入口。"""
+        ...
 
     async def find_main_version_files_in_space(
         self,

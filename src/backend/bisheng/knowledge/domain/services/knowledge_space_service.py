@@ -17351,7 +17351,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
-        if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
+        if resolved is None and updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
@@ -17426,7 +17426,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
-        if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
+        if resolved is None and updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
 

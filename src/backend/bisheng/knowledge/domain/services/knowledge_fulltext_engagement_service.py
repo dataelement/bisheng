@@ -43,14 +43,12 @@ async def settle_knowledge_fulltext_engagement_batch(
     lease_owner: str,
     now_epoch: int,
 ) -> None:
-    for file_id in result.updated_ids + result.noop_ids + result.missing_ids:
-        await queue_repository.ack(file_id=file_id, lease_owner=lease_owner)
-    for file_id in result.failed_ids:
-        await queue_repository.retry(
-            file_id=file_id,
-            lease_owner=lease_owner,
-            now_epoch=now_epoch,
-        )
+    await queue_repository.ack_many(
+        file_ids=result.updated_ids + result.noop_ids + result.missing_ids, lease_owner=lease_owner,
+    )
+    await queue_repository.retry_many(
+        file_ids=result.failed_ids, lease_owner=lease_owner, now_epoch=now_epoch,
+    )
 
 
 class KnowledgeFulltextEngagementService:
@@ -147,8 +145,7 @@ class KnowledgeFulltextEngagementService:
                     updated_at=now,
                 )
                 summary["daily_records"] += len(page.records)
-                for file_id in changed_ids:
-                    await self.queue_repository.enqueue(file_id=file_id, now_epoch=now_epoch)
+                await self.queue_repository.enqueue_many(file_ids=changed_ids, now_epoch=now_epoch)
                 if page.after_key is None:
                     await self.queue_repository.save_history_cursor(event_type, {"completed": True})
                     break
@@ -222,8 +219,7 @@ class KnowledgeFulltextEngagementService:
                 after_key = page.after_key
         # 校准期间把原始埋点中出现过的文件全部重新入队。即使日统计绝对值未变化，
         # 也能恢复“日统计已成功、Redis 入队失败或 Redis 数据丢失”的窗口。
-        for file_id in observed | changed:
-            await self.queue_repository.enqueue(file_id=file_id, now_epoch=int(now.timestamp()))
+        await self.queue_repository.enqueue_many(file_ids=sorted(observed | changed), now_epoch=int(now.timestamp()))
         return {
             "pages": page_count,
             "records": record_count,

@@ -71,6 +71,54 @@ class KnowledgeFulltextSyncService:
             return await self._sync_knowledge(row, lease_owner=lease_owner, now=now)
         raise ValueError(f"unsupported fulltext aggregate type: {row.aggregate_type}")
 
+    async def sync_files_batch(self, rows: list[KnowledgeFulltextOutbox], *, lease_owner: str) -> dict[int, str | None]:
+        errors, documents = {}, {}
+        try:
+            snapshots = await self.source_repository.get_current_snapshots([int(row.aggregate_id) for row in rows])
+            upserts = [snapshot for snapshot in snapshots.values()
+                       if not isinstance(snapshot, Exception) and self.document_service.decide(snapshot) == KnowledgeFulltextProjectionAction.UPSERT]
+            sources = await self.source_repository.get_chunk_sources(upserts)
+            chunks = await self.chunk_repository.list_many([source for source in sources.values()
+                                                            if source is not None and not isinstance(source, Exception)])
+            engagement = await self.engagement_repository.get_totals([s.file_id for s in upserts]) if self.engagement_repository else {}
+            for row in rows:
+                file_id = int(row.aggregate_id)
+                try:
+                    snapshot = snapshots.get(file_id)
+                    if isinstance(snapshot, Exception):
+                        raise snapshot
+                    action = self.document_service.decide(snapshot) if snapshot else KnowledgeFulltextProjectionAction.DELETE
+                    if action == KnowledgeFulltextProjectionAction.RETRY:
+                        raise KnowledgeFulltextProjectionNotReadyError("projection not ready")
+                    if action == KnowledgeFulltextProjectionAction.DELETE:
+                        documents[file_id] = None
+                    elif action == KnowledgeFulltextProjectionAction.UPSERT:
+                        if isinstance(sources.get(file_id), Exception):
+                            raise sources[file_id]
+                        content = chunks.get(file_id)
+                        if isinstance(content, Exception):
+                            raise content
+                        if content is None:
+                            raise KnowledgeFulltextProjectionNotReadyError("chunk source unavailable")
+                        rebuilt = self.rebuild_service.rebuild(content, file_id=file_id, knowledge_id=snapshot.knowledge_id)
+                        documents[file_id] = self.document_service.build(snapshot, content=rebuilt.content,
+                            chunk_count=rebuilt.chunk_count, content_hash=rebuilt.content_hash,
+                            sync_revision=row.desired_revision, indexed_at=datetime.now(), engagement=engagement.get(file_id))
+                    errors[int(row.id)] = None
+                except Exception as exc:
+                    errors[int(row.id)] = type(exc).__name__
+        except Exception as exc:
+            errors = {int(row.id): type(exc).__name__ for row in rows}
+        current = await self.outbox_repository.lock_current_many(rows, lease_owner, datetime.now())
+        writes = {int(row.aggregate_id): documents[int(row.aggregate_id)] for row in current
+                  if errors.get(int(row.id)) is None and int(row.aggregate_id) in documents}
+        results = await self.index_repository.apply_batch(writes)
+        for row in current:
+            if int(row.aggregate_id) in results:
+                errors[int(row.id)] = results[int(row.aggregate_id)]
+        await self.outbox_repository.settle_many(current, errors, datetime.now())
+        return {int(row.id): errors.get(int(row.id)) for row in current}
+
     async def _sync_file(
         self,
         row: KnowledgeFulltextOutbox,

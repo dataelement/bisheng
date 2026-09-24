@@ -257,7 +257,8 @@ class _NoopDispatcher:
 
 
 @pytest.mark.asyncio
-async def test_preflight_consumes_and_persists_fixed_size_pages():
+@pytest.mark.parametrize("round_no", [1, 2])
+async def test_preflight_consumes_and_persists_fixed_size_pages(round_no):
     files = [
         KnowledgeFile(
             id=file_id,
@@ -278,6 +279,7 @@ async def test_preflight_consumes_and_persists_fixed_size_pages():
     batch = KnowledgeMigrationBatch(
         id=1,
         batch_no="paged-preflight",
+        round_no=round_no,
         request_id="paged-preflight",
         operator_id=1,
         operator_name="admin",
@@ -313,5 +315,6 @@ async def test_preflight_consumes_and_persists_fixed_size_pages():
     assert source_repository.page_calls == [(0, 2), (2, 2), (4, 2)]
     assert repository.append_sizes == [2, 2, 1]
     assert len(repository.units) == 5
+    assert {unit.current_round_no for unit in repository.units} == {round_no}
     assert batch.scanned_count == 5
     assert batch.status == "queued"

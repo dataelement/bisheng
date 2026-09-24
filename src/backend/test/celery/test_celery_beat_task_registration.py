@@ -26,6 +26,7 @@ missing_tasks = [
 ]
 
 required = {
+    "bisheng.worker.knowledge.background_jobs.drain",
     "bisheng.worker.knowledge.portal_recommendation.rebuild_portal_recommendation_pools",
     "bisheng.worker.knowledge.portal_recommendation.refresh_portal_recommendation_projection_batch",
     "bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
@@ -37,6 +38,7 @@ removed = {
     "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
 }
 missing_tasks.extend(sorted(required - set(bisheng_celery.tasks)))
+assert bisheng_celery.conf.beat_schedule["knowledge_background_jobs"]["task"] == "bisheng.worker.knowledge.background_jobs.drain"
 assert not removed.intersection(bisheng_celery.tasks), "obsolete knowledge tasks remain registered"
 
 print("MISSING_BEAT_TASKS=" + json.dumps(missing_tasks, ensure_ascii=False))

@@ -277,13 +277,22 @@ return redis.call('INCR', KEYS[2])
     async def invalidate_user(self, tenant_id: int, user_id: int) -> None:
         self._assert_current_tenant(tenant_id)
         redis = await self._redis()
-        # Top-N keys are versioned and naturally expire; behavior INCR invalidates them immediately.
-        await redis.async_connection.eval(
-            self._INVALIDATE_USER_SCRIPT,
-            2,
-            self.domains_key(tenant_id, user_id),
-            self.behavior_version_key(tenant_id, user_id),
-        )
+        await redis.async_connection.eval(self._INVALIDATE_USER_SCRIPT, 2,
+                                          self.domains_key(tenant_id, user_id),
+                                          self.behavior_version_key(tenant_id, user_id))
+
+    async def invalidate_users(self, tenant_id: int, user_ids: Sequence[int]) -> int:
+        self._assert_current_tenant(tenant_id)
+        redis = await self._redis()
+        ids = sorted(set(int(value) for value in user_ids))
+        # 每个用户仍由 Lua 原子删除并递增版本, 管道仅合并网络往返。
+        for start in range(0, len(ids), 200):
+            async with redis.async_connection.pipeline(transaction=False) as pipeline:
+                for user_id in ids[start:start + 200]:
+                    pipeline.eval(self._INVALIDATE_USER_SCRIPT, 2,
+                                  self.domains_key(tenant_id, user_id), self.behavior_version_key(tenant_id, user_id))
+                await pipeline.execute()
+        return len(ids)
 
     async def set_top_n(
         self,

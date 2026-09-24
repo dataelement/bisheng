@@ -4,7 +4,7 @@ from loguru import logger
 
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
@@ -31,6 +31,12 @@ def init_knowledge_space_indices(knowledge_id: int, invoke_user_id: int) -> str:
         if not knowledge:
             logger.warning("knowledge_space_index_init skipped knowledge_id={} reason=not_found", knowledge_id)
             return f"knowledge {knowledge_id} not found"
+
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            from bisheng.knowledge.rag.shared_space_storage import verify_shared_space_storage_ready
+
+            verify_shared_space_storage_ready(int(knowledge.tenant_id))
+            return f"knowledge {knowledge_id} shared indices verified"
 
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
             invoke_user_id,

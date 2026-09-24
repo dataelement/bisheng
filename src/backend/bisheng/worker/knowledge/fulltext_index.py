@@ -23,15 +23,6 @@ from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
     KnowledgeFulltextDesiredAction,
     KnowledgeFulltextOutbox,
 )
-from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
-    KnowledgeDocumentRepositoryImpl,
-)
-from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
-    KnowledgeDocumentVersionRepositoryImpl,
-)
-from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
-    KnowledgeFileRepositoryImpl,
-)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_chunk_repository_impl import (
     KnowledgeFulltextChunkRepositoryImpl,
 )
@@ -97,13 +88,12 @@ def dispatch_knowledge_fulltext_outbox() -> int:
     soft_time_limit=700,
     name="bisheng.worker.knowledge.fulltext_index.consume",
 )
-def consume_knowledge_fulltext_outbox(outbox_id: int, revision: int) -> bool:
-    return run_async_task(
-        lambda: _consume(
-            outbox_id=int(outbox_id),
-            revision=int(revision),
-        )
-    )
+def consume_knowledge_fulltext_outbox(outbox_id: int | None = None, revision: int | None = None,
+                                     items: list[dict] | None = None):
+    if items is not None:
+        return run_async_task(lambda: _consume_many(items))
+    result = run_async_task(lambda: _consume_many([{"outbox_id": int(outbox_id), "revision": int(revision)}]))
+    return result["processed"] == 1 and result["failed"] == 0
 
 
 @bisheng_celery.task(
@@ -175,9 +165,19 @@ def publish_knowledge_fulltext_auto_repair(
     ).info("knowledge fulltext auto repair published")
 
 
+def publish_knowledge_fulltext_batch(*, items: list[dict]) -> None:
+    token = current_tenant_id.set(None)
+    try:
+        consume_knowledge_fulltext_outbox.apply_async(kwargs={"items": items}, queue=DEFAULT_CELERY_QUEUE, retry=False)
+    finally:
+        current_tenant_id.reset(token)
+
+
 async def _dispatch() -> int:
     async with get_async_db_session() as session:
         repository = KnowledgeFulltextOutboxRepositoryImpl(session)
+
+        await repository.recover_exhausted_leases(datetime.now())
 
         def sender(*, outbox_id: int, revision: int) -> None:
             publish_knowledge_fulltext_outbox(
@@ -190,7 +190,9 @@ async def _dispatch() -> int:
             multi_tenant_enabled=settings.multi_tenant.enabled,
             repository=repository,
             sender=sender,
+            batch_sender=publish_knowledge_fulltext_batch,
         )
+        await session.commit()
     repair_count = await _dispatch_auto_repairs()
     logger.bind(
         status="dispatched",
@@ -263,6 +265,44 @@ async def _dispatch_auto_repairs() -> int:
                 status="publish_failed",
             ).exception("knowledge fulltext auto repair publish failed")
     return published
+
+
+async def _consume_many(items: list[dict]) -> dict:
+    constants.ensure_runtime_compatible(multi_tenant_enabled=settings.multi_tenant.enabled)
+    requests = {}
+    for item in items:
+        row_id, revision = int(item["outbox_id"]), int(item["revision"])
+        requests[row_id] = max(requests.get(row_id, 0), revision)
+    refs = list(requests.items())
+    outcomes = {}
+    es_client = await get_es_connection()
+    statistics_client = await get_statistics_es_connection()
+    index = KnowledgeFulltextIndexRepositoryImpl(es_client)
+    await index.ensure_index()
+    for start in range(0, len(refs), 100):
+        batch = dict(refs[start:start + 100])
+        owner = uuid4().hex
+        async with get_async_db_session() as session:
+            repo = KnowledgeFulltextOutboxRepositoryImpl(session)
+            candidates = await repo.list_by_ids(list(batch))
+            file_requests = {int(row.id): batch[int(row.id)] for row in candidates if row.aggregate_type == "file"}
+            claimed = await repo.claim_many(file_requests, lease_owner=owner, now=datetime.now())
+            knowledge_requests = [(int(row.id), batch[int(row.id)]) for row in candidates if row.aggregate_type == "knowledge"]
+            await session.commit()
+        if claimed:
+            try:
+                async with get_async_db_session() as session:
+                    service = _build_sync_service(session, es_client, statistics_client, index)
+                    result = await service.sync_files_batch(claimed, lease_owner=owner)
+                    await session.commit()
+                    outcomes.update(result)
+            except Exception:
+                # 已领取次数已提交; 租约到期后可恢复, 不阻塞后续批次。
+                logger.exception("fulltext batch interrupted ids={}", [row.id for row in claimed])
+                outcomes.update({int(row.id): "batch_interrupted" for row in claimed})
+        for row_id, revision in knowledge_requests:
+            outcomes[row_id] = None if await _consume(outbox_id=row_id, revision=revision) else "fanout_failed"
+    return {"processed": len(outcomes), "failed": sum(value is not None for value in outcomes.values())}
 
 
 async def _consume(*, outbox_id: int, revision: int) -> bool:
@@ -411,6 +451,30 @@ async def _sync_claimed_with_db_retry(
     raise RuntimeError("unreachable knowledge fulltext database retry state")
 
 
+def _build_sync_service(session, es_client, statistics_es_client, index_repository):
+    return KnowledgeFulltextSyncService(
+        outbox_repository=KnowledgeFulltextOutboxRepositoryImpl(session),
+        source_repository=KnowledgeFulltextSourceRepositoryImpl(session),
+        chunk_repository=KnowledgeFulltextChunkRepositoryImpl(
+            es_client,
+            page_size=constants.KNOWLEDGE_FULLTEXT_CHUNK_PAGE_SIZE,
+        ),
+        index_repository=index_repository,
+        rebuild_service=KnowledgeFulltextRebuildService(
+            max_overlap_chars=constants.KNOWLEDGE_FULLTEXT_MAX_OVERLAP_CHARS
+        ),
+        document_service=KnowledgeFulltextDocumentService(
+            index_schema_version=constants.KNOWLEDGE_FULLTEXT_INDEX_SCHEMA_VERSION
+        ),
+        fanout_batch_size=constants.KNOWLEDGE_FULLTEXT_FANOUT_BATCH_SIZE,
+        max_retries=constants.KNOWLEDGE_FULLTEXT_MAX_RETRIES,
+        engagement_repository=KnowledgeFulltextEngagementRepositoryImpl(
+            daily_client=es_client,
+            raw_client=statistics_es_client,
+        ),
+    )
+
+
 async def _sync_claimed_once(
     *,
     row_snapshot: KnowledgeFulltextOutbox,
@@ -420,27 +484,7 @@ async def _sync_claimed_once(
     index_repository: KnowledgeFulltextIndexRepositoryImpl,
 ) -> str:
     async with get_async_db_session() as session:
-        sync_service = KnowledgeFulltextSyncService(
-            outbox_repository=KnowledgeFulltextOutboxRepositoryImpl(session),
-            source_repository=KnowledgeFulltextSourceRepositoryImpl(session),
-            chunk_repository=KnowledgeFulltextChunkRepositoryImpl(
-                es_client,
-                page_size=constants.KNOWLEDGE_FULLTEXT_CHUNK_PAGE_SIZE,
-            ),
-            index_repository=index_repository,
-            rebuild_service=KnowledgeFulltextRebuildService(
-                max_overlap_chars=constants.KNOWLEDGE_FULLTEXT_MAX_OVERLAP_CHARS
-            ),
-            document_service=KnowledgeFulltextDocumentService(
-                index_schema_version=constants.KNOWLEDGE_FULLTEXT_INDEX_SCHEMA_VERSION
-            ),
-            fanout_batch_size=constants.KNOWLEDGE_FULLTEXT_FANOUT_BATCH_SIZE,
-            max_retries=constants.KNOWLEDGE_FULLTEXT_MAX_RETRIES,
-            engagement_repository=KnowledgeFulltextEngagementRepositoryImpl(
-                daily_client=es_client,
-                raw_client=statistics_es_client,
-            ),
-        )
+        sync_service = _build_sync_service(session, es_client, statistics_es_client, index_repository)
         result = await sync_service.sync_claimed(
             row_snapshot,
             lease_owner=lease_owner,
@@ -507,7 +551,7 @@ async def _finish_auto_repair(
     outbox_id: int,
     fingerprint: str,
     lease_owner: str,
-    success: bool,
+    success: bool | None,
     error_type: str | None,
 ) -> bool:
     async with get_async_db_session() as session:
@@ -528,36 +572,12 @@ async def _run_logical_entry_projection_repair(
     file_id: int,
     tenant_id: int,
     lease_owner: str,
-) -> bool:
-    async with get_async_db_session() as session:
-        repository = KnowledgeFileRepositoryImpl(session)
-        requested = await repository.request_projection_rebuild(file_id)
-        if not requested:
-            await session.rollback()
-            return False
-        await session.commit()
+) -> bool | None:
+    from bisheng.worker.knowledge.rebuild_knowledge_worker import _rebuild_shared_files
 
-    async with get_async_db_session() as session:
-        from bisheng.worker.knowledge.document_projection import (
-            _build_document_projection_service,
-        )
-
-        file_repository = KnowledgeFileRepositoryImpl(session)
-        service = await _build_document_projection_service(
-            session=session,
-            file_repository=file_repository,
-            document_repository=KnowledgeDocumentRepositoryImpl(session),
-            version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
-            tenant_id=tenant_id,
-            allow_legacy_content_loader=True,
-        )
-        result = await service.process_entry(
-            tenant_id=tenant_id,
-            entry_id=file_id,
-            lease_owner=f"fulltext-repair:{lease_owner}",
-            force_content_upsert=True,
-        )
-        return result.status == "ready"
+    # 默认 worker 只探测并复用已有内容; 缺失内容由批量流程交给文件解析 worker。
+    result = await _rebuild_shared_files(tenant_id, [file_id])
+    return True if result["results"].get(file_id) == "ready" else None
 
 
 def _run_auto_repair(*, outbox_id: int, revision: int, fingerprint: str) -> bool:
@@ -581,8 +601,12 @@ def _run_auto_repair(*, outbox_id: int, revision: int, fingerprint: str) -> bool
 
     file_id = int(row.aggregate_id)
     source, snapshot = run_async_task(lambda: _load_auto_repair_context(file_id))
+    eligibility_updates = {"status": str(KnowledgeFileStatus.SUCCESS.value)}
+    if snapshot is not None and snapshot.logical_document_id is not None:
+        # 投影尚未完成正是修复原因; 这里只核验删除、版本、分发状态等源数据资格。
+        eligibility_updates["projection_status"] = "ready"
     eligible_snapshot = (
-        snapshot.model_copy(update={"status": str(KnowledgeFileStatus.SUCCESS.value)}) if snapshot is not None else None
+        snapshot.model_copy(update=eligibility_updates) if snapshot is not None else None
     )
     source_is_current = (
         source is not None
@@ -636,20 +660,32 @@ def _run_auto_repair(*, outbox_id: int, revision: int, fingerprint: str) -> bool
                     )
                 )
                 return False
-            success = run_async_task(
-                lambda: _run_logical_entry_projection_repair(
-                    file_id=file_id,
-                    tenant_id=int(file.tenant_id),
-                    lease_owner=lease_owner,
+            repair = dict((getattr(row, "payload_snapshot", None) or {}).get("fulltext_auto_repair") or {})
+            if repair.get("projection_requested_at"):
+                requested_at = datetime.fromisoformat(repair["projection_requested_at"])
+                if file.projection_status == "ready" and file.status == KnowledgeFileStatus.SUCCESS.value:
+                    success = True
+                elif file.projection_status == "failed" or datetime.now() - requested_at >= timedelta(hours=2):
+                    success = False
+                else:
+                    success = None
+            else:
+                success = run_async_task(
+                    lambda: _run_logical_entry_projection_repair(
+                        file_id=file_id,
+                        tenant_id=int(file.tenant_id),
+                        lease_owner=lease_owner,
+                    )
                 )
-            )
+            if success is True and file.status != KnowledgeFileStatus.SUCCESS.value:
+                success = None
             run_async_task(
                 lambda: _finish_auto_repair(
                     outbox_id=outbox_id,
                     fingerprint=fingerprint,
                     lease_owner=lease_owner,
                     success=success,
-                    error_type=(None if success else "KnowledgeFulltextAutoRepairProjectionFailed"),
+                    error_type=("KnowledgeFulltextAutoRepairProjectionFailed" if success is False else None),
                 )
             )
             logger.bind(
@@ -658,9 +694,9 @@ def _run_auto_repair(*, outbox_id: int, revision: int, fingerprint: str) -> bool
                 file_id=file_id,
                 repair_mode="projection",
                 fingerprint_prefix=fingerprint[:12],
-                status="completed" if success else "failed",
+                status="waiting_projection" if success is None else "completed" if success else "failed",
             ).info("knowledge fulltext auto repair completed")
-            return success
+            return success is True
 
         if file.entry_type not in {None, KnowledgeFileEntryType.MANAGER.value} or not file.object_name:
             run_async_task(

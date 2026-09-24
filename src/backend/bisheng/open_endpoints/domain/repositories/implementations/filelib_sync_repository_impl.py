@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import and_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -53,14 +55,31 @@ class FilelibSyncRepositoryImpl(
         *,
         tenant_id: int,
     ) -> list[User]:
-        normalized_external_id = str(external_id or "").strip()
-        if not normalized_external_id:
+        return await self._find_users_by_external_identifier(external_id, field="external_id", tenant_id=tenant_id)
+
+    async def find_users_by_external_code(
+        self,
+        external_code: str,
+        *,
+        tenant_id: int,
+    ) -> list[User]:
+        return await self._find_users_by_external_identifier(external_code, field="external_code", tenant_id=tenant_id)
+
+    async def _find_users_by_external_identifier(
+        self,
+        value: str,
+        *,
+        field: Literal["external_id", "external_code"],
+        tenant_id: int,
+    ) -> list[User]:
+        normalized_value = str(value or "").strip()
+        if not normalized_value:
             return []
         result = await self.session.exec(
             select(User)
             .join(UserTenant, UserTenant.user_id == User.user_id)
             .where(
-                User.external_id == normalized_external_id,
+                getattr(User, field) == normalized_value,
                 User.delete == 0,
                 UserTenant.tenant_id == tenant_id,
                 UserTenant.status == "active",

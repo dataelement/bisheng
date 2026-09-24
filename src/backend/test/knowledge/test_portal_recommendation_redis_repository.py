@@ -421,3 +421,31 @@ async def test_pool_readiness_marker_expires_before_pool_and_rebuild_trigger_is_
     redis = repository.redis.async_connection
     assert redis.expirations[repository.pool_ready_key(5, "pool-a")] == 48 * 60 * 60 - 5 * 60
     assert redis.expirations[repository.pool_rebuild_trigger_key(5)] == 60
+
+
+async def test_batch_invalidation_deduplicates_users_and_pipelines_internal_batches(repository, monkeypatch):
+    redis = repository.redis.async_connection
+    executions = []
+    class Pipeline:
+        def __init__(self):
+            self.calls = []
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *_):
+            return False
+        def eval(self, *args):
+            self.calls.append(args)
+            return self
+        async def execute(self):
+            executions.append(len(self.calls))
+            return [await redis.eval(*args) for args in self.calls]
+    monkeypatch.setattr(redis, 'pipeline', lambda **kwargs: Pipeline(), raising=False)
+    token = current_tenant_id.set(5)
+    try:
+        assert await repository.invalidate_users(5, [*range(1, 651), 1, 2]) == 650
+        assert executions == [200, 200, 200, 50]
+        assert all(redis.strings[repository.behavior_version_key(5, user_id)] == '1' for user_id in range(1, 651))
+        with pytest.raises(PermissionError):
+            await repository.invalidate_users(6, [1])
+    finally:
+        current_tenant_id.reset(token)

@@ -89,9 +89,9 @@ class FakeQueue:
     async def save_history_cursor(self, stage, cursor):
         self.cursors[stage] = cursor
 
-    async def enqueue(self, *, file_id, now_epoch):
-        self.enqueued.append((file_id, now_epoch))
-        return True
+    async def enqueue_many(self, *, file_ids, now_epoch):
+        self.enqueued.extend((file_id, now_epoch) for file_id in file_ids)
+        return len(file_ids)
 
 
 async def test_history_rebuild_merges_both_streams_and_zero_fills_existing_documents(monkeypatch):

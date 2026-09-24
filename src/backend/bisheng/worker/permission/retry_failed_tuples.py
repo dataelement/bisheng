@@ -1,13 +1,7 @@
-"""Celery beat task: retry failed OpenFGA tuple operations (T10, AC-04).
+"""按批重试 OpenFGA 失败元组, Redis 锁与数据库租约一起续期。
 
-Runs every 5 minutes via beat schedule. Uses a Redis distributed lock to
-prevent concurrent processing of the same pending tuples.
-
-Retry policy:
-  - Max 3 attempts (configurable per-tuple via max_retries)
-  - Success → status='succeeded'
-  - Failure within limit → retry_count++, error_message updated
-  - Failure at limit → status='dead', logger.critical alert
+领取时预扣尝试次数, 进程中断也计入 max_retries 预算。
+成功标记 succeeded, 耗尽标记 dead; 同一元组按入队顺序执行。
 """
 
 from __future__ import annotations
@@ -18,7 +12,7 @@ from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
 
-LOCK_KEY = 'bisheng:lock:retry_failed_tuples'
+LOCK_KEY = "bisheng:lock:retry_failed_tuples"
 LOCK_TTL = 60  # seconds — must be > typical execution time
 
 
@@ -29,125 +23,106 @@ def retry_failed_tuples():
 
 
 def _retry_failed_tuples_sync() -> None:
-    """Sync implementation: acquire lock, batch writes, then batch deletes."""
-    from bisheng.database.models.failed_tuple import FailedTupleDao
+    from datetime import datetime
+    from threading import Event, Thread
+    from uuid import uuid4
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+    from bisheng.core.database import get_sync_db_session
     from bisheng.core.openfga.manager import get_fga_client
+    from bisheng.permission.domain.repositories.implementations.failed_tuple_repository_impl import (
+        FailedTupleRepositoryImpl,
+    )
 
-    # Distributed lock to prevent concurrent Beat fires from processing same rows
     redis = _get_redis()
-    if redis:
-        acquired = redis.setNx(LOCK_KEY, 1, expiration=LOCK_TTL)
-        if not acquired:
-            logger.debug('retry_failed_tuples: lock held by another worker, skipping')
-            return
+    if redis is None:
+        raise RuntimeError("OpenFGA retry lock unavailable")
+    connection = redis.connection
+    owner = uuid4().hex
+    if not connection.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL):
+        return
+    stopped, lost = Event(), Event()
+    renew_script = (
+        "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) end return 0"
+    )
+    release_script = "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) end return 0"
+
+    def guard():
+        if lost.is_set() or not connection.eval(renew_script, 1, LOCK_KEY, owner, LOCK_TTL):
+            raise RuntimeError("OpenFGA retry lock lost")
+
+    def heartbeat():
+        while not stopped.wait(20):
+            try:
+                guard()
+                with bypass_tenant_filter(), get_sync_db_session() as session:
+                    FailedTupleRepositoryImpl(session).renew(owner, datetime.utcnow())
+                    session.commit()
+            except Exception:
+                logger.exception("OpenFGA retry lease renewal failed")
+                lost.set()
+                return
+
+    thread = Thread(target=heartbeat, daemon=True)
+    thread.start()
     try:
-        pending = FailedTupleDao.get_pending(limit=100)
-        if not pending:
-            return
-
-        logger.info('Processing %d pending failed tuples', len(pending))
-
         fga = get_fga_client()
         if fga is None:
-            logger.warning('FGAClient not available, skipping retry cycle')
-            return
-
-        write_items = [item for item in pending if item.action == 'write']
-        delete_items = [item for item in pending if item.action == 'delete']
-
-        _retry_batch(fga, write_items, 'write', FailedTupleDao)
-        _retry_batch(fga, delete_items, 'delete', FailedTupleDao)
+            raise RuntimeError("FGAClient not available")
+        with bypass_tenant_filter(), get_sync_db_session() as session:
+            items = FailedTupleRepositoryImpl(session).claim(owner, datetime.utcnow())
+            session.commit()
+        # 每个元组只领取最早未完成操作; 不把后来的删除越过早先失败的写入。
+        outcomes = {}
+        for tenant_id, action in sorted({(item.tenant_id, item.action) for item in items}):
+            group = [item for item in items if item.tenant_id == tenant_id and item.action == action]
+            for start in range(0, len(group), 20):
+                batch = group[start : start + 20]
+                guard()
+                values = [{"user": i.fga_user, "relation": i.relation, "object": i.object} for i in batch]
+                try:
+                    if action not in {"write", "delete"}:
+                        raise ValueError("unknown tuple action")
+                    fga.write_tuples_sync(**{("writes" if action == "write" else "deletes"): values})
+                    outcomes.update({item.id: None for item in batch})
+                except Exception:
+                    logger.warning("OpenFGA retry batch failed; isolating %d items", len(batch), exc_info=True)
+                    for item, value in zip(batch, values):
+                        guard()
+                        try:
+                            if action not in {"write", "delete"}:
+                                raise ValueError("unknown tuple action")
+                            fga.write_tuples_sync(**{("writes" if action == "write" else "deletes"): [value]})
+                            outcomes[item.id] = None
+                        except Exception as exc:
+                            message = str(exc)[:500]
+                            outcomes[item.id] = None if _is_idempotent_tuple_error(action, message) else message
+                guard()
+                with bypass_tenant_filter(), get_sync_db_session() as session:
+                    FailedTupleRepositoryImpl(session).settle(owner, outcomes, datetime.utcnow())
+                    session.commit()
+                outcomes.clear()
     finally:
-        # Release lock
-        if redis:
-            redis.delete(LOCK_KEY)
-
-
-def _retry_batch(fga, items, action: str, dao) -> None:
-    """Attempt a batch FGA call; on failure, fall back to per-item retry."""
-    if not items:
-        return
-
-    tuples = [
-        {'user': item.fga_user, 'relation': item.relation, 'object': item.object}
-        for item in items
-    ]
-
-    try:
-        if action == 'write':
-            fga.write_tuples_sync(writes=tuples)
-        else:
-            fga.write_tuples_sync(deletes=tuples)
-
-        for item in items:
-            dao.update_succeeded(item.id)
-        logger.info('Batch retry succeeded for %d %s tuples', len(items), action)
-
-    except Exception:
-        logger.debug('Batch %s failed, falling back to per-item retry', action)
-        for item in items:
-            _retry_single(fga, item, action, dao)
-
-
-def _retry_single(fga, item, action: str, dao) -> None:
-    """Retry a single tuple. Update status based on result."""
-    try:
-        tuple_dict = {
-            'user': item.fga_user, 'relation': item.relation, 'object': item.object,
-        }
-        if action == 'write':
-            fga.write_tuples_sync(writes=[tuple_dict])
-        else:
-            fga.write_tuples_sync(deletes=[tuple_dict])
-
-        dao.update_succeeded(item.id)
-
-    except Exception as e:
-        error_msg = str(e)[:500]
-        if _is_idempotent_tuple_error(action, error_msg):
-            dao.update_succeeded(item.id)
-            logger.info(
-                'Ignoring idempotent OpenFGA %s failure for FailedTuple %d: %s',
-                action, item.id, error_msg,
-            )
-            return
-
-        if item.retry_count + 1 >= item.max_retries:
-            dao.mark_dead(item.id, error_msg)
-            logger.critical(
-                'FailedTuple %d exceeded max retries (%d), marked as dead. '
-                'Action=%s user=%s relation=%s object=%s error=%s',
-                item.id, item.max_retries, item.action,
-                item.fga_user, item.relation, item.object, error_msg,
-            )
-        else:
-            dao.update_retry(item.id, error_msg)
-            logger.warning(
-                'Retry %d/%d failed for FailedTuple %d: %s',
-                item.retry_count + 1, item.max_retries, item.id, error_msg,
-            )
+        stopped.set()
+        thread.join(timeout=1)
+        connection.eval(release_script, 1, LOCK_KEY, owner)
 
 
 def _get_redis():
     """Get RedisClient. Returns None if unavailable."""
     try:
         from bisheng.core.cache.redis_manager import get_redis_client_sync
+
         return get_redis_client_sync()
     except Exception:
+        logger.exception("OpenFGA retry Redis unavailable")
         return None
 
 
 def _is_idempotent_tuple_error(action: str, error_msg: str) -> bool:
     text = error_msg.lower()
-    if action == 'write':
-        return (
-            'already exists' in text
-            or 'cannot write a tuple which already exists' in text
-        )
-    if action == 'delete':
-        return (
-            'does not exist' in text
-            or 'did not exist' in text
-            or 'tuple to be deleted did not exist' in text
-        )
+    if action == "write":
+        return "already exists" in text or "cannot write a tuple which already exists" in text
+    if action == "delete":
+        return "does not exist" in text or "did not exist" in text or "tuple to be deleted did not exist" in text
     return False

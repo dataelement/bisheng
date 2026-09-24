@@ -10,6 +10,18 @@ from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
 
 class KnowledgeFulltextOutboxRepository(ABC):
     @abstractmethod
+    async def recover_exhausted_leases(self, now: datetime) -> None: ...
+
+    @abstractmethod
+    async def claim_many(self, requests: dict[int, int], *, lease_owner: str, now: datetime) -> list[KnowledgeFulltextOutbox]: ...
+
+    @abstractmethod
+    async def lock_current_many(self, rows: list[KnowledgeFulltextOutbox], owner: str, now: datetime) -> list[KnowledgeFulltextOutbox]: ...
+
+    @abstractmethod
+    async def settle_many(self, rows: list[KnowledgeFulltextOutbox], errors: dict[int, str | None], now: datetime) -> None: ...
+
+    @abstractmethod
     async def validate_storage(self) -> None: ...
 
     @abstractmethod
@@ -88,7 +100,8 @@ class KnowledgeFulltextOutboxRepository(ABC):
         outbox_id: int,
         fingerprint: str,
         lease_owner: str,
-        success: bool,
+        success: bool | None,
         error_type: str | None,
         now: datetime,
-    ) -> bool: ...
+    ) -> bool:
+        """success=None 表示等待投影解析结果, 保留修复指纹和重试预算。"""

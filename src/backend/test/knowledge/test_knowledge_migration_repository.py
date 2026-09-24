@@ -1,4 +1,5 @@
-from datetime import datetime
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -54,6 +55,162 @@ def _batch(request_id: str = "request-1") -> KnowledgeMigrationBatch:
         target_space_id=20,
         target_space_name="目标库",
     )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_redispatch_queued_batch_on_every_scan(migration_session):
+    from bisheng.knowledge.domain.services.knowledge_migration_executor import KnowledgeMigrationReconcileService
+    from test.knowledge.test_knowledge_migration_execution_service import FakeDispatcher, FakeLock
+
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch = _batch("reconcile-dedup")
+    batch.status = "queued"
+    batch.update_time = datetime.now() - timedelta(hours=1)
+    migration_session.add(batch)
+    await migration_session.commit()
+
+    @asynccontextmanager
+    async def factory():
+        yield repository
+
+    service = KnowledgeMigrationReconcileService(
+        repository_factory=factory, lock_repository=FakeLock(), dispatcher=FakeDispatcher()
+    )
+    assert await service.reconcile() == 1
+    assert await service.reconcile() == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["queued", "running", "preflight_queued", "preflighting"])
+async def test_reconcile_budget_backoff_exhaustion_and_manual_retry(migration_session, status):
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch = _batch("reconcile-budget")
+    batch.status = status
+    now = datetime(2026, 9, 24, 12)
+    batch.update_time = now - timedelta(hours=1)
+    migration_session.add(batch)
+    await migration_session.flush()
+    unit = KnowledgeMigrationUnit(
+        batch_id=batch.id, unit_key="file:1", source_space_id=10, source_space_name="source",
+        status="running" if status == "running" else "planned",
+    )
+    migration_session.add(unit)
+    await migration_session.commit()
+    for count, delay in enumerate([30, 60, 120, 240], start=1):
+        recovered = await repository.claim_reconcile_batch(
+            batch.id, expected_status=batch.status, expected_round_no=1,
+            older_than=now - timedelta(minutes=30), now=now, max_recoveries=4,
+        )
+        await repository.commit()
+        assert recovered is not None
+        assert batch.reconcile_count == count
+        assert batch.next_reconcile_at == now + timedelta(minutes=delay)
+        assert batch.status == ("preflight_queued" if status.startswith("preflight") else "queued")
+        # 即使心跳已经过期, 未到恢复时间仍不能被扫描选中。
+        assert await repository.list_reconcile_candidates(
+            {batch.status}, older_than=now + timedelta(days=1),
+            now=batch.next_reconcile_at - timedelta(seconds=1), limit=100,
+        ) == []
+        now = batch.next_reconcile_at + timedelta(seconds=1)
+    assert await repository.claim_reconcile_batch(
+        batch.id, expected_status=batch.status, expected_round_no=1,
+        older_than=now - timedelta(minutes=30), now=now, max_recoveries=4,
+    ) is None
+    await repository.commit()
+    await migration_session.refresh(batch)
+    assert batch.status == "failed"
+    assert batch.reconcile_count == 4
+    assert batch.last_error_code.endswith("recovery_exhausted")
+    assert await repository.find_oldest_queued_batch() is None
+    retried = await repository.retry_batch(batch.id, queued_at=now)
+    assert retried.round_no == 2
+    assert retried.reconcile_count == 0
+    assert retried.next_reconcile_at is None
+    assert retried.last_error_code is None
+    assert retried.status == ("preflight_queued" if status.startswith("preflight") else "queued")
+
+
+@pytest.mark.asyncio
+async def test_reconcile_rechecks_heartbeat_after_candidate_scan(migration_session):
+    from sqlmodel import update
+
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch = _batch("reconcile-heartbeat")
+    batch.status = "preflighting"
+    now = datetime.now()
+    batch.update_time = now - timedelta(hours=1)
+    migration_session.add(batch)
+    await migration_session.commit()
+    assert await repository.list_reconcile_candidates(
+        {"preflighting"}, older_than=now - timedelta(minutes=30), now=now, limit=100,
+    )
+    # 模拟另一个会话更新心跳, 但当前会话的身份映射仍缓存旧值。
+    await migration_session.exec(
+        update(KnowledgeMigrationBatch).where(KnowledgeMigrationBatch.id == batch.id)
+        .values(update_time=now).execution_options(synchronize_session=False)
+    )
+    await migration_session.commit()
+    assert await repository.claim_reconcile_batch(
+        batch.id, expected_status="preflighting", expected_round_no=1,
+        older_than=now - timedelta(minutes=30), now=now, max_recoveries=4,
+    ) is None
+    assert batch.status == "preflighting"
+    assert batch.reconcile_count == 0
+
+
+@pytest.mark.asyncio
+async def test_reconcile_dispatch_failure_is_isolated_and_consumes_budget(migration_session):
+    from unittest.mock import Mock
+
+    from bisheng.knowledge.domain.services.knowledge_migration_executor import KnowledgeMigrationReconcileService
+    from test.knowledge.test_knowledge_migration_execution_service import FakeLock
+
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batches = [_batch(f"dispatch-{index}") for index in range(2)]
+    for batch in batches:
+        batch.update_time = datetime.now() - timedelta(hours=1)
+    migration_session.add_all(batches)
+    await migration_session.commit()
+
+    @asynccontextmanager
+    async def factory():
+        yield repository
+
+    dispatcher = Mock()
+    dispatcher.dispatch_preflight.side_effect = [RuntimeError("broker unavailable"), "task-2"]
+    service = KnowledgeMigrationReconcileService(
+        repository_factory=factory, lock_repository=FakeLock(), dispatcher=dispatcher,
+    )
+    assert await service.reconcile() == 1
+    assert dispatcher.dispatch_preflight.call_count == 2
+    assert [batch.reconcile_count for batch in batches] == [1, 1]
+    assert await service.reconcile() == 0
+
+
+@pytest.mark.asyncio
+async def test_manual_preflight_recovery_retry_dispatches_preflight(migration_session):
+    from unittest.mock import Mock
+
+    from bisheng.knowledge.domain.services.knowledge_migration_service import KnowledgeMigrationService
+
+    repository = KnowledgeMigrationRepositoryImpl(migration_session)
+    batch = _batch("manual-preflight")
+    batch.status = "failed"
+    batch.last_error_code = "preflight_recovery_exhausted"
+    batch.reconcile_count = 4
+    migration_session.add(batch)
+    await migration_session.commit()
+    dispatcher = Mock()
+    dispatcher.dispatch_preflight.return_value = "preflight-task"
+    service = KnowledgeMigrationService(
+        repository=repository, source_repository=Mock(), dispatcher=dispatcher,
+    )
+    response = await service.retry(SimpleNamespace(is_admin=lambda: True), batch.batch_no)
+    assert response.status == "preflight_queued"
+    assert response.round_no == 2
+    dispatcher.dispatch_preflight.assert_called_once_with(batch.id)
+    dispatcher.dispatch_execution.assert_not_called()
+    assert batch.preflight_task_id == "preflight-task"
 
 
 async def test_batch_claim_and_checkpoint_use_bounded_queries_and_fence_stale_attempts(migration_session):

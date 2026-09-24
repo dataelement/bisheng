@@ -10,6 +10,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from test.knowledge.projection_scan_helpers import scan_state as _scan_state_fixture
+
+scan_state = _scan_state_fixture
+
 
 @pytest.fixture
 def worker(monkeypatch):
@@ -29,6 +33,9 @@ def worker(monkeypatch):
             bisheng_celery=SimpleNamespace(task=lambda **kwargs: lambda function: function),
         ),
     )
+    for name, relative in (("bisheng.worker", "bisheng/worker"), ("bisheng.worker.knowledge", "bisheng/worker/knowledge")):
+        if name in sys.modules:
+            monkeypatch.setattr(sys.modules[name], "__path__", [str(Path(__file__).resolve().parents[2] / relative)], raising=False)
     path = Path(__file__).resolve().parents[2] / "bisheng/worker/knowledge/document_projection.py"
     spec = importlib.util.spec_from_file_location("projection_batch_worker_test", path)
     module = importlib.util.module_from_spec(spec)
@@ -76,6 +83,64 @@ def test_invalid_or_cross_tenant_message_never_starts_io(worker, monkeypatch, kw
     execute.assert_not_called()
 
 
+async def test_scan_delivery_only_processes_owned_entries_once(worker, scan_state, monkeypatch):
+    ticket = await scan_state.reserve("projection", 41, "v1")
+    execute = AsyncMock(return_value={"total": 1})
+    monkeypatch.setattr(worker, "_process_projection_batch_async", execute)
+    monkeypatch.setattr(worker, "run_async_task", lambda factory: factory())
+    for _ in range(2):
+        await worker.process_document_projection(None, tenant_id=7, entry_ids=[41], scan_tickets=[ticket])
+    execute.assert_awaited_once()
+    assert execute.await_args.args[:2] == (7, [41])
+
+
+@pytest.mark.parametrize("still_pending,expected_status,expected_calls", [(True, "failed", 4), (False, "completed", 0)])
+async def test_approval_recovery_has_finite_budget_and_skips_resolved_entries(
+    worker, scan_state, monkeypatch, still_pending, expected_status, expected_calls,
+):
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def db():
+        yield None
+
+    action = AsyncMock(return_value=False)
+    approvals = sys.modules["bisheng.worker.approval.tasks"]
+    approvals._execute_approval_outbox_async = action
+    approvals._retry_approval_outbox_async = action
+    monkeypatch.setattr(worker, "run_async_task", lambda factory: factory())
+    monkeypatch.setattr(worker, "get_async_db_session", db)
+    monkeypatch.setattr(worker, "KnowledgeFileRepositoryImpl", lambda session: SimpleNamespace(
+        has_preparing_approval_entries=AsyncMock(return_value=still_pending),
+    ))
+    monkeypatch.setattr(worker.ApprovalInstanceRepository, "get_outbox", AsyncMock(
+        return_value=SimpleNamespace(status="failed", instance_id=101),
+    ))
+    for _ in range(4):
+        ticket = await scan_state.reserve("approval", 91, "91", max_attempts=4)
+        result = await worker.recover_document_projection_scan_item(7, ticket, {"outbox_id": 91})
+        assert result["status"] == expected_status
+        scan_state.clock[0] += 3601
+    assert await scan_state.reserve("approval", 91, "91", max_attempts=4) is None
+    assert action.await_count == expected_calls
+
+
+def test_scan_request_uses_the_single_merged_task(worker, monkeypatch):
+    publish = MagicMock()
+    monkeypatch.setattr(worker.scan_document_projections, "apply_async", publish, raising=False)
+    worker.enqueue_document_projection_entries(tenant_id=7, entry_ids=None)
+    publish.assert_called_once_with(kwargs={"tenant_id": 7}, headers={"tenant_id": 7}, queue="celery")
+
+
+@pytest.mark.parametrize("tenant_id", [8, 0, -1, True, None])
+def test_merged_scan_rejects_mismatched_or_invalid_tenant(worker, monkeypatch, tenant_id):
+    execute = MagicMock()
+    monkeypatch.setattr(worker, "run_async_task", execute)
+    with pytest.raises(ValueError):
+        worker.scan_document_projections(tenant_id)
+    execute.assert_not_called()
+
+
 async def test_content_rebuild_is_published_to_parse_worker(worker, monkeypatch):
     publish = MagicMock()
     monkeypatch.setattr(worker.rebuild_document_content, "apply_async", publish, raising=False)
@@ -112,10 +177,22 @@ def test_registered_rebuild_task_uses_real_celery_parse_route():
             """
 from bisheng.worker.main import bisheng_celery
 prefix = "bisheng.worker.knowledge.document_projection."
-for name, queue in (("rebuild_document_content", "knowledge_celery"), ("process_document_projection", "celery")):
+for name, queue in (("rebuild_document_content", "knowledge_celery"), ("process_document_projection", "celery"),
+                    ("recover_scan_item", "celery"), ("scan_document_projections", "celery")):
     assert prefix + name in bisheng_celery.tasks
     route = bisheng_celery.amqp.router.route({}, prefix + name)
     assert route["queue"].name == queue, route
+assert prefix + "fanout_document_projection_scan" not in bisheng_celery.tasks
+assert prefix + "scan_tenant_document_projections" not in bisheng_celery.tasks
+from bisheng.worker.knowledge._projection_scan import tenant_scan_context
+from bisheng.worker.tenant_context import inject_tenant_header
+from bisheng.core.context.tenant import get_current_tenant_id
+previous = get_current_tenant_id()
+with tenant_scan_context(7):
+    headers = {"tenant_id": 1}
+    inject_tenant_header(headers=headers)
+    assert headers["tenant_id"] == 7
+assert get_current_tenant_id() == previous
 """,
         ],
         cwd=Path(__file__).resolve().parents[2],

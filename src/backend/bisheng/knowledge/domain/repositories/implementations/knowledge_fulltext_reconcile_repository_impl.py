@@ -148,7 +148,7 @@ class KnowledgeFulltextReconcileRepository:
         old_outbox = (await self.outboxes([file_id], lock=True)).get(file_id)
         old_repair = dict((old_outbox.payload_snapshot or {}).get("fulltext_auto_repair") or {}) if old_outbox else {}
         if old_repair.get("fingerprint") == fingerprint and old_repair.get("coordinator") != "daily_reconcile":
-            if old_repair.get("state") in {"exhausted", "completed", "failed"}:
+            if old_repair.get("state") in {"exhausted", "completed", "failed", "superseded"}:
                 return "repair_exhausted_existing"
             if old_repair.get("state") in {"requested", "processing"}:
                 return "repair_pending_existing"
@@ -224,8 +224,11 @@ class KnowledgeFulltextReconcileRepository:
         return ticket.reason
 
     async def finish_repair(
-        self, file_id: int, fingerprint: str, task_id: str, kind: str, execution_ok: bool, now: datetime
+        self, file_id: int, fingerprint: str, task_id: str, kind: str, execution_ok: bool | None, now: datetime
     ) -> None:
+        if kind == "projection" and execution_ok is None:
+            await self.state.finish_repair(file_id, fingerprint, task_id, None, now)
+            return
         files = (await self.source._execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))).scalars().all()
         success = bool(execution_ok and files and files[0].status == 2 and files[0].deleted_at is None)
         if kind == "projection":

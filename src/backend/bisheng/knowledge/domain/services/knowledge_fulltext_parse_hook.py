@@ -45,6 +45,11 @@ def persist_parse_result_with_fulltext_intent(
     action = fulltext_action_for_parse_status(file.status)
     with session_factory() as session:
         session.add(file)
+        if file.status == KnowledgeFileStatus.SUCCESS.value:
+            from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
+                KnowledgeBackgroundRepositoryImpl,
+            )
+            KnowledgeBackgroundRepositoryImpl(session).request_auto_publish(file)
         if action is not None:
             KnowledgeFulltextOutboxSyncRepositoryImpl(session).request_file_sync(
                 file_id=int(file.id),

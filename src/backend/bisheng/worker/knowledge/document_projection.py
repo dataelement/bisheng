@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 
 from sqlalchemy import delete, or_
 from sqlmodel import col, select
@@ -20,7 +21,6 @@ from bisheng.approval.domain.repositories.approval_instance_repository import (
 from bisheng.core.config.celery_queues import KNOWLEDGE_PARSE_QUEUE
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
-from bisheng.database.models.tenant import TenantDao
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocument,
@@ -52,15 +52,11 @@ from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import 
     request_file_delete_intents,
 )
 from bisheng.worker._asyncio_utils import run_async_task
-from bisheng.worker.approval.tasks import (
-    execute_approval_outbox,
-    retry_approval_outbox,
-)
+from bisheng.worker.knowledge._projection_scan_state import ProjectionScanState, run_reserved
 from bisheng.worker.main import bisheng_celery
 
 logger = logging.getLogger(__name__)
 DEFAULT_QUEUE = "celery"
-SCAN_PAGE_SIZE = 100
 
 # 测试可注入 writer; 生产始终要求已初始化的共享目标。
 shared_storage_writer_factory = None
@@ -475,6 +471,7 @@ def process_document_projection(
     entry_id: int | None = None,
     *,
     entry_ids: list[int] | None = None,
+    scan_tickets: list[dict] | None = None,
 ) -> dict:
     if entry_id is not None and entry_ids is not None:
         raise ValueError("use entry_ids or entry_id, not both")
@@ -485,6 +482,17 @@ def process_document_projection(
         raise ValueError("projection tenant header mismatch")
     # 每次交付使用唯一所有者, 旧执行者不能在消息重投后写回结果。
     lease_owner = f"batch:{uuid.uuid4().hex}"
+    if scan_tickets is not None:
+        if any(ticket["kind"] != "projection" or ticket["object_id"] not in ids for ticket in scan_tickets):
+            raise ValueError("projection scan ticket target mismatch")
+
+        async def reserved_batch() -> dict:
+            state = await ProjectionScanState.create(tenant_id)
+            return await run_reserved(state, scan_tickets, lambda active, progress: _process_projection_batch_async(
+                int(tenant_id), [int(ticket["object_id"]) for ticket in active], lease_owner,
+            ))
+
+        return run_async_task(reserved_batch)
     return run_async_task(
         lambda: _process_projection_batch_async(int(tenant_id), list(dict.fromkeys(ids)), lease_owner)
     )
@@ -553,7 +561,23 @@ async def _process_projection_batch_async(
             embed_shared_content_chunks,
             load_shared_content_from_original,
         )
-        loaders = {"chunk_loader": load_shared_content_from_original, "chunk_embedder": embed_shared_content_chunks}
+        async def reserve_rebuild(file):
+            from bisheng.knowledge.domain.repositories.implementations.shared_storage_reconcile_repository_impl import SharedStorageReconcileRepositoryImpl
+            async with get_async_db_session() as session:
+                accepted = await SharedStorageReconcileRepositoryImpl(session).claim_content_rebuild(int(file.id))
+                await session.commit()
+            if not accepted:
+                raise RuntimeError("document_content_rebuild_budget_exhausted")
+
+        async def load_with_budget(file):
+            await reserve_rebuild(file)
+            return await load_shared_content_from_original(file)
+
+        async def embed_with_budget(file, chunks):
+            await reserve_rebuild(file)
+            return await embed_shared_content_chunks(file, chunks)
+
+        loaders = {"chunk_loader": load_with_budget, "chunk_embedder": embed_with_budget}
     service = DocumentProjectionBatchService(
         repository_factory=repository_factory, writer=writer,
         finalizer=_finalize_deleting_entry, rebuild_dispatch=_dispatch_content_rebuild,
@@ -578,6 +602,9 @@ async def _reconcile_permission_candidates(
     *,
     tenant_id: int,
     candidates: list[KnowledgeFile],
+    state: ProjectionScanState,
+    max_attempts: int,
+    guard: Callable[[], Awaitable[None]],
 ) -> int:
     dispatched = 0
     dispatched_approval_ids: set[int] = set()
@@ -624,16 +651,10 @@ async def _reconcile_permission_candidates(
                 )
                 continue
             outbox = outboxes[-1]
-            task = (
-                execute_approval_outbox
-                if outbox.status == ApprovalOutboxStatus.PENDING
-                else retry_approval_outbox
+            dispatched += await _dispatch_scan_recovery(
+                state, guard, "approval", int(outbox.id), str(outbox.id),
+                {"outbox_id": int(outbox.id)}, max_attempts=max_attempts,
             )
-            task.apply_async(
-                kwargs={"outbox_id": int(outbox.id)},
-                headers={"tenant_id": int(tenant_id)},
-            )
-            dispatched += 1
         except Exception:
             logger.exception(
                 "F059 permission reconcile dispatch failed: "
@@ -715,6 +736,9 @@ async def _reconcile_rollback_candidates(
     *,
     tenant_id: int,
     candidates: list[KnowledgeFile],
+    state: ProjectionScanState,
+    max_attempts: int,
+    guard: Callable[[], Awaitable[None]],
 ) -> int:
     dispatched = 0
     seen_documents: set[int] = set()
@@ -732,143 +756,104 @@ async def _reconcile_rollback_candidates(
         if document_id in seen_documents:
             continue
         seen_documents.add(document_id)
-        reconcile_document_rollback.apply_async(
-            kwargs={
-                "tenant_id": int(tenant_id),
+        dispatched += await _dispatch_scan_recovery(
+            state, guard, "rollback", int(entry.id),
+            f"{entry.id}:{entry.desired_content_generation}:{entry.desired_entry_generation}",
+            {
+                "entry_id": int(entry.id),
                 "document_id": document_id,
-                "manager_file_id": int(
-                    entry.projection_previous_file_id
-                ),
+                "manager_file_id": int(entry.projection_previous_file_id),
             },
-            headers={"tenant_id": int(tenant_id)},
-            queue=DEFAULT_QUEUE,
+            max_attempts=max_attempts,
         )
-        dispatched += 1
     return dispatched
 
 
-async def _scan_tenant_projection_async(tenant_id: int) -> int:
-    from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
-        KnowledgeDocumentProjectionService,
-    )
+async def _publish_scan_task(task, *, state: ProjectionScanState,
+                             guard: Callable[[], Awaitable[None]], kwargs: dict) -> None:
+    await guard()
+    # 超时可能意味着已经发出消息, 保留预占直到过期, 不能立即解锁造成重复。
+    await asyncio.wait_for(asyncio.to_thread(
+        task.apply_async, kwargs=kwargs, headers={"tenant_id": state.tenant_id}, queue=DEFAULT_QUEUE, retry=False,
+    ), timeout=5)
 
-    async with get_async_db_session() as session:
-        from bisheng.knowledge.rag.shared_space_storage import (
-            get_shared_storage_conf,
-        )
 
-        repository = KnowledgeFileRepositoryImpl(session)
-        service = KnowledgeDocumentProjectionService(
-            session=session,
-            file_repository=repository,
-            max_retry_attempts=int(
-                get_shared_storage_conf().projection_max_retries
-            ),
-        )
-        entry_ids = await service.list_due_entry_ids(
-            limit=SCAN_PAGE_SIZE,
-        )
-        retiring_space_ids = list(
-            (
-                await session.exec(
-                    select(Knowledge.id)
-                    .where(
-                        Knowledge.tenant_id == tenant_id,
-                        Knowledge.state == KnowledgeState.DELETING.value,
-                    )
-                    .order_by(Knowledge.id.asc())
-                    .limit(SCAN_PAGE_SIZE)
+async def _dispatch_scan_recovery(
+    state: ProjectionScanState, guard: Callable[[], Awaitable[None]], kind: str,
+    object_id: int, fingerprint: str, payload: dict, *, max_attempts: int,
+) -> int:
+    await guard()
+    ticket = await state.reserve(kind, object_id, fingerprint, max_attempts=max_attempts)
+    if ticket is None:
+        return 0
+    await _publish_scan_task(recover_document_projection_scan_item, state=state, guard=guard, kwargs={
+        "tenant_id": state.tenant_id, "ticket": ticket, "payload": payload,
+    })
+    return 1
+
+
+@bisheng_celery.task(acks_late=True, name="bisheng.worker.knowledge.document_projection.recover_scan_item")
+def recover_document_projection_scan_item(tenant_id: int, ticket: dict, payload: dict) -> dict:
+    if int(get_current_tenant_id() or DEFAULT_TENANT_ID) != int(tenant_id):
+        raise ValueError("projection recovery tenant header mismatch")
+
+    async def run() -> dict:
+        state = await ProjectionScanState.create(tenant_id)
+
+        async def work(active: list[dict], progress: dict) -> dict:
+            kind, object_id = ticket["kind"], int(ticket["object_id"])
+            if kind == "approval" and int(payload["outbox_id"]) == object_id:
+                from bisheng.worker.approval.tasks import _execute_approval_outbox_async, _retry_approval_outbox_async
+
+                outbox = await ApprovalInstanceRepository.get_outbox(object_id)
+                if outbox is None:
+                    return {"status": "completed"}
+                async with get_async_db_session() as session:
+                    still_pending = await KnowledgeFileRepositoryImpl(session).has_preparing_approval_entries(outbox.instance_id)
+                if not still_pending:
+                    return {"status": "completed"}
+                action = (_execute_approval_outbox_async if outbox.status == ApprovalOutboxStatus.PENDING
+                          else _retry_approval_outbox_async)
+                if not await action(object_id):
+                    raise RuntimeError(f"approval recovery failed: {object_id}")
+                result = "completed"
+            elif kind == "rollback" and int(payload["entry_id"]) == object_id:
+                async with get_async_db_session() as session:
+                    entry = await KnowledgeFileRepositoryImpl(session).find_by_id(object_id)
+                if (entry is None or entry.entry_status != KnowledgeFileEntryStatus.PREPARING.value
+                        or entry.entry_type != KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+                        or entry.reference_document_id != payload["document_id"]
+                        or entry.projection_previous_file_id != payload["manager_file_id"]):
+                    return {"status": "completed"}
+                result = await _resume_rollback_async(
+                    tenant_id=tenant_id, document_id=int(payload["document_id"]),
+                    manager_file_id=int(payload["manager_file_id"]),
                 )
-            ).all()
-        )
-    enqueue_document_projection_entries(tenant_id=tenant_id, entry_ids=entry_ids)
-    # 固定截止时间并按主键翻页, 陈旧 deleting 不再挡住后续 preparing。
-    cutoff = datetime.now() - timedelta(minutes=5)
-    after_id = 0
-    preparing_count = deleting_count = exhausted_count = 0
-    exhausted_sample = []
-    while True:
-        async with get_async_db_session() as session:
-            permission_candidates = await KnowledgeFileRepositoryImpl(session).find_permission_reconcile_candidates(
-                older_than=cutoff, limit=SCAN_PAGE_SIZE, after_id=after_id,
-            )
-        if not permission_candidates:
-            break
-        after_id = int(permission_candidates[-1].id)
-        preparing = [row for row in permission_candidates if row.entry_status == KnowledgeFileEntryStatus.PREPARING.value]
-        preparing_count += len(preparing)
-        deleting_count += len(permission_candidates) - len(preparing)
-        for row in permission_candidates:
-            if int(row.projection_retry_count or 0) >= service.max_retry_attempts:
-                exhausted_count += 1
-                if len(exhausted_sample) < 10:
-                    exhausted_sample.append({
-                        "entry_id": row.id, "document_id": row.reference_document_id,
-                        "error": row.projection_last_error,
-                    })
-        await _reconcile_permission_candidates(tenant_id=tenant_id, candidates=preparing)
-        await _reconcile_rollback_candidates(tenant_id=tenant_id, candidates=preparing)
-        if len(permission_candidates) < SCAN_PAGE_SIZE:
-            break
-    logger.info(
-        "F059 reconcile scan tenant_id=%s projection_due=%s aged_preparing=%s "
-        "aged_deleting=%s retry_exhausted=%s page_size=%s",
-        tenant_id, len(entry_ids), preparing_count, deleting_count, exhausted_count, SCAN_PAGE_SIZE,
-    )
-    if exhausted_count:
-        logger.warning(
-            "F059 cleanup requires explicit recovery tenant_id=%s exhausted_count=%s sample=%s",
-            tenant_id, exhausted_count, exhausted_sample,
-        )
-    for space_id in retiring_space_ids:
-        enqueue_knowledge_space_retirement(
-            tenant_id=tenant_id,
-            space_id=int(space_id),
-        )
-    return len(entry_ids)
+            elif kind == "retirement" and int(payload["space_id"]) == object_id:
+                result = await _process_knowledge_space_retirement_async(
+                    tenant_id=tenant_id, space_id=object_id, scan_progress=progress,
+                )
+            else:
+                raise ValueError("projection recovery ticket target mismatch")
+            return {"status": result}
+
+        return await run_reserved(state, [ticket], work)
+
+    return run_async_task(run)
 
 
 @bisheng_celery.task(
-    name=(
-        "bisheng.worker.knowledge.document_projection."
-        "scan_tenant_document_projections"
-    )
+    name="bisheng.worker.knowledge.document_projection.scan_document_projections",
 )
-def scan_tenant_document_projections(tenant_id: int) -> int:
+def scan_document_projections(tenant_id: int | None = None) -> dict:
     current = int(get_current_tenant_id() or DEFAULT_TENANT_ID)
-    if current != int(tenant_id):
-        raise RuntimeError("F059 projection tenant header mismatch")
-    return run_async_task(
-        lambda: _scan_tenant_projection_async(int(tenant_id))
-    )
+    if tenant_id is not None and (type(tenant_id) is not int or tenant_id <= 0):
+        raise ValueError("projection scan tenant_id must be a positive integer")
+    if current != (tenant_id if tenant_id is not None else DEFAULT_TENANT_ID):
+        raise ValueError("projection scan tenant header mismatch")
+    from bisheng.worker.knowledge._projection_scan import scan_documents
 
-
-async def _fanout_projection_scan_async() -> int:
-    tenant_ids = [
-        DEFAULT_TENANT_ID,
-        *(
-            await TenantDao.aget_children_ids_active(
-                DEFAULT_TENANT_ID
-            )
-        ),
-    ]
-    for tenant_id in sorted({int(item) for item in tenant_ids}):
-        scan_tenant_document_projections.apply_async(
-            kwargs={"tenant_id": tenant_id},
-            headers={"tenant_id": tenant_id},
-            queue=DEFAULT_QUEUE,
-        )
-    return len(set(tenant_ids))
-
-
-@bisheng_celery.task(
-    name=(
-        "bisheng.worker.knowledge.document_projection."
-        "fanout_document_projection_scan"
-    )
-)
-def fanout_document_projection_scan() -> int:
-    return run_async_task(_fanout_projection_scan_async)
+    return run_async_task(lambda: scan_documents(tenant_id))
 
 
 def enqueue_document_projection_entries(
@@ -877,7 +862,7 @@ def enqueue_document_projection_entries(
     entry_ids: list[int] | None,
 ) -> None:
     if entry_ids is None:
-        scan_tenant_document_projections.apply_async(
+        scan_document_projections.apply_async(
             kwargs={"tenant_id": int(tenant_id)},
             headers={"tenant_id": int(tenant_id)},
             queue=DEFAULT_QUEUE,
@@ -1031,6 +1016,15 @@ async def _process_container_distribution_cleanup_async(
     space_id: int,
     folder_prefix: str | None,
 ) -> str:
+    if folder_prefix:
+        from bisheng.knowledge.domain.services.knowledge_background_service import KnowledgeBackgroundService
+        service = KnowledgeBackgroundService()
+        folder_id = int(folder_prefix.rstrip("/").split("/")[-1])
+        folders = await service.repository_call("files", [folder_id])
+        if not folders or folders[0].deleted_at is None:
+            return "skipped"
+        job_id = await service.repository_call("request_container", folders[0], folders[0].deleted_at)
+        return await service.process(job_id, tenant_id)
     status, processed = await _sweep_container_distribution_entries(
         tenant_id=tenant_id,
         space_id=space_id,
@@ -1101,6 +1095,7 @@ async def _process_knowledge_space_retirement_async(
     *,
     tenant_id: int,
     space_id: int,
+    scan_progress: dict | None = None,
 ) -> str:
     from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
     from bisheng.knowledge.domain.models.knowledge_file import FileType
@@ -1145,6 +1140,11 @@ async def _process_knowledge_space_retirement_async(
                 )
             ).all()
         )
+    if scan_progress is not None:
+        # 只比较清理进度, 不把失败次数或刷新时间当成业务进展。
+        snapshot = sorted((int(item.id), item.entry_status, item.applied_content_generation,
+                           item.applied_entry_generation) for item in local_files)
+        scan_progress["fingerprint"] = hashlib.sha256(repr(snapshot).encode()).hexdigest()
     if any(
         item.reference_document_id is not None
         and item.entry_status

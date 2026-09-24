@@ -225,7 +225,10 @@ class SharedStorageReconcileService:
                         try:
                             await self.guard()
                             entry_id = await source.queue_rebuild(fresh[doc_id])
-                            queued.append((doc_id, entry_id))
+                            if entry_id:
+                                queued.append((doc_id, entry_id))
+                            else:
+                                self.stats["skipped"] += 1
                         except ReconcileLockLost:
                             raise
                         except Exception as exc:

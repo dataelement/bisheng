@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, or_, update
+from sqlalchemy import case, delete, func, or_, update
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -274,6 +274,7 @@ class PortalCourseRepository:
             .where(
                 PortalCourseMediaCleanup.status == "pending",
                 PortalCourseMediaCleanup.not_before <= now,
+                PortalCourseMediaCleanup.attempt_count < 8,
             )
             .order_by(PortalCourseMediaCleanup.not_before.asc(), PortalCourseMediaCleanup.id.asc())
             .limit(limit)
@@ -282,21 +283,44 @@ class PortalCourseRepository:
         jobs = list((await self.session.exec(statement)).all())
         for job in jobs:
             job.status = "processing"
-            job.lease_until = now + timedelta(seconds=lease_seconds)
+            job.attempt_count += 1
+            job.lease_until = (now + timedelta(seconds=lease_seconds)).replace(microsecond=0)
             job.update_time = now
             self.session.add(job)
         await self.session.flush()
         return jobs
 
     async def recover_expired_cleanup_leases(self, *, now: datetime) -> None:
+        await self.session.execute(update(PortalCourseMediaCleanup).where(
+            PortalCourseMediaCleanup.status == "pending",
+            PortalCourseMediaCleanup.attempt_count >= 8,
+        ).values(status="dead", lease_until=None, update_time=now))
         await self.session.execute(
             update(PortalCourseMediaCleanup)
             .where(
                 PortalCourseMediaCleanup.status == "processing",
                 PortalCourseMediaCleanup.lease_until < now,
             )
-            .values(status="pending", lease_until=None, update_time=now)
+            .values(
+                status=case((PortalCourseMediaCleanup.attempt_count >= 8, "dead"), else_="pending"),
+                lease_until=None, update_time=now, not_before=now + timedelta(minutes=5),
+            )
         )
+
+    async def claim_cleanup_job(self, *, tenant_id: int, job_id: str, now: datetime):
+        job = await self.get_cleanup_job(tenant_id=tenant_id, job_id=job_id, for_update=True)
+        if job is None or job.status != "pending" or job.not_before > now:
+            return None
+        if job.attempt_count >= 8:
+            job.status = "dead"
+            await self.add(job)
+            return None
+        job.status = "processing"
+        job.attempt_count += 1
+        job.lease_until = (now + timedelta(seconds=300)).replace(microsecond=0)
+        job.update_time = now
+        await self.add(job)
+        return job.lease_until
 
     async def get_cleanup_job(
         self,
@@ -310,7 +334,7 @@ class PortalCourseRepository:
             PortalCourseMediaCleanup.id == job_id,
         )
         if for_update:
-            statement = statement.with_for_update()
+            statement = statement.with_for_update().execution_options(populate_existing=True)
         return (await self.session.exec(statement)).first()
 
     async def list_due_cleanup_refs(

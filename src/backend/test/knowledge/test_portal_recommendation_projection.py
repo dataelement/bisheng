@@ -17,6 +17,31 @@ class _SourceRepository:
         return self.source if self.source and self.source.file_id == file_id else None
 
 
+@pytest.mark.parametrize("broken_acl", [False, True])
+async def test_batch_reads_acl_once_and_preserves_public_and_department_rules(broken_acl):
+    from dataclasses import replace
+    from unittest.mock import AsyncMock, Mock
+
+    public = _source(space_level="public")
+    department = replace(public, file_id=42, space_level="department")
+    source = SimpleNamespace(find_by_ids=AsyncMock(return_value=[public, department]))
+    projection = SimpleNamespace(apply_batch=AsyncMock(return_value=2))
+    loader = Mock(return_value=[{"resource_type": "knowledge_space", "resource_id": str(public.space_id)}])
+    if broken_acl:
+        loader.side_effect = ValueError("broken ACL")
+    service = PortalRecommendationProjectionService(
+        source_repository=source, projection_repository=projection, binding_loader=loader,
+    )
+    assert await service.refresh_batch([{"file_id": 41}, {"file_id": 42}]) == 2
+    source.find_by_ids.assert_awaited_once_with([41, 42])
+    loader.assert_called_once()
+    public_value, department_value = projection.apply_batch.await_args.args[0]
+    assert public_value.recommendable is (not broken_acl)
+    assert department_value.recommendable is False
+    assert public_value.permission_scope == ("unknown" if broken_acl else "custom")
+    assert department_value.reason_code == ("acl_unknown" if broken_acl else "custom_acl")
+
+
 class _ProjectionRepository:
     def __init__(self):
         self.upserts = []

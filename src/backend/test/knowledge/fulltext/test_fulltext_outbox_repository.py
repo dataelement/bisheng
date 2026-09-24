@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -449,6 +450,82 @@ async def test_successful_auto_repair_keeps_an_already_applied_revision_successf
         assert repaired.retry_count == 0
         assert repaired.next_retry_at is None
         assert repaired.error_summary is None
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+async def test_projection_handoff_preserves_budget_and_resumes_by_lease():
+    engine, session = await make_session()
+    now = datetime(2026, 9, 24, 1)
+    try:
+        repo = KnowledgeFulltextOutboxRepositoryImpl(session)
+        row = KnowledgeFulltextOutbox(
+            tenant_id=1, aggregate_type="file", aggregate_id=7, knowledge_id=9,
+            desired_action="sync_current", desired_revision=1, applied_revision=0,
+            trigger_type="repair", status="failed", retry_count=8, max_retries=8,
+            lease_owner="first", error_summary="KnowledgeFulltextAutoRepairProcessing:repair_processing",
+            payload_snapshot={"fulltext_auto_repair": {
+                "fingerprint": "source", "state": "processing", "repair_owner": "first", "attempt_count": 1,
+            }},
+        )
+        session.add(row)
+        await session.commit()
+        assert await repo.finish_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="first", success=None, error_type=None, now=now,
+        )
+        await session.refresh(row)
+        repair = row.payload_snapshot["fulltext_auto_repair"]
+        assert repair["state"] == "processing"
+        assert repair["projection_requested_at"] == now.isoformat()
+        assert repair["attempt_count"] == 1
+        assert await repo.claim_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="second", now=now + timedelta(minutes=1),
+            lease_until=now + timedelta(minutes=20),
+        ) is None
+        assert await repo.claim_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="second", now=now + timedelta(minutes=6),
+            lease_until=now + timedelta(minutes=20),
+        ) is not None
+        assert not await repo.finish_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="first", success=False, error_type=None, now=now,
+        )
+        assert await repo.finish_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="second", success=True, error_type=None, now=now,
+        )
+        await session.refresh(row)
+        assert row.status == "pending"
+        assert row.retry_count == 0
+        assert row.payload_snapshot["fulltext_auto_repair"]["state"] == "completed"
+    finally:
+        await session.close()
+        await engine.dispose()
+
+
+@pytest.mark.parametrize("action,owner,applied", [("delete_current", None, 0), ("sync_current", "new-consumer", 0), ("sync_current", None, 2)])
+async def test_projection_wait_does_not_overwrite_a_newer_outbox_operation(action, owner, applied):
+    engine, session = await make_session()
+    now = datetime(2026, 9, 24, 1)
+    try:
+        row = KnowledgeFulltextOutbox(
+            tenant_id=1, aggregate_type="file", aggregate_id=7, knowledge_id=9,
+            desired_action=action, desired_revision=2, applied_revision=applied,
+            trigger_type="newer_event", status="processing" if owner else "pending",
+            retry_count=0, max_retries=8, lease_owner=owner,
+            lease_until=now + timedelta(minutes=10) if owner else None,
+            payload_snapshot={"fulltext_auto_repair": {
+                "fingerprint": "source", "state": "processing", "repair_owner": "repair-worker",
+            }},
+        )
+        session.add(row)
+        await session.commit()
+        before = (row.status, row.lease_owner, row.lease_until, row.retry_count)
+        assert await KnowledgeFulltextOutboxRepositoryImpl(session).finish_auto_repair(
+            outbox_id=row.id, fingerprint="source", lease_owner="repair-worker", success=None, error_type=None, now=now,
+        )
+        await session.refresh(row)
+        assert (row.status, row.lease_owner, row.lease_until, row.retry_count) == before
+        assert row.payload_snapshot["fulltext_auto_repair"]["state"] in {"completed", "superseded"}
     finally:
         await session.close()
         await engine.dispose()

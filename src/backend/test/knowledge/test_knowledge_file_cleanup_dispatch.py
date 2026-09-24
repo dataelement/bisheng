@@ -39,7 +39,7 @@ def test_cleanup_policy_preserves_snapshot_cleanup(knowledge_type, file_ids, cle
 
 
 @pytest.mark.parametrize("knowledge_type", [KnowledgeTypeEnum.SPACE.value, KnowledgeTypeEnum.NORMAL.value, None])
-async def test_purge_only_dispatches_cleanup_for_existing_non_space_knowledge(monkeypatch, knowledge_type):
+async def test_purge_records_cleanup_intents_before_deleting_parent_rows(monkeypatch, knowledge_type):
     item = SimpleNamespace(
         file_id=101,
         knowledge_id=9,
@@ -62,22 +62,21 @@ async def test_purge_only_dispatches_cleanup_for_existing_non_space_knowledge(mo
     dispatch = MagicMock()
     file_worker = import_module("bisheng.worker.knowledge.file_worker")
     monkeypatch.setattr(file_worker.delete_knowledge_file_celery, "apply_async", dispatch)
+    from bisheng.knowledge.domain.services import knowledge_pdf_artifact_service as pdf_service
+    monkeypatch.setattr(pdf_service, "get_pdf_artifact_deletion_snapshots", AsyncMock(return_value=[]))
+    session.run_sync.return_value = []
     user = SimpleNamespace(tenant_id=7, is_admin=lambda: True)
 
     assert await recycle.KnowledgeRecycleService(user).purge(RecyclePurgeRequest(all=True)) == {"purged": 1}
 
-    if knowledge_type == KnowledgeTypeEnum.NORMAL.value:
-        dispatch.assert_called_once_with(
-            kwargs={"file_ids": [101], "knowledge_id": 9, "clear_minio": True},
-            headers={"tenant_id": 7},
-        )
-    else:
-        dispatch.assert_not_called()
+    dispatch.assert_not_called()
+    assert session.run_sync.await_count == 2
     session.commit.assert_awaited_once()
 
 
 @pytest.mark.parametrize("knowledge_type", [KnowledgeTypeEnum.SPACE.value, KnowledgeTypeEnum.NORMAL.value])
-def test_file_delete_keeps_delayed_snapshot_cleanup(monkeypatch, knowledge_type):
+@pytest.mark.parametrize("broker_down", [False, True])
+def test_file_delete_keeps_delayed_snapshot_cleanup(monkeypatch, knowledge_type, broker_down):
     from bisheng.knowledge.domain.services import knowledge_pdf_artifact_service as pdf_service
     from bisheng.knowledge.domain.services import knowledge_service as service
 
@@ -94,7 +93,7 @@ def test_file_delete_keeps_delayed_snapshot_cleanup(monkeypatch, knowledge_type)
     monkeypatch.setattr(cls, "delete_knowledge_file_hook", MagicMock())
     worker = import_module("bisheng.worker.knowledge.file_worker")
     monkeypatch.setattr(import_module("bisheng.worker.knowledge"), "file_worker", worker)
-    dispatch = MagicMock()
+    dispatch = MagicMock(side_effect=RuntimeError("broker unavailable") if broker_down else None)
     monkeypatch.setattr(worker.delete_knowledge_file_celery, "apply_async", dispatch)
 
     assert cls.delete_knowledge_file(None, SimpleNamespace(user_id=1, user_name="admin"), [101]) is True

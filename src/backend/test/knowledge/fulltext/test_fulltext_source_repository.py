@@ -262,3 +262,31 @@ async def test_shared_space_chunk_source_uses_current_canonical_generation(
     assert source.canonical_document_id == 500
     assert source.canonical_version_id == 501
     assert source.content_generation == 3
+
+
+async def test_batch_snapshots_use_shared_queries_and_preserve_each_file(async_db_session, monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.shougang_portal_config.domain.services.portal_config_service import ShougangPortalConfigService
+
+    await async_db_session.exec(text('ALTER TABLE knowledge_space_scope ADD COLUMN portal_discovery_enabled INTEGER NOT NULL DEFAULT 0'))
+    async_db_session.add(Knowledge(id=901, tenant_id=1, name="批量知识库", index_name="batch"))
+    for file_id in range(901, 921):
+        async_db_session.add(KnowledgeFile(id=file_id, tenant_id=1, knowledge_id=901, file_type=1, file_name=f"文件{file_id}", status=2))
+    await async_db_session.commit()
+    monkeypatch.setattr(ShougangPortalConfigService, 'get_config', AsyncMock(return_value=SimpleNamespace(portal=SimpleNamespace(document_types=[]))))
+    from sqlalchemy import table, column
+    from bisheng.knowledge.domain.repositories.implementations import knowledge_fulltext_source_repository_impl as source_module
+    # 全局测试夹具替换了 User 模块; 使用同名真实 SQL 列执行查询。
+    users = table('user', column('user_id'), column('user_name'))
+    monkeypatch.setattr(source_module, 'User', SimpleNamespace(user_id=users.c.user_id, user_name=users.c.user_name))
+    repo = KnowledgeFulltextSourceRepositoryImpl(async_db_session)
+    execute = AsyncMock(wraps=repo._execute)
+    monkeypatch.setattr(repo, '_execute', execute)
+    for name in ('_load_tags', '_load_user_name', '_load_category_names', '_load_folder_path'):
+        monkeypatch.setattr(repo, name, AsyncMock(side_effect=AssertionError('不能退回逐文件查询')))
+    result = await repo.get_current_snapshots(list(range(901, 921)))
+    assert len(result) == 20
+    assert [result[key].file_name for key in sorted(result)] == [f"文件{i}" for i in range(901, 921)]
+    assert execute.await_count == 3
+    ShougangPortalConfigService.get_config.assert_awaited_once_with(tenant_id=1)

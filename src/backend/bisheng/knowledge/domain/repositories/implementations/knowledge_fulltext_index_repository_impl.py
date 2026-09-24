@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any
 
 from elasticsearch import AsyncElasticsearch, BadRequestError, NotFoundError
@@ -374,6 +375,44 @@ class KnowledgeFulltextIndexRepositoryImpl(KnowledgeFulltextIndexRepository):
             refresh=False,
         )
 
+    async def apply_batch(self, documents: dict[int, KnowledgeFulltextDocument | None]) -> dict[int, str | None]:
+        results = {}
+        operations, ids, byte_count = [], [], 0
+
+        async def flush():
+            if not ids:
+                return
+            try:
+                response = await self.client.bulk(operations=list(operations), refresh=False)
+                items = response.get("items", [])
+                if len(items) != len(ids):
+                    raise RuntimeError("fulltext bulk result count mismatch")
+                for file_id, item in zip(ids, items):
+                    action, result = next(iter(item.items()))
+                    status = int(result.get("status", 500))
+                    results[file_id] = None if status < 300 or (action == "delete" and status == 404) else "FulltextBulkWriteError"
+            except Exception as exc:
+                results.update({file_id: type(exc).__name__ for file_id in ids})
+            operations.clear()
+            ids.clear()
+
+        for file_id, document in documents.items():
+            if document is None:
+                item = [{"delete": {"_index": constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS, "_id": str(file_id)}}]
+            else:
+                payload = document.model_dump(mode="json")
+                item = [{"update": {"_index": constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS, "_id": str(file_id), "retry_on_conflict": 3}},
+                        {"doc": {key: value for key, value in payload.items() if key not in _ENGAGEMENT_FIELDS}, "upsert": payload}]
+            size = len(json.dumps(item, ensure_ascii=False).encode())
+            if ids and (byte_count + size > 5 * 1024 * 1024 or len(ids) >= 100):
+                await flush()
+                byte_count = 0
+            operations.extend(item)
+            ids.append(file_id)
+            byte_count += size
+        await flush()
+        return results
+
     async def bulk_update_engagement(
         self,
         counts: list[KnowledgeFulltextEngagementCounts],
@@ -406,7 +445,7 @@ class KnowledgeFulltextIndexRepositoryImpl(KnowledgeFulltextIndexRepository):
                     },
                 ]
             )
-        response = await self.client.bulk(operations=operations, refresh=False)
+        response = await self.client.bulk(operations=list(operations), refresh=False)
         result = KnowledgeFulltextEngagementBulkResult()
         for response_item in response.get("items", []):
             update_result = response_item.get("update") or {}

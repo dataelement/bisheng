@@ -207,12 +207,11 @@ async def test_consumers_route_by_type_instead_of_flags(monkeypatch, kinds, expe
         assert is_shared_storage_active_for_knowledge_ids(ids) is expected
 
 
-async def test_shared_rebuild_uses_projection_and_requires_convergence(monkeypatch):
-    from contextlib import asynccontextmanager
-
+async def test_shared_rebuild_failure_is_reported_without_legacy_parsing(monkeypatch):
     import importlib
     import importlib.util
     import sys
+    from contextlib import asynccontextmanager
     from pathlib import Path
 
     backend_root = Path(__file__).resolve().parents[2]
@@ -230,22 +229,22 @@ async def test_shared_rebuild_uses_projection_and_requires_convergence(monkeypat
         yield session
 
     monkeypatch.setattr("bisheng.core.database.get_async_db_session", session_context)
-    repository = SimpleNamespace(request_projection_rebuild=AsyncMock(return_value=True))
+    repository = SimpleNamespace(request_projection_checks=AsyncMock(return_value=1))
     for module, name in [
         ("knowledge_file_repository_impl", "KnowledgeFileRepositoryImpl"),
         ("knowledge_document_repository_impl", "KnowledgeDocumentRepositoryImpl"),
         ("knowledge_document_version_repository_impl", "KnowledgeDocumentVersionRepositoryImpl"),
     ]:
         monkeypatch.setattr(f"bisheng.knowledge.domain.repositories.implementations.{module}.{name}", lambda _: repository)
-    service = SimpleNamespace(process_entry=AsyncMock(return_value=SimpleNamespace(status="ready")))
-    monkeypatch.setattr(projection, "_build_document_projection_service", AsyncMock(return_value=service))
+    legacy = AsyncMock(side_effect=AssertionError("must not parse in the default worker"))
+    monkeypatch.setattr(projection, "_build_document_projection_service", legacy)
+    execute = AsyncMock(return_value={"results": {11: "exhausted"}})
+    monkeypatch.setattr(projection, "_process_projection_batch_async", execute)
     file = SimpleNamespace(id=11, tenant_id=1)
-    await subject._rebuild_shared_file(file)
-    repository.request_projection_rebuild.assert_awaited_once_with(11)
-    assert service.process_entry.await_args.kwargs["force_content_upsert"] is True
-    service.process_entry.return_value.status = "not_claimed"
-    with pytest.raises(RuntimeError, match="did not converge"):
+    with pytest.raises(RuntimeError, match="projection check failed"):
         await subject._rebuild_shared_file(file)
+    repository.request_projection_checks.assert_awaited_once_with([11])
+    legacy.assert_not_awaited()
 
 
 async def test_version_comparison_reads_shared_content_file_id(monkeypatch):

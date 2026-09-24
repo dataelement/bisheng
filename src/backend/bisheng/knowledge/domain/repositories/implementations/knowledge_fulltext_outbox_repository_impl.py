@@ -247,6 +247,13 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
         row.fanout_cursor = None
         row.error_summary = None
 
+    async def recover_exhausted_leases(self, now: datetime) -> None:
+        await self.session.execute(update(KnowledgeFulltextOutbox).where(
+            KnowledgeFulltextOutbox.status == "processing", KnowledgeFulltextOutbox.lease_until < now,
+            KnowledgeFulltextOutbox.retry_count >= KnowledgeFulltextOutbox.max_retries,
+        ).values(status="failed", lease_owner=None, lease_until=None, next_retry_at=None,
+                 error_summary="KnowledgeFulltextWorkerInterrupted"))
+
     async def list_dispatchable(self, *, now: datetime, limit: int) -> list[KnowledgeFulltextOutbox]:
         statement = (
             select(KnowledgeFulltextOutbox)
@@ -310,6 +317,54 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
             return None
         await self.session.flush()
         return await self._get_fresh(outbox_id)
+
+    async def claim_many(self, requests: dict[int, int], *, lease_owner: str, now: datetime) -> list[KnowledgeFulltextOutbox]:
+        if not requests:
+            return []
+        rows = list((await self.session.execute(select(KnowledgeFulltextOutbox).where(
+            KnowledgeFulltextOutbox.id.in_(list(requests)),
+            KnowledgeFulltextOutbox.desired_revision > KnowledgeFulltextOutbox.applied_revision,
+            KnowledgeFulltextOutbox.retry_count < KnowledgeFulltextOutbox.max_retries,
+            or_(KnowledgeFulltextOutbox.lease_until.is_(None), KnowledgeFulltextOutbox.lease_until < now),
+            or_(KnowledgeFulltextOutbox.next_retry_at.is_(None), KnowledgeFulltextOutbox.next_retry_at <= now),
+        ).order_by(KnowledgeFulltextOutbox.id).with_for_update().execution_options(populate_existing=True))).scalars())
+        claimed = []
+        for row in rows:
+            if row.desired_revision != requests[int(row.id)]:
+                continue
+            row.status, row.lease_owner = "processing", lease_owner
+            row.lease_until = now + timedelta(seconds=constants.KNOWLEDGE_FULLTEXT_LEASE_TTL_SECONDS)
+            row.retry_count += 1
+            claimed.append(row)
+        await self.session.flush()
+        return [KnowledgeFulltextOutbox.model_validate(row.model_dump()) for row in claimed]
+
+    async def lock_current_many(self, rows: list[KnowledgeFulltextOutbox], owner: str, now: datetime) -> list[KnowledgeFulltextOutbox]:
+        revisions = {int(row.id): row.desired_revision for row in rows}
+        if not revisions:
+            return []
+        current = list((await self.session.execute(select(KnowledgeFulltextOutbox).where(
+            KnowledgeFulltextOutbox.id.in_(list(revisions)), KnowledgeFulltextOutbox.lease_owner == owner,
+            KnowledgeFulltextOutbox.lease_until > now,
+        ).order_by(KnowledgeFulltextOutbox.id).with_for_update().execution_options(populate_existing=True))).scalars())
+        # 将源 revision 的并发提交阻塞在批量 ES 写入之后, 防止旧结果覆盖新意图。
+        return [row for row in current if row.desired_revision == revisions[int(row.id)]]
+
+    async def settle_many(self, rows: list[KnowledgeFulltextOutbox], errors: dict[int, str | None], now: datetime) -> None:
+        for row in rows:
+            error = errors.get(int(row.id))
+            if error is None:
+                row.status, row.applied_revision = "success", row.desired_revision
+                row.retry_count, row.error_summary, row.next_retry_at = 0, None, None
+                row.last_success_at = now
+            else:
+                row.status, row.error_summary = "failed", error[:1000]
+                row.next_retry_at = None if row.retry_count >= row.max_retries else now + timedelta(seconds=min(
+                    constants.KNOWLEDGE_FULLTEXT_RETRY_MAX_SECONDS,
+                    constants.KNOWLEDGE_FULLTEXT_RETRY_BASE_SECONDS * 2 ** max(0, row.retry_count - 1),
+                ))
+            row.lease_owner, row.lease_until = None, None
+        await self.session.flush()
 
     async def is_current_lease(
         self,
@@ -551,7 +606,7 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
         outbox_id: int,
         fingerprint: str,
         lease_owner: str,
-        success: bool,
+        success: bool | None,
         error_type: str | None,
         now: datetime,
     ) -> bool:
@@ -566,6 +621,36 @@ class KnowledgeFulltextOutboxRepositoryImpl(KnowledgeFulltextOutboxRepository):
             or repair.get("repair_owner") != lease_owner
         ):
             return False
+        if success is None:
+            if (
+                row.desired_action != KnowledgeFulltextDesiredAction.SYNC_CURRENT.value
+                or row.lease_owner not in {None, lease_owner}
+                or row.desired_revision <= row.applied_revision
+            ):
+                # 新的删除、消费租约或已应用版本优先, 不能被旧修复的等待回调覆盖。
+                repair["state"] = "completed" if row.desired_revision <= row.applied_revision else "superseded"
+                repair["finished_at"] = now.isoformat()
+                repair["repair_owner"] = None
+                repair["lease_until"] = None
+                payload["fulltext_auto_repair"] = repair
+                row.payload_snapshot = payload
+                self.session.add(row)
+                await self.session.flush()
+                return True
+            # 已交给投影解析任务, 保留指纹和等待起点, 下一次只检查完成状态。
+            repair.setdefault("projection_requested_at", now.isoformat())
+            repair["lease_until"] = (now + timedelta(minutes=5)).isoformat()
+            repair["repair_owner"] = None
+            payload["fulltext_auto_repair"] = repair
+            row.payload_snapshot = payload
+            row.lease_owner = None
+            row.lease_until = now + timedelta(minutes=5)
+            row.status = KnowledgeFulltextOutboxStatus.FAILED.value
+            row.retry_count = row.max_retries
+            row.error_summary = "KnowledgeFulltextAutoRepairProcessing:repair_processing"
+            self.session.add(row)
+            await self.session.flush()
+            return True
         repair["state"] = "completed" if success else "failed"
         repair["finished_at"] = now.isoformat()
         repair["error_type"] = error_type or repair.get("error_type")

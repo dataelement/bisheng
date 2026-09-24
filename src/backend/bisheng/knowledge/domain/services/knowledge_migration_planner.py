@@ -786,6 +786,7 @@ class KnowledgeMigrationPlannerService:
 
         unit_row = KnowledgeMigrationUnit(
             batch_id=int(batch.id),
+            current_round_no=int(batch.round_no),
             unit_key=source_unit.unit_key,
             unit_type=source_unit.unit_type,
             source_document_id=source_unit.document_id,

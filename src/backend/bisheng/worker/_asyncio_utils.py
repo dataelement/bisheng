@@ -115,4 +115,7 @@ def run_async_task(coro_factory: Callable[[], Awaitable[T]]) -> T:
         try:
             return fut.result(timeout=_POLL_INTERVAL)
         except concurrent.futures.TimeoutError:
+            # 已完成的业务异常也可能是 TimeoutError, 必须透传, 不能继续空转。
+            if fut.done():
+                return fut.result()
             _die_if_loop_dead()

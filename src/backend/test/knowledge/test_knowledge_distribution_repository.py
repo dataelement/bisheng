@@ -35,6 +35,34 @@ def _file(file_id: int, **overrides) -> KnowledgeFile:
     return KnowledgeFile(**values)
 
 
+async def test_projection_checks_batch_ready_entries_without_resetting_failures_or_leases(async_db_session):
+    now = datetime.now()
+    base = {"reference_document_id": 91, "entry_type": "manager", "entry_status": "active", "projection_status": "ready"}
+    rows = [_file(i, **base) for i in range(1, 502)]
+    failed = _file(502, **{**base, "projection_status": "failed"}, projection_retry_count=4,
+                   projection_last_error="retry_exhausted", projection_next_retry_at=now)
+    rebuilding = _file(503, **{**base, "projection_status": "pending"}, projection_retry_count=2,
+                       projection_lease_owner="rebuild:owner", projection_lease_until=now + timedelta(minutes=3))
+    deleted = _file(504, **base, deleted_at=now)
+    deleting = _file(505, **{**base, "entry_status": "deleting"})
+    legacy = _file(506, projection_status="ready")
+    async_db_session.add_all([*rows, failed, rebuilding, deleted, deleting, legacy])
+    await async_db_session.commit()
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    assert await repository.request_projection_checks(list(range(1, 507))) == 501
+    await async_db_session.commit()
+    for row in [*rows, failed, rebuilding, deleted, deleting, legacy]:
+        await async_db_session.refresh(row)
+    assert all(row.projection_status == "pending" for row in rows)
+    assert (failed.projection_status, failed.projection_retry_count, failed.projection_last_error) == (
+        "failed", 4, "retry_exhausted",
+    )
+    assert (rebuilding.projection_lease_owner, rebuilding.projection_retry_count) == ("rebuild:owner", 2)
+    assert deleted.projection_status == deleting.projection_status == "ready"
+    assert legacy.projection_status != "pending"
+    assert await repository.request_projection_checks(list(range(1, 507))) == 0
+
+
 @pytest.mark.asyncio
 async def test_distribution_row_locks_return_stable_id_order(
     async_db_session: AsyncSession,

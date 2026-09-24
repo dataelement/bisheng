@@ -1,5 +1,6 @@
 # ruff: noqa: F401
 # register tasks
+from bisheng.worker.knowledge.background_jobs import drain_knowledge_background_jobs
 from bisheng.open_endpoints.worker.filelib_sync_worker import (
     fanout_automotive_sheet_intro_sync,
     run_automotive_sheet_intro_sync,
@@ -15,10 +16,9 @@ from bisheng.worker.knowledge.auto_publish_worker import (
     auto_publish_file_celery,
 )
 from bisheng.worker.knowledge.document_projection import (
-    fanout_document_projection_scan,
     process_document_projection,
     rebuild_document_content,
-    scan_tenant_document_projections,
+    scan_document_projections,
 )
 from bisheng.worker.knowledge.shared_storage_reconcile import (
     fanout_shared_storage_reconcile,

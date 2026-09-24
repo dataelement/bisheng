@@ -120,12 +120,9 @@ async def _sync_engagement() -> dict[str, int]:
     try:
         result = await service.sync_file_ids(file_ids, updated_at=now)
     except Exception:
-        for file_id in file_ids:
-            await queue_repository.retry(
-                file_id=file_id,
-                lease_owner=lease_owner,
-                now_epoch=now_epoch,
-            )
+        await queue_repository.retry_many(
+            file_ids=file_ids, lease_owner=lease_owner, now_epoch=int(datetime.now(timezone.utc).timestamp()),
+        )
         logger.bind(
             claimed_count=len(file_ids),
             status="failed",

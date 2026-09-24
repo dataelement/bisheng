@@ -12,6 +12,7 @@ from bisheng.knowledge.domain.models.portal_recommendation_file_projection impor
     PortalRecommendationFileProjection,
 )
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_repository import (
+    PortalRecommendationProjectionDelete,
     PortalRecommendationProjectionRecord,
     PortalRecommendationProjectionUpsert,
     PortalRecommendationRepository,
@@ -80,6 +81,56 @@ class PortalRecommendationRepositoryImpl(PortalRecommendationRepository):
         self.session.add(model)
         await self.session.flush()
         return True
+
+    async def apply_batch(
+        self, changes: Sequence[PortalRecommendationProjectionUpsert | PortalRecommendationProjectionDelete],
+    ) -> int:
+        if not changes:
+            return 0
+        ids = sorted({int(value.file_id) for value in changes})
+        with strict_tenant_filter():
+            result = await self.session.exec(
+                select(PortalRecommendationFileProjection)
+                .where(col(PortalRecommendationFileProjection.file_id).in_(ids))
+                .order_by(PortalRecommendationFileProjection.file_id)
+                .with_for_update()
+            )
+        existing = {int(model.file_id): model for model in result.all()}
+        desired = {file_id: {"projection_version": int(model.projection_version)} for file_id, model in existing.items()}
+        touched = set()
+        changed = 0
+        # 先在内存按原消息顺序计算最终状态, 避免每个文件一次查询和 flush。
+        for value in changes:
+            file_id = int(value.file_id)
+            current = desired.get(file_id)
+            if isinstance(value, PortalRecommendationProjectionDelete):
+                if current is None or current["projection_version"] > max(int(value.projection_version), 0):
+                    continue
+                desired.pop(file_id)
+            else:
+                values = self._validated_values(value)
+                if current is not None and current["projection_version"] >= values["projection_version"]:
+                    continue
+                desired[file_id] = values
+            touched.add(file_id)
+            changed += 1
+        models = []
+        for file_id in sorted(touched):
+            model = existing.get(file_id)
+            values = desired.get(file_id)
+            if values is None:
+                if model is not None:
+                    await self.session.delete(model)
+                continue
+            if model is None:
+                model = PortalRecommendationFileProjection(**values)
+            else:
+                for field, field_value in values.items():
+                    setattr(model, field, field_value)
+            models.append(model)
+        self.session.add_all(models)
+        await self.session.flush()
+        return changed
 
     async def delete(self, file_id: int, projection_version: int) -> bool:
         event_version = max(int(projection_version), 0)

@@ -9,6 +9,12 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
 
 class KnowledgeFulltextSourceRepository(ABC):
     @abstractmethod
+    async def get_current_snapshots(self, file_ids: list[int]) -> dict[int, KnowledgeFulltextFileSnapshot | Exception]: ...
+
+    @abstractmethod
+    async def get_chunk_sources(self, snapshots: list[KnowledgeFulltextFileSnapshot]) -> dict[int, KnowledgeFulltextChunkSource | Exception | None]: ...
+
+    @abstractmethod
     async def get_current_snapshot(self, file_id: int) -> KnowledgeFulltextFileSnapshot | None: ...
 
     @abstractmethod

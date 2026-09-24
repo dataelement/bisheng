@@ -619,6 +619,9 @@ CREATE TABLE IF NOT EXISTS failed_tuple (
     max_retries INTEGER NOT NULL DEFAULT 3,
     status VARCHAR(16) NOT NULL DEFAULT 'pending',
     error_message TEXT,
+    lease_owner VARCHAR(64),
+    lease_until DATETIME,
+    next_retry_at DATETIME,
     tenant_id INTEGER NOT NULL DEFAULT 1,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -934,7 +937,15 @@ CREATE INDEX IF NOT EXISTS idx_dtpc_item_event_status
 # Registry & helpers
 # ---------------------------------------------------------------------------
 
+TABLE_KNOWLEDGE_BACKGROUND_JOB = """CREATE TABLE IF NOT EXISTS knowledge_background_job (
+    id VARCHAR(64) PRIMARY KEY, tenant_id INTEGER NOT NULL, kind VARCHAR(32) NOT NULL,
+    parent_id VARCHAR(64), payload JSON NOT NULL, status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0, lease_owner VARCHAR(64), lease_until DATETIME,
+    next_retry_at DATETIME, last_error VARCHAR(1000), create_time DATETIME NOT NULL,
+    update_time DATETIME NOT NULL)"""
+
 TABLE_DEFINITIONS: dict[str, str] = {
+    "knowledge_background_job": TABLE_KNOWLEDGE_BACKGROUND_JOB,
     "tenant": TABLE_TENANT,
     "user_tenant": TABLE_USER_TENANT,
     "user": TABLE_USER,

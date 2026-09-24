@@ -15,6 +15,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileEntryType,
     KnowledgeFileProjectionStatus,
 )
+from test.knowledge.projection_scan_helpers import scan_state as _scan_state_fixture
+
+scan_state = _scan_state_fixture
 
 _BACKEND = Path(__file__).resolve().parents[2]
 if "bisheng.worker" in sys.modules:
@@ -50,7 +53,7 @@ def _entry(
     )
 
 
-async def test_permission_reconcile_redispatches_pending_failed_and_inconsistent_success() -> None:
+async def test_permission_reconcile_redispatches_pending_failed_and_inconsistent_success(scan_state) -> None:
     moving_manager = _entry(6, approval_instance_id=101)
     moving_manager.entry_type = KnowledgeFileEntryType.MANAGER.value
     candidates = [
@@ -95,32 +98,28 @@ async def test_permission_reconcile_redispatches_pending_failed_and_inconsistent
             ),
         ),
         patch.object(
-            projection_worker.execute_approval_outbox,
-            "apply_async",
-            new=MagicMock(),
-        ) as execute,
-        patch.object(
-            projection_worker.retry_approval_outbox,
-            "apply_async",
-            new=MagicMock(),
-        ) as retry,
+            projection_worker.recover_document_projection_scan_item,
+            "apply_async", new=MagicMock(),
+        ) as publish,
     ):
         dispatched = await projection_worker._reconcile_permission_candidates(
-            tenant_id=7,
-            candidates=candidates,
+            tenant_id=7, candidates=candidates, state=scan_state, max_attempts=4, guard=AsyncMock(),
         )
+        assert await projection_worker._reconcile_permission_candidates(
+            tenant_id=7, candidates=candidates, state=scan_state, max_attempts=4, guard=AsyncMock(),
+        ) == 0
 
     assert dispatched == 3
-    assert execute.call_args.kwargs["kwargs"] == {"outbox_id": 1001}
-    assert [call.kwargs["kwargs"] for call in retry.call_args_list] == [
-        {"outbox_id": 1002},
-        {"outbox_id": 1003},
+    assert [call.kwargs["kwargs"]["payload"] for call in publish.call_args_list] == [
+        {"outbox_id": 1001}, {"outbox_id": 1002}, {"outbox_id": 1003},
     ]
-    for call in [execute.call_args, *retry.call_args_list]:
+    for call in publish.call_args_list:
         assert call.kwargs["headers"] == {"tenant_id": 7}
+        assert call.kwargs["queue"] == "celery"
+        assert call.kwargs["kwargs"]["ticket"]["kind"] == "approval"
 
 
-async def test_rollback_reconcile_dispatches_from_preparing_tombstone() -> None:
+async def test_rollback_reconcile_dispatches_from_preparing_tombstone(scan_state) -> None:
     tombstone = _entry(7, approval_instance_id=None)
     tombstone.entry_type = (
         KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
@@ -129,7 +128,7 @@ async def test_rollback_reconcile_dispatches_from_preparing_tombstone() -> None:
     tombstone.projection_previous_file_id = 100
 
     with patch.object(
-        projection_worker.reconcile_document_rollback,
+        projection_worker.recover_document_projection_scan_item,
         "apply_async",
         new=MagicMock(),
     ) as task:
@@ -137,19 +136,17 @@ async def test_rollback_reconcile_dispatches_from_preparing_tombstone() -> None:
             await projection_worker._reconcile_rollback_candidates(
                 tenant_id=7,
                 candidates=[tombstone, tombstone],
+                state=scan_state, max_attempts=4, guard=AsyncMock(),
             )
         )
 
     assert dispatched == 1
-    assert task.call_args.kwargs == {
-        "kwargs": {
-            "tenant_id": 7,
-            "document_id": 91,
-            "manager_file_id": 100,
-        },
-        "headers": {"tenant_id": 7},
-        "queue": projection_worker.DEFAULT_QUEUE,
-    }
+    kwargs = task.call_args.kwargs
+    assert kwargs["kwargs"]["payload"] == {"entry_id": 7, "document_id": 91, "manager_file_id": 100}
+    assert kwargs["kwargs"]["ticket"]["kind"] == "rollback"
+    assert kwargs["headers"] == {"tenant_id": 7}
+    assert kwargs["queue"] == projection_worker.DEFAULT_QUEUE
+
 
 
 def test_final_document_delete_waits_for_every_entry_cleanup() -> None:
@@ -182,7 +179,7 @@ def test_final_document_delete_waits_for_every_entry_cleanup() -> None:
         )
 
 
-async def test_scan_visits_aged_rollback_beyond_full_deleting_page(async_db_session, monkeypatch):
+async def test_scan_visits_aged_rollback_beyond_full_deleting_page(async_db_session, monkeypatch, scan_state):
     from contextlib import asynccontextmanager
     from datetime import datetime, timedelta
 
@@ -202,12 +199,13 @@ async def test_scan_visits_aged_rollback_beyond_full_deleting_page(async_db_sess
         yield async_db_session
 
     monkeypatch.setattr(projection_worker, "get_async_db_session", db)
-    monkeypatch.setattr("bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf", lambda: SimpleNamespace(projection_max_retries=8))
+    scanner = importlib.import_module("bisheng.worker.knowledge._projection_scan")
+    monkeypatch.setattr(scanner, "get_shared_storage_conf", lambda: SimpleNamespace(projection_max_retries=8))
     task = MagicMock()
-    monkeypatch.setattr(projection_worker.reconcile_document_rollback, "apply_async", task)
-    assert await projection_worker._scan_tenant_projection_async(7) == 0
+    monkeypatch.setattr(projection_worker.recover_document_projection_scan_item, "apply_async", task)
+    assert await scanner.scan_tenant(7) == 0
     task.assert_called_once()
-    assert task.call_args.kwargs["kwargs"]["document_id"] == 91
+    assert task.call_args.kwargs["kwargs"]["payload"]["document_id"] == 91
 
 
 async def test_finalizer_rejects_changed_lease_before_permission_delete(async_db_session, monkeypatch):

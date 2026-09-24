@@ -765,16 +765,21 @@ class KnowledgeMigrationService:
         if retried is None:
             raise KnowledgeMigrationStateConflictError()
         await self.repository.commit()
+        is_preflight = retried.status == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
         try:
-            task_id = self.dispatcher.dispatch_execution(
-                int(retried.id),
-                retried.round_no,
+            task_id = (
+                self.dispatcher.dispatch_preflight(int(retried.id))
+                if is_preflight
+                else self.dispatcher.dispatch_execution(int(retried.id), retried.round_no)
             )
             if task_id:
-                retried.execution_task_id = task_id
+                if is_preflight:
+                    retried.preflight_task_id = task_id
+                else:
+                    retried.execution_task_id = task_id
                 await self.repository.commit()
         except Exception as exc:
-            retried.last_error_code = "execution_dispatch_failed"
+            retried.last_error_code = "preflight_dispatch_failed" if is_preflight else "execution_dispatch_failed"
             retried.last_error_summary = sanitize_error_summary(str(exc))
             await self.repository.commit()
         return self._batch_response(retried)

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
+from loguru import logger
+
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationAttemptResult,
     KnowledgeMigrationBatchStatus,
@@ -34,6 +36,7 @@ from bisheng.knowledge.domain.services.knowledge_migration_service import (
 
 DEFAULT_LEASE_TTL_SECONDS = 300
 DEFAULT_RECONCILE_STALE_SECONDS = 1800
+DEFAULT_RECONCILE_MAX_RECOVERIES = 4
 
 
 class BatchMigrationOperations(MigrationOperations, Protocol):
@@ -483,54 +486,67 @@ class KnowledgeMigrationReconcileService:
         lock_repository: KnowledgeMigrationLockRepository,
         dispatcher: KnowledgeMigrationTaskDispatcher,
         stale_seconds: int = DEFAULT_RECONCILE_STALE_SECONDS,
+        max_recoveries: int = DEFAULT_RECONCILE_MAX_RECOVERIES,
     ):
         self.repository_factory = repository_factory
         self.lock_repository = lock_repository
         self.dispatcher = dispatcher
         self.stale_seconds = stale_seconds
+        self.max_recoveries = max(1, int(max_recoveries))
 
     async def reconcile(self, *, limit: int = 100) -> int:
-        older_than = datetime.now() - timedelta(seconds=self.stale_seconds)
-        has_active_lease = await self.lock_repository.is_locked()
+        now = datetime.now()
+        older_than = now - timedelta(seconds=self.stale_seconds)
+        statuses = {"preflight_queued", "preflighting", "queued", "running"}
+        if await self.lock_repository.is_locked():
+            # 正式迁移占用执行器时只扫描预检, 避免排队批次挤占扫描额度。
+            statuses -= {"queued", "running"}
         async with self.repository_factory() as repository:
             batches = await repository.list_reconcile_candidates(
-                {
-                    KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value,
-                    KnowledgeMigrationBatchStatus.PREFLIGHTING.value,
-                    KnowledgeMigrationBatchStatus.QUEUED.value,
-                    KnowledgeMigrationBatchStatus.RUNNING.value,
-                },
+                statuses,
                 older_than=older_than,
-                limit=limit,
+                now=now,
+                limit=max(1, min(int(limit), 100)),
             )
-            recovered: list[tuple[str, int, int]] = []
-            for batch in batches:
-                status = batch.status
-                if status == KnowledgeMigrationBatchStatus.PREFLIGHTING.value:
-                    if not await repository.recover_stale_preflight_batch(
-                        int(batch.id)
-                    ):
-                        continue
-                    status = (
-                        KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
-                    )
-                elif status == KnowledgeMigrationBatchStatus.RUNNING.value:
-                    if has_active_lease:
-                        continue
-                    if not await repository.recover_stale_running_batch(
-                        int(batch.id),
-                        queued_at=datetime.now(),
-                    ):
-                        continue
-                    status = KnowledgeMigrationBatchStatus.QUEUED.value
-                recovered.append(
-                    (status, int(batch.id), int(batch.round_no))
-                )
-            await repository.commit()
+            candidates = [(int(batch.id), batch.status, int(batch.round_no)) for batch in batches]
 
-        for status, batch_id, round_no in recovered:
-            if status == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value:
-                self.dispatcher.dispatch_preflight(batch_id)
-            elif status == KnowledgeMigrationBatchStatus.QUEUED.value:
-                self.dispatcher.dispatch_execution(batch_id, round_no)
-        return len(recovered)
+        dispatched = 0
+        for batch_id, status, round_no in candidates:
+            token = None
+            try:
+                if status in {"queued", "running"}:
+                    # 与执行 worker 竞争同一租约, 避免先查无锁后接管的竞态。
+                    token = uuid4().hex
+                    if not await self.lock_repository.acquire(token, ttl_seconds=DEFAULT_LEASE_TTL_SECONDS):
+                        token = None
+                        continue
+                async with self.repository_factory() as repository:
+                    recovered = await repository.claim_reconcile_batch(
+                        batch_id,
+                        expected_status=status,
+                        expected_round_no=round_no,
+                        older_than=older_than,
+                        now=now,
+                        max_recoveries=self.max_recoveries,
+                    )
+                    delivery = (recovered.status, int(recovered.round_no)) if recovered else None
+                    await repository.commit()
+            except Exception:
+                logger.exception("迁移恢复领取失败 batch_id={}", batch_id)
+                continue
+            finally:
+                if token is not None:
+                    await self.lock_repository.release(token)
+
+            if delivery is None:
+                continue
+            try:
+                if delivery[0] == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value:
+                    self.dispatcher.dispatch_preflight(batch_id)
+                else:
+                    self.dispatcher.dispatch_execution(batch_id, delivery[1])
+                dispatched += 1
+            except Exception:
+                # 保留已提交的预算和退避, 单条发布失败不阻塞后续批次。
+                logger.exception("迁移恢复投递失败 batch_id={}", batch_id)
+        return dispatched
