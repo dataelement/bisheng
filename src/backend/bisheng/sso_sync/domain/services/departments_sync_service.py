@@ -13,6 +13,8 @@ querying ``org_sync_log``.
 
 from __future__ import annotations
 
+from collections import deque
+
 from loguru import logger
 
 from bisheng.core.context.tenant import (
@@ -50,6 +52,48 @@ from bisheng.tenant.domain.services.department_deletion_handler import (
 class DepartmentsSyncService:
     SOURCE = DEFAULT_SSO_SYNC_SOURCE
 
+    @staticmethod
+    def _parent_first_upserts(
+        items: list[DepartmentUpsertItem],
+    ) -> list[DepartmentUpsertItem]:
+        """Return the batch in parent-before-child order where possible.
+
+        Gateway normally emits a depth-first tree, but a flat source may put a
+        child before its parent.  Applying that input verbatim makes the child
+        fail with ``SsoDeptParentMissingError`` even though its parent is in
+        the same request.  Stable passes keep unrelated items in their input
+        order and leave cycles/missing parents to the existing per-item error
+        handling.
+        """
+        external_ids = {item.external_id for item in items}
+        children: dict[str, list[int]] = {}
+        unresolved: set[int] = set()
+        ready: deque[int] = deque()
+        for index, item in enumerate(items):
+            parent_id = item.parent_external_id
+            if parent_id and parent_id in external_ids:
+                unresolved.add(index)
+                children.setdefault(parent_id, []).append(index)
+            else:
+                ready.append(index)
+
+        ordered: list[DepartmentUpsertItem] = []
+        while ready:
+            index = ready.popleft()
+            item = items[index]
+            ordered.append(item)
+            for child_index in children.get(item.external_id, []):
+                if child_index in unresolved:
+                    unresolved.remove(child_index)
+                    ready.append(child_index)
+
+        if unresolved:
+            # Preserve the current behavior for malformed cycles: each item
+            # is attempted and recorded by _apply_upsert.
+            ordered.extend(items[index] for index in sorted(unresolved))
+
+        return ordered
+
     @classmethod
     async def execute(
         cls,
@@ -85,7 +129,7 @@ class DepartmentsSyncService:
                 fga_ops: list = []
 
                 # --- upsert round ---
-                for item in payload.upsert:
+                for item in cls._parent_first_upserts(payload.upsert):
                     await cls._apply_upsert(
                         item,
                         payload.source_ts,
