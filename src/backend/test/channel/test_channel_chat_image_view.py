@@ -6,7 +6,6 @@ Covers AC: AC-02, AC-03, AC-12, AC-14
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -51,18 +50,13 @@ def test_apply_image_anchors_noop_without_markdown_image():
 
 
 @pytest.mark.asyncio
-async def test_resolve_workbench_visual_reads_wsmodel(monkeypatch):
-    monkeypatch.setattr(
-        "bisheng.channel.domain.services.channel_chat_service.LLMService.get_workbench_llm",
-        AsyncMock(
-            return_value=SimpleNamespace(
-                models=[SimpleNamespace(id="11", visual=True), SimpleNamespace(id="12", visual=False)]
-            )
-        ),
-    )
-    assert await ChannelChatService._resolve_workbench_visual(11) is True
+async def test_resolve_workbench_visual_follows_image_view_tool(monkeypatch):
+    configured = AsyncMock(return_value=True)
+    monkeypatch.setattr("bisheng.common.image_view.loop.image_view_configured", configured)
+    assert await ChannelChatService._resolve_workbench_visual(11, tenant_id=3) is True
+    configured.assert_awaited_with(tenant_id=3)
+    configured.return_value = False
     assert await ChannelChatService._resolve_workbench_visual(12) is False
-    assert await ChannelChatService._resolve_workbench_visual(99) is False
 
 
 @pytest.mark.asyncio
@@ -70,7 +64,7 @@ async def test_stream_uses_vision_loop_when_visual_and_images(monkeypatch):
     llm = object()
     loop_calls: list[tuple] = []
 
-    async def fake_loop(model, messages, registry, *, visual):
+    async def fake_loop(model, messages, registry, *, visual, **kwargs):
         loop_calls.append((visual, len(registry), "".join(str(m.content) for m in messages)))
         yield AIMessage(content="answer with ![chart](https://intel.example/chart.png)")
 
@@ -106,7 +100,7 @@ async def test_stream_uses_vision_loop_when_visual_and_images(monkeypatch):
 async def test_stream_does_not_annotate_when_visual_false(monkeypatch):
     loop_calls: list[tuple] = []
 
-    async def fake_loop(model, messages, registry, *, visual):
+    async def fake_loop(model, messages, registry, *, visual, **kwargs):
         loop_calls.append((visual, len(registry), "".join(str(m.content) for m in messages)))
         yield AIMessage(content="ok")
 
@@ -138,7 +132,7 @@ async def test_stream_does_not_annotate_when_visual_false(monkeypatch):
 async def test_stream_does_not_annotate_without_markdown_image(monkeypatch):
     loop_calls: list[tuple] = []
 
-    async def fake_loop(model, messages, registry, *, visual):
+    async def fake_loop(model, messages, registry, *, visual, **kwargs):
         loop_calls.append((visual, len(registry), "".join(str(m.content) for m in messages)))
         yield AIMessage(content="ok")
 
@@ -186,24 +180,26 @@ class _FakeLLM:
 @pytest.mark.asyncio
 async def test_stream_does_not_yield_first_round_tool_tokens(monkeypatch):
     fetch = AsyncMock(
-        return_value=type("R", (), {"ok": True, "data_uri": "data:image/png;base64,aaa", "error": None})()
+        return_value=type(
+            "R", (), {"ok": True, "data_uri": "data:image/png;base64,aaa", "error": None, "reason": None}
+        )()
     )
-    monkeypatch.setattr("bisheng.common.image_view.tool.fetch_and_encode", fetch)
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.fetch_and_encode", fetch)
     monkeypatch.setattr(ChannelChatService, "_resolve_workbench_visual", AsyncMock(return_value=True))
 
+    class _Vision:
+        async def astream(self, messages, **kwargs):
+            yield AIMessage(content="final from pixels")
+
+    async def _resolve(*args, **kwargs):
+        del args, kwargs
+        return _Vision()
+
+    monkeypatch.setattr("bisheng.common.image_view.react_loop.resolve_image_view_llm", _resolve)
+
     llm = _FakeLLM(
-        first=AIMessage(
-            content="calling tool",
-            tool_calls=[
-                {
-                    "name": "view_image",
-                    "args": {"image_ids": ["img#1"], "quality": "standard"},
-                    "id": "call_1",
-                    "type": "tool_call",
-                }
-            ],
-        ),
-        second=AIMessage(content="final from pixels"),
+        first=AIMessage(content="calling tool"),
+        second=AIMessage(content="unused"),
     )
 
     texts = [

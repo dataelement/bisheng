@@ -6,9 +6,18 @@ Covers AC: AC-04, AC-08
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from bisheng.common.image_view.loop import IMAGE_VIEW_PROMPT_RULES, prepare_vision_messages, suggest_image_ids
+from bisheng.common.image_view.loop import (
+    IMAGE_VIEW_PROMPT_RULES,
+    image_view_configured,
+    prepare_vision_messages,
+    resolve_image_view_llm,
+    suggest_image_ids,
+)
 from bisheng.common.image_view.relocate import relocate_images_to_human
 
 _DATA_URI = "data:image/png;base64,aaa"
@@ -210,3 +219,38 @@ def test_suggest_skips_already_failed_too_small_ids():
     assert "img#5" not in suggested
     assert any(image_id in suggested for image_id in ("img#8",))
     assert "img#32" not in suggested
+
+
+async def test_image_view_configured_requires_visual_model(monkeypatch):
+    tool = SimpleNamespace(type=17)
+    tool_type = SimpleNamespace(extra='{"model_id": "6"}')
+    monkeypatch.setattr(
+        "bisheng.tool.domain.models.gpts_tools.GptsToolsDao.aget_tool_by_tool_key",
+        AsyncMock(return_value=tool),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.models.gpts_tools.GptsToolsDao.aget_one_tool_type",
+        AsyncMock(return_value=tool_type),
+    )
+    workbench = SimpleNamespace(models=[SimpleNamespace(id="6", visual=True), SimpleNamespace(id="2", visual=False)])
+    monkeypatch.setattr(
+        "bisheng.llm.domain.services.llm.LLMService.get_workbench_llm",
+        AsyncMock(return_value=workbench),
+    )
+    llm_factory = AsyncMock(return_value="vision-llm")
+    monkeypatch.setattr(
+        "bisheng.llm.domain.services.llm.LLMService.get_bisheng_llm",
+        llm_factory,
+    )
+    assert await image_view_configured() is True
+    assert await resolve_image_view_llm(user_id=1) == "vision-llm"
+    kwargs = llm_factory.await_args.kwargs
+    assert kwargs["model_id"] == 6
+    assert kwargs["user_id"] == 1
+    assert kwargs["app_id"]
+    assert kwargs["app_name"]
+    assert kwargs["app_type"] is not None
+
+    workbench.models[0].visual = False
+    assert await image_view_configured() is False
+    assert await resolve_image_view_llm() is None

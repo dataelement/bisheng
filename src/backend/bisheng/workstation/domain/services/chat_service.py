@@ -56,7 +56,6 @@ from bisheng.common.image_view import (
     ImageRegistry,
     VisionToolBindWrapper,
     annotate,
-    build_view_image_tool,
     missing_viewed_markdown,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import (
@@ -1567,7 +1566,19 @@ async def _agent_stream_chat_completion(
         error_msg = ""
         citation_collector = CitationRegistryCollector()
         image_registry = ImageRegistry()
-        visual_enabled = bool(getattr(model_info, "visual", False))
+        from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+        from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
+
+        visual_enabled = await image_view_configured(tenant_id)
+        vision_llm = None
+        if visual_enabled:
+            vision_llm = await resolve_image_view_llm(
+                tenant_id=tenant_id,
+                user_id=login_user.user_id,
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+            )
+            if vision_llm is None:
+                visual_enabled = False
 
         def close_thinking() -> int | None:
             """Finalise the open thinking event (if any). Returns its duration
@@ -1922,8 +1933,6 @@ async def _agent_stream_chat_completion(
                 # error never aborts the whole agent stream
                 # (see _handle_agent_tool_error).
                 agent_tools = list(langchain_tools)
-                if visual_enabled:
-                    agent_tools.append(build_view_image_tool(image_registry))
                 tool_node = ToolNode(
                     agent_tools,
                     handle_tool_errors=_handle_agent_tool_error,
@@ -1937,6 +1946,7 @@ async def _agent_stream_chat_completion(
                         retrieve_tool_name="search_knowledge_bases"
                         if visual_enabled and knowledge_bases_info
                         else None,
+                        vision_llm=vision_llm,
                     ),
                     tool_node,
                     prompt=sys_prompt,  # may be None

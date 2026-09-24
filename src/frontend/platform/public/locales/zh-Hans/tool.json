@@ -16,6 +16,10 @@
       "name": "联网搜索",
       "desc": "搜索互联网信息，可配置使用不同的搜索引擎，目前支持 Bing、博查、Jina 深度搜索、SerpApi、Tavily。"
     },
+    "Image View": {
+      "name": "图片查看",
+      "desc": "使用模型管理中的视觉模型查看文档图片"
+    },
     "Dalle3绘画": {
       "name": "Dalle3绘画",
       "desc": "OpenAI 文生图模型"
@@ -157,6 +161,10 @@
       "params": {
         "query": "query to look up in Bing search"
       }
+    },
+    "image_view": {
+      "name": "图片查看",
+      "desc": "查看文档中的图片，并判断哪些图片符合问题"
     },
     "dalle_image_generator": {
       "name": "Dalle3绘画",
@@ -387,6 +395,8 @@
   "fieldCannotBeEmpty": "{{label}} 不能为空",
   "jinaApiKeyLabel": "Jina API 密钥",
   "siliconflowApiKeyLabel": "SiliconFlow API 密钥",
+  "imageViewModelLabel": "视觉模型",
+  "imageViewNoVisualModel": "模型管理里还没有标为视觉模型的条目。请先在工作台模型中打开视觉开关。",
   "uploadFile": "上传文件",
   "个人知识库": "个人知识库"
 }

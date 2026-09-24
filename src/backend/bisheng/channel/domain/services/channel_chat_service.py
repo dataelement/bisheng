@@ -127,12 +127,11 @@ class ChannelChatService:
 
     @classmethod
     async def _resolve_workbench_visual(cls, model_id: int, tenant_id: int | None = None) -> bool:
-        """Same WSModel.visual lookup as Linsight ``_resolve_model``."""
-        workbench = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-        return any(
-            str(entry.id) == str(model_id) and bool(getattr(entry, "visual", False))
-            for entry in (workbench.models or [])
-        )
+        """Image viewing follows the Image View builtin tool, not the chat model."""
+        del model_id
+        from bisheng.common.image_view.loop import image_view_configured
+
+        return await image_view_configured(tenant_id=tenant_id)
 
     @staticmethod
     def _apply_image_anchors(article_content: str, visual: bool) -> tuple[str, ImageRegistry]:
@@ -154,6 +153,7 @@ class ChannelChatService:
         model_id: int,
         max_chunk_size: int,
         tenant_id: int | None = None,
+        user_id: int | None = None,
     ) -> AsyncIterator[Any]:
         """Truncate, annotate markdown images, then stream via the vision tool loop."""
         article_content = cls._truncate_article_content(article_content, max_chunk_size)
@@ -161,7 +161,7 @@ class ChannelChatService:
         article_content, registry = cls._apply_image_anchors(article_content, visual)
         user_prompt = user_prompt_template.format(article_content=article_content, question=question)
         inputs = [SystemMessage(content=system_prompt), *history_messages, HumanMessage(content=user_prompt)]
-        async for chunk in run_react_vision_stream(llm, inputs, registry, visual=visual):
+        async for chunk in run_react_vision_stream(llm, inputs, registry, visual=visual, user_id=user_id):
             yield chunk
 
     @classmethod

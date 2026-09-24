@@ -16,6 +16,10 @@
       "name": "Web Search",
       "desc": "Search the internet with configurable engines such as Bing, Bochacha, Jina Deep Search, SerpApi, and Tavily"
     },
+    "Image View": {
+      "name": "Image View",
+      "desc": "View document images with a vision model from model management"
+    },
     "Dalle3绘画": {
       "name": "Dall-E 3 Image Generation",
       "desc": "OpenAI text-to-image model"
@@ -150,6 +154,10 @@
       "params": {
         "target_url": "URL to fetch"
       }
+    },
+    "image_view": {
+      "name": "Image View",
+      "desc": "View images in a document and decide which ones answer the question"
     },
     "web_search": {
       "name": "Web Search",
@@ -387,6 +395,8 @@
   "fieldCannotBeEmpty": "{{label}} cannot be empty",
   "jinaApiKeyLabel": "Jina API Key",
   "siliconflowApiKeyLabel": "SiliconFlow API Key",
+  "imageViewModelLabel": "Vision model",
+  "imageViewNoVisualModel": "No model is marked as a vision model yet. Turn on the vision switch for a workbench model first.",
   "uploadFile": "Upload File",
   "个人知识库": "Personal Knowledge Base"
 }
