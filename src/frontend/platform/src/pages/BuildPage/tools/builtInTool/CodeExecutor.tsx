@@ -108,7 +108,9 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                     },
                     official: {
                         api_key: localFormData.officialApiKey
-                    }
+                    },
+                    // Pool URL / token stay in system config, never extra.
+                    container: {}
                 }
             };
 
@@ -124,13 +126,20 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                 </Label>
                 <RadioGroup
                     value={localFormData.executionMode}
-                    className="flex gap-6"
+                    className="flex flex-wrap gap-6"
                     onValueChange={handleExecutionModeChange}
                 >
                     <div className="flex items-center space-x-2">
                         <RadioGroupItem value="local" id="execution-local" />
                         <Label htmlFor="execution-local">
                             {t('executionLocalLabel')}
+                        </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="container" id="execution-container" />
+                        <Label htmlFor="execution-container">
+                            {t('executionContainerLabel')}{' '}
+                            <QuestionTooltip content={t('executionContainerHint')} />
                         </Label>
                     </div>
                     <div className="flex items-center space-x-2">

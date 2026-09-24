@@ -36,6 +36,7 @@ import os
 import re
 import shutil
 import zipfile
+import zlib
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 from uuid import uuid4
@@ -54,14 +55,37 @@ SKILL_OBJECT_PREFIX = "linsight/skills"
 # find bundles a pre-object-storage release left on a node's local disk.
 LEGACY_TENANT_SKILLS_DIR = "data/skills"
 
-# Upload payload limit: the .md / .zip / .skill bytes that arrive over HTTP.
-MAX_BUNDLE_SIZE = 10 * 1024 * 1024
-# Unpacked limit: sum of every extracted file's contents (also the GitHub import's
-# total download size). Deliberately larger than the upload limit — an archive of
-# pptx templates/fonts/images compresses well and expands past 10MB while the .zip
-# itself is far below it. This line is the zip-bomb guard, not a second copy of the
-# upload limit. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md cap, unrelated.)
-MAX_UNPACKED_SIZE = 100 * 1024 * 1024
+_MB = 1024 * 1024
+# Upload payload limit (default): the .md / .zip / .skill bytes that arrive over HTTP.
+MAX_BUNDLE_SIZE = 200 * _MB
+# Unpacked limit (default): sum of every extracted file's size (also the GitHub
+# import's total download size). Deliberately larger than the upload limit — an
+# archive of pptx templates/fonts/images compresses well and can expand past the
+# upload cap while the .zip itself stays under it. (deepagents' MAX_SKILL_FILE_SIZE is a per-SKILL.md
+# cap, unrelated.)
+MAX_UNPACKED_SIZE = 500 * _MB
+# Hard ceiling no configuration can lift. A bundle is held in memory whole — at upload
+# (the unpacked mapping plus its repacked archive) and at every task start that selects
+# it (skill_provisioning copies it into the session workspace) — so a runaway setting
+# must not be able to OOM the API process or a worker. The store's own write and
+# materialize guards check this ceiling, not the live setting: a bundle accepted under
+# a larger setting has to stay readable after an admin lowers it.
+MAX_UNPACKED_CEILING = 1024 * _MB
+
+
+class BundleTooLargeError(ValueError):
+    """Unpacked contents exceed the cap — distinct from a malformed-archive ValueError."""
+
+
+async def _configured_bytes(field: str, fallback: int) -> int:
+    """A ``linsight.<field>`` MB setting from 系统配置, in bytes; ``fallback`` when unreadable or < 1."""
+    try:
+        megabytes = int(getattr(await bisheng_settings.aget_linsight_conf(), field))
+    except Exception:
+        return fallback
+    if megabytes < 1:
+        return fallback
+    return megabytes * _MB
 
 
 async def resolve_skill_upload_limit() -> int:
@@ -69,15 +93,21 @@ async def resolve_skill_upload_limit() -> int:
 
     Read from 系统配置 (``linsight.skill_upload_max_size_mb``) so a deployment can raise it
     without a release; MAX_BUNDLE_SIZE is only the fallback when the config is unreadable.
-    The unpacked cap stays fixed — it guards against zip bombs, not disk budget.
     """
-    try:
-        megabytes = int((await bisheng_settings.aget_linsight_conf()).skill_upload_max_size_mb)
-    except Exception:
-        return MAX_BUNDLE_SIZE
-    if megabytes < 1:
-        return MAX_BUNDLE_SIZE
-    return megabytes * 1024 * 1024
+    return await _configured_bytes("skill_upload_max_size_mb", MAX_BUNDLE_SIZE)
+
+
+async def resolve_skill_unpacked_limit() -> int:
+    """The effective unpacked cap in bytes (系统配置 ``linsight.skill_unpacked_max_size_mb``).
+
+    Never below the upload cap: a stored (uncompressed) archive unpacks to about its own
+    size, so raising only the upload cap must not leave files that pass it bouncing off
+    this one. Never above MAX_UNPACKED_CEILING.
+    """
+    configured = await _configured_bytes("skill_unpacked_max_size_mb", MAX_UNPACKED_SIZE)
+    return min(max(configured, await resolve_skill_upload_limit()), MAX_UNPACKED_CEILING)
+
+
 MAX_NAME_LEN = 64
 MAX_DESCRIPTION_LEN = 1024
 MAX_DISPLAY_NAME_LEN = 255
@@ -211,26 +241,43 @@ def _decode_zip_name(info: zipfile.ZipInfo) -> str:
     return info.orig_filename
 
 
-def unpack_zip_bytes(data: bytes) -> dict[str, bytes]:
+def unpack_zip_bytes(data: bytes, max_unpacked: int | None = None) -> dict[str, bytes]:
     """Extract a .zip/.skill archive into {relative_posix_path: bytes}.
 
     A single top-level wrapper directory (the common "zip a folder" shape) is
     stripped so SKILL.md lands at the bundle root. Raises ValueError when the
-    archive is unreadable or contains no SKILL.md.
+    archive is unreadable or contains no SKILL.md, and BundleTooLargeError when
+    the entries' total size exceeds ``max_unpacked`` (default MAX_UNPACKED_CEILING).
+
+    The size cap is enforced *before* anything is decompressed, from the sizes the
+    central directory declares. Summing the extracted bytes afterwards let a small
+    zip bomb inflate fully in memory before it was refused. The declared size is
+    binding: ``zipfile`` never returns more than ``file_size`` bytes for an entry,
+    and an entry that understates it fails its CRC check (an invalid archive here).
     """
+    if max_unpacked is None:
+        max_unpacked = MAX_UNPACKED_CEILING
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
         raise ValueError("invalid zip archive") from exc
     files: dict[str, bytes] = {}
     with zf:
+        entries: list[tuple[str, zipfile.ZipInfo]] = []
         for info in zf.infolist():
             if info.is_dir():
                 continue
             path = _decode_zip_name(info).replace("\\", "/").lstrip("/")
             if not path or path.startswith("__MACOSX/") or PurePosixPath(path).name == ".DS_Store":
                 continue
-            files[path] = zf.read(info)
+            entries.append((path, info))
+        if sum(info.file_size for _, info in entries) > max_unpacked:
+            raise BundleTooLargeError(f"bundle exceeds {max_unpacked} bytes when unpacked")
+        try:
+            for path, info in entries:
+                files[path] = zf.read(info)
+        except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
+            raise ValueError(f"corrupted zip archive: {exc}") from exc
     if not files:
         raise ValueError("empty archive")
     if SKILL_MD not in files:
@@ -366,8 +413,11 @@ class SkillStore:
         for rel, content in files.items():
             _safe_rel_path(rel)
             total += len(content)
-        if total > MAX_UNPACKED_SIZE:
-            raise ValueError(f"bundle exceeds {MAX_UNPACKED_SIZE} bytes when unpacked")
+        # The ceiling, not the configured cap: ingress (upload / GitHub import) already
+        # applied the latter, and an edit that re-publishes an existing bundle must not
+        # fail just because an admin has since lowered the setting.
+        if total > MAX_UNPACKED_CEILING:
+            raise BundleTooLargeError(f"bundle exceeds {MAX_UNPACKED_CEILING} bytes when unpacked")
 
         content_hash = bundle_content_hash(files)
         key = self.object_key(tenant_id, name, content_hash)
@@ -445,24 +495,21 @@ class SkillStore:
         data = self.minio.get_object_sync(bucket_name=self._bucket(), object_name=key)
         if data is None:
             raise FileNotFoundError(f"skill bundle object not found: {key}")
-        self._install_cache(dst, self._unpack_for_cache(unpack_zip_bytes(data), key))
+        self._install_cache(dst, self._unpack_for_cache(unpack_zip_bytes(data)))
         return dst
 
     @staticmethod
-    def _unpack_for_cache(files: dict[str, bytes], key: str) -> dict[str, bytes]:
-        """Re-apply the upload path's guards to bytes coming back from storage.
+    def _unpack_for_cache(files: dict[str, bytes]) -> dict[str, bytes]:
+        """Re-apply the upload path's traversal guard to bytes coming back from storage.
 
-        Materialization is a *second* write-to-disk path: the size cap lives in
-        ``skill_service._parse_upload`` and the traversal check in the old
-        ``write_bundle``, so neither protects this one. A corrupted or tampered
-        object must not be able to fill the disk or escape the cache directory.
+        Materialization is a *second* write-to-disk path: the traversal check lives in
+        ``write_bundle``, which never runs here. A corrupted or tampered object must
+        not be able to escape the cache directory. (Filling the disk is already ruled
+        out by ``unpack_zip_bytes``, which refuses past MAX_UNPACKED_CEILING before
+        decompressing anything.)
         """
-        total = 0
-        for rel, content in files.items():
+        for rel in files:
             _safe_rel_path(rel)
-            total += len(content)
-            if total > MAX_UNPACKED_SIZE:
-                raise ValueError(f"skill bundle {key} exceeds {MAX_UNPACKED_SIZE} bytes when unpacked")
         return files
 
     def _install_cache(self, dst: Path, files: dict[str, bytes]) -> None:

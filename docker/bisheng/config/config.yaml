@@ -170,6 +170,18 @@ logger_conf:
 #   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
 #   public_base_url: https://kb.example.com
 
+# Isolation-environment (sandbox) access. Keep this whole block commented in the
+# shipped file: older images refuse unknown top-level keys at boot.
+# Override any field with BS_SANDBOX_CONF__<FIELD>, e.g. BS_SANDBOX_CONF__TOKEN.
+# Do not add deploy_mode / orchestrator — discovery is the hostname pattern only.
+# sandbox_conf:
+#   discover_host_pattern: "code-runner-{n}"          # K8s: "code-runner-{n}.code-runner"
+#   discover_index_start: 1                           # K8s: 0
+#   discover_ttl_s: 60                            # background refresh interval, not list expiry
+#   token: "..."
+#   code_node_enabled: false                      # workflow code node → sandbox
+#   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery
+
 # Linsight (task mode) runtime knobs. Commented out on purpose: an older image
 # rejects unknown top-level keys, so enable per deployment or via 系统配置.
 # linsight:

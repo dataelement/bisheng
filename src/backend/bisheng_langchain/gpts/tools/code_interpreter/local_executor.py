@@ -1,14 +1,11 @@
 import glob
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
 import tempfile
-import uuid
 from hashlib import md5
-from os import DirEntry
 from pathlib import Path
 from typing import Any
 
@@ -206,6 +203,8 @@ class LocalExecutor(BaseExecutor):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             start_new_session=not WIN32,
         )
         try:
@@ -271,7 +270,6 @@ class LocalExecutor(BaseExecutor):
             raise AssertionError(error_msg)
 
         timeout = timeout or DEFAULT_TIMEOUT
-        original_filename = filename
 
         if filename is None:
             code_hash = md5(code.encode()).hexdigest()
@@ -293,109 +291,6 @@ class LocalExecutor(BaseExecutor):
         finally:
             if filepath is not None:
                 os.remove(filepath)
-
-    @staticmethod
-    def _snapshot_files(dir_path: str) -> dict[str, tuple[float, int]]:
-        """Map every non-hidden file under ``dir_path`` to ``(mtime, size)``.
-
-        Taken before and after a run so the executor can tell what THIS run
-        produced. Without the diff the working dir is indistinguishable from its
-        contents: it also holds the prefetched uploaded sources and every earlier
-        step's files, so "what did this code write" is otherwise unanswerable.
-        """
-        snapshot: dict[str, tuple[float, int]] = {}
-        for root, dirs, files in os.walk(dir_path):
-            # hidden dirs and __pycache__ are never deliverables or inputs
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-            for name in files:
-                if name.startswith("."):
-                    continue
-                abs_path = os.path.join(root, name)
-                try:
-                    stat = os.stat(abs_path)
-                except OSError:
-                    # raced away between walk and stat — treat as absent
-                    continue
-                snapshot[os.path.relpath(abs_path, dir_path)] = (stat.st_mtime, stat.st_size)
-        return snapshot
-
-    def _relocate_root_files(self, dir_path: str, created: list[str]) -> list[tuple[str, str]]:
-        """Move run-created ROOT-level files into ``output/``; return the moves.
-
-        The working-dir root is not a delivery zone — only ``output/`` is harvested
-        into the result panel — so a model that writes ``report.xlsx`` instead of
-        ``output/report.xlsx`` loses its deliverable silently. Relocating is safe
-        because only files *this run created* are eligible: prefetched upload
-        sources and prior-step files sit in the pre-run snapshot and stay put.
-
-        An existing ``output/<name>`` is overwritten on purpose: re-running the same
-        script must refresh its deliverable, not accumulate ``report (1).xlsx``.
-        """
-        moved: list[tuple[str, str]] = []
-        for rel in created:
-            # anything with a path separator already lives in a zone (output/,
-            # scratch/, or a model-made subdir) — leave it alone
-            if os.sep in rel or "/" in rel:
-                continue
-            src = os.path.join(dir_path, rel)
-            if not os.path.isfile(src):
-                continue
-            target_dir = os.path.join(dir_path, OUTPUT_DIR_NAME)
-            dst = os.path.join(target_dir, rel)
-            try:
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.move(src, dst)
-            except OSError:
-                # best-effort: a file we cannot relocate stays where it is (it just
-                # will not be delivered) — never fail the user's code run over this
-                logger.exception("relocate root deliverable failed: {}", src)
-                continue
-            moved.append((rel, os.path.relpath(dst, dir_path)))
-        return moved
-
-    def run_with_dir(self, code: str, dir_path: str, lang: str) -> (int, str, list):
-        """在指定目录下运行代码，并返回日志和生成的文件列表"""
-        pre_snapshot = self._snapshot_files(dir_path)
-        exitcode, logs, _ = self.execute_code(
-            code,
-            work_dir=dir_path,
-            lang=lang,
-        )
-        file_list = []
-        if exitcode != 0:
-            return exitcode, logs, file_list
-
-        post_snapshot = self._snapshot_files(dir_path)
-        created = [rel for rel in post_snapshot if rel not in pre_snapshot]
-        modified = [rel for rel, meta in post_snapshot.items() if rel in pre_snapshot and pre_snapshot[rel] != meta]
-
-        # Root-level new files are in no delivery zone; normalise them into output/
-        # and tell the model where they went (the old path stops resolving).
-        moved = self._relocate_root_files(dir_path, created)
-        relocated_from = {old for old, _ in moved}
-        touched = [rel for rel in created if rel not in relocated_from]
-        touched.extend(new for _, new in moved)
-        touched.extend(modified)
-        logs += self.relocation_advisory(moved)
-
-        # 获取文件: only what this run actually produced. Uploading the whole
-        # working dir every run (the previous behaviour) re-uploaded the prefetched
-        # upload sources and every earlier step's output on each call, so the tool
-        # result grew with the task and told the model nothing about its own write.
-        for rel in touched:
-            file_name = os.path.join(dir_path, rel)
-            if not os.path.isfile(file_name):
-                continue
-            file_ext = os.path.splitext(rel)[-1]
-            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
-        # Mirror the same set into the session workspace so the file tools and the
-        # next turn can see what this run produced (see sync_to_workspace).
-        self.sync_to_workspace(dir_path, touched)
-        # 同步执行结果文件到本地同步目录
-        if self.local_sync_path and os.path.exists(self.local_sync_path):
-            files_info = list(os.scandir(dir_path))
-            self.sync_files_to_local(files_info, dir_path)
-        return exitcode, logs, file_list
 
     @staticmethod
     def _tail(logs: str, limit: int = MAX_FAILURE_LOG_CHARS) -> str:
@@ -454,26 +349,6 @@ class LocalExecutor(BaseExecutor):
         if advisory:
             logs_all += advisory
         return {"exitcode": 0, "log": logs_all, "file_list": all_file_list}
-
-    def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
-        if not files_info:
-            return
-        for file in files_info:
-            # ignore hidden files
-            if file.name.startswith("."):
-                continue
-            if file.is_file():
-                self.download_file(file, root_path)
-            else:
-                new_files_info = os.scandir(file.path)
-                self.sync_files_to_local(list(new_files_info), root_path)
-
-    def download_file(self, file_info: DirEntry, root_path: str):
-        relative_path = file_info.path.replace(root_path, "").lstrip(os.sep)
-        local_path = os.path.join(self.local_sync_path, relative_path)
-        local_dir = os.path.dirname(local_path)
-        os.makedirs(local_dir, exist_ok=True)
-        shutil.move(file_info.path, local_path)
 
 
 if __name__ == "__main__":

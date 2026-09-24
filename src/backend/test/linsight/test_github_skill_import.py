@@ -27,7 +27,7 @@ from bisheng.linsight.domain.services.github_skill_fetcher import (
 )
 from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
-from bisheng.linsight.domain.services.skill_store import MAX_UNPACKED_SIZE, SKILL_MD, SkillStore
+from bisheng.linsight.domain.services.skill_store import SKILL_MD, SkillStore
 
 TENANT = 1
 USER = 7
@@ -176,13 +176,16 @@ class TestFetchSkillFiles:
             await fetch_skill_files(GithubTarget("o", "r", "main", "skills/demo"))
 
     async def test_oversize_rejected(self, monkeypatch):
+        # The cumulative download is held to the configured unpacked cap.
+        monkeypatch.setattr(fetcher_module, "resolve_skill_unpacked_limit", AsyncMock(return_value=1024))
+
         def handler(url, params=None):
             return _FakeResponse(
                 json_data=[
                     {
                         "name": "SKILL.md",
                         "type": "file",
-                        "size": MAX_UNPACKED_SIZE + 1,
+                        "size": 1024 + 1,
                         "download_url": f"{RAW}/SKILL.md",
                     },
                 ]

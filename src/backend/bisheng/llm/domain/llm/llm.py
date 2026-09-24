@@ -55,6 +55,38 @@ def _get_user_kwargs(model_config: dict) -> dict:
     return dict(user_kwargs) if user_kwargs else {}
 
 
+def _assert_ascii_http_header_values(params: dict) -> None:
+    """httpx encodes request headers as ASCII. A non-ASCII api_key becomes
+    ``Authorization: Bearer <key>`` and crashes at request time with
+    UnicodeEncodeError at position 7-N (``Bearer `` is 7 characters).
+    Fail at client init so the agent does not surface a raw codec error.
+    """
+    suspects: list[tuple[str, Any]] = [
+        ("api_key", params.get("api_key") or params.get("openai_api_key")),
+        ("organization", params.get("organization") or params.get("openai_organization")),
+    ]
+    for header_key in ("default_headers", "extra_headers"):
+        headers = params.get(header_key)
+        if isinstance(headers, dict):
+            for name, value in headers.items():
+                suspects.append((f"{header_key}.{name}", value))
+
+    for field, value in suspects:
+        if value is None:
+            continue
+        text = value if isinstance(value, str) else str(value)
+        if not text:
+            continue
+        try:
+            text.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"LLM HTTP header field {field} contains non-ASCII characters "
+                "(httpx requires ASCII; Authorization is 'Bearer ' + api_key). "
+                "Fix the model provider API key or default_headers in model management."
+            ) from exc
+
+
 # Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params["base_url"] = server_config.get("base_url", "").rstrip("/")
@@ -295,6 +327,13 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         params_handler = _llm_node_type[server_info.type]["params_handler"]
         params = params_handler(default_params, server_config, model_config)
+        try:
+            _assert_ascii_http_header_values(params)
+        except ValueError as exc:
+            raise ValueError(
+                f"{exc} provider={server_info.name!r} type={server_info.type} "
+                f"model_id={model_info.id} model={model_info.model_name}"
+            ) from exc
         return params
 
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:

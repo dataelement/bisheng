@@ -354,6 +354,8 @@
   "toolFetchFailed": "ツールの取得に失敗しました",
   "executionModeLabel": "コード実行方式",
   "executionLocalLabel": "ローカル実行",
+  "executionContainerLabel": "隔離実行",
+  "executionContainerHint": "接続設定はシステム設定で管理します。ここでは入力しません。",
   "executionE2bLabel": "E2Bサンドボックス実行",
   "serviceProviderLabel": "サービスプロバイダ",
   "providerPrivateLabel": "自己ホスティング",

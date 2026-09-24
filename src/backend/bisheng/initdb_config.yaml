@@ -89,6 +89,18 @@ workflow:
   timeout: 5
   # 首次打开已结束的独立工作流会话时是否自动重新运行（全局开关，默认关闭）
   auto_rerun_on_open: false
+  # 是否允许工作流运行「代码节点」。默认关闭，不配置也视为关闭。
+  #
+  # 代码节点按设计会执行用户填写的 Python 代码。当前版本尚未提供执行沙箱，
+  # 代码以后端进程的权限直接运行，可以读取服务器文件、环境变量（含数据库与
+  # 对象存储凭证）以及访问内网。
+  #
+  # 因此开启后：所有能创建或编辑工作流的用户，都等同于拥有这台服务器的命令
+  # 执行权限。这与他们在毕昇里的角色无关，也与是否部署在内网无关。
+  # 仅在「所有能创建应用的人都可信」的环境下开启。
+  #
+  # 执行沙箱正在开发中，届时本开关将不再是唯一防线。
+  code_node_enabled: false
 
 # 日常聊天（Agent 模式）相关配置
 daily_chat:
@@ -135,9 +147,11 @@ linsight:
   retry_num: 3
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
-  # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它；
-  # 解压后内容仍固定 ≤ 100MB（防 zip 炸弹，与此无关）。
-  skill_upload_max_size_mb: 10
+  # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它。
+  skill_upload_max_size_mb: 200
+  # 技能包解压后全部文件的总大小上限，单位 MB。实际生效值不低于上面的上传上限，
+  # 也不超过 1024（每个选用该技能的任务启动时都会把整包拷进任务工作区，调大会拖慢任务启动）。
+  skill_unpacked_max_size_mb: 500
   # 生成SOP时，prompt里放的用户上传文件信息的数量
   max_file_num: 5
   # 生成SOP时，prompt里放的组织知识库的最大数量
@@ -163,7 +177,7 @@ information_conf:
   information_business_timezone: Asia/Shanghai
 
 mcp:
-  enable_stdio: true
+  enable_stdio: false
 
 knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）

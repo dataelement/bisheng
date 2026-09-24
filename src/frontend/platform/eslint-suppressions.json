@@ -120,11 +120,6 @@
       "count": 5
     }
   },
-  "src/components/bs-comp/apiComponent/ChatLink.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/apiComponent/index.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -183,11 +178,6 @@
   "src/components/bs-comp/chatComponent/CitationReferencesDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    }
-  },
-  "src/components/bs-comp/chatComponent/CitationSourceIcon.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/components/bs-comp/chatComponent/FileBs.tsx": {
@@ -1032,7 +1022,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     }
   },
   "src/controllers/API/approval.ts": {
@@ -1158,9 +1148,6 @@
   "src/controllers/request.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     },
     "no-console": {
       "count": 1
@@ -1768,7 +1755,7 @@
       "count": 4
     },
     "no-restricted-syntax": {
-      "count": 7
+      "count": 5
     },
     "no-useless-escape": {
       "count": 2
@@ -2068,9 +2055,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-console": {
-      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 7

@@ -1,10 +1,18 @@
 // @ts-strict-ignore
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
+import { Button } from '@/components/bs-ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
+import { SearchInput } from '@/components/bs-ui/input';
+import { Label } from '@/components/bs-ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import Skeleton from '@/components/bs-ui/skeleton';
+import { Switch } from '@/components/bs-ui/switch';
+import { toast } from '@/components/bs-ui/toast/use-toast';
+import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
+import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { copyText } from '@/utils';
 import { Check, CircleX, Clipboard, Info } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -59,12 +67,224 @@ const enum API_TYPE {
   FLOW = 'flow'
 }
 
+function guestLinkKind(type: string): GuestLinkKind | null {
+  if (type === API_TYPE.FLOW) return 'workflow'
+  if (type === API_TYPE.ASSISTANT) return 'assistant'
+  return null
+}
+
+interface GuestLinkPanelProps {
+  kind: GuestLinkKind
+  appId: string
+  onAvailabilityChange: (available: boolean) => void
+}
+
+function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelProps) {
+  const { t } = useTranslation()
+  const [settings, setSettings] = useState<GuestLinkSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [operatorQuery, setOperatorQuery] = useState('')
+  const [searchedCandidates, setSearchedCandidates] = useState<GuestLinkSettings['candidates'] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId)).then((data) => {
+      if (!cancelled && data) {
+        setSettings(data)
+        onAvailabilityChange(Boolean(data.system_guest_access && data.enabled))
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [kind, appId, onAvailabilityChange])
+
+  useEffect(() => {
+    const keyword = operatorQuery.trim()
+    if (!keyword) {
+      setSearchedCandidates(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      captureAndAlertRequestErrorHoc(getGuestLinkApi(kind, appId, keyword)).then((data) => {
+        if (!cancelled && data) {
+          setSearchedCandidates(data.candidates || [])
+        }
+      })
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [kind, appId, operatorQuery])
+
+  const persist = async (patch: { enabled?: boolean; user_id?: number | null }, previous: GuestLinkSettings) => {
+    setSaving(true)
+    const result = await captureAndAlertRequestErrorHoc(patchGuestLinkApi(kind, appId, patch))
+    setSaving(false)
+    if (result === false || !result) {
+      setSettings(previous)
+      onAvailabilityChange(Boolean(previous.system_guest_access && previous.enabled))
+      return
+    }
+    setSettings(result)
+    onAvailabilityChange(Boolean(result.system_guest_access && result.enabled))
+    toast({ variant: 'success', description: t('api.guestSaved') })
+  }
+
+  if (!settings) {
+    return <Skeleton className="mb-4 h-24 w-full rounded" />
+  }
+
+  const systemOff = !settings.system_guest_access
+  const readOnly = !settings.can_edit || systemOff || saving
+  const controlsOff = systemOff || !settings.enabled
+  const candidates = (searchedCandidates ?? settings.candidates ?? []).filter((item) => item?.user_id)
+  const selectValue = settings.operator_user_id ? String(settings.operator_user_id) : undefined
+  const keyword = operatorQuery.trim().toLowerCase()
+  const visibleCandidates = keyword
+    ? candidates.filter((item) => {
+        const name = String(item.user_name || '').toLowerCase()
+        return name.includes(keyword) || String(item.user_id) === selectValue
+      })
+    : candidates
+
+  return (
+    <>
+      <Alert className="mb-4">
+        <Info className="h-4 w-4" />
+        <AlertDescription className="mt-0.5">
+          {systemOff ? t('api.guestAccessDisabledSystem') : t('api.noLoginLinkDescription')}
+        </AlertDescription>
+      </Alert>
+
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <Label htmlFor="guest-link-enabled">{t('api.allowGuestAccess')}</Label>
+        <Switch
+          id="guest-link-enabled"
+          checked={settings.enabled}
+          disabled={readOnly}
+          onCheckedChange={(next) => {
+            const previous = settings
+            setSettings({ ...settings, enabled: next })
+            onAvailabilityChange(Boolean(settings.system_guest_access && next))
+            void persist({ enabled: next }, previous)
+          }}
+        />
+      </div>
+
+      {settings.enabled && (
+        <div className={`mb-6 space-y-3 ${systemOff ? 'pointer-events-none opacity-50' : ''}`}>
+          <div className="flex items-center gap-3">
+            <Label className="shrink-0">{t('api.guestOperator')}</Label>
+            <Select
+              value={selectValue}
+              disabled={readOnly}
+              onOpenChange={(open) => {
+                if (!open) setOperatorQuery('')
+              }}
+              onValueChange={(value) => {
+                if (!value) return
+                const previous = settings
+                const userId = Number(value)
+                setSettings({
+                  ...settings,
+                  follow_system_default: false,
+                  user_id: userId,
+                  operator_user_id: userId,
+                })
+                void persist({ user_id: userId }, previous)
+              }}
+            >
+              <SelectTrigger className="max-w-sm">
+                <SelectValue placeholder={t('api.guestSelectOperator')} />
+              </SelectTrigger>
+              <SelectContent
+                headNode={
+                  <div className="shrink-0 bg-popover p-2" onPointerDown={(event) => event.stopPropagation()}>
+                    <SearchInput
+                      value={operatorQuery}
+                      inputClassName="h-8 dark:border-gray-700"
+                      placeholder={t('api.guestSearchOperator')}
+                      onChange={(event) => setOperatorQuery(event.target.value)}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      iconClassName="w-4 h-4"
+                    />
+                  </div>
+                }
+              >
+                {visibleCandidates.map((item) => (
+                  <SelectItem key={item.user_id} value={String(item.user_id)}>
+                    {item.user_name}
+                    {settings.follow_system_default && item.user_id === settings.default_operator_user_id
+                      ? ` · ${t('api.systemDefault')}`
+                      : ''}
+                  </SelectItem>
+                ))}
+                {visibleCandidates.length === 0 && (
+                  <div className="px-2 py-3 text-sm text-muted-foreground">
+                    {t('api.guestOperatorNotFound')}
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+            {settings.follow_system_default && (
+              <span className="text-xs text-muted-foreground">{t('api.systemDefault')}</span>
+            )}
+            {!settings.follow_system_default && settings.can_edit && !systemOff && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                disabled={saving}
+                onClick={() => {
+                  const previous = settings
+                  setSettings({ ...settings, follow_system_default: true, user_id: null })
+                  void persist({ user_id: null }, previous)
+                }}
+              >
+                {t('api.restoreSystemDefault')}
+              </Button>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{t('api.guestOperatorHint')}</p>
+          {settings.warnings?.operator_is_admin && (
+            <Alert className="border-orange-300 text-orange-800">
+              <AlertDescription>{t('api.guestWarnAdmin')}</AlertDescription>
+            </Alert>
+          )}
+          {settings.warnings?.default_not_in_tenant && (
+            <Alert className="border-orange-300 text-orange-800">
+              <AlertDescription>{t('api.guestWarnDefaultNotInTenant')}</AlertDescription>
+            </Alert>
+          )}
+          {settings.warnings?.operator_inactive && (
+            <Alert className="border-orange-300 text-orange-800">
+              <AlertDescription>{t('api.guestWarnOperatorInactive')}</AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
+      {controlsOff && !systemOff && (
+        <Alert className="mb-4">
+          <AlertDescription>{t('api.guestLinkDisabled')}</AlertDescription>
+        </Alert>
+      )}
+    </>
+  )
+}
+
 const NoLoginLink = ({ type, noLogin = false }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const { t } = useTranslation()
   const { id } = useParams()
+  const [guestAvailable, setGuestAvailable] = useState(true)
+  const kind = guestLinkKind(type)
 
   const copyToClipboard = (code: string) => {
+    if (noLogin && !guestAvailable) return
     setIsCopied(true);
     copyText(code).then(() => {
       setTimeout(() => {
@@ -78,7 +298,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
     const loginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/workspace/chat/${type}/auth/${id}`
     const noLoginUrl = `${location.origin}${__APP_ENV__.BASE_URL}/workspace/chat/${type === API_TYPE.SKILL ? '' : type + '/'}${id}`
     return noLogin ? noLoginUrl : loginUrl;
-  }, [type, noLogin])
+  }, [type, noLogin, id])
 
   const embedCode = useMemo(() => {
     if (embed) return `<script
@@ -103,15 +323,20 @@ const NoLoginLink = ({ type, noLogin = false }) => {
 
   return (
     <section className='pb-20 max-w-[1600px]'>
-      <Alert className='mb-4'>
-        <Info className="h-4 w-4" />
-        <AlertDescription className='mt-0.5'>
-          {noLogin
-            ? t('api.noLoginLinkDescription')
-            : t('api.loginLinkDescription')}
-        </AlertDescription>
-      </Alert>
+      {noLogin && kind && id ? (
+        <GuestLinkPanel kind={kind} appId={String(id)} onAvailabilityChange={setGuestAvailable} />
+      ) : (
+        <Alert className='mb-4'>
+          <Info className="h-4 w-4" />
+          <AlertDescription className='mt-0.5'>
+            {noLogin
+              ? t('api.noLoginLinkDescription')
+              : t('api.loginLinkDescription')}
+          </AlertDescription>
+        </Alert>
+      )}
 
+      <div className={noLogin && !guestAvailable ? 'pointer-events-none opacity-50' : undefined}>
       <h3 className="text-lg font-bold mt-8 mb-2">{t('api.publishAsStandalonePage')}</h3>
       <Card className='mb-4'>
         <CardHeader className='pt-2 pb-0'>
@@ -182,6 +407,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
           </SyntaxHighlighter>
         </CardContent>
       </Card>
+      </div>
     </section>
   );
 };

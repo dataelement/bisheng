@@ -1,0 +1,131 @@
+# Application chart only. MySQL / Redis / MinIO / ES / Milvus / OpenFGA are
+# expected to already exist (compose, operator, or another chart). Point the
+# hosts below at those Services.
+
+timezone: Asia/Shanghai
+
+imagePullSecrets: []
+
+backend:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.0.0-beta1
+    pullPolicy: IfNotPresent
+  service:
+    port: 7860
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  extraEnv: []
+
+worker:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.0.0-beta1
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  extraEnv: []
+
+# Task-mode / Linsight worker. The image `entrypoint.sh worker` path does not
+# keep this process as PID 1; run it as its own Deployment.
+linsight:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-backend
+    tag: v3.0.0-beta1
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 4Gi
+  extraEnv: []
+
+frontend:
+  replicaCount: 1
+  image:
+    repository: dataelement/bisheng-frontend
+    tag: v3.0.0-beta1
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+    # Client SPA (base /workspace). 0 disables the extra listen/Service port.
+    clientPort: 4001
+    clientNodePort: null
+    # Bind the node host to clientPort (single-node / no Ingress). Empty = off.
+    clientHostPort: null
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  extraEnv: []
+
+# Isolation-environment discovery. Token must match the bisheng-sandbox chart.
+# Pattern uses StatefulSet ordinal DNS (n from 0), not a ClusterIP VIP.
+sandbox:
+  enabled: true
+  token: bisheng-sandbox-local
+  existingSecret: ""
+  existingSecretKey: token
+  discoverHostPattern: "code-runner-{n}.code-runner.bisheng-sandbox.svc.cluster.local"
+  discoverIndexStart: 0
+  discoverTtlS: 60
+  codeNodeEnabled: false
+
+middleware:
+  milvus:
+    connectionArgs: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+    isPartition: "true"
+    partitionSuffix: "1"
+  elasticsearch:
+    url: http://elasticsearch:9200
+    sslVerify: "{}"
+  minio:
+    schema: "false"
+    certCheck: "false"
+    endpoint: minio:9000
+    sharepoint: minio:9000
+    accessKey: minioadmin
+    secretKey: minioadmin
+
+secrets:
+  gatewayHmacSecret: bisheng-local-hmac-20260422
+
+# Mounted at /app/bisheng/config.yaml. Empty = chart files/config.yaml
+# (same as docker/bisheng/config/config.yaml). Hosts mysql / redis / openfga
+# must resolve in this namespace (or edit the YAML).
+config:
+  existingConfigMap: ""
+  yaml: ""
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: bisheng.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+persistence:
+  enabled: false
+  size: 20Gi
+  storageClass: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

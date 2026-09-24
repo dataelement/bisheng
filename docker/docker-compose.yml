@@ -103,8 +103,8 @@ services:
       BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
@@ -141,14 +141,19 @@ services:
       BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
     volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh worker  # 启动celery的异步worker服务，用来处理一些耗时的任务
     restart: on-failure
+    networks:
+      - default
+      - sandbox_net
     depends_on:
       mysql:
         condition: service_healthy
@@ -156,6 +161,8 @@ services:
         condition: service_healthy
       openfga:
         condition: service_started
+      # Runners are not on this chain: a missing replica is 28001 at lease time,
+      # not a blocked mysql/redis healthcheck.
 
   frontend:
     container_name: bisheng-frontend
@@ -260,3 +267,45 @@ services:
     depends_on:
       - etcd
       - minio
+
+  # Named replicas (not deploy.replicas): worker DNS is code-runner-{n} from 1.
+  # No ports: — isolation is network unreachability, not hiding a host port.
+  code-runner-1: &code_runner
+    image: dataelement/bisheng-sandbox:${SANDBOX_IMAGE_TAG:-v3.0.0-beta1}
+    container_name: bisheng-code-runner-1
+    # Isolation mode (sessions > 1): PID 1 is root so it can chown/setuid per session.
+    # User code still drops via SETUID. DAC_OVERRIDE is required while the runner
+    # chowns the session dir at lease create (copy-in into 0700/uid 10000).
+    user: "0"
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - CHOWN
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    pids_limit: 256
+    tmpfs:
+      # 0755 root:root — session uids cannot plant files in /tmp (not Docker's 1777).
+      - /tmp:mode=755
+    environment:
+      TZ: Asia/Shanghai
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      SANDBOX_MAX_SESSIONS: "2"
+      SANDBOX_ENABLE_UID_ISOLATION: "true"
+      SANDBOX_LEASE_TTL_S: "900"
+    networks:
+      - sandbox_net
+    restart: on-failure
+
+  code-runner-2:
+    <<: *code_runner
+    container_name: bisheng-code-runner-2
+
+networks:
+  sandbox_net:
+    internal: true

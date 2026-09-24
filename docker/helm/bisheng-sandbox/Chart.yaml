@@ -1,0 +1,10 @@
+apiVersion: v2
+name: bisheng-sandbox
+description: Isolation-environment runners for BiSheng (StatefulSet + headless Service).
+type: application
+version: 0.1.0
+appVersion: v3.0.0-beta1
+keywords:
+  - bisheng
+  - sandbox
+  - code-runner

@@ -4,7 +4,8 @@ import {
     reportGatewayLicense,
     type CommercialLicenseItem,
 } from "@/controllers/API/license";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { locationContext } from "@/contexts/locationContext";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { buildLicenseBannerCopy } from "./licenseBannerCopy";
@@ -26,6 +27,7 @@ const BANNER_CARD =
  */
 export function LicenseBanner() {
     const { t } = useTranslation();
+    const { appConfig } = useContext(locationContext);
     const [licenses, setLicenses] = useState<CommercialLicenseItem[]>([]);
     const ref = useRef<HTMLDivElement>(null);
 
@@ -33,7 +35,7 @@ export function LicenseBanner() {
         let active = true;
         const load = async () => {
             let aggregated = await getCommercialLicenseStatus();
-            if (shouldFetchGatewayLicenseStatus(aggregated?.licenses)) {
+            if (shouldFetchGatewayLicenseStatus(aggregated?.licenses, Date.now(), appConfig.isPro)) {
                 const gateway = await getLicenseStatus();
                 if (gateway) {
                     await reportGatewayLicense(gateway);
@@ -48,7 +50,7 @@ export function LicenseBanner() {
         return () => {
             active = false;
         };
-    }, []);
+    }, [appConfig.isPro]);
 
     const message = buildLicenseBannerCopy(licenses, t);
     const visible = Boolean(message);
