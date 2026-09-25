@@ -26,4 +26,14 @@ describe("F050 permission subject picker contract", () => {
     expect(source).not.toContain("modelId:");
     expect(source).not.toContain("relation:");
   });
+
+  it("supports a caller-selected default relation with a viewer fallback", () => {
+    expect(source).toContain(
+      "defaultRelationLevel = 1",
+    );
+    expect(source).toContain(
+      "model.level === defaultRelationLevel",
+    );
+    expect(source).toContain("model.level === 1");
+  });
 });

@@ -43,6 +43,7 @@ export interface PermissionDraftPickerDialogProps {
   disabledIds: Record<SubjectType, number[]>;
   relationModels: RelationModelOption[];
   canAddNonUserSubjects: boolean;
+  defaultRelationLevel?: number;
   onConfirm: (rows: PermissionDraftRow[]) => void;
   searchApi?: PermissionDraftSearchApi;
 }
@@ -56,6 +57,7 @@ export function PermissionDraftPickerDialog({
   disabledIds,
   relationModels,
   canAddNonUserSubjects,
+  defaultRelationLevel = 1,
   onConfirm,
   searchApi,
 }: PermissionDraftPickerDialogProps) {
@@ -66,6 +68,7 @@ export function PermissionDraftPickerDialog({
   const [selectedModelId, setSelectedModelId] = useState("");
   const selectableModels = useMemo(() => relationModels, [relationModels]);
   const activeModel = selectableModels.find((model) => model.id === selectedModelId)
+    ?? selectableModels.find((model) => model.level === defaultRelationLevel)
     ?? selectableModels.find((model) => model.level === 1)
     ?? selectableModels[0];
 

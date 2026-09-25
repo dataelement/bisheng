@@ -603,6 +603,7 @@ export function KnowledgeSpaceSettingsPage() {
         disabledIds={disabledIds}
         relationModels={relationModels}
         canAddNonUserSubjects={settings.canAddNonUserSubjects}
+        defaultRelationLevel={2}
         onConfirm={settings.addPermissionRows}
         searchApi={permissionSearchApi}
       />
