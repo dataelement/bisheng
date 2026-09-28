@@ -129,6 +129,23 @@ class BotExecutionGuard:
         return self._cancelled
 
 
+class BotIngressCoordinator:
+    """Keep recovery and callback ordering stable across reconnect objects."""
+
+    def __init__(self) -> None:
+        self.admission_lock = asyncio.Lock()
+        self._recovery_complete = asyncio.Event()
+
+    async def wait_recovered(self) -> None:
+        await self._recovery_complete.wait()
+
+    def mark_recovered(self) -> None:
+        self._recovery_complete.set()
+
+    def reset(self) -> None:
+        self._recovery_complete.clear()
+
+
 class SwitchableEPlusSender:
     """Route queued replies to the currently authenticated connection."""
 
@@ -473,6 +490,7 @@ class WorkerConnection:
         callback_registry: CallbackTaskRegistry,
         sender: SwitchableEPlusSender,
         execution_guard: BotExecutionGuard,
+        ingress: BotIngressCoordinator,
         recover_once: Callable[[BotConnectionRef, EPlusBotRuntimeContext], Awaitable[None]],
         clear_recovery: Callable[[BotConnectionRef], Awaitable[None]],
     ) -> None:
@@ -482,12 +500,11 @@ class WorkerConnection:
         self._callback_registry = callback_registry
         self._sender = sender
         self._execution_guard = execution_guard
+        self._ingress = ingress
         self._recover_once = recover_once
         self._clear_recovery = clear_recovery
         self._close_lock = asyncio.Lock()
-        self._admission_order_lock = asyncio.Lock()
         self._closed = False
-        self._recovery_complete = asyncio.Event()
         self._client = EPlusConnectionClient(
             EPlusConnectionConfig(
                 url=target.connection_url,
@@ -513,7 +530,7 @@ class WorkerConnection:
         except Exception:
             await self.close()
             raise
-        self._recovery_complete.set()
+        self._ingress.mark_recovered()
 
     async def run_connection_once(self):
         try:
@@ -533,6 +550,7 @@ class WorkerConnection:
             self._sender.deactivate(self)
             await self._client.close()
             await self._callback_registry.cancel(self._ref)
+            self._ingress.reset()
             await self._robot.cancel_bot(
                 tenant_id=self._ref.tenant_id,
                 bot_config_id=self._ref.bot_config_id,
@@ -546,14 +564,14 @@ class WorkerConnection:
         self._callback_registry.spawn(self._ref, self._handle_message(frame))
 
     async def _handle_message(self, frame: dict[str, Any]) -> None:
-        await self._recovery_complete.wait()
+        await self._ingress.wait_recovered()
         if self._closed:
             return
         # E+ delivers callbacks in order. Keep context resolution and durable
         # admission FIFO too, otherwise a faster later SQL/CA lookup can
-        # allocate an earlier turn sequence. Assistant consumers still run
-        # independently after handle_message has admitted the callback.
-        async with self._admission_order_lock:
+        # allocate an earlier turn sequence. Release the lock after PREPARING
+        # is reserved so media I/O and assistant consumers remain concurrent.
+        async with self._ingress.admission_lock:
             if self._closed:
                 return
             context = await self._provider.runtime_context(self._ref, self._sender)
@@ -566,7 +584,9 @@ class WorkerConnection:
             )
             callback = parse_message_callback(frame)
             with _tenant_scope(self._ref.tenant_id):
-                await self._robot.handle_message(context, callback)
+                reservation = await self._robot.reserve_message(context, callback)
+        with _tenant_scope(self._ref.tenant_id):
+            await self._robot.handle_reserved_message(context, callback, reservation)
 
 
 async def build_worker_runtime() -> EPlusWorkerRuntime:
@@ -603,6 +623,7 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
     recovery_lock = asyncio.Lock()
     senders: dict[BotConnectionRef, SwitchableEPlusSender] = {}
     execution_guards: dict[BotConnectionRef, BotExecutionGuard] = {}
+    ingress_coordinators: dict[BotConnectionRef, BotIngressCoordinator] = {}
 
     async def recover_once(ref: BotConnectionRef, context: EPlusBotRuntimeContext) -> None:
         async with recovery_lock:
@@ -625,6 +646,7 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
         ref = BotConnectionRef(target.tenant_id, target.bot_config_id)
         sender = senders.setdefault(ref, SwitchableEPlusSender())
         execution_guard = execution_guards.setdefault(ref, BotExecutionGuard())
+        ingress = ingress_coordinators.setdefault(ref, BotIngressCoordinator())
         execution_guard.reset()
         return WorkerConnection(
             ref=ref,
@@ -635,6 +657,7 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
             callback_registry=callback_registry,
             sender=sender,
             execution_guard=execution_guard,
+            ingress=ingress,
             recover_once=recover_once,
             clear_recovery=clear_recovery,
         )

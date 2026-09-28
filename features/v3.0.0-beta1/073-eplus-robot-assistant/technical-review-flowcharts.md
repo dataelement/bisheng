@@ -242,7 +242,7 @@ sequenceDiagram
     Q->>A: 执行消息 2，并加载消息 1 完整问答
 ```
 
-`PREPARING/QUEUED` 都是本次 E+ 接入新增的状态，不是原有助手逻辑。同一连接先按 E+ 到达顺序串行完成上下文读取和准入，`PREPARING` 再在耗时图片下载前固定数据库顺序并占用在途名额；队首未准备好时后续 `QUEUED` 不得先执行。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者先完成旧队列恢复，再开放新回调；中断的 `PREPARING/RUNNING` 标为失败，尚未开始的 `QUEUED` 恢复执行；RUNNING 的 execution token 防止旧 worker 延迟回写。
+`PREPARING/QUEUED` 都是本次 E+ 接入新增的状态，不是原有助手逻辑。同一机器人先按 E+ 到达顺序串行完成上下文读取和数据库预留，写入 `PREPARING` 后立即释放准入锁，再并发下载图片；因此慢图片不阻塞其他会话验人、排队或忙碌回复。队首未准备好时后续 `QUEUED` 不得先执行。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者通过跨重连共享的恢复屏障先完成旧队列恢复，再开放新回调；中断的 `PREPARING/RUNNING` 标为失败，尚未开始的 `QUEUED` 恢复执行；RUNNING 的 execution token 防止旧 worker 延迟回写。
 
 ## 7. 助手核心到底改什么
 

@@ -76,7 +76,7 @@ class AdmissionResult:
 
 
 @dataclass(frozen=True, slots=True)
-class _AdmissionReservation:
+class EPlusAdmissionReservation:
     inbound_message_id: int
     conversation_id: str
     turn_id: str
@@ -96,14 +96,28 @@ class EPlusMessageAdmissionService:
         self._admission_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
     async def admit(self, context: EPlusAdmissionContext, callback: EPlusCallback) -> AdmissionResult:
+        reservation = await self.reserve(context, callback)
+        if isinstance(reservation, AdmissionResult):
+            return reservation
+        return await self.finalize(context, callback, reservation)
+
+    async def reserve(
+        self,
+        context: EPlusAdmissionContext,
+        callback: EPlusCallback,
+    ) -> AdmissionResult | EPlusAdmissionReservation:
         self._validate_callback(context, callback)
         lock_key = (int(context.tenant_id), int(context.bot_config_id))
         admission_lock = self._admission_locks.setdefault(lock_key, asyncio.Lock())
         async with admission_lock:
-            reservation = await self._reserve(context, callback)
-        if isinstance(reservation, AdmissionResult):
-            return reservation
+            return await self._reserve(context, callback)
 
+    async def finalize(
+        self,
+        context: EPlusAdmissionContext,
+        callback: EPlusCallback,
+        reservation: EPlusAdmissionReservation,
+    ) -> AdmissionResult:
         prepared = await self._ingest_content(context, callback)
         async with self._session_factory() as session, session.begin():
             finalized = await EPlusConversationRepository(session).finalize_prepared_turn(
@@ -130,7 +144,7 @@ class EPlusMessageAdmissionService:
         self,
         context: EPlusAdmissionContext,
         callback: EPlusCallback,
-    ) -> AdmissionResult | _AdmissionReservation:
+    ) -> AdmissionResult | EPlusAdmissionReservation:
         inbound = self._new_inbound(context, callback)
 
         # Commit the idempotency owner before any user lookup or media network
@@ -255,7 +269,7 @@ class EPlusMessageAdmissionService:
             )
             if not transitioned:
                 raise RuntimeError("E+ preparing admission lost its inbound state transition")
-        return _AdmissionReservation(
+        return EPlusAdmissionReservation(
             inbound_message_id=int(inbound.id),
             conversation_id=conversation_id,
             turn_id=turn_id,

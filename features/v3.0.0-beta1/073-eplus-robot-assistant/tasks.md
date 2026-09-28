@@ -362,7 +362,7 @@ src/backend/bisheng/eplus/
 - Consumes: T014/T015、`initialize_app_context/close_app_context`。
 - Produces: `python -m bisheng.eplus.worker` 独立常驻进程与 `eplus` entrypoint mode；独立 `backend_eplus_worker` 服务。
 
-- [x] **Step 1 — RED:** 测试启动初始化 DB/Redis/MinIO/权限运行时、Supervisor 启动、SIGTERM 有界关闭、关闭连接/租约/HTTP client、鉴权恢复完成前不准入新消息、同一连接回调严格按到达顺序准入；compose 静态测试断言独立服务使用同一配置但不依赖共享本地数据。
+- [x] **Step 1 — RED:** 测试启动初始化 DB/Redis/MinIO/权限运行时、Supervisor 启动、SIGTERM 有界关闭、关闭连接/租约/HTTP client、鉴权恢复完成前不准入新消息、恢复期间普通断线后旧回调由新连接释放、同一机器人回调严格按到达顺序预留且慢图片不阻塞后续准入；compose 静态测试断言独立服务使用同一配置但不依赖共享本地数据。
 - [x] **Step 2 — Verify RED:** 运行 lifecycle 测试，预期 worker/compose 配置缺失失败。
 - [x] **Step 3 — GREEN:** 新进程不运行 Celery/Linsight；API、Celery 和 E+ Worker 可部署在不同主机；所有共享字节通过 MinIO。
 - [x] **Step 4 — Verify GREEN:** shell 语法、lifecycle、YAML 解析与最小 import smoke 通过；本机未安装 Docker CLI，`docker compose config` 记入 T017 未验证项。

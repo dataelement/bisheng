@@ -19,7 +19,11 @@ from bisheng.eplus.domain.schemas.execution import (
 from bisheng.eplus.domain.schemas.protocol import EPlusCallback
 from bisheng.eplus.domain.services.conversation_scheduler import ReadyEPlusTurn
 from bisheng.eplus.domain.services.media_service import EPlusMediaRef, EPlusPreparedBlock
-from bisheng.eplus.domain.services.message_service import AdmissionDisposition
+from bisheng.eplus.domain.services.message_service import (
+    AdmissionDisposition,
+    AdmissionResult,
+    EPlusAdmissionReservation,
+)
 from bisheng.eplus.domain.services.reply_stream import (
     TIMEOUT_REPLY,
     EPlusReplyDeadlineExceeded,
@@ -74,6 +78,33 @@ class EPlusRobotService:
 
     async def handle_message(self, context: EPlusBotRuntimeContext, callback: EPlusCallback) -> None:
         result = await self._admission.admit(context.admission, callback)
+        await self._handle_admission_result(context, callback, result)
+
+    async def reserve_message(
+        self,
+        context: EPlusBotRuntimeContext,
+        callback: EPlusCallback,
+    ) -> AdmissionResult | EPlusAdmissionReservation:
+        """Persist idempotency, identity and turn order before slow media I/O."""
+        return await self._admission.reserve(context.admission, callback)
+
+    async def handle_reserved_message(
+        self,
+        context: EPlusBotRuntimeContext,
+        callback: EPlusCallback,
+        reservation: AdmissionResult | EPlusAdmissionReservation,
+    ) -> None:
+        result = reservation
+        if isinstance(reservation, EPlusAdmissionReservation):
+            result = await self._admission.finalize(context.admission, callback, reservation)
+        await self._handle_admission_result(context, callback, result)
+
+    async def _handle_admission_result(
+        self,
+        context: EPlusBotRuntimeContext,
+        callback: EPlusCallback,
+        result: AdmissionResult,
+    ) -> None:
         if result.disposition == AdmissionDisposition.DUPLICATE:
             return
         if result.disposition != AdmissionDisposition.QUEUED:
