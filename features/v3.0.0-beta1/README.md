@@ -20,6 +20,7 @@
 | F049 | [knowledge-space-children-read-optimization](./049-knowledge-space-children-read-optimization/) | P1 | Spec 已存在 | F027, F040, F048 |
 | F050 | [unified-permission-settings](./050-unified-permission-settings/) | P0 | Spec、Design 已确认，Tasks 已拆解，实现中 | v2.6.0 F044, F048 |
 | F054 | [unified-citation-entries](./054-unified-citation-entries/) | P1 | Discovery + Spec + Design 已出，待确认 | F029, F041（F047 并行） |
+| F073 | [eplus-robot-assistant](./073-eplus-robot-assistant/) | P1（安全验收 P0） | 已实现；待客户环境集成验收 | F048、v2.6.0 F041、既有助手 |
 
 ---
 
