@@ -16,6 +16,7 @@ from bisheng.eplus.domain.models.eplus import (
     EPlusConversation,
     EPlusInboundMessage,
     EPlusInboundStatus,
+    EPlusTurn,
 )
 
 
@@ -157,6 +158,47 @@ class EPlusMessageRepository:
                 raise
             return existing, False
 
+    async def get_inbound(self, *, tenant_id: int, message_id: int) -> EPlusInboundMessage | None:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        return (
+            await self.session.exec(
+                select(EPlusInboundMessage).where(
+                    EPlusInboundMessage.tenant_id == resolved_tenant_id,
+                    EPlusInboundMessage.id == int(message_id),
+                )
+            )
+        ).first()
+
+    async def lock_bot_admission(self, *, tenant_id: int, bot_config_id: int) -> None:
+        """Serialize the short quota/create-turn section per robot."""
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        statement = select(EPlusBotConfig.id).where(
+            EPlusBotConfig.tenant_id == resolved_tenant_id,
+            EPlusBotConfig.id == int(bot_config_id),
+        )
+        if self.session.get_bind().dialect.name != "sqlite":
+            statement = statement.with_for_update()
+        if (await self.session.exec(statement)).first() is None:
+            raise LookupError(f"E+ bot config not found: {bot_config_id}")
+
+    async def link_to_turn(
+        self,
+        *,
+        tenant_id: int,
+        message: EPlusInboundMessage,
+        conversation_id: str,
+        turn_id: str,
+        sender_user_id: int,
+    ) -> None:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        if message.tenant_id != resolved_tenant_id:
+            raise ValueError("E+ inbound tenant does not match the current tenant context")
+        message.conversation_id = str(conversation_id)
+        message.turn_id = str(turn_id)
+        message.sender_user_id = int(sender_user_id)
+        self.session.add(message)
+        await self.session.flush()
+
     async def transition(
         self,
         *,
@@ -247,6 +289,46 @@ class EPlusMessageRepository:
 class EPlusConversationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def get_or_create(
+        self,
+        *,
+        tenant_id: int,
+        conversation: EPlusConversation,
+    ) -> EPlusConversation:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        if conversation.tenant_id != resolved_tenant_id:
+            raise ValueError("E+ conversation tenant does not match the current tenant context")
+        statement = select(EPlusConversation).where(
+            EPlusConversation.tenant_id == resolved_tenant_id,
+            EPlusConversation.bot_config_id == int(conversation.bot_config_id),
+            EPlusConversation.chat_type == conversation.chat_type,
+            EPlusConversation.conversation_key == conversation.conversation_key,
+        )
+        existing = (await self.session.exec(statement)).first()
+        if existing is None:
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(conversation)
+                    await self.session.flush()
+                return conversation
+            except IntegrityError:
+                existing = (await self.session.exec(statement)).first()
+                if existing is None:
+                    raise
+        if int(existing.scope_version) != int(conversation.scope_version):
+            existing.scope_version = int(conversation.scope_version)
+            self.session.add(existing)
+            await self.session.flush()
+        return existing
+
+    async def save_turn(self, *, tenant_id: int, turn: EPlusTurn) -> EPlusTurn:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        if turn.tenant_id != resolved_tenant_id:
+            raise ValueError("E+ turn tenant does not match the current tenant context")
+        self.session.add(turn)
+        await self.session.flush()
+        return turn
 
     async def allocate_next_sequence(self, *, tenant_id: int, conversation_id: str) -> int:
         resolved_tenant_id = _require_matching_tenant(tenant_id)

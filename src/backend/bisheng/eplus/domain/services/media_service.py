@@ -129,7 +129,10 @@ class EPlusMediaService:
 
         digest = hashlib.sha256(plaintext).hexdigest()
         object_key = f"eplus/media/{int(tenant_id)}/{digest[:2]}/{digest}.{extension}"
-        await self.store.put(object_key=object_key, data=plaintext, content_type=mime_type)
+        try:
+            await self.store.put(object_key=object_key, data=plaintext, content_type=mime_type)
+        except Exception as exc:
+            raise MediaIngestionError("image persistence failed") from exc
         return EPlusMediaRef(
             object_key=object_key,
             sha256=digest,
