@@ -7,7 +7,7 @@
 
 | 范围 | 命令 | 结果 |
 |---|---|---|
-| E+ 后端全套 | `pytest -q src/backend/test/eplus` | 132 passed；包含协议、媒体、身份、队列、范围、回复、长连接、租约、编排和 Worker 生命周期 |
+| E+ 后端全套 | `pytest -q src/backend/test/eplus` | 135 passed；包含协议、媒体、身份、队列、范围、回复、长连接、租约、编排和 Worker 生命周期 |
 | 安全与既有助手/F041 回归 | `pytest` 运行安全守卫及 assistant、space retrieval、日常附件相关用例 | 43 passed，另 6 个 subtests passed |
 | E+ 管理页 | `pnpm --dir src/frontend --filter bisheng test -- eplusRobotSettings.test.tsx` | 3 passed |
 | 前端 lint | `pnpm --dir src/frontend lint` | 通过 |

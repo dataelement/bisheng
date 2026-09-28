@@ -63,7 +63,8 @@ flowchart TD
     LEASE -->|是| CONN["建立 ws / wss 长连接<br/>CA 构建 TLS 信任"]
     CONN --> SUB["用 BotID + Secret 发送 aibot_subscribe"]
     SUB --> EPLUS["客户 E+ 服务"]
-    EPLUS --> STATUS["认证成功后保持心跳<br/>断线按规则重连"]
+    EPLUS --> RECOVER["认证成功后先恢复数据库队列<br/>恢复完成才开放新消息准入"]
+    RECOVER --> STATUS["保持心跳；断线按规则重连<br/>重连退避期仍持续监控租约"]
 
     classDef customer fill:#fff3d8,stroke:#ad7a18,color:#30220a;
     classDef added fill:#e6f6eb,stroke:#438a59,color:#173321;
@@ -73,7 +74,7 @@ flowchart TD
 
     class ADMIN,EPLUS customer;
     class PAGE changed;
-    class SAVE,AUTH,SPACE,TX,NOTICE,RECONCILE,READY,STOP,LEASE,STANDBY,CONN,SUB,STATUS added;
+    class SAVE,AUTH,SPACE,TX,NOTICE,RECONCILE,READY,STOP,LEASE,STANDBY,CONN,SUB,RECOVER,STATUS added;
     class ONLINE existing;
     class BC,BS data;
 ```
@@ -85,6 +86,7 @@ flowchart TD
 3. 助手下线、关闭 E+ 配置或删除配置时立即断开。
 4. 助手已经在线时再启用 E+ 或轮换凭据，也会连接或重连，不要求重新上下线。
 5. 变更通知用于快速响应，周期性数据库对账用于防止通知丢失。
+6. 单活租约覆盖连接、断线和最长 30 秒的重连退避全过程；任何阶段丢失租约都会关闭该机器人本机任务。
 
 ## 4. 客户侧与毕昇侧完整职责
 
@@ -159,11 +161,11 @@ flowchart TD
     TURN --> Q["放入该会话串行队列"]
     Q --> WAIT{"前一轮已进入终态？"}
     WAIT -->|否| Q
-    WAIT -->|是| RUN["会话消费协程取出下一条<br/>状态改为 RUNNING / PROCESSING"]
+    WAIT -->|是| RUN["会话消费协程取出下一条<br/>读取最新 scope 快照并生成执行 token<br/>状态改为 RUNNING / PROCESSING"]
     RUN --> PLACEHOLDER["发送第一帧：处理中<br/>该消息的 E+ 6 分钟回复窗口开始"]
     PLACEHOLDER --> ACK{"首帧回执成功？"}
     ACK -->|否| FAIL["不启动助手，记录失败"]
-    ACK -->|是| CONTEXT["执行开始时读取最新 scope_version 与空间快照<br/>加载跨版本完整历史"]
+    ACK -->|是| CONTEXT["装入本轮固定 scope 快照<br/>加载跨版本完整历史"]
     CONTEXT --> IMAGE["按视觉模型 / OCR 能力处理图片"]
     IMAGE --> AGENT["调用共用助手执行核心"]
     AGENT --> TOOL{"模型是否调用工具？"}
@@ -240,7 +242,7 @@ sequenceDiagram
     Q->>A: 执行消息 2，并加载消息 1 完整问答
 ```
 
-`PREPARING/QUEUED` 都是本次 E+ 接入新增的状态，不是原有助手逻辑。`PREPARING` 用于在耗时图片下载前固定到达顺序并占用在途名额；队首未准备好时后续 `QUEUED` 不得先执行。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者把中断的 `PREPARING/RUNNING` 标为失败，并恢复尚未开始的 `QUEUED` 记录；RUNNING 的 execution token 防止旧 worker 延迟回写。
+`PREPARING/QUEUED` 都是本次 E+ 接入新增的状态，不是原有助手逻辑。同一连接先按 E+ 到达顺序串行完成上下文读取和准入，`PREPARING` 再在耗时图片下载前固定数据库顺序并占用在途名额；队首未准备好时后续 `QUEUED` 不得先执行。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者先完成旧队列恢复，再开放新回调；中断的 `PREPARING/RUNNING` 标为失败，尚未开始的 `QUEUED` 恢复执行；RUNNING 的 execution token 防止旧 worker 延迟回写。
 
 ## 7. 助手核心到底改什么
 
@@ -313,7 +315,7 @@ flowchart TD
     RUN2 -.->|"E+ 不读写"| OLD[("现有 message_session / chat_message")]
 
     IMAGE2["图片下载解密"] --> MINIO[("现有 MinIO<br/>保存图片对象")]
-    CONTROL["连接、限流与恢复"] --> REDIS[("现有 Redis<br/>租约、在途计数、发送额度")]
+    CONTROL["连接、限流与恢复"] --> REDIS[("现有 Redis<br/>单活租约、发送额度")]
 
     classDef added fill:#e6f6eb,stroke:#438a59,color:#173321;
     classDef existing fill:#e8f1ff,stroke:#4f78a8,color:#172033;
@@ -346,7 +348,7 @@ flowchart TD
 |---|---|---:|---|
 | E+ 长连接协议、心跳、回执、重连、单活 | 新增 | 大 | 重复连接互踢、断线恢复、私有 CA |
 | E+ 配置页与管理接口 | 改造 + 新增 | 中 | Secret 安全、上下线生命周期、同租户校验 |
-| 五张 E+ 专用表及 MySQL/DM8 迁移 | 新增 | 中 | 幂等键、状态恢复、双数据库兼容 |
+| 五张 E+ 专用表及 schema discovery 自动建表 | 新增 | 中 | 幂等键、状态恢复、双数据库兼容 |
 | 机器人会话排队与三条在途控制 | 新增 | 中 | 顺序、崩溃恢复、重复执行 |
 | 图片下载、解密、存储及多模态分流 | 新增 + 改造 | 中到大 | 临时地址过期、解密错误、模型能力差异 |
 | 共享助手执行核心支持显式内容和知识范围 | 改造 | 中到大 | 不能影响内部助手原行为 |

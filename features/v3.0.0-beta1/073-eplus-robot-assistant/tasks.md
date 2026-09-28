@@ -323,9 +323,9 @@ src/backend/bisheng/eplus/
 - Consumes: T004 `resolve_connection_target()`、T013 client、`TokenSafeRedisLock`。
 - Produces: 每机器人一条连接任务；订阅 Redis 变更通知并周期扫描 SQL；连接状态写回 DB。
 
-- [x] **Step 1 — RED:** 覆盖两个实例只有一个获得租约、续租失败立即取消连接、持有者宕机 TTL 后接管、普通断线按 1/2/4…30 秒退避重连、启用但助手离线不连、上线后连接、下线/关闭/逻辑删除断开、凭据版本变化重连、通知丢失被周期对账修复、TAKEN_OVER 冻结且不抢回。
+- [x] **Step 1 — RED:** 覆盖两个实例只有一个获得租约、续租失败立即取消连接、持有者宕机 TTL 后接管、普通断线按 1/2/4…30 秒退避重连且退避期间持续监控租约、启用但助手离线不连、上线后连接、下线/关闭/逻辑删除断开、凭据版本变化重连、通知丢失被周期对账修复、TAKEN_OVER 冻结且不抢回。
 - [x] **Step 2 — Verify RED:** 运行本测试，预期 supervisor 缺失失败。
-- [x] **Step 3 — GREEN:** 每 bot 使用 token-safe lease；租约丢失时关闭连接并取消本机该机器人任务；RUNNING 完成回写校验 execution token；普通重连切换队列共享发送端；本地 task map 不是状态真相；Supervisor 停止时逐连接关闭并释放自己持有的 token。
+- [x] **Step 3 — GREEN:** 每 bot 使用 token-safe lease，监控覆盖连接与重连退避；租约丢失时关闭连接并取消本机该机器人任务；RUNNING 完成回写校验 execution token；普通重连切换队列共享发送端；本地 task map 不是状态真相；Supervisor 停止时逐连接关闭并释放自己持有的 token。
 - [x] **Step 4 — Verify GREEN:** 重跑测试并开启 asyncio debug 检查无泄漏 task。
 - [x] **Step 5 — Commit:** `feat(eplus): supervise single-active robot connections`。
 
@@ -362,7 +362,7 @@ src/backend/bisheng/eplus/
 - Consumes: T014/T015、`initialize_app_context/close_app_context`。
 - Produces: `python -m bisheng.eplus.worker` 独立常驻进程与 `eplus` entrypoint mode；独立 `backend_eplus_worker` 服务。
 
-- [x] **Step 1 — RED:** 测试启动初始化 DB/Redis/MinIO/权限运行时、Supervisor 启动、SIGTERM 有界关闭、关闭连接/租约/HTTP client；compose 静态测试断言独立服务使用同一配置但不依赖共享本地数据。
+- [x] **Step 1 — RED:** 测试启动初始化 DB/Redis/MinIO/权限运行时、Supervisor 启动、SIGTERM 有界关闭、关闭连接/租约/HTTP client、鉴权恢复完成前不准入新消息、同一连接回调严格按到达顺序准入；compose 静态测试断言独立服务使用同一配置但不依赖共享本地数据。
 - [x] **Step 2 — Verify RED:** 运行 lifecycle 测试，预期 worker/compose 配置缺失失败。
 - [x] **Step 3 — GREEN:** 新进程不运行 Celery/Linsight；API、Celery 和 E+ Worker 可部署在不同主机；所有共享字节通过 MinIO。
 - [x] **Step 4 — Verify GREEN:** shell 语法、lifecycle、YAML 解析与最小 import smoke 通过；本机未安装 Docker CLI，`docker compose config` 记入 T017 未验证项。

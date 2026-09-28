@@ -193,6 +193,35 @@ async def test_ordinary_disconnect_uses_bounded_exponential_backoff() -> None:
     await supervisor.stop()
 
 
+async def test_lease_loss_during_reconnect_backoff_closes_previous_client() -> None:
+    provider = FakeTargetProvider(_target())
+    leases = FakeLeaseRegistry()
+    factory = FakeClientFactory([EPlusConnectionExitReason.DISCONNECTED])
+    backoff_started = asyncio.Event()
+    release_backoff = asyncio.Event()
+
+    async def backoff_waiter(delay: float, wake: asyncio.Event) -> None:
+        backoff_started.set()
+        await release_backoff.wait()
+
+    supervisor = _supervisor(
+        provider,
+        factory,
+        leases,
+        lease_check_interval_seconds=0.001,
+        backoff_waiter=backoff_waiter,
+    )
+    await supervisor.start()
+    await backoff_started.wait()
+    leases.expire("eplus:bot_lease:9:73")
+    await asyncio.sleep(0.02)
+    close_calls_before_backoff_ended = factory.clients[0].close_calls
+    release_backoff.set()
+    await supervisor.stop()
+
+    assert close_calls_before_backoff_ended >= 1
+
+
 async def test_offline_disabled_or_deleted_target_disconnects_and_online_target_connects() -> None:
     provider = FakeTargetProvider(None)
     leases = FakeLeaseRegistry()

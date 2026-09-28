@@ -485,7 +485,9 @@ class WorkerConnection:
         self._recover_once = recover_once
         self._clear_recovery = clear_recovery
         self._close_lock = asyncio.Lock()
+        self._admission_order_lock = asyncio.Lock()
         self._closed = False
+        self._recovery_complete = asyncio.Event()
         self._client = EPlusConnectionClient(
             EPlusConnectionConfig(
                 url=target.connection_url,
@@ -499,14 +501,19 @@ class WorkerConnection:
     async def wait_authenticated(self) -> None:
         await self._client.wait_authenticated()
         self._sender.activate(self)
-        context = await self._provider.runtime_context(self._ref, self._sender)
-        if context is not None:
-            context = EPlusBotRuntimeContext(
-                admission=context.admission,
-                sender=context.sender,
-                cancellation_check=self._execution_guard.is_cancelled,
-            )
-            await self._recover_once(self._ref, context)
+        try:
+            context = await self._provider.runtime_context(self._ref, self._sender)
+            if context is not None:
+                context = EPlusBotRuntimeContext(
+                    admission=context.admission,
+                    sender=context.sender,
+                    cancellation_check=self._execution_guard.is_cancelled,
+                )
+                await self._recover_once(self._ref, context)
+        except Exception:
+            await self.close()
+            raise
+        self._recovery_complete.set()
 
     async def run_connection_once(self):
         try:
@@ -539,17 +546,27 @@ class WorkerConnection:
         self._callback_registry.spawn(self._ref, self._handle_message(frame))
 
     async def _handle_message(self, frame: dict[str, Any]) -> None:
-        context = await self._provider.runtime_context(self._ref, self._sender)
-        if context is None:
+        await self._recovery_complete.wait()
+        if self._closed:
             return
-        context = EPlusBotRuntimeContext(
-            admission=context.admission,
-            sender=context.sender,
-            cancellation_check=self._execution_guard.is_cancelled,
-        )
-        callback = parse_message_callback(frame)
-        with _tenant_scope(self._ref.tenant_id):
-            await self._robot.handle_message(context, callback)
+        # E+ delivers callbacks in order. Keep context resolution and durable
+        # admission FIFO too, otherwise a faster later SQL/CA lookup can
+        # allocate an earlier turn sequence. Assistant consumers still run
+        # independently after handle_message has admitted the callback.
+        async with self._admission_order_lock:
+            if self._closed:
+                return
+            context = await self._provider.runtime_context(self._ref, self._sender)
+            if context is None:
+                return
+            context = EPlusBotRuntimeContext(
+                admission=context.admission,
+                sender=context.sender,
+                cancellation_check=self._execution_guard.is_cancelled,
+            )
+            callback = parse_message_callback(frame)
+            with _tenant_scope(self._ref.tenant_id):
+                await self._robot.handle_message(context, callback)
 
 
 async def build_worker_runtime() -> EPlusWorkerRuntime:

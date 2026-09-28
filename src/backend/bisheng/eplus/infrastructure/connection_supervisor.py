@@ -251,9 +251,10 @@ class EPlusConnectionSupervisor:
                     continue
 
                 retry_index = 0
+                lease_task = asyncio.create_task(self._monitor_lease(lease))
                 try:
                     while not self._stopping and not runtime.stop_event.is_set():
-                        outcome = await self._run_connection_attempt(runtime, lease)
+                        outcome = await self._run_connection_attempt(runtime, lease_task)
                         if outcome == "stop":
                             return
                         if outcome == "lease_lost":
@@ -267,8 +268,14 @@ class EPlusConnectionSupervisor:
                         await self._provider.set_status(runtime.ref, EPlusConnectionStatus.RETRYING)
                         delay = min(2**retry_index, 30)
                         retry_index += 1
-                        await self._backoff_waiter(delay, runtime.stop_event)
+                        backoff_outcome = await self._wait_backoff(runtime, lease_task, delay)
+                        if backoff_outcome == "stop":
+                            return
+                        if backoff_outcome == "lease_lost":
+                            await _wait_or_stop(self._lease_check_interval, runtime.stop_event)
+                            break
                 finally:
+                    await _cancel_task(lease_task)
                     await _release_lease(lease)
                     lease = None
         except asyncio.CancelledError:
@@ -290,7 +297,7 @@ class EPlusConnectionSupervisor:
     async def _run_connection_attempt(
         self,
         runtime: _BotRuntime,
-        lease: Lease,
+        lease_task: asyncio.Task[None],
     ) -> EPlusConnectionExitReason | str:
         ca_pem = await self._provider.read_ca(runtime.target)
         client = self._client_factory(runtime.target, ca_pem)
@@ -298,7 +305,6 @@ class EPlusConnectionSupervisor:
         await self._provider.set_status(runtime.ref, EPlusConnectionStatus.CONNECTING)
         connection_task = asyncio.create_task(client.run_connection_once())
         auth_task = asyncio.create_task(client.wait_authenticated())
-        lease_task = asyncio.create_task(self._monitor_lease(lease))
         stop_task = asyncio.create_task(runtime.stop_event.wait())
         authenticated = False
         try:
@@ -335,12 +341,39 @@ class EPlusConnectionSupervisor:
             return EPlusConnectionExitReason.DISCONNECTED
         finally:
             await _cancel_task(auth_task)
-            await _cancel_task(lease_task)
             await _cancel_task(stop_task)
             if not connection_task.done():
                 await client.close()
                 await _cancel_task(connection_task)
-            runtime.client = None
+
+    async def _wait_backoff(
+        self,
+        runtime: _BotRuntime,
+        lease_task: asyncio.Task[None],
+        delay: float,
+    ) -> str:
+        backoff_task = asyncio.create_task(self._backoff_waiter(delay, runtime.stop_event))
+        stop_task = asyncio.create_task(runtime.stop_event.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {backoff_task, lease_task, stop_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if stop_task in done:
+                return "stop"
+            if lease_task in done:
+                try:
+                    await lease_task
+                except RedisLockLostError:
+                    if runtime.client is not None:
+                        await runtime.client.close()
+                    await self._provider.set_status(runtime.ref, EPlusConnectionStatus.ERROR)
+                    return "lease_lost"
+            await backoff_task
+            return "retry"
+        finally:
+            await _cancel_task(backoff_task)
+            await _cancel_task(stop_task)
 
     async def _monitor_lease(self, lease: Lease) -> None:
         while True:
