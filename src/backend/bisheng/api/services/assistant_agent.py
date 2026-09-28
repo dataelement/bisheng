@@ -15,9 +15,9 @@ from loguru import logger
 from pydantic import Field, SkipValidation
 
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.assistant.domain.schemas.execution import AssistantExecutionContext, AssistantMessageContent
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -25,7 +25,6 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import (
@@ -515,65 +514,97 @@ class AssistantAgent(AssistantUtils):
             total_count = 0
             for one in new_messages:
                 if isinstance(one, HumanMessage):
-                    total_count += len(enc.encode(one.content))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
                 elif isinstance(one, AIMessage):
-                    total_count += len(enc.encode(one.content))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
                     if "tool_calls" in one.additional_kwargs:
                         total_count += len(
                             enc.encode(json.dumps(one.additional_kwargs["tool_calls"], ensure_ascii=False))
                         )
                 else:
-                    total_count += len(enc.encode(str(one.content)))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
             if total_count > self.assistant.max_token:
                 return get_finally_message(new_messages[1:])
             return new_messages
 
         return get_finally_message(messages)
 
-    async def run(self, query: str, chat_history: list = None, callback: Callbacks = None) -> list[BaseMessage]:
+    @staticmethod
+    def message_content_for_tokens(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        return json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def build_input_messages(
+        *,
+        query: str,
+        chat_history: list[BaseMessage] | None,
+        context: AssistantExecutionContext | None,
+    ) -> list[BaseMessage]:
+        content: AssistantMessageContent = context.content if context is not None else query
+        user_message = HumanMessage(content=content)
+        if chat_history:
+            chat_history.append(user_message)
+            return chat_history
+        return [user_message]
+
+    @staticmethod
+    async def _raise_if_cancelled(context: AssistantExecutionContext | None) -> None:
+        if context is not None:
+            await context.raise_if_cancelled()
+
+    async def run(
+        self,
+        query: str,
+        chat_history: list | None = None,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ) -> list[BaseMessage]:
         """
         Run Agent Conversation
         """
+        await self._raise_if_cancelled(context)
         await self.fake_callback(callback)
 
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
+        inputs = self.build_input_messages(query=query, chat_history=chat_history, context=context)
 
         # trim message
         inputs = await self.trim_messages(inputs)
 
         if self.current_agent_executor == "ReAct":
-            result = await self.react_run(inputs, callback)
+            result = await self.react_run(inputs, callback, context=context)
         else:
             result = await self.agent.ainvoke({"messages": inputs}, config=RunnableConfig(callbacks=callback))
             result = result["messages"]
+        await self._raise_if_cancelled(context)
 
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
 
         return result
 
-    async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
+    async def astream(
+        self,
+        query: str,
+        chat_history: list | None = None,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """
         Run Agent Conversation - Streaming version
         """
+        await self._raise_if_cancelled(context)
         await self.fake_callback(callback)
 
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
+        inputs = self.build_input_messages(query=query, chat_history=chat_history, context=context)
 
         # trim message
         inputs = await self.trim_messages(inputs)
 
         if self.current_agent_executor == "ReAct":
             # ReActMode temporarily does not support streaming, downgrade to non streaming
-            result = await self.react_run(inputs, callback)
+            result = await self.react_run(inputs, callback, context=context)
             # Record Chat History
             await self.record_chat_history([one.to_json() for one in result])
             yield result
@@ -589,12 +620,13 @@ class AssistantAgent(AssistantUtils):
             try:
                 # UsemessagesPatternedLangGraph streamingattaintokenLevel of Streaming Output
                 async for chunk in self.agent.astream({"messages": inputs}, config=config, stream_mode="messages"):
+                    await self._raise_if_cancelled(context)
                     chunk_count += 1
 
                     # stream_mode="messages" Return (message, metadata) Meta Group
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
-                        message, metadata = chunk[:2]
+                        message, _metadata = chunk[:2]
                     elif hasattr(chunk, "content"):
                         # Directly to the message object
                         message = chunk
@@ -617,8 +649,14 @@ class AssistantAgent(AssistantUtils):
             if final_messages:
                 await self.record_chat_history([one.to_json() for one in final_messages])
 
-    async def react_run(self, inputs: list, callback: Callbacks = None):
+    async def react_run(
+        self,
+        inputs: list,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """react Mode input and execution"""
+        await self._raise_if_cancelled(context)
         result = await self.agent.ainvoke(
             {
                 "input": inputs[-1].content,
@@ -629,8 +667,9 @@ class AssistantAgent(AssistantUtils):
         logger.debug(f"react_run result: {result}")
         output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
-            output = list(output.values())[0]
+            output = next(iter(output.values()))
         for one in result["intermediate_steps"]:
+            await self._raise_if_cancelled(context)
             inputs.append(one[0])
         inputs.append(AIMessage(content=output))
         return inputs
