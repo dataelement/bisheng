@@ -104,6 +104,16 @@ def _source(source_id: int = 1):
     )
 
 
+def _direct_source(*, source_id: int, user_id: int, protected: bool = False):
+    return GrantSourceService().canonicalize_source(
+        source_id=source_id,
+        subject_type="user",
+        subject_id=str(user_id),
+        source_type="DIRECT",
+        protected=protected,
+    )
+
+
 @pytest.mark.asyncio
 async def test_business_membership_add_uses_system_authorized_mutation() -> None:
     viewer = _grant(_model("viewer", 1))
@@ -169,6 +179,52 @@ async def test_business_membership_same_model_is_idempotent() -> None:
         source=_source(),
         model_key="viewer",
         idempotency_key="membership-noop",
+    )
+
+    assert result is None
+    assert mutation.calls == []
+
+
+@pytest.mark.asyncio
+async def test_actor_can_remove_only_their_own_direct_sources() -> None:
+    actor_direct = replace(_direct_source(source_id=41, user_id=7), version=3)
+    other_direct = _direct_source(source_id=42, user_id=8)
+    protected = _direct_source(source_id=43, user_id=7, protected=True)
+    organization = GrantSourceService().canonicalize_source(
+        source_id=44,
+        subject_type="department",
+        subject_id="9",
+        source_type="DEPARTMENT",
+    )
+    viewer = _grant(
+        _model("viewer", 1),
+        sources=(actor_direct, other_direct, organization),
+    )
+    owner = _grant(_model("owner", 4), sources=(protected,))
+    runtime, mutation = _runtime(_context(grants=(viewer, owner)))
+
+    await runtime.remove_actor_direct_sources(
+        actor=PermissionActor(user_id=7, current_tenant_id=5),
+        target=_target(),
+        idempotency_key="leave-direct",
+    )
+
+    context, request = mutation.calls[0]
+    assert context.system_authorized is True
+    assert [(row.operation, row.assignee_id, row.expected_assignee_version) for row in request["changes"]] == [
+        ("REMOVE", 41, 3),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_actor_direct_source_removal_is_idempotent_when_absent() -> None:
+    viewer = _grant(_model("viewer", 1), sources=(_direct_source(source_id=42, user_id=8),))
+    runtime, mutation = _runtime(_context(grants=(viewer,)))
+
+    result = await runtime.remove_actor_direct_sources(
+        actor=PermissionActor(user_id=7, current_tenant_id=5),
+        target=_target(),
+        idempotency_key="leave-direct-none",
     )
 
     assert result is None
