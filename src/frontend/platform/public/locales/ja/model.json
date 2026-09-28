@@ -77,6 +77,8 @@
     "assistantExecutionMode": "アシスタント実行モード",
     "assistantExecutionModeTooltip": "モデルがOpenAI function call形式のインターフェースプロトコルをサポートしている場合、function callモードを選択することをお勧めします。",
     "streamingOutput": "ストリーミング出力",
+    "assistantVision": "画像入力",
+    "assistantVisionTooltip": "このモデルエンドポイントが画像入力をサポートしていることを確認した場合のみ有効にしてください。E+ロボットは画像対応のアシスタントモデルへ画像を直接渡し、それ以外では設定済みの画像文字抽出を使用します。",
     "assistantKnowledgeBaseMaxCharacters": "アシスタント知識ベース検索最大文字数",
     "assistantKnowledgeBaseMaxCharactersTooltip": "モデルに渡される最大文字数。これを超えると自動的に切り捨てられます。モデルの最大コンテキスト長に合わせて調整できます。",
     "reorderAfterRetrieval": "検索後に再並べ替えますか？",

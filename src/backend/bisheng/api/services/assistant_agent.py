@@ -202,6 +202,7 @@ class AssistantAgent(AssistantUtils):
         }
         self.current_agent_executor = None
         self.llm: BaseLanguageModel | None = None
+        self.supports_vision = False
         self.llm_agent_executor = None
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
@@ -234,6 +235,7 @@ class AssistantAgent(AssistantUtils):
             raise AssistantModelNotConfigError()
 
         self.llm_agent_executor = default_llm.agent_executor_type
+        self.supports_vision = bool(default_llm.visual)
         self.knowledge_retriever = {
             "max_content": default_llm.knowledge_max_content,
             "sort_by_source_and_index": default_llm.knowledge_sort_index,

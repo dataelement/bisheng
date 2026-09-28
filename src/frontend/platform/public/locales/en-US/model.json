@@ -79,6 +79,8 @@
     "assistantExecutionMode": "Execution Mode",
     "assistantExecutionModeTooltip": "Use function call mode if supported by model",
     "streamingOutput": "Streaming",
+    "assistantVision": "Vision input",
+    "assistantVisionTooltip": "Enable only when this model endpoint is confirmed to accept image input. E+ robots send images directly to vision-enabled assistant models; otherwise configured image text extraction is used.",
     "assistantKnowledgeBaseMaxCharacters": "Knowledge Base Max Chars",
     "assistantKnowledgeBaseMaxCharactersTooltip": "Max chars for model, truncate if exceeds",
     "reorderAfterRetrieval": "Reorder",
