@@ -9,9 +9,7 @@ the configured scope.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any, Protocol
 
 from langchain_core.documents import Document
@@ -20,7 +18,6 @@ from sqlmodel import col, select
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
 from bisheng.core.database import get_async_db_session
-from bisheng.eplus.domain.repositories.eplus_repository import EPlusConfigRepository
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
@@ -47,18 +44,6 @@ class RobotToolScopeViolation(PermissionError):
     """Raised when an E+ execution could bypass the robot-bound knowledge scope."""
 
 
-@dataclass(frozen=True, slots=True)
-class RobotScopeSnapshot:
-    tenant_id: int
-    bot_config_id: int
-    space_ids: tuple[int, ...]
-    scope_version: int
-
-
-class RobotScopeReader(Protocol):
-    async def get_snapshot(self, *, tenant_id: int, bot_config_id: int) -> RobotScopeSnapshot | None: ...
-
-
 class RobotDocumentStateReader(Protocol):
     async def valid_file_ids(
         self,
@@ -80,22 +65,6 @@ class RobotRetrievalBackend(Protocol):
         max_content: int,
         sort_by_source_and_index: bool,
     ) -> list[Document]: ...
-
-
-class DatabaseRobotScopeReader:
-    async def get_snapshot(self, *, tenant_id: int, bot_config_id: int) -> RobotScopeSnapshot | None:
-        async with get_async_db_session() as session:
-            repository = EPlusConfigRepository(session)
-            config = await repository.get_by_id(tenant_id=tenant_id, bot_config_id=bot_config_id)
-            if config is None or config.is_deleted or not config.enabled:
-                return None
-            space_ids = tuple(await repository.list_space_ids(tenant_id=tenant_id, bot_config_id=bot_config_id))
-            return RobotScopeSnapshot(
-                tenant_id=tenant_id,
-                bot_config_id=bot_config_id,
-                space_ids=space_ids,
-                scope_version=int(config.scope_version),
-            )
 
 
 class DatabaseRobotDocumentStateReader:
@@ -160,34 +129,14 @@ class RobotSpaceRetrievalPolicy:
         tenant_id: int,
         bot_config_id: int,
         invoke_user_id: int,
-        scope_reader: RobotScopeReader | None = None,
         document_state_reader: RobotDocumentStateReader | None = None,
         retrieval_backend: RobotRetrievalBackend | None = None,
     ) -> None:
         self.tenant_id = int(tenant_id)
         self.bot_config_id = int(bot_config_id)
         self.invoke_user_id = int(invoke_user_id)
-        self.scope_reader = scope_reader or DatabaseRobotScopeReader()
         self.document_state_reader = document_state_reader or DatabaseRobotDocumentStateReader()
         self.retrieval_backend = retrieval_backend or DatabaseRobotRetrievalBackend()
-
-    async def get_snapshot(self) -> RobotScopeSnapshot | None:
-        return await self.scope_reader.get_snapshot(
-            tenant_id=self.tenant_id,
-            bot_config_id=self.bot_config_id,
-        )
-
-    async def assert_current(self, expected_scope: AssistantRobotScope) -> RobotScopeSnapshot:
-        snapshot = await self.get_snapshot()
-        expected_spaces = tuple(sorted({int(space_id) for space_id in expected_scope.space_ids}))
-        if (
-            snapshot is None
-            or snapshot.bot_config_id != int(expected_scope.bot_config_id)
-            or snapshot.scope_version != int(expected_scope.scope_version)
-            or snapshot.space_ids != expected_spaces
-        ):
-            raise asyncio.CancelledError("E+ robot knowledge scope changed during assistant execution")
-        return snapshot
 
     async def retrieve(
         self,
@@ -197,13 +146,12 @@ class RobotSpaceRetrievalPolicy:
         max_content: int = 15000,
         sort_by_source_and_index: bool = False,
     ) -> list[Document]:
-        snapshot = await self.assert_current(expected_scope)
-        if not snapshot.space_ids:
+        space_ids = tuple(sorted({int(space_id) for space_id in expected_scope.space_ids}))
+        if not space_ids:
             return []
 
         candidates: list[Document] = []
-        for space_id in snapshot.space_ids:
-            await self.assert_current(expected_scope)
+        for space_id in space_ids:
             candidates.extend(
                 await self.retrieval_backend.retrieve_space(
                     space_id=space_id,
@@ -215,15 +163,13 @@ class RobotSpaceRetrievalPolicy:
                 )
             )
 
-        await self.assert_current(expected_scope)
         file_ids = {_document_id(doc) for doc in candidates}
         file_ids.discard(None)
         valid_file_ids = await self.document_state_reader.valid_file_ids(
             tenant_id=self.tenant_id,
-            space_ids=snapshot.space_ids,
+            space_ids=space_ids,
             file_ids={int(file_id) for file_id in file_ids},
         )
-        await self.assert_current(expected_scope)
 
         result: list[Document] = []
         seen: set[tuple[int, int, str]] = set()
@@ -253,7 +199,6 @@ class RobotSpaceRetrievalPolicy:
         max_content: int = 15000,
         sort_by_source_and_index: bool = False,
     ) -> KnowledgeRagTool:
-        await self.assert_current(expected_scope)
         retriever = RobotSpaceRetrieverTool(
             policy=self,
             expected_scope=expected_scope,

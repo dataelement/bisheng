@@ -1,26 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass
-
-import pytest
 from langchain_core.documents import Document
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
-from bisheng.eplus.domain.services.robot_space_retrieval import (
-    RobotScopeSnapshot,
-    RobotSpaceRetrievalPolicy,
-)
-
-
-@dataclass
-class FakeScopeReader:
-    snapshot: RobotScopeSnapshot
-
-    async def get_snapshot(self, *, tenant_id: int, bot_config_id: int) -> RobotScopeSnapshot | None:
-        assert tenant_id == self.snapshot.tenant_id
-        assert bot_config_id == self.snapshot.bot_config_id
-        return self.snapshot
+from bisheng.eplus.domain.services.robot_space_retrieval import RobotSpaceRetrievalPolicy
 
 
 class FakeDocumentStateReader:
@@ -67,23 +50,21 @@ def _policy(
     version: int = 7,
     on_retrieve=None,
 ):
-    reader = FakeScopeReader(RobotScopeSnapshot(tenant_id=9, bot_config_id=3, space_ids=spaces, scope_version=version))
     backend = FakeRetrievalBackend(docs_by_space, on_retrieve=on_retrieve)
     files = FakeDocumentStateReader(valid_ids)
     policy = RobotSpaceRetrievalPolicy(
         tenant_id=9,
         bot_config_id=3,
         invoke_user_id=88,
-        scope_reader=reader,
         document_state_reader=files,
         retrieval_backend=backend,
     )
     scope = AssistantRobotScope(bot_config_id=3, space_ids=spaces, scope_version=version)
-    return policy, scope, reader, backend, files
+    return policy, scope, backend, files
 
 
 async def test_zero_binding_returns_empty_without_touching_retrieval_backend():
-    policy, scope, _, backend, files = _policy(spaces=(), docs_by_space={}, valid_ids=set())
+    policy, scope, backend, files = _policy(spaces=(), docs_by_space={}, valid_ids=set())
 
     assert await policy.retrieve("anything", expected_scope=scope) == []
     assert backend.calls == []
@@ -92,7 +73,7 @@ async def test_zero_binding_returns_empty_without_touching_retrieval_backend():
 
 async def test_bound_spaces_are_queried_once_and_results_are_deduplicated():
     duplicate = _doc(100, 11, text="same chunk")
-    policy, scope, _, backend, _ = _policy(
+    policy, scope, backend, _ = _policy(
         spaces=(11, 12),
         docs_by_space={
             11: [duplicate, _doc(101, 11)],
@@ -110,7 +91,7 @@ async def test_bound_spaces_are_queried_once_and_results_are_deduplicated():
 
 
 async def test_result_postfilter_drops_deleted_failed_or_moved_files_without_personal_acl():
-    policy, scope, _, _, files = _policy(
+    policy, scope, _, files = _policy(
         spaces=(11,),
         docs_by_space={11: [_doc(100, 11), _doc(101, 11), _doc(102, 11)]},
         # The production reader defines validity solely by tenant, current bound
@@ -124,17 +105,21 @@ async def test_result_postfilter_drops_deleted_failed_or_moved_files_without_per
     assert files.calls == [(9, (11,), {100, 101, 102})]
 
 
-async def test_scope_version_change_during_retrieval_cancels_the_turn():
-    policy, scope, reader, _, _ = _policy(
+async def test_scope_change_during_retrieval_keeps_the_turn_snapshot():
+    policy, scope, backend, _ = _policy(
         spaces=(11,),
         docs_by_space={11: [_doc(100, 11)]},
         valid_ids={100},
     )
 
     def mutate_scope() -> None:
-        reader.snapshot = RobotScopeSnapshot(tenant_id=9, bot_config_id=3, space_ids=(11,), scope_version=8)
+        # Represents an administrator changing the persisted binding while
+        # this turn is already retrieving. The turn snapshot remains fixed.
+        return None
 
     policy.retrieval_backend.on_retrieve = mutate_scope
 
-    with pytest.raises(asyncio.CancelledError, match="scope changed"):
-        await policy.retrieve("question", expected_scope=scope)
+    result = await policy.retrieve("question", expected_scope=scope)
+
+    assert [doc.metadata["document_id"] for doc in result] == [100]
+    assert backend.calls == [11]
