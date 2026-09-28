@@ -20,6 +20,7 @@ from bisheng.eplus.domain.schemas.protocol import EPlusCallback
 from bisheng.eplus.domain.services.conversation_scheduler import ReadyEPlusTurn
 from bisheng.eplus.domain.services.media_service import EPlusMediaRef, EPlusPreparedBlock
 from bisheng.eplus.domain.services.message_service import AdmissionDisposition
+from bisheng.eplus.infrastructure.protocol import stable_stream_id
 
 
 class EPlusTurnLoader(Protocol):
@@ -74,7 +75,7 @@ class EPlusRobotService:
                 conversation_id=result.conversation_id or f"rejected:{result.inbound_message_id}",
                 inbound_message_id=result.inbound_message_id,
                 req_id=callback.req_id,
-                stream_id=f"rejected-{result.inbound_message_id}",
+                stream_id=stable_stream_id(context.admission.bot_id, callback.msg_id),
             )
             await stream.send_terminal(
                 result.reply_text or "处理失败，请稍后重试",  # noqa: RUF001
@@ -150,7 +151,23 @@ class EPlusRobotService:
                     continue
                 return
             context = self._contexts[key]
-            ready = await self._execute_turn(context, ready)
+            current = ready
+            try:
+                ready = await self._execute_turn(context, current)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.opt(exception=True).error(
+                    "E+ turn orchestration failed tenant_id={} turn_hash={}",
+                    tenant_id,
+                    _short_hash(current.turn.id),
+                )
+                ready = await self._scheduler.complete_and_wake_next(
+                    tenant_id=tenant_id,
+                    turn_id=current.turn.id,
+                    succeeded=False,
+                    error_code="ORCHESTRATION_ERROR",
+                )
 
     async def _execute_turn(
         self,

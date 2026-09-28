@@ -213,11 +213,11 @@ class FakeReplyFactory:
         return stream
 
 
-def _service(admission, scheduler, assistant, replies) -> EPlusRobotService:
+def _service(admission, scheduler, assistant, replies, *, turn_loader=None) -> EPlusRobotService:
     return EPlusRobotService(
         admission_service=admission,
         scheduler=scheduler,
-        turn_loader=FakeTurnLoader(),
+        turn_loader=turn_loader or FakeTurnLoader(),
         media_service=FakeMedia(),
         assistant_factory=assistant,
         reply_factory=replies,
@@ -393,6 +393,40 @@ async def test_first_frame_failure_never_creates_assistant() -> None:
 
     assert assistant.created == 0
     assert scheduler.completed[-1] == (f"{conversation}-1", False, None, "REPLY_START_FAILED")
+
+
+async def test_orchestration_failure_releases_turn_without_starting_assistant() -> None:
+    class BrokenTurnLoader:
+        async def load(self, ready):
+            raise LookupError("missing delivery")
+
+    admission = FakeAdmission()
+    scheduler = FakeScheduler()
+    assistant = FakeAssistantFactory()
+    callback = _callback("orchestration-failure")
+    conversation = "conversation-orchestration-failure"
+    admission.results[callback.msg_id] = AdmissionResult(
+        AdmissionDisposition.QUEUED, 1, conversation, f"{conversation}-1"
+    )
+    scheduler.queues[conversation].append(_ready(f"{conversation}-1", conversation))
+    service = _service(
+        admission,
+        scheduler,
+        assistant,
+        FakeReplyFactory(),
+        turn_loader=BrokenTurnLoader(),
+    )
+
+    await service.handle_message(_context(), callback)
+    await service.wait_idle()
+
+    assert assistant.created == 0
+    assert scheduler.completed[-1] == (
+        f"{conversation}-1",
+        False,
+        None,
+        "ORCHESTRATION_ERROR",
+    )
 
 
 async def test_different_conversations_execute_concurrently() -> None:
