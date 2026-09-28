@@ -160,7 +160,19 @@ class EPlusBotConfigService:
         await self._notify(row)
         return self._view(row, space_ids)
 
-    async def get_config(self, *, tenant_id: int, assistant_id: str) -> EPlusBotConfigView | None:
+    async def get_config(
+        self,
+        *,
+        tenant_id: int,
+        assistant_id: str,
+        operator_id: int,
+    ) -> EPlusBotConfigView | None:
+        await self._permission_checker.require_assistant_edit(
+            tenant_id=tenant_id,
+            assistant_id=assistant_id,
+            operator_id=operator_id,
+            action="edit",
+        )
         row = await self._repository.get_by_assistant_id(tenant_id=tenant_id, assistant_id=assistant_id)
         if row is None:
             return None

@@ -26,6 +26,7 @@ from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
 from bisheng.department.api.router import router as department_router
+from bisheng.eplus.api.router import router as eplus_router
 from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
@@ -86,6 +87,7 @@ router.include_router(assistant_router)
 router.include_router(group_router)
 router.include_router(audit_router)
 router.include_router(evaluation_router)
+router.include_router(eplus_router)
 router.include_router(tag_router)
 router.include_router(llm_router)
 router.include_router(workflow_router)

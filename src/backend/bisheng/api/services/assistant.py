@@ -29,6 +29,7 @@ from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tag import TagDao
+from bisheng.eplus.infrastructure.config_adapters import notify_eplus_assistant_target_changed
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.permission.application.access import get_f048_resource_adapter
@@ -609,6 +610,10 @@ class AssistantService(BaseService, AssistantUtils):
             user_id=login_user.user_id, event_type=BaseTelemetryTypeEnum.EDIT_APPLICATION, trace_id=trace_id_var.get()
         )
         cls.update_assistant_hook(request, login_user, assistant)
+        await notify_eplus_assistant_target_changed(
+            tenant_id=int(assistant.tenant_id),
+            assistant_id=str(assistant.id),
+        )
         return True
 
     @classmethod
