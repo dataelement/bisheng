@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
 from sqlalchemy import delete, func, update
@@ -117,19 +118,25 @@ class EPlusConfigRepository:
 
 class EPlusMessageRepository:
     _SOURCE_STATUSES: dict[EPlusInboundStatus, frozenset[EPlusInboundStatus]] = {
-        EPlusInboundStatus.QUEUED: frozenset({EPlusInboundStatus.RECEIVED}),
+        EPlusInboundStatus.PREPARING: frozenset({EPlusInboundStatus.RECEIVED}),
+        EPlusInboundStatus.QUEUED: frozenset({EPlusInboundStatus.PREPARING}),
         EPlusInboundStatus.PROCESSING: frozenset({EPlusInboundStatus.QUEUED}),
         EPlusInboundStatus.SUCCEEDED: frozenset({EPlusInboundStatus.PROCESSING}),
         EPlusInboundStatus.FAILED: frozenset(
             {
                 EPlusInboundStatus.RECEIVED,
+                EPlusInboundStatus.PREPARING,
                 EPlusInboundStatus.QUEUED,
                 EPlusInboundStatus.PROCESSING,
             }
         ),
         EPlusInboundStatus.REJECTED_BUSY: frozenset({EPlusInboundStatus.RECEIVED}),
     }
-    _INFLIGHT_STATUSES = (EPlusInboundStatus.QUEUED.value, EPlusInboundStatus.PROCESSING.value)
+    _INFLIGHT_STATUSES = (
+        EPlusInboundStatus.PREPARING.value,
+        EPlusInboundStatus.QUEUED.value,
+        EPlusInboundStatus.PROCESSING.value,
+    )
     MAX_RECOVERY_BATCH = 500
 
     def __init__(self, session: AsyncSession) -> None:
@@ -331,37 +338,97 @@ class EPlusConversationRepository:
         await self.session.flush()
         return turn
 
-    async def claim_next_turn(self, *, tenant_id: int, conversation_id: str) -> EPlusTurn | None:
+    async def finalize_prepared_turn(
+        self,
+        *,
+        tenant_id: int,
+        turn_id: str,
+        content_manifest: list[dict],
+    ) -> EPlusTurn | None:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
-        running = (
+        turn = (
             await self.session.exec(
-                select(func.count())
-                .select_from(EPlusTurn)
-                .where(
+                select(EPlusTurn).where(
                     EPlusTurn.tenant_id == resolved_tenant_id,
-                    EPlusTurn.conversation_id == str(conversation_id),
-                    EPlusTurn.status == EPlusTurnStatus.RUNNING.value,
+                    EPlusTurn.id == str(turn_id),
+                    EPlusTurn.status == EPlusTurnStatus.PREPARING.value,
                 )
             )
-        ).one()
-        if int(running):
+        ).first()
+        if turn is None:
             return None
+        turn.content_manifest = content_manifest
+        turn.status = EPlusTurnStatus.QUEUED.value
+        turn.queued_at = datetime.now()
+        self.session.add(turn)
+        await self.session.flush()
+        transitioned = await EPlusMessageRepository(self.session).transition(
+            tenant_id=resolved_tenant_id,
+            message_id=turn.inbound_message_id,
+            target=EPlusInboundStatus.QUEUED,
+        )
+        if not transitioned:
+            raise RuntimeError("E+ prepared turn has no matching inbound message")
+        return turn
 
+    async def claim_next_turn(self, *, tenant_id: int, conversation_id: str) -> EPlusTurn | None:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
         statement = (
             select(EPlusTurn)
             .where(
                 EPlusTurn.tenant_id == resolved_tenant_id,
                 EPlusTurn.conversation_id == str(conversation_id),
-                EPlusTurn.status == EPlusTurnStatus.QUEUED.value,
+                col(EPlusTurn.status).in_(
+                    (
+                        EPlusTurnStatus.PREPARING.value,
+                        EPlusTurnStatus.QUEUED.value,
+                        EPlusTurnStatus.RUNNING.value,
+                    )
+                ),
             )
             .order_by(EPlusTurn.turn_seq.asc())
             .limit(1)
         )
         if self.session.get_bind().dialect.name != "sqlite":
-            statement = statement.with_for_update(skip_locked=True)
+            statement = statement.with_for_update()
         turn = (await self.session.exec(statement)).first()
-        if turn is None:
+        if turn is None or turn.status != EPlusTurnStatus.QUEUED.value:
             return None
+
+        conversation = (
+            await self.session.exec(
+                select(EPlusConversation).where(
+                    EPlusConversation.tenant_id == resolved_tenant_id,
+                    EPlusConversation.id == str(conversation_id),
+                )
+            )
+        ).first()
+        if conversation is None:
+            raise LookupError(f"E+ conversation not found: {conversation_id}")
+        config = (
+            await self.session.exec(
+                select(EPlusBotConfig).where(
+                    EPlusBotConfig.tenant_id == resolved_tenant_id,
+                    EPlusBotConfig.id == int(conversation.bot_config_id),
+                )
+            )
+        ).first()
+        if config is None:
+            raise LookupError(f"E+ bot config not found: {conversation.bot_config_id}")
+        space_ids = [
+            int(space_id)
+            for space_id in (
+                await self.session.exec(
+                    select(EPlusBotSpace.space_id)
+                    .where(
+                        EPlusBotSpace.tenant_id == resolved_tenant_id,
+                        EPlusBotSpace.bot_config_id == int(conversation.bot_config_id),
+                    )
+                    .order_by(EPlusBotSpace.space_id.asc())
+                )
+            ).all()
+        ]
+        execution_token = uuid.uuid4().hex
         result = await self.session.exec(
             update(EPlusTurn)
             .where(
@@ -369,13 +436,21 @@ class EPlusConversationRepository:
                 EPlusTurn.id == turn.id,
                 EPlusTurn.status == EPlusTurnStatus.QUEUED.value,
             )
-            .values(status=EPlusTurnStatus.RUNNING.value, started_at=datetime.now())
+            .values(
+                status=EPlusTurnStatus.RUNNING.value,
+                started_at=datetime.now(),
+                scope_version=int(config.scope_version),
+                scope_space_ids=space_ids,
+                assistant_run_id=execution_token,
+            )
             .execution_options(synchronize_session=False)
         )
         if not result.rowcount:
             return None
         await self.session.flush()
         await self.session.refresh(turn)
+        conversation.scope_version = int(config.scope_version)
+        self.session.add(conversation)
         transitioned = await EPlusMessageRepository(self.session).transition(
             tenant_id=resolved_tenant_id,
             message_id=turn.inbound_message_id,
@@ -413,6 +488,7 @@ class EPlusConversationRepository:
         succeeded: bool,
         answer_text: str | None,
         error_code: str | None,
+        execution_token: str,
     ) -> EPlusTurn | None:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         turn = (
@@ -421,6 +497,7 @@ class EPlusConversationRepository:
                     EPlusTurn.tenant_id == resolved_tenant_id,
                     EPlusTurn.id == str(turn_id),
                     EPlusTurn.status == EPlusTurnStatus.RUNNING.value,
+                    EPlusTurn.assistant_run_id == str(execution_token),
                 )
             )
         ).first()
@@ -445,27 +522,34 @@ class EPlusConversationRepository:
 
     async def recover_bot_turns(self, *, tenant_id: int, bot_config_id: int) -> tuple[str, ...]:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
-        running_statement = (
+        interrupted_statement = (
             select(EPlusTurn)
             .join(EPlusConversation, EPlusConversation.id == EPlusTurn.conversation_id)
             .where(
                 EPlusTurn.tenant_id == resolved_tenant_id,
                 EPlusConversation.tenant_id == resolved_tenant_id,
                 EPlusConversation.bot_config_id == int(bot_config_id),
-                EPlusTurn.status == EPlusTurnStatus.RUNNING.value,
+                col(EPlusTurn.status).in_(
+                    (EPlusTurnStatus.PREPARING.value, EPlusTurnStatus.RUNNING.value)
+                ),
             )
         )
-        running_turns = list((await self.session.exec(running_statement)).all())
-        for turn in running_turns:
+        interrupted_turns = list((await self.session.exec(interrupted_statement)).all())
+        for turn in interrupted_turns:
+            error_code = (
+                "ADMISSION_INTERRUPTED"
+                if turn.status == EPlusTurnStatus.PREPARING.value
+                else "WORKER_INTERRUPTED"
+            )
             turn.status = EPlusTurnStatus.FAILED.value
-            turn.error_code = "WORKER_INTERRUPTED"
+            turn.error_code = error_code
             turn.finished_at = datetime.now()
             self.session.add(turn)
             transitioned = await EPlusMessageRepository(self.session).transition(
                 tenant_id=resolved_tenant_id,
                 message_id=turn.inbound_message_id,
                 target=EPlusInboundStatus.FAILED,
-                error_code="WORKER_INTERRUPTED",
+                error_code=error_code,
             )
             if not transitioned:
                 raise RuntimeError("E+ recovery found a running turn without a processing inbound message")

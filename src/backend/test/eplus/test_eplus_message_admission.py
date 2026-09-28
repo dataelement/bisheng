@@ -239,6 +239,46 @@ async def test_first_three_messages_queue_and_fourth_is_rejected_busy_without_tu
     assert busy.status == EPlusInboundStatus.REJECTED_BUSY.value
 
 
+async def test_concurrent_admission_reserves_only_three_inflight_slots(engine):
+    service = _service(engine, media=FakeMediaService(delay=0.03))
+
+    results = await asyncio.gather(
+        *(service.admit(_context(), _callback(f"parallel-{index}")) for index in range(4))
+    )
+
+    assert sum(result.disposition == AdmissionDisposition.QUEUED for result in results) == 3
+    assert sum(result.disposition == AdmissionDisposition.BUSY for result in results) == 1
+
+
+async def test_slow_image_ingestion_cannot_be_overtaken_by_later_text(engine):
+    image_started = asyncio.Event()
+    release_image = asyncio.Event()
+
+    class OrderedMedia(FakeMediaService):
+        async def ingest_blocks(self, *, blocks, **kwargs) -> EPlusPreparedMessage:
+            if any(block.kind == EPlusContentKind.IMAGE for block in blocks):
+                image_started.set()
+                await release_image.wait()
+            return await super().ingest_blocks(blocks=blocks, **kwargs)
+
+    service = _service(engine, media=OrderedMedia())
+    first_blocks = (
+        EPlusContentBlock(kind=EPlusContentKind.TEXT, text="first"),
+        EPlusContentBlock(kind=EPlusContentKind.IMAGE, url="https://media.example/1", aes_key="key"),
+    )
+    first_task = asyncio.create_task(service.admit(_context(), _callback("first", blocks=first_blocks)))
+    await image_started.wait()
+    second = await service.admit(_context(), _callback("second"))
+    release_image.set()
+    first = await first_task
+
+    assert first.disposition == AdmissionDisposition.QUEUED
+    assert second.disposition == AdmissionDisposition.QUEUED
+    async with AsyncSession(engine) as session:
+        turns = list((await session.exec(select(EPlusTurn).order_by(EPlusTurn.turn_seq))).all())
+    assert [(turn.turn_seq, turn.user_text) for turn in turns] == [(1, "first"), (2, "second")]
+
+
 async def test_images_are_persisted_before_queue_and_failed_image_keeps_text(engine):
     media = FakeMediaService(image_error=True)
     service = _service(engine, media=media)

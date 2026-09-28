@@ -20,6 +20,10 @@ from bisheng.eplus.domain.schemas.protocol import EPlusCallback
 from bisheng.eplus.domain.services.conversation_scheduler import ReadyEPlusTurn
 from bisheng.eplus.domain.services.media_service import EPlusMediaRef, EPlusPreparedBlock
 from bisheng.eplus.domain.services.message_service import AdmissionDisposition
+from bisheng.eplus.domain.services.reply_stream import (
+    TIMEOUT_REPLY,
+    EPlusReplyDeadlineExceeded,
+)
 from bisheng.eplus.infrastructure.protocol import stable_stream_id
 
 
@@ -53,13 +57,17 @@ class EPlusRobotService:
         media_service: Any,
         assistant_factory: EPlusAssistantFactory,
         reply_factory: EPlusReplyFactory,
+        execution_timeout_seconds: float = 300,
     ) -> None:
+        if execution_timeout_seconds <= 0:
+            raise ValueError("E+ assistant execution timeout must be positive")
         self._admission = admission_service
         self._scheduler = scheduler
         self._turn_loader = turn_loader
         self._media = media_service
         self._assistant_factory = assistant_factory
         self._reply_factory = reply_factory
+        self._execution_timeout_seconds = float(execution_timeout_seconds)
         self._tasks: dict[tuple[int, str], asyncio.Task[None]] = {}
         self._contexts: dict[tuple[int, str], EPlusBotRuntimeContext] = {}
         self._pending: set[tuple[int, str]] = set()
@@ -114,6 +122,25 @@ class EPlusRobotService:
         self._contexts.clear()
         self._pending.clear()
 
+    async def cancel_bot(self, *, tenant_id: int, bot_config_id: int) -> None:
+        """Cancel in-process work after this worker loses bot ownership."""
+        keys = tuple(
+            key
+            for key, context in self._contexts.items()
+            if key[0] == int(tenant_id) and context.admission.bot_config_id == int(bot_config_id)
+        )
+        tasks = []
+        for key in keys:
+            self._pending.discard(key)
+            task = self._tasks.get(key)
+            if task is not None and not task.done():
+                task.cancel()
+                tasks.append(task)
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        for key in keys:
+            self._contexts.pop(key, None)
+
     def _start_consumer(self, key: tuple[int, str]) -> None:
         task = self._tasks.get(key)
         if task is not None and not task.done():
@@ -167,6 +194,7 @@ class EPlusRobotService:
                     turn_id=current.turn.id,
                     succeeded=False,
                     error_code="ORCHESTRATION_ERROR",
+                    execution_token=current.turn.assistant_run_id or "",
                 )
 
     async def _execute_turn(
@@ -194,13 +222,31 @@ class EPlusRobotService:
             return await self._complete(delivery, succeeded=False, error_code="REPLY_START_FAILED")
 
         try:
-            runtime = await self._assistant_factory.create(delivery)
-            request = await self._build_request(context, delivery, runtime.supports_vision)
-            async for fragment in runtime.astream(request):
-                await stream.append(fragment)
-            await stream.finish()
+            async with asyncio.timeout(self._execution_timeout_seconds):
+                runtime = await self._assistant_factory.create(delivery)
+                request = await self._build_request(context, delivery, runtime.supports_vision)
+                async for fragment in runtime.astream(request):
+                    await stream.append(fragment)
+                    if stream.finished:
+                        break
+                await stream.finish()
         except asyncio.CancelledError:
             raise
+        except (TimeoutError, EPlusReplyDeadlineExceeded):
+            logger.warning(
+                "E+ assistant execution timed out tenant_id={} turn_hash={}",
+                delivery.tenant_id,
+                _short_hash(delivery.turn_id),
+            )
+            try:
+                await stream.fail(TIMEOUT_REPLY, error_code="ASSISTANT_TIMEOUT")
+            except Exception:
+                logger.opt(exception=True).warning(
+                    "E+ timeout reply could not be delivered tenant_id={} turn_hash={}",
+                    delivery.tenant_id,
+                    _short_hash(delivery.turn_id),
+                )
+            return await self._complete(delivery, succeeded=False, error_code="ASSISTANT_TIMEOUT")
         except Exception:
             logger.opt(exception=True).warning(
                 "E+ assistant execution failed tenant_id={} turn_hash={}",
@@ -240,6 +286,7 @@ class EPlusRobotService:
             succeeded=succeeded,
             answer_text=answer_text,
             error_code=error_code,
+            execution_token=delivery.execution_token,
         )
 
     async def _build_request(
@@ -280,6 +327,7 @@ class EPlusRobotService:
             content=content,
             history=tuple(history),
             robot_scope=scope,
+            cancellation_check=context.cancellation_check,
         )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -74,6 +75,13 @@ class AdmissionResult:
     existing_status: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _AdmissionReservation:
+    inbound_message_id: int
+    conversation_id: str
+    turn_id: str
+
+
 class EPlusMessageAdmissionService:
     def __init__(
         self,
@@ -85,9 +93,44 @@ class EPlusMessageAdmissionService:
         self._session_factory = session_factory
         self._identity_service = identity_service
         self._media_service = media_service
+        self._admission_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
     async def admit(self, context: EPlusAdmissionContext, callback: EPlusCallback) -> AdmissionResult:
         self._validate_callback(context, callback)
+        lock_key = (int(context.tenant_id), int(context.bot_config_id))
+        admission_lock = self._admission_locks.setdefault(lock_key, asyncio.Lock())
+        async with admission_lock:
+            reservation = await self._reserve(context, callback)
+        if isinstance(reservation, AdmissionResult):
+            return reservation
+
+        prepared = await self._ingest_content(context, callback)
+        async with self._session_factory() as session, session.begin():
+            finalized = await EPlusConversationRepository(session).finalize_prepared_turn(
+                tenant_id=context.tenant_id,
+                turn_id=reservation.turn_id,
+                content_manifest=[asdict(block) for block in prepared.blocks],
+            )
+            if finalized is None:
+                return AdmissionResult(
+                    disposition=AdmissionDisposition.DUPLICATE,
+                    inbound_message_id=reservation.inbound_message_id,
+                    conversation_id=reservation.conversation_id,
+                    turn_id=reservation.turn_id,
+                    existing_status=EPlusInboundStatus.FAILED.value,
+                )
+        return AdmissionResult(
+            disposition=AdmissionDisposition.QUEUED,
+            inbound_message_id=reservation.inbound_message_id,
+            conversation_id=reservation.conversation_id,
+            turn_id=reservation.turn_id,
+        )
+
+    async def _reserve(
+        self,
+        context: EPlusAdmissionContext,
+        callback: EPlusCallback,
+    ) -> AdmissionResult | _AdmissionReservation:
         inbound = self._new_inbound(context, callback)
 
         # Commit the idempotency owner before any user lookup or media network
@@ -122,11 +165,16 @@ class EPlusMessageAdmissionService:
                 reply_text=NO_PERMISSION_REPLY,
             )
 
-        prepared = await self._ingest_content(context, callback)
-
         async with self._session_factory() as session, session.begin():
             messages = EPlusMessageRepository(session)
             conversations = EPlusConversationRepository(session)
+            # The locking read must be the transaction's first database read.
+            # Under MySQL REPEATABLE READ this ensures the following quota read
+            # observes the previous admission owner's committed reservation.
+            await messages.lock_bot_admission(
+                tenant_id=context.tenant_id,
+                bot_config_id=context.bot_config_id,
+            )
             current = await messages.get_inbound(tenant_id=context.tenant_id, message_id=int(inbound.id))
             if current is None:
                 raise LookupError(f"E+ inbound message not found: {inbound.id}")
@@ -139,10 +187,6 @@ class EPlusMessageAdmissionService:
                     existing_status=current.status,
                 )
 
-            await messages.lock_bot_admission(
-                tenant_id=context.tenant_id,
-                bot_config_id=context.bot_config_id,
-            )
             inflight = await messages.count_inflight(
                 tenant_id=context.tenant_id,
                 bot_id=context.bot_id,
@@ -180,41 +224,42 @@ class EPlusMessageAdmissionService:
                 tenant_id=context.tenant_id,
                 conversation_id=conversation.id,
             )
+            turn_id = uuid.uuid4().hex
+            conversation_id = conversation.id
             turn = EPlusTurn(
-                id=uuid.uuid4().hex,
+                id=turn_id,
                 tenant_id=context.tenant_id,
-                conversation_id=conversation.id,
+                conversation_id=conversation_id,
                 inbound_message_id=int(current.id),
                 turn_seq=sequence,
                 sender_user_id=identity.user_id,
                 sender_external_id=identity.external_user_id,
                 user_text=_joined_user_text(callback),
-                content_manifest=[asdict(block) for block in prepared.blocks],
+                content_manifest=[],
                 scope_version=context.scope_version,
                 scope_space_ids=list(context.space_ids),
-                status=EPlusTurnStatus.QUEUED.value,
+                status=EPlusTurnStatus.PREPARING.value,
             )
             await conversations.save_turn(tenant_id=context.tenant_id, turn=turn)
             await messages.link_to_turn(
                 tenant_id=context.tenant_id,
                 message=current,
-                conversation_id=conversation.id,
-                turn_id=turn.id,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
                 sender_user_id=identity.user_id,
             )
             transitioned = await messages.transition(
                 tenant_id=context.tenant_id,
                 message_id=int(current.id),
-                target=EPlusInboundStatus.QUEUED,
+                target=EPlusInboundStatus.PREPARING,
             )
             if not transitioned:
-                raise RuntimeError("E+ queued admission lost its inbound state transition")
-            return AdmissionResult(
-                disposition=AdmissionDisposition.QUEUED,
-                inbound_message_id=int(current.id),
-                conversation_id=conversation.id,
-                turn_id=turn.id,
-            )
+                raise RuntimeError("E+ preparing admission lost its inbound state transition")
+        return _AdmissionReservation(
+            inbound_message_id=int(inbound.id),
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+        )
 
     async def _ingest_content(
         self,

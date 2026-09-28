@@ -104,19 +104,19 @@
 
 ### 4.2 拟新增主线
 
-`E+ 长连接回调 → 按订阅机器人确定租户/核对 aibotid → (tenant_id,bot_id,msgid) 落库去重 → 用 (WECOM_SOURCE,from.userid) 精确映射用户 → 建立/读取机器人会话 → 规范化内容（去掉 @机器人 前缀）并下载解密图片 → 按日常对话能力完成图片预处理 → 固定本轮机器人范围 → 进程内调用助手核心（模型/其他工具 + 受限知识工具） → 合并模型流式片段 → 同 req_id、同 stream.id 流式回复 E+ → 持久化结果/审计`。
+`E+ 长连接回调 → 按订阅机器人确定租户/核对 aibotid → (tenant_id,bot_id,msgid) 落库去重 → 用 (WECOM_SOURCE,from.userid) 精确映射用户 → 建立/读取机器人会话并按到达顺序预占轮次 → 规范化内容（去掉 @机器人 前缀）并下载解密图片 → 转为 QUEUED → 真正开始执行时固定最新机器人范围 → 进程内调用助手核心（模型/其他工具 + 受限知识工具） → 合并模型流式片段 → 同 req_id、同 stream.id 流式回复 E+ → 持久化结果/审计`。
 
 不存在或不可用的用户在映射步骤即结束，仅回复「无权限使用」。单聊会话键为 `(tenant_id, bot_id, single, from.userid)`；群聊会话键为 `(tenant_id, bot_id, group, chatid)`，但**每一条**群消息仍以 `from.userid` 独立验人。不同机器人即使在同一个群也不共享历史。
 
 连接生命周期按“目标状态”驱动，而不只依赖某一次保存或上线事件：只有**助手已上线 + E+ 配置已启用 + 配置完整有效**三项同时满足，worker 才抢租约并建立长连接；助手下线、E+ 配置关闭或配置删除时释放租约并断开。保存离线助手的机器人配置只落库；助手上线时触发 worker 对账并连接。若助手已经在线，此时新开启 E+ 配置或轮换连接凭据，也会触发对账并连接/重连，不要求管理员先下线再上线。上线/下线与配置接口向 worker 发送变更通知，worker 启动时及运行中还会周期性按数据库状态对账，避免通知丢失后连接状态永久错误。
 
-同一个机器人的所有用户消息都由当前持有该机器人 Redis 租约的 worker 实例从同一条长连接接收；不是每个用户单独启动 worker。这里的“机器人单活租约”就是 Redis 中一把带自动过期时间、需要 worker 持续续期的分布式锁：同一时刻只有抢到锁的一个 worker 可以连接该机器人，避免多个实例互相踢线和重复收发；持有者宕机且租约过期后，其他实例才能接管。worker 内按会话键隔离队列：同一会话的消息按 E+ 到达顺序串行进入 Agent，避免历史乱序；不同单聊/群聊会话可在有界并发内同时执行。
+同一个机器人的所有用户消息都由当前持有该机器人 Redis 租约的 worker 实例从同一条长连接接收；不是每个用户单独启动 worker。这里的“机器人单活租约”就是 Redis 中一把带自动过期时间、需要 worker 持续续期的分布式锁：同一时刻只有抢到锁的一个 worker 可以连接该机器人，避免多个实例互相踢线和重复收发；持有者宕机且租约过期后，其他实例才能接管。租约丢失或被其他连接接管时，旧 worker 立即关闭连接并取消该机器人本机的准入/Agent 任务；每个 RUNNING Turn 还有独立执行 token，旧任务即使延迟返回也不能回写新持有者的状态。普通网络重连不更换租约，排队任务通过可切换发送端自动使用新连接。worker 内按会话键隔离队列：同一会话的消息按 E+ 到达顺序串行进入 Agent，避免历史乱序；不同单聊/群聊会话可在有界并发内同时执行。
 
-业务去重以 SQL 为最终真相，不依赖进程内集合：完成机器人身份校验后，先原子插入唯一键 `(tenant_id, bot_id, msgid)` 的 `EPlusInboundMessage`；只有插入成功的调用获得执行权。唯一键冲突表示重投，复用原记录的稳定 `stream_id` 和处理结果，不再次启动 Agent，也不再次生成业务回答。Redis 可保存短期热键减少重复查库，但不能作为唯一去重依据。消息记录按 `RECEIVED → QUEUED → PROCESSING → SUCCEEDED/FAILED` 条件更新；超过在途上限的消息记为 `REJECTED_BUSY`，使其重投时也不重复回复。worker 崩溃后通过持久状态识别未完成消息，不能把它当成一条新提问重新执行。
+业务去重以 SQL 为最终真相，不依赖进程内集合：完成机器人身份校验后，先原子插入唯一键 `(tenant_id, bot_id, msgid)` 的 `EPlusInboundMessage`；只有插入成功的调用获得执行权。唯一键冲突表示重投，复用原记录的稳定 `stream_id` 和处理结果，不再次启动 Agent，也不再次生成业务回答。Redis 可保存短期热键减少重复查库，但不能作为唯一去重依据。消息记录按 `RECEIVED → PREPARING → QUEUED → PROCESSING → SUCCEEDED/FAILED` 条件更新：`PREPARING` 已预占会话序号和在途名额，正在下载图片，后到消息不得越过它；超过在途上限的消息记为 `REJECTED_BUSY`，使其重投时也不重复回复。worker 崩溃后通过持久状态识别未完成消息，不能把它当成一条新提问重新执行。
 
-E+ 允许同一用户对同一机器人同时有 3 条消息在途。“在途”是并发控制状态，不是“历史轮次”的同义词：消息已被接收、但尚未得到最终成功或失败回复时都算一条，包含 `QUEUED` 和 `PROCESSING`；完成后即不再计数。前一轮若还没完成，它就是一条在途消息；已经完成的前一轮只是历史，不算在途。`QUEUED` 不是现有内部助手的原逻辑，而是 E+ 接入为“用户连续发消息”新增的排队状态：同一会话正在执行时，后续消息完成验人、落库和图片保存后进入队列，不与前一轮并发。每个会话由当前 E+ worker 内的一个串行消费协程负责；前一轮进入成功/失败/取消终态后，该协程立即取出下一条，重新加载包含前一轮完整问答的最新历史，再发送「处理中」并启动 Agent，不需要用户再次发消息，也不由 Celery 或另一个“助手 worker”触发。worker 崩溃接管后，新持有者根据数据库中的 `QUEUED` 状态恢复未开始任务。排队阶段不提前发送占位；同一用户与机器人已有 3 条在途时，第 4 条立即以 `finish=true` 回复「消息处理中，请稍后再试」，不进入队列。
+E+ 允许同一用户对同一机器人同时有 3 条消息在途。“在途”是并发控制状态，不是“历史轮次”的同义词：消息已被接收、但尚未得到最终成功或失败回复时都算一条，包含 `PREPARING`、`QUEUED` 和 `PROCESSING`；完成后即不再计数。前一轮若还没完成，它就是一条在途消息；已经完成的前一轮只是历史，不算在途。`QUEUED` 不是现有内部助手的原逻辑，而是 E+ 接入为“用户连续发消息”新增的排队状态：同一会话正在执行时，后续消息先按到达顺序预占 `PREPARING` 轮次，完成图片保存后转为 `QUEUED`，不与前一轮并发。每个会话由当前 E+ worker 内的一个串行消费协程负责；前一轮进入成功/失败/取消终态后，该协程立即取出下一条，重新加载包含前一轮完整问答的最新历史，再发送「处理中」并启动 Agent，不需要用户再次发消息，也不由 Celery 或另一个“助手 worker”触发。worker 崩溃接管后，新持有者把中断的 `PREPARING/RUNNING` 标为失败，并恢复尚未开始的 `QUEUED`。排队阶段不提前发送占位；同一用户与机器人已有 3 条在途时，第 4 条立即以 `finish=true` 回复「消息处理中，请稍后再试」，不进入队列。
 
-“6 分钟窗口”是 E+ 对**一条消息的流式回复通道**规定的有效期，不是会话历史有效期，也不是排队超时：从我方向这条消息第一次发送 `aibot_respond_msg`（本设计为「处理中」）开始计时，必须在 6 分钟内用同一 `req_id`、同一 `stream.id` 发送 `finish=true`，否则 E+ 自动结束该回复流。排队时尚未发送首帧，所以该消息自己的 6 分钟还没开始；轮到执行后才开始。我方执行硬上限取约 5 分钟（与客户 demo 的 300 秒一致，给结束帧留余量），到点以明确超时终态结束。**占位帧的回执失败（发送异常、超时或 `errcode≠0`）就不再启动 Agent**，直接把该消息记为失败：占位都发不出去，后面的答案也发不出去，白跑只会浪费模型调用。该设计依赖“6 分钟从首次回复起算”的文档口径；真实环境若要求回调到达后必须在更短时间内首次响应，则改为直接拒绝同会话后续消息，不能让排队消息悄悄超时。
+“6 分钟窗口”是 E+ 对**一条消息的流式回复通道**规定的有效期，不是会话历史有效期，也不是排队超时：从我方向这条消息第一次发送 `aibot_respond_msg`（本设计为「处理中」）开始计时，必须在 6 分钟内用同一 `req_id`、同一 `stream.id` 发送 `finish=true`，否则 E+ 自动结束该回复流。排队时尚未发送首帧，所以该消息自己的 6 分钟还没开始；轮到执行后才开始。我方用外层主动超时包住模型、工具和流式读取的整个执行链，硬上限取约 5 分钟（与客户 demo 的 300 秒一致，给结束帧留余量）；即使模型一直没有输出片段也会被取消并发送明确超时终态。**占位帧的回执失败（发送异常、超时或 `errcode≠0`）就不再启动 Agent**，直接把该消息记为失败：占位都发不出去，后面的答案也发不出去，白跑只会浪费模型调用。该设计依赖“6 分钟从首次回复起算”的文档口径；真实环境若要求回调到达后必须在更短时间内首次响应，则改为直接拒绝同会话后续消息，不能让排队消息悄悄超时。
 
 模型流式输出通常是 token/文本片段，不是稳定的“一个字”。worker 不按每个片段立即向 E+ 发帧，而是累计答案并按约 1–2 秒或达到缓冲阈值合并刷新；每次向 E+ 发送的是截至当前的**完整累计内容**，且必须等上一帧回执后再发下一帧，并为 `finish=true` 预留额度。`scope_version` 不是知识空间自身的版本，而是**这个机器人“绑定空间清单”的递增版本号**：每次新增、移除或替换绑定时加一。本轮开始时把版本号和空间 ID 集合一起写入 Turn，作为审计快照；本轮始终使用该空间集合，不在检索或流式发送中途重新比较版本。管理员修改绑定不会打断已开始的回答，下一轮启动时才读取最新版本和空间集合。会话历史跨版本完整保留并继续提供给模型，不按 `scope_version` 过滤。超过回复窗口前结束本轮并回明确超时。
 
@@ -136,7 +136,7 @@ E+ 允许同一用户对同一机器人同时有 3 条消息在途。“在途�
 |---|---|---|
 | `EPlusBotConfig` | `(tenant_id, bot_id)` 与 `(tenant_id, assistant_id)` 分别唯一，落实助手应用↔机器人一对一；保存连接地址、加密 Secret、可选 CA 对象引用、启用状态、连接状态与配置版本 | 不存员工个人空间权限；不把 Secret 写明文配置或日志；不把 CA 当客户端私钥 |
 | `EPlusBotSpace` | `(tenant_id, bot_id, space_id)` 唯一、规范化绑定，是机器人知识范围的唯一真相；记录绑定人与时间，配置更改入审计 | 不把 ID 列表塞入大 JSON；不写 PermissionGrant/OpenFGA |
-| `EPlusInboundMessage` | `(tenant_id, bot_id, msgid)` 唯一；原子插入决定执行权，记录 `RECEIVED/QUEUED/PROCESSING/SUCCEEDED/FAILED/REJECTED_BUSY`、回调 `req_id`、稳定 `stream_id` 与最终回复状态 | 不用进程内 Set 或 Redis 短期键充当最终消息真相；重投不再次执行 Agent |
+| `EPlusInboundMessage` | `(tenant_id, bot_id, msgid)` 唯一；原子插入决定执行权，记录 `RECEIVED/PREPARING/QUEUED/PROCESSING/SUCCEEDED/FAILED/REJECTED_BUSY`、回调 `req_id`、稳定 `stream_id` 与最终回复状态 | 不用进程内 Set 或 Redis 短期键充当最终消息真相；重投不再次执行 Agent |
 | `EPlusConversation` / `EPlusTurn` | 机器人+单聊用户或群聊 ID 的独立上下文；逐轮记录实际发送者、文本、图片对象引用、回答和当时的范围版本 | 不把群聊塞进某个人的内部助手历史，也不让普通会话 API 读到群记录 |
 | `EPlusConnectionWorker` | 独立常驻进程；每机器人 Redis 租约单活，同一机器人的所有会话由租约持有实例接收；连接协程负责订阅/心跳/重连/收发，独立有界执行任务在进程内调用 `AssistantAgent` | 不是 Linsight/Celery 式一次性任务消费者；不新增“助手 worker”网络服务；不依赖 `aibot` SDK；收到 `disconnected_event` 不自动重连 |
 | `EPlusRobotService` | 校验配置/用户/会话、固定执行范围、编排 Agent、审计 | 不直接操作 OpenFGA tuple 或跨层写 ORM |
@@ -209,7 +209,7 @@ Assistant 1 ── 0..1 EPlusBotConfig 1 ── N EPlusBotSpace
 | `chat_id` | VARCHAR(255)，NULL | 群聊使用 E+ `chatid`；单聊为空 |
 | `msg_type` | VARCHAR(16)，NOT NULL | `TEXT/IMAGE/MIXED` |
 | `payload_sha256` | CHAR(64)，NOT NULL | 原始回调规范化摘要，用于异常重投对账；不在本表保存完整原文 |
-| `status` | VARCHAR(32)，NOT NULL | `RECEIVED/QUEUED/PROCESSING/SUCCEEDED/FAILED/REJECTED_BUSY` |
+| `status` | VARCHAR(32)，NOT NULL | `RECEIVED/PREPARING/QUEUED/PROCESSING/SUCCEEDED/FAILED/REJECTED_BUSY` |
 | `reply_status` | VARCHAR(32)，NOT NULL | `NOT_STARTED/STREAMING/FINISHED/SEND_FAILED` |
 | `error_code` | VARCHAR(64)，NULL | 如用户无权限、图片失败、助手超时、E+ 回执失败等稳定分类 |
 | `received_at` / `started_at` / `finished_at` | DATETIME，按阶段可空 | 排队、执行和时延统计 |
@@ -250,9 +250,9 @@ Assistant 1 ── 0..1 EPlusBotConfig 1 ── N EPlusBotSpace
 | `extracted_text` | TEXT，NULL | 非视觉路径得到的 OCR/文字提取结果 |
 | `scope_version` | BIGINT，NOT NULL | 本轮使用的机器人空间绑定版本 |
 | `scope_space_ids` | `JsonType`，NOT NULL | 本轮实际空间 ID 快照，是本轮检索授权边界并用于审计；配置变更不撤销本轮，下一轮重新生成快照 |
-| `assistant_run_id` | VARCHAR(64)，NULL | 关联助手执行/运行日志，便于定位工具和模型失败 |
+| `assistant_run_id` | VARCHAR(64)，NULL | 每次领取 RUNNING 时生成的执行所有权 token；完成回写必须匹配，防止旧 worker 覆盖接管后的状态，也可关联运行日志 |
 | `answer_text` | TEXT，NULL | 实际向 E+ 完成发送的安全文字；最长遵守协议 20,480 UTF-8 字节 |
-| `status` | VARCHAR(16)，NOT NULL | `QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED` |
+| `status` | VARCHAR(16)，NOT NULL | `PREPARING/QUEUED/RUNNING/SUCCEEDED/FAILED/CANCELLED` |
 | `error_code` | VARCHAR(64)，NULL | 稳定失败分类，不保存内部异常堆栈 |
 | `queued_at` / `started_at` / `finished_at` | DATETIME，按阶段可空 | 排队和执行耗时 |
 | `create_time` / `update_time` | DATETIME，NOT NULL | 通用审计时间 |

@@ -139,6 +139,31 @@ async def test_supervisor_close_failure_does_not_skip_robot_or_context_cleanup()
     assert events[-3:] == ["supervisor.stop", "robot.close", "context.close"]
 
 
+async def test_switchable_sender_routes_queued_reply_to_reconnected_client() -> None:
+    from bisheng.eplus.worker import SwitchableEPlusSender
+
+    class Connection:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        async def send_direct(self, frame):
+            return {"errcode": 0, "connection": self.name, "frame": frame}
+
+    sender = SwitchableEPlusSender(wait_timeout_seconds=0.2)
+    first = Connection("first")
+    second = Connection("second")
+    sender.activate(first)
+    assert (await sender.send_with_ack({"value": 1}))["connection"] == "first"
+
+    sender.deactivate(first)
+    pending = asyncio.create_task(sender.send_with_ack({"value": 2}))
+    await asyncio.sleep(0)
+    assert not pending.done()
+    sender.activate(second)
+
+    assert (await pending)["connection"] == "second"
+
+
 def test_entrypoints_expose_dedicated_eplus_mode() -> None:
     root = Path(__file__).resolve().parents[4]
     for path in (root / "src/backend/entrypoint.sh", root / "docker/bisheng/entrypoint.sh"):

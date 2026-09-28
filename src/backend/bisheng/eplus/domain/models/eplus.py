@@ -36,6 +36,7 @@ class EPlusConnectionStatus(StrEnum):
 
 class EPlusInboundStatus(StrEnum):
     RECEIVED = "RECEIVED"
+    PREPARING = "PREPARING"
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"
     SUCCEEDED = "SUCCEEDED"
@@ -67,6 +68,7 @@ class EPlusConversationStatus(StrEnum):
 
 
 class EPlusTurnStatus(StrEnum):
+    PREPARING = "PREPARING"
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"

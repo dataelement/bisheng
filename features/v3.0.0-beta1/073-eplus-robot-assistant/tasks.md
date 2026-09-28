@@ -20,7 +20,7 @@
 - Secret 永不回显，使用既有 Fernet 能力加密落库；CA 与图片字节只存 MinIO，SQL 只保存对象引用与摘要。
 - E+ 协议固定使用探针已验证的帧格式、图片解密算法、逐帧 ACK、30 秒心跳、连续两次失败判死、1–30 秒退避和 `disconnected_event` 不抢回规则。
 - 单条流式回答使用同一 `req_id`/`stream.id`、累计全文、20,480 UTF-8 字节上限；首次占位后 5 分钟硬取消并在 6 分钟协议窗口前发送 `finish=true`。
-- 同一会话串行执行；同一用户+机器人最多三条 `QUEUED/PROCESSING` 在途，第 4 条固定回复忙碌且不创建 Turn。
+- 同一会话按到达顺序串行执行；同一用户+机器人最多三条 `PREPARING/QUEUED/PROCESSING` 在途，第 4 条固定回复忙碌且不创建 Turn。
 - 前端只改 Platform 助手设置页；使用已落地 `@bisheng/ui`/现有组件，三语 i18n 同步，不引入新 UI/状态库。
 - 每个后端任务遵循 RED → GREEN；中间件、DM8 和客户真实 E+ 验证作为 CI/环境门禁，不用本地 mock 冒充通过。
 
@@ -104,7 +104,7 @@ src/backend/bisheng/eplus/
 - Consumes: T001 五表。
 - Produces: `EPlusConfigRepository`、`EPlusMessageRepository`、`EPlusConversationRepository`；服务层不直接拼 ORM 查询。
 
-- [x] **Step 1 — RED:** 测试原子插入 `(tenant_id, bot_id, msgid)` 只有一个创建者；条件状态迁移只允许 `RECEIVED→QUEUED→PROCESSING→终态`；事务内分配会话 `next_sequence`；统计用户+机器人三条在途；按 bot 恢复 `QUEUED` 且不把 `PROCESSING` 直接重跑。
+- [x] **Step 1 — RED:** 测试原子插入 `(tenant_id, bot_id, msgid)` 只有一个创建者；条件状态迁移只允许 `RECEIVED→PREPARING→QUEUED→PROCESSING→终态`；事务内分配会话 `next_sequence`；统计用户+机器人三条在途；按 bot 恢复 `QUEUED` 且不把 `PROCESSING` 直接重跑。
 - [x] **Step 2 — Verify RED:** 运行 `test/eplus/test_eplus_repository.py`，预期 Repository 缺失失败。
 - [x] **Step 3 — GREEN:** 实现异步 Repository；写操作显式检查租户上下文，批量 update/delete 不依赖 SELECT tenant hook；唯一键冲突只返回既有记录，不吞其他完整性错误。
 - [x] **Step 4 — Verify GREEN:** 重跑测试；SQLite 只验证语义，MySQL/DM8 并发唯一键进入 T017 环境门禁。
@@ -275,7 +275,7 @@ src/backend/bisheng/eplus/
 
 - [x] **Step 1 — RED:** 覆盖不同单聊/群互不串历史、群内发送者共享群会话但逐条身份记录、同会话严格序号执行、前一轮完成后自动取下一轮、scope_version 变化仍加载完整成功历史、QUEUED 恢复、PROCESSING 标记失败/人工恢复而不自动重跑。
 - [x] **Step 2 — Verify RED:** 运行本测试，预期 scheduler 缺失失败。
-- [x] **Step 3 — GREEN:** 内存 Event 只做唤醒，SQL 是队列真相；消费者退出/接管后可从数据库恢复；不使用 Celery。
+- [x] **Step 3 — GREEN:** 内存 Event 只做唤醒，SQL 是队列真相；媒体处理前用 `PREPARING` 预占顺序；执行领取时刷新最新范围快照并生成 fencing token；消费者退出/接管后可从数据库恢复；不使用 Celery。
 - [x] **Step 4 — Verify GREEN:** 重跑测试，并执行取消/异常路径确保释放在途。
 - [x] **Step 5 — Commit:** `feat(eplus): serialize robot conversations`。
 
@@ -325,7 +325,7 @@ src/backend/bisheng/eplus/
 
 - [x] **Step 1 — RED:** 覆盖两个实例只有一个获得租约、续租失败立即取消连接、持有者宕机 TTL 后接管、普通断线按 1/2/4…30 秒退避重连、启用但助手离线不连、上线后连接、下线/关闭/逻辑删除断开、凭据版本变化重连、通知丢失被周期对账修复、TAKEN_OVER 冻结且不抢回。
 - [x] **Step 2 — Verify RED:** 运行本测试，预期 supervisor 缺失失败。
-- [x] **Step 3 — GREEN:** 每 bot 使用 token-safe lease；本地 task map 不是状态真相；Supervisor 停止时逐连接关闭并释放自己持有的 token。
+- [x] **Step 3 — GREEN:** 每 bot 使用 token-safe lease；租约丢失时关闭连接并取消本机该机器人任务；RUNNING 完成回写校验 execution token；普通重连切换队列共享发送端；本地 task map 不是状态真相；Supervisor 停止时逐连接关闭并释放自己持有的 token。
 - [x] **Step 4 — Verify GREEN:** 重跑测试并开启 asyncio debug 检查无泄漏 task。
 - [x] **Step 5 — Commit:** `feat(eplus): supervise single-active robot connections`。
 
@@ -344,7 +344,7 @@ src/backend/bisheng/eplus/
 
 - [x] **Step 1 — RED:** 端到端 fake Assistant 覆盖四类消息、无权限、重复、忙碌、图片失败+文字继续、零绑定知识为空、执行中改绑本轮继续且下一轮使用新绑定、模型/工具异常安全终态、同会话后续轮加载跨版本完整历史、不同会话并发、首帧失败不启动 Agent。
 - [x] **Step 2 — Verify RED:** 运行本测试，预期 orchestrator 缺失失败。
-- [x] **Step 3 — GREEN:** 按“协议→幂等→身份→媒体→排队→占位→scope snapshot→Assistant→buffer→终态”编排；每个异常落明确终态并释放在途；日志仅记录脱敏 ID/分类/耗时。
+- [x] **Step 3 — GREEN:** 按“协议→幂等→身份→预占顺序→媒体→排队→占位→最新 scope snapshot→Assistant→buffer→终态”编排；外层硬超时覆盖模型/工具无输出场景；每个异常落明确终态并释放在途；日志仅记录脱敏 ID/分类/耗时。
 - [x] **Step 4 — Verify GREEN:** 重跑 T015 及 T007–T014 全部 eplus 测试。
 - [x] **Step 5 — Commit:** `feat(eplus): integrate robot assistant orchestration`。
 

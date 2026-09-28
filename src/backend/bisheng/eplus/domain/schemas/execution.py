@@ -17,6 +17,7 @@ class EPlusBotRuntimeContext:
 
     admission: EPlusAdmissionContext
     sender: EPlusFrameSender
+    cancellation_check: Any | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ class EPlusAssistantRequest:
     content: AssistantMessageContent
     history: tuple[EPlusAssistantHistoryItem, ...]
     robot_scope: AssistantRobotScope
+    cancellation_check: Any | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,3 +53,4 @@ class EPlusTurnDelivery:
     scope_version: int
     space_ids: tuple[int, ...]
     history: tuple[EPlusHistoryTurn, ...]
+    execution_token: str

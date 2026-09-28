@@ -150,11 +150,12 @@ flowchart TD
     USER -->|是| CONV["读取或创建机器人会话<br/>eplus_conversation"]
     CONV --> LIMIT{"该用户 + 机器人<br/>已有 3 条在途消息？"}
     LIMIT -->|是| BUSY["回复：消息处理中，请稍后再试<br/>状态 REJECTED_BUSY"]
-    LIMIT -->|否| NORMALIZE["解析文字、图片或图文混排<br/>剥离群聊 @机器人"]
+    LIMIT -->|否| RESERVE["按到达顺序预占轮次<br/>eplus_turn = PREPARING"]
+    RESERVE --> NORMALIZE["解析文字、图片或图文混排<br/>剥离群聊 @机器人"]
     NORMALIZE --> MEDIA{"有图片？"}
     MEDIA -->|是| DOWNLOAD["立即下载、解密、校验并存 MinIO"]
     MEDIA -->|否| TURN
-    DOWNLOAD --> TURN["创建本轮记录<br/>eplus_turn = QUEUED"]
+    DOWNLOAD --> TURN["媒体准备完成<br/>PREPARING → QUEUED"]
     TURN --> Q["放入该会话串行队列"]
     Q --> WAIT{"前一轮已进入终态？"}
     WAIT -->|否| Q
@@ -162,7 +163,7 @@ flowchart TD
     RUN --> PLACEHOLDER["发送第一帧：处理中<br/>该消息的 E+ 6 分钟回复窗口开始"]
     PLACEHOLDER --> ACK{"首帧回执成功？"}
     ACK -->|否| FAIL["不启动助手，记录失败"]
-    ACK -->|是| CONTEXT["记录当前 scope_version 与空间快照<br/>加载跨版本完整历史"]
+    ACK -->|是| CONTEXT["执行开始时读取最新 scope_version 与空间快照<br/>加载跨版本完整历史"]
     CONTEXT --> IMAGE["按视觉模型 / OCR 能力处理图片"]
     IMAGE --> AGENT["调用共用助手执行核心"]
     AGENT --> TOOL{"模型是否调用工具？"}
@@ -191,7 +192,7 @@ flowchart TD
     classDef reject fill:#fdeaea,stroke:#aa4242,color:#431717;
 
     class MSG customer;
-    class RECEIVE,BOT,DEDUP,DUP,USER,CONV,LIMIT,NORMALIZE,MEDIA,DOWNLOAD,TURN,Q,WAIT,RUN,PLACEHOLDER,ACK,CONTEXT,SCOPE,BUFFER,TIME,STREAM,DONE,FINISH,SUCCESS,NEXT added;
+    class RECEIVE,BOT,DEDUP,DUP,USER,CONV,LIMIT,RESERVE,NORMALIZE,MEDIA,DOWNLOAD,TURN,Q,WAIT,RUN,PLACEHOLDER,ACK,CONTEXT,SCOPE,BUFFER,TIME,STREAM,DONE,FINISH,SUCCESS,NEXT added;
     class IMAGE,AGENT changed;
     class NORMALTOOL,TOOL existing;
     class DROP,NOPERM,BUSY,FAIL,TIMEOUT,END reject;
@@ -217,8 +218,9 @@ sequenceDiagram
 
     U->>E: 连续发送消息 2
     E->>W: 回调消息 2
-    W->>DB: 消息 2 = QUEUED，图片立即保存
-    W->>Q: 消息 2 入队等待
+    W->>DB: 消息 2 = PREPARING，先预占顺序
+    W->>DB: 图片保存完成后转 QUEUED
+    W->>Q: 消息 2 入队等待；后发消息不能越过
 
     U->>E: 连续发送消息 3
     E->>W: 回调消息 3
@@ -238,7 +240,7 @@ sequenceDiagram
     Q->>A: 执行消息 2，并加载消息 1 完整问答
 ```
 
-`QUEUED` 是本次 E+ 接入新增的状态，不是原有助手逻辑。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者从数据库恢复尚未开始的 `QUEUED` 记录。
+`PREPARING/QUEUED` 都是本次 E+ 接入新增的状态，不是原有助手逻辑。`PREPARING` 用于在耗时图片下载前固定到达顺序并占用在途名额；队首未准备好时后续 `QUEUED` 不得先执行。下一条由同一个 Worker 的会话消费协程在前一轮结束后主动取出，不需要用户重新发送，也不经过 Celery。Worker 异常退出后，新租约持有者把中断的 `PREPARING/RUNNING` 标为失败，并恢复尚未开始的 `QUEUED` 记录；RUNNING 的 execution token 防止旧 worker 延迟回写。
 
 ## 7. 助手核心到底改什么
 

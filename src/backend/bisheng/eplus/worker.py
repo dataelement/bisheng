@@ -50,7 +50,11 @@ from bisheng.eplus.domain.services.media_service import EPlusMediaService
 from bisheng.eplus.domain.services.message_service import EPlusAdmissionContext, EPlusMessageAdmissionService
 from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream, RedisReplyQuota
 from bisheng.eplus.domain.services.robot_service import EPlusRobotService
-from bisheng.eplus.infrastructure.connection_client import EPlusConnectionClient, EPlusConnectionConfig
+from bisheng.eplus.infrastructure.connection_client import (
+    EPlusConnectionClient,
+    EPlusConnectionConfig,
+    EPlusConnectionExitReason,
+)
 from bisheng.eplus.infrastructure.connection_supervisor import (
     BotConnectionRef,
     EPlusConnectionSupervisor,
@@ -79,24 +83,75 @@ class CallbackTaskRegistry:
     """Keep durable admission work alive across a WebSocket reconnect."""
 
     def __init__(self) -> None:
-        self._tasks: set[asyncio.Task[None]] = set()
+        self._tasks: dict[asyncio.Task[None], BotConnectionRef] = {}
 
-    def spawn(self, awaitable: Awaitable[None]) -> None:
+    def spawn(self, ref: BotConnectionRef, awaitable: Awaitable[None]) -> None:
         task = asyncio.create_task(awaitable)
-        self._tasks.add(task)
+        self._tasks[task] = ref
         task.add_done_callback(self._done)
+
+    async def cancel(self, ref: BotConnectionRef) -> None:
+        tasks = tuple(task for task, owner in self._tasks.items() if owner == ref)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def close(self) -> None:
         if self._tasks:
-            await asyncio.gather(*tuple(self._tasks), return_exceptions=True)
+            tasks = tuple(self._tasks)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def _done(self, task: asyncio.Task[None]) -> None:
-        self._tasks.discard(task)
+        self._tasks.pop(task, None)
         if task.cancelled():
             return
         error = task.exception()
         if error is not None:
             logger.opt(exception=error).error("E+ callback admission task failed")
+
+
+class BotExecutionGuard:
+    """Process-local cancellation signal for one leased robot."""
+
+    def __init__(self) -> None:
+        self._cancelled = False
+
+    def reset(self) -> None:
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def is_cancelled(self) -> bool:
+        return self._cancelled
+
+
+class SwitchableEPlusSender:
+    """Route queued replies to the currently authenticated connection."""
+
+    def __init__(self, *, wait_timeout_seconds: float = 5) -> None:
+        self._current: WorkerConnection | None = None
+        self._available = asyncio.Event()
+        self._wait_timeout_seconds = float(wait_timeout_seconds)
+
+    def activate(self, connection: WorkerConnection) -> None:
+        self._current = connection
+        self._available.set()
+
+    def deactivate(self, connection: WorkerConnection) -> None:
+        if self._current is connection:
+            self._current = None
+            self._available.clear()
+
+    async def send_with_ack(self, frame: dict[str, Any]):
+        async with asyncio.timeout(self._wait_timeout_seconds):
+            while self._current is None:
+                await self._available.wait()
+            connection = self._current
+        return await connection.send_direct(frame)
 
 
 @dataclass(frozen=True, slots=True)
@@ -311,6 +366,7 @@ class SqlEPlusTurnLoader:
             scope_version=turn.scope_version,
             space_ids=tuple(turn.scope_space_ids),
             history=ready.history,
+            execution_token=turn.assistant_run_id or "",
         )
 
 
@@ -373,6 +429,7 @@ class BiShengAssistantRuntime:
             external_user_id=request.external_user_id,
             content=request.content,
             robot_scope=request.robot_scope,
+            cancellation_check=request.cancellation_check,
         )
         self._agent.execution_context = context
         await self._agent.init_tools(context=context)
@@ -414,13 +471,21 @@ class WorkerConnection:
         provider: SqlEPlusTargetProvider,
         robot_service: EPlusRobotService,
         callback_registry: CallbackTaskRegistry,
+        sender: SwitchableEPlusSender,
+        execution_guard: BotExecutionGuard,
         recover_once: Callable[[BotConnectionRef, EPlusBotRuntimeContext], Awaitable[None]],
+        clear_recovery: Callable[[BotConnectionRef], Awaitable[None]],
     ) -> None:
         self._ref = ref
         self._provider = provider
         self._robot = robot_service
         self._callback_registry = callback_registry
+        self._sender = sender
+        self._execution_guard = execution_guard
         self._recover_once = recover_once
+        self._clear_recovery = clear_recovery
+        self._close_lock = asyncio.Lock()
+        self._closed = False
         self._client = EPlusConnectionClient(
             EPlusConnectionConfig(
                 url=target.connection_url,
@@ -433,26 +498,55 @@ class WorkerConnection:
 
     async def wait_authenticated(self) -> None:
         await self._client.wait_authenticated()
-        context = await self._provider.runtime_context(self._ref, self)
+        self._sender.activate(self)
+        context = await self._provider.runtime_context(self._ref, self._sender)
         if context is not None:
+            context = EPlusBotRuntimeContext(
+                admission=context.admission,
+                sender=context.sender,
+                cancellation_check=self._execution_guard.is_cancelled,
+            )
             await self._recover_once(self._ref, context)
 
     async def run_connection_once(self):
-        return await self._client.run_connection_once()
+        try:
+            reason = await self._client.run_connection_once()
+            if reason is EPlusConnectionExitReason.TAKEN_OVER:
+                await self.close()
+            return reason
+        finally:
+            self._sender.deactivate(self)
 
     async def close(self) -> None:
-        await self._client.close()
+        async with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._execution_guard.cancel()
+            self._sender.deactivate(self)
+            await self._client.close()
+            await self._callback_registry.cancel(self._ref)
+            await self._robot.cancel_bot(
+                tenant_id=self._ref.tenant_id,
+                bot_config_id=self._ref.bot_config_id,
+            )
+            await self._clear_recovery(self._ref)
 
-    async def send_with_ack(self, frame: dict[str, Any]):
+    async def send_direct(self, frame: dict[str, Any]):
         return await self._client.send_with_ack(frame)
 
     async def _on_message(self, frame: dict[str, Any]) -> None:
-        self._callback_registry.spawn(self._handle_message(frame))
+        self._callback_registry.spawn(self._ref, self._handle_message(frame))
 
     async def _handle_message(self, frame: dict[str, Any]) -> None:
-        context = await self._provider.runtime_context(self._ref, self)
+        context = await self._provider.runtime_context(self._ref, self._sender)
         if context is None:
             return
+        context = EPlusBotRuntimeContext(
+            admission=context.admission,
+            sender=context.sender,
+            cancellation_check=self._execution_guard.is_cancelled,
+        )
         callback = parse_message_callback(frame)
         with _tenant_scope(self._ref.tenant_id):
             await self._robot.handle_message(context, callback)
@@ -490,6 +584,8 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
     callback_registry = CallbackTaskRegistry()
     recovered: set[BotConnectionRef] = set()
     recovery_lock = asyncio.Lock()
+    senders: dict[BotConnectionRef, SwitchableEPlusSender] = {}
+    execution_guards: dict[BotConnectionRef, BotExecutionGuard] = {}
 
     async def recover_once(ref: BotConnectionRef, context: EPlusBotRuntimeContext) -> None:
         async with recovery_lock:
@@ -504,8 +600,15 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
                     await robot.run_turn(context, conversation_id)
             recovered.add(ref)
 
+    async def clear_recovery(ref: BotConnectionRef) -> None:
+        async with recovery_lock:
+            recovered.discard(ref)
+
     def client_factory(target: EPlusConnectionTarget, ca_pem: bytes | None) -> WorkerConnection:
         ref = BotConnectionRef(target.tenant_id, target.bot_config_id)
+        sender = senders.setdefault(ref, SwitchableEPlusSender())
+        execution_guard = execution_guards.setdefault(ref, BotExecutionGuard())
+        execution_guard.reset()
         return WorkerConnection(
             ref=ref,
             target=target,
@@ -513,7 +616,10 @@ async def build_worker_runtime() -> EPlusWorkerRuntime:
             provider=provider,
             robot_service=robot,
             callback_registry=callback_registry,
+            sender=sender,
+            execution_guard=execution_guard,
             recover_once=recover_once,
+            clear_recovery=clear_recovery,
         )
 
     supervisor = EPlusConnectionSupervisor(

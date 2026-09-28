@@ -67,6 +67,7 @@ class EPlusConversationScheduler:
         succeeded: bool,
         answer_text: str | None = None,
         error_code: str | None = None,
+        execution_token: str,
     ) -> ReadyEPlusTurn | None:
         async with self._session_factory() as session, session.begin():
             completed = await EPlusConversationRepository(session).complete_turn(
@@ -75,6 +76,7 @@ class EPlusConversationScheduler:
                 succeeded=succeeded,
                 answer_text=answer_text,
                 error_code=error_code,
+                execution_token=execution_token,
             )
             if completed is None:
                 return None

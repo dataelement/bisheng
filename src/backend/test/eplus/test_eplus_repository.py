@@ -147,6 +147,11 @@ async def test_state_machine_rejects_skipped_and_terminal_transitions(engine: As
         assert await repository.transition(
             tenant_id=TENANT_ID,
             message_id=message.id,
+            target=EPlusInboundStatus.PREPARING,
+        )
+        assert await repository.transition(
+            tenant_id=TENANT_ID,
+            message_id=message.id,
             target=EPlusInboundStatus.QUEUED,
         )
         assert not await repository.transition(

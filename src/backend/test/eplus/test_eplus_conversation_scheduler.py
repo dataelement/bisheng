@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import pytest_asyncio
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -11,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.eplus.domain.models.eplus import (
     EPlusBotConfig,
+    EPlusBotSpace,
     EPlusChatType,
     EPlusConnectionStatus,
     EPlusConversation,
@@ -49,6 +51,7 @@ async def engine(tmp_path) -> AsyncIterator[AsyncEngine]:
                 conn,
                 tables=[
                     EPlusBotConfig.__table__,
+                    EPlusBotSpace.__table__,
                     EPlusInboundMessage.__table__,
                     EPlusConversation.__table__,
                     EPlusTurn.__table__,
@@ -118,7 +121,9 @@ async def _seed_turn(
             msg_type=EPlusMessageType.TEXT.value,
             payload_sha256=str(turn_seq).zfill(64),
             status=(
-                EPlusInboundStatus.QUEUED.value
+                EPlusInboundStatus.PREPARING.value
+                if status == EPlusTurnStatus.PREPARING
+                else EPlusInboundStatus.QUEUED.value
                 if status == EPlusTurnStatus.QUEUED
                 else EPlusInboundStatus.PROCESSING.value
                 if status == EPlusTurnStatus.RUNNING
@@ -187,6 +192,7 @@ async def test_one_conversation_claims_strictly_in_sequence_and_completion_wakes
         turn_id=first.turn.id,
         succeeded=True,
         answer_text="a1",
+        execution_token=first.turn.assistant_run_id,
     )
     assert second.turn.turn_seq == 2
 
@@ -200,6 +206,80 @@ async def test_concurrent_consumers_have_only_one_claim_owner(engine):
     )
 
     assert sum(claim is not None for claim in claims) == 1
+
+
+async def test_preparing_head_blocks_later_queued_turn(engine):
+    await _seed_turn(
+        engine,
+        conversation_id="c1",
+        conversation_key="u1",
+        turn_seq=1,
+        status=EPlusTurnStatus.PREPARING,
+    )
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=2)
+    scheduler = _scheduler(engine)
+
+    assert await scheduler.next_ready_turn(TENANT_ID, "c1") is None
+
+    async with AsyncSession(engine) as session, session.begin():
+        await session.exec(
+            update(EPlusTurn)
+            .where(EPlusTurn.id == "turn-c1-1")
+            .values(status=EPlusTurnStatus.QUEUED.value)
+        )
+        await session.exec(
+            update(EPlusInboundMessage)
+            .where(EPlusInboundMessage.msgid == "c1-1")
+            .values(status=EPlusInboundStatus.QUEUED.value)
+        )
+
+    claimed = await scheduler.next_ready_turn(TENANT_ID, "c1")
+    assert claimed.turn.turn_seq == 1
+
+
+async def test_claim_refreshes_scope_and_stale_execution_token_cannot_complete(engine):
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=1, scope_version=7)
+    async with AsyncSession(engine, expire_on_commit=False) as session, session.begin():
+        config = await session.get(EPlusBotConfig, BOT_CONFIG_ID)
+        config.scope_version = 8
+        session.add(config)
+        session.add(
+            EPlusBotSpace(
+                tenant_id=TENANT_ID,
+                bot_config_id=BOT_CONFIG_ID,
+                space_id=12,
+                bound_by=9,
+            )
+        )
+
+    scheduler = _scheduler(engine)
+    claimed = await scheduler.next_ready_turn(TENANT_ID, "c1")
+    stale_token = claimed.turn.assistant_run_id
+    assert claimed.turn.scope_version == 8
+    assert claimed.turn.scope_space_ids == [12]
+    assert stale_token
+
+    async with AsyncSession(engine) as session, session.begin():
+        await session.exec(
+            update(EPlusTurn)
+            .where(EPlusTurn.id == claimed.turn.id)
+            .values(assistant_run_id="replacement-owner")
+        )
+
+    assert (
+        await scheduler.complete_and_wake_next(
+            tenant_id=TENANT_ID,
+            turn_id=claimed.turn.id,
+            succeeded=True,
+            answer_text="stale answer",
+            execution_token=stale_token,
+        )
+        is None
+    )
+    async with AsyncSession(engine) as session:
+        turn = await session.get(EPlusTurn, claimed.turn.id)
+    assert turn.status == EPlusTurnStatus.RUNNING.value
+    assert turn.answer_text is None
 
 
 async def test_history_contains_completed_turns_across_scope_versions(engine):
@@ -256,6 +336,7 @@ async def test_failed_or_cancelled_completion_releases_conversation_for_next_tur
         turn_id=first.turn.id,
         succeeded=False,
         error_code="CANCELLED",
+        execution_token=first.turn.assistant_run_id,
     )
 
     assert second.turn.turn_seq == 2

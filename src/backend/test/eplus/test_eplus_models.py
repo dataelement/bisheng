@@ -122,6 +122,7 @@ def test_statuses_are_portable_string_values_not_database_enums() -> None:
     }
     assert {status.value for status in EPlusInboundStatus} == {
         "RECEIVED",
+        "PREPARING",
         "QUEUED",
         "PROCESSING",
         "SUCCEEDED",
@@ -136,6 +137,7 @@ def test_statuses_are_portable_string_values_not_database_enums() -> None:
     }
     assert {status.value for status in EPlusConversationStatus} == {"ACTIVE", "CLOSED"}
     assert {status.value for status in EPlusTurnStatus} == {
+        "PREPARING",
         "QUEUED",
         "RUNNING",
         "SUCCEEDED",

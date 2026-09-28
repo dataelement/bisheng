@@ -103,7 +103,16 @@ class FakeScheduler:
         queue = self.queues[conversation_id]
         return queue.pop(0) if queue else None
 
-    async def complete_and_wake_next(self, *, tenant_id, turn_id, succeeded, answer_text=None, error_code=None):
+    async def complete_and_wake_next(
+        self,
+        *,
+        tenant_id,
+        turn_id,
+        succeeded,
+        answer_text=None,
+        error_code=None,
+        execution_token,
+    ):
         self.completed.append((turn_id, succeeded, answer_text, error_code))
         conversation_id = turn_id.rsplit("-", 1)[0]
         return await self.next_ready_turn(tenant_id, conversation_id)
@@ -126,6 +135,7 @@ class FakeTurnLoader:
             scope_version=turn.scope_version,
             space_ids=tuple(turn.scope_space_ids),
             history=ready.history,
+            execution_token=turn.assistant_run_id or "execution-token",
         )
 
 
@@ -179,6 +189,7 @@ class FakeReplyStream:
         self.start_error = start_error
         self.events: list[tuple] = []
         self.answer = ""
+        self.finished = False
 
     async def start(self) -> None:
         self.events.append(("start",))
@@ -192,14 +203,17 @@ class FakeReplyStream:
 
     async def finish(self) -> None:
         self.events.append(("finish", self.answer))
+        self.finished = True
 
     async def send_terminal(self, content: str, *, error_code: str | None = None) -> None:
         self.answer = content
         self.events.append(("terminal", content, error_code))
+        self.finished = True
 
     async def fail(self, content: str, *, error_code: str) -> None:
         self.answer = content
         self.events.append(("fail", content, error_code))
+        self.finished = True
 
 
 class FakeReplyFactory:
@@ -215,7 +229,15 @@ class FakeReplyFactory:
         return stream
 
 
-def _service(admission, scheduler, assistant, replies, *, turn_loader=None) -> EPlusRobotService:
+def _service(
+    admission,
+    scheduler,
+    assistant,
+    replies,
+    *,
+    turn_loader=None,
+    execution_timeout_seconds=300,
+) -> EPlusRobotService:
     return EPlusRobotService(
         admission_service=admission,
         scheduler=scheduler,
@@ -223,6 +245,7 @@ def _service(admission, scheduler, assistant, replies, *, turn_loader=None) -> E
         media_service=FakeMedia(),
         assistant_factory=assistant,
         reply_factory=replies,
+        execution_timeout_seconds=execution_timeout_seconds,
     )
 
 
@@ -394,6 +417,55 @@ async def test_assistant_error_sends_safe_failure_and_releases_turn() -> None:
         "ASSISTANT_ERROR",
     )
     assert scheduler.completed[-1] == (f"{conversation}-1", False, None, "ASSISTANT_ERROR")
+
+
+async def test_hard_timeout_cancels_silent_assistant_and_wakes_queue() -> None:
+    admission = FakeAdmission()
+    scheduler = FakeScheduler()
+    assistant = FakeAssistantFactory(block=asyncio.Event())
+    replies = FakeReplyFactory()
+    callback = _callback("timeout")
+    conversation = "conversation-timeout"
+    admission.results[callback.msg_id] = AdmissionResult(
+        AdmissionDisposition.QUEUED, 1, conversation, f"{conversation}-1"
+    )
+    scheduler.queues[conversation].append(_ready(f"{conversation}-1", conversation))
+    service = _service(
+        admission,
+        scheduler,
+        assistant,
+        replies,
+        execution_timeout_seconds=0.01,
+    )
+
+    await service.handle_message(_context(), callback)
+    await service.wait_idle()
+
+    assert replies.streams[f"req-{conversation}-1"].events[-1] == (
+        "fail",
+        "处理超时，请稍后重试",  # noqa: RUF001
+        "ASSISTANT_TIMEOUT",
+    )
+    assert scheduler.completed[-1] == (f"{conversation}-1", False, None, "ASSISTANT_TIMEOUT")
+
+
+async def test_lost_bot_ownership_cancels_running_consumer_without_completing_it() -> None:
+    admission = FakeAdmission()
+    scheduler = FakeScheduler()
+    assistant = FakeAssistantFactory(block=asyncio.Event())
+    callback = _callback("lease-lost")
+    conversation = "conversation-lease-lost"
+    admission.results[callback.msg_id] = AdmissionResult(
+        AdmissionDisposition.QUEUED, 1, conversation, f"{conversation}-1"
+    )
+    scheduler.queues[conversation].append(_ready(f"{conversation}-1", conversation))
+    service = _service(admission, scheduler, assistant, FakeReplyFactory())
+
+    await service.handle_message(_context(), callback)
+    await assistant.started.wait()
+    await service.cancel_bot(tenant_id=9, bot_config_id=73)
+
+    assert scheduler.completed == []
 
 
 async def test_first_frame_failure_never_creates_assistant() -> None:
