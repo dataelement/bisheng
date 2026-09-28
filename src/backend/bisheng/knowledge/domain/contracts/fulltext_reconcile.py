@@ -9,6 +9,16 @@ class ReconcileReadError(RuntimeError):
     pass
 
 
+class ReconcileSourceRelationError(ReconcileReadError):
+    """已确认的关系异常；保留原索引，不能作为重新解析的依据。"""
+
+    def __init__(self, code: str, fingerprint: str, *, retryable: bool = False):
+        super().__init__(code)
+        self.code = code
+        self.fingerprint = fingerprint
+        self.retryable = retryable
+
+
 class ReconcileWriteError(RuntimeError):
     pass
 

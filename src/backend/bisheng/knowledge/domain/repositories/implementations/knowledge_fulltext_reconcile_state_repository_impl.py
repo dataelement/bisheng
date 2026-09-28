@@ -4,8 +4,12 @@ from collections import Counter
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from loguru import logger
 from sqlmodel import col, or_, select, update
 
+from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_fulltext_reconcile import FulltextReconcileIssue as Issue
 from bisheng.knowledge.domain.models.knowledge_fulltext_reconcile import FulltextReconcileRun as Run
 
@@ -16,6 +20,63 @@ class FulltextReconcileStateRepository:
 
     async def _rows(self, query):
         return list((await self.session.execute(query)).scalars())
+
+    async def record_source_failures(
+        self,
+        errors: dict[int, ReconcileSourceRelationError],
+        now: datetime,
+    ) -> dict[int, str]:
+        """使用独立命名空间保留跨轮次预算，不与解析修复票据混用。"""
+        if not errors:
+            return {}
+        # 与修复任务统一先锁文件再锁问题记录，避免并发首次登记造成主键冲突。
+        with bypass_tenant_filter():
+            await self.session.execute(
+                select(KnowledgeFile.id)
+                .where(
+                    col(KnowledgeFile.id).in_(sorted(errors)),
+                )
+                .order_by(KnowledgeFile.id)
+                .with_for_update()
+            )
+        existing = {
+            row.file_id: row
+            for row in await self._rows(
+                select(Issue).where(Issue.run_id == "source", col(Issue.file_id).in_(sorted(errors))).with_for_update()
+            )
+        }
+        result = {}
+        for file_id, error in errors.items():
+            row = existing.get(file_id) or Issue(run_id="source", file_id=file_id, updated_at=now)
+            changed = row.fingerprint != error.fingerprint or row.status == "resolved"
+            if changed:
+                row.fingerprint, row.attempts, row.status = error.fingerprint, 0, "pending"
+                row.next_retry_at = now
+                logger.warning(
+                    "全文源关联异常 file_id={} reason={} fingerprint={}", file_id, error.code, error.fingerprint
+                )
+            if row.status != "blocked" and (row.next_retry_at is None or row.next_retry_at <= now):
+                row.attempts += 1
+                row.reason = error.code[:128]
+                row.updated_at = now
+                row.status = "blocked" if not error.retryable or row.attempts >= 8 else "pending"
+                row.next_retry_at = (
+                    None
+                    if row.status == "blocked"
+                    else now
+                    + timedelta(
+                        seconds=min(1800, 300 * 2 ** min(row.attempts - 1, 3)),
+                    )
+                )
+                if row.status == "blocked":
+                    logger.error(
+                        "全文源关联需要处理 file_id={} reason={} attempts={}", file_id, error.code, row.attempts
+                    )
+            self.session.add(row)
+            prefix = "source_blocked" if row.status == "blocked" else "source_waiting"
+            result[file_id] = f"{prefix}:{error.code}"
+        await self.session.flush()
+        return result
 
     async def load_or_create(self, now: datetime, upper: int, *, create: bool = True) -> Run | None:
         active = await self._rows(
@@ -56,7 +117,8 @@ class FulltextReconcileStateRepository:
                 item.attempts += 1
             item.status = (
                 "exhausted"
-                if item.attempts >= 8 or reason.startswith(("repair_exhausted", "invalid_es_identity"))
+                if item.attempts >= 8
+                or reason.startswith(("repair_exhausted", "invalid_es_identity", "source_blocked"))
                 else "pending"
             )
             item.next_retry_at = now + timedelta(seconds=min(1800, 300 * 2 ** min(item.attempts, 3)))
@@ -68,6 +130,18 @@ class FulltextReconcileStateRepository:
                 item.status = "resolved"
                 item.updated_at = now
                 self.session.add(item)
+        verified = [file_id for file_id, reason in successes.items() if reason in {"consistent", "repaired", "deleted"}]
+        if verified:
+            # 只有实际比较或写后回读确认成功，才结清跨轮次的源关联问题。
+            await self.session.execute(
+                update(Issue)
+                .where(
+                    Issue.run_id == "source",
+                    col(Issue.file_id).in_(verified),
+                    Issue.status != "resolved",
+                )
+                .values(status="resolved", next_retry_at=None, updated_at=now)
+            )
         counts = Counter(run.counters or {})
         counts.update(successes.values())
         counts["failed_observations"] += len(failures)

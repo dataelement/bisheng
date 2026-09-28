@@ -276,11 +276,19 @@ def test_auto_repair_worker_keeps_minimal_message_cas_and_retry_lifecycle_contra
     assert "run_retry_knowledge_parse_lifecycle(file_id)" in runner
 
 
-@pytest.mark.parametrize("projection_status,waiting_minutes,outcome", [
-    ("ready", None, True), ("pending", None, None),
-    ("pending", 10, None), ("ready", 10, True), ("failed", 10, False), ("pending", 121, False),
-    ("parsing", 10, None),
-])
+@pytest.mark.parametrize(
+    "projection_status,waiting_minutes,outcome",
+    [
+        ("ready", None, True),
+        ("pending", None, None),
+        ("pending", 10, None),
+        ("ready", 10, True),
+        ("failed", 10, False),
+        ("pending", 121, False),
+        ("parsing", 10, None),
+        ("relation_broken", 10, False),
+    ],
+)
 def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatch, projection_status, waiting_minutes, outcome):
     from bisheng.knowledge.domain.models.knowledge_file import (
         KnowledgeFileDao,
@@ -377,6 +385,12 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
         "run_retry_knowledge_parse_lifecycle",
         parse_repair,
     )
+    if projection_status == "relation_broken":
+        from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
+
+        fulltext_index._load_auto_repair_context.side_effect = ReconcileSourceRelationError(
+            "document_missing", "changed"
+        )
 
     assert fulltext_index._run_auto_repair(
         outbox_id=76,
@@ -384,6 +398,11 @@ def test_auto_repair_routes_share_entry_to_projection_without_reparse(monkeypatc
         fingerprint=fingerprint,
     ) is (outcome is True)
     assert fulltext_index._finish_auto_repair.await_args.kwargs["success"] is outcome
+    if projection_status == "relation_broken":
+        assert (
+            fulltext_index._finish_auto_repair.await_args.kwargs["error_type"]
+            == "ReconcileSourceRelationError: document_missing"
+        )
     if waiting_minutes is None:
         projection_repair.assert_awaited_once()
         assert projection_repair.await_args.kwargs["file_id"] == 830

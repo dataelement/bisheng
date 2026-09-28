@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlmodel import col, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
     KnowledgeFulltextAggregateType,
@@ -191,11 +192,23 @@ class KnowledgeFulltextReconcileRepository:
             .all()
         )
         ticket = await self.session.get(FulltextReconcileIssue, ("repair", file_id))
-        if not rows or ticket is None or ticket.task_id != task_id or ticket.fingerprint != fingerprint:
+        if ticket is None or ticket.task_id != task_id or ticket.fingerprint != fingerprint:
+            return None
+        if not rows:
+            ticket.status = "exhausted"
+            self.session.add(ticket)
+            await self.session.flush()
             return None
         file = rows[0]
         source = await self.source.get_auto_repair_source(file_id)
-        current = await KnowledgeFulltextSourceRepositoryImpl(self.session).get_current_snapshot(file_id)
+        try:
+            current = await KnowledgeFulltextSourceRepositoryImpl(self.session).get_current_snapshot(file_id)
+        except ReconcileSourceRelationError as exc:
+            await self.state.record_source_failures({file_id: exc}, now)
+            ticket.status = "exhausted"
+            self.session.add(ticket)
+            await self.session.flush()
+            return None
         valid = (
             file.deleted_at is None
             and source is not None

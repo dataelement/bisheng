@@ -148,6 +148,25 @@ async def test_rollback_reconcile_dispatches_from_preparing_tombstone(scan_state
     assert kwargs["queue"] == projection_worker.DEFAULT_QUEUE
 
 
+async def test_synthetic_publish_does_not_enter_approval_recovery(scan_state, caplog):
+    entries = [_entry(9992071, approval_instance_id=-13910134), _entry(1391, approval_instance_id=-13910134)]
+    entries[0].entry_type = "publish"
+    entries[1].entry_type = "manager"
+    before = [entry.model_dump() for entry in entries]
+    with (
+        patch.object(projection_worker.ApprovalInstanceRepository, "list_outbox", new=AsyncMock()) as outboxes,
+        patch.object(projection_worker, "_dispatch_scan_recovery", new=AsyncMock()) as dispatch,
+    ):
+        assert await projection_worker._reconcile_permission_candidates(
+            tenant_id=7, candidates=entries, state=scan_state, max_attempts=4, guard=AsyncMock(),
+        ) == 0
+    outboxes.assert_not_awaited()
+    dispatch.assert_not_awaited()
+    assert [entry.model_dump() for entry in entries] == before
+    assert "non-approval publish remains preparing" in caplog.text
+    assert "no approval outbox" not in caplog.text
+
+
 
 def test_final_document_delete_waits_for_every_entry_cleanup() -> None:
     ready = _entry(

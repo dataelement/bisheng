@@ -275,8 +275,11 @@ async def test_batch_snapshots_use_shared_queries_and_preserve_each_file(async_d
         async_db_session.add(KnowledgeFile(id=file_id, tenant_id=1, knowledge_id=901, file_type=1, file_name=f"文件{file_id}", status=2))
     await async_db_session.commit()
     monkeypatch.setattr(ShougangPortalConfigService, 'get_config', AsyncMock(return_value=SimpleNamespace(portal=SimpleNamespace(document_types=[]))))
-    from sqlalchemy import table, column
-    from bisheng.knowledge.domain.repositories.implementations import knowledge_fulltext_source_repository_impl as source_module
+    from sqlalchemy import column, table
+
+    from bisheng.knowledge.domain.repositories.implementations import (
+        knowledge_fulltext_source_repository_impl as source_module,
+    )
     # 全局测试夹具替换了 User 模块; 使用同名真实 SQL 列执行查询。
     users = table('user', column('user_id'), column('user_name'))
     monkeypatch.setattr(source_module, 'User', SimpleNamespace(user_id=users.c.user_id, user_name=users.c.user_name))
@@ -288,5 +291,5 @@ async def test_batch_snapshots_use_shared_queries_and_preserve_each_file(async_d
     result = await repo.get_current_snapshots(list(range(901, 921)))
     assert len(result) == 20
     assert [result[key].file_name for key in sorted(result)] == [f"文件{i}" for i in range(901, 921)]
-    assert execute.await_count == 3
+    assert execute.await_count == 2
     ShougangPortalConfigService.get_config.assert_awaited_once_with(tenant_id=1)

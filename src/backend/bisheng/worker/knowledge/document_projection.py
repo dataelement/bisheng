@@ -648,6 +648,18 @@ async def _reconcile_permission_candidates(
         if approval_instance_id in dispatched_approval_ids:
             continue
         dispatched_approval_ids.add(approval_instance_id)
+        if approval_instance_id < 0:
+            # 自动发布和迁移共用负数幂等键, 只能由原持久化任务恢复。
+            # 保留卡住告警; 不补建审批、不重置状态或复活已终止任务。
+            logger.warning(
+                "F059 non-approval publish remains preparing; check original auto-publish/migration job: "
+                "tenant_id=%s entry_id=%s publish_instance_id=%s source_file_id_hint=%s",
+                tenant_id,
+                entry.id,
+                approval_instance_id,
+                (-approval_instance_id) // 10000,
+            )
+            continue
         try:
             outboxes = await ApprovalInstanceRepository.list_outbox(
                 approval_instance_id

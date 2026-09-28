@@ -25,6 +25,11 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
     KnowledgeSpaceSharedStorageRouting,
 )
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_source_identity import (
+    canonical_identity,
+    group_source_rows,
+    unique_source_row,
+)
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_source_repository import (
     KnowledgeFulltextSourceRepository,
 )
@@ -34,9 +39,9 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
     KnowledgeFulltextFileSnapshot,
 )
 from bisheng.knowledge.rag.shared_space_storage import (
+    TenantRoutingSnapshot,
     es_routing_value,
     get_shared_storage_conf,
-    TenantRoutingSnapshot,
     require_initialized_shared_routing,
 )
 from bisheng.user.domain.models.user import User
@@ -53,12 +58,13 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
 
     async def get_current_snapshot(self, file_id: int) -> KnowledgeFulltextFileSnapshot | None:
         statement = self._snapshot_statement().where(KnowledgeFile.id == file_id)
-        row = (await self._execute(statement)).first()
-        return await self._snapshot_from_row(row) if row is not None else None
+        rows = (await self._execute(statement)).all()
+        return await self._snapshot_from_row(unique_source_row(rows)) if rows else None
 
     async def get_current_snapshots(self, file_ids: list[int]) -> dict[int, KnowledgeFulltextFileSnapshot | Exception]:
         rows = (await self._execute(self._snapshot_statement().where(KnowledgeFile.id.in_(file_ids)))).all()
-        files = [row[0] for row in rows]
+        grouped = group_source_rows(rows)
+        files = [group[0][0] for group in grouped.values()]
         tags = {file.id: [] for file in files}
         tag_rows = (await self._execute(select(TagLink.resource_id, Tag.name).join(Tag, Tag.id == TagLink.tag_id).where(
             TagLink.resource_id.in_([str(file.id) for file in files]),
@@ -67,9 +73,12 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
         for file_id, name in tag_rows:
             if name and str(file_id).isdigit() and int(file_id) in tags and name not in tags[int(file_id)]:
                 tags[int(file_id)].append(name)
-        users = dict((await self._execute(select(User.user_id, User.user_name).where(
-            User.user_id.in_({file.original_uploader_id for file in files if file.original_uploader_id})
-        ))).all())
+        user_ids = {file.original_uploader_id for file in files if file.original_uploader_id}
+        users = (
+            dict((await self._execute(select(User.user_id, User.user_name).where(User.user_id.in_(user_ids)))).all())
+            if user_ids
+            else {}
+        )
         folder_ids = sorted({int(part) for file in files for part in str(file.file_level_path or "").split("/") if part.isdigit()})
         folders = {}
         for start in range(0, len(folder_ids), 500):
@@ -82,9 +91,10 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             config = await ShougangPortalConfigService.get_config(tenant_id=tenant)
             types[tenant] = getattr(getattr(config, "portal", None), "document_types", None) or []
         snapshots = {}
-        for row in rows:
-            file = row[0]
+        for group in grouped.values():
+            file = group[0][0]
             try:
+                row = unique_source_row(group)
                 category = self.resolve_category_names(types[int(file.tenant_id or 1)],
                     document_category_code=get_file_category_code_from_file(file), file_subcategory_code=file.file_subcategory_code)
                 path = "/".join(str(folders[int(part)]) for part in str(file.file_level_path or "").split("/")
@@ -118,6 +128,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
     def _snapshot_statement(self):
         original_knowledge = aliased(Knowledge)
         version_document = aliased(KnowledgeDocument)
+        content_file = aliased(KnowledgeFile)
         statement = (
             select(
                 KnowledgeFile,
@@ -127,8 +138,9 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 KnowledgeDocumentVersion,
                 version_document,
                 original_knowledge.name,
+                content_file,
             )
-            .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
+            .outerjoin(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
             .outerjoin(
                 original_knowledge,
                 original_knowledge.id == KnowledgeFile.original_knowledge_id,
@@ -155,6 +167,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 version_document,
                 version_document.id == KnowledgeDocumentVersion.document_id,
             )
+            .outerjoin(content_file, content_file.id == KnowledgeDocumentVersion.knowledge_file_id)
         )
         return statement
 
@@ -167,7 +180,9 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             version,
             owning_document,
             original_knowledge_name,
+            _content_file,
         ) = row
+        canonical_document_id = canonical_identity(row)
         document = referenced_document if referenced_document is not None else owning_document
         document_category_code = get_file_category_code_from_file(file)
         business_domain_code = get_business_domain_code_from_file(file)
@@ -192,12 +207,9 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             status=str(file.status),
             deleted_at=file.deleted_at,
             logical_document_id=file.reference_document_id,
+            canonical_document_id=canonical_document_id,
             document_version_id=getattr(version, "id", None),
-            content_file_id=(
-                int(version.knowledge_file_id)
-                if version is not None
-                else int(file.id)
-            ),
+            content_file_id=(int(version.knowledge_file_id) if version is not None else int(file.id)),
             content_generation=(
                 int(document.content_generation or 0)
                 if document is not None
@@ -217,10 +229,10 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             alias_name=file.alias_name,
             summary=file.abstract,
             tags=tags,
-            knowledge_name=knowledge.name,
-            knowledge_type=knowledge.type,
+            knowledge_name=getattr(knowledge, "name", ""),
+            knowledge_type=getattr(knowledge, "type", None),
             knowledge_level=level,
-            knowledge_business_domain_codes=knowledge.business_domain_codes or [],
+            knowledge_business_domain_codes=getattr(knowledge, "business_domain_codes", None) or [],
             business_domain_code=business_domain_code or None,
             business_domain_name=BUSINESS_DOMAIN_OPTIONS.get(business_domain_code),
             document_category_code=document_category_code or None,
@@ -229,7 +241,9 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
             file_subcategory_name=file_subcategory_name,
             file_source=file.file_source or "unknown",
             folder_path=folder_path,
-            source_path="/".join(part for part in (knowledge.name, folder_path, file.file_name) if part),
+            source_path="/".join(
+                part for part in (getattr(knowledge, "name", ""), folder_path, file.file_name) if part
+            ),
             uploader_id=file.user_id,
             uploader_name=file.user_name,
             original_uploader_id=file.original_uploader_id,
@@ -251,6 +265,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
         self, snapshot: KnowledgeFulltextFileSnapshot
     ) -> KnowledgeFulltextChunkSource | None:
         conf = get_shared_storage_conf()
+        canonical_id = snapshot.canonical_document_id or snapshot.logical_document_id
         if (
             snapshot.knowledge_type is not None
             and int(snapshot.knowledge_type) == KnowledgeTypeEnum.SPACE.value
@@ -269,24 +284,20 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 int(snapshot.tenant_id),
                 TenantRoutingSnapshot.from_row(routing) if routing is not None else None,
             )
-            if (
-                not routing.index_name
-                or snapshot.logical_document_id is None
-                or snapshot.document_version_id is None
-            ):
+            if not routing.index_name or canonical_id is None or snapshot.document_version_id is None:
                 return None
             return KnowledgeFulltextChunkSource(
                 index_name=str(routing.index_name),
                 file_id=int(snapshot.file_id),
                 knowledge_id=int(snapshot.knowledge_id),
                 tenant_id=int(snapshot.tenant_id),
-                canonical_document_id=int(snapshot.logical_document_id),
+                canonical_document_id=int(canonical_id),
                 canonical_version_id=int(snapshot.document_version_id),
                 content_generation=int(snapshot.content_generation),
                 routing=(
                     es_routing_value(
                         int(snapshot.tenant_id),
-                        int(snapshot.logical_document_id),
+                        int(canonical_id),
                     )
                     if conf.es_routing_enabled
                     else None

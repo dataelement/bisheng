@@ -12,7 +12,6 @@ from loguru import logger
 from pymysql.err import OperationalError as PyMySQLOperationalError
 from sqlalchemy.exc import OperationalError
 
-from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.celery_queues import DEFAULT_CELERY_QUEUE, KNOWLEDGE_PARSE_QUEUE
 from bisheng.core.context.tenant import current_tenant_id
@@ -56,6 +55,7 @@ from bisheng.knowledge.domain.services.knowledge_fulltext_rebuild_service import
 from bisheng.knowledge.domain.services.knowledge_fulltext_sync_service import (
     KnowledgeFulltextSyncService,
 )
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
@@ -601,7 +601,23 @@ def _run_auto_repair(*, outbox_id: int, revision: int, fingerprint: str) -> bool
     from bisheng.worker.knowledge.file_worker import run_retry_knowledge_parse_lifecycle
 
     file_id = int(row.aggregate_id)
-    source, snapshot = run_async_task(lambda: _load_auto_repair_context(file_id))
+    from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
+
+    try:
+        source, snapshot = run_async_task(lambda: _load_auto_repair_context(file_id))
+    except ReconcileSourceRelationError as exc:
+        logger.warning("全文修复执行前关联已变化 file_id={} reason={}", file_id, exc.code)
+        error_type = f"{type(exc).__name__}: {exc.code}"
+        run_async_task(
+            lambda: _finish_auto_repair(
+                outbox_id=outbox_id,
+                fingerprint=fingerprint,
+                lease_owner=lease_owner,
+                success=False,
+                error_type=error_type,
+            )
+        )
+        return False
     eligibility_updates = {"status": str(KnowledgeFileStatus.SUCCESS.value)}
     if snapshot is not None and snapshot.logical_document_id is not None:
         # 投影尚未完成正是修复原因; 这里只核验删除、版本、分发状态等源数据资格。

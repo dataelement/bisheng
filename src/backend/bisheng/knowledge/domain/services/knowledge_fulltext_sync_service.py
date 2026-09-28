@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
 from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
     KnowledgeFulltextAggregateType,
     KnowledgeFulltextDesiredAction,
@@ -106,7 +107,11 @@ class KnowledgeFulltextSyncService:
                             sync_revision=row.desired_revision, indexed_at=datetime.now(), engagement=engagement.get(file_id))
                     errors[int(row.id)] = None
                 except Exception as exc:
-                    errors[int(row.id)] = type(exc).__name__
+                    errors[int(row.id)] = (
+                        f"{type(exc).__name__}: {exc.code}"
+                        if isinstance(exc, ReconcileSourceRelationError)
+                        else type(exc).__name__
+                    )
         except Exception as exc:
             errors = {int(row.id): type(exc).__name__ for row in rows}
         current = await self.outbox_repository.lock_current_many(rows, lease_owner, datetime.now())

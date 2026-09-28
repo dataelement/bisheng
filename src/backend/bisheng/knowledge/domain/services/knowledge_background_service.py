@@ -70,12 +70,30 @@ class KnowledgeBackgroundService:
         from bisheng.knowledge.domain.services.auto_publish_service import AutoPublishService
 
         if "projection_ids" not in payload:
-            existing = await self.repository_call("existing_auto_publish_projections", payload["file_id"])
+            # 有原命令时必须按该命令校验, 不能拿其他目标的已发布入口代替。
+            existing = (
+                []
+                if "publish_context" in payload
+                else await self.repository_call(
+                    "existing_auto_publish_projections",
+                    payload["file_id"],
+                )
+            )
             if existing:
                 # 发布事务可能已提交而结果登记前进程中断, 从持久化入口恢复等待阶段。
                 payload["projection_ids"] = existing
             else:
-                result = await AutoPublishService.execute(file_id=payload["file_id"], tenant_id=job.tenant_id)
+
+                async def save_publish_context(context):
+                    payload["publish_context"] = context
+                    await self._checkpoint(job, owner, payload)
+
+                result = await AutoPublishService.execute(
+                    file_id=payload["file_id"],
+                    tenant_id=job.tenant_id,
+                    publish_context=payload.get("publish_context"),
+                    save_publish_context=save_publish_context,
+                )
                 if result.skipped:
                     payload["skip_reason"] = result.skip_reason
                     return "skipped"
