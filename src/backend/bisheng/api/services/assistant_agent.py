@@ -15,7 +15,11 @@ from loguru import logger
 from pydantic import Field, SkipValidation
 
 from bisheng.api.services.assistant_base import AssistantUtils
-from bisheng.assistant.domain.schemas.execution import AssistantExecutionContext, AssistantMessageContent
+from bisheng.assistant.domain.schemas.execution import (
+    AssistantEntryPoint,
+    AssistantExecutionContext,
+    AssistantMessageContent,
+)
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
@@ -202,10 +206,16 @@ class AssistantAgent(AssistantUtils):
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
         self.citation_registry_collector = CitationRegistryCollector()
+        self.execution_context: AssistantExecutionContext | None = None
 
-    async def init_assistant(self, callbacks: Callbacks = None):
+    async def init_assistant(
+        self,
+        callbacks: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
+        self.execution_context = context
         await self.init_llm()
-        await self.init_tools(callbacks)
+        await self.init_tools(callbacks, context=context)
         await self.init_agent()
 
     async def init_llm(self):
@@ -256,7 +266,11 @@ class AssistantAgent(AssistantUtils):
             user_id=self.invoke_user_id,
         )
 
-    async def init_tools(self, callbacks: Callbacks = None):
+    async def init_tools(
+        self,
+        callbacks: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """Get by nametool Vertical
         tools_name_param:: {name: params}
         """
@@ -281,6 +295,57 @@ class AssistantAgent(AssistantUtils):
                 llm=self.llm,
                 callbacks=callbacks,
             )
+
+        if context is not None and context.entry_point == AssistantEntryPoint.EPLUS:
+            from bisheng.database.models.flow import FlowDao
+            from bisheng.eplus.domain.services.robot_space_retrieval import (
+                RobotSpaceRetrievalPolicy,
+                RobotToolScopeViolation,
+                assert_eplus_tool_scope,
+                flow_uses_bisheng_knowledge,
+            )
+
+            if context.robot_scope is None:
+                raise RobotToolScopeViolation("E+ assistant execution requires a robot scope")
+
+            # External tools keep their normal user authorization. The only
+            # additional guard rejects an explicit call back into BiSheng's own
+            # knowledge APIs, which would otherwise bypass the robot binding.
+            tools = [assert_eplus_tool_scope(tool) for tool in tools]
+
+            # Assistant flow links are not executable tools in this legacy
+            # runtime. Still inspect knowledge-bearing links so they fail closed
+            # instead of becoming an accidental bypass when flow loading lands.
+            flow_ids = [str(link.flow_id) for link in flow_links if getattr(link, "flow_id", None)]
+            if flow_ids:
+                for flow in await FlowDao.aget_flow_by_ids(flow_ids):
+                    if flow_uses_bisheng_knowledge(flow.data):
+                        raise RobotToolScopeViolation(
+                            "E+ assistant flow contains a BiSheng knowledge node without robot scope injection"
+                        )
+
+            bound_space_ids = tuple(sorted({int(space_id) for space_id in context.robot_scope.space_ids}))
+            if bound_space_ids:
+                policy = RobotSpaceRetrievalPolicy(
+                    tenant_id=int(self.assistant.tenant_id),
+                    bot_config_id=context.robot_scope.bot_config_id,
+                    invoke_user_id=self.invoke_user_id,
+                )
+                tools.append(
+                    await policy.build_tool(
+                        llm=self.llm,
+                        expected_scope=context.robot_scope,
+                        max_content=self.knowledge_retriever.get("max_content", 15000),
+                        sort_by_source_and_index=self.knowledge_retriever.get("sort_by_source_and_index", False),
+                    )
+                )
+
+            self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+            kb_name_by_id = self._resolve_kb_name_by_id(list(bound_space_ids))
+            for tool in self.tools:
+                if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
+                    tool.kb_name_by_id = kb_name_by_id
+            return
 
         # F041: split knowledge spaces (type=3) from document / QA KBs by row.type.
         link_knowledge_ids = [link.knowledge_id for link in flow_links if link.knowledge_id]
