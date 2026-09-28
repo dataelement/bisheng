@@ -62,12 +62,18 @@ const StatusBadge = ({ file }: { file: KnowledgeFile }) => {
     const status = file.status ?? FileStatus.SUCCESS;
     const approvalStatusLabel = getKnowledgeApprovalStatusLabel(file);
     const statusReason = file.approvalReason?.trim() || file.errorMessage?.trim() || null;
+    // Folder rollup: a folder holding at least one failed descendant shows the
+    // error pill itself (the backend has_failed_files covers every ancestor level).
+    const isFolderWithFailedFiles = file.type === FileType.FOLDER && file.hasFailedFiles === true;
 
-    if (status === FileStatus.SUCCESS && !approvalStatusLabel) return null;
+    if (status === FileStatus.SUCCESS && !approvalStatusLabel && !isFolderWithFailedFiles) return null;
 
     let label: string;
     let tone: Tone;
-    if (approvalStatusLabel) {
+    if (isFolderWithFailedFiles) {
+        label = localize("com_knowledge.fail");
+        tone = ERROR_TONE;
+    } else if (approvalStatusLabel) {
         label = approvalStatusLabel;
         tone = isKnowledgeApprovalRejected(file) ? ERROR_TONE : INFO_TONE;
     } else {

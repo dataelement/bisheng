@@ -213,7 +213,22 @@ export function FileCard({
             // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
             return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
         }
-        if (!isAdmin || isFolder) return null;
+        if (!isAdmin) return null;
+        // Folder rollup (IKC813): a folder holding at least one failed descendant
+        // shows the error pill itself — backend has_failed_files covers every
+        // ancestor level via the path-prefix recursion.
+        if (isFolder) {
+            if (file.hasFailedFiles !== true) return null;
+            const pill = (
+                <div className="inline-flex items-center justify-center gap-1 rounded-[4px] bg-[#fff2f0] px-2">
+                    <span className="size-1 shrink-0 rounded-full bg-[#f53f3f]" />
+                    <span className="whitespace-nowrap text-xs leading-5 text-[#f53f3f]">
+                        {localize("com_knowledge.fail")}
+                    </span>
+                </div>
+            );
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-10">{pill}</div>;
+        }
         if (file.status === FileStatus.SUCCESS) return null;
 
         const approvalLabel = approvalStatusLabel;
