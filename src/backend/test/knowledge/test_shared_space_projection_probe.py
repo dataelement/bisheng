@@ -78,7 +78,7 @@ def make_writer(responses):
             schema=SimpleNamespace(fields=[SimpleNamespace(name="vector", params={"dim": 2})]),
             query_iterator=MagicMock(return_value=iterator),
         ),
-        _assert_writable=MagicMock(),
+        _aassert_writable=AsyncMock(),
         _es_index=lambda snapshot: "shared",
         _run_es=AsyncMock(side_effect=responses),
     )

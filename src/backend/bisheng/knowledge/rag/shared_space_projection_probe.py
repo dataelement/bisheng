@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _read_es(writer: Any, ids: list[int], guard: Callable[[], Awaitable[None]]) -> list[dict]:
-    snapshot = writer._assert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
+    snapshot = await writer._aassert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
     cursor = None
     rows = []
     try:
@@ -142,7 +142,7 @@ async def inspect_projection_content(
     if any(int(item.tenant_id) != writer.tenant_id for item in identities):
         raise ValueError("projection content inspection cannot cross tenants")
     ids = [int(item.canonical_document_id) for item in identities]
-    writer._assert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
+    await writer._aassert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
     dimension = next(
         (int(field.params["dim"]) for field in writer.collection.schema.fields if field.name == "vector"),
         0,

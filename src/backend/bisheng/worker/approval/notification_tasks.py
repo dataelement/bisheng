@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.approval.domain.repositories.approval_notification_outbox_repository import (
     ApprovalNotificationOutboxRepository,
 )
@@ -64,7 +65,7 @@ async def _dispatch_approval_notifications_async() -> int:
     dispatched = 0
     for row in rows:
         try:
-            consume_approval_notification.delay(int(row.id), int(row.tenant_id))
+            await run_sync_dispatch(consume_approval_notification.delay, int(row.id), int(row.tenant_id))
             dispatched += 1
         except Exception as exc:
             logger.exception(

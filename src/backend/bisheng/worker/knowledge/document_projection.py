@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import delete, or_
 from sqlmodel import col, select
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalOutboxStatus,
 )
@@ -62,13 +63,21 @@ DEFAULT_QUEUE = "celery"
 shared_storage_writer_factory = None
 
 
-def _default_shared_storage_writer_factory(tenant_id: int):
+async def _default_shared_storage_writer_factory(tenant_id: int):
     from bisheng.knowledge.rag.shared_space_storage import (
-        build_shared_space_components_for_tenant,
+        abuild_shared_space_components_for_tenant,
     )
 
-    components = build_shared_space_components_for_tenant(int(tenant_id))
+    components = await abuild_shared_space_components_for_tenant(int(tenant_id))
     return components[0] if components is not None else None
+
+
+async def _create_projection_writer(factory, tenant_id):
+    import inspect
+
+    if inspect.iscoroutinefunction(factory):
+        return await factory(tenant_id=tenant_id)
+    return await asyncio.to_thread(factory, tenant_id=tenant_id)
 
 
 async def _build_document_projection_service(
@@ -91,7 +100,7 @@ async def _build_document_projection_service(
             SharedStorageErrorCode.ROUTING_NOT_CONFIGURED, "projection requires a tenant shared target",
         )
     factory = shared_storage_writer_factory or _default_shared_storage_writer_factory
-    writer = factory(tenant_id=int(tenant_id))
+    writer = await _create_projection_writer(factory, int(tenant_id))
     if writer is None:
         raise SharedStorageContractError(
             SharedStorageErrorCode.ROUTING_NOT_CONFIGURED, "shared projection writer is unavailable", tenant_id=int(tenant_id),
@@ -552,7 +561,9 @@ async def _process_projection_batch_async(
             yield DocumentProjectionBatchRepository(session)
 
     conf = get_shared_storage_conf()
-    writer = (shared_storage_writer_factory or _default_shared_storage_writer_factory)(tenant_id=tenant_id)
+    writer = await _create_projection_writer(
+        shared_storage_writer_factory or _default_shared_storage_writer_factory, tenant_id,
+    )
     if writer is None:
         raise RuntimeError("shared projection writer is unavailable")
     loaders = {}
@@ -1003,7 +1014,7 @@ async def _sweep_container_distribution_entries(
                 [item.entry_id for item in failed],
             )
             return "stalled", processed
-        enqueue_document_projection_entries(
+        await run_sync_dispatch(enqueue_document_projection_entries,
             tenant_id=tenant_id,
             entry_ids=[item.entry_id for item in moved],
         )
@@ -1031,7 +1042,7 @@ async def _process_container_distribution_cleanup_async(
         folder_prefix=folder_prefix,
     )
     if status == "pending":
-        enqueue_container_distribution_cleanup(
+        await run_sync_dispatch(enqueue_container_distribution_cleanup,
             tenant_id=tenant_id,
             space_id=space_id,
             folder_prefix=folder_prefix,

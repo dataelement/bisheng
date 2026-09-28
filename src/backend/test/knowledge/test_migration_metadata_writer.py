@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import replace
+from unittest.mock import AsyncMock
 from types import SimpleNamespace as N
 
 import pytest
@@ -16,7 +17,7 @@ async def test_metadata_migration_preserves_payload_retries_partial_write_and_ba
     writer = object.__new__(MilvusEsSharedSpaceStorageWriter)
     writer.tenant_id = 1
     writer.schema_spec = N(embedding_model_id=7)
-    writer._assert_writable = lambda **_: N(index_name="shared")
+    writer._aassert_writable = AsyncMock(side_effect=lambda **_: N(index_name="shared"))
     writer._check_membership_limits = lambda _: None
     writer._conf = lambda: N(es_routing_enabled=True)
     writer._es_index = lambda _: "shared"
@@ -101,7 +102,7 @@ async def test_metadata_migration_preserves_payload_retries_partial_write_and_ba
 async def test_missing_shared_content_fails_without_reparse(monkeypatch):
     writer = object.__new__(MilvusEsSharedSpaceStorageWriter)
     writer.tenant_id = 1
-    writer._assert_writable = lambda **_: N()
+    writer._aassert_writable = AsyncMock(side_effect=lambda **_: N())
     writer._check_membership_limits = lambda _: None
 
     async def empty(*_):
@@ -130,7 +131,7 @@ async def test_overwritten_content_delete_rejects_es_partial_failure():
     writer = object.__new__(MilvusEsSharedSpaceStorageWriter)
     writer.tenant_id = 1
     writer.schema_spec = N(embedding_model_id=7)
-    writer._assert_writable = lambda **_: N()
+    writer._aassert_writable = AsyncMock(side_effect=lambda **_: N())
     writer._es_index = lambda _: "shared"
     writer._run_milvus = AsyncMock()
     writer._run_es = AsyncMock(return_value={"failures": [{"reason": "unavailable"}]})

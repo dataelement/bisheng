@@ -1,8 +1,10 @@
 """Core logic for scanning and pushing wechat message outbox records."""
 
+
 import logging
 from datetime import datetime, timedelta
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -25,7 +27,7 @@ class WeChatOutboxProcessor:
 
         Returns the number of records dispatched.
         """
-        conf = settings.get_shougang_wechat_message_push_conf()
+        conf = await settings.aget_shougang_wechat_message_push_conf()
         if not conf.enabled:
             logger.debug("wechat_push.scan skipped: feature disabled")
             return 0
@@ -46,7 +48,7 @@ class WeChatOutboxProcessor:
 
         dispatched = 0
         for record in records:
-            push_single_wechat_message.delay(record.id)
+            await run_sync_dispatch(push_single_wechat_message.delay, record.id)
             dispatched += 1
 
         logger.info("wechat_push.scan dispatched=%s", dispatched)
@@ -57,7 +59,7 @@ class WeChatOutboxProcessor:
 
         Returns True if the record reached a terminal state (sent or failed).
         """
-        conf = settings.get_shougang_wechat_message_push_conf()
+        conf = await settings.aget_shougang_wechat_message_push_conf()
         if not conf.enabled:
             logger.debug("wechat_push.push_one skipped: feature disabled outbox_id=%s", outbox_id)
             return False

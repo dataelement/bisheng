@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.tenant import TenantDao
@@ -1036,9 +1037,9 @@ async def _fanout_maintenance_async(kind: str) -> int:
     tenant_ids = [DEFAULT_TENANT_ID, *(await TenantDao.aget_children_ids_active(DEFAULT_TENANT_ID))]
     if kind == "pools":
         for tenant_id in sorted(set(tenant_ids)):
-            enqueue_portal_recommendation_pool_rebuild(tenant_id=tenant_id)
+            await run_sync_dispatch(enqueue_portal_recommendation_pool_rebuild, tenant_id=tenant_id)
     else:
-        _dispatch_task_for_tenants(task, tenant_ids)
+        await run_sync_dispatch(_dispatch_task_for_tenants, task, tenant_ids)
     return len(set(tenant_ids))
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.knowledge.domain import knowledge_fulltext_constants as constants
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_outbox_repository import (
     KnowledgeFulltextOutboxRepository,
@@ -26,12 +27,18 @@ async def dispatch_knowledge_fulltext_outbox_async(
     )
     if batch_sender is not None:
         for start in range(0, len(rows), 100):
-            batch_sender(items=[{"outbox_id": int(row.id), "revision": int(row.desired_revision)}
-                                for row in rows[start:start + 100]])
+            await run_sync_dispatch(
+                batch_sender,
+                items=[
+                    {"outbox_id": int(row.id), "revision": int(row.desired_revision)}
+                    for row in rows[start : start + 100]
+                ],
+            )
         return len(rows)
     dispatched = 0
     for row in rows:
-        sender(
+        await run_sync_dispatch(
+            sender,
             outbox_id=int(row.id),
             revision=int(row.desired_revision),
         )

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from sqlmodel import select
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import UserDepartment
 from bisheng.permission.domain.models.department_transfer_permission_cleanup import (
@@ -103,7 +104,7 @@ async def _scan_due_events_async() -> int:
             await _mark_overdue_if_needed(repository, event, now=now)
             await session.commit()
             try:
-                process_event.apply_async(args=[event_id], queue="celery")
+                await run_sync_dispatch(process_event.apply_async, args=[event_id], queue="celery")
                 dispatched += 1
             except Exception as exc:
                 logger.warning(

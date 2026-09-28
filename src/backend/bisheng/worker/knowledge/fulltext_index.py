@@ -12,6 +12,7 @@ from loguru import logger
 from pymysql.err import OperationalError as PyMySQLOperationalError
 from sqlalchemy.exc import OperationalError
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.celery_queues import DEFAULT_CELERY_QUEUE, KNOWLEDGE_PARSE_QUEUE
 from bisheng.core.context.tenant import current_tenant_id
@@ -250,7 +251,7 @@ async def _dispatch_auto_repairs() -> int:
     published = 0
     for outbox_id, revision, fingerprint in dispatches:
         try:
-            publish_knowledge_fulltext_auto_repair(
+            await run_sync_dispatch(publish_knowledge_fulltext_auto_repair,
                 outbox_id=outbox_id,
                 revision=revision,
                 fingerprint=fingerprint,
@@ -392,7 +393,7 @@ async def _consume(*, outbox_id: int, revision: int) -> bool:
         if repair_dispatch is not None:
             fingerprint, repair_result = repair_dispatch
             try:
-                publish_knowledge_fulltext_auto_repair(
+                await run_sync_dispatch(publish_knowledge_fulltext_auto_repair,
                     outbox_id=outbox_id,
                     revision=revision,
                     fingerprint=fingerprint,

@@ -309,6 +309,12 @@ class ConfigService(Settings):
         feature via Pydantic defaults.
         """
         all_config = self.get_all_config()
+        return self._parse_shougang_wechat_message_push_conf(all_config)
+
+    async def aget_shougang_wechat_message_push_conf(self) -> ShougangWeChatMessagePushConf:
+        return self._parse_shougang_wechat_message_push_conf(await self.aget_all_config())
+
+    def _parse_shougang_wechat_message_push_conf(self, all_config) -> ShougangWeChatMessagePushConf:
         db_block = (all_config.get('in_app_message_forwarding') or {}).get('shougang_wechat') or {}
         yaml_conf = self.in_app_message_forwarding.shougang_wechat
         yaml_enabled = yaml_conf.enabled

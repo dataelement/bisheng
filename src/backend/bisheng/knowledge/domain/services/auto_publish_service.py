@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
+
 logger = logging.getLogger(__name__)
 
 
@@ -249,7 +251,7 @@ class AutoPublishService:
                 enqueue_document_projection_entries,
             )
 
-            enqueue_document_projection_entries(
+            await run_sync_dispatch(enqueue_document_projection_entries,
                 tenant_id=tenant_id,
                 entry_ids=[
                     result.manager_file_id,

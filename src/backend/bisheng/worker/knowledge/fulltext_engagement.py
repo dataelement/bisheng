@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from celery.schedules import crontab
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
@@ -38,7 +39,7 @@ def register_fulltext_engagement_beat_schedule() -> None:
         "reconcile_knowledge_fulltext_engagement",
         {
             "task": constants.KNOWLEDGE_FULLTEXT_ENGAGEMENT_RECONCILE_TASK,
-            "schedule": 86400.0,
+            "schedule": crontab(hour=5, minute=0),  # 固定每日时间，与共享存储对账错峰
         },
     )
     bisheng_celery.conf.beat_schedule = schedule

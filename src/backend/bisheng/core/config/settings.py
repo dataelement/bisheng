@@ -191,7 +191,7 @@ class CeleryConf(BaseModel):
         if "telemetry_sync_mid_knowledge_space_content_stat" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_knowledge_space_content_stat"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat",
-                "schedule": crontab.from_string("10 1 * * *"),  # 每天 01:10，与每日统计错峰
+                "schedule": crontab.from_string("40 3 * * *"),  # 每天 03:40，在每日统计之后对账
             }
         if "telemetry_recover_knowledge_space_content_stat_leases" not in self.beat_schedule:
             self.beat_schedule["telemetry_recover_knowledge_space_content_stat_leases"] = {
@@ -271,7 +271,7 @@ class CeleryConf(BaseModel):
         if "fanout_shared_storage_reconcile" not in self.beat_schedule:
             self.beat_schedule["fanout_shared_storage_reconcile"] = {
                 "task": "bisheng.worker.knowledge.shared_storage_reconcile.fanout_shared_storage_reconcile",
-                "schedule": crontab(hour=2, minute=0),
+                "schedule": crontab(hour=4, minute=20),  # 与全文及内容统计对账错峰
             }
         projection_scan_task = "bisheng.worker.knowledge.document_projection.scan_document_projections"
         old_projection_tasks = {
@@ -317,7 +317,7 @@ class CeleryConf(BaseModel):
         if "reconcile_user_tenant_assignments" not in self.beat_schedule:
             self.beat_schedule["reconcile_user_tenant_assignments"] = {
                 "task": "bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments",
-                "schedule": crontab.from_string("0 */6 * * *"),  # every 6 hours
+                "schedule": crontab.from_string("55 */6 * * *"),  # 在组织对账启动 30 分钟后执行
             }
         # v2.5.1 F019: 10min admin_scope Redis key sweep (AC-13).
         if "admin_scope_cleanup" not in self.beat_schedule:
@@ -332,12 +332,12 @@ class CeleryConf(BaseModel):
         if "reconcile_all_organizations" not in self.beat_schedule:
             self.beat_schedule["reconcile_all_organizations"] = {
                 "task": "bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations",
-                "schedule": crontab.from_string("0 */6 * * *"),  # every 6h
+                "schedule": crontab.from_string("25 */6 * * *"),  # 与租户归属及推荐池维护错峰
             }
         if "report_ts_conflicts_weekly" not in self.beat_schedule:
             self.beat_schedule["report_ts_conflicts_weekly"] = {
                 "task": "bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_weekly",
-                "schedule": crontab.from_string("0 9 * * MON"),  # Mon 09:00
+                "schedule": crontab.from_string("20 9 * * MON"),  # 周一 09:20，与每日冲突报告错峰
             }
         if "report_ts_conflicts_daily_escalation" not in self.beat_schedule:
             self.beat_schedule["report_ts_conflicts_daily_escalation"] = {
@@ -365,7 +365,7 @@ class CeleryConf(BaseModel):
         if "scan_portal_course_media_cleanup" not in self.beat_schedule:
             self.beat_schedule["scan_portal_course_media_cleanup"] = {
                 "task": "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup",
-                "schedule": 60.0,
+                "schedule": 300.0,
             }
 
         if "purge_expired_knowledge_recycle_items" not in self.beat_schedule:
@@ -397,12 +397,12 @@ class CeleryConf(BaseModel):
         if "portal_recommendation_full_weekly" not in self.beat_schedule:
             self.beat_schedule["portal_recommendation_full_weekly"] = {
                 "task": "bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance",
-                "schedule": crontab.from_string("30 3 * * SUN"),
+                "schedule": crontab.from_string("40 6 * * SUN"),  # 避开凌晨每日全量对账
                 "args": ("full",),
             }
 
         # F048: portal home hot-search daily rebuild. Root Beat only fans out;
-        # 每租户任务携带租户标识, 02:55 与共享存储对账错开。
+        # 每租户任务携带租户标识, 02:55 与推荐增量对账错开。
         if "portal_hot_search_rebuild_daily" not in self.beat_schedule:
             self.beat_schedule["portal_hot_search_rebuild_daily"] = {
                 "task": "bisheng.worker.knowledge.portal_hot_search.fanout_portal_hot_search_rebuild",
@@ -427,7 +427,7 @@ class CeleryConf(BaseModel):
         if "points_reconcile_balances" not in self.beat_schedule:
             self.beat_schedule["points_reconcile_balances"] = {
                 "task": "bisheng.worker.points.tasks.reconcile_point_balances",
-                "schedule": crontab.from_string("30 2 * * *"),
+                "schedule": crontab.from_string("40 5 * * *"),  # 在互动统计校准之后执行
             }
 
         # F070: 外部同步 outbox drain（AC-23）；受 points.sync_outbox_enabled 控制。

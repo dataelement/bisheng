@@ -160,6 +160,18 @@ class AsyncRetrievalRuntime:
                 timeout=self.config.milvus_timeout_seconds,
             )
 
+    async def write_shared_content(self, method: str, collection_name: str, **kwargs):
+        """复用同一异步连接和并发预算执行共享存储写入。"""
+        if method not in {"insert", "delete"}:
+            raise ValueError("unsupported shared storage operation")
+        async with self._milvus_semaphore:
+            client = await self._get_milvus_client()
+            return await asyncio.wait_for(
+                getattr(client, method)(collection_name=collection_name,
+                                        timeout=self.config.milvus_timeout_seconds, **kwargs),
+                timeout=self.config.milvus_timeout_seconds,
+            )
+
     async def close(self) -> None:
         if self.milvus_client is None:
             return

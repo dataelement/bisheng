@@ -468,9 +468,9 @@ class TestMembershipRewrite:
             dimension=1024,
         )
         asserted_models = []
-        writer._assert_writable = lambda **kwargs: (
+        writer._aassert_writable = AsyncMock(side_effect=lambda **kwargs: (
             asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
-        )
+        ))
         writer._check_membership_limits = lambda _ids: None
         writer._conf = lambda: _conf()
         writer.es_client = SimpleNamespace(
@@ -546,9 +546,9 @@ class TestMembershipRewrite:
             dimension=1024,
         )
         asserted_models = []
-        writer._assert_writable = lambda **kwargs: (
+        writer._aassert_writable = AsyncMock(side_effect=lambda **kwargs: (
             asserted_models.append(kwargs.get("embedding_model_id")) or _snapshot()
-        )
+        ))
         writer._run_milvus = noop
         writer._run_es = noop
 
@@ -589,7 +589,7 @@ class TestContentRewrite:
             embedding_model_id=7,
             dimension=4,
         )
-        writer._assert_writable = lambda **_kwargs: _snapshot()
+        writer._aassert_writable = AsyncMock(side_effect=lambda **_kwargs: _snapshot())
         writer._check_membership_limits = lambda _ids: None
         writer._conf = lambda: _conf()
         writer._current_membership_generation = AsyncMock(return_value=3)

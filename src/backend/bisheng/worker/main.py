@@ -3,7 +3,7 @@ import time
 from typing import List
 
 from celery import Celery
-from celery.signals import celeryd_after_setup, worker_shutting_down
+from celery.signals import celeryd_after_setup, worker_shutdown, worker_shutting_down
 from loguru import logger
 
 import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
@@ -93,3 +93,33 @@ def on_worker_shutdown(*args, **kwargs):
     from bisheng.utils.async_utils import set_preferred_bridge_loop
 
     set_preferred_bridge_loop(None)
+
+
+async def _close_worker_storage_clients() -> None:
+    """关闭惰性创建的异步存储连接，保持在创建连接的事件循环内执行。"""
+    from bisheng.core.context.manager import app_context
+    from bisheng.knowledge.rag.async_retrieval_runtime import AsyncRetrievalRuntimeManager
+
+    for name in ("shared_storage_elasticsearch", AsyncRetrievalRuntimeManager.name):
+        try:
+            context = app_context.get_context(name)
+        except KeyError:
+            continue
+        await context.async_close()
+
+
+@worker_shutdown.connect
+def on_worker_stopped(*args, **kwargs):
+    """等 Celery 工作池停止后再关闭客户端，避免中断仍在执行的请求。"""
+    from bisheng.worker import _asyncio_utils
+    from bisheng.utils.async_utils import set_preferred_bridge_loop
+
+    thread = _asyncio_utils._loop_thread
+    if thread is None or not thread.is_alive():
+        return
+    try:
+        _asyncio_utils.run_async_task(_close_worker_storage_clients, timeout=10, cancel_grace=1)
+    except Exception:
+        logger.exception("Celery 异步存储连接关闭失败")
+    finally:
+        set_preferred_bridge_loop(None)

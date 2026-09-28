@@ -1,5 +1,6 @@
 """默认队列只推进发布/清理状态, 内容修复仍由投影链路交给解析 worker。"""
 
+
 import asyncio
 import time
 from datetime import datetime, timedelta
@@ -7,6 +8,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
@@ -158,7 +160,7 @@ class KnowledgeBackgroundService:
                     raise RuntimeError(outcome.error or "entry_cleanup_not_started")
             payload["cleanup_requested"] = True
             await self._checkpoint(job, owner, payload)
-        enqueue_document_projection_entries(tenant_id=job.tenant_id, entry_ids=[entry.id])
+        await run_sync_dispatch(enqueue_document_projection_entries,tenant_id=job.tenant_id, entry_ids=[entry.id])
         return self._wait(payload)
 
     async def _delete_file(self, job, owner, payload):

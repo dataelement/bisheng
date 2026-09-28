@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from loguru import logger
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationAttemptResult,
     KnowledgeMigrationBatchStatus,
@@ -371,7 +372,7 @@ class KnowledgeMigrationExecutionService:
             batch_id = int(next_batch.id)
             round_no = int(next_batch.round_no)
         try:
-            self.dispatcher.dispatch_execution(batch_id, round_no)
+            await run_sync_dispatch(self.dispatcher.dispatch_execution, batch_id, round_no)
         except Exception:
             # queued 状态仍是 DB 真相源, reconcile 会再次投递.
             return
@@ -542,9 +543,9 @@ class KnowledgeMigrationReconcileService:
                 continue
             try:
                 if delivery[0] == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value:
-                    self.dispatcher.dispatch_preflight(batch_id)
+                    await run_sync_dispatch(self.dispatcher.dispatch_preflight, batch_id)
                 else:
-                    self.dispatcher.dispatch_execution(batch_id, delivery[1])
+                    await run_sync_dispatch(self.dispatcher.dispatch_execution, batch_id, delivery[1])
                 dispatched += 1
             except Exception:
                 # 保留已提交的预算和退避, 单条发布失败不阻塞后续批次。

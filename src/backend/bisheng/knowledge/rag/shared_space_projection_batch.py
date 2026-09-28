@@ -45,7 +45,7 @@ async def apply_projection_batch(
         raise ValueError("duplicate document in projection write batch")
     if any(int(item.membership.tenant_id) != writer.tenant_id for item in requests):
         raise ValueError("projection write cannot cross tenant routes")
-    snapshot = writer._assert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
+    snapshot = await writer._aassert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
     await guard()
     existing = defaultdict(list)
     for row in await _load_rows(writer, list(plans)):
@@ -143,7 +143,7 @@ async def apply_projection_batch(
             continue
         document_ids = {int(row["canonical_document_id"]) for row in page}
         await guard()
-        writer._assert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
+        await writer._aassert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
         try:
             # Milvus 先插入新行, ES 部分失败时保留旧主键以便重试恢复。
             await writer._run_milvus("insert", page)
@@ -172,7 +172,7 @@ async def apply_projection_batch(
     for offset in range(0, len(successful), 100):
         document_ids = sorted(successful)[offset : offset + 100]
         await guard()
-        writer._assert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
+        await writer._aassert_writable(embedding_model_id=writer.schema_spec.embedding_model_id)
         try:
             pks = [pk for document_id in document_ids for pk in old_pks.get(document_id, [])]
             for start in range(0, len(pks), CHUNK_BATCH_SIZE):

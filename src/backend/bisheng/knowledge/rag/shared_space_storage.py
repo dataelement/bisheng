@@ -631,10 +631,13 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         self.tenant_id = int(tenant_id)
         self.collection = collection
         self.es_client = es_client
+        self._native_async_es = False
+        self._async_write_runtime = None
         self.expected_routing_version = int(expected_routing_version)
         self.schema_spec = schema_spec
         self.conf = conf
         self._routing_provider = routing_provider or load_tenant_routing_snapshot
+        self._async_routing_provider = None if routing_provider else aload_tenant_routing_snapshot
         self._embedding_model_validator = embedding_model_validator
         self._migration_mode = bool(migration_mode)
 
@@ -657,6 +660,23 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         self, *, embedding_model_id: str | int | None = None
     ) -> TenantRoutingSnapshot:
         snapshot = self._routing_snapshot()
+        return self._validate_writable(snapshot, embedding_model_id=embedding_model_id)
+
+    async def _aassert_writable(self, *, embedding_model_id=None):
+        if self._async_routing_provider is None:
+            snapshot = await asyncio.to_thread(self._routing_snapshot)
+        else:
+            snapshot = await self._async_routing_provider(self.tenant_id)
+        if snapshot is None:
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED, "no routing row for tenant",
+                tenant_id=self.tenant_id,
+            )
+        return await asyncio.to_thread(
+            self._validate_writable, snapshot, embedding_model_id=embedding_model_id,
+        )
+
+    def _validate_writable(self, snapshot, *, embedding_model_id=None):
         if not self._migration_mode:
             require_initialized_shared_routing(self.tenant_id, snapshot)
         if int(snapshot.routing_version) != self.expected_routing_version:
@@ -733,10 +753,20 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         return getattr(self.collection, method)(*args, **kwargs)
 
     async def _run_milvus(self, method: str, *args, **kwargs):
+        if self._async_write_runtime is not None and method in {"insert", "delete"}:
+            if method == "insert":
+                kwargs["data"] = args[0] if args else kwargs.pop("data")
+            else:
+                kwargs["filter"] = kwargs.pop("expr")
+            return await self._async_write_runtime.write_shared_content(method, self.collection.name, **kwargs)
         return await asyncio.to_thread(self._milvus_call, method, *args, **kwargs)
 
     async def _run_es(self, method: str, *args, **kwargs):
-        client_method = getattr(self.es_client, method)
+        client_method = self.es_client
+        for part in method.split("."):
+            client_method = getattr(client_method, part)
+        if self._native_async_es:
+            return await client_method(*args, **kwargs)
         return await asyncio.to_thread(client_method, *args, **kwargs)
 
     def _doc_expr(
@@ -868,7 +898,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 f"writer is bound to tenant {self.tenant_id}, got "
                 f"{identity.tenant_id}"
             )
-        snapshot = self._assert_writable(
+        snapshot = await self._aassert_writable(
             embedding_model_id=identity.embedding_model_id
         )
         knowledge_ids = validate_knowledge_ids(request.knowledge_ids)
@@ -992,7 +1022,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable(
+        snapshot = await self._aassert_writable(
             embedding_model_id=self.schema_spec.embedding_model_id
         )
         knowledge_ids = validate_knowledge_ids(request.knowledge_ids, allow_empty=True)
@@ -1090,7 +1120,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             },
         }
         es_index = self._es_index(snapshot)
-        await asyncio.to_thread(self.es_client.indices.refresh, index=es_index)
+        await self._run_es("indices.refresh", index=es_index)
         await self._run_es(
             "update_by_query",
             index=es_index,
@@ -1123,7 +1153,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable(
+        snapshot = await self._aassert_writable(
             embedding_model_id=self.schema_spec.embedding_model_id
         )
         expr = self._doc_expr(
@@ -1165,11 +1195,43 @@ def verify_shared_space_storage_ready(tenant_id: int) -> None:
         writer.es_client.close()
 
 
+async def abuild_shared_space_components_for_tenant(tenant_id: int):
+    """异步加载路由和客户端，SDK 结构检查保留线程边界。"""
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context.manager import app_context
+    from bisheng.core.search.elasticsearch.manager import EsConnManager
+    from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
+
+    snapshot = require_initialized_shared_routing(
+        tenant_id, await aload_tenant_routing_snapshot(tenant_id),
+    )
+    context_name = "shared_storage_elasticsearch"
+    try:
+        connection = await app_context.async_get_instance(context_name)
+    except KeyError:
+        vectors = settings.get_vectors_conf()
+        es_conf = vectors.elasticsearch
+        app_context.register_context(EsConnManager(
+            es_hosts=es_conf.elasticsearch_url, name=context_name, **es_conf.ssl_verify,
+        ))
+        connection = await app_context.async_get_instance(context_name)
+    writer, reader = await asyncio.to_thread(
+        build_shared_space_components_for_tenant, tenant_id,
+        routing_provider=lambda _: snapshot, es_client=connection.es_connection,
+    )
+    writer._async_routing_provider = aload_tenant_routing_snapshot
+    writer._native_async_es = True
+    writer._async_write_runtime = await get_async_retrieval_runtime()
+    reader._routing_provider = aload_tenant_routing_snapshot
+    return writer, reader
+
+
 def build_shared_space_components_for_tenant(
     tenant_id: int,
     *,
     embedding_dimension: int | None = None,
     conf=None,
+    es_client=None,
     routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
 ) -> tuple[MilvusEsSharedSpaceStorageWriter, SharedSpaceStorageReader]:
     """Build the per-tenant writer+reader pair when the tenant is routed.
@@ -1217,8 +1279,9 @@ def build_shared_space_components_for_tenant(
 
     from bisheng.common.services.config_service import settings as bisheng_settings
 
-    es_conf = bisheng_settings.get_vectors_conf().elasticsearch
-    es_client = Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify)
+    if es_client is None:
+        es_conf = bisheng_settings.get_vectors_conf().elasticsearch
+        es_client = Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify)
 
     writer = MilvusEsSharedSpaceStorageWriter(
         tenant_id=int(tenant_id),

@@ -1,4 +1,9 @@
 from datetime import datetime, timedelta
+import importlib.util
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,11 +15,44 @@ from bisheng.message.domain.models.message_push_outbox import (
 from bisheng.message.domain.repositories.implementations.message_push_outbox_repository_impl import (
     MessagePushOutboxRepositoryImpl,
 )
-from bisheng.worker.message.outbox_processor import wechatOutboxProcessor
-from bisheng.worker.message.tasks import (
-    push_single_wechat_message,
-    scan_wechat_message_push_outbox,
-)
+
+if TYPE_CHECKING:
+    from bisheng.worker.message.outbox_processor import WeChatOutboxProcessor
+    from bisheng.worker.message.tasks import push_single_wechat_message, scan_wechat_message_push_outbox
+
+@pytest.fixture(autouse=True)
+def load_message_workers(monkeypatch):
+    import bisheng
+
+    # 根测试环境会替换 worker 包，这里只在当前用例内加载真实业务模块。
+    root = Path(__file__).resolve().parents[2] / "bisheng/worker"
+    monkeypatch.setattr(bisheng, "worker", sys.modules["bisheng.worker"], raising=False)
+    package = ModuleType("bisheng.worker.message")
+    package.__path__ = [str(root / "message")]
+    monkeypatch.setitem(sys.modules, package.__name__, package)
+    monkeypatch.setattr(sys.modules["bisheng.worker"], "message", package, raising=False)
+
+    def task(**kwargs):
+        def decorate(function):
+            function.delay = MagicMock()
+            return function
+        return decorate
+
+    monkeypatch.setitem(sys.modules, "bisheng.worker.main", SimpleNamespace(
+        bisheng_celery=SimpleNamespace(task=task),
+    ))
+    monkeypatch.setitem(sys.modules, "bisheng.worker._asyncio_utils", SimpleNamespace(run_async_task=MagicMock()))
+    modules = {}
+    for name in ("outbox_processor", "tasks"):
+        spec = importlib.util.spec_from_file_location(f"{package.__name__}.{name}", root / "message" / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, spec.name, module)
+        monkeypatch.setattr(package, name, module, raising=False)
+        spec.loader.exec_module(module)
+        modules[name] = module
+    monkeypatch.setitem(globals(), "WeChatOutboxProcessor", modules["outbox_processor"].WeChatOutboxProcessor)
+    for name in ("push_single_wechat_message", "scan_wechat_message_push_outbox"):
+        monkeypatch.setitem(globals(), name, getattr(modules["tasks"], name))
 
 
 @pytest.fixture
@@ -45,16 +83,16 @@ def pending_record_factory(async_db_session):
     return _make
 
 
-# ---- wechatOutboxProcessor.scan_and_dispatch tests ----
+# ---- WeChatOutboxProcessor.scan_and_dispatch tests ----
 
 
 @pytest.mark.asyncio
 async def test_processor_scan_disabled(mock_wechat_conf):
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         mock_wechat_conf.enabled = False
         with patch("bisheng.worker.message.outbox_processor.get_async_db_session") as session_mock:
-            processor = wechatOutboxProcessor()
+            processor = WeChatOutboxProcessor()
             result = await processor.scan_and_dispatch()
             assert result == 0
             session_mock.assert_not_called()
@@ -63,13 +101,13 @@ async def test_processor_scan_disabled(mock_wechat_conf):
 @pytest.mark.asyncio
 async def test_processor_scan_no_pending_records(async_db_session, mock_wechat_conf):
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
             with patch("bisheng.worker.message.tasks.push_single_wechat_message.delay") as delay_mock:
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.scan_and_dispatch()
                 assert result == 0
                 delay_mock.assert_not_called()
@@ -81,13 +119,13 @@ async def test_processor_scan_dispatches_pending_records(async_db_session, mock_
     record2 = await pending_record_factory(action_code="qa_expert_answered")
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
             with patch("bisheng.worker.message.tasks.push_single_wechat_message.delay") as delay_mock:
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.scan_and_dispatch()
                 assert result == 2
                 delay_mock.assert_any_call(record1.id)
@@ -101,13 +139,13 @@ async def test_processor_scan_respects_batch_size(async_db_session, mock_wechat_
 
     mock_wechat_conf.batch_size = 2
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
             with patch("bisheng.worker.message.tasks.push_single_wechat_message.delay") as delay_mock:
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.scan_and_dispatch()
                 assert result == 2
                 assert delay_mock.call_count == 2
@@ -120,27 +158,27 @@ async def test_processor_scan_skips_future_retry_records(async_db_session, mock_
     await pending_record_factory(next_retry_at=future)
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
             with patch("bisheng.worker.message.tasks.push_single_wechat_message.delay") as delay_mock:
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.scan_and_dispatch()
                 assert result == 1
                 delay_mock.assert_called_once_with(ready_record.id)
 
 
-# ---- wechatOutboxProcessor.push_one tests ----
+# ---- WeChatOutboxProcessor.push_one tests ----
 
 
 @pytest.mark.asyncio
 async def test_processor_push_one_disabled(mock_wechat_conf):
     mock_wechat_conf.enabled = False
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
-        processor = wechatOutboxProcessor()
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
+        processor = WeChatOutboxProcessor()
         result = await processor.push_one(1)
         assert result is False
 
@@ -148,12 +186,12 @@ async def test_processor_push_one_disabled(mock_wechat_conf):
 @pytest.mark.asyncio
 async def test_processor_push_one_record_not_found(async_db_session, mock_wechat_conf):
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
-            processor = wechatOutboxProcessor()
+            processor = WeChatOutboxProcessor()
             result = await processor.push_one(999999)
             assert result is False
 
@@ -165,12 +203,12 @@ async def test_processor_push_one_non_pending_status(async_db_session, mock_wech
     await repo.mark_sent(record.id, datetime.now())
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
         ):
-            processor = wechatOutboxProcessor()
+            processor = WeChatOutboxProcessor()
             result = await processor.push_one(record.id)
             assert result is False
 
@@ -180,7 +218,7 @@ async def test_processor_push_one_success(async_db_session, mock_wechat_conf, pe
     record = await pending_record_factory()
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
@@ -190,7 +228,7 @@ async def test_processor_push_one_success(async_db_session, mock_wechat_conf, pe
                 client.push_text_message = AsyncMock(return_value=(True, None))
                 client_cls.return_value = client
 
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.push_one(record.id)
                 assert result is True
 
@@ -210,10 +248,12 @@ async def test_processor_push_one_success(async_db_session, mock_wechat_conf, pe
 @pytest.mark.asyncio
 async def test_processor_push_one_retry_then_fail(async_db_session, mock_wechat_conf, pending_record_factory):
     record = await pending_record_factory()
-    mock_wechat_conf.max_retries = 1
+    # 重试预算在创建记录时固化，发送阶段读取记录自身的上限。
+    record.max_retries = 1
+    await async_db_session.commit()
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
@@ -223,7 +263,7 @@ async def test_processor_push_one_retry_then_fail(async_db_session, mock_wechat_
                 client.push_text_message = AsyncMock(return_value=(False, "timeout"))
                 client_cls.return_value = client
 
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.push_one(record.id)
                 assert result is True
 
@@ -240,7 +280,7 @@ async def test_processor_push_one_pending_retry(async_db_session, mock_wechat_co
     mock_wechat_conf.max_retries = 3
 
     with patch("bisheng.worker.message.outbox_processor.settings") as m:
-        m.get_shougang_wechat_message_push_conf.return_value = mock_wechat_conf
+        m.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=mock_wechat_conf)
         with patch(
             "bisheng.worker.message.outbox_processor.get_async_db_session",
             return_value=async_db_session,
@@ -250,7 +290,7 @@ async def test_processor_push_one_pending_retry(async_db_session, mock_wechat_co
                 client.push_text_message = AsyncMock(return_value=(False, "http_status_500"))
                 client_cls.return_value = client
 
-                processor = wechatOutboxProcessor()
+                processor = WeChatOutboxProcessor()
                 result = await processor.push_one(record.id)
                 assert result is False
 

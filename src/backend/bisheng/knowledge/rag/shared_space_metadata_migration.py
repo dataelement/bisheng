@@ -41,7 +41,7 @@ async def relocate_content(writer, request: ContentRelocationRequest) -> None:
     source, target = request.source, request.target
     if int(source.tenant_id) != writer.tenant_id or int(target.tenant_id) != writer.tenant_id:
         raise ValueError("migration cannot cross tenant storage routes")
-    snapshot = writer._assert_writable(embedding_model_id=target.embedding_model_id)
+    snapshot = await writer._aassert_writable(embedding_model_id=target.embedding_model_id)
     knowledge_ids = validate_knowledge_ids(request.knowledge_ids)
     writer._check_membership_limits(knowledge_ids)
     source_rows = await _rows(writer, source)

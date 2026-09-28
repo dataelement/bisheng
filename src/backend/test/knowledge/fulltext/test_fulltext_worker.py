@@ -58,6 +58,38 @@ async def test_dispatcher_rejects_multi_tenant_without_reading_outbox():
     sender.assert_not_called()
 
 
+async def test_batch_dispatch_yields_to_loop_and_stops_on_publish_failure():
+    import threading
+
+    repository = AsyncMock()
+    repository.list_dispatchable.return_value = [SimpleNamespace(id=i, desired_revision=4) for i in range(201)]
+    loop_thread = threading.get_ident()
+    started, release = threading.Event(), threading.Event()
+    batches = []
+
+    def publish(*, items):
+        assert threading.get_ident() != loop_thread
+        batches.append(items)
+        if len(batches) == 1:
+            started.set()
+            assert release.wait(2)
+        else:
+            raise OSError('broker unavailable')
+
+    task = asyncio.create_task(dispatch_knowledge_fulltext_outbox_async(
+        multi_tenant_enabled=False, repository=repository, sender=MagicMock(), batch_sender=publish,
+    ))
+    try:
+        assert await asyncio.to_thread(started.wait, 1)
+        assert not task.done()
+    finally:
+        release.set()
+    with pytest.raises(OSError, match='broker unavailable'):
+        await task
+    assert [len(batch) for batch in batches] == [100, 100]
+    assert batches[0][0] == {'outbox_id': 0, 'revision': 4}
+
+
 @pytest.mark.parametrize(
     (
         "aggregate_type",

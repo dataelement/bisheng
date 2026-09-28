@@ -7,12 +7,13 @@ ContextVar, so all downstream repos see the right tenant.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from random import randrange
 
 from loguru import logger
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -57,20 +58,20 @@ def _dispatch_task_for_tenants(task, tenant_ids: list[int]) -> None:
         )
 
 
-def _build_llm_invoke(tenant_id: int) -> Callable[[str], str] | None:
+async def _build_llm_invoke(tenant_id: int) -> Callable[[str], Awaitable[str]] | None:
     """Return a prompt->text callable backed by the tenant knowledge LLM, or None."""
     from bisheng.llm.domain.services import LLMService
 
     try:
-        llm = LLMService.get_knowledge_similar_llm(invoke_user_id=0, tenant_id=tenant_id)
+        llm = await LLMService.aget_knowledge_similar_llm(invoke_user_id=0, tenant_id=tenant_id)
     except Exception:
         logger.warning("hot-search LLM resolve failed tenant={}", tenant_id)
         return None
     if llm is None:
         return None
 
-    def _invoke(prompt: str) -> str:
-        response = llm.invoke(prompt)
+    async def _invoke(prompt: str) -> str:
+        response = await llm.ainvoke(prompt)
         return getattr(response, "content", None) or str(response)
 
     return _invoke
@@ -84,7 +85,7 @@ async def _rebuild_async(now: datetime | None = None) -> str:
         return "disabled"
 
     now = now or datetime.now(timezone.utc)
-    llm_invoke = _build_llm_invoke(tenant_id)
+    llm_invoke = await _build_llm_invoke(tenant_id)
     telemetry_repository = PortalHotSearchTelemetryRepositoryImpl()
     redis_repository = PortalHotSearchRedisRepositoryImpl(
         cache_ttl=config.redis_ttl,
@@ -96,8 +97,8 @@ async def _rebuild_async(now: datetime | None = None) -> str:
         min_search_count=config.min_search_count,
         window_days=config.window_days,
     )
-    intent_service = PortalHotSearchIntentService(llm_invoke=llm_invoke)
-    rewrite_service = PortalHotSearchRewriteService(llm_invoke=llm_invoke)
+    intent_service = PortalHotSearchIntentService(llm_ainvoke=llm_invoke)
+    rewrite_service = PortalHotSearchRewriteService(llm_ainvoke=llm_invoke)
 
     async with get_async_db_session() as session:
         pipeline = PortalHotSearchPipelineService(
@@ -150,7 +151,7 @@ def rebuild_portal_hot_search_snapshot_celery(_task, trigger: str = "scheduled")
 
 async def _fanout_async() -> int:
     tenant_ids = [DEFAULT_TENANT_ID, *(await TenantDao.aget_children_ids_active(DEFAULT_TENANT_ID))]
-    _dispatch_task_for_tenants(rebuild_portal_hot_search_snapshot_celery, tenant_ids)
+    await run_sync_dispatch(_dispatch_task_for_tenants, rebuild_portal_hot_search_snapshot_celery, tenant_ids)
     return len(set(tenant_ids))
 
 

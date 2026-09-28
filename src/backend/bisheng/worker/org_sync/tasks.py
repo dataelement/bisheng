@@ -7,9 +7,11 @@ Tenant context: propagated via Celery headers (INV-8), automatically restored
 by the before_task signal in bisheng.worker.tenant_context.
 """
 
+
 import logging
 from datetime import datetime
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
@@ -68,7 +70,7 @@ async def _check_schedules_async():
                     f'Dispatching scheduled sync for config {config.id} '
                     f'(cron={config.cron_expression})',
                 )
-                execute_org_sync.apply_async(
+                await run_sync_dispatch(execute_org_sync.apply_async,
                     args=[config.id, 'scheduled', None],
                     queue='celery',
                 )

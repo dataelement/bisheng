@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
     current_tenant_id,
@@ -53,7 +54,7 @@ async def _scan_cleanup_jobs(limit: int = 100) -> int:
                 refs = [(job.id, job.tenant_id, job.lease_until.isoformat()) for job in jobs]
     for job_id, tenant_id, lease_until in refs:
         try:
-            process_portal_course_media_cleanup.apply_async(
+            await run_sync_dispatch(process_portal_course_media_cleanup.apply_async,
                 args=(job_id, tenant_id, lease_until), headers={"tenant_id": tenant_id},
             )
         except Exception:

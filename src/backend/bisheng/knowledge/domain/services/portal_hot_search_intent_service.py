@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Sequence
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import HotSearchIntentGroup
@@ -36,8 +38,32 @@ class PortalHotSearchIntentService:
     distinct query) so the batch always produces a result.
     """
 
-    def __init__(self, llm_invoke: LLMInvoke | None = None) -> None:
+    def __init__(self, llm_invoke: LLMInvoke | None = None, *,
+                 llm_ainvoke: Callable[[str], Awaitable[str]] | None = None,
+                 request_timeout: float = 60.0) -> None:
         self._llm_invoke = llm_invoke
+        self._llm_ainvoke = llm_ainvoke
+        self._request_timeout = request_timeout
+
+    async def agroup(self, queries: Sequence[str]) -> IntentGroupingResult:
+        """原生异步调用模型，旧同步调用方通过线程池兼容。"""
+        if self._llm_ainvoke is None:
+            return await asyncio.to_thread(self.group, queries)
+        distinct = list(dict.fromkeys(q for q in queries if q))
+        if not distinct:
+            return IntentGroupingResult(groups=[], degraded=False)
+        try:
+            response = await asyncio.wait_for(
+                self._llm_ainvoke(GROUP_PROMPT.format(queries="\n".join(distinct))),
+                timeout=self._request_timeout,
+            )
+            groups = self._parse_groups(response, distinct)
+            if not groups:
+                raise ValueError("empty groups parsed from LLM response")
+            return IntentGroupingResult(groups=groups, degraded=False)
+        except Exception:
+            logging.getLogger(__name__).warning("热搜意图模型失败，使用原始分组", exc_info=True)
+            return IntentGroupingResult(groups=self._identity_groups(distinct), degraded=True)
 
     def group(self, queries: Sequence[str]) -> IntentGroupingResult:
         distinct = list(dict.fromkeys(q for q in queries if q))

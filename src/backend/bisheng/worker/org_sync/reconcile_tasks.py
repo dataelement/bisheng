@@ -2,10 +2,10 @@
 
 Three scheduled entries:
 
-- ``reconcile_all_organizations`` (cron ``0 */6 * * *``): fans one
+- ``reconcile_all_organizations`` (cron ``25 */6 * * *``): fans one
   ``reconcile_single_config`` per active ``org_sync_config``. Skips the
   F014 ``provider='sso_realtime'`` seed.
-- ``report_ts_conflicts_weekly`` (cron ``0 9 * * MON``): aggregates the
+- ``report_ts_conflicts_weekly`` (cron ``20 9 * * MON``): aggregates the
   past 7d of ``ts_conflict`` event rows and notifies global super
   admins when any external_id crosses
   ``settings.reconcile.weekly_conflict_threshold``.
@@ -17,8 +17,10 @@ Three scheduled entries:
 Beat registration lives in ``bisheng.core.config.settings.CeleryConf.validate``.
 """
 
+
 import logging
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 
@@ -51,7 +53,7 @@ async def _fan_out_all() -> None:
         if c.provider == 'sso_realtime':
             continue
         try:
-            reconcile_single_config.apply_async(
+            await run_sync_dispatch(reconcile_single_config.apply_async,
                 args=[c.id], queue='celery',
             )
         except Exception as e:
@@ -93,7 +95,7 @@ def reconcile_single_config(config_id: int):
 
 @bisheng_celery.task(acks_late=True)
 def report_ts_conflicts_weekly():
-    """Monday 09:00 — aggregate last-7d ts_conflicts, notify admins."""
+    """每周一 09:20 汇总最近 7 天的时间戳冲突并通知管理员。"""
     run_async_task(_run_weekly)
 
 

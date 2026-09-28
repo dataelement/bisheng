@@ -191,6 +191,34 @@ class RedisClient:
         except TypeError as exc:
             raise TypeError("RedisCache only accepts values that can be pickled. ") from exc
 
+    async def ascan_batches(self, pattern: str, batch_size: int = 200):
+        """按批遍历全部主节点，使用 scan_iter 兼容单机和集群游标。"""
+        batch = []
+        async for key in self.async_connection.scan_iter(match=pattern, count=batch_size):
+            batch.append(key)
+            if len(batch) >= batch_size:
+                yield list(dict.fromkeys(batch))
+                batch.clear()
+        if batch:
+            yield list(dict.fromkeys(batch))
+
+    async def aget_raw_many(self, keys):
+        """流水线保留缺失项的位置，不对跨槽键执行 MGET。"""
+        pipe = self.async_connection.pipeline(transaction=False)
+        for key in keys:
+            pipe.get(key)
+        return await pipe.execute()
+
+    async def adelete_unchanged_many(self, values):
+        """仅删除值未变化的键，每段脚本只操作一个槽。"""
+        if not values:
+            return 0
+        script = "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) end return 0"
+        pipe = self.async_connection.pipeline(transaction=False)
+        for key, raw in values:
+            pipe.eval(script, 1, key, raw)
+        return sum(int(value) for value in await pipe.execute())
+
     async def akeys(self, pattern: str) -> list[str]:
         """Get all keys matching patterns asynchronously"""
         try:

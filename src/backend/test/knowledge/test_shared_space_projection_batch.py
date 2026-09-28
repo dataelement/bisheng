@@ -42,7 +42,7 @@ def make_writer(failed_document=None):
     return SimpleNamespace(
         tenant_id=7,
         schema_spec=SimpleNamespace(embedding_model_id=1),
-        _assert_writable=MagicMock(),
+        _aassert_writable=AsyncMock(),
         _check_membership_limits=MagicMock(),
         _es_index=lambda snapshot: "shared",
         _conf=lambda: SimpleNamespace(es_routing_enabled=True),

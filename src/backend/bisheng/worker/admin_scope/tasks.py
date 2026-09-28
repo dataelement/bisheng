@@ -36,50 +36,37 @@ def admin_scope_cleanup():
 
 
 async def _cleanup_async() -> None:
-    """Delete ``admin_scope:{user_id}`` keys whose Tenant is no longer active.
+    """分页扫描并删除失效范围，保留扫描后的并发更新。"""
+    import pickle
 
-    Fast path: if no scope keys exist, skip the DB query altogether.
-    """
-    from bisheng.core.cache.redis_manager import get_redis_client_sync
+    from bisheng.core.cache.redis_manager import get_redis_client
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.database.models.tenant import TenantDao
 
-    redis = get_redis_client_sync()
-    keys = redis.keys("admin_scope:*")
-    if not keys:
-        return
-
-    # Cross-tenant read — without the bypass, the tenant_filter event
-    # listener's behaviour when current_tenant_id is None is undefined.
-    with bypass_tenant_filter():
-        non_active = set(await TenantDao.aget_non_active_ids())
-
-    if not non_active:
-        return  # All tenants active — all scope keys still valid.
-
-    deleted = 0
-    for key in keys:
-        try:
-            raw = redis.get(key)
-        except Exception as exc:
-            logger.debug("admin_scope_cleanup: read %s failed: %s", key, exc)
-            continue
-        if raw is None:
-            continue
-        try:
-            scope_id = int(raw)
-        except (TypeError, ValueError):
-            # Corrupt value — treat as stale and remove.
-            redis.delete(key)
-            deleted += 1
-            continue
-        if scope_id in non_active:
-            redis.delete(key)
-            deleted += 1
-
-    logger.info(
-        "admin_scope_cleanup done: total_keys=%d non_active_tenants=%d deleted=%d",
-        len(keys),
-        len(non_active),
-        deleted,
-    )
+    redis = await get_redis_client()
+    non_active = None
+    total = deleted = 0
+    async for keys in redis.ascan_batches("admin_scope:*", batch_size=200):
+        if non_active is None:
+            with bypass_tenant_filter():
+                non_active = set(await TenantDao.aget_non_active_ids())
+            if not non_active:
+                return
+        values = await redis.aget_raw_many(keys)
+        stale = []
+        total += len(keys)
+        for key, raw in zip(keys, values):
+            if raw is None:
+                continue
+            try:
+                value = pickle.loads(raw)
+                if value is None:
+                    continue
+                expired = int(value) in non_active
+            except (ValueError, TypeError, pickle.UnpicklingError, EOFError):
+                logger.warning("管理员范围值无效 key=%s", key)
+                expired = True
+            if expired:
+                stale.append((key, raw))
+        deleted += await redis.adelete_unchanged_many(stale)
+    logger.info("admin_scope_cleanup done: total_keys=%d deleted=%d", total, deleted)
