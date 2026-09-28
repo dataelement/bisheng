@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import func, update
+from sqlalchemy import delete, func, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -53,6 +53,17 @@ class EPlusConfigRepository:
             )
         ).first()
 
+    async def get_by_assistant_id(self, *, tenant_id: int, assistant_id: str) -> EPlusBotConfig | None:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        return (
+            await self.session.exec(
+                select(EPlusBotConfig).where(
+                    EPlusBotConfig.tenant_id == resolved_tenant_id,
+                    EPlusBotConfig.assistant_id == str(assistant_id),
+                )
+            )
+        ).first()
+
     async def list_space_ids(self, *, tenant_id: int, bot_config_id: int) -> list[int]:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         statement = (
@@ -64,6 +75,42 @@ class EPlusConfigRepository:
             .order_by(EPlusBotSpace.space_id.asc())
         )
         return [int(space_id) for space_id in (await self.session.exec(statement)).all()]
+
+    async def save(self, *, tenant_id: int, row: EPlusBotConfig) -> EPlusBotConfig:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        if row.tenant_id != resolved_tenant_id:
+            raise ValueError("E+ config tenant does not match the current tenant context")
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    async def replace_space_ids(
+        self,
+        *,
+        tenant_id: int,
+        bot_config_id: int,
+        space_ids: tuple[int, ...],
+        bound_by: int,
+    ) -> None:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        await self.session.exec(
+            delete(EPlusBotSpace).where(
+                EPlusBotSpace.tenant_id == resolved_tenant_id,
+                EPlusBotSpace.bot_config_id == int(bot_config_id),
+            )
+        )
+        self.session.add_all(
+            [
+                EPlusBotSpace(
+                    tenant_id=resolved_tenant_id,
+                    bot_config_id=int(bot_config_id),
+                    space_id=space_id,
+                    bound_by=int(bound_by),
+                )
+                for space_id in space_ids
+            ]
+        )
+        await self.session.flush()
 
 
 class EPlusMessageRepository:
