@@ -388,8 +388,8 @@ src/backend/bisheng/eplus/
 - [x] **Step 3 — GREEN:** 修复日志泄露；backend E+、assistant/F041、frontend lint/i18n/E+ UI、arch-guard、单头检查通过；Client typecheck 被两处既有无关错误阻断，已记录在 `e2e-checklist.md`。
 - [ ] **Step 4 — Environment gates:** 在 MySQL 与 105 DM8 验五表/唯一键；Redis 双实例租约接管；MinIO 跨进程图片；客户 E+ 验文本/图片/mixed/群聊、重复 msgid、三条排队、第 4 条忙碌、断线、执行中改绑本轮继续且下一轮生效、无用户、互斥空间越权；不能完成的项必须标“未验证”，不得写“通过”。
 - [x] **Step 5 — E2E:** 使用 `/e2e-test features/v3.0.0-beta1/073-eplus-robot-assistant` 生成环境只读 E2E 与手工清单；本地无运行中目标环境，结果为 PARTIAL，未冒充通过。
-- [ ] **Step 6 — Final review:** `/code-review --base <909 分支合入前基线>`，Important/Critical 全部 RED→GREEN 修复；更新任务状态与偏差记录。
-- [ ] **Step 7 — Commit:** `test(eplus): close integration and security gates`。
+- [x] **Step 6 — Final review:** 独立评审发现的租约退避、恢复竞态、入口乱序和慢图片阻塞均已 RED→GREEN 修复；最终复审 `0d8b030d2` 无 Critical/Important。
+- [x] **Step 7 — Commit:** `ac51f11d3`、`c369e7ed8`、`09da336cc`、`0d8b030d2` 完成门禁与评审修复提交。
 
 ## 依赖图
 

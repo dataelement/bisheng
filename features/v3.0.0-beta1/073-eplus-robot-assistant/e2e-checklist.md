@@ -14,6 +14,7 @@
 | 前端 i18n | `pnpm --dir src/frontend check-i18n` | 通过 |
 | 前端 typecheck | `pnpm --dir src/frontend typecheck` | Platform 通过；Client 被既有的 `AgentToolSelector.tsx:139`、`ChatFormTools.tsx:118` 两处无关错误阻断 |
 | 架构守卫 | `bash scripts/arch-guard.sh` | 通过 |
+| 最终代码评审 | 独立复审 `0d8b030d2` | 无 Critical/Important；租约退避、跨重连恢复、到达顺序和慢图片准入竞态均已复现并修复 |
 | Alembic 单头 | `alembic heads` | `f061_merge_cofco_909_f066_heads (head)` |
 | Shell | `bash -n src/backend/entrypoint.sh docker/bisheng/entrypoint.sh` | 通过 |
 | Compose | `docker compose ... config --quiet` | 未执行：本机未安装 Docker CLI；YAML 与服务约束由 Worker 生命周期测试解析验证 |
