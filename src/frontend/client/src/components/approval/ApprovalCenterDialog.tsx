@@ -221,6 +221,17 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     );
   }, [requestItems, requestsFilter, searchQuery]);
 
+  // Per-sub-filter counts shown next to the tab labels (外显消息数量). Derived from the fully
+  // loaded list in state — the list APIs return every item, so these are true totals, not page counts.
+  const taskCounts = useMemo(() => {
+    const pending = taskItems.filter((t) => t.status === "pending").length;
+    return { pending_me: pending, processed: taskItems.length - pending };
+  }, [taskItems]);
+  const requestCounts = useMemo(() => {
+    const inProgress = requestItems.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? "")).length;
+    return { in_progress: inProgress, completed: requestItems.length - inProgress };
+  }, [requestItems]);
+
   const toast = (ok: boolean) => showToast({
     message: localize(ok ? "com_approval_toast_success" : "com_approval_toast_failed"),
     severity: ok ? NotificationSeverity.SUCCESS : NotificationSeverity.INFO,
@@ -442,6 +453,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                           taskFilter === f ? "border-[#212121] text-text-1 font-medium" : "text-text-3 font-normal")}
                         onClick={() => setTaskFilter(f)}>
                         {f === "pending_me" ? localize("com_approval_task_filter_pending") : localize("com_approval_task_filter_processed")}
+                        <span className="ml-1 text-text-4">({taskCounts[f]})</span>
                       </button>
                     ))
                   : (["in_progress", "completed"] as RequestsFilter[]).map((f) => (
@@ -451,6 +463,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                           requestsFilter === f ? "border-[#212121] text-text-1 font-medium" : "text-text-3 font-normal")}
                         onClick={() => setRequestsFilter(f)}>
                         {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
+                        <span className="ml-1 text-text-4">({requestCounts[f]})</span>
                       </button>
                     ))}
               </div>
