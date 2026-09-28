@@ -43,7 +43,8 @@ JSON 请求
   → 按 CHECK_STANDARD_ID 将 check_standard_items 归入对应分组
   → 每个分组生成 1 个双 Sheet `.xlsx` 文件（共 1～N 个，N = distinct CREATE_DEPT_ID 数）
   → 文件名均为 `{CREATE_DEPT_ID}_{start_date}至{end_date}.xlsx`（由 CREATE_DEPT_ID 与 start_time/end_time 解析出的日期部分）
-  → 写入 Token 配置的知识库；目录 = Token 配置目录 / CREATE_DEPT_ID / `{start_time年份}`（不存在则创建）
+  → 解析 responsible_person_id：先匹配 user.external_id，无匹配时再匹配 user.external_code；任一步匹配多人则报错；不传时使用接口调用人
+  → 写入 Token 配置的知识库；目录 = Token 配置目录 / CREATE_DEPT_ID / `{start_time年份}`（不存在则创建）；文件责任人为上述解析结果
   → 返回 data.files[]，长度等于生成的 .xlsx 文件数
 ```
 
@@ -131,13 +132,14 @@ CREATE_DEPT_ID = DEPT-B
 
 ### 2.4 服务端自动生成的同步元数据
 
-调用方**无需**传入 `external_file_id`、文件名、部门、责任人等参数。
+调用方**无需**传入 `external_file_id`、文件名、部门。责任人通过可选字段 `responsible_person_id` 指定。
 
 | 字段 | 生成规则 |
 |---|---|
 | `file_name` | 各分组为 `{CREATE_DEPT_ID}_{start_date}至{end_date}.xlsx`（见 §2.3） |
 | `external_file_id` | 按 `CREATE_DEPT_ID` + 时间窗口 + 内容摘要生成，每组独立 |
-| 责任人 / 主责单位 | 默认 Token 绑定用户及其主部门 |
+| 责任人 | 请求体 `responsible_person_id`。先匹配 `user.external_id`，无匹配时再匹配 `user.external_code`；任一步匹配到多人则报错。不传或空字符串时使用接口调用人（Token 绑定用户）。 |
+| 主责单位 | 取最终责任人的唯一主部门 |
 
 分类、业务域、目标知识库均由 Token `file_sync_rule` 固定配置决定。
 
@@ -151,6 +153,7 @@ CREATE_DEPT_ID = DEPT-B
 |---|---|---:|---|
 | `start_time` | string | 否 | 本次推送数据的**开始时间**。ISO 8601，推荐 `YYYY-MM-DDTHH:mm:ss` 或 `YYYY-MM-DD HH:mm:ss`。可省略 / 空字符串；空值由业务校验拒绝。 |
 | `end_time` | string | 否 | 本次推送数据的**结束时间**。格式同 `start_time`，须 `end_time >= start_time`。可省略 / 空字符串；空值由业务校验拒绝。 |
+| `responsible_person_id` | string | 否 | 责任人标识，1～128 字符。先匹配 `user.external_id`，无匹配时再匹配 `user.external_code`；任一步匹配到多人则报错。不传、`null` 或空字符串时默认填入接口调用人（Token 绑定用户）。同一请求内各分组文件使用同一责任人。 |
 | `data` | object | 否 | 点检业务数据，见 §3.2。可省略，默认空对象。 |
 
 ### 3.2 `data` 对象
@@ -258,6 +261,7 @@ curl -X POST 'https://{bisheng-host}/api/v2/filelib/inspection-standard/sync' \
   -d '{
     "start_time": "2026-08-01T00:00:00",
     "end_time": "2026-08-14T23:59:59",
+    "responsible_person_id": "EMP001",
     "data": {
       "check_standards": [
         {
@@ -411,8 +415,9 @@ Excel 生成成功后，若某分组入库失败，沿用现有错误码（可�
 
 | HTTP | 业务码 | 场景 |
 |---:|---:|---|
+| 400 | `19901` | `responsible_person_id` 在 `user.external_id` 或回退到 `user.external_code` 时匹配到多名用户。 |
 | 403 | `19902` | 无上传权限（含 `{Token目录}/{CREATE_DEPT_ID}/{年份}` 节点）。 |
-| 404 | `19903` | 固定分类/域/空间/目录不存在或失效。 |
+| 404 | `19903` | 固定分类/域/空间/目录不存在或失效；或 `responsible_person_id` 在 `external_id` 与 `external_code` 上均未匹配到用户。 |
 | 409 | `19904` | 同目录下 `{CREATE_DEPT_ID}_{start_date}至{end_date}.xlsx` 已存在且触发重复校验。 |
 | 403 | `19906` | Token 未配置 `file_sync_rule`。 |
 
@@ -458,7 +463,7 @@ Developer Token 通用认证错误（`19801`～`19806`、`19812`）同 [filelib-
 
 - 本接口**不是**幂等接口；每组服务端生成的 `external_file_id` 仅用于回传与审计。
 - `start_time` / `end_time` 写入各文件元数据扩展字段，便于检索。
-- 记录 `CREATE_DEPT_ID`、分组行数、入库路径及 Token ID（不含 secret）。
+- 记录 `CREATE_DEPT_ID`、分组行数、入库路径、Token ID（不含 secret）以及请求参数 `responsible_person_id`（未传时为空）。成功与失败的批量审计都会写入该字段。
 - 同一 `{Token目录}/{CREATE_DEPT_ID}/{年份}/{CREATE_DEPT_ID}_{start_date}至{end_date}.xlsx` 重复提交行为与 Filelib 重复上传策略一致。
 
 ---
@@ -468,6 +473,7 @@ Developer Token 通用认证错误（`19801`～`19806`、`19812`）同 [filelib-
 - [ ] Token `file_sync_rule` 为固定业务域 + 固定知识库 + 固定目录（`folder_path` 或 `folder_id`）。
 - [ ] Token 路由白名单已加入 `POST /api/v2/filelib/inspection-standard/sync`。
 - [ ] 绑定用户对 `{Token目录}` 及预期 `{CREATE_DEPT_ID}` 子目录具备 `upload_file` 权限。
+- [ ] 若传入 `responsible_person_id`，确认该值在 `user.external_id` 或 `user.external_code` 上唯一；不传则文件责任人为 Token 绑定用户。
 - [ ] 调用方每条 `check_standards` 均提供非空 `CREATE_DEPT_ID`。
 - [ ] `check_standard_items.CHECK_STANDARD_ID` 与标准表一一对应。
 - [ ] 联调验证：单分组、多分组、项次孤儿、Token 非 fixed 配置、目录自动创建。

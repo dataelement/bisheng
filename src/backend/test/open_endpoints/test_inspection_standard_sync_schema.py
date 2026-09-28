@@ -115,8 +115,20 @@ def test_sync_request_allows_empty_times_and_lists_at_schema_layer():
     request = InspectionStandardSyncRequest.model_validate({})
     assert request.start_time == ""
     assert request.end_time == ""
+    assert request.responsible_person_id is None
     assert request.data.check_standards == []
     assert request.data.check_standard_items == []
+
+
+def test_sync_request_normalizes_responsible_person_id():
+    request = InspectionStandardSyncRequest.model_validate({"responsible_person_id": "  EMP002  "})
+    assert request.responsible_person_id == "EMP002"
+    request = InspectionStandardSyncRequest.model_validate({"responsible_person_id": 10086})
+    assert request.responsible_person_id == "10086"
+    request = InspectionStandardSyncRequest.model_validate({"responsible_person_id": "   "})
+    assert request.responsible_person_id is None
+    request = InspectionStandardSyncRequest.model_validate({"responsible_person_id": None})
+    assert request.responsible_person_id is None
 
 
 def test_item_record_coerces_numeric_optional_fields():

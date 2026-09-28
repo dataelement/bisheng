@@ -95,6 +95,7 @@ class InspectionStandardSyncService:
                         check_standard_item_count=len(group.check_standard_items),
                     ),
                     file_name=generated_file_name,
+                    responsible_person_id=request.responsible_person_id,
                 )
                 sync_result = await self.filelib_sync_service.sync_from_staged_file(
                     params=params,
@@ -137,6 +138,7 @@ class InspectionStandardSyncService:
                 data_end_time=request.end_time,
                 group_count=len(file_results),
                 file_count=len(file_results),
+                responsible_person_id=request.responsible_person_id,
             )
             return response
         except Exception as exc:
@@ -152,6 +154,7 @@ class InspectionStandardSyncService:
                 group_count=len(groups),
                 success_count=len(file_results),
                 error=exc,
+                responsible_person_id=request.responsible_person_id,
             )
             raise
         finally:

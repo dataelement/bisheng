@@ -138,6 +138,18 @@ async def test_sync_builds_single_group_file():
     assert result.files[0].folder_path == "点检标准/DEPT-A/2026"
     assert result.files[0].generated_file_name == "DEPT-A_2026-08-01至2026-08-14.xlsx"
     service.filelib_sync_service.sync_from_staged_file.assert_awaited_once()
+    params = service.filelib_sync_service.sync_from_staged_file.await_args.kwargs["params"]
+    assert params.responsible_person_id is None
+
+
+@pytest.mark.asyncio
+async def test_sync_forwards_responsible_person_id_to_file_owner():
+    service = _build_service()
+    await service.sync(_request(responsible_person_id=" EMP002 "))
+
+    assert service.filelib_sync_service.sync_from_staged_file.await_count == 1
+    params = service.filelib_sync_service.sync_from_staged_file.await_args.kwargs["params"]
+    assert params.responsible_person_id == "EMP002"
 
 
 @pytest.mark.asyncio
@@ -227,11 +239,14 @@ def test_validate_create_dept_id_rejects_path_separator():
 def test_build_generated_file_name_includes_create_dept_id():
     start_dt = InspectionStandardSyncService._parse_time_value("2026-08-01T00:00:00")
     end_dt = InspectionStandardSyncService._parse_time_value("2026-08-14 23:59:59")
-    assert InspectionStandardSyncService._build_generated_file_name(
-        create_dept_id="DEPT-A",
-        start_dt=start_dt,
-        end_dt=end_dt,
-    ) == "DEPT-A_2026-08-01至2026-08-14.xlsx"
+    assert (
+        InspectionStandardSyncService._build_generated_file_name(
+            create_dept_id="DEPT-A",
+            start_dt=start_dt,
+            end_dt=end_dt,
+        )
+        == "DEPT-A_2026-08-01至2026-08-14.xlsx"
+    )
 
 
 def test_sample_standard_coerces_numeric_check_period():
