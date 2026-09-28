@@ -206,8 +206,10 @@ class FakeReplyFactory:
     def __init__(self, *, start_error=None) -> None:
         self.start_error = start_error
         self.streams: dict[str, FakeReplyStream] = {}
+        self.calls: list[dict] = []
 
     def create(self, *, req_id: str, **kwargs) -> FakeReplyStream:
+        self.calls.append({"req_id": req_id, **kwargs})
         stream = FakeReplyStream(start_error=self.start_error)
         self.streams[req_id] = stream
         return stream
@@ -302,6 +304,25 @@ async def test_rejections_send_one_terminal_reply_without_assistant(disposition,
 
     assert replies.streams[callback.req_id].events == [("terminal", reply, disposition.value.upper())]
     assert assistant.created == 0
+
+
+async def test_rejections_share_quota_key_for_same_bot_conversation() -> None:
+    admission = FakeAdmission()
+    replies = FakeReplyFactory()
+    service = _service(admission, FakeScheduler(), FakeAssistantFactory(), replies)
+
+    for msg_id in ("rejected-1", "rejected-2"):
+        callback = _callback(msg_id)
+        admission.results[msg_id] = AdmissionResult(
+            AdmissionDisposition.NO_PERMISSION,
+            int(msg_id.rsplit("-", 1)[-1]),
+            reply_text="无权限使用",
+        )
+        await service.handle_message(_context(), callback)
+
+    quota_keys = [call["conversation_id"] for call in replies.calls]
+    assert quota_keys[0] == quota_keys[1]
+    assert quota_keys[0].startswith("rejected:")
 
 
 async def test_duplicate_does_not_reply_or_run_assistant() -> None:

@@ -2,9 +2,9 @@
 
 The robot binding is the complete authorization boundary for E+ retrieval. It
 does not intersect with, or expand from, the sender's personal knowledge-space
-permissions. Every retrieval re-reads the binding and post-filters returned
-chunks against current successful file rows so stale vector hits cannot escape
-the configured scope.
+permissions. Every turn supplies an immutable binding snapshot, and retrieval
+post-filters returned chunks against current successful file rows so stale
+vector hits cannot escape that turn's configured scope.
 """
 
 from __future__ import annotations

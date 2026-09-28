@@ -233,7 +233,7 @@ class EPlusConnectionClient:
             return
         exception = task.exception()
         if exception is not None:
-            self._emit("message.handler_failed", error=repr(exception))
+            self._emit("message.handler_failed", error_type=type(exception).__name__)
 
     async def _finish_message_tasks(self) -> None:
         if not self._message_tasks:
@@ -242,7 +242,7 @@ class EPlusConnectionClient:
         done, pending = await asyncio.wait(tasks, timeout=0.2)
         for task in done:
             if not task.cancelled() and task.exception() is not None:
-                self._emit("message.handler_failed", error=repr(task.exception()))
+                self._emit("message.handler_failed", error_type=type(task.exception()).__name__)
         for task in pending:
             task.cancel()
         if pending:
@@ -264,7 +264,7 @@ class EPlusConnectionClient:
                 raise
             except Exception as exc:
                 failures += 1
-                self._emit("heartbeat.failed", failures=failures, error=repr(exc))
+                self._emit("heartbeat.failed", failures=failures, error_type=type(exc).__name__)
                 if failures >= 2:
                     websocket = self._websocket
                     if websocket is not None:

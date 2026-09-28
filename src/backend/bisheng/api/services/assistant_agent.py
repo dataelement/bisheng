@@ -703,9 +703,10 @@ class AssistantAgent(AssistantUtils):
                         final_messages = [message]  # Save message for history
                         yield [message]
 
-            except Exception as astream_error:
-                logger.exception(f"Error in astream async for loop: {astream_error!s}")
-                raise astream_error
+            except Exception:
+                # Provider exceptions may embed request content; keep it out of logs.
+                logger.exception("assistant astream failed")
+                raise
 
             logger.info(f"Function calling astream completed, total chunks: {chunk_count}")
 
@@ -731,7 +732,8 @@ class AssistantAgent(AssistantUtils):
             },
             config=RunnableConfig(callbacks=callback),
         )
-        logger.debug(f"react_run result: {result}")
+        result_count = len(result)
+        logger.debug("react_run completed with {} messages", result_count)
         output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
             output = next(iter(output.values()))

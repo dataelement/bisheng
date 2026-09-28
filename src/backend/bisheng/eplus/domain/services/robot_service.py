@@ -72,7 +72,7 @@ class EPlusRobotService:
             stream = self._reply_factory.create(
                 sender=context.sender,
                 tenant_id=context.admission.tenant_id,
-                conversation_id=result.conversation_id or f"rejected:{result.inbound_message_id}",
+                conversation_id=result.conversation_id or _rejection_quota_key(callback),
                 inbound_message_id=result.inbound_message_id,
                 req_id=callback.req_id,
                 stream_id=stable_stream_id(context.admission.bot_id, callback.msg_id),
@@ -300,3 +300,9 @@ def _prepared_blocks(manifest: tuple[dict[str, Any], ...]) -> tuple[EPlusPrepare
 
 def _short_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:12]
+
+
+def _rejection_quota_key(callback: EPlusCallback) -> str:
+    conversation_key = callback.chat_id if callback.chat_type == "group" else callback.sender_external_id
+    raw = f"{callback.bot_id}\0{callback.chat_type}\0{conversation_key or ''}"
+    return f"rejected:{hashlib.sha256(raw.encode()).hexdigest()[:24]}"
