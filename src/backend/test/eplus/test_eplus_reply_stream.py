@@ -243,6 +243,40 @@ async def test_nonterminal_quota_denial_coalesces_but_terminal_slot_is_reserved(
     assert sender.frames[-1]["body"]["stream"]["finish"] is True
 
 
+async def test_terminal_rejection_can_reply_without_starting_assistant_stream() -> None:
+    sender = FakeSender()
+    recorder = FakeRecorder()
+    stream = _stream(sender=sender, recorder=recorder)
+
+    await stream.send_terminal("无权限使用", error_code="NO_PERMISSION")
+
+    assert sender.frames[-1]["body"]["stream"] == {
+        "id": "stream-1",
+        "finish": True,
+        "content": "无权限使用",
+    }
+    assert recorder.events == [(EPlusReplyStatus.FINISHED, "NO_PERMISSION")]
+    assert stream.answer == "无权限使用"
+
+
+async def test_failure_replaces_partial_answer_with_safe_terminal_message() -> None:
+    sender = FakeSender()
+    recorder = FakeRecorder()
+    stream = _stream(sender=sender, recorder=recorder, flush_bytes=100)
+    await stream.start()
+    await stream.append("partial secret detail")
+
+    await stream.fail("处理失败，请稍后重试", error_code="ASSISTANT_ERROR")  # noqa: RUF001
+
+    assert sender.frames[-1]["body"]["stream"] == {
+        "id": "stream-1",
+        "finish": True,
+        "content": "处理失败，请稍后重试",  # noqa: RUF001
+    }
+    assert recorder.events[-1] == (EPlusReplyStatus.FINISHED, "ASSISTANT_ERROR")
+    assert stream.answer == "处理失败，请稍后重试"  # noqa: RUF001
+
+
 class FakeRedisConnection:
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}

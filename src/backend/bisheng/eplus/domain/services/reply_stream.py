@@ -191,6 +191,19 @@ class EPlusReplyStream:
         self._finished = True
         await self._recorder.record(EPlusReplyStatus.FINISHED)
 
+    async def send_terminal(self, content: str, *, error_code: str | None = None) -> None:
+        """Send a one-frame response for admission rejections or safe failures."""
+        if self._finished:
+            return
+        self._answer = content
+        await self._send(content, finish=True, terminal=True, required=True)
+        self._finished = True
+        await self._recorder.record(EPlusReplyStatus.FINISHED, error_code=error_code)
+
+    async def fail(self, content: str, *, error_code: str) -> None:
+        """Replace any partial model output with a safe terminal response."""
+        await self.send_terminal(content, error_code=error_code)
+
     async def _flush_nonterminal(self, *, now: float, answer_bytes: int) -> bool:
         sent = await self._send(self._answer, finish=False, terminal=False, required=False)
         if sent:
