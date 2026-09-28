@@ -251,6 +251,13 @@
 
 - 暂无。
 
+## 缺陷修复记录
+
+- [x] **BUG-001**: MCP `date-time` 输出补充 RFC 3339 时区信息
+  **文件**: `src/backend/bisheng/open_mcp/contracts.py`, `src/backend/test/open_mcp/test_result.py`, `src/backend/docs/api/open-mcp.md`
+  **逻辑**: 仅在 MCP DTO 的 JSON 序列化阶段，将业务层无时区 `DATETIME` 按默认部署时区 `Asia/Shanghai` 输出为 `+08:00`；已带时区值保留原偏移，不改现有 HTTP API。
+  **覆盖 AC**: AC-19, AC-20, AC-25
+
 ## 验收记录
 
 - 2026-09-18：本地单元、契约与 ASGI 集成用例已完成；F067 E2E 骨架已编写，但因本地未配置

@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from bisheng.common.services.config_service import settings
 
 
 class McpContract(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def serialize_datetime_with_timezone(self, value: Any) -> Any:
+        if isinstance(value, datetime) and value.utcoffset() is None:
+            return value.replace(tzinfo=timezone(timedelta(hours=8)))
+        return value
 
 
 class KnowledgeListInput(McpContract):

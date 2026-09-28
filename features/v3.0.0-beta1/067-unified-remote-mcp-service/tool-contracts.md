@@ -289,6 +289,10 @@ create_time?: string(date-time) | null
 update_time?: string(date-time) | null
 ```
 
+所有 `string(date-time)` 成功输出必须符合 RFC 3339 并显式携带时区偏移。业务层返回的
+无时区 `DATETIME` 由 MCP adapter 按 BISHENG 默认部署时区 `Asia/Shanghai` 补为
+`+08:00`；已带时区的值保留原偏移。该线格式适配不得反向修改现有 HTTP API。
+
 实现必须为 `OperationResult / Resource / MetadataField / FileRecord / FileItem / TagItem` 生成完整 MCP JSON Schema，不能用无约束顶层 `object` 代替。只有现有 API 本身定义为动态键值映射的 `user_metadata` 允许 `additionalProperties`，其值 schema 必须直接复用当前业务模型；知识库与知识空间响应允许通过 `oneOf` 表达。MCP 成功结果必须等于“既有业务结果经过 §2.4 MCP 适配”的结果，不要求 API 原始 JSON 直接通过 MCP `outputSchema`。
 
 ## 4. 交付校验

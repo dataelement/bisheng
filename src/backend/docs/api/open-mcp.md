@@ -57,6 +57,9 @@ scope、租户、数据范围和资源权限判定。`tools/list` 只返回当�
 - 上传不接受服务器本地 `file_path`；`content_base64` 和 `file_url` 必须二选一。
 - 成功返回的知识资源动作字段保留为 `actions`，文件标签保留为结构化
   `TagItem[]`，不转成 `permission_ids` 或标签名数组。
+- 所有 `string(date-time)` 输出均为带时区的 RFC 3339 时间。现有业务数据中的无时区
+  `DATETIME` 由 MCP 适配层按 BISHENG 默认部署时区 `Asia/Shanghai` 输出为 `+08:00`；
+  已带时区的值保留原偏移量。此适配不改变现有 HTTP API 的时间格式。
 
 ### 关键输出字段语义
 
