@@ -13,12 +13,10 @@ from bisheng.common.image_view.annotate import ImageRegistry
 from bisheng.common.image_view.tool import MAX_IMAGES_PER_TURN, TOOL_NAME
 
 IMAGE_VIEW_PROMPT_RULES = """# 查看图片
-1. `⟦img#N⟧` 只是锚点，第一次请求看不见像素。文件名、alt、上下文、上一轮回答都不是图里的内容。
-2. 用户问截图 / 界面 / 表单字段 / 图内文字 / 图表走势时，必须先调 `view_image`（`image_ids` 为列表，单轮最多 3 张），看完再答。
-3. 选图：根据问题匹配附近标题 / 说明文字对应的 `img#`，不要默认第一张 `img#1`。
-4. 不要写「我看不到图」，不要根据周围文字或历史编造图意。
-5. 是否把图画进回答由你判断：用户要看图 / 展示 / 对照截图时，输出原始 `![](url)`；只问字段、走势、图意时只写文字，不要贴图。
-6. 只能使用本轮出现过的 `img#`。"""
+1. `⟦img#N⟧` 只是锚点。文件名、alt、上下文、上一轮回答都不是图里的内容。像素在后面的 Viewed images 消息里。
+2. 哪些图符合问题，由你看完这些像素后判断。每张图都附有一行 `![](url)`，只把像素符合问题的那几行原样单独成行抄进回答；不符合的图不要抄它的 `![](url)`，也不要逐张说明。问「是否有」时，有就把对应的 `![](url)` 单独成行并只写一句结论，没有就只写没有。问内容时只描述符合的那张。不要先说有再改口，不要用反引号包住图片，不要抄参考资料里的引用标记。只问字段、走势、图意时只写文字。
+3. 不要写「我看不到图」，不要根据周围文字或历史编造图意。
+4. 给用户的回答里不要出现 `img#` 编号、`-6` 这类序号、文件路径、「第N张」，也不要解释张数限制或「请单独请求」。用户说的「第N张」是对话里已经展示过的图片，按展示顺序数，不是文档顺序。不要逐张辩驳序号。看完后用画面内容写一句结论，只附上这句对应的图片。"""
 
 # Prior assistant turns that list many img# ids were almost always guessed from
 # filenames / surrounding text (no pixels). Keep short answers that cite 1–3 images.
@@ -390,6 +388,81 @@ def _as_call_dict(call: Any) -> dict:
         "args": getattr(call, "args", None) or {},
         "id": getattr(call, "id", None),
     }
+
+
+IMAGE_VIEW_TOOL_KEY = "image_view"
+
+
+async def _image_view_model_id() -> str | None:
+    """model_id saved on the Image View builtin tool, or None when unset."""
+    import json
+
+    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+
+    tool = await GptsToolsDao.aget_tool_by_tool_key(IMAGE_VIEW_TOOL_KEY)
+    if tool is None or not tool.type:
+        return None
+    tool_type = await GptsToolsDao.aget_one_tool_type(tool.type)
+    if tool_type is None or not tool_type.extra:
+        return None
+    try:
+        extra = json.loads(tool_type.extra)
+    except json.JSONDecodeError:
+        return None
+    model_id = str(extra.get("model_id") or "").strip()
+    return model_id or None
+
+
+async def _model_is_visual(model_id: str, tenant_id: int | None = None) -> bool:
+    from bisheng.llm.domain.services.llm import LLMService
+
+    workbench = await LLMService.get_workbench_llm(tenant_id=tenant_id)
+    return any(
+        str(getattr(entry, "id", "")) == str(model_id) and bool(getattr(entry, "visual", False))
+        for entry in (getattr(workbench, "models", None) or [])
+    )
+
+
+async def image_view_configured(tenant_id: int | None = None) -> bool:
+    """True when the builtin tool points at a workbench model marked visual."""
+    model_id = await _image_view_model_id()
+    if not model_id:
+        return False
+    return await _model_is_visual(model_id, tenant_id)
+
+
+async def resolve_image_view_llm(
+    tenant_id: int | None = None,
+    *,
+    user_id: int | None = None,
+    app_type: Any | None = None,
+) -> Any | None:
+    """Chat model for pixel viewing. The builtin tool's visual model, or None."""
+    model_id = await _image_view_model_id()
+    if not model_id or not await _model_is_visual(model_id, tenant_id):
+        logger.info("image_view skip: builtin tool has no visual model")
+        return None
+    if user_id is None:
+        logger.info("image_view skip: no invoke user")
+        return None
+    try:
+        numeric_id = int(model_id)
+    except ValueError:
+        logger.info("image_view skip: model_id is not an int")
+        return None
+    from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+    from bisheng.llm.domain.services.llm import LLMService
+
+    app = app_type or ApplicationTypeEnum.KNOWLEDGE_SPACE
+    return await LLMService.get_bisheng_llm(
+        model_id=numeric_id,
+        temperature=0,
+        streaming=True,
+        app_id=app.value,
+        app_name=app.value,
+        app_type=app,
+        user_id=user_id,
+    )
 
 
 def _view_calls(ai_message: AIMessage) -> list[dict]:

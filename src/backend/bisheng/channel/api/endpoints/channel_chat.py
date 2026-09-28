@@ -196,6 +196,7 @@ async def chat_completions(
                 model_id=data.model_id,
                 max_chunk_size=max_chunk_size,
                 tenant_id=getattr(login_user, "tenant_id", None),
+                user_id=login_user.user_id,
             ):
                 content = chunk.content
                 reasoning_content = extract_reasoning_content(chunk)
