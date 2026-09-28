@@ -78,6 +78,20 @@ async def save_bot_config(
     return resp_200(data=view)
 
 
+@router.get("/assistants/{assistant_id}/bot/spaces")
+async def list_bindable_spaces(
+    assistant_id: str,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    service: EPlusBotConfigService = Depends(get_eplus_bot_config_service),
+):
+    spaces = await service.list_bindable_spaces(
+        tenant_id=_tenant_id(login_user),
+        assistant_id=assistant_id,
+        operator_id=login_user.user_id,
+    )
+    return resp_200(data=spaces)
+
+
 @router.delete("/assistants/{assistant_id}/bot")
 async def disable_bot_config(
     assistant_id: str,

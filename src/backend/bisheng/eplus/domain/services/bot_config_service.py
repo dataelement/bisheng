@@ -11,6 +11,7 @@ from bisheng.eplus.domain.models.eplus import EPlusBotConfig, EPlusConnectionSta
 from bisheng.eplus.domain.repositories.eplus_repository import EPlusConfigRepository
 from bisheng.eplus.domain.schemas.config import (
     AssistantSnapshot,
+    EPlusBindableSpace,
     EPlusBotConfigUpsert,
     EPlusBotConfigView,
     EPlusConnectionTarget,
@@ -36,6 +37,8 @@ class AssistantReader(Protocol):
 
 class SpaceReader(Protocol):
     async def require_valid_spaces(self, *, tenant_id: int, space_ids: tuple[int, ...]) -> None: ...
+
+    async def list_valid_spaces(self, *, tenant_id: int) -> tuple[EPlusBindableSpace, ...]: ...
 
 
 class CredentialStore(Protocol):
@@ -197,6 +200,22 @@ class EPlusBotConfigService:
         await self._session.commit()
         await self._notify(row)
         return True
+
+    async def list_bindable_spaces(
+        self,
+        *,
+        tenant_id: int,
+        assistant_id: str,
+        operator_id: int,
+    ) -> tuple[EPlusBindableSpace, ...]:
+        await self._permission_checker.require_assistant_edit(
+            tenant_id=tenant_id,
+            assistant_id=assistant_id,
+            operator_id=operator_id,
+            action="edit",
+        )
+        await self._require_assistant(tenant_id=tenant_id, assistant_id=assistant_id)
+        return await self._space_reader.list_valid_spaces(tenant_id=tenant_id)
 
     async def resolve_connection_target(
         self,

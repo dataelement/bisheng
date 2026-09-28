@@ -12,7 +12,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.assistant import Assistant, AssistantStatus
-from bisheng.eplus.domain.schemas.config import AssistantSnapshot
+from bisheng.eplus.domain.schemas.config import AssistantSnapshot, EPlusBindableSpace
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.permission.application.business_authorization import require_business_action
 
@@ -84,6 +84,17 @@ class SqlSpaceReader:
         invalid_ids = sorted(set(space_ids) - valid_ids)
         if invalid_ids:
             raise ValueError(f"invalid knowledge spaces: {invalid_ids}")
+
+    async def list_valid_spaces(self, *, tenant_id: int) -> tuple[EPlusBindableSpace, ...]:
+        rows = await self._session.exec(
+            select(Knowledge.id, Knowledge.name)
+            .where(
+                Knowledge.tenant_id == int(tenant_id),
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            )
+            .order_by(Knowledge.name.asc(), Knowledge.id.asc())
+        )
+        return tuple(EPlusBindableSpace(id=int(space_id), name=str(name)) for space_id, name in rows.all())
 
 
 class RedisConfigNotifier:

@@ -13,7 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.database.models.assistant import Assistant, AssistantStatus
 from bisheng.eplus.api.endpoints.bot_config import get_eplus_bot_config_service
 from bisheng.eplus.api.router import router
-from bisheng.eplus.domain.schemas.config import EPlusBotConfigView
+from bisheng.eplus.domain.schemas.config import EPlusBindableSpace, EPlusBotConfigView
 
 
 class FakeConfigService:
@@ -48,6 +48,12 @@ class FakeConfigService:
     async def disable_config(self, **kwargs):
         self.view = None
         return True
+
+    async def list_bindable_spaces(self, **kwargs):
+        return (
+            EPlusBindableSpace(id=10, name="Space A"),
+            EPlusBindableSpace(id=20, name="Space B"),
+        )
 
 
 def _client(service: FakeConfigService) -> TestClient:
@@ -103,6 +109,18 @@ def test_put_rejects_non_websocket_connection_url() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_lists_all_tenant_spaces_through_assistant_edit_scope() -> None:
+    client = _client(FakeConfigService())
+
+    response = client.get("/api/v1/eplus/assistants/assistant-1/bot/spaces")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == [
+        {"id": 10, "name": "Space A"},
+        {"id": 20, "name": "Space B"},
+    ]
 
 
 async def test_assistant_online_and_offline_publish_target_change_after_update(monkeypatch) -> None:

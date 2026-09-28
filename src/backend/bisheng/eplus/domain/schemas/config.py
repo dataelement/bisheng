@@ -16,6 +16,12 @@ class AssistantSnapshot:
     is_online: bool
 
 
+@dataclass(frozen=True, slots=True)
+class EPlusBindableSpace:
+    id: int
+    name: str
+
+
 class EPlusBotConfigUpsert(BaseModel):
     bot_id: str = Field(min_length=1, max_length=128)
     connection_url: str = Field(min_length=1, max_length=1024)
