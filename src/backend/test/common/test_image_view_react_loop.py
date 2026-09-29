@@ -438,8 +438,9 @@ def test_rejection_catalog_and_citations_do_not_survive():
     assert cited_ids_on_shown_lines(raw) == ["img#1"]
 
 
-async def test_wrapper_is_not_runnable():
+def test_wrapper_bind_tools_returns_self():
     from langchain_core.runnables import Runnable
 
     wrapper = VisionToolBindWrapper(_SkipGraphLLM(), ImageRegistry(), [])
-    assert not isinstance(wrapper, Runnable)
+    assert isinstance(wrapper, Runnable)
+    assert wrapper.bind_tools([]) is wrapper

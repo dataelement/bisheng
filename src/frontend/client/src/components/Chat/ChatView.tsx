@@ -764,7 +764,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               sidebar navigation (otherwise the centered welcome-page layout
               briefly floats the input up before messages arrive). */}
           {(() => {
-            const loadingExistingConvo = isLoading && conversationId !== 'new';
+            // A history fetch must not blank a turn that is already on screen.
+            // Content-safety replies finish in one SSE tick, which used to flip
+            // isLoading while the just-sent messages were still mounted.
+            const loadingExistingConvo = isLoading && conversationId !== 'new' && !hasMessages;
             // Keep input pinned to bottom as soon as a send starts (before first token lands),
             // otherwise mobile can briefly fall back to the centered landing layout.
             // An EXISTING conversation (id !== 'new') always uses the detail layout,
@@ -782,7 +785,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 useMessagesLayout ? 'h-full' : 'max-md:h-full'
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
-                {isLoading && conversationId !== 'new' ? (
+                {loadingExistingConvo ? (
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>

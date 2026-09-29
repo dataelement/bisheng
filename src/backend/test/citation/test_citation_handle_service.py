@@ -19,8 +19,11 @@ from bisheng.citation.domain.services import citation_handle_service as svc
 from bisheng.citation.domain.services import linsight_citation_scope as scope_mod
 from bisheng.citation.domain.services.citation_handle_service import (
     assign_handles,
+    attach_web_url_markers,
+    collected_web_sources,
     convert_handles_to_markers,
     count_handle_runs,
+    remember_web_surface_url,
     strip_citation_handles,
 )
 from bisheng.citation.domain.services.linsight_citation_scope import LinsightCitationScope
@@ -324,7 +327,9 @@ def _m(*keys):
 
 
 def test_export_numbers_by_first_appearance_and_appends_references():
-    text = f"结论一。{_m('knowledgesearch_aaaa1111:3')} 结论二。{_m('websearch_bbbb2222:1', 'knowledgesearch_aaaa1111:3')}"
+    text = (
+        f"结论一。{_m('knowledgesearch_aaaa1111:3')} 结论二。{_m('websearch_bbbb2222:1', 'knowledgesearch_aaaa1111:3')}"
+    )
 
     r = render_citations_for_export(text, [_rag_resolved(), _web_resolved()])
 
@@ -337,7 +342,9 @@ def test_export_numbers_by_first_appearance_and_appends_references():
 
 
 def test_export_same_source_shares_a_number_but_other_chunk_gets_its_own():
-    text = f"A{_m('knowledgesearch_aaaa1111:3')} B{_m('knowledgesearch_aaaa1111:3')} C{_m('knowledgesearch_aaaa1111:4')}"
+    text = (
+        f"A{_m('knowledgesearch_aaaa1111:3')} B{_m('knowledgesearch_aaaa1111:3')} C{_m('knowledgesearch_aaaa1111:4')}"
+    )
 
     r = render_citations_for_export(text, [_rag_resolved()])
 
@@ -364,7 +371,10 @@ def test_export_with_nothing_resolvable_equals_strip():
 
     assert r.numbered == 0
     assert "## " not in r.text
-    assert r.text == strip_citation_handles(strip_citation_markers(text)).replace("`code `", f"`code {_m('x:1')}`") or S not in r.text
+    assert (
+        r.text == strip_citation_handles(strip_citation_markers(text)).replace("`code `", f"`code {_m('x:1')}`")
+        or S not in r.text
+    )
 
 
 def test_export_leaves_code_alone_and_strips_handles():
@@ -411,8 +421,40 @@ def test_export_page_zero_falls_back_to_chunk_index():
         ),
     )
 
-    r = render_citations_for_export(f"甲{_m('knowledgesearch_cccc3333:7')} 乙{_m('knowledgesearch_cccc3333:8')}", [item])
+    r = render_citations_for_export(
+        f"甲{_m('knowledgesearch_cccc3333:7')} 乙{_m('knowledgesearch_cccc3333:8')}", [item]
+    )
 
     assert "1. 《规则.docx》" in r.text and "第 7 段" in r.text
     assert "第 0 页" not in r.text
     assert "2. 《规则.docx》\n" in r.text or r.text.rstrip().endswith("2. 《规则.docx》")
+
+
+WEB_KEY = "websearch_bbbb2222:1"
+PAGE = "https://news.example.com/a/report"
+
+
+def test_attach_web_url_markers_after_pasted_link():
+    entries = [{"type": "web", "key": WEB_KEY, "url": PAGE, "urls": [PAGE], "title": "报道", "loc": "news.example.com"}]
+
+    marked = attach_web_url_markers(f"详见 [{PAGE}]({PAGE})。", entries)
+
+    assert marked == f"详见 [{PAGE}]({PAGE}){S}{WEB_KEY}{E}。"
+
+
+def test_attach_web_url_markers_skips_code_and_already_cited():
+    entries = [{"type": "web", "key": WEB_KEY, "url": PAGE, "urls": [PAGE]}]
+
+    assert attach_web_url_markers(f"```\n{PAGE}\n```", entries) == f"```\n{PAGE}\n```"
+    already = f"见 {PAGE}{S}{WEB_KEY}{E}"
+    assert attach_web_url_markers(already, entries) == already
+
+
+def test_remember_surface_url_and_collect_web_sources():
+    entries = [{"type": "web", "key": WEB_KEY, "url": PAGE, "urls": [PAGE], "title": "报道", "loc": "news.example.com"}]
+    remember_web_surface_url(entries, WEB_KEY, "https://news.example.com/a/report?utm=1")
+
+    marked = attach_web_url_markers("原文 https://news.example.com/a/report?utm=1 结束", entries)
+    assert f"{S}{WEB_KEY}{E}" in marked
+    assert collected_web_sources(entries) == [{"title": "报道", "url": PAGE, "source": "news.example.com"}]
+    assert collected_web_sources([{"type": "rag", "url": PAGE, "title": "内部文档"}]) == []

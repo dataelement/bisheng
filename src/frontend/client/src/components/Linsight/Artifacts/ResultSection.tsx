@@ -28,6 +28,15 @@ interface ResultSectionProps {
     /** output_result.citation_audit (F069) — completion-time verdict on whether the
         run cited the sources it retrieved. Only `uncited` is surfaced to the user. */
     citationAudit?: CitationAudit | null;
+    /** Web pages this run retrieved. Shown even when the report body has no badge,
+        so the reader can still open the page. */
+    webSources?: RetrievedWebSource[] | null;
+}
+
+export interface RetrievedWebSource {
+    title?: string;
+    url?: string;
+    source?: string;
 }
 
 /** Subset of `output_result.citation_audit` the result panel reads. */
@@ -44,6 +53,7 @@ export function ResultSection({
     citations,
     messageId,
     citationAudit,
+    webSources,
 }: ResultSectionProps) {
     const localize = useLocalize();
     const resolveArtifactLink = useCallback(
@@ -58,6 +68,7 @@ export function ResultSection({
     // there are in total — naming one of five silently would misrepresent the run,
     // and a bare count would waste the row. The full manifest is the card below.
     const multiple = files.length > 1;
+    const visibleWebSources = (webSources ?? []).filter((item) => item.url);
     const fileCount = String(files.length);
 
     return (
@@ -129,6 +140,26 @@ export function ResultSection({
                 <p data-testid="citation-uncited-note" className="text-[14px] leading-[22px] text-text-3">
                     {localize('com_linsight_citation_uncited', { 0: String(citationAudit.sources_seen ?? 0) })}
                 </p>
+            )}
+
+            {visibleWebSources.length > 0 && (
+                <div data-testid="web-sources" className="space-y-1">
+                    <p className="text-[14px] leading-[22px] text-text-3">{localize('com_linsight_web_sources')}</p>
+                    <ul className="space-y-1">
+                        {visibleWebSources.map((item) => (
+                            <li key={item.url}>
+                                <a
+                                    href={item.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="break-all text-[14px] leading-[22px] text-blue-600 hover:text-blue-700"
+                                >
+                                    {item.title || item.url}
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             )}
 
             {/* output files card — dotted background matching ClarifyCard.

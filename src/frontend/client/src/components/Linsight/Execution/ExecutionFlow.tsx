@@ -263,6 +263,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 versionId={versionId}
                                 citations={linsight?.output_result?.citations}
                                 citationAudit={linsight?.output_result?.citation_audit}
+                                webSources={linsight?.output_result?.web_sources}
                                 messageId={linsight?.message_id ?? undefined}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
