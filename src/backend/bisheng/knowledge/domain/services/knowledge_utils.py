@@ -264,6 +264,8 @@ class KnowledgeUtils(BaseService):
     def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:
         """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
+        if "." not in file_name:
+            return None
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
         if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_name_no_ext}.docx"

@@ -253,3 +253,13 @@ def test_sample_standard_coerces_numeric_check_period():
     record = _sample_standard(CHECK_PERIOD=2)
     assert record.CHECK_PERIOD == "2"
     assert isinstance(record.CHECK_PERIOD, str)
+
+
+def test_filelib_sync_service_validate_file_name_rejects_extensionless_safely():
+    from bisheng.common.errcode.filelib_sync import FilelibSyncInvalidParamsError
+    from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+
+    with pytest.raises(FilelibSyncInvalidParamsError) as exc_info:
+        FilelibSyncService._validate_file_name("README")
+    assert "file format is not supported" in str(exc_info.value.message)
+

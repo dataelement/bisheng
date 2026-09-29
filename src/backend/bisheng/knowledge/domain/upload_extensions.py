@@ -36,6 +36,8 @@ def extract_upload_file_extension(file_name: str | None) -> str | None:
         return None
     if name.startswith(".") and name.count(".") == 1:
         return None
+    if "." not in name:
+        return None
     base, ext = name.rsplit(".", 1)
     if not base or not ext:
         return None

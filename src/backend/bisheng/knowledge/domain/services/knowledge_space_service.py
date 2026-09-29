@@ -17065,7 +17065,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Check file names against sensitive words before processing any files.
         for fp in file_path:
-            fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
+            clean_fp = fp.split("?", 1)[0].split("#", 1)[0]
+            fname = clean_fp.rsplit("/", 1)[-1] if "/" in clean_fp else clean_fp
             self._check_filename_sensitive_words(fname)
             try:
                 validate_knowledge_upload_file_extension(fname)

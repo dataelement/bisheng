@@ -335,7 +335,8 @@ class FilelibSyncAuditWriter:
             error_message=error_message,
         )
         target_id = str(created_file.id) if created_file is not None else str(params.external_file_id or "")
-        tenant_id = int(getattr(target.space, "tenant_id", None) if target is not None else login_user.tenant_id)
+        target_space_tenant = getattr(target.space, "tenant_id", None) if target is not None else None
+        tenant_id = int(target_space_tenant or login_user.tenant_id)
         try:
             await AuditLogDao.ainsert_v2(
                 tenant_id=tenant_id,

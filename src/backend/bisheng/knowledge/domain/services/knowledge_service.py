@@ -1728,8 +1728,10 @@ class KnowledgeService(KnowledgeUtils):
         minio_share_host = minio_client.get_minio_share_host()
         if file_path.startswith(minio_share_host):
             url_obj = urlparse(file_path)
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
-            minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
+            path_parts = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
+            if len(path_parts) == 2:
+                bucket_name, object_name = path_parts
+                minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
 
     @classmethod
     def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: list[KnowledgeFile]) -> dict[str, str]:

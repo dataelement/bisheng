@@ -78,8 +78,30 @@ def test_validate_knowledge_upload_file_extension_accepts_platform_formats(file_
         "scan.png",
         "data.csv",
         "doc.wps",
+        "README",
+        "no_ext_file",
+        ".hidden",
+        "file.",
     ],
 )
 def test_validate_knowledge_upload_file_extension_rejects_removed_formats(file_name: str):
     with pytest.raises(UnsupportedUploadFileExtensionError):
         validate_knowledge_upload_file_extension(file_name, image_parser_enabled=True)
+
+
+def test_extract_upload_file_extension_handles_no_extension():
+    assert extract_upload_file_extension("README") is None
+    assert extract_upload_file_extension("no_ext_file") is None
+    assert extract_upload_file_extension(".gitignore") is None
+    assert extract_upload_file_extension("file.") is None
+    assert extract_upload_file_extension("") is None
+    assert extract_upload_file_extension(None) is None
+
+
+def test_get_tmp_preview_file_object_name_handles_no_extension():
+    from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+
+    assert KnowledgeUtils.get_tmp_preview_file_object_name("/path/to/README") is None
+    assert KnowledgeUtils.get_tmp_preview_file_object_name("no_ext") is None
+    assert KnowledgeUtils.get_tmp_preview_file_object_name("/path/to/file.xlsx") == "preview/file.xlsx"
+

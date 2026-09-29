@@ -27,7 +27,8 @@ def get_request_ip(request: Request | WebSocket) -> str:
     ip = request.headers.get('X-Real-IP')
     if ip:
         return ip
-    return request.client.host
+    client = getattr(request, "client", None)
+    return getattr(client, "host", "") or ""
 
 
 def generate_knowledge_index_name() -> str:

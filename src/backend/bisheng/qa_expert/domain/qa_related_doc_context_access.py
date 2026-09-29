@@ -81,20 +81,10 @@ async def _can_view_question_related_doc(
     space_id: int,
     file_id: int,
 ) -> bool:
-    """提问侧关联文档：定向/公开邀请专家，或公开无邀请时全体在库专家。"""
-    viewer_id = _viewer_user_id(user)
-    if viewer_id is None:
-        return False
+    """提问侧关联文档：只要文档属于该提问关联文档，且当前用户能看见该问题，即可直接放行只读预览。"""
+    del user, invited_user_ids
     pairs = await canonical_pairs_in_related_docs(getattr(question, "related_docs", None))
-    if (int(space_id), int(file_id)) not in pairs:
-        return False
-
-    question_type = str(getattr(question, "question_type", QUESTION_TYPE_PUBLIC) or QUESTION_TYPE_PUBLIC)
-    if question_type == QUESTION_TYPE_DIRECTED:
-        return viewer_id in invited_user_ids
-    if invited_user_ids:
-        return viewer_id in invited_user_ids
-    return await _is_active_expert_user(viewer_id)
+    return (int(space_id), int(file_id)) in pairs
 
 
 async def _can_view_answer_related_doc(
@@ -104,12 +94,8 @@ async def _can_view_answer_related_doc(
     space_id: int,
     file_id: int,
 ) -> bool:
-    """回答侧关联文档：仅提问者可读，且文档须出现在该问题下任一回答的 related_docs。"""
-    viewer_id = _viewer_user_id(user)
-    asker_id = int(getattr(question, "user_id", 0) or 0)
-    if viewer_id is None or asker_id <= 0 or viewer_id != asker_id:
-        return False
-
+    """回答侧关联文档：只要文档出现在该问题下任一回答的 related_docs，且当前用户能看见该问题，即可直接放行只读预览。"""
+    del user
     from bisheng.qa_expert.domain.repositories import AnswerRepository
 
     answers = await AnswerRepository().list_all_by_question_id(int(question.id))

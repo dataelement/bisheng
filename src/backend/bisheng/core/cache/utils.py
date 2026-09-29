@@ -410,7 +410,10 @@ def file_download(file_path: str):
 
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            path_parts = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            if len(path_parts) != 2:
+                raise ValueError(f"Invalid MinIO URL path: {url_obj.path}")
+            bucket_name, object_name = path_parts
             object_name = unquote(object_name)
             file_response = minio_client.download_object_sync(bucket_name, object_name)
         else:
@@ -494,7 +497,10 @@ async def async_file_download(file_path: str):
 
         if file_path.startswith(minio_share_host):
             # download file from minio sdk
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            path_parts = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split('/', 1)
+            if len(path_parts) != 2:
+                raise ValueError(f"Invalid MinIO URL path: {url_obj.path}")
+            bucket_name, object_name = path_parts
             object_name = unquote(object_name)
             file_content = await minio_client.get_object(bucket_name, object_name)
         else:

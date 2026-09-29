@@ -20,12 +20,13 @@ export async function logoutApi() {
   return await axios.post(`/api/v1/user/logout`);
 }
 // 登录
-export async function loginApi(personId, pwd, captcha_key?, captcha?) {
+export async function loginApi(personId, pwd, captcha_key?, captcha?, force_login = false) {
   return await axios.post(`/api/v1/user/login`, {
     user_name: personId,
     password: pwd,
     captcha_key,
     captcha,
+    force_login,
   });
 }
 // 注册

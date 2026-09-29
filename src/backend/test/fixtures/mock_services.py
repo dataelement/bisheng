@@ -94,6 +94,21 @@ class _KnowledgeUtilsPlaceholder:
     def get_knowledge_abstract_llm(cls, *args, **kwargs):
         return None, None
 
+    @classmethod
+    def get_tmp_preview_file_object_name(cls, file_path: str):
+        import os
+        file_name = os.path.basename(file_path)
+        if "." not in file_name:
+            return None
+        file_name_no_ext, file_ext = file_name.rsplit(".", 1)
+        if file_ext in ["doc", "docx", "wps"]:
+            return f"preview/{file_name_no_ext}.docx"
+        elif file_ext in ["xls", "xlsx", "et"]:
+            return f"preview/{file_name_no_ext}.xlsx"
+        elif file_ext in ["ppt", "pptx", "dps"]:
+            return f"preview/{file_name_no_ext}.pdf"
+        return None
+
     chunk_split = "\n----------\n"
     schema_ready_lock_ttl = 60
     schema_ready_wait_seconds = 20
@@ -114,6 +129,20 @@ for _mod in (
 ):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
+
+import importlib.machinery
+try:
+    import scipy.optimize
+except (ImportError, OSError):
+    for _scipy_mod in (
+        "scipy", "scipy.optimize", "scipy.sparse", "scipy.linalg",
+        "scipy.sparse.linalg", "scipy.sparse.linalg._propack", "scipy.sparse.linalg._propack._spropack",
+        "scipy.sparse.linalg._propack._dpropack", "scipy.sparse.linalg._propack._cpropack", "scipy.sparse.linalg._propack._zpropack",
+    ):
+        if _scipy_mod not in sys.modules:
+            _m = MagicMock()
+            _m.__spec__ = importlib.machinery.ModuleSpec(_scipy_mod, None)
+            sys.modules[_scipy_mod] = _m
 
 from bisheng.core.config.multi_tenant import MultiTenantConf
 

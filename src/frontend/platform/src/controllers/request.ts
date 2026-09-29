@@ -144,9 +144,9 @@ customAxios.interceptors.response.use(function (response) {
     }
     const errorMessage = decodeEnvelopeMessage(response.data)
 
-    // 密码过期，标记后透传给业务层处理
-    if (statusCode === 10601) {
-        return Promise.reject({ code: 10601, message: errorMessage });
+    // 密码过期 / 多设备登录冲突，标记后透传给业务层处理
+    if ([10601, 10612].includes(statusCode)) {
+        return Promise.reject({ code: statusCode, message: errorMessage });
     }
     // 无权访问
     if ([403, 404].includes(statusCode) && response.config.url !== '/api/v1/user/info') {

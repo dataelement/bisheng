@@ -6,6 +6,14 @@ import { useTranslation } from 'react-i18next';
 import json from "../../../package.json";
 import { Button } from "../../components/bs-ui/button";
 import { Input } from "../../components/bs-ui/input";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/bs-ui/dialog';
 // import { alertContext } from "../contexts/alertContext";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -129,7 +137,18 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
     const shouldUseLdap = hasLdap && !!ldapCheckboxLabel && isLdapLogin
     const showCaptcha = captchaData.user_capthca && (!showLogin || !shouldUseLdap)
 
-    const handleLogin = async () => {
+    const [multiLoginOpen, setMultiLoginOpen] = useState(false)
+    const [multiLoginBusy, setMultiLoginBusy] = useState(false)
+
+    const handleConfirmMultiLogin = async () => {
+        await handleLogin(true)
+    }
+
+    const handleCancelMultiLogin = () => {
+        setMultiLoginOpen(false)
+    }
+
+    const handleLogin = async (forceLogin = false) => {
         const error = []
         const [personId, pwd] = [personIdRef.current.value, pwdRef.current.value]
         if (!personId) error.push(t('login.pleaseEnterPersonId'))
@@ -145,41 +164,55 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
         //     list: error,
         // });
 
+        if (forceLogin) {
+            setMultiLoginBusy(true)
+        }
         const encryptPwd = shouldUseLdap ? await handleLdapEncrypt(pwd) : await handleEncrypt(pwd)
-        captureAndAlertRequestErrorHoc(
-            (shouldUseLdap
-                ? ldapLoginApi(personId, encryptPwd)
-                : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value)
-            ).then((res: any) => {
-                // v2.5.1: leaf tenant is derived from the user's primary department.
-                // Ignore any stale "requires_tenant_selection" response fields.
-                if (res.requires_tenant_selection) {
-                    sessionStorage.removeItem('pending_tenants')
-                }
-
-                window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
-                localStorage.setItem('isLogin', '1')
-                const pathname = localStorage.getItem('LOGIN_PATHNAME')
-                if (pathname) {
-                    // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
-                    localStorage.removeItem('LOGIN_PATHNAME')
-                    location.href = pathname
-                } else {
-                    const entry = (res as { default_entry?: string }).default_entry
-                    if (entry === 'workspace') {
-                        location.href = getWorkspaceClientUrl('/')
-                    } else {
-                        // Both areas or admin-only: default to admin shell first.
-                        location.href = `${__APP_ENV__.BASE_URL}/admin`
+        try {
+            await captureAndAlertRequestErrorHoc(
+                (shouldUseLdap
+                    ? ldapLoginApi(personId, encryptPwd)
+                    : loginApi(personId, encryptPwd, captchaData.captcha_key, captchaRef.current?.value, forceLogin)
+                ).then((res: any) => {
+                    setMultiLoginOpen(false)
+                    // v2.5.1: leaf tenant is derived from the user's primary department.
+                    // Ignore any stale "requires_tenant_selection" response fields.
+                    if (res.requires_tenant_selection) {
+                        sessionStorage.removeItem('pending_tenants')
                     }
-                }
-            }), (error) => {
-                if (error?.code === 10601) { // 密码过期
-                    localStorage.setItem('account', personId)
-                    navigate('/reset', { state: { noback: true } })
-                    return true // Skip the default error toast; resetPwd page shows its own
-                }
-            })
+
+                    window.self === window.top ? localStorage.removeItem('ws_token') : localStorage.setItem('ws_token', res.access_token)
+                    localStorage.setItem('isLogin', '1')
+                    const pathname = localStorage.getItem('LOGIN_PATHNAME')
+                    if (pathname) {
+                        // After the login session expires, redirect back to the login page. After successful login, redirect back to the page before login.
+                        localStorage.removeItem('LOGIN_PATHNAME')
+                        location.href = pathname
+                    } else {
+                        const entry = (res as { default_entry?: string }).default_entry
+                        if (entry === 'workspace') {
+                            location.href = getWorkspaceClientUrl('/')
+                        } else {
+                            // Both areas or admin-only: default to admin shell first.
+                            location.href = `${__APP_ENV__.BASE_URL}/admin`
+                        }
+                    }
+                }), (error) => {
+                    if (error?.code === 10601) { // 密码过期
+                        localStorage.setItem('account', personId)
+                        navigate('/reset', { state: { noback: true } })
+                        return true // Skip the default error toast; resetPwd page shows its own
+                    }
+                    if (error?.code === 10612 || (typeof error === 'string' && error.includes('其它设备登录'))) {
+                        setMultiLoginOpen(true)
+                        return true // Skip default error toast and show confirm dialog
+                    }
+                })
+        } finally {
+            if (forceLogin) {
+                setMultiLoginBusy(false)
+            }
+        }
 
         fetchCaptchaData()
     }
@@ -335,7 +368,7 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                                 </div>
                                 <Button
                                     className='h-[48px] mt-[32px] dark:bg-button'
-                                    disabled={isLoading} onClick={handleLogin} >{t('login.loginButton')}</Button>
+                                    disabled={isLoading} onClick={() => handleLogin(false)} >{t('login.loginButton')}</Button>
                             </> :
                                 <>
                                     <div className="text-center">
@@ -361,6 +394,31 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     </div>
                 </div>
             </div>
+            <Dialog open={multiLoginOpen} onOpenChange={setMultiLoginOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>登录确认</DialogTitle>
+                        <DialogDescription className="pt-2 text-sm text-gray-600 dark:text-gray-300">
+                            该用户已在其它设备登录，是否继续登录？继续登录后，另一设备的登录状态将失效。
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+                        <Button
+                            variant="outline"
+                            disabled={multiLoginBusy}
+                            onClick={handleCancelMultiLogin}
+                        >
+                            取消
+                        </Button>
+                        <Button
+                            disabled={multiLoginBusy}
+                            onClick={handleConfirmMultiLogin}
+                        >
+                            {multiLoginBusy ? '登录中...' : '继续登录'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     </div>
 };
