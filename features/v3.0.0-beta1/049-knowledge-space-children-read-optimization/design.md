@@ -28,7 +28,7 @@
 
 ### 2.1 本功能特有约束
 
-- client 文件列表当前固定请求 `page_size=80`，API 默认值仍为 20；候选窗口必须由请求页大小派生，
+- client 文件列表与 API 默认 `page_size` 统一为 40；候选窗口必须由请求页大小派生，
   但单次权限批次不得超过 OpenFGA BatchCheck 的 100 target 上限。
 - `/children` 已是四键 keyset cursor；返回 cursor 必须指向最后一个**已消费候选**，不能指向最后一个
   可见项或数据库批次尾部，否则会重复或跳过权限过滤项。
@@ -52,7 +52,7 @@
 | 条款 | 结论 | 本设计的证据 |
 |---|---|---|
 | C1 DDD 分层 | PASS | Endpoint 只传参；编排在 `KnowledgeSpaceService`；新后代状态查询进入 `KnowledgeFileRepository`，不在 Service 新写 ORM；permission module 不读取知识空间父子表 |
-| C2 MySQL + DM8 | PASS | 动态批次不依赖方言；后代状态使用 SQLAlchemy 相关 `EXISTS`，不使用 JSON、row tuple 或 MySQL 专有函数；DM8 在中央回归验证 |
+| C2 MySQL + DM8 | PASS | 动态批次不依赖方言；后代状态使用标准 `CASE + GROUP BY` 和路径前缀条件，不使用 JOIN、JSON、row tuple 或 MySQL 专有函数；已在 109 的 MySQL 与 DM8 做等价性和性能验证 |
 | C3 多租户 | PASS | 所有业务候选仍由 tenant auto-filter 保护；super admin 只跳过权限判定，不开启 tenant bypass，不跨 tenant 枚举 |
 | C4 权限统一入口 | PASS | 普通用户继续走 F048 `batch_check_business_visible`；super admin 是已确认的系统身份流程且仅限 ID-scoped 入口；不新增 SQL/继承 ALLOW 或 OpenFGA client 直连 |
 | C5 错误码 | PASS | 保持既有不存在、拒绝、cursor 和权限故障错误；不新增错误码 |
@@ -114,7 +114,7 @@
   - C. 每个请求计算稳定窗口 `min(max(page_size + 1, 1), 100)`，同一请求的后续扫描沿用该窗口。
 - **选定**：C。
 - **原因**：A 对小页无条件过读；B 会让 `/search` 的 OFFSET 窗口宽度变化，批次 offset 无法稳定推导，
-  也可能在只缺 1 个可见项时制造大量小 RPC。C 让 20 页读取 21、client 的 80 页读取 81，并为
+  也可能在只缺 1 个可见项时制造大量小 RPC。C 让 20 页读取 21、默认 40 页读取 41 个候选并为
   `has_more` 预留探针；超过 OpenFGA 单批上限时封顶 100。权限稀疏时仍逐批补取，直到填页或业务候选耗尽。
 - **何时重新考虑**：若新指标显示极低可见率下 round trip 数过多，可在不改变结果集的前提下设计基于
   scan amplification 的自适应放大，但必须保证搜索 OFFSET 的窗口/offset 稳定并增加等价测试。
@@ -132,21 +132,24 @@
 - **何时重新考虑**：稳定出现 `page > 10`，或 `scanned_candidates / returned_items`、深页 P95 达到告警
   阈值时，单独立项迁移真实 cursor，并一次性更新 HTTP 和 F030 wrapper。
 
-### 决策 6：删除文件夹数量，改为一次批量存在性查询保留两个行为标记
+### 决策 6：删除文件夹数量，按目录层级执行批量前缀聚合并保留两个行为标记
 
 - **备选**：
   - A. 完全删除文件夹聚合和三个字段。
   - B. 保留现有每文件夹 `COUNT + GROUP BY status`，只不展示数字。
-  - C. 在 `KnowledgeFileRepository` 用一条标准 SQLAlchemy 查询，为当前页文件夹分别计算“存在可重试
-    失败后代”和“存在处理中后代”；返回 `has_failed_files`、`has_processing_files` 两个布尔值，删除
-    `success_file_num`、`processing_file_num`。
+  - C. 先按目录路径深度把结果文件夹分组，再由 `KnowledgeFileRepository` 对每组使用一条标准
+    SQLAlchemy `CASE + GROUP BY` 查询，分别计算“存在可重试失败后代”和“存在处理中后代”；返回
+    `has_failed_files`、`has_processing_files` 两个布尔值，删除 `success_file_num`、`processing_file_num`。
 - **选定**：C。
 - **原因**：截图和组件确认数字不展示；但 `has_failed_files` 控制文件夹/批量重试，
   `processing_file_num > 0` 控制 5 秒轮询。A 会静默删除功能；B 仍为每页 N 个文件夹执行 N 次全状态计数。
-  C 将返回量固定为每文件夹一行、每状态命中后即可停止，并把 N 次 DB 往返收敛为 1 次。查询进入已有
-  Repository interface/implementation，避免延续 Service 内 ORM。
-- **何时重新考虑**：若 DM8 实测相关 `EXISTS` 计划不佳或 folder-heavy P95 仍由该阶段主导，基于真实
-  EXPLAIN 评估状态物化；不得在无证据时新增冗余列或写路径维护。
+  同一深度的规范路径前缀不会相互包含，因此 C 可用常量前缀 `CASE` 正确归类：children 天然只有一个
+  深度、一次查询；search 若父子目录同时命中，则按不同深度分别查询，查询次数等于结果中的目录深度数。
+  查询只使用受 tenant auto-filter 保护的 `KnowledgeFile` 基础表，不使用自连接，也不逐文件鉴权。109 的
+  5 万后代合成数据中，该方案在 MySQL/DM8 的 P50 分别约 70ms/603ms，显著优于逐目录相关查询的约
+  4991ms/10402ms；两库结果一致。
+- **何时重新考虑**：若 folder-heavy P95 仍由该阶段主导，基于真实 EXPLAIN 评估复合索引或状态物化；
+  不得在无证据时新增冗余列或写路径维护。
 
 ### 决策 7：终端请求指标 + 权限扫描指标双层观测
 
@@ -188,7 +191,7 @@ flowchart TD
     L --> N
     N -- "否" --> J
     N -- "是" --> O["版本信息 + 文件标签/缩略图"]
-    O --> P["一次查询文件夹失败/处理中存在性"]
+    O --> P["按目录深度分组查询失败/处理中存在性"]
     P --> Q["emit metrics + PageInfiniteCursorData"]
 ```
 
@@ -246,11 +249,15 @@ flowchart TD
 当前页按类型分流：
 
 - 文件：保持 tags、thumbnail share link、`version_no`、`is_multi_version`、`has_similar`。
-- 文件夹：Repository 对本页 folder IDs 执行一次查询，每个文件夹返回：
-  - `has_failed_files: bool`：后代存在 `FAILED` 或 `VIOLATION` 文件；
+- 文件夹：先按 `file_level_path + id` 的路径深度分组；Repository 对每个同深度前缀组执行一次查询，
+  每个文件夹返回：
+  - `has_failed_files: bool`：后代存在 `FAILED`、`TIMEOUT` 或 `VIOLATION` 文件；
+  - `has_abnormal_files: bool`：与 `has_failed_files` 复用同一查询事实，仅空间创建人可返回 `true`；
   - `has_processing_files: bool`：后代存在 `PROCESSING`、`WAITING` 或 `REBUILDING` 文件。
 - 删除：`success_file_num`、`processing_file_num`。前端不展示数字，且轮询改读
   `hasProcessingFiles`，重试继续读 `hasFailedFiles`。
+- children 结果天然同层，因此固定一次 Repository 查询；search 允许父子目录同时命中，先拆成不同
+  深度组，避免 `CASE` 中父前缀抢先归类子目录后代。
 
 ### 4.4 候选扫描伪代码
 
@@ -350,6 +357,7 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | 字段 | 目标状态 | 消费者 |
 |---|---|---|
 | `has_failed_files: bool` | 保留，始终明确返回 | `FileCard`、`FileTable`、`SpaceDetail` 重试入口 |
+| `has_abnormal_files: bool` | 保留，仅空间创建人可为 `true` | 文件夹“存在异常”提示 |
 | `has_processing_files: bool` | 新增，始终明确返回 | `knowledgeUtils.isKnowledgeItemPending`，决定 5 秒轮询 |
 | `success_file_num` | 删除 | 无展示消费者 |
 | `processing_file_num` | 删除 | 被 `has_processing_files` 替代 |
@@ -363,7 +371,7 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | `knowledge/api/endpoints/knowledge_space.py` | 保持两个 HTTP 路由和参数传递 | 不做权限、计时或查询编排 |
 | `knowledge/domain/services/knowledge_space_service.py` | listing scope、扫描、权限编排、enrichment、终端指标 | 不新增 ORM；不读 mode 后本地放行；不直连 OpenFGA |
 | `knowledge/domain/repositories/interfaces/knowledge_file_repository.py` | 声明批量文件夹后代状态和搜索范围 ID 投影契约 | 不做权限和响应拼装 |
-| `.../implementations/knowledge_file_repository_impl.py` | 一次查询返回本页 folder 状态 flags；按需只投影搜索范围的后代 ID | 不决定谁可见；不加载不需要的完整文件对象；不统计成功/处理中数量 |
+| `.../implementations/knowledge_file_repository_impl.py` | 每个同深度前缀组一次查询返回 folder 状态 flags；按需只投影搜索范围的后代 ID | 不决定谁可见；不加载不需要的完整文件对象；不统计成功/处理中数量 |
 | `knowledge/api/dependencies.py` | 向 KnowledgeSpaceService 注入 file repository | 不创建第二 session 或跨请求缓存 |
 | `open_endpoints/api/endpoints/filelib.py` | F030 `/filelib/file/list` 构造同一 Service 时注入 file repository | 不复制 children/search 编排；不改变 `writeable` 动作判断 |
 | `permission/application/business_authorization.py` | 普通用户的 verified target + visible BatchCheck | 本期不新增 parent-aware API，不查询知识空间树 |
@@ -381,7 +389,7 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | 2 | 只放行 super admin 的空间门禁不够；子候选仍按个人 visible 会让目录空白 | 出现“能进空间但看不到内容”的半授权 | listing scope 同时作用于门禁和候选过滤 |
 | 3 | `_require_folder_action` 自己会再调用 `_require_read_permission` | 在外层先查空间再调它会重复空间 Check；全局删掉又会伤害其他调用方 | 两列表改用专用 listing scope；通用 helper 保持 |
 | 4 | `processing_file_num` 不展示，但它驱动前端 5 秒自动轮询 | 直接删字段后，文件夹内任务状态不再自动刷新 | Repository 返回 `has_processing_files`；`knowledgeUtils.isKnowledgeItemPending` 改读布尔值 |
-| 5 | `has_failed_files` 控制单文件夹和批量重试入口 | 把全部文件夹聚合一起删掉会让失败文件无法从文件夹入口重试 | 保留失败 EXISTS 语义；`FileCard/FileTable/SpaceDetail` 不改判断含义 |
+| 5 | `has_failed_files` 控制单文件夹和批量重试入口 | 把全部文件夹聚合一起删掉会让异常文件无法从文件夹入口重试 | 与 `has_abnormal_files` 复用异常状态事实，并将 `TIMEOUT` 纳入重试；提示字段仅空间创建人可见 |
 | 6 | children cursor 必须停在最后“已消费”候选，而非最后 visible 或批次尾 | 否则不可见项被重复扫，或第 `page_size+1` 个可见探针被跳过 | `_scan_visible_child_items` 的 `resume_cursor` 更新顺序和回归测试 |
 | 7 | search 的 cursor wrapper 只是 `[page_num]` pseudo-cursor | 误以为已有 keyset，会遗漏深页每次从头重扫的成本 | `asearch_space_children_cursor`、`_scan_visible_search_items` 指标记录 page/amplification |
 | 8 | search OFFSET 分批要求同一请求窗口恒定且必须有 ID tie-breaker | 动态改变窗口宽度会造成 offset 重叠/空洞；同排序值会重复/漏项 | `_candidate_scan_batch_size` 每请求计算一次；DAO `id_tiebreaker=True` |
@@ -389,7 +397,7 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | 10 | keyword 正文搜索先查空间文件总数，再让 ES terms 聚合最多返回 10,000 个 document IDs | 只看候选 DB/FGA 时间会错判 ES/范围准备瓶颈；大命中集仍可能截断 | 保持既有 warning；分别记录 scope/search engine 时间，列入 §8 |
 | 11 | 一个候选批同时有 folder/file 时会产生两个权限批次 | 把 scan batch 数当 OpenFGA request 数会低估；盲目并发又会提高引擎峰值 | 指标分开记录 `scan_batch_count`、`permission_batch_count`，本期顺序执行 |
 | 12 | `emit_metric` 的 trace 来自 loguru request context，指标函数本身不读 ContextVar | 手工重复写 trace 或直接打印自由文本会形成不一致字段 | 统一调用 `emit_metric("knowledge_space_read", ...)` |
-| 13 | Service 目前已有历史 ORM，但 C1 禁止为新功能继续添加 | 为方便把 EXISTS 写回 `_handle_file_folder_extra_info` 会扩大分层债务 | 新查询进入 `KnowledgeFileRepository` 并由 DI 注入 |
+| 13 | Service 目前已有历史 ORM，但 C1 禁止为新功能继续添加 | 为方便把前缀聚合写回 `_handle_file_folder_extra_info` 会扩大分层债务 | 新查询进入 `KnowledgeFileRepository` 并由 DI 注入 |
 | 14 | 116 的 `HTTP_ACCESS_METRIC` 只证明总耗时；当前 search scanner没有同 trace 的权限阶段 metric | 看到 101ms 无法判断是两个 Check、ES、BatchCheck 还是 enrich | 决策 7 的双层指标 |
 
 ---
@@ -423,7 +431,7 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | TagDao batch tags / tag resource IDs | DB API | tag ID 跨空间集合必须继续由业务 `space_id`/path 收窄 |
 | ES `metadata.document_id` terms aggregation | Elasticsearch mapping | mapping 或 10k bucket 语义变化会影响正文命中集合；必须保留截断观测 |
 | F042 `emit_metric` | 结构化日志 API | best-effort、未知 domain 默认启用；若监控开关策略改变要验证新 domain 仍采集 |
-| client `useFileManager` | React 本地状态 | page size 当前 80；search page 和 children cursor 是两套状态机，不能混用 token |
+| client `useFileManager` | React 本地状态 | page size 默认 40；search page 和 children cursor 是两套状态机，不能混用 token |
 
 ### 6.3 领域邻接声明
 
@@ -446,8 +454,10 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
   - search keyword/tag/parent/status、ES+文件名并集、非主版本排除保持。
   - 成功、early return、权限异常、ES 异常均只产生一条终端 metric；错误原样传播且指标不含 keyword/name。
 - **Repository/双库契约测试**：
-  - 当前页多个文件夹只调用一次 Repository；失败/处理中/空后代的两个 bool 正确。
-  - SQLAlchemy 表达式做 MySQL 编译测试；真实 DM8 由中央回归执行，重点检查相关 EXISTS 和 path LIKE。
+  - children 当前页多个同层文件夹只调用一次 Repository；search 父子命中按路径深度拆分调用；失败、
+    处理中和空后代的两个 bool 正确。
+  - SQL 不含 JOIN/alias，使用基础表 tenant 过滤、path 等值/前缀和 `CASE + GROUP BY`；MySQL 与 DM8
+    使用相同 fixture 验证结果等价并记录执行时间。
 - **client 组件/纯函数测试**：
   - folder `hasProcessingFiles=true` 时 pending、false 时不轮询；`hasFailedFiles` 重试入口保持。
   - raw mapper 不再依赖数值字段；children/search 两种 envelope 均映射新 bool。
@@ -462,8 +472,9 @@ returned、scan batches、permission batches、DB/FGA elapsed、amplification、
 | 普通 folder 门禁 | 空间 2 次 + folder 1 次 | 空间 1 次 + folder 1 次 |
 | super admin listing 权限 RPC | 依赖个人 visible，可能拒绝/为空 | 0；但业务空间/tenant/folder 验证保留 |
 | 首批候选，`page_size=20` | 100 | 21 |
-| 首批候选，client `page_size=80` | 100 | 81 |
-| 当前页 N 个文件夹后代状态 DB 往返 | N 次 COUNT/GROUP BY | 1 次 EXISTS flags 查询 |
+| 首批候选，client 默认 `page_size=40` | 100 | 41 |
+| children 当前页 N 个同层文件夹后代状态 DB 往返 | N 次 COUNT/GROUP BY | 1 次前缀聚合查询 |
+| search 父子目录同时命中的后代状态 DB 往返 | N 次 COUNT/GROUP BY | L 次前缀聚合查询，L 为命中目录深度数且 L≤目录层级上限 |
 | search 分段 metric | 无 | 1 terminal + permission scanner metric，同 trace |
 
 端到端不以单次请求作门禁。同一 fixture、同一镜像预热后各执行 3 次 warmup + 30 次采样，报告 P50/P95/P99、
@@ -503,7 +514,8 @@ candidate/permission batch、DB/FGA/ES/enrich 分段。以 116 的 2026-08-14 �
 - `scan_amplification > 10`：检查用户可见率、filter 选择性和 deep search page；不能直接扩大 batch 或跳权限。
 - `permission_elapsed_ms / total_elapsed_ms` 高：对照 OpenFGA metrics/request ID；必要时重跑 BENCH-01。
 - `search_engine_elapsed_ms` 高：检查 ES terms 命中量、10k 截断和 index；不要误判为 OpenFGA。
-- `folder_state_elapsed_ms` 高：检查 folder-heavy 页及相关 EXISTS plan，分别在 MySQL/DM8 EXPLAIN。
+- `folder_state_elapsed_ms` 高：检查 folder-heavy 页、搜索命中的目录深度数和前缀聚合计划，分别在
+  MySQL/DM8 EXPLAIN。
 - `candidate_db_elapsed_ms` 高：检查 path/status/filter 选择性和 search 深页，不通过新增未验证索引猜修。
 
 ---
@@ -517,7 +529,7 @@ candidate/permission batch、DB/FGA/ES/enrich 分段。以 116 的 2026-08-14 �
 - **OpenFGA 继承捷径**：已否决；只有正式业务 trace 和 BENCH-01 证明必要时重审，不能直接恢复
   `batch_check_visible_under_visible_parent` 提案。
 - **folder 状态物化**：会把读成本转移到上传、重试、移动、删除等写路径并增加一致性负担；本期使用批量
-  EXISTS。只有双库 EXPLAIN 和 P95 证明仍慢时再评估。
+  前缀聚合。只有双库 EXPLAIN 和 P95 证明仍慢时再评估。
 - **并行 folder/file BatchCheck**：最多两个并发可能降低单请求延迟但提高 OpenFGA 峰值；先通过新指标确认
   是否值得，并在并发压测后单独决定。
 - **通用 `_require_folder_action` 重构**：影响面远超两个接口；本期用专用 listing scope，不扩大改动。

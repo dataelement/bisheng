@@ -122,6 +122,9 @@ export default defineConfig(({ command, mode }) => {
   // Per-request proxy logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
   // dozens of lines per page load and buries the warnings that matter.
   const proxyLog = env.VITE_PROXY_LOG === '1';
+  // Module ids statically reachable from src/main.jsx, i.e. what the first screen must
+  // load anyway. Filled on the first manualChunks call (the module graph is complete by then).
+  let firstScreenModules: Set<string> | null = null;
 
   return {
     base: app_env.BASE_URL || '/',
@@ -297,9 +300,34 @@ export default defineConfig(({ command, mode }) => {
       rollupOptions: {
         preserveEntrySignatures: 'strict',
         output: {
-          manualChunks(id: string) {
+          manualChunks(id: string, { getModuleInfo }) {
+            if (!firstScreenModules) {
+              firstScreenModules = new Set();
+              const root = path.join(__dirname, 'src/main.jsx');
+              if (!getModuleInfo(root)) throw new Error(`manualChunks: first-screen root not found: ${root}`);
+              const queue = [root];
+              while (queue.length) {
+                const current = queue.pop()!;
+                if (firstScreenModules.has(current)) continue;
+                firstScreenModules.add(current);
+                queue.push(...(getModuleInfo(current)?.importedIds ?? []));
+              }
+            }
+            // Rollup's CommonJS runtime helpers are shared by nearly every chunk. Left alone they
+            // land in whichever manual chunk needs them first (e.g. docx-viewer), which then gets
+            // statically imported by the first screen and drags that whole library along.
+            if (id.startsWith('\0commonjsHelpers') || id.startsWith('\0commonjs-dynamic-modules')) {
+              return 'vendor';
+            }
             const normalizedId = id.replace(/\\/g, '/');
             if (normalizedId.includes('node_modules')) {
+              // Libraries only reached through a lazy import are left to Rollup so they travel
+              // with that lazy chunk. The name rules below are loose substring matches (bluebird's
+              // join.js hits 'joi'); applied to lazy-only modules they would pull those modules
+              // into a first-screen chunk and the rest of their library in after them.
+              if (!firstScreenModules.has(id)) {
+                return null;
+              }
               // High-impact chunking for large libraries
               if (normalizedId.includes('@codesandbox/sandpack')) {
                 return 'sandpack';

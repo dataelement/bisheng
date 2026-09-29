@@ -36,7 +36,13 @@ from bisheng.open_api.domain.models.api_credential import (
     ApiCredential,
 )
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
-from bisheng.open_api.domain.schemas.credential import KeyIssuedResponse, KeyIssueRequest, KeyItem, KeyUpdateRequest
+from bisheng.open_api.domain.schemas.credential import (
+    KeyIssuedResponse,
+    KeyIssueRequest,
+    KeyItem,
+    KeyPage,
+    KeyUpdateRequest,
+)
 from bisheng.open_api.domain.scopes import (
     DELEGATE_SCOPE_CODE,
     LOCAL_DEV_TOOLKIT_SCOPE_CODES,
@@ -169,6 +175,18 @@ class CredentialService:
         rows = await CredentialRepository.list_by_subject(subject_kind, subject_id)
         moment = datetime.now()
         return [await cls._to_item(row, now=moment) for row in rows]
+
+    @classmethod
+    async def list_by_subject_page(cls, subject_kind: str, subject_id: int, *, page: int, page_size: int) -> KeyPage:
+        moment = datetime.now()
+        rows, total, active_count = await CredentialRepository.list_by_subject_page(
+            subject_kind, subject_id, page=page, page_size=page_size, now=moment
+        )
+        return KeyPage(
+            data=[await cls._to_item(row, now=moment) for row in rows],
+            total=total,
+            active_count=active_count,
+        )
 
     @classmethod
     async def get_row(cls, subject_kind: str, subject_id: int, credential_id: int) -> ApiCredential:

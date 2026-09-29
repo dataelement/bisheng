@@ -1,13 +1,15 @@
 import { useRecoilValue } from 'recoil';
-import { useEffect, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useMemo } from 'react';
 import { FileSources, LocalStorageKeys } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/hooks/queries/data-provider';
-import Artifacts from '~/components/Artifacts/Artifacts';
 import { SidePanelGroup } from '~/components/SidePanel';
 import { useSetFilesToDelete } from '~/hooks';
 import { EditorProvider } from '~/Providers';
 import store from '~/store';
+
+// Artifacts pulls in Sandpack + CodeMirror (~600 KB); load it only when an artifact is shown.
+const Artifacts = lazy(() => import('~/components/Artifacts/Artifacts'));
 
 export default function Presentation({ children }: { isLingsi: boolean, children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);
@@ -77,7 +79,9 @@ export default function Presentation({ children }: { isLingsi: boolean, children
         artifacts={
           artifactsVisible === true && Object.keys(artifacts ?? {}).length > 0 ? (
             <EditorProvider>
-              <Artifacts />
+              <Suspense fallback={null}>
+                <Artifacts />
+              </Suspense>
             </EditorProvider>
           ) : null
         }
