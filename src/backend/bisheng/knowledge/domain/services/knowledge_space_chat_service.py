@@ -120,12 +120,11 @@ class KnowledgeSpaceChatService:
         return context, citation_items
 
     async def _resolve_workbench_visual(self, model_id: int) -> bool:
-        """Same WSModel.visual lookup as Linsight ``_resolve_model``."""
-        workbench = await LLMService.get_workbench_llm(tenant_id=getattr(self.login_user, "tenant_id", None))
-        return any(
-            str(entry.id) == str(model_id) and bool(getattr(entry, "visual", False))
-            for entry in (workbench.models or [])
-        )
+        """Image viewing follows the Image View builtin tool, not the chat model."""
+        del model_id
+        from bisheng.common.image_view.loop import image_view_configured
+
+        return await image_view_configured(tenant_id=getattr(self.login_user, "tenant_id", None))
 
     @staticmethod
     def _apply_image_anchors(file_content: str, visual: bool) -> tuple[str, ImageRegistry]:
@@ -533,7 +532,13 @@ class KnowledgeSpaceChatService:
             [{"role": m.type, "content": m.content} for m in inputs],
         )
 
-        async for one in run_react_vision_stream(llm, inputs, image_registry, visual=visual):
+        async for one in run_react_vision_stream(
+            llm,
+            inputs,
+            image_registry,
+            visual=visual,
+            user_id=self.login_user.user_id,
+        ):
             chunk_reasoning_content = extract_reasoning_content(one)
             yield ChatResponse(
                 category=MessageCategory.STREAM,

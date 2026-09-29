@@ -33,6 +33,22 @@ class KnowledgeFileStatus(int, Enum):
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
     VIOLATION = 7  # Content safety violation
 
+    @classmethod
+    def abnormal_values(cls) -> frozenset[int]:
+        """Statuses that surface as an actionable file anomaly."""
+
+        return frozenset(
+            {
+                cls.FAILED.value,
+                cls.TIMEOUT.value,
+                cls.VIOLATION.value,
+            }
+        )
+
+    @classmethod
+    def is_abnormal(cls, status: int | None) -> bool:
+        return status in cls.abnormal_values()
+
 
 class QAStatus(Enum):
     DISABLED = 0  # User manually closedQA

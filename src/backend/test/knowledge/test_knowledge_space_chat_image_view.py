@@ -54,19 +54,14 @@ def test_apply_image_anchors_noop_without_markdown_image():
 
 
 @pytest.mark.asyncio
-async def test_resolve_workbench_visual_reads_wsmodel(monkeypatch):
+async def test_resolve_workbench_visual_follows_image_view_tool(monkeypatch):
     service = _service()
-    monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.LLMService.get_workbench_llm",
-        AsyncMock(
-            return_value=SimpleNamespace(
-                models=[SimpleNamespace(id="11", visual=True), SimpleNamespace(id="12", visual=False)]
-            )
-        ),
-    )
+    configured = AsyncMock(return_value=True)
+    monkeypatch.setattr("bisheng.common.image_view.loop.image_view_configured", configured)
     assert await service._resolve_workbench_visual(11) is True
-    assert await service._resolve_workbench_visual(12) is False
-    assert await service._resolve_workbench_visual(99) is False
+    configured.return_value = False
+    assert await service._resolve_workbench_visual(2) is False
+    assert configured.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -88,7 +83,7 @@ async def test_render_uses_vision_loop_when_visual_and_images(monkeypatch):
 
     loop_calls: list[tuple] = []
 
-    async def fake_loop(model, messages, registry, *, visual):
+    async def fake_loop(model, messages, registry, *, visual, **kwargs):
         loop_calls.append((visual, len(registry), "".join(str(m.content) for m in messages)))
         yield AIMessage(content="answer with ![](/bisheng/knowledge/images/1/2/chart.png)")
 
@@ -135,7 +130,7 @@ async def test_render_does_not_annotate_when_visual_false(monkeypatch):
 
     loop_calls: list[tuple] = []
 
-    async def fake_loop(model, messages, registry, *, visual):
+    async def fake_loop(model, messages, registry, *, visual, **kwargs):
         loop_calls.append((visual, len(registry), "".join(str(m.content) for m in messages)))
         yield AIMessage(content="ok")
 

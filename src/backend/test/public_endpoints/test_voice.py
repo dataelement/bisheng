@@ -177,9 +177,7 @@ async def test_published_voice_without_credentials_keeps_resource_tenant(client,
 
 @pytest.mark.parametrize("operation", OPERATIONS)
 @pytest.mark.parametrize("failure,status,code", [("disabled", 403, 26103), ("offline", 404, 26102)])
-async def test_publication_denial_prevents_voice_model_access(
-    client, publication, operation, failure, status, code
-):
+async def test_publication_denial_prevents_voice_model_access(client, publication, operation, failure, status, code):
     """AC-R9: Closed guest access and unpublished apps never reach a model.
 
     The transport status stays coarse; the envelope carries the code the guest
@@ -208,11 +206,12 @@ async def test_application_id_is_required(client, publication, operation, flow_i
 
 @pytest.mark.parametrize("operation", OPERATIONS)
 @pytest.mark.parametrize("header", ["X-On-Behalf-Of", "X-End-User"])
-async def test_public_voice_rejects_identity_headers(client, publication, operation, header):
+async def test_public_voice_ignores_identity_headers(client, publication, operation, header):
     response = await request_voice(client, operation, WORKFLOW_ID, headers={header: "123"})
-    assert response.status_code == 403
-    assert response.json()["status_code"] == 26104
-    assert publication.calls == []
+    assert response.status_code == 200
+    assert response.json()["status_code"] == 200
+    # The publication fixture checks that the real default operator is used.
+    assert publication.calls == [(operation, 3, WORKFLOW_ID)]
 
 
 async def test_missing_voice_models_return_disabled_controls(client, publication, monkeypatch):

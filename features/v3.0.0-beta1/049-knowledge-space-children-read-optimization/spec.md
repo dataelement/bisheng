@@ -77,7 +77,7 @@
 ### 2.3 文件夹统计与响应兼容
 
 - **AC-14** — WHEN 目录列表或搜索结果返回文件夹, THE SYSTEM SHALL 不再计算或提供界面未展示的后代成功数和处理中数量。
-- **AC-15** — WHEN 前端消费目录列表或搜索结果中的文件夹, THE SYSTEM SHALL 保持既有失败文件提示、单文件夹重试和批量重试入口；`has_failed_files` 只表达是否存在可重试失败文件，不得依赖完整状态计数才能得出。
+- **AC-15** — WHEN 前端消费目录列表或搜索结果中的文件夹, THE SYSTEM SHALL 保持既有失败文件提示、单文件夹重试和批量重试入口；`has_failed_files` 与 `has_abnormal_files` 共享 `FAILED`、`TIMEOUT`、`VIOLATION` 异常状态事实，不得重复查询或依赖完整状态计数才能得出；其中异常提示 `has_abnormal_files` 仅对空间创建人返回 `true`。
 - **AC-16** — THE SYSTEM SHALL 保持文件条目的标签、缩略图和版本信息等现有返回能力，不得把移除文件夹数量统计扩大为移除文件补充信息。
 
 ### 2.4 可观测性
