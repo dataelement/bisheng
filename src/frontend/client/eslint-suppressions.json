@@ -701,9 +701,6 @@
   "src/components/Chat/Messages/Content/citationUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 15
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {

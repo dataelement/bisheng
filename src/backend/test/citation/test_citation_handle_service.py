@@ -349,7 +349,7 @@ def test_export_same_source_shares_a_number_but_other_chunk_gets_its_own():
     r = render_citations_for_export(text, [_rag_resolved()])
 
     assert r.text.startswith("A[1] B[1] C[2]")
-    assert "2. 《OKR规则2026.docx》 · 第 4 段 · 制度库" in r.text
+    assert "2. 《OKR规则2026.docx》 · 第 5 段 · 制度库" in r.text
 
 
 def test_export_drops_unresolved_keys_and_whole_spans():
@@ -425,9 +425,39 @@ def test_export_page_zero_falls_back_to_chunk_index():
         f"甲{_m('knowledgesearch_cccc3333:7')} 乙{_m('knowledgesearch_cccc3333:8')}", [item]
     )
 
-    assert "1. 《规则.docx》" in r.text and "第 7 段" in r.text
+    # The chunk index is zero-based; readers count paragraphs from 1.
+    assert "1. 《规则.docx》" in r.text and "第 8 段" in r.text
     assert "第 0 页" not in r.text
     assert "2. 《规则.docx》\n" in r.text or r.text.rstrip().endswith("2. 《规则.docx》")
+
+
+def test_export_pdf_page_is_zero_based_like_its_bboxes():
+    def _box(page):
+        return json.dumps({"chunk_bboxes": [{"page": page, "bbox": [27, 69, 469, 100]}]})
+
+    item = CitationRegistryItemSchema(
+        citationId="knowledgesearch_dddd4444",
+        type=CitationType.RAG,
+        accessScope="per_user",
+        sourcePayload=RagCitationPayloadSchema(
+            knowledgeId=9,
+            documentId=13,
+            documentName="方案.pdf",
+            items=[
+                # First page of a PDF: page 0 must not fall back to "第 1 段".
+                RagCitationItemSchema(itemId="0", page=0, chunkIndex=0, bbox=_box(0)),
+                RagCitationItemSchema(itemId="20", page=19, chunkIndex=20, bbox=_box(19)),
+            ],
+        ),
+    )
+
+    r = render_citations_for_export(
+        f"甲{_m('knowledgesearch_dddd4444:0')} 乙{_m('knowledgesearch_dddd4444:20')}", [item]
+    )
+
+    assert "1. 《方案.pdf》 · 第 1 页" in r.text
+    assert "2. 《方案.pdf》 · 第 20 页" in r.text
+    assert "段" not in r.text.split("## 参考资料")[1]
 
 
 WEB_KEY = "websearch_bbbb2222:1"

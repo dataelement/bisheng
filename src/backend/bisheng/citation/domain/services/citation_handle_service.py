@@ -106,24 +106,44 @@ def _item_location(item: Any) -> str:
     item_id = getattr(item, "itemId", None)
     for sub in getattr(payload, "items", None) or []:
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
+            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
     return ""
 
 
-def _location_label(page: Any, chunk_index: Any) -> str:
-    """``第 N 页`` when the parser produced a real page number, else ``第 N 段``.
+def _has_layout_boxes(bbox: Any) -> bool:
+    """Whether a chunk carries PDF layout boxes (``{"chunk_bboxes": [...]}``)."""
+    if not bbox:
+        return False
+    try:
+        parsed = json.loads(bbox) if isinstance(bbox, str) else bbox
+    except (TypeError, ValueError):
+        return False
+    boxes = parsed.get("chunk_bboxes") if isinstance(parsed, dict) else None
+    return isinstance(boxes, list) and len(boxes) > 0
 
-    docx / xlsx / md chunks carry ``page=0`` (no pagination), which must not
-    render as "page 0"; the chunk index is the meaningful locator there.
+
+def _location_label(page: Any, chunk_index: Any, bbox: Any = None) -> str:
+    """``第 N 页`` when the chunk has a real page number, else ``第 N 段``.
+
+    Two page conventions reach here. Chunks parsed with a layout (PDF, and
+    office files converted to PDF) carry bboxes, and their page is the
+    zero-based page index the bboxes use — the first page is ``0``. Chunks
+    without a layout carry a one-based page (slides) or ``0`` for "not
+    paginated" (docx / xlsx / md). The chunk index is zero-based too.
     """
     try:
-        if page is not None and int(page) > 0:
-            return f"第 {int(page)} 页"
+        page_no = int(page) if page is not None else None
     except (TypeError, ValueError):
-        pass
+        page_no = None
+    if page_no is not None:
+        if _has_layout_boxes(bbox):
+            if page_no >= 0:
+                return f"第 {page_no + 1} 页"
+        elif page_no > 0:
+            return f"第 {page_no} 页"
     try:
         if chunk_index is not None and int(chunk_index) >= 0:
-            return f"第 {int(chunk_index)} 段"
+            return f"第 {int(chunk_index) + 1} 段"
     except (TypeError, ValueError):
         pass
     return ""
@@ -548,7 +568,7 @@ def _export_identity(item: Any, item_id: str | None) -> str:
 def _export_location(item: Any, item_id: str | None) -> str:
     for sub in _payload_items(item):
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
+            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
     return ""
 
 
