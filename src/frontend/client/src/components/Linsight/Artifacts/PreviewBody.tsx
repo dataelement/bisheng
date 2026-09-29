@@ -7,6 +7,7 @@
 import { Colored, Outlined } from 'bisheng-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatCitation } from '~/api/chatApi';
+import type { CitationDocumentPreviewState } from '~/components/Chat/Messages/Content/CitationDocumentPreviewDrawer';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import FilePreview from '~/pages/knowledge/FilePreview';
@@ -158,10 +159,12 @@ interface PreviewBodyProps {
     onArtifactPreview?: (file: ArtifactFile) => void;
     /** Sources actually cited in the report — same payload as output_result.citations */
     citations?: ChatCitation[] | null;
+    /** F071: open a cited document beside the report instead of in a floating drawer. */
+    onOpenSource?: (preview: CitationDocumentPreviewState) => void;
     messageId?: string;
 }
 
-export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId }: PreviewBodyProps) {
+export function PreviewBody({ file, versionId, fileList, onArtifactPreview, citations, messageId, onOpenSource }: PreviewBodyProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const { loading, error, text, imageUrl, resolvedUrl } = usePreviewSource(file, versionId);
@@ -297,6 +300,7 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
                         resolveImageSrc={resolveImageSrc}
                         resolveArtifactLink={onArtifactPreview ? resolveArtifactLink : undefined}
                         onArtifactPreview={onArtifactPreview ? handleArtifactPreview : undefined}
+                        onOpenSourcePreview={onOpenSource}
                     />
                 </div>
             </div>
