@@ -80,6 +80,35 @@ async def test_last_used_write_is_throttled(open_api_db, fake_redis):
     assert await CredentialService.touch_last_used(issued.id) is False
 
 
+async def test_last_used_is_written_before_any_tenant_context_exists(open_api_db, fake_redis, monkeypatch):
+    # Bearer validation runs before the request's tenant context is bound, so in
+    # a multi-tenant deployment the write must not depend on that context.
+    from bisheng.common.services.config_service import settings
+    from bisheng.core.context.tenant import current_tenant_id
+    from bisheng.core.database import tenant_filter
+    from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
+
+    issued = await CredentialService.issue(
+        tenant_id=2,
+        subject_kind=SUBJECT_KIND_SERVICE_ACCOUNT,
+        subject_id=7,
+        request=KeyIssueRequest(name="key", expires_at=datetime.now() + timedelta(days=1)),
+        created_by=3,
+    )
+    monkeypatch.setattr(settings.multi_tenant, "enabled", True)
+    monkeypatch.setattr(tenant_filter, "_initialized", False)
+    tenant_filter.register_tenant_filter_events()
+    token = current_tenant_id.set(None)
+    try:
+        assert await CredentialService.touch_last_used(issued.id) is True
+    finally:
+        current_tenant_id.reset(token)
+        # The listener stays on Session; an empty table set turns it back into a no-op.
+        tenant_filter._tenant_aware_tables = set()
+    row = await CredentialRepository.get_by_hash(hash_token(issued.plaintext))
+    assert row.last_used_at is not None
+
+
 async def test_removing_delegate_scope_clears_entries_atomically(
     open_api_db,
     fake_redis,
