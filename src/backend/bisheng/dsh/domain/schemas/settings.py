@@ -13,11 +13,13 @@ class DshManagementSettings(BaseModel):
         default=True, description="Compatibility field; deployed DSH business access is always enabled."
     )
     download_url: str | None = Field(
-        default=None, max_length=2048, description="Optional Desktop download HTTP(S) URL."
+        default="https://www.dshdesktop.com/zh/enterprise/",
+        max_length=2048,
+        description="Optional Desktop download HTTP(S) URL; null hides the download link.",
     )
 
     launch_url: str = Field(
-        default="dsh-desktop://login",
+        default="bisheng-work://login",
         max_length=2048,
         description="Desktop native protocol base URL; the browser appends the current platform server parameter.",
     )
