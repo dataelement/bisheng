@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import ClassVar
 
 from sqlalchemy import case, func, or_, text, update
 from sqlmodel import col, select
@@ -242,8 +243,19 @@ class SpaceFileDao(KnowledgeFileDao):
             result = await session.exec(statement)
             return result.all()
 
+    # Sort keys accepted from API clients. Both values are interpolated into a
+    # raw ORDER BY fragment below, so anything outside these sets is rejected
+    # instead of escaped.
+    ORDER_FIELDS: ClassVar[frozenset[str]] = frozenset({"file_name", "file_type", "file_size", "update_time"})
+    ORDER_SORTS: ClassVar[frozenset[str]] = frozenset({"asc", "desc"})
+
     @staticmethod
     def order_field_text(order_field: str, order_sort: str) -> str:
+        if order_field not in SpaceFileDao.ORDER_FIELDS:
+            raise ValueError(f"unsupported order field: {order_field!r}")
+        if not isinstance(order_sort, str) or order_sort.lower() not in SpaceFileDao.ORDER_SORTS:
+            raise ValueError(f"unsupported order direction: {order_sort!r}")
+
         order_sort = order_sort.upper()
         order_text = ""
 
