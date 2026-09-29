@@ -91,6 +91,8 @@ class FGAClient:
             tuple[str, str, str, str, str],
             tuple[asyncio.Task[list[dict]], int],
         ] = {}
+        self._read_tuple_tasks: set[asyncio.Task[list[dict]]] = set()
+        self._closed = False
         self._read_tuple_lock = asyncio.Lock()
         self._read_tuple_cache_generation = 0
         self._install_httpx_log_filter()
@@ -273,6 +275,8 @@ class FGAClient:
 
         Returns list of {"key": {"user": ..., "relation": ..., "object": ...}, "timestamp": ...}.
         """
+        if self._closed:
+            raise RuntimeError('OpenFGA client is closed')
         tuple_key: dict[str, str] = {}
         if user:
             tuple_key['user'] = user
@@ -286,17 +290,12 @@ class FGAClient:
             _increment_fga_read_stat('cache_hit_count')
             return cached
 
-        task, _is_owner, generation = await self._get_or_create_read_tuple_task(cache_key, tuple_key)
+        task, _is_owner, _generation = await self._get_or_create_read_tuple_task(cache_key, tuple_key)
         if not _is_owner:
             _increment_fga_read_stat('singleflight_wait_count')
 
-        try:
-            tuples = await task
-        except Exception:
-            await self._clear_read_tuple_inflight(cache_key, task)
-            raise
-
-        await self._store_read_tuple_cache(cache_key, task, tuples, generation)
+        # 共享读取归客户端所有。单个请求取消不能影响其他等待者。
+        tuples = await asyncio.shield(task)
         return self._copy_tuples(tuples)
 
     async def _read_tuples_uncached(self, tuple_key: dict[str, str]) -> list[dict]:
@@ -362,6 +361,8 @@ class FGAClient:
         tuple_key: dict[str, str],
     ) -> tuple[asyncio.Task[list[dict]], bool, int]:
         async with self._read_tuple_lock:
+            if self._closed:
+                raise RuntimeError('OpenFGA client is closed')
             cached = self._get_cached_read_tuples(cache_key)
             if cached is not None:
                 _increment_fga_read_stat('cache_hit_count')
@@ -371,48 +372,56 @@ class FGAClient:
             inflight = self._read_tuple_inflight.get(cache_key)
             if inflight is not None:
                 task, generation = inflight
-                if generation == self._read_tuple_cache_generation:
+                if (
+                    generation == self._read_tuple_cache_generation
+                    and not task.cancelled()
+                    and (not task.done() or task.exception() is None)
+                ):
                     return task, False, generation
                 self._read_tuple_inflight.pop(cache_key, None)
 
             generation = self._read_tuple_cache_generation
             task = asyncio.create_task(self._read_tuples_uncached(dict(tuple_key)))
             self._read_tuple_inflight[cache_key] = (task, generation)
+            # 权限变更可能替换同键任务。客户端关闭时仍须回收旧任务。
+            self._read_tuple_tasks.add(task)
+            task.add_done_callback(lambda done: self._finish_read_tuple_task(cache_key, done, generation))
             return task, True, generation
 
     @staticmethod
     async def _return_read_tuples(tuples: list[dict]) -> list[dict]:
         return tuples
 
-    async def _store_read_tuple_cache(
+    def _finish_read_tuple_task(
         self,
         cache_key: tuple[str, str, str, str, str],
         task: asyncio.Task[list[dict]],
-        tuples: list[dict],
         generation: int,
     ) -> None:
-        async with self._read_tuple_lock:
-            current = self._read_tuple_inflight.get(cache_key)
-            if current is not None and current[0] is task:
-                self._read_tuple_inflight.pop(cache_key, None)
-            if self._read_tuple_cache_ttl <= 0:
-                return
-            if generation != self._read_tuple_cache_generation:
-                return
+        # 回调在同一事件循环内同步执行。清理不依赖已取消请求继续运行。
+        self._read_tuple_tasks.discard(task)
+        current = self._read_tuple_inflight.get(cache_key)
+        is_current = current is not None and current[0] is task
+        if is_current:
+            self._read_tuple_inflight.pop(cache_key, None)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            # 等待者可能全部离开。主动记录异常并仍由 task 向存活等待者传播。
+            logger.warning(
+                'OpenFGA shared tuple read failed object=%s', cache_key[-1],
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            return
+        if (
+            is_current and not self._closed and self._read_tuple_cache_ttl > 0
+            and generation == self._read_tuple_cache_generation
+        ):
             self._read_tuple_cache[cache_key] = (
                 time.monotonic() + self._read_tuple_cache_ttl,
-                self._copy_tuples(tuples),
+                self._copy_tuples(task.result()),
             )
-
-    async def _clear_read_tuple_inflight(
-        self,
-        cache_key: tuple[str, str, str, str, str],
-        task: asyncio.Task[list[dict]],
-    ) -> None:
-        async with self._read_tuple_lock:
-            current = self._read_tuple_inflight.get(cache_key)
-            if current is not None and current[0] is task:
-                self._read_tuple_inflight.pop(cache_key, None)
 
     @staticmethod
     def _copy_tuples(tuples: list[dict]) -> list[dict]:
@@ -455,6 +464,13 @@ class FGAClient:
 
     async def close(self) -> None:
         """Close the underlying httpx client."""
+        self._closed = True
+        self.clear_read_tuples_cache()
+        tasks = list(self._read_tuple_tasks)
+        for task in tasks:
+            task.cancel()
+        # 完成回调已记录读取异常。这里等待任务退出后再关闭 HTTP 连接。
+        await asyncio.gather(*tasks, return_exceptions=True)
         await self._http.aclose()
 
     # ── Internal helpers ─────────────────────────────────────────

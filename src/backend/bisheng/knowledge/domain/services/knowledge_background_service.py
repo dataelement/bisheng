@@ -1,19 +1,24 @@
 """默认队列只推进发布/清理状态, 内容修复仍由投影链路交给解析 worker。"""
 
-
 import asyncio
+import json
 import time
 from datetime import datetime, timedelta
+from typing import NoReturn
 from uuid import uuid4
 
 from loguru import logger
 
-from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import (
     KnowledgeBackgroundRepositoryImpl as Repository,
 )
+from bisheng.utils.task_dispatch import run_sync_dispatch
+
+
+class _PublishedProjectionStopped(RuntimeError):
+    """下游终止或等待超时，应保留诊断并停止自动发布重试。"""
 
 
 class KnowledgeBackgroundService:
@@ -46,6 +51,9 @@ class KnowledgeBackgroundService:
                 handler = getattr(self, f"_{job.kind}")
                 status = await asyncio.wait_for(handler(job, owner, payload), timeout=120)
                 error = "child_operation_exhausted" if status == "dead" else None
+            except _PublishedProjectionStopped as exc:
+                status, error = "dead", str(exc)[:1000]
+                logger.warning("auto publish projection stopped job_id={} detail={}", job.id, error)
             except Exception as exc:
                 status = "dead" if job.attempts >= Repository.MAX_ATTEMPTS else "pending"
                 error = f"{type(exc).__name__}:{exc}"[:1000]
@@ -99,14 +107,63 @@ class KnowledgeBackgroundService:
                     return "skipped"
                 payload["projection_ids"] = [result.manager_file_id, result.publish_entry_id]
             await self._checkpoint(job, owner, payload)
-        entries = await self.repository_call("files", payload["projection_ids"])
-        if len(entries) != len(payload["projection_ids"]):
-            raise RuntimeError("published_projection_missing")
-        if all(e.projection_status == "ready" and e.entry_status == "active" for e in entries):
+        from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
+
+        ids = payload["projection_ids"]
+        entries = await self.repository_call("files", ids)
+        document_id = payload.get("projection_document_id") or payload.get("publish_context", {}).get("document_id")
+        if document_id is None and entries:
+            document_id = entries[0].reference_document_id
+            payload["projection_document_id"] = document_id
+        if Repository.projections_ready(entries, ids, job.tenant_id, document_id):
             return "done"
-        if any(e.projection_status == "failed" for e in entries):
-            raise RuntimeError("published_projection_failed")
-        return self._wait(payload)
+        by_id = {entry.id: entry for entry in entries}
+        details = [
+            {
+                "file_id": file_id,
+                "document_id": entry.reference_document_id,
+                "status": entry.projection_status,
+                "entry_status": entry.entry_status,
+                "attempts": int(entry.projection_retry_count or 0),
+                "error": entry.projection_last_error,
+            }
+            if (entry := by_id.get(file_id)) is not None
+            else {"file_id": file_id, "error": "entry_missing"}
+            for file_id in ids
+        ]
+
+        def stop(reason: str) -> NoReturn:
+            payload["projection_failure"] = {"reason": reason, "entries": details}
+            raise _PublishedProjectionStopped(
+                "published_projection_" + reason + ":" + json.dumps(details, ensure_ascii=False)
+            )
+
+        if len(set(ids)) != 2 or set(by_id) != set(ids):
+            stop("missing")
+        if any(
+            entry.deleted_at is not None
+            or entry.entry_status in {"deleting", "invalid"}
+            or entry.tenant_id != job.tenant_id
+            or entry.reference_document_id != document_id
+            or entry.reference_document_id is None
+            for entry in entries
+        ):
+            stop("unavailable")
+        max_attempts = int(get_shared_storage_conf().projection_max_retries)
+        if any(
+            entry.projection_status == "failed"
+            and (
+                int(entry.projection_retry_count or 0) >= max_attempts
+                or str(entry.projection_last_error or "").startswith("retry_exhausted:")
+                or "document_content_rebuild_budget_exhausted" in str(entry.projection_last_error or "")
+            )
+            for entry in entries
+        ):
+            stop("exhausted")
+        try:
+            return self._wait(payload)
+        except RuntimeError:
+            stop("wait_expired")
 
     async def _container(self, job, owner, payload):
         folders = await self.repository_call("files", [payload["folder_id"]])
@@ -166,6 +223,9 @@ class KnowledgeBackgroundService:
         if not entries:
             return "done"
         entry = entries[0]
+        # 回收已完成本容器的删除决策, 保留文件及关系等待还原或到期。
+        if entry.deleted_at is not None:
+            return "done"
         path = str(entry.file_level_path or "")
         prefix = container["prefix"]
         if int(entry.knowledge_id) != int(container["space_id"]) or not (path == prefix or path.startswith(prefix + "/")):

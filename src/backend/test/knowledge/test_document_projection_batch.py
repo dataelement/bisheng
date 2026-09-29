@@ -597,3 +597,50 @@ async def test_handoff_preserves_known_content_manifest_across_workers(batch_env
     )
     assert await source.run(7, [101], "source") == {101: "rebuild_queued"}
     loader.assert_awaited_once()
+
+
+async def test_claimed_snapshots_remain_writable_after_session_close(batch_environment):
+    import asyncio
+    import gc
+
+    from sqlalchemy import inspect
+
+    factory, _ = batch_environment
+    async with factory() as repository:
+        original = await repository.find_by_id(100)
+        original.user_metadata = {"nested": {"value": "original"}}
+        original.parse_type = "local"
+        repository.session.add(original)
+        await repository.session.commit()
+        context = await repository.claim_batch([101, 102], "owner", 4)
+    del original, repository
+    gc.collect()
+
+    def parse_and_update_snapshots():
+        # 对应 PDF 加载器在线程中更新 parse_type 的真实失败点。
+        context.files[100].parse_type = "etl4lm"
+        context.files[100].user_metadata["nested"]["value"] = "snapshot"
+        context.claimed[0].remark = "claimed"
+        context.entries[0].remark = "entry"
+        context.documents[91].content_generation = 99
+        context.versions[501].version_no = 99
+
+    await asyncio.to_thread(parse_and_update_snapshots)
+    snapshots = [
+        *context.files.values(),
+        *context.claimed,
+        *context.entries,
+        *context.documents.values(),
+        *context.versions.values(),
+    ]
+    assert all(inspect(row).transient and inspect(row).session is None for row in snapshots)
+    assert isinstance(context.files[100].create_time, datetime)
+    assert isinstance(context.claimed[0].projection_lease_until, datetime)
+    assert context.files[100].parse_type == "etl4lm"
+    assert next(row for row in context.entries if row.id == 100).user_metadata == {"nested": {"value": "original"}}
+    async with factory() as repository:
+        persisted = await repository.find_by_id(100)
+        assert persisted.parse_type == "local"
+        assert persisted.user_metadata == {"nested": {"value": "original"}}
+        result = await repository.settle(context.claimed, "owner", {}, 4)
+        assert result == {101: "ready", 102: "ready"}

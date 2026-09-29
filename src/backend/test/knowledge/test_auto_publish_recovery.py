@@ -111,6 +111,8 @@ async def test_interrupted_publish_resumes_original_context_without_reactivating
         for entry in entries:
             assert entry.entry_status == "active"
             entry.projection_status = "ready"
+            entry.applied_content_generation = entry.desired_content_generation
+            entry.applied_entry_generation = entry.desired_entry_generation
         job.next_retry_at = None
         await session.commit()
     assert await service.process(job_id, 7) == "done"

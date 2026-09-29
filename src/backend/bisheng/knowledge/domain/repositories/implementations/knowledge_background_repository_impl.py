@@ -39,6 +39,7 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
 
     def due(self, limit: int = 100) -> list[tuple[str, int]]:
         now = datetime.now()
+        self.recover_auto_publish_completions(limit, now)
         self.session.execute(
             update(Job)
             .where(Job.status == "processing", Job.lease_until <= now)
@@ -61,6 +62,86 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
             .limit(limit)
         ).all()
         return [(str(row[0]), int(row[1])) for row in rows]
+
+    @staticmethod
+    def projections_ready(
+        entries: list[KnowledgeFile],
+        ids: list[int],
+        tenant_id: int,
+        document_id: int | None = None,
+    ) -> bool:
+        if len(set(ids)) != 2 or {row.id for row in entries} != set(ids):
+            return False
+        documents = {row.reference_document_id for row in entries}
+        if None in documents or len(documents) != 1 or (document_id is not None and documents != {document_id}):
+            return False
+        return all(
+            row.tenant_id == tenant_id
+            and row.deleted_at is None
+            and row.entry_status == "active"
+            and row.projection_status == "ready"
+            and row.applied_content_generation == row.desired_content_generation
+            and row.applied_entry_generation == row.desired_entry_generation
+            for row in entries
+        )
+
+    def recover_auto_publish_completions(self, limit: int, now: datetime) -> None:
+        # 只回读因投影停止的任务；每批有界且每条最多每小时核验一次，不重新发布或重置预算。
+        jobs = self.session.exec(
+            select(Job)
+            .where(
+                Job.kind == "auto_publish",
+                Job.status == "dead",
+                or_(Job.next_retry_at.is_(None), Job.next_retry_at <= now),
+                or_(
+                    Job.last_error.startswith("published_projection_", autoescape=True),
+                    Job.last_error == "RuntimeError:published_projection_failed",
+                    Job.last_error == "RuntimeError:published_projection_missing",
+                    Job.last_error == "RuntimeError:projection_wait_expired",
+                ),
+            )
+            .order_by(Job.next_retry_at, Job.update_time, Job.id)
+            .limit(limit)
+            .with_for_update()
+        ).all()
+        ids_by_job = {}
+        for job in jobs:
+            ids = job.payload.get("projection_ids", [])
+            ids_by_job[job.id] = (
+                ids if isinstance(ids, list) and len(ids) == 2 and all(type(i) is int for i in ids) else []
+            )
+        ids = sorted({i for values in ids_by_job.values() for i in values})
+        files = {}
+        for start in range(0, len(ids), 200):
+            # 与结案处于同一事务，避免回读后投影状态被并发更新。
+            rows = self.session.exec(
+                select(KnowledgeFile)
+                .where(KnowledgeFile.id.in_(ids[start : start + 200]))
+                .order_by(KnowledgeFile.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            ).all()
+            files.update({row.id: row for row in rows})
+        for job in jobs:
+            ids = ids_by_job[job.id]
+            entries = [files[i] for i in ids if i in files]
+            document_id = job.payload.get("projection_document_id") or job.payload.get("publish_context", {}).get(
+                "document_id"
+            )
+            if self.projections_ready(entries, ids, job.tenant_id, document_id):
+                job.payload = {
+                    **job.payload,
+                    "projection_recovery": {
+                        "previous_error": job.last_error,
+                        "verified_at": now.isoformat(),
+                    },
+                }
+                job.status, job.last_error, job.next_retry_at = "done", None, None
+                job.lease_owner, job.lease_until = None, None
+            else:
+                job.next_retry_at = now + timedelta(hours=1)
+            job.update_time = now
+            self.session.add(job)
 
     def claim(self, job_id: str, owner: str, now: datetime) -> Job | None:
         from bisheng.core.context.tenant import get_current_tenant_id

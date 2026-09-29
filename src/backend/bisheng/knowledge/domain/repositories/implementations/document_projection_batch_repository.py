@@ -1,6 +1,8 @@
 """批量领取、读取和条件写回; 复用现有持久化租约和重试次数。"""
 
+from copy import deepcopy
 from datetime import datetime, timedelta
+from typing import TypeVar
 
 from sqlalchemy import case, or_, update
 from sqlmodel import select
@@ -19,6 +21,13 @@ from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import 
     KnowledgeFulltextFileRef,
     request_file_sync_intents,
 )
+
+SnapshotModel = TypeVar("SnapshotModel", KnowledgeFile, KnowledgeDocument, KnowledgeDocumentVersion)
+
+
+def _snapshot(row: SnapshotModel) -> SnapshotModel:
+    # 只复制字段，避免 model_copy 携带失效的 ORM 状态；显式保留 datetime 等 Python 类型。
+    return type(row)(**deepcopy(row.model_dump(mode="python")))
 
 
 class DocumentProjectionBatchRepository(KnowledgeFileRepositoryImpl, BatchRepositoryContract):
@@ -125,11 +134,11 @@ class DocumentProjectionBatchRepository(KnowledgeFileRepositoryImpl, BatchReposi
         )
         files = await self.find_by_ids([row.knowledge_file_id for row in versions])
         context = ProjectionBatchContext(
-            claimed=[row.model_copy(deep=True) for row in claimed],
-            entries=[row.model_copy(deep=True) for row in entries],
-            documents={row.id: row.model_copy(deep=True) for row in documents},
-            versions={row.id: row.model_copy(deep=True) for row in versions},
-            files={row.id: row.model_copy(deep=True) for row in files},
+            claimed=[_snapshot(row) for row in claimed],
+            entries=[_snapshot(row) for row in entries],
+            documents={row.id: _snapshot(row) for row in documents},
+            versions={row.id: _snapshot(row) for row in versions},
+            files={row.id: _snapshot(row) for row in files},
         )
         await self.session.commit()
         return context

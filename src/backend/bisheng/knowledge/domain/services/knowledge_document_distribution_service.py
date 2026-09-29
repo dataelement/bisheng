@@ -249,7 +249,7 @@ class KnowledgeDocumentDistributionService:
             trigger_type="document_distribution_updated",
         )
 
-    async def _lock_published_spaces(self, space_ids: set[int]) -> None:
+    async def _lock_published_spaces(self, space_ids: set[int], *, retiring_space_ids: set[int] | None = None) -> None:
         normalized = sorted({int(item) for item in space_ids})
         result = await self.session.execute(
             select(Knowledge)
@@ -259,7 +259,12 @@ class KnowledgeDocumentDistributionService:
             .execution_options(populate_existing=True)
         )
         spaces = list(result.scalars().all())
-        if len(spaces) != len(normalized) or any(item.state != KnowledgeState.PUBLISHED.value for item in spaces):
+        retiring_space_ids = retiring_space_ids or set()
+        if len(spaces) != len(normalized) or any(
+            item.state != KnowledgeState.PUBLISHED.value
+            and not (int(item.id) in retiring_space_ids and item.state == KnowledgeState.DELETING.value)
+            for item in spaces
+        ):
             raise KnowledgeDocumentDistributionError("source or target knowledge space is no longer published")
 
     async def _ensure_publish_target_content_not_duplicate(
@@ -2654,7 +2659,7 @@ class KnowledgeDocumentDistributionService:
         entries = await self.file_repository.find_distribution_entries_by_document_id(
             document_id,
         )
-        return "rollback" if self._active_publish_predecessor(document, entries) is not None else "final_delete"
+        return "rollback" if self._active_publish_predecessor(document, entries) is not None else "recycle"
 
     @staticmethod
     def _mark_entry_for_manager_delete(
@@ -2674,6 +2679,8 @@ class KnowledgeDocumentDistributionService:
         tenant_id: int,
         document_id: int,
         manager_file_id: int,
+        actor_id: int = 0,
+        actor_name: str = "system",
     ) -> DeleteManagerResult:
         manager_snapshot = await self.file_repository.find_by_id(manager_file_id)
         if manager_snapshot is None:
@@ -2691,7 +2698,8 @@ class KnowledgeDocumentDistributionService:
                     if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
                     and entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
                 },
-            }
+            },
+            retiring_space_ids={manager_space_id},
         )
 
         document = await self.document_repository.find_by_id_for_update(document_id)
@@ -2707,6 +2715,11 @@ class KnowledgeDocumentDistributionService:
             or int(document.knowledge_id) != manager_space_id
         ):
             raise KnowledgeDocumentDistributionError("delete target is not the canonical manager")
+        if document.lifecycle_status == KnowledgeDocumentLifecycleStatus.RECYCLED.value:
+            return DeleteManagerResult(
+                document_id=document_id, manager_file_id=manager_file_id,
+                action="recycle", idempotent=True,
+            )
         if (
             document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
             and manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
@@ -2752,37 +2765,19 @@ class KnowledgeDocumentDistributionService:
                     manager=manager,
                     predecessor_id=int(predecessor.id),
                 )
-        document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
-        for entry in entries:
-            if int(entry.id) == manager_file_id:
-                self._mark_entry_for_manager_delete(
-                    entry,
-                    KnowledgeFileEntryStatus.DELETING,
-                )
-            elif entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value and entry.entry_type in {
-                KnowledgeFileEntryType.PUBLISH.value,
-                KnowledgeFileEntryType.SHARE.value,
-            }:
-                self._mark_entry_for_manager_delete(
-                    entry,
-                    KnowledgeFileEntryStatus.INVALID,
-                )
-            elif entry.entry_status in {
-                KnowledgeFileEntryStatus.PREPARING.value,
-                KnowledgeFileEntryStatus.DELETING.value,
-            }:
-                self._mark_entry_for_manager_delete(
-                    entry,
-                    KnowledgeFileEntryStatus.DELETING,
-                )
-        self.session.add(document)
-        self.session.add_all(entries)
-        await self.session.flush()
+        from bisheng.knowledge.domain.services.knowledge_document_recycle_service import KnowledgeDocumentRecycleService
+
+        try:
+            await KnowledgeDocumentRecycleService(self.session).recycle(
+                document, manager, entries, actor_id=actor_id, actor_name=actor_name,
+            )
+        except ValueError as exc:
+            raise KnowledgeDocumentDistributionError(str(exc)) from exc
         await self._commit()
         return DeleteManagerResult(
             document_id=document_id,
             manager_file_id=manager_file_id,
-            action="final_delete",
+            action="recycle",
         )
 
     async def _rollback_manager(
@@ -2866,7 +2861,10 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError("rollback permission prewrite failed") from exc
 
         try:
-            await self._lock_published_spaces({int(manager.knowledge_id), int(predecessor.knowledge_id)})
+            await self._lock_published_spaces(
+                {int(manager.knowledge_id), int(predecessor.knowledge_id)},
+                retiring_space_ids={int(manager.knowledge_id)},
+            )
             document = await self.document_repository.find_by_id_for_update(int(document.id))
             entries = (
                 await self.file_repository.find_distribution_entries_by_document_id(

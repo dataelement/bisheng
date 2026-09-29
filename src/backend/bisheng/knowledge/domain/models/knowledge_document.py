@@ -28,6 +28,7 @@ def _default_document_tenant_id() -> int:
 
 class KnowledgeDocumentLifecycleStatus(str, Enum):
     ACTIVE = "active"
+    RECYCLED = "recycled"
     DELETING = "deleting"
     INVALID = "invalid"
 

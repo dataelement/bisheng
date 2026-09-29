@@ -394,7 +394,12 @@ async def _finalize_document_delete(entry: KnowledgeFile) -> None:
 
 async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
     if entry.entry_status == KnowledgeFileEntryStatus.INVALID.value:
-        await _delete_entry_permissions(int(entry.id))
+        # 回收入口保留权限供还原; 查询当前记录, 不能信任旧任务快照。
+        async with get_async_db_session() as session:
+            current = await KnowledgeFileRepositoryImpl(session).find_by_id_for_update(int(entry.id))
+            if current is None or current.deleted_at is not None or current.entry_status != KnowledgeFileEntryStatus.INVALID.value:
+                return
+            await _delete_entry_permissions(int(entry.id))
         return
     if entry.entry_type == KnowledgeFileEntryType.MANAGER.value:
         await _finalize_document_delete(entry)
@@ -951,6 +956,7 @@ async def _load_container_distribution_entries(
         .where(
             KnowledgeFile.tenant_id == tenant_id,
             KnowledgeFile.knowledge_id == space_id,
+            col(KnowledgeFile.deleted_at).is_(None),
             col(KnowledgeFile.reference_document_id).is_not(None),
             col(KnowledgeFile.entry_status).in_(
                 [
@@ -1203,7 +1209,7 @@ async def _process_knowledge_space_retirement_async(
     await KnowledgeSpaceContentStat.enqueue_space_delete_stat_async(space_id)
     await SpaceChannelMemberDao.clean_space_member(space_id)
     await ChannelKnowledgeSyncDao.adelete_by_space_id(str(space_id))
-    await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
+    await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, preserve_recycled=True)
     return "completed"
 
 

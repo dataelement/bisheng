@@ -15,6 +15,7 @@ from bisheng.common.errcode.filelib_sync import FilelibSyncError
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
+from bisheng.common.middleware.http_request_diagnostics import HttpRequestDiagnosticsMiddleware
 from bisheng.common.middleware.openfga_guard import OpenFgaGuardMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
@@ -38,7 +39,7 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
         data = {"exception": str(exc), **exc.kwargs} if exc.kwargs else {"exception": str(exc)}
         msg = {"status_code": exc.code, "status_message": exc.message, "data": data}
     else:
-        logger.exception("Unhandled exception")
+        logger.opt(exception=exc).error("Unhandled exception")
         msg = {"status_code": 500, "status_message": str(exc)}
         http_status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     logger.error(f"{req.method} {req.url} {exc!s}")
@@ -99,6 +100,8 @@ def create_app():
     def get_health():
         return {"status": "OK"}
 
+    # 放在 BaseHTTPMiddleware 内层，在取消信号被包装前记录原始请求状态。
+    app.add_middleware(HttpRequestDiagnosticsMiddleware)
     # Register first so CORS and request logging wrap short-circuited 429 responses.
     app.add_middleware(ApiRateLimitMiddleware)
     # Sits just outside rate limiting for the same reason: CORS and request

@@ -98,6 +98,7 @@ async def test_publish_wait_does_not_publish_again(async_db_engine, monkeypatch)
                     file_name="文件",
                     status=2,
                     entry_type="manager" if i == 1 else "publish",
+                    reference_document_id=91,
                     entry_status="active",
                     projection_status="pending",
                 )

@@ -187,6 +187,16 @@ class KnowledgeRecycleService:
     def __init__(self, login_user: UserPayload):
         self.login_user = login_user
 
+    @staticmethod
+    def _enqueue_document_projection(tenant_id: int, entry_ids: list[int]) -> None:
+        try:
+            from bisheng.worker.knowledge.document_projection import enqueue_document_projection_entries
+
+            enqueue_document_projection_entries(tenant_id=tenant_id, entry_ids=entry_ids)
+        except Exception:
+            # 状态已持久化, 即时投递失败由投影扫描补偿。
+            logger.exception("recycle projection dispatch failed tenant=%s entries=%s", tenant_id, entry_ids)
+
     def _require_admin(self) -> None:
         if not (self.login_user.is_admin() or getattr(self.login_user, "is_global_super", False)):
             raise KnowledgeRecycleForbiddenError()
@@ -612,6 +622,8 @@ class KnowledgeRecycleService:
 
     async def purge(self, req: RecyclePurgeRequest) -> dict[str, Any]:
         self._require_admin()
+        document_purged = 0
+        projection_jobs: list[tuple[int, list[int]]] = []
         async with get_async_db_session() as session:
             if req.all:
                 rows = (await session.execute(select(KnowledgeRecycleItem))).scalars().all()
@@ -631,6 +643,25 @@ class KnowledgeRecycleService:
             if not rows:
                 return {"purged": 0}
 
+            from bisheng.knowledge.domain.services.knowledge_document_recycle_service import (
+                KnowledgeDocumentRecycleService,
+            )
+
+            document_items = {int(row.document_id): row for row in rows if row.document_id is not None}
+            for document_id in sorted(document_items):
+                try:
+                    count, entry_ids = await KnowledgeDocumentRecycleService(session).purge(document_items[document_id])
+                except ValueError as exc:
+                    raise KnowledgeRecycleTaskError(msg=str(exc)) from exc
+                document_purged += count
+                projection_jobs.append((int(document_items[document_id].tenant_id), entry_ids))
+            rows = [row for row in rows if row.document_id is None]
+            if not rows:
+                await session.commit()
+                for tenant_id, entry_ids in projection_jobs:
+                    self._enqueue_document_projection(tenant_id, entry_ids)
+                return {"purged": document_purged}
+
             batch_ids = {r.recycle_batch_id for r in rows}
             all_items = (
                 (
@@ -644,7 +675,10 @@ class KnowledgeRecycleService:
             file_ids = [int(i.file_id) for i in all_items]
             knowledge_ids = {int(i.knowledge_id) for i in all_items}
             await _plan_canonical_purge(session, file_ids)
+            await session.commit()
 
+        for tenant_id, entry_ids in projection_jobs:
+            self._enqueue_document_projection(tenant_id, entry_ids)
         async with get_async_db_session() as session:
             version_ids, document_ids = await _plan_canonical_purge(
                 session,
@@ -685,7 +719,7 @@ class KnowledgeRecycleService:
             )
             await session.commit()
         await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
-        return {"purged": len(file_ids)}
+        return {"purged": document_purged + len(file_ids)}
 
     async def purge_expired(self) -> int:
         return await KnowledgeRecycleService.purge_expired_items()
@@ -801,7 +835,13 @@ class KnowledgeRecycleService:
                 conflicts = await self._find_file_conflicts(
                     target_kid, item.display_name, item.md5, exclude_id=int(item.file_id)
                 )
-                if conflicts and not req.overwrite_files:
+                if conflicts and item.document_id is not None:
+                    blockers.append(RecycleConflict(
+                        code="DOCUMENT_RESTORE_CONFLICT",
+                        message="目标库已有同名或同内容文件, 请先移走或回收重复文件再还原",
+                        conflicts=conflicts, item_ids=[int(item.id)],
+                    ))
+                elif conflicts and not req.overwrite_files:
                     need_overwrite = True
                     warnings.append(
                         RecycleConflict(
@@ -842,6 +882,8 @@ class KnowledgeRecycleService:
                 raise KnowledgeRecycleOriginalPathGoneError()
             if code == "BUSINESS_DOMAIN_MISSING":
                 raise KnowledgeRecycleBusinessDomainError(msg=preview.blockers[0].message)
+            if code == "DOCUMENT_RESTORE_CONFLICT":
+                raise KnowledgeRecycleTaskError(msg=preview.blockers[0].message)
             if code == "EMBEDDING_MISMATCH":
                 raise KnowledgeRecycleCrossSpaceError(msg=preview.blockers[0].message)
             raise KnowledgeRecycleTargetPathNotFoundError()
@@ -857,6 +899,30 @@ class KnowledgeRecycleService:
             assert target_kid is not None
             target_path = await self._target_file_level_path(target_kid, target_folder_id)
             cross = int(item.original_knowledge_id) != int(target_kid)
+
+            if item.document_id is not None:
+                from bisheng.knowledge.domain.services.knowledge_document_recycle_service import (
+                    KnowledgeDocumentRecycleService,
+                )
+
+                # 文档回收以独立批次还原, 分享保留各自位置, 物理版本随管理入口移动。
+                async with get_async_db_session() as session:
+                    try:
+                        records, projection_ids = await KnowledgeDocumentRecycleService(session).restore(
+                            item, target_knowledge_id=target_kid, target_path=target_path,
+                        )
+                    except ValueError as exc:
+                        raise KnowledgeRecycleTaskError(msg=str(exc)) from exc
+                    await request_file_sync_intents(
+                        session,
+                        [KnowledgeFulltextFileRef(file_id=int(record.id), knowledge_id=int(record.knowledge_id), tenant_id=int(record.tenant_id)) for record in records],
+                        trigger_type="recycle_restored",
+                    )
+                    await session.commit()
+                self._enqueue_document_projection(int(item.tenant_id), projection_ids)
+                restored_file_ids.extend(int(record.id) for record in records)
+                restored += 1
+                continue
 
             batch_file_ids = await self._batch_file_ids(item.recycle_batch_id, item.recycle_root_id)
 

@@ -75,6 +75,9 @@ def _service(
 
 
 async def _seed_manager(session: AsyncSession) -> None:
+    from test.knowledge.document_recycle_helpers import create_recycle_tables
+
+    await create_recycle_tables(session)
     session.add_all(
         [
             Knowledge(
@@ -371,7 +374,7 @@ async def test_delete_publish_entry_rewires_chain_and_manager_delete_skips_it(
 
 
 @pytest.mark.asyncio
-async def test_delete_all_publish_entries_then_manager_uses_final_delete(
+async def test_delete_all_publish_entries_then_manager_uses_recycle(
     async_db_session: AsyncSession,
 ):
     await _seed_manager(async_db_session)
@@ -406,10 +409,10 @@ async def test_delete_all_publish_entries_then_manager_uses_final_delete(
     repository = KnowledgeFileRepositoryImpl(async_db_session)
     manager = await repository.find_by_id(100)
     share = await repository.find_by_id(shared.share_entry_id)
-    assert result.action == "final_delete"
-    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
+    assert result.action == "recycle"
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.RECYCLED.value
     assert document.predecessor_logic_file_id is None
-    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.INVALID.value
     assert share.entry_status == KnowledgeFileEntryStatus.INVALID.value
 
 
@@ -589,7 +592,7 @@ async def test_delete_manager_resumes_preparing_rollback_state(
 
 
 @pytest.mark.asyncio
-async def test_final_delete_keeps_physical_cleanup_facts_until_worker_finishes(
+async def test_manager_without_predecessor_is_recoverable_and_idempotent(
     async_db_session: AsyncSession,
 ):
     await _seed_manager(async_db_session)
@@ -615,14 +618,32 @@ async def test_final_delete_keeps_physical_cleanup_facts_until_worker_finishes(
     versions = await KnowledgeDocumentVersionRepositoryImpl(
         async_db_session
     ).find_by_document_id(91)
-    assert first.action == "final_delete"
+    assert first.action == "recycle"
     assert second.idempotent is True
     assert document.lifecycle_status == (
-        KnowledgeDocumentLifecycleStatus.DELETING.value
+        "recycled"
     )
-    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.INVALID.value
+    assert manager.deleted_at is not None
     assert manager.object_name == "tenant/7/canonical.pdf"
     assert [version.knowledge_file_id for version in versions] == [100]
+
+
+@pytest.mark.asyncio
+async def test_retiring_manager_space_can_still_roll_back(async_db_session: AsyncSession):
+    await _seed_manager(async_db_session)
+    service = _service(async_db_session)
+    await service.publish_approved(_publish_command(
+        approval_instance_id=7001, source_space=10, target_space=20, target_path="/18",
+    ))
+    retiring = await async_db_session.get(Knowledge, 20)
+    retiring.state = KnowledgeState.DELETING.value
+    async_db_session.add(retiring)
+    await async_db_session.commit()
+    result = await service.delete_manager(tenant_id=7, document_id=91, manager_file_id=100)
+    assert result.action == "rollback"
+    manager = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    assert manager.knowledge_id == 10 and manager.entry_status == "active"
 
 
 @pytest.mark.asyncio
