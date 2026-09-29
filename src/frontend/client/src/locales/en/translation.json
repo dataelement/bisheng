@@ -2300,7 +2300,7 @@
   },
   "com_ai_access": {
     "action_failed": "The operation failed. Please try again.",
-    "address_mismatch_admin": "The platform address written into skill packs ({{packOrigin}}) differs from the address you are using ({{browserOrigin}}). Employees who run the setup command copied here are not affected. To correct the address inside the pack as well, set open_api.public_base_url on the backend, or have the reverse proxy forward X-Forwarded-Proto and X-Forwarded-Host.",
+    "address_mismatch_admin": "Skill packs record the platform address as {{packOrigin}}, but you are visiting {{browserOrigin}}. Employees who set up with the steps in this window are not affected; anyone who installs the skill pack without running the setup command here may fail to reach the platform. To fix: ask whoever deploys the platform to add public_base_url: {{browserOrigin}} under open_api in the backend config file config.yaml, then restart the backend.",
     "admin_banner": "Administrator key: it reaches all knowledge visible to you on the platform. Configure it only on your own devices. Lifetime capped at {{days}} days.",
     "admin_confirm_body": "This key sees exactly what you see — all knowledge visible to you on the platform. A leak affects far more than your own material. To limit the risk its lifetime is capped at {{days}} days.",
     "admin_confirm_check": "I understand this key reaches everything I can see, and I will keep it safe",

@@ -1,11 +1,15 @@
 // @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import type { MsEdgeTTS } from 'msedge-tts';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { VoiceOption } from '~/common';
 import { useToastContext } from '~/Providers/ToastContext';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
+
+// msedge-tts drags in the Node crypto/stream polyfills (~600 KB). This hook sits behind the
+// `~/hooks` barrel that the first screen imports, so load the library only when it is used.
+const loadEdgeTTS = () => import('msedge-tts');
 
 interface UseTextToSpeechEdgeReturn {
   generateSpeechEdge: (text: string) => void;
@@ -33,12 +37,17 @@ function useTextToSpeechEdge({
     [],
   );
 
-  const fetchVoices = useCallback(() => {
+  const getTTS = useCallback(async () => {
+    const edgeTTS = await loadEdgeTTS();
     if (!ttsRef.current) {
-      ttsRef.current = new MsEdgeTTS();
+      ttsRef.current = new edgeTTS.MsEdgeTTS();
     }
-    ttsRef.current
-      .getVoices()
+    return { tts: ttsRef.current, OUTPUT_FORMAT: edgeTTS.OUTPUT_FORMAT };
+  }, []);
+
+  const fetchVoices = useCallback(() => {
+    getTTS()
+      .then(({ tts }) => tts.getVoices())
       .then((voicesList) => {
         setVoices(
           voicesList.map((v) => ({
@@ -54,17 +63,16 @@ function useTextToSpeechEdge({
           status: 'warning',
         });
       });
-  }, [showToast, localize]);
+  }, [getTTS, showToast, localize]);
 
   const initializeTTS = useCallback(() => {
-    if (!ttsRef.current) {
-      ttsRef.current = new MsEdgeTTS();
-    }
     const availableVoice: VoiceOption | undefined = voices.find((v) => v.value === voiceName);
 
     if (availableVoice) {
-      ttsRef.current
-        .setMetadata(availableVoice.value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3)
+      getTTS()
+        .then(({ tts, OUTPUT_FORMAT }) =>
+          tts.setMetadata(availableVoice.value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3),
+        )
         .catch((error) => {
           console.error('Error initializing TTS:', error);
           showToast({
@@ -73,8 +81,10 @@ function useTextToSpeechEdge({
           });
         });
     } else if (voices.length > 0) {
-      ttsRef.current
-        .setMetadata(voices[0].value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3)
+      getTTS()
+        .then(({ tts, OUTPUT_FORMAT }) =>
+          tts.setMetadata(voices[0].value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3),
+        )
         .catch((error) => {
           console.error('Error initializing TTS:', error);
           showToast({
@@ -83,7 +93,7 @@ function useTextToSpeechEdge({
           });
         });
     }
-  }, [voiceName, showToast, localize, voices]);
+  }, [getTTS, voiceName, showToast, localize, voices]);
 
   const appendNextBuffer = useCallback(() => {
     if (
