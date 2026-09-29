@@ -137,22 +137,26 @@ it.each(["en", "zh-Hans", "ja"])("bundles the key and the browser address into t
   expect(expected).toContain(`--configure --base-url ${window.location.origin} --api-key ${plaintext}`);
 });
 
-it("warns administrators when skill packs would carry a different address than the browser uses", async () => {
+it.each(["en", "zh-Hans", "ja"])("warns administrators when skill packs would carry a different address than the browser uses in %s", async (language) => {
+  await mockI18n.changeLanguage(language);
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ holder_is_admin: true }));
   jest.mocked(getPersonalTokenInstallPromptApi).mockResolvedValue({
     prompt: "", skill_pack_url: "http://backend:7860/api/v1/open-api/skill-packs/knowledge-search",
   });
   render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
-  expect(await screen.findByText(mockI18n.t("com_ai_access.address_mismatch_admin", {
+  const expected = mockI18n.t("com_ai_access.address_mismatch_admin", {
     packOrigin: "http://backend:7860", browserOrigin: window.location.origin,
-  }))).toBeInTheDocument();
+  });
+  expect(await screen.findByText(expected)).toBeInTheDocument();
+  // The fix must be copyable as-is: the exact config line carrying the browser address.
+  expect(expected).toContain(`public_base_url: ${window.location.origin}`);
 });
 
 it("shows no address warning to administrators when the origins match, and never checks for employees", async () => {
   jest.mocked(getPersonalTokenStatusApi).mockResolvedValue(statusOf({ holder_is_admin: true }));
   const { unmount } = render(<PersonalTokenDialog open onOpenChange={jest.fn()} />);
   await waitFor(() => expect(getPersonalTokenInstallPromptApi).toHaveBeenCalled());
-  expect(screen.queryByText(/X-Forwarded-Host/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/public_base_url/)).not.toBeInTheDocument();
   unmount();
 
   jest.mocked(getPersonalTokenInstallPromptApi).mockClear();

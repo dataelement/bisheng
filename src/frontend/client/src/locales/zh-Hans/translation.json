@@ -2303,7 +2303,7 @@
   },
   "com_ai_access": {
     "action_failed": "操作未完成，请重试。",
-    "address_mismatch_admin": "技能包里写入的平台地址（{{packOrigin}}）与你当前访问的地址（{{browserOrigin}}）不一致。员工运行这里复制的配置命令不受影响；如需包内地址也正确，请在后端配置 open_api.public_base_url，或让反向代理转发 X-Forwarded-Proto 和 X-Forwarded-Host。",
+    "address_mismatch_admin": "技能包里记录的平台地址是 {{packOrigin}}，和你现在访问的 {{browserOrigin}} 不一样。按这个窗口的步骤配置的员工不受影响；没有运行这里的配置命令、自行安装技能包的人可能连不上平台。修复方法：请负责部署的同事在后端配置文件 config.yaml 的 open_api 下加一行 public_base_url: {{browserOrigin}}，然后重启后端。",
     "admin_banner": "管理员密钥：能查到你在平台内可见的全部知识，请只配置在自己的设备上。有效期最长 {{days}} 天。",
     "admin_confirm_body": "这把密钥的可见范围与你本人一致——能查到平台内你可见的全部知识。一旦泄露，影响的不只是你自己的资料。为控制风险，它的有效期最长 {{days}} 天。",
     "admin_confirm_check": "我了解这把密钥能查到我可见的全部知识，并会妥善保管",
