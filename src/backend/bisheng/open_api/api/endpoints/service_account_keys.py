@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.open_api import ServiceAccountInactiveError
@@ -16,6 +16,7 @@ from bisheng.open_api.domain.schemas.credential import (
     KeyIssuedResponse,
     KeyIssueRequest,
     KeyItem,
+    KeyPage,
     KeyUpdateRequest,
     OpenApiScopeCatalog,
     OpenApiScopeEndpoint,
@@ -80,6 +81,21 @@ async def list_keys(
 ):
     await _account(service_account_id)
     return resp_200(data=await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, service_account_id))
+
+
+@router.get("/{service_account_id}/keys/page", response_model=UnifiedResponseModel[KeyPage])
+async def list_keys_page(
+    service_account_id: int,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    _admin: UserPayload = Depends(get_service_account_admin),
+):
+    await _account(service_account_id)
+    return resp_200(
+        data=await CredentialService.list_by_subject_page(
+            SUBJECT_KIND_SERVICE_ACCOUNT, service_account_id, page=page, page_size=page_size
+        )
+    )
 
 
 @router.post("/{service_account_id}/keys", response_model=UnifiedResponseModel[KeyIssuedResponse])

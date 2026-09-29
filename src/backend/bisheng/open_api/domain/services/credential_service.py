@@ -31,7 +31,13 @@ from bisheng.open_api.domain.models.api_credential import (
     ApiCredential,
 )
 from bisheng.open_api.domain.repositories.credential_repository import CredentialRepository
-from bisheng.open_api.domain.schemas.credential import KeyIssuedResponse, KeyIssueRequest, KeyItem, KeyUpdateRequest
+from bisheng.open_api.domain.schemas.credential import (
+    KeyIssuedResponse,
+    KeyIssueRequest,
+    KeyItem,
+    KeyPage,
+    KeyUpdateRequest,
+)
 from bisheng.open_api.domain.scopes import ISSUABLE_OPEN_API_SCOPE_CODES, OPEN_API_SCOPE_CODES
 from bisheng.open_api.domain.services.delegate_scope_service import DelegateScopeService
 
@@ -116,6 +122,18 @@ class CredentialService:
         return [await cls._to_item(row, now=moment) for row in rows]
 
     @classmethod
+    async def list_by_subject_page(cls, subject_kind: str, subject_id: int, *, page: int, page_size: int) -> KeyPage:
+        moment = datetime.now()
+        rows, total, active_count = await CredentialRepository.list_by_subject_page(
+            subject_kind, subject_id, page=page, page_size=page_size, now=moment
+        )
+        return KeyPage(
+            data=[await cls._to_item(row, now=moment) for row in rows],
+            total=total,
+            active_count=active_count,
+        )
+
+    @classmethod
     async def get_row(cls, subject_kind: str, subject_id: int, credential_id: int) -> ApiCredential:
         row = await CredentialRepository.get(credential_id)
         if row is None or row.subject_kind != subject_kind or row.subject_id != subject_id:
@@ -149,9 +167,7 @@ class CredentialService:
         if "delegate" not in (row.scopes or []):
             requested_entries = []
         else:
-            requested_entries = (
-                request.delegate_scopes if request.delegate_scopes is not None else current_entries
-            )
+            requested_entries = request.delegate_scopes if request.delegate_scopes is not None else current_entries
         delegate_entries = await cls._delegate_entries(
             tenant_id=row.tenant_id,
             subject_kind=row.subject_kind,
@@ -252,9 +268,7 @@ class CredentialService:
     @staticmethod
     async def _to_item(row: ApiCredential, *, now: datetime | None = None) -> KeyItem:
         item = KeyItem.from_row(row, now=now)
-        return item.model_copy(
-            update={"delegate_scopes": await DelegateScopeService.response_entries(row.id)}
-        )
+        return item.model_copy(update={"delegate_scopes": await DelegateScopeService.response_entries(row.id)})
 
     @staticmethod
     async def _delegate_entries(

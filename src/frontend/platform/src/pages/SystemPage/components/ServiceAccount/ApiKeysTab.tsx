@@ -19,7 +19,7 @@ import {
 } from "@/components/bs-ui/tooltip"
 import {
   listOpenApiScopesApi,
-  listServiceAccountKeysApi,
+  listServiceAccountKeysPageApi,
   revokeAllServiceAccountKeysApi,
   revokeServiceAccountKeyApi,
 } from "@/controllers/API/serviceAccount"
@@ -30,9 +30,10 @@ import type {
   OpenApiScopeItem,
 } from "@/types/api/openApi"
 import { formatIsoDateTime } from "@/util/utils"
-import { Loader2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
+import { useOpenApiList } from "../OpenApiList/useOpenApiList"
 import { KeyIssueDialog } from "./KeyIssueDialog"
 import { KeyRevealDialog } from "./KeyRevealDialog"
 
@@ -50,36 +51,29 @@ export function ApiKeysTab({
   onKeysChanged,
 }: ApiKeysTabProps) {
   const { t } = useTranslation()
-  const [keys, setKeys] = useState<ApiKeyItem[]>([])
   const [scopes, setScopes] = useState<OpenApiScopeItem[]>([])
   const [dialogOpen, setDialogOpen] = useState(initialIssueOpen)
   const [editingKey, setEditingKey] = useState<ApiKeyItem | null>(null)
   const [issuedKey, setIssuedKey] = useState<ApiKeyIssued | null>(null)
   const [loading, setLoading] = useState(false)
-  const [loadingData, setLoadingData] = useState(true)
   const [loadingScopes, setLoadingScopes] = useState(true)
 
-  const loadKeys = useCallback(async () => {
-    setLoadingData(true)
-    try {
-      const rows = await captureAndAlertRequestErrorHoc(
-        listServiceAccountKeysApi(serviceAccountId),
-      )
-      if (rows) setKeys(rows)
-    } finally {
-      setLoadingData(false)
-    }
-  }, [serviceAccountId])
+  const fetchPage = useCallback((page: number, pageSize: number) =>
+    listServiceAccountKeysPageApi(serviceAccountId, { page, page_size: pageSize }),
+  [serviceAccountId])
+  const list = useOpenApiList(fetchPage)
+  const keys = list.items
+  const loadKeys = list.reload
+  const loadingData = list.initialLoading
 
   useEffect(() => {
-    void loadKeys()
     setLoadingScopes(true)
     void captureAndAlertRequestErrorHoc(listOpenApiScopesApi())
       .then((catalog) => {
         if (catalog) setScopes(catalog.scopes)
       })
       .finally(() => setLoadingScopes(false))
-  }, [loadKeys])
+  }, [])
 
   const handleRevoke = (keyId: number) => {
     bsConfirm({
@@ -194,7 +188,7 @@ export function ApiKeysTab({
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"
-          disabled={loading || loadingData || !keys.some((key) => key.is_valid)}
+          disabled={loading || loadingData || !list.response?.active_count}
           onClick={handleRevokeAll}
         >
           {t("openApiManagement.actions.revokeAll")}
@@ -285,17 +279,7 @@ export function ApiKeysTab({
               </TableRow>
             )
           })}
-          {loadingData ? (
-            <TableRow>
-              <TableCell colSpan={8} className="py-8 text-center">
-                <Loader2
-                  aria-label={t("loading")}
-                  className="mx-auto size-5 animate-spin"
-                />
-              </TableCell>
-            </TableRow>
-          ) : null}
-          {!loadingData && !keys.length ? (
+          {list.isEmpty ? (
             <TableRow>
               <TableCell
                 colSpan={8}
@@ -307,6 +291,7 @@ export function ApiKeysTab({
           ) : null}
         </TableBody>
       </Table>
+      <OpenApiListFooter status={list.status} itemCount={keys.length} onLoadMore={list.loadMore} onRetry={list.retry} />
       <KeyIssueDialog
         serviceAccountId={serviceAccountId}
         scopes={scopes}

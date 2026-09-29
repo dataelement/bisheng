@@ -80,6 +80,38 @@ class CredentialRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
+    async def list_by_subject_page(
+        cls,
+        subject_kind: str,
+        subject_id: int,
+        *,
+        page: int,
+        page_size: int,
+        now: datetime,
+    ) -> tuple[list[ApiCredential], int, int]:
+        filters = (
+            ApiCredential.subject_kind == subject_kind,
+            ApiCredential.subject_id == subject_id,
+        )
+        statement = (
+            select(ApiCredential)
+            .where(*filters)
+            .order_by(col(ApiCredential.id).desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        count_statement = select(func.count()).select_from(ApiCredential).where(*filters)
+        active_statement = count_statement.where(
+            col(ApiCredential.revoked_at).is_(None),
+            col(ApiCredential.expires_at).is_(None) | (ApiCredential.expires_at > now),
+        )
+        async with get_async_db_session() as session:
+            rows = list((await session.exec(statement)).all())
+            total = int((await session.exec(count_statement)).one())
+            active_count = int((await session.exec(active_statement)).one())
+        return rows, total, active_count
+
+    @classmethod
     async def list_natural_person_page(
         cls,
         *,
@@ -143,12 +175,16 @@ class CredentialRepository:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 async with session.begin():
-                    statement = select(ApiCredential).where(
-                        ApiCredential.subject_kind == "natural_person",
-                        ApiCredential.subject_id == user_id,
-                        ApiCredential.tenant_id != tenant_id,
-                        col(ApiCredential.revoked_at).is_(None),
-                    ).with_for_update()
+                    statement = (
+                        select(ApiCredential)
+                        .where(
+                            ApiCredential.subject_kind == "natural_person",
+                            ApiCredential.subject_id == user_id,
+                            ApiCredential.tenant_id != tenant_id,
+                            col(ApiCredential.revoked_at).is_(None),
+                        )
+                        .with_for_update()
+                    )
                     rows = list((await session.exec(statement)).all())
                     migrated: list[tuple[ApiCredential, int]] = []
                     now = datetime.now()
@@ -185,9 +221,7 @@ class CredentialRepository:
             async with session.begin():
                 session.add(row)
                 await session.exec(
-                    delete(ApiCredentialDelegateScope).where(
-                        ApiCredentialDelegateScope.credential_id == row.id
-                    )
+                    delete(ApiCredentialDelegateScope).where(ApiCredentialDelegateScope.credential_id == row.id)
                 )
                 for subject_type, subject_id in entries:
                     session.add(
