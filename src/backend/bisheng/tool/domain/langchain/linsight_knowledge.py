@@ -128,7 +128,9 @@ class SearchKnowledgeBase(BaseTool):
                 # F069 P1: the model sees a short handle instead of the registry key.
                 # format_retrieved_chunk itself is shared platform-wide and untouched;
                 # an allocation failure (empty mapping) keeps the F047 shape.
-                formatted = [_swap_chunk_id_for_handle(chunk, handles) for chunk in formatted]
+                from bisheng.citation.domain.services.citation_handle_service import swap_chunk_id_for_handle
+
+                formatted = [swap_chunk_id_for_handle(chunk, handles) for chunk in formatted]
             return json.dumps({"状态": "成功", "结果": formatted}, ensure_ascii=False, indent=2)
         except Exception:
             logger.opt(exception=True).warning("search_knowledge_base citation annotate failed; returning bare chunks")
@@ -159,15 +161,3 @@ class SearchKnowledgeBase(BaseTool):
             knowledge_id=knowledge_id,
             knowledge_name=knowledge_info.name or "",
         )
-
-
-_CHUNK_ID_RE = re.compile(r"<chunk_id>(.*?)</chunk_id>", re.S)
-
-
-def _swap_chunk_id_for_handle(chunk: str, handles: dict[str, str]) -> str:
-    def _repl(match: re.Match[str]) -> str:
-        key = match.group(1).strip()
-        handle = handles.get(key)
-        return f"<ref>{handle}</ref>" if handle else match.group(0)
-
-    return _CHUNK_ID_RE.sub(_repl, chunk)

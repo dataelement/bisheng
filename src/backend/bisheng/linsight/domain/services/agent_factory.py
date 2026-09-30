@@ -860,35 +860,13 @@ async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: l
     Allocation failure (empty mapping) keeps the F047 shape untouched so the
     model still has a citable id.
     """
-    from bisheng.citation.domain.services.citation_handle_service import assign_handles, remember_web_surface_url
+    from bisheng.citation.domain.services.citation_handle_service import (
+        assign_handles,
+        rewrite_web_results_with_handles,
+    )
 
     handles = await assign_handles(scope, items)
-    if not handles or not isinstance(annotated, str):
-        return annotated
-    try:
-        results = json.loads(annotated)
-    except json.JSONDecodeError:
-        return annotated
-    if not isinstance(results, list):
-        return annotated
-    changed = False
-    for result in results:
-        if not isinstance(result, dict):
-            continue
-        handle = handles.get(str(result.get("citation_key") or ""))
-        if not handle:
-            continue
-        result["ref"] = handle
-
-        remember_web_surface_url(
-            getattr(scope, "entries", None),
-            str(result.get("citation_key") or ""),
-            str(result.get("url") or result.get("link") or ""),
-        )
-        result.pop("citation_key", None)
-        result.pop("itemId", None)
-        changed = True
-    return json.dumps(results, ensure_ascii=False) if changed else annotated
+    return rewrite_web_results_with_handles(annotated, handles, getattr(scope, "entries", None))
 
 
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
