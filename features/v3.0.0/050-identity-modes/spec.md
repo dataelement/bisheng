@@ -245,5 +245,5 @@
 - 依赖 spec: [features/v3.0.0/052-mcp-server-face/spec.md](../052-mcp-server-face/spec.md)（统一检索门面 AC-19 / AC-25 / AC-43；`delegate` 入口拒绝 AC-28）；[051-model-protocol-gateway/spec.md](../051-model-protocol-gateway/spec.md)（AC-21 subject 口径 / AC-26 入口拒绝）；[053-dev-cli-skills/spec.md](../053-dev-cli-skills/spec.md)（AC-09 `login` 拒 `delegate`）；[055-app-publish-pipeline/spec.md](../055-app-publish-pipeline/spec.md)（AC-55 运行期双归属）
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.1 / §2.2 / N3；[baseline-recheck.md](../000-prd1-discovery/baseline-recheck.md) §一–§三
 - MVP 纵切: [features/v3.0.0/mvp-114-path.md](../mvp-114-path.md)（本 Feature 不在纵切上）
-- PRD: `docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（伴生册，本 Feature 的需求真相：R2 / R3 / R7 / §4.9 / 附录 B.1 / C / E.2 / E.5 / F）；`docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0 DEV-01 / DEV-02 ④ / DEV-05 ① / GOV-04 / GOV-05（上册总纲：三面仅模式 S、信任机制分界）
+- PRD: `docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（伴生册，本 Feature 的需求真相：R2 / R3 / R7 / §4.9 / 附录 B.1 / C / E.2 / E.5 / F）；`docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0 DEV-01 / DEV-02 ④ / DEV-05 ① / GOV-04 / GOV-05（上册总纲：三面仅模式 S、信任机制分界）
 - 架构文档: `docs/architecture/`（权限 / 多租户）；`docs/constitution.md` C4（权限唯一入口）/ C5（错误码 260 登记）

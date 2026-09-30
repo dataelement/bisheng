@@ -5,7 +5,7 @@
 > spec 只回答 **做什么 / 验收标准 / 不做什么**。所有 How（决策、数据流、字段、API、Service、前端、文件清单、性能指标）一律不写在这里，
 > How 的唯一真相在 [design.md](./design.md) 与 [tasks.md](./tasks.md)。
 
-**关联 PRD**: [docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/customer-guides/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §2.2（主旅程）/ §3.1 引言（本域操作者是 agent）/ DEV-01（① 权限位与三面映射、④ 凭据落地、⑤ 接入信息区、⑥ 可选部署）/ DEV-02 ④（三面仅模式 S、CLI `login` 拒 `delegate`）/ DEV-03（两包技能包）/ DEV-04（CLI 五命令、deploy 管线四步、托管运行契约、日志三入口）/ DEV-05（`bisheng dev` 身份注入 + 本地 sqlite）/ DEV-07（不进 SDK 的两样与同名环境变量对齐）/ GOV-07 ②（CLI 通道准入闸 = `app:manage`）/ GOV-10（开放能力层开关）/ §5.1（不做 `--as`）；伴生 [docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md](../../../docs/customer-guides/3.0%20开放%20API%20鉴权与身份传递%20PRD.md) **v2.1** §4.2.4（三扩展位）/ 附录 B.2（本地开发三面：CLI 行的权限位与「仅 S」）；《3.0 应用工场 产品方案》§5.1 F106（部分）
+**关联 PRD**: [docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/PRD/3.0-release/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §2.2（主旅程）/ §3.1 引言（本域操作者是 agent）/ DEV-01（① 权限位与三面映射、④ 凭据落地、⑤ 接入信息区、⑥ 可选部署）/ DEV-02 ④（三面仅模式 S、CLI `login` 拒 `delegate`）/ DEV-03（两包技能包）/ DEV-04（CLI 五命令、deploy 管线四步、托管运行契约、日志三入口）/ DEV-05（`bisheng dev` 身份注入 + 本地 sqlite）/ DEV-07（不进 SDK 的两样与同名环境变量对齐）/ GOV-07 ②（CLI 通道准入闸 = `app:manage`）/ GOV-10（开放能力层开关）/ §5.1（不做 `--as`）；伴生 [docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md](../../../docs/customer-guides/3.0%20开放%20API%20鉴权与身份传递%20PRD.md) **v2.1** §4.2.4（三扩展位）/ 附录 B.2（本地开发三面：CLI 行的权限位与「仅 S」）；《3.0 应用工场 产品方案》§5.1 F106（部分）
 **同步记录**: 2026-08-17 初稿（按 PRD-1 v2.0 + 伴生 PRD v2.1 + release-contract 拆分 v2 表 3 F053 行；§4 决议 1–11 于同日按用户授权的全自动模式直接定案并留痕）；同日按独立审查（spec-checklist）13 项裁定就地修订：`bisheng-app.yaml` 对外形态 owner 改 F055（表 1 AppManifest）、AC-31 拆 a/b/c、AC-39 删除（墓碑保号）、AC-48 收为引用、追加 AC-51–53、决议-5 / 决议-9 改写、新增决议-12；编号说明见文末附表
 **优先级**: P0
 **所属版本**: v3.0.0
@@ -221,7 +221,7 @@
 - MVP 纵切: [features/v3.0.0/mvp-114-path.md](../mvp-114-path.md) §2 F053 行
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.9（全仓无 CLI / 无可发布包工程 / 无安装件分发端点）/ §4.2 次级决策
 - 同版 spec: [../049-openapi-auth-baseline/spec.md](../049-openapi-auth-baseline/spec.md)（AC-13 三扩展位 / AC-49 开放能力层开关 / AC-44 「API 密钥」tab）；[../054-app-domain-runtime/spec.md](../054-app-domain-runtime/spec.md)（AC-07 归属 / AC-23 日志接口 / AC-25 入口地址 / AC-31–32 注入与剥离 / AC-44 同名连接环境变量）；[../055-app-publish-pipeline/spec.md](../055-app-publish-pipeline/spec.md)（范围边界 RT-04 段 `bisheng-app.yaml` 对外形态 / AC-04 `deploy` · `logs` 服务端权限判定与拒 `delegate` / AC-07 托管预检 / AC-09 结构变更确认）
-- PRD: `docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（DEV-01 / DEV-02 ④ / DEV-03 / DEV-04 / DEV-05 / DEV-07 / GOV-07 / GOV-10）；`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（§4.2.4 / 附录 B.2）；`docs/customer-guides/3.0 应用工场 产品方案.md` §5.1 F106
+- PRD: `docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（DEV-01 / DEV-02 ④ / DEV-03 / DEV-04 / DEV-05 / DEV-07 / GOV-07 / GOV-10）；`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（§4.2.4 / 附录 B.2）；`docs/PRD/3.0-release/3.0 应用工场 产品方案.md` §5.1 F106
 
 ---
 

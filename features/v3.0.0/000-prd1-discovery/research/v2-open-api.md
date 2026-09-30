@@ -27,7 +27,7 @@ v2 开放 API（/api/v2/**，实现在 src/backend/bisheng/open_endpoints/，8 �
 - src/backend/bisheng/common/utils/util.py — :28-55 generate_short_high_entropy_string——全仓唯一合格随机源，密钥生成复用
 - src/backend/bisheng/share_link/domain/services/share_link_service.py — :32-60 bypass_tenant_filter 下按 token 查行的同构先例（注释语义＝token 本身就是授权）；同时是明文存储/过期不校验的反面教材
 - src/backend/bisheng/user/domain/models/user.py — :71 class User——无 user_type 字段，服务账号主体需 Alembic 变更；_filter_users_statement 为 /user/list 分叉的下沉点（PRD 引用，函数存在性已核）
-- docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md — :747-787 GOV-08 三类 key 总纲：应用 token=bs-sak- 服务账号密钥、存量迁移用 SAK 非个人 key、兼容窗口为部署配置项、掩码=前缀+末四位
+- docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md — :747-787 GOV-08 三类 key 总纲：应用 token=bs-sak- 服务账号密钥、存量迁移用 SAK 非个人 key、兼容窗口为部署配置项、掩码=前缀+末四位
 
 ## reuse
 - 密钥生成随机源：common/utils/util.py:28-55 generate_short_high_entropy_string（os.urandom+HMAC-SHA256+urlsafe base64），PRD 点名全仓唯一合格随机源，直接复用
