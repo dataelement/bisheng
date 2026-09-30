@@ -9,6 +9,9 @@
 
 ## 实际偏差记录
 
+- [x] T6 支持未解析成功文件及未建立版本链的原始文件迁移，保留解析状态和已有内容，验证空/部分索引、并发拒绝与恢复。
+  _Requirements: REQ-6_ _Acceptance: AC-6_ _Verification: 2026-09-30 定向及脚本回归_ _Depends: T5_ _Boundary: 不重解析、不补建分块、不运行真实迁移_
+
 - [x] T5 增加显式权限所有者回退选项，保持上传人/库所有者不变，验证默认拒绝、有效所有者不替换、失效账号回退和中断恢复。
   _Requirements: REQ-5_ _Acceptance: AC-5_ _Verification: 所有者失效集成回归_ _Depends: T4_ _Boundary: 不运行真实迁移或修改库所有者_
 

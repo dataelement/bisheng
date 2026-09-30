@@ -89,7 +89,7 @@ def test_missing_original_uploader_falls_back_to_current(snapshot):
         ("archived", "unavailable_department"),
         ("no_clinic", "missing_clinic"),
         ("ordinary_team", "missing_clinic"),
-        ("not_parsed", "not_parsed"),
+        ("not_parsed", "parsing_busy"),
         ("share", "not_manager"),
         ("missing_version", "invalid_version_chain"),
     ],
@@ -123,6 +123,25 @@ def test_each_ineligible_file_has_reason(snapshot, case, code):
     plan = m.build_plan(snapshot, 1, ())
     assert plan["candidate_files"] == 0
     assert plan["skipped"][0]["reason_code"] == code
+
+
+@pytest.mark.parametrize("status", [None, 3, 5, 6, 7])
+def test_non_success_files_are_candidates(snapshot, status):
+    snapshot["files"][-1].status = status
+    plan = m.build_plan(snapshot, 1, ("A", "B"))
+    assert plan["candidate_files"] == 1
+    assert plan["skipped"] == []
+
+
+def test_unversioned_failed_file_gets_its_own_unit(snapshot):
+    row = snapshot["files"][-1]
+    row.status, row.entry_type = 3, None
+    snapshot["versions"] = []
+    plan = m.build_plan(snapshot, 1, ("A", "B"))
+    assert plan["candidate_files"] == 1
+    unit = m.document_units(snapshot, plan["groups"][0], plan)[0]
+    assert unit["unversioned"] is True
+    assert [f["file_id"] for f in unit["files"]] == [101]
 
 
 def test_nearest_office_without_binding_does_not_use_higher_office_or_secondary(snapshot):

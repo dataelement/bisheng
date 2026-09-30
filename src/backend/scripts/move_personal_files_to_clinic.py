@@ -9,7 +9,8 @@
 省略 --folder-path 扫描个人库全部文件。完整路径匹配、包含子目录，保留原完整路径。
 原始上传人缺失时回退当前上传人；只从主组织沿父级寻找 org_level=office。
 默认只读预览；--apply 创建缺失目录、移动归属并同步权限和共享索引，不重新解析。
-只支持已就绪共享存储；正式执行必须处于停止相关写入的维护窗口。
+支持解析失败、等待、超时等静止文件，保留解析状态，不补建缺失分块。
+只支持共享存储；正式执行必须处于停止相关写入的维护窗口。
 失败逐项记录，--recover-report 修复中断项，不撤销成功迁移。
 目标库所有者失效时，可显式加 --use-operator-as-file-owner，使用操作人作为文件权限所有者。
 """
@@ -128,6 +129,14 @@ class SkipFile(ValueError):
     def __init__(self, code: str, reason: str):
         super().__init__(reason)
         self.code = code
+
+
+def validate_parse_state(row: Any) -> None:
+    if row.status in {1, 4}:
+        label = "正在解析" if row.status == 1 else "正在重建"
+        raise SkipFile("parsing_busy", f"文件{label}（status={row.status}），待任务结束后再迁移")
+    if row.status not in {None, 2, 3, 5, 6, 7}:
+        raise SkipFile("unknown_parse_status", f"未知解析状态（status={row.status}）")
 
 
 def parse_folder_path(value: str | None) -> tuple[str, ...]:
@@ -277,12 +286,20 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
                 row.entry_type == "manager" and row.entry_status != "active"
             ):
                 raise SkipFile("not_manager", "非有效原文件入口")
-            if row.status != 2:
-                raise SkipFile("not_parsed", "文件尚未解析成功")
+            validate_parse_state(row)
             entry.update(routing.resolve(row))
-            if len(documents[row.id]) != 1:
+            unversioned = (
+                not documents[row.id]
+                and row.status != 2
+                and not getattr(row, "reference_document_id", None)
+                and row.entry_type in {None, ""}
+            )
+            if len(documents[row.id]) != 1 and not unversioned:
                 raise SkipFile("invalid_version_chain", "缺少唯一规范文档版本链")
-            entry["document_id"] = next(iter(documents[row.id]))
+            # 负值仅作报告内的单元键，不创建虚构的数据库文档。
+            entry["document_id"] = -int(row.id) if unversioned else next(iter(documents[row.id]))
+            if unversioned:
+                entry["unversioned"] = True
             parent_path, missing = "", False
             for name in parts:
                 matches = by_location.get((entry["target_space_id"], parent_path, name), []) if not missing else []
@@ -403,15 +420,16 @@ def validate_document(
     ):
         raise SkipFile("invalid_primary_version", "规范文档主版本或管理入口异常")
     for entry in entries:
+        incomplete = managers[0].status != 2 and entry.status != 2
         if (
             entry.entry_status != "active"
             or entry.deleted_at is not None
-            or entry.projection_status != "ready"
+            or entry.projection_status not in ({None, "pending", "failed", "ready"} if incomplete else {"ready"})
             or entry.projection_lease_owner
             or entry.projection_lease_until
             or entry.desired_content_generation != document.content_generation
-            or entry.applied_content_generation != document.content_generation
-            or entry.applied_entry_generation != entry.desired_entry_generation
+            or (not incomplete and entry.applied_content_generation != document.content_generation)
+            or (not incomplete and entry.applied_entry_generation != entry.desired_entry_generation)
         ):
             raise SkipFile("projection_not_ready", "存在未完成或不一致的共享投影")
     expected = {f["file_id"]: f for f in unit["files"]}
@@ -435,8 +453,12 @@ def validate_document(
         or document.level != managers[0].level
     ):
         raise SkipFile("document_location_mismatch", "文档和管理入口归属不一致")
-    if any(f.deleted_at is not None or f.file_type != 1 or f.status != 2 for f in files):
-        raise SkipFile("file_not_ready", "版本文件已删除、类型异常或未解析成功")
+    if any(f.deleted_at is not None or f.file_type != 1 for f in files):
+        raise SkipFile("file_not_ready", "版本文件已删除或类型异常")
+    for file in [*files, *entries]:
+        validate_parse_state(file)
+        if file.projection_lease_owner or file.projection_lease_until or file.projection_status == "processing":
+            raise SkipFile("projection_busy", "版本文件存在执行中的投影任务")
     before = {f["id"]: f for f in unit["before"]["files"]} if unit.get("before") else {}
     for file in files:
         old = before.get(file.id, expected[file.id])
@@ -452,12 +474,18 @@ def validate_document(
 
 
 def validate_chunks(
-    observed: dict[str, list[dict[str, Any]]], unit: dict[str, Any], document: Any, primary: Any, model_id: str
+    observed: dict[str, list[dict[str, Any]]],
+    unit: dict[str, Any],
+    document: Any,
+    primary: Any,
+    model_id: str,
+    *,
+    allow_incomplete: bool = False,
 ) -> dict[str, str]:
     fingerprints = {}
     texts = {}
     for side, rows in observed.items():
-        if not rows:
+        if not rows and not allow_incomplete:
             raise ValueError(f"{side} 缺少已有内容；停止迁移，不重新解析")
         chunks = {}
         for row in rows:
@@ -483,9 +511,62 @@ def validate_chunks(
             chunks[chunk_index] = payload
         texts[side] = {key: value["text"] for key, value in chunks.items()}
         fingerprints[side] = hashlib.sha256(json.dumps(chunks, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-    if texts["es"] != texts["milvus"]:
+    if not allow_incomplete and texts["es"] != texts["milvus"]:
         raise ValueError("ES 与 Milvus 分块不完整或内容不一致")
+    if any(texts["es"][i] != texts["milvus"][i] for i in texts["es"].keys() & texts["milvus"].keys()):
+        raise ValueError("ES 与 Milvus 已有分块内容不一致")
     return fingerprints
+
+
+def validate_unversioned(unit: dict[str, Any], files: list[Any], folder: Any, spaces: list[Any]) -> None:
+    if len(files) != 1 or len(unit["files"]) != 1:
+        raise SkipFile("source_changed", "原始文件不存在或迁移单元异常")
+    file, expected = files[0], unit["files"][0]
+    if any(int(row.tenant_id or 1) != unit["tenant_id"] for row in [*files, *spaces, *([folder] if folder else [])]):
+        raise SkipFile("tenant_mismatch", "文件、目录或知识库不属于指定租户")
+    validate_parse_state(file)
+    if (
+        file.status == 2
+        or file.deleted_at is not None
+        or file.file_type != 1
+        or file.reference_document_id
+        or file.entry_type
+        or file.entry_status
+    ):
+        raise SkipFile("source_changed", "原始文件已解析成功、删除或已建立文档入口，请重新预览")
+    if file.projection_lease_owner or file.projection_lease_until or file.projection_status == "processing":
+        raise SkipFile("projection_busy", "原始文件存在执行中的投影任务")
+    if unit["folder_parts"]:
+        if (
+            folder is None
+            or folder.deleted_at is not None
+            or folder.file_type != 0
+            or folder.knowledge_id != unit["target_space_id"]
+            or folder.level != len(unit["folder_parts"]) - 1
+        ):
+            raise SkipFile("target_folder_changed", "目标目录已变化")
+    elif folder is not None:
+        raise SkipFile("target_folder_changed", "预期目标为根目录")
+    source = (
+        file.knowledge_id == expected["space_id"]
+        and (file.file_level_path or "") == expected["source_path"]
+        and file.level == expected["source_level"]
+    )
+    target = (
+        file.knowledge_id == unit["target_space_id"]
+        and (file.file_level_path or "") == target_path(folder)
+        and file.level == len(unit["folder_parts"])
+    )
+    if not source and not (unit.get("before") and target):
+        raise SkipFile("source_changed", "原始文件归属或目录已变化")
+    old = unit["before"]["files"][0] if unit.get("before") else expected
+    uploader = (old["original_uploader_id"] or old["user_id"]) if target else old["original_uploader_id"]
+    if file.user_id != old["user_id"] or file.original_uploader_id != uploader:
+        raise SkipFile("uploader_changed", "上传人已变化")
+    if unit.get("before"):
+        origin = (old["original_knowledge_id"] or old["knowledge_id"]) if target else old["original_knowledge_id"]
+        if file.original_knowledge_id != origin:
+            raise SkipFile("original_space_changed", "原始知识库已变化，拒绝恢复")
 
 
 class Backend:
@@ -750,19 +831,32 @@ class Backend:
             if len(scopes) != 1 or scopes[0].level not in {"team", "team_ks"} or scopes[0].owner_type != "user":
                 raise ValueError("目标科室库范围已变化")
             owner = await self.resolve_file_owner(session, target, unit)
-            documents = await rows(KnowledgeDocument, KnowledgeDocument.id == unit["document_id"])
-            if len(documents) != 1:
-                raise ValueError("文档不存在")
-            document = documents[0]
-            versions = await rows(KnowledgeDocumentVersion, KnowledgeDocumentVersion.document_id == document.id)
-            ids = sorted(int(v.knowledge_file_id) for v in versions)
-            if ids != sorted(f["file_id"] for f in unit["files"]):
-                raise ValueError("版本链发生变化或不完整")
+            document = None
+            if unit.get("unversioned"):
+                ids = [f["file_id"] for f in unit["files"]]
+                versions = await rows(
+                    KnowledgeDocumentVersion, col(KnowledgeDocumentVersion.knowledge_file_id).in_(ids)
+                )
+                if versions:
+                    raise ValueError("原始文件已生成版本链，请重新预览")
+                entries = []
+            else:
+                documents = await rows(KnowledgeDocument, KnowledgeDocument.id == unit["document_id"])
+                if len(documents) != 1:
+                    raise ValueError("文档不存在")
+                document = documents[0]
+                versions = await rows(KnowledgeDocumentVersion, KnowledgeDocumentVersion.document_id == document.id)
+                ids = sorted(int(v.knowledge_file_id) for v in versions)
+                if ids != sorted(f["file_id"] for f in unit["files"]):
+                    raise ValueError("版本链发生变化或不完整")
+                entries = await rows(KnowledgeFile, KnowledgeFile.reference_document_id == document.id)
             files = await rows(KnowledgeFile, col(KnowledgeFile.id).in_(ids))
-            entries = await rows(KnowledgeFile, KnowledgeFile.reference_document_id == document.id)
             folders = await rows(KnowledgeFile, KnowledgeFile.id == unit["folder_id"]) if unit["folder_id"] else []
             folder = folders[0] if len(folders) == 1 else None
-            validate_document(unit, document, versions, files, entries, folder, spaces)
+            if unit.get("unversioned"):
+                validate_unversioned(unit, files, folder, spaces)
+            else:
+                validate_document(unit, document, versions, files, entries, folder, spaces)
             await self.validate_route(session, unit, files, folder)
             from bisheng.approval.domain.models.approval_instance import ApprovalInstance
 
@@ -773,7 +867,7 @@ class Backend:
                     )
                 )
             ).all()
-            protected = set(ids) | {document.id}
+            protected = set(ids) | ({document.id} if document else set())
             if any(
                 str(a.business_resource_id or "").split(":", 1)[0] in {str(i) for i in protected}
                 and ("file" in a.business_resource_type or "file" in a.scenario_code)
@@ -856,9 +950,84 @@ class Backend:
         if sorted(await self.read_permissions(file_id), key=str) != sorted(desired, key=str):
             raise RuntimeError(f"文件 {file_id} 权限写入未确认")
 
+    async def move_unversioned(self, unit: dict[str, Any], checkpoint: Any, *, recover: bool = False) -> None:
+        from sqlmodel import or_, select
+
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+        async with self.locked_document(unit) as (session, _, _, files, _, folder, target, owner):
+            file = files[0]
+            fid = str(file.id)
+            in_target = file.knowledge_id == target.id
+            identity = identity_fingerprint(file, [], files, [])
+            if recover:
+                if identity != unit["before"]["identity"] or int(owner.user_id) != unit["target_owner_id"]:
+                    raise ValueError("原始文件内容、状态或权限所有者已变化，拒绝恢复")
+                allowed = unit["before"]["permissions"][fid] + unit["desired_permissions"][fid]
+                if any(row not in allowed for row in await self.read_permissions(file.id)):
+                    raise ValueError("文件权限存在本次迁移之外的修改，拒绝覆盖")
+            else:
+                if unit.get("before") or in_target:
+                    raise ValueError("文件已迁入或存在未完成记录，请核对报告")
+                conflicts = (
+                    await session.exec(
+                        select(KnowledgeFile).where(
+                            KnowledgeFile.knowledge_id == target.id,
+                            KnowledgeFile.file_level_path == target_path(folder)
+                            if folder
+                            else or_(KnowledgeFile.file_level_path == "", KnowledgeFile.file_level_path.is_(None)),
+                            KnowledgeFile.deleted_at.is_(None),
+                            KnowledgeFile.id != file.id,
+                            or_(
+                                KnowledgeFile.file_name == file.file_name,
+                                KnowledgeFile.md5 == file.md5 if file.md5 else False,
+                            ),
+                        )
+                    )
+                ).all()
+                if conflicts:
+                    raise SkipFile("target_file_conflict", "目标目录存在同名或相同内容文件")
+                unit["target_owner_id"] = int(owner.user_id)
+                unit["before"] = {
+                    "identity": identity,
+                    "files": [file.model_dump(mode="json")],
+                    "permissions": {fid: await self.read_permissions(file.id)},
+                }
+                unit["desired_permissions"] = {
+                    fid: [
+                        {"user": f"user:{owner.user_id}", "relation": "owner", "object": f"knowledge_file:{file.id}"},
+                        {
+                            "user": f"folder:{folder.id}" if folder else f"knowledge_space:{target.id}",
+                            "relation": "parent",
+                            "object": f"knowledge_file:{file.id}",
+                        },
+                    ]
+                }
+                unit["status"] = "prepared"
+                checkpoint()
+                file.original_knowledge_id = file.original_knowledge_id or file.knowledge_id
+                file.original_uploader_id = file.original_uploader_id or file.user_id
+                file.knowledge_id = target.id
+                file.file_level_path, file.level = target_path(folder), len(unit["folder_parts"])
+                session.add(file)
+                in_target = True
+            desired = unit["desired_permissions"] if in_target else unit["before"]["permissions"]
+            unit.update(status="syncing", destination="target" if in_target else "source")
+            checkpoint()
+            await self.replace_permissions(file.id, desired[fid])
+            unit["status"] = "committing"
+            checkpoint()
+            await session.commit()
+        await self.refresh_metadata(unit)
+        unit["status"] = "succeeded" if in_target else "restored"
+        checkpoint()
+
     async def move_unit(
         self, unit: dict[str, Any], checkpoint: Any, *, recover: bool = False, force_rewrite: bool = False
     ) -> None:
+        if unit.get("unversioned"):
+            await self.move_unversioned(unit, checkpoint, recover=recover)
+            return
         from sqlmodel import col, or_, select
 
         from bisheng.knowledge.domain.contracts.shared_storage_reconcile import DocumentSnapshot, MetadataRepair
@@ -919,7 +1088,10 @@ class Backend:
             observed = {
                 side: (await self.store.read(side, [document.id])).get(document.id, []) for side in ("es", "milvus")
             }
-            fingerprints = validate_chunks(observed, unit, document, primary, self.store.embedding_model_id)
+            allow_incomplete = manager.status != 2
+            fingerprints = validate_chunks(
+                observed, unit, document, primary, self.store.embedding_model_id, allow_incomplete=allow_incomplete
+            )
             if recover and fingerprints != unit["before"]["chunks"]:
                 raise ValueError("共享分块或向量已变化，拒绝恢复")
             old_ids = tuple(sorted({int(e.knowledge_id) for e in active}))
@@ -994,7 +1166,10 @@ class Backend:
                 session.add(document)
                 in_target = True
             desired = unit["desired_permissions"] if in_target else unit["before"]["permissions"]
-            manager.desired_entry_generation = manager.applied_entry_generation = next_generation
+            manager.desired_entry_generation = next_generation
+            # 未完成解析的投影不能因迁移变成已应用，保留后续解析/重试所需状态。
+            if not allow_incomplete:
+                manager.applied_entry_generation = next_generation
             session.add(manager)
             await session.flush()
             ids = tuple(sorted({int(e.knowledge_id) for e in active}))
@@ -1009,7 +1184,7 @@ class Backend:
             checkpoint()
             for file in files:
                 await self.replace_permissions(int(file.id), desired[str(file.id)])
-            pending_sides = {"es", "milvus"}
+            pending_sides = {side for side, rows in observed.items() if rows}
             max_rewrites = 2 if force_rewrite else 0
             for attempt in range(max_rewrites + 1):
                 for side in sorted(pending_sides):
@@ -1020,7 +1195,17 @@ class Backend:
                 actual = {
                     side: (await self.store.read(side, [document.id])).get(document.id, []) for side in ("es", "milvus")
                 }
-                if validate_chunks(actual, unit, document, primary, self.store.embedding_model_id) != fingerprints:
+                if (
+                    validate_chunks(
+                        actual,
+                        unit,
+                        document,
+                        primary,
+                        self.store.embedding_model_id,
+                        allow_incomplete=allow_incomplete,
+                    )
+                    != fingerprints
+                ):
                     raise RuntimeError("同步后分块或向量发生变化")
                 mismatches = 0
                 samples = []
@@ -1249,6 +1434,7 @@ def document_units(snapshot: dict[str, Any], group: dict[str, Any], plan: dict[s
                 "folder_name": group["folder_name"],
                 "folder_parts": group["folder_parts"],
                 "status": "candidate",
+                **({"unversioned": True} if file.get("unversioned") else {}),
             },
         )
         unit["files"].append(file)

@@ -515,6 +515,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         default=None, max_length=16, description="Business domain code from file_encoding segment 3"
     )
     recommendation: str | None = Field(default=None, max_length=64, description="Recommendation mode")
+    response_scene: Literal["list", "home"] = "list"
     public_only: bool = Field(
         default=False,
         description="Restrict browsing to server-resolved public knowledge spaces",

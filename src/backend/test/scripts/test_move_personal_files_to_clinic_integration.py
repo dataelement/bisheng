@@ -1,8 +1,10 @@
 """单文件迁移只改归属; 数据库回滚及提交响应不确定时按报告恢复。"""
 
+import sys
 from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import datetime
+from types import ModuleType
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -167,12 +169,16 @@ async def direct(monkeypatch):
     from bisheng.user.domain.models import user as user_module
 
     monkeypatch.setattr(user_module, "User", PersonalTestUserRow)
-    from bisheng.knowledge.domain.services import shared_space_content_loader
-    from bisheng.knowledge.domain.services.knowledge_migration_service import KnowledgeMigrationService
-
     forbidden = Mock(side_effect=AssertionError("must not parse, embed, dispatch or use migration engine"))
-    monkeypatch.setattr(shared_space_content_loader, "load_shared_content_from_original", forbidden)
-    monkeypatch.setattr(KnowledgeMigrationService, "create_batch", forbidden)
+    # 不加载真实解析器依赖; 迁移一旦调用解析或通用迁移引擎仍立即失败。
+    for name, attr, value in (
+        ("shared_space_content_loader", "load_shared_content_from_original", forbidden),
+        ("knowledge_migration_service", "KnowledgeMigrationService", Mock(create_batch=forbidden)),
+    ):
+        module_name = f"bisheng.knowledge.domain.services.{name}"
+        module = ModuleType(module_name)
+        setattr(module, attr, value)
+        monkeypatch.setitem(sys.modules, module_name, module)
     monkeypatch.setattr(Task, "apply_async", forbidden)
     models = [
         Knowledge,
@@ -339,6 +345,200 @@ async def direct(monkeypatch):
             yield backend, unit, checkpoint, connection, permissions, forbidden
     finally:
         await engine.dispose()
+
+
+async def setup_unparsed(direct, status=3, content="empty"):
+    backend, _unit, _checkpoint, connection, _, _ = direct
+    async with connection() as session:
+        for fid in (101, 106, 103):
+            row = await session.get(KnowledgeFile, fid)
+            row.status = status
+            row.remark = "保留原解析原因"
+            row.projection_status = "failed"
+            row.applied_content_generation = 0
+            row.applied_entry_generation = 0
+            session.add(row)
+        await session.commit()
+    if content == "empty":
+        backend.store.data = {"es": [], "milvus": []}
+    elif content == "es_only":
+        backend.store.data["milvus"] = []
+    elif content == "partial":
+        backend.store.data["milvus"] = backend.store.data["milvus"][:1]
+
+
+@pytest.mark.parametrize("status", [None, 3, 5, 6, 7])
+@pytest.mark.parametrize("content", ["empty", "es_only", "partial"])
+async def test_unparsed_move_preserves_parse_state_and_partial_content(direct, status, content):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    await setup_unparsed(direct, status, content)
+    original = deepcopy(backend.store.data)
+    await backend.move_unit(unit, checkpoint)
+    assert unit["status"] == "succeeded"
+    async with connection() as session:
+        for fid in (101, 106):
+            row = await session.get(KnowledgeFile, fid)
+            assert (row.knowledge_id, row.file_level_path, row.user_id, row.status, row.remark) == (
+                20,
+                "/199/200",
+                8,
+                status,
+                "保留原解析原因",
+            )
+            assert row.projection_status == "failed"
+            assert row.applied_content_generation == row.applied_entry_generation == 0
+    for side, rows in backend.store.data.items():
+        assert len(rows) == len(original[side])
+        for row, old in zip(rows, original[side], strict=True):
+            assert row["knowledge_ids"] == [20, 30]
+            assert row["text"] == old["text"] and row.get("vector") == old.get("vector")
+    assert permissions["101"] == unit["desired_permissions"]["101"]
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("committed", [False, True])
+async def test_unparsed_recovery_keeps_failed_projection(direct, committed):
+    backend, unit, checkpoint, connection, permissions, _ = direct
+    await setup_unparsed(direct, content="es_only")
+    if committed:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    else:
+        backend.store.fail_side = "es"
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    backend.refresh_metadata.side_effect = None
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == ("succeeded" if committed else "restored")
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        assert row.knowledge_id == (20 if committed else 10)
+        assert (row.status, row.projection_status, row.applied_content_generation, row.applied_entry_generation) == (
+            3,
+            "failed",
+            0,
+            0,
+        )
+    assert permissions == (unit["desired_permissions"] if committed else unit["before"]["permissions"])
+    assert backend.store.data["milvus"] == []
+
+
+async def setup_unversioned(direct):
+    backend, unit, _checkpoint, connection, _, _ = direct
+    await setup_unparsed(direct)
+    async with connection() as session:
+        for model, ids in (
+            (KnowledgeDocumentVersion, (500, 501)),
+            (KnowledgeDocument, (400,)),
+            (KnowledgeFile, (103, 106)),
+        ):
+            for row_id in ids:
+                await session.delete(await session.get(model, row_id))
+        file = await session.get(KnowledgeFile, 101)
+        file.reference_document_id = file.entry_type = file.entry_status = None
+        session.add(file)
+        await session.commit()
+    unit.update(document_id=-101, unversioned=True, files=unit["files"][:1])
+    backend.store.read = AsyncMock(side_effect=AssertionError("unversioned file has no canonical index"))
+
+
+@pytest.mark.parametrize("change", ["parsing", "rebuilding", "lease", "content", "new_chunks"])
+async def test_unparsed_move_rejects_busy_or_changing_content(direct, change):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_unparsed(direct, content="es_only")
+    if change in {"parsing", "rebuilding", "lease"}:
+        async with connection() as session:
+            file = await session.get(KnowledgeFile, 101)
+            if change == "lease":
+                file.projection_lease_owner = "worker"
+            else:
+                file.status = 1 if change == "parsing" else 4
+            session.add(file)
+            await session.commit()
+        with pytest.raises(m.SkipFile):
+            await backend.move_unit(unit, checkpoint)
+        backend.replace_permissions.assert_not_awaited()
+        assert not backend.store.calls
+    else:
+        repair = backend.store.repair
+
+        async def changed(side, plans):
+            result = await repair(side, plans)
+            if change == "content":
+                backend.store.data["es"][0]["text"] = "changed"
+            else:
+                backend.store.data["milvus"] = [{**backend.store.data["es"][0], "vector": [0.25, -0.5]}]
+            return result
+
+        backend.store.repair = changed
+        with pytest.raises(RuntimeError, match="分块或向量发生变化"):
+            await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == 10
+
+
+@pytest.mark.parametrize("change", ["version", "parsed", "busy", "conflict"])
+async def test_unversioned_rechecks_before_any_write(direct, change):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_unversioned(direct)
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        if change == "version":
+            session.add(
+                KnowledgeDocumentVersion(id=501, knowledge_file_id=101, document_id=400, version_no=1, is_primary=True)
+            )
+        elif change == "conflict":
+            session.add(
+                KnowledgeFile(id=999, knowledge_id=20, tenant_id=1, file_name=row.file_name, file_level_path="/199/200")
+            )
+        else:
+            row.status = 2 if change == "parsed" else 1
+            session.add(row)
+        await session.commit()
+    with pytest.raises(ValueError):
+        await backend.move_unit(unit, checkpoint)
+    assert "before" not in unit
+    backend.replace_permissions.assert_not_awaited()
+
+
+@pytest.mark.parametrize("failure", [None, "permission", "after_commit"])
+async def test_unversioned_move_and_recovery_preserve_file(direct, failure):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    await setup_unversioned(direct)
+    original_replace = backend.replace_permissions.side_effect
+    if failure == "permission":
+
+        async def fail_after_write(fid, rows):
+            await original_replace(fid, rows)
+            raise RuntimeError("permission response lost")
+
+        backend.replace_permissions.side_effect = fail_after_write
+    elif failure == "after_commit":
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    if failure:
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.replace_permissions.side_effect = original_replace
+        backend.refresh_metadata.side_effect = None
+        await backend.move_unit(unit, checkpoint, recover=True)
+    else:
+        await backend.move_unit(unit, checkpoint)
+    restored = failure == "permission"
+    assert unit["status"] == ("restored" if restored else "succeeded")
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        assert (row.knowledge_id, row.file_level_path, row.status, row.remark, row.user_id, row.object_name) == (
+            10 if restored else 20,
+            "/99/98" if restored else "/199/200",
+            3,
+            "保留原解析原因",
+            8,
+            "original/101.pdf",
+        )
+        assert row.reference_document_id is None and row.entry_type is None
+        assert (await session.get(KnowledgeDocument, 400)) is None
+    assert permissions["101"] == (unit["before"]["permissions"] if restored else unit["desired_permissions"])["101"]
+    backend.store.read.assert_not_awaited()
+    forbidden.assert_not_called()
 
 
 async def assert_state(connection, space, membership):
@@ -826,8 +1026,6 @@ async def test_scan_paginates_read_only_and_preserves_full_version_chain(direct)
 async def test_create_only_missing_directory_segments_and_reuse_on_retry(direct, monkeypatch):
     from types import SimpleNamespace as NS
 
-    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
     backend, _unit, _checkpoint, connection, _, _ = direct
     created, checkpoints = [], []
     group = {}
@@ -850,7 +1048,11 @@ async def test_create_only_missing_directory_segments_and_reuse_on_retry(direct,
             created.append(row.id)
             return row
 
-    monkeypatch.setattr(KnowledgeSpaceService, "add_folder", add_folder)
+    # 此测试只验证脚本的目录规划, 目录创建仍使用原有 ORM 仿真。
+    module_name = "bisheng.knowledge.domain.services.knowledge_space_service"
+    module = ModuleType(module_name)
+    module.KnowledgeSpaceService = Mock(return_value=NS(add_folder=lambda *args: add_folder(None, *args)))
+    monkeypatch.setitem(sys.modules, module_name, module)
 
     def checkpoint():
         checkpoints.append(deepcopy(group))

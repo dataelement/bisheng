@@ -142,10 +142,14 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
     assert by_id[1]["projection_ready"] is False
     assert by_id[4]["projection_ready"] is True
 
-    navigation = await navigation_counts(service)
-    total = await service.count_shougang_portal_files(
-        ShougangPortalFileCountReq(query_type="browse", **inventory_filter, discovery_scope="portal_enabled")
-    )
+    # 数量接口只读取库存。不能为了一个数字查询文件展示信息。
+    with monkeypatch.context() as count_patch:
+        for method in ("_handle_file_folder_extra_info", "_resolve_shougang_portal_source_paths"):
+            count_patch.setattr(service, method, AsyncMock(side_effect=AssertionError("计数不能补充展示信息")))
+        navigation = await navigation_counts(service)
+        total = await service.count_shougang_portal_files(
+            ShougangPortalFileCountReq(query_type="browse", **inventory_filter, discovery_scope="portal_enabled")
+        )
     assert navigation == total["total"] == len(listed) == 7
     service.advanced_search_shougang_portal_files.assert_not_awaited()
 
@@ -177,3 +181,13 @@ async def test_category_inventory_is_independent_of_projection_and_fulltext(
     configured_counts = await navigation_counts(service, scope="portal_configured", space_ids=[10, 20])
     assert {item["id"] for item in configured_page["data"]} == {1, 2, 3, 4, 13, 15}
     assert configured_page["total"] == configured_counts == 6
+
+    # 发现范围快照相同。库存变化后必须实时更新数量。
+    await insert(17)
+    await async_db_session.commit()
+    changed = await navigation_counts(service, scope="portal_configured", space_ids=[10, 20])
+    changed_page = await service.browse_shougang_portal_files(
+        ShougangPortalFileBrowseReq(**inventory_filter, discovery_scope="portal_configured", limit=100)
+    )
+    assert changed == changed_page["total"] == 7
+    assert discovery.snapshot == "inventory-scope"

@@ -5850,6 +5850,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         req: ShougangPortalFileCountReq,
     ) -> dict[str, Any]:
         """Count the exact traversable result set without blocking the list request."""
+        # 数量接口统计完整结果。首页展示场景不能改变计数。
+        if req.response_scene != "list":
+            req = req.model_copy(update={"response_scene": "list"})
         if req.query_type == "keyword":
             search_payload = req.model_dump(
                 exclude={"query_type", "conditions"},
@@ -5973,7 +5976,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             seen_cursors: set[str] = set()
             while True:
                 result = await self.browse_shougang_portal_files(
-                    ShougangPortalFileBrowseReq.model_validate(browse_payload)
+                    ShougangPortalFileBrowseReq.model_validate(browse_payload),
+                    count_only=True,
                 )
                 if result.get("total") is not None:
                     total = int(result["total"])
@@ -7061,7 +7065,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 type(exc).__name__,
             )
 
-    async def browse_shougang_portal_files(self, req: ShougangPortalFileBrowseReq) -> dict:
+    async def browse_shougang_portal_files(
+        self, req: ShougangPortalFileBrowseReq, *, count_only: bool = False
+    ) -> dict:
         perf = PortalSearchPerfContext(started_at=time.monotonic())
         perf.sort = req.sort
         perf.tag_enabled = bool(req.tag)
@@ -7071,7 +7077,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
-            result = await self._browse_shougang_portal_files_impl(req)
+            result = await self._browse_shougang_portal_files_impl(
+                req, **({"count_only": True} if count_only else {})
+            )
             perf.success = True
             return result
         except Exception as exc:
@@ -8425,7 +8433,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             trusted_public_scope=is_public_latest_selected,
         )
 
-    async def _browse_shougang_portal_files_impl(self, req: ShougangPortalFileBrowseReq) -> dict:
+    async def _browse_shougang_portal_files_impl(
+        self, req: ShougangPortalFileBrowseReq, *, count_only: bool = False
+    ) -> dict:
         _set_portal_search_stage("resolve_spaces")
         trusted_public_scope = bool(req.public_only)
         effective_discovery_scope = (
@@ -8504,6 +8514,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             spaces=spaces,
             tag_file_ids=tag_file_ids,
             trusted_public_scope=trusted_public_scope,
+            **({"count_only": True} if count_only else {}),
         )
 
     @classmethod
@@ -8587,6 +8598,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ordered_candidate_count = 0
 
         redis_repository = PortalRecommendationRedisRepositoryImpl()
+        behavior_version = 0
+        pool_version = "projection"
+        interest_entries: list[tuple[str, float]] = []
+        cached_top_n_ids: list[tuple[int, int]] = []
+        cached_top_n_hit = False
+        domain_pool_candidates: dict[str, list[PortalRecommendationCandidate]] = {}
+        generic_pool_candidates: list[PortalRecommendationCandidate] = []
+        active_pool_version: str | None = None
+        try:
+            behavior_version = await redis_repository.get_behavior_version(tenant_id, self.login_user.user_id)
+            pool_state = await redis_repository.get_pool_state(tenant_id)
+            pool_ready = bool(pool_state.active_pool_version and await redis_repository.is_pool_version_ready(
+                tenant_id, pool_state.active_pool_version,
+            ))
+            if not pool_ready:
+                await PortalRecommendationPoolRecoveryService.trigger_if_needed(redis_repository, tenant_id)
+            if pool_ready:
+                active_pool_version = pool_state.active_pool_version
+                pool_version = active_pool_version
+            cached_payload = await redis_repository.get_top_n(
+                tenant_id, self.login_user.user_id, config_version, pool_version, behavior_version,
+                scope=cache_scope or "base",
+            ) if uses_top_n_cache else None
+            cached_top_n_hit = cached_payload is not None
+            cached_top_n_ids = cached_payload or []
+        except Exception:
+            logger.warning("portal recommendation Redis state unavailable; using projection cold start")
+            redis_state_available = False
+            behavior_version = 0
+            pool_version = "projection"
+            active_pool_version = None
+            cached_top_n_ids = []
+            cached_top_n_hit = False
+
+        authorization = None
+        cache_probe_started_at = time.monotonic()
+        if cached_top_n_ids:
+            cached_result, authorization = await self._try_personalized_recommendation_cache(
+                req=req, spaces=spaces, cached_ids=cached_top_n_ids, config=config,
+                redis_repository=redis_repository, tenant_id=tenant_id, config_version=config_version,
+                pool_version=pool_version, behavior_version=behavior_version, cache_scope=cache_scope or "base",
+                request_started_at=diagnostic_started_at,
+            )
+            if cached_result is not None:
+                return cached_result
+        cache_probe_ms = (time.monotonic() - cache_probe_started_at) * 1000
+
         try:
             user_domains = await redis_repository.get_user_domains(tenant_id, self.login_user.user_id)
         except Exception:
@@ -8608,94 +8666,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 logger.warning("portal recommendation user-domain cache unavailable")
         user_domains = sorted(set(user_domains or []))
 
-        behavior_version = 0
-        pool_version = "projection"
-        interest_entries: list[tuple[str, float]] = []
-        cached_top_n_ids: list[tuple[int, int]] = []
-        cached_top_n_hit = False
-        domain_pool_candidates: dict[str, list[PortalRecommendationCandidate]] = {}
-        generic_pool_candidates: list[PortalRecommendationCandidate] = []
-        active_pool_version: str | None = None
-        try:
-            behavior_version = await redis_repository.get_behavior_version(tenant_id, self.login_user.user_id)
-            interest_entries = await redis_repository.get_interest(tenant_id, self.login_user.user_id)
-            pool_state = await redis_repository.get_pool_state(tenant_id)
-            pool_ready = bool(
-                pool_state.active_pool_version
-                and await redis_repository.is_pool_version_ready(
-                    tenant_id,
-                    pool_state.active_pool_version,
-                )
-            )
-            if not pool_ready:
-                await PortalRecommendationPoolRecoveryService.trigger_if_needed(
-                    redis_repository,
-                    tenant_id,
-                )
-            if pool_ready and pool_state.active_pool_version:
-                active_pool_version = pool_state.active_pool_version
-                pool_version = pool_state.active_pool_version
-                if not user_domains:
+        if redis_state_available:
+            try:
+                interest_entries = await redis_repository.get_interest(tenant_id, self.login_user.user_id)
+                if pool_ready and not user_domains:
                     generic_pool_candidates = await redis_repository.get_pool(
-                        tenant_id,
-                        pool_version,
-                        "generic",
-                        limit=500,
+                        tenant_id, pool_version, "generic", limit=500,
                     )
-            cached_payload = (
-                await redis_repository.get_top_n(
-                    tenant_id,
-                    self.login_user.user_id,
-                    config_version,
-                    pool_version,
-                    behavior_version,
-                    scope=cache_scope or "base",
-                )
-                if uses_top_n_cache
-                else None
-            )
-            cached_top_n_hit = cached_payload is not None
-            cached_top_n_ids = cached_payload or []
-            if pool_ready and pool_state.active_pool_version:
-                reserved_keys: set[tuple[int, int]] = set()
-                for member, _score in interest_entries:
-                    try:
-                        key = tuple(int(value) for value in member.split(":", 1))
-                    except (TypeError, ValueError):
-                        continue
-                    if key[0] in visible_space_ids:
-                        reserved_keys.add(key)
+                if pool_ready and pool_state.active_pool_version:
+                    reserved_keys: set[tuple[int, int]] = set()
+                    for member, _score in interest_entries:
+                        try:
+                            key = tuple(int(value) for value in member.split(":", 1))
+                        except (TypeError, ValueError):
+                            continue
+                        if key[0] in visible_space_ids:
+                            reserved_keys.add(key)
 
-                async def load_domain_page(
-                    domain_code: str,
-                    offset: int,
-                    limit: int,
-                ) -> list[PortalRecommendationCandidate]:
-                    return await redis_repository.get_pool(
-                        tenant_id,
-                        pool_version,
-                        f"domain:{domain_code}",
-                        limit=limit,
-                        offset=offset,
+                    async def load_domain_page(
+                        domain_code: str,
+                        offset: int,
+                        limit: int,
+                    ) -> list[PortalRecommendationCandidate]:
+                        return await redis_repository.get_pool(
+                            tenant_id,
+                            pool_version,
+                            f"domain:{domain_code}",
+                            limit=limit,
+                            offset=offset,
+                        )
+
+                    domain_pool_candidates = await PortalRecommendationService.load_unique_domain_pool_candidates(
+                        user_domains,
+                        load_page=load_domain_page,
+                        reserved_keys=reserved_keys,
+                        accept_candidate=lambda candidate: candidate.space_id in visible_space_ids,
                     )
-
-                domain_pool_candidates = await PortalRecommendationService.load_unique_domain_pool_candidates(
-                    user_domains,
-                    load_page=load_domain_page,
-                    reserved_keys=reserved_keys,
-                    accept_candidate=lambda candidate: candidate.space_id in visible_space_ids,
-                )
-        except Exception:
-            logger.warning("portal recommendation Redis state unavailable; using projection cold start")
-            redis_state_available = False
-            behavior_version = 0
-            pool_version = "projection"
-            interest_entries = []
-            domain_pool_candidates = {}
-            generic_pool_candidates = []
-            active_pool_version = None
-            cached_top_n_ids = []
-            cached_top_n_hit = False
+            except Exception:
+                logger.warning("portal recommendation Redis candidates unavailable; using projection cold start")
+                redis_state_available = False
+                behavior_version = 0
+                pool_version = "projection"
+                interest_entries = []
+                domain_pool_candidates = {}
+                generic_pool_candidates = []
+                active_pool_version = None
+                cached_top_n_ids = []
+                cached_top_n_hit = False
 
         interest_scores: dict[tuple[int, int], float] = {}
         for member, score in interest_entries:
@@ -8819,19 +8836,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and record.recommendable
             and (allowed_tag_file_ids is None or record.file_id in allowed_tag_file_ids)
         }
-        public_space_ids = await self._get_shougang_portal_public_space_ids(space_ids, spaces=spaces)
-        try:
-            portal_enabled_discovery = await self.resolve_portal_discovery(
-                scope="portal_enabled",
-                persist_result=False,
-            )
-            portal_enabled_space_ids = set(portal_enabled_discovery.discoverable_space_ids) & visible_space_ids
-        except Exception as exc:
-            logger.warning(
-                "portal recommendation discovery fast-path unavailable; using normal permission checks: error={}",
-                type(exc).__name__,
-            )
-            portal_enabled_space_ids = set()
         now = datetime.now(timezone.utc)
 
         def candidate_for(key: tuple[int, int]) -> PortalRecommendationCandidate | None:
@@ -8925,83 +8929,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             stable_shuffle_cycle_days=shuffle_days,
         )
         recommendation_service = PortalRecommendationService()
-        permission_contexts: dict[int, dict] = {}
-        public_permissions_by_space: dict[int, set[str]] = {}
-        non_primary_file_ids_by_space: dict[int, set[int]] = {}
-        portal_enabled_fast_allowed_count = 0
-
-        async def build_permission_context() -> dict:
-            # The binding snapshot is loaded lazily only if a candidate outside
-            # portal_enabled still needs the normal file permission path.
-            return {"by_space": permission_contexts, "live_bindings": None}
-
-        async def check_permission_batch(
-            _request_context: dict,
-            candidates: list[PortalRecommendationCandidate],
-        ) -> dict[tuple[int, int], bool | Exception]:
-            nonlocal portal_enabled_fast_allowed_count
-            file_ids = [candidate.file_id for candidate in candidates]
-            files = await KnowledgeFileDao.aget_file_by_space_filters(
-                knowledge_ids=space_ids,
-                status=[KnowledgeFileStatus.SUCCESS.value],
-                file_ids=file_ids,
-                file_ext=req.file_ext,
-                file_subcategory_code=req.file_subcategory_code,
-            )
-            files = self._filter_shougang_portal_files_by_document_type(files, req.document_type)
-            files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
-            files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
-            file_map = {(int(file.knowledge_id), int(file.id)): file for file in files}
-            result: dict[tuple[int, int], bool | Exception] = {}
-            for candidate in candidates:
-                item = file_map.get(candidate.key)
-                if item is None:
-                    result[candidate.key] = False
-                    continue
-                try:
-                    if self.version_repo is not None:
-                        non_primary = non_primary_file_ids_by_space.get(candidate.space_id)
-                        if non_primary is None:
-                            non_primary = set(
-                                await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([candidate.space_id])
-                            )
-                            non_primary_file_ids_by_space[candidate.space_id] = non_primary
-                        if candidate.file_id in non_primary:
-                            result[candidate.key] = False
-                            continue
-                    if self._try_fast_allow_portal_enabled_recommendation(
-                        item,
-                        space_id=candidate.space_id,
-                        portal_enabled_space_ids=portal_enabled_space_ids,
-                    ):
-                        result[candidate.key] = True
-                        portal_enabled_fast_allowed_count += 1
-                        authorization_state.fast_allowed_count += 1
-                        continue
-                    if _request_context["live_bindings"] is None:
-                        try:
-                            _request_context["live_bindings"] = (
-                                await PortalRecommendationProjectionService.load_bindings_strict()
-                            )
-                        except Exception as exc:
-                            raise PortalRecommendationPermissionContextUnavailable(
-                                "failed to load current permission bindings"
-                            ) from exc
-                    result[candidate.key] = await self._check_portal_recommendation_item_permission(
-                        item,
-                        space_id=candidate.space_id,
-                        public_space_ids=public_space_ids,
-                        live_bindings=_request_context["live_bindings"],
-                        permission_contexts=permission_contexts,
-                        public_permissions_by_space=public_permissions_by_space,
-                    )
-                except PortalRecommendationPermissionContextUnavailable:
-                    raise
-                except Exception as exc:
-                    result[candidate.key] = exc
-            return result
-
-        authorization_state = PortalRecommendationAuthorizationState()
+        authorization = authorization or await self._build_personalized_recommendation_authorizer(req=req, spaces=spaces)
+        authorization_state = authorization["state"]
+        paused_at = authorization.pop("paused_at", None)
+        if paused_at is not None and authorization_state.started_at is not None:
+            # 原路径在候选准备结束后才开始授权计时。回源准备不占用原授权预算。
+            authorization_state.started_at += time.monotonic() - paused_at
+        build_permission_context = authorization["build"]
+        check_permission_batch = authorization["check"]
 
         def score(candidates: list[PortalRecommendationCandidate]) -> list[PortalRecommendationCandidate]:
             candidates = candidates[: PortalRecommendationService.MAX_LIGHTWEIGHT_CANDIDATES]
@@ -9108,31 +9043,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 state=authorization_state,
             )
 
-        selected_ids = [candidate.file_id for candidate in selected]
-        files = await KnowledgeFileDao.aget_file_by_space_filters(
-            knowledge_ids=space_ids,
-            status=[KnowledgeFileStatus.SUCCESS.value],
-            file_ids=selected_ids,
-            file_ext=req.file_ext,
-            file_subcategory_code=req.file_subcategory_code,
+        items, ordered_files, display_count = await self._render_personalized_recommendation(
+            req=req, spaces=spaces, selected=selected, config=config,
         )
-        files = self._filter_shougang_portal_files_by_document_type(files, req.document_type)
-        files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
-        files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
-        file_map = {(int(file.knowledge_id), int(file.id)): file for file in files}
-        ordered_files = [file_map[candidate.key] for candidate in selected if candidate.key in file_map]
-        items = await self._map_shougang_portal_files_to_items(
-            files=ordered_files,
-            spaces=spaces,
-            file_ext=req.file_ext,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            include_source_paths=True,
-        )
-        cache_write_allowed = uses_top_n_cache and self._personalized_recommendation_cache_write_allowed(
-            selected_count=len(selected),
-            result_count=len(items),
-            authorization_state=authorization_state,
+        cache_write_allowed = uses_top_n_cache and len(items) == display_count and self._personalized_recommendation_cache_write_allowed(
+            selected_count=len(selected), result_count=len(ordered_files), authorization_state=authorization_state,
         )
         if cache_write_allowed:
             try:
@@ -9181,6 +9096,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "authorization_ineligible_count": authorization_state.ineligible_count,
                     "cache_candidate_count": len(cached_candidates),
                     "cache_hit": cached_top_n_hit,
+                    "cache_fast_path": False,
+                    "cache_probe_ms": round(cache_probe_ms, 2),
+                    "response_scene": req.response_scene,
                     "cache_stable": cache_stable,
                     "cache_write_allowed": cache_write_allowed,
                     "candidate_count": ordered_candidate_count,
@@ -9196,8 +9114,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "permission_time_budget_reached": authorization_state.time_budget_reached,
                     "pool_ready": pool_ready,
                     "pool_source": "redis" if active_pool_version else "projection",
-                    "portal_enabled_fast_allowed_count": portal_enabled_fast_allowed_count,
-                    "portal_enabled_space_count": len(portal_enabled_space_ids),
+                    "portal_enabled_fast_allowed_count": authorization["metrics"]["portal_enabled_fast_allowed_count"],
+                    "portal_enabled_space_count": len(authorization["metrics"]["portal_enabled_space_ids"]),
                     "personal_space_excluded_count": personal_space_excluded_count,
                     "redis_state_available": redis_state_available,
                     "requested_space_count": requested_space_count,
@@ -9215,6 +9133,192 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
         )
         return self._build_shougang_portal_search_response(items, limit=target_count)
+
+    async def _build_personalized_recommendation_authorizer(
+        self, *, req: ShougangPortalFileBrowseReq, spaces: list[Knowledge]
+    ) -> dict[str, Any]:
+        """缓存与回源使用同一套当前文件和权限事实校验。"""
+        space_ids = [int(space.id) for space in spaces]
+        visible_space_ids = set(space_ids)
+        public_space_ids = await self._get_shougang_portal_public_space_ids(space_ids, spaces=spaces)
+        try:
+            portal_enabled_discovery = await self.resolve_portal_discovery(
+                scope="portal_enabled",
+                persist_result=False,
+            )
+            portal_enabled_space_ids = set(portal_enabled_discovery.discoverable_space_ids) & visible_space_ids
+        except Exception as exc:
+            logger.warning(
+                "portal recommendation discovery fast-path unavailable; using normal permission checks: error={}",
+                type(exc).__name__,
+            )
+            portal_enabled_space_ids = set()
+        permission_contexts: dict[int, dict] = {}
+        public_permissions_by_space: dict[int, set[str]] = {}
+        non_primary_file_ids_by_space: dict[int, set[int]] = {}
+        metrics = {"portal_enabled_space_ids": portal_enabled_space_ids, "portal_enabled_fast_allowed_count": 0}
+
+        async def build_permission_context() -> dict:
+            # The binding snapshot is loaded lazily only if a candidate outside
+            # portal_enabled still needs the normal file permission path.
+            return {"by_space": permission_contexts, "live_bindings": None}
+
+        async def check_permission_batch(
+            _request_context: dict,
+            candidates: list[PortalRecommendationCandidate],
+        ) -> dict[tuple[int, int], bool | Exception]:
+            file_ids = [candidate.file_id for candidate in candidates]
+            files = await KnowledgeFileDao.aget_file_by_space_filters(
+                knowledge_ids=space_ids,
+                status=[KnowledgeFileStatus.SUCCESS.value],
+                file_ids=file_ids,
+                file_ext=req.file_ext,
+                file_subcategory_code=req.file_subcategory_code,
+            )
+            files = self._filter_shougang_portal_files_by_document_type(files, req.document_type)
+            files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
+            files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
+            file_map = {(int(file.knowledge_id), int(file.id)): file for file in files}
+            result: dict[tuple[int, int], bool | Exception] = {}
+            for candidate in candidates:
+                item = file_map.get(candidate.key)
+                if item is None:
+                    result[candidate.key] = False
+                    continue
+                try:
+                    if self.version_repo is not None:
+                        non_primary = non_primary_file_ids_by_space.get(candidate.space_id)
+                        if non_primary is None:
+                            non_primary = set(
+                                await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([candidate.space_id])
+                            )
+                            non_primary_file_ids_by_space[candidate.space_id] = non_primary
+                        if candidate.file_id in non_primary:
+                            result[candidate.key] = False
+                            continue
+                    if self._try_fast_allow_portal_enabled_recommendation(
+                        item,
+                        space_id=candidate.space_id,
+                        portal_enabled_space_ids=portal_enabled_space_ids,
+                    ):
+                        result[candidate.key] = True
+                        metrics["portal_enabled_fast_allowed_count"] += 1
+                        authorization_state.fast_allowed_count += 1
+                        continue
+                    if _request_context["live_bindings"] is None:
+                        try:
+                            _request_context["live_bindings"] = (
+                                await PortalRecommendationProjectionService.load_bindings_strict()
+                            )
+                        except Exception as exc:
+                            raise PortalRecommendationPermissionContextUnavailable(
+                                "failed to load current permission bindings"
+                            ) from exc
+                    result[candidate.key] = await self._check_portal_recommendation_item_permission(
+                        item,
+                        space_id=candidate.space_id,
+                        public_space_ids=public_space_ids,
+                        live_bindings=_request_context["live_bindings"],
+                        permission_contexts=permission_contexts,
+                        public_permissions_by_space=public_permissions_by_space,
+                    )
+                except PortalRecommendationPermissionContextUnavailable:
+                    raise
+                except Exception as exc:
+                    result[candidate.key] = exc
+            return result
+
+        authorization_state = PortalRecommendationAuthorizationState()
+
+        return {"state": authorization_state, "build": build_permission_context,
+                "check": check_permission_batch, "metrics": metrics}
+
+    async def _render_personalized_recommendation(
+        self, *, req: ShougangPortalFileBrowseReq, spaces: list[Knowledge],
+        selected: list[PortalRecommendationCandidate], config: Any,
+    ) -> tuple[list[ShougangPortalFileItemResp], list[KnowledgeFile], int]:
+        if not selected:
+            return [], [], 0
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=[int(space.id) for space in spaces],
+            status=[KnowledgeFileStatus.SUCCESS.value], file_ids=[candidate.file_id for candidate in selected],
+            file_ext=req.file_ext, file_subcategory_code=req.file_subcategory_code,
+        )
+        files = self._filter_shougang_portal_files_by_document_type(files, req.document_type)
+        files = self._filter_shougang_portal_files_by_subcategory_code(files, req.file_subcategory_code)
+        files = self._filter_shougang_portal_files_by_business_domain_code(files, req.business_domain_code)
+        file_map = {(int(file.knowledge_id), int(file.id)): file for file in files if file.file_type == FileType.FILE.value}
+        ordered_files = [file_map[candidate.key] for candidate in selected if candidate.key in file_map]
+        home = req.response_scene == "home"
+        display_files = ordered_files
+        if home:
+            display_limit = int(config.portal.display.home.section_page_size) if config is not None else 6
+            display_files = ordered_files[:display_limit]
+        items = await self._map_shougang_portal_files_to_items(
+            files=display_files, spaces=spaces, file_ext=req.file_ext, document_type=req.document_type,
+            file_subcategory_code=req.file_subcategory_code, include_source_paths=not home,
+            **({"home_preview": True} if home else {}),
+        )
+        return items, ordered_files, len(display_files)
+
+    async def _try_personalized_recommendation_cache(
+        self, *, req: ShougangPortalFileBrowseReq, spaces: list[Knowledge], cached_ids: list[tuple[int, int]],
+        config: Any, redis_repository: Any, tenant_id: int, config_version: int,
+        pool_version: str, behavior_version: int, cache_scope: str,
+        request_started_at: float,
+    ) -> tuple[dict | None, dict | None]:
+        started_at = time.monotonic()
+        async with get_async_db_session() as session:
+            records = await PortalRecommendationRepositoryImpl(session).find_by_file_ids(
+                [file_id for _space_id, file_id in cached_ids],
+            )
+        visible_ids = {int(space.id) for space in spaces}
+        record_map = {(record.space_id, record.file_id): record for record in records
+                      if record.space_id in visible_ids and record.recommendable}
+        candidates = [PortalRecommendationCandidate(space_id=space_id, file_id=file_id,
+                        is_public=False, normal_acl=False, eligible=True)
+                      for space_id, file_id in cached_ids if (space_id, file_id) in record_map]
+        if len(candidates) != len(cached_ids):
+            return None, None
+        authorization = await self._build_personalized_recommendation_authorizer(req=req, spaces=spaces)
+        state = authorization["state"]
+        selected = await PortalRecommendationService().select_authorized_top_n(
+            candidates, top_n=len(cached_ids), state=state,
+            build_permission_context=authorization["build"], check_permission_batch=authorization["check"],
+        )
+        authorization["paused_at"] = time.monotonic()
+        if not self._personalized_recommendation_cached_selection_is_stable(
+            cached_top_n_hit=True, cached_top_n_ids=cached_ids, cached_candidates=candidates, selected=selected,
+        ):
+            return None, authorization
+        items, current_files, display_count = await self._render_personalized_recommendation(
+            req=req, spaces=spaces, selected=selected, config=config,
+        )
+        if len(current_files) != len(selected) or len(items) != display_count:
+            return None, authorization
+        writable = self._personalized_recommendation_cache_write_allowed(
+            selected_count=len(selected), result_count=len(current_files), authorization_state=state,
+        )
+        if writable:
+            try:
+                await redis_repository.set_top_n(
+                    tenant_id, self.login_user.user_id, config_version, pool_version, behavior_version,
+                    [(candidate.space_id, candidate.file_id) for candidate in selected], scope=cache_scope,
+                )
+            except Exception:
+                logger.warning("portal recommendation Top-N cache unavailable")
+        logger.info("[diag][portal.recommendation] {}", json.dumps({
+            "stage": "complete", "cache_hit": True, "cache_stable": True, "cache_fast_path": True,
+            "cache_write_allowed": writable, "selected_count": len(selected), "result_count": len(items),
+            "response_scene": req.response_scene, "authorization_check_count": state.checks,
+            "authorization_error_count": state.error_count, "tenant_id": tenant_id,
+            "fallback_used": False, "empty_reason": "", "cache_candidate_count": len(candidates),
+            "user_id": int(self.login_user.user_id),
+            "cache_probe_ms": round((time.monotonic()-started_at)*1000, 2),
+            "duration_ms": round((time.monotonic()-request_started_at)*1000, 2),
+        }, sort_keys=True))
+        target_count = int(config.portal.recommendation.home_total_count) if config is not None else 20
+        return self._build_shougang_portal_search_response(items, limit=min(max(target_count, 1), 50)), authorization
 
     @staticmethod
     def _personalized_recommendation_cached_selection_is_stable(
@@ -9672,11 +9776,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         document_type: str | None,
         file_subcategory_code: str | None,
         include_source_paths: bool,
+        home_preview: bool = False,
     ) -> list[ShougangPortalFileItemResp]:
         if not files:
             return []
         space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
-        enriched_items = await self._handle_file_folder_extra_info(files)
+        enriched_items = await self._handle_file_folder_extra_info(
+            files, **({"include_management_details": False} if home_preview else {}),
+        )
         folder_path_map: dict[int, str] = {}
         source_path_map: dict[int, str] = {}
         if include_source_paths:
@@ -9700,6 +9807,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         spaces: list[Knowledge],
         tag_file_ids: list[int] | None,
         trusted_public_scope: bool = False,
+        count_only: bool = False,
     ) -> dict:
         # 分类和业务域浏览使用业务库存。投影未完成或全文索引缺失不能隐藏已入库文件。
         # 导航先完成精确编码和可见性筛选，再选代表入口；分页和总数共享同一结果集。
@@ -9804,6 +9912,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 previous = representatives.get(identity)
                 if previous is None or representative_priority(file) < representative_priority(previous):
                     representatives[identity] = file
+            # 计数和列表共用完整库存规则。数量请求在展示补充之前结束。
+            if count_only:
+                return self._build_shougang_portal_cursor_response(
+                    [], False, None, total=len(representatives)
+                )
             visible_files = sorted(
                 representatives.values(),
                 key=lambda file: (file.update_time, int(file.id)),
@@ -15069,6 +15182,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         enrich_files: bool = True,
         folder_count_mode: str = "deep",
         search_context=None,
+        include_management_details: bool = True,
     ) -> list[dict]:
         perf_start = time.perf_counter()
         folder_ids = []
@@ -15109,7 +15223,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_source_file_ids = sorted(set(tag_source_by_file_id.values()))
         file_tags_start = time.perf_counter()
         file_tags = (
-            await self._load_file_tags_batch(tag_source_file_ids) if enrich_files and tag_source_file_ids else {}
+            await self._load_file_tags_batch(tag_source_file_ids)
+            if enrich_files and include_management_details and tag_source_file_ids else {}
         )
         file_tags_ms = (time.perf_counter() - file_tags_start) * 1000
 
@@ -15117,7 +15232,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         pending_publish_file_ids = (
             await self._find_pending_publish_approval_file_ids(
                 res, **({"search_context": search_context} if search_context is not None else {}),
-            ) if enrich_files and file_ids else set()
+            ) if enrich_files and include_management_details and file_ids else set()
         )
         pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
 
