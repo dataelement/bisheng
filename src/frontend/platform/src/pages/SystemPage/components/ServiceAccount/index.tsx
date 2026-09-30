@@ -190,54 +190,63 @@ export function ServiceAccount() {
                   </Badge>
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={
-                      account.active_key_count === 0 ? "text-red-500" : ""
-                    }
-                  >
-                    {account.active_key_count}
+                  <span className="inline-flex items-center gap-1">
+                    <span
+                      className={
+                        account.active_key_count === 0 ? "text-red-500" : ""
+                      }
+                    >
+                      {account.active_key_count}
+                    </span>
+                    {account.active_key_count === 0 ? (
+                      <QuestionTooltip
+                        error
+                        className="flex"
+                        content={t(
+                          "openApiManagement.serviceAccount.noKeyWarning",
+                        )}
+                      />
+                    ) : null}
                   </span>
-                  {account.active_key_count === 0 ? (
-                    <QuestionTooltip
-                      error
-                      content={t(
-                        "openApiManagement.serviceAccount.noKeyWarning",
-                      )}
-                    />
-                  ) : null}
                 </TableCell>
                 <TableCell>
-                  <span
-                    className={
-                      account.resource_owner.disabled ? "text-red-500" : ""
-                    }
-                  >
-                    {account.resource_owner.user_name ||
-                      account.resource_owner.user_id}
+                  <span className="inline-flex items-center gap-1">
+                    <span
+                      className={
+                        account.resource_owner.disabled ? "text-red-500" : ""
+                      }
+                    >
+                      {account.resource_owner.user_name ||
+                        account.resource_owner.user_id}
+                    </span>
+                    {account.resource_owner.disabled ? (
+                      <QuestionTooltip
+                        error
+                        className="flex"
+                        content={t(
+                          "openApiManagement.serviceAccount.ownerDisabled",
+                        )}
+                      />
+                    ) : null}
                   </span>
-                  {account.resource_owner.disabled ? (
-                    <QuestionTooltip
-                      error
-                      content={t(
-                        "openApiManagement.serviceAccount.ownerDisabled",
-                      )}
-                    />
-                  ) : null}
                 </TableCell>
                 <TableCell>
-                  <span>
-                    {account.last_used_at
-                      ? formatIsoDateTime(account.last_used_at)
-                      : t("openApiManagement.serviceAccount.neverUsed")}
+                  <span className="inline-flex items-center gap-1">
+                    <span>
+                      {account.last_used_at
+                        ? formatIsoDateTime(account.last_used_at)
+                        : t("openApiManagement.serviceAccount.neverUsed")}
+                    </span>
+                    {account.idle ? (
+                      <QuestionTooltip
+                        className="flex"
+                        content={t(
+                          "openApiManagement.serviceAccount.idleWarning",
+                          { days: idleDays },
+                        )}
+                      />
+                    ) : null}
                   </span>
-                  {account.idle ? (
-                    <QuestionTooltip
-                      content={t(
-                        "openApiManagement.serviceAccount.idleWarning",
-                        { days: idleDays },
-                      )}
-                    />
-                  ) : null}
                 </TableCell>
                 <TableCell>
                   <div>{account.creator_name || account.created_by || "-"}</div>

@@ -2520,14 +2520,11 @@
       "typeFilter": "Resource type filter",
       "noMatch": "No grants match these filters",
       "notice": {
-        "ownOnlyTitle": "Keys can only access the resources listed below",
-        "mixedTitle": "This list applies only to the {{count}} key(s) calling as the account itself",
-        "mixedDesc": "The other {{count}} key(s) act on behalf of users and use those users' own permissions, not this list. ",
-        "scopeRule": "Keys also need the matching permission, e.g. reading a knowledge library here requires “Read knowledge”. Calls succeed only when both are in place.",
-        "delegateOnlyTitle": "None of the current keys use this list",
-        "delegateOnlyDesc": "All valid keys on this account act on behalf of users and use those users' own permissions. These grants take effect once you issue a key that does not act on behalf of users.",
-        "noKeyTitle": "This list is not in use yet",
-        "noKeyDesc": "This account has no valid keys. A key issued without “Act on behalf of users” can access only the resources listed below."
+        "appliesTo": "Applies to",
+        "notAppliesTo": "Does not apply to",
+        "delegateReason": "Act on behalf of users, so the user's own permissions apply",
+        "none": "None",
+        "noKey": "No valid keys yet. These grants take effect once a key is issued."
       }
     },
     "permissionTiers": {
