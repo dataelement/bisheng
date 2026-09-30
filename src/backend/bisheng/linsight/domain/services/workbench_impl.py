@@ -15,6 +15,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -231,6 +232,11 @@ class LinsightWorkbenchImpl:
         login_user: UserPayload,
         display_files: list[dict] | None = None,
         defer_ingest: bool = True,
+        *,
+        session_subject: SessionSubject | None = None,
+        api_meta: dict | None = None,
+        telemetry_source: str = "platform",
+        session_name: str = "New Chat",
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -249,6 +255,16 @@ class LinsightWorkbenchImpl:
                 minutes — so inline parsing put the whole batch inside one HTTP
                 request, which nginx cut at 300s. Set False only where the caller
                 genuinely needs the files materialized before it returns.
+            session_subject: F073 — the Open API caller identity. When given, a
+                new MessageSession is stamped through it (compatibility user id
+                + service-account marker, so self-identity runs stay out of the
+                resource owner's workbench list) and attachments are promoted
+                into its storage partition. ``None`` keeps the workbench path.
+            api_meta: F073 — persisted on the version; the worker switches to
+                unattended execution when ``channel == "open_api_v2"``.
+            telemetry_source: ``source`` on the NEW_MESSAGE_SESSION event
+                ("api" for Open API submissions).
+            session_name: Initial conversation name.
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -299,10 +315,12 @@ class LinsightWorkbenchImpl:
                 # session type, so flow_type=LINSIGHT(20) is no longer minted here.
                 message_session = MessageSession(
                     chat_id=chat_id,
-                    name="New Chat",
+                    name=session_name,
                     flow_type=FlowType.WORKSTATION.value,
                     user_id=login_user.user_id,
                 )
+                if session_subject is not None:
+                    message_session = session_subject.stamp(message_session)
 
                 message_session = await MessageSessionDao.async_insert_one(message_session)
 
@@ -314,7 +332,7 @@ class LinsightWorkbenchImpl:
                     event_data=NewMessageSessionEventData(
                         session_id=message_session.chat_id,
                         app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                        source="platform",
+                        source=telemetry_source,
                         app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                         app_type=ApplicationTypeEnum.DAILY_CHAT,
                     ),
@@ -335,6 +353,7 @@ class LinsightWorkbenchImpl:
                 pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
+                api_meta=api_meta,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
 
@@ -355,7 +374,11 @@ class LinsightWorkbenchImpl:
                 # failed state) is stamped on later by the worker, via the
                 # session_version_id pointer below.
                 files=await promote_chat_attachments(
-                    cls.annotate_display_files(display_files, processed_files), login_user.user_id
+                    cls.annotate_display_files(display_files, processed_files),
+                    login_user.user_id,
+                    # Only an Open API submit names its own partition; the
+                    # workbench call stays exactly what it was.
+                    **({"storage_partition": session_subject.storage_partition} if session_subject is not None else {}),
                 ),
                 session_version_id=svid,
             )
