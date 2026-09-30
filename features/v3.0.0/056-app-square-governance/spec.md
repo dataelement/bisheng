@@ -5,7 +5,7 @@
 > spec 只回答 **做什么 / 验收标准 / 不做什么**。所有 How（决策、数据流、字段、API、Service、前端、文件清单、性能指标）一律不写在这里，
 > How 的唯一真相在 [design.md](./design.md) 与 [tasks.md](./tasks.md)。
 
-**关联 PRD**: [docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/product/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §2.3（普通业务用户旅程）/ §3.0.1（承载面：造在 platform、用在 client）/ **§3.0.3 事件触达（全表）**/ **RT-02 应用广场**（验收 1–5）/ **GOV-01 权限资源类型与授权交互**（两个入口同一弹窗、验收 1–6、⚙️ 菜单裁剪注）/ **GOV-04 全链路审计**（事件清单表、审计查询面、规则、验收 1–4）/ **GOV-07 应用工场权限控制**（界面通道 `create_app` 复用、三个承载面、验收 1 / 4）/ §3.3 角色×动作矩阵与矩阵注 / §3.3 末「实现锚点与前置」表 GOV-01 · GOV-04 · GOV-07 各行 / §5.2 已取消项（GOV-09、草稿对管理员不可见、代调可见范围）
+**关联 PRD**: [docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/customer-guides/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §2.3（普通业务用户旅程）/ §3.0.1（承载面：造在 platform、用在 client）/ **§3.0.3 事件触达（全表）**/ **RT-02 应用广场**（验收 1–5）/ **GOV-01 权限资源类型与授权交互**（两个入口同一弹窗、验收 1–6、⚙️ 菜单裁剪注）/ **GOV-04 全链路审计**（事件清单表、审计查询面、规则、验收 1–4）/ **GOV-07 应用工场权限控制**（界面通道 `create_app` 复用、三个承载面、验收 1 / 4）/ §3.3 角色×动作矩阵与矩阵注 / §3.3 末「实现锚点与前置」表 GOV-01 · GOV-04 · GOV-07 各行 / §5.2 已取消项（GOV-09、草稿对管理员不可见、代调可见范围）
 **同步记录**: 2026-08-17 初稿（按 PRD-1 v2.0 + release-contract 表 3 F056 行 + MVP-114 纵切 §2 F056 行编写；§4 决议按全自动模式定案）；同日按独立审查修订——**按「审计事件写入归动作 owner、F056 只拥有登记 / 查询面 / 导出 / 可查性验收」的跨 Feature 归属规则全文改写**（AC 编号全部保留、无作废；AC-17 / AC-18–21 / AC-23 / AC-24 / AC-34 / AC-41 / AC-42 改写为「可查 / 验收」口径，`app.*` 命名空间与记录字段口径移入 §4 决议-1 / 决议-7）
 **优先级**: P0
 **所属版本**: v3.0.0
@@ -222,4 +222,4 @@
 - 上游 Feature spec: [../054-app-domain-runtime/spec.md](../054-app-domain-runtime/spec.md)（`app` 资源类型 / 入口 / 详情页壳 / 开关 / 五个状态动作及其审计写入 AC-65 / 访问记录 AC-38 / 数据行编辑 AC-56 / ⚙️ 裁剪 AC-42 · AC-53）；[../055-app-publish-pipeline/spec.md](../055-app-publish-pipeline/spec.md)（发布管线与管线事件审计写入 AC-01 / 元信息 AC-05 / 上线与待上线成因 AC-31 / 因删除取消 AC-35 / 发布 tab AC-61 / 触达 AC-64 / 决议-8）；[../049-openapi-auth-baseline/spec.md](../049-openapi-auth-baseline/spec.md)（密钥审计事件 AC-12、INV-29 选人排除）
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.2 / §2.6 / §2.7 / §2.8 / §5 风险 7 · 9
 - UI 参考: [features/v3.0.0/000-prd1-discovery/ui-demo/](../000-prd1-discovery/ui-demo/)（以 PRD 为准、demo 为参考）
-- PRD: `docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（§3.0.3 / RT-02 / GOV-01 / GOV-04 / GOV-07 / §3.3 矩阵与锚点表 / §5.2）；`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1 §4.5 定义 6（资源归属人）/ §4.8 审计双归属（F050 引入的字段口径）
+- PRD: `docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（§3.0.3 / RT-02 / GOV-01 / GOV-04 / GOV-07 / §3.3 矩阵与锚点表 / §5.2）；`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1 §4.5 定义 6（资源归属人）/ §4.8 审计双归属（F050 引入的字段口径）

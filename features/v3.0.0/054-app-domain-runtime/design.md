@@ -13,7 +13,7 @@
 > **本文是"要建成的样子"**：F054 尚未开工，`app_runtime` 模块 / runtime-manager / app-proxy 三者全是绿地（E2 §0：backend 今天零 docker 依赖、零进程管理器、零 cgroup 操作）。实现后按现状覆盖本文。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 App / AppVersion / AppInstance；INV-32 / INV-33 / INV-35）· [mvp-114-path.md](../mvp-114-path.md)（**§6 MVP-核心是本轮裁剪基准**、§3 114 环境事实）· 姊妹 [F055](../055-app-publish-pipeline/spec.md) / [F053](../053-dev-cli-skills/spec.md) / [F056](../056-app-square-governance/spec.md) · [F049 design](../049-openapi-auth-baseline/design.md)（凭据底座与开放能力层开关的兄弟键形态）
-**技术路线依据**: `docs/product/3.0 附录：纳管应用技术路线与架构选型调研.md`（下称《调研》）· `docs/product/3.0 应用工场 产品方案.md` §4.1 / §4.5 / §4.8
+**技术路线依据**: `docs/customer-guides/3.0 附录：纳管应用技术路线与架构选型调研.md`（下称《调研》）· `docs/customer-guides/3.0 应用工场 产品方案.md` §4.1 / §4.5 / §4.8
 **版本**: v3.0.0
 **最后更新**: 2026-08-18（D5.2 补第 4 条「裸应用根路径先补尾斜杠再呈现」——114 实测白屏；此前：2026-08-17 初版 → 同日按独立审查 16 条发现修订，见修订历史）
 

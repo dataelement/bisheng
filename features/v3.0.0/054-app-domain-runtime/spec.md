@@ -5,7 +5,7 @@
 > spec 只回答 **做什么 / 验收标准 / 不做什么**。所有 How（决策、数据流、字段、API、Service、前端、文件清单、性能指标）一律不写在这里，
 > How 的唯一真相在 [design.md](./design.md) 与 [tasks.md](./tasks.md)。
 
-**关联 PRD**: [docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/product/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §1.0（术语「托管应用」）/ §1.3 前提 4（双形态产品面一致）/ §3.0.1（承载面与导航）/ §3.0.2（应用状态机）/ §3.3 角色矩阵及注 / RT-01（统一入口与登录复用）/ RT-07（资产持久与显式删除）/ RT-08（稳定性承诺）/ GOV-01（`app` 资源类型注册部分）/ GOV-03（档位 → 运行环境限额的落地部分）/ GOV-04（访问记录留痕的来源）/ GOV-10（工场运行时层开关、compose 形态）/ DEV-04「托管运行契约」（运行时侧承诺）/ DEV-05（线上身份注入形态）/ NFR-1.3 / NFR-2 / NFR-3 / NFR-6；PRD-2 最小面 WB-13（运行日志）/ WB-06（数据面：查改导出）；《3.0 应用工场 产品方案》§4.1 / §4.5 / §4.8（技术方案上游，spec 只取其对外承诺）
+**关联 PRD**: [docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/customer-guides/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §1.0（术语「托管应用」）/ §1.3 前提 4（双形态产品面一致）/ §3.0.1（承载面与导航）/ §3.0.2（应用状态机）/ §3.3 角色矩阵及注 / RT-01（统一入口与登录复用）/ RT-07（资产持久与显式删除）/ RT-08（稳定性承诺）/ GOV-01（`app` 资源类型注册部分）/ GOV-03（档位 → 运行环境限额的落地部分）/ GOV-04（访问记录留痕的来源）/ GOV-10（工场运行时层开关、compose 形态）/ DEV-04「托管运行契约」（运行时侧承诺）/ DEV-05（线上身份注入形态）/ NFR-1.3 / NFR-2 / NFR-3 / NFR-6；PRD-2 最小面 WB-13（运行日志）/ WB-06（数据面：查改导出）；《3.0 应用工场 产品方案》§4.1 / §4.5 / §4.8（技术方案上游，spec 只取其对外承诺）
 **同步记录**: 2026-08-17 初稿；同日按 `/sdd-review` 独立审查 28 条发现修订（去 How、补访问记录 / 预览入口 / 数据面「改」/ 状态筛选 / 日志口径 / 超管代行 / 标识规则 / 构建失败原因，理清与 F055 / F056 的归属）
 **优先级**: P0
 **所属版本**: v3.0.0
@@ -223,4 +223,4 @@
 - 姊妹 spec: [../055-app-publish-pipeline/spec.md](../055-app-publish-pipeline/spec.md)（管线调用本 Feature 状态动作）· [../056-app-square-governance/spec.md](../056-app-square-governance/spec.md)（广场 / 授权交互 / 审计面）
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.2 / §2.6 / §2.9
 - UI 参考: [features/v3.0.0/000-prd1-discovery/ui-demo/](../000-prd1-discovery/ui-demo/)（以 PRD 为准、demo 为参考）
-- PRD: `docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0；`docs/product/3.0 应用工场 产品方案.md` §4；`docs/product/3.0 附录：纳管应用技术路线与架构选型调研.md`（design 阶段的技术路线依据）
+- PRD: `docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0；`docs/customer-guides/3.0 应用工场 产品方案.md` §4；`docs/customer-guides/3.0 附录：纳管应用技术路线与架构选型调研.md`（design 阶段的技术路线依据）

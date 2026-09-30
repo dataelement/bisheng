@@ -5,7 +5,7 @@
 > spec 只回答 **做什么 / 验收标准 / 不做什么**。所有 How（决策、数据流、字段、API、Service、前端、文件清单、性能指标）一律不写在这里，
 > How 的唯一真相在 [design.md](./design.md) 与 [tasks.md](./tasks.md)。
 
-**关联 PRD**: [docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/product/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §3.0.2（应用状态机 · 审批单态）/ §3.0.3（事件触达 · 审批类事件）/ DEV-04（deploy 管线四步 · 托管运行契约 · 服务端侧）/ DEV-07 ②（应用数据表由应用包声明、平台建表）/ **RT-03** / **RT-04** / **RT-05** / **GOV-02** / **GOV-03** / **GOV-05** / GOV-08（应用运行期凭据 · 不作产品概念）/ GOV-04（发布类与接入能力审计事件）/ §3.3 末「实现锚点与前置」表 GOV-02 三行（⚠️ 阻塞前置）；PRD-2 最小面 **WB-14 发布面 / WB-15 版本与差异**（§1 分册说明）；《3.0 应用工场 产品方案》§4.4 / §4.5
+**关联 PRD**: [docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md](../../../docs/customer-guides/3.0%20应用工场%20PRD-1%20专业开发者通道与应用运行时.md) **v2.0** §3.0.2（应用状态机 · 审批单态）/ §3.0.3（事件触达 · 审批类事件）/ DEV-04（deploy 管线四步 · 托管运行契约 · 服务端侧）/ DEV-07 ②（应用数据表由应用包声明、平台建表）/ **RT-03** / **RT-04** / **RT-05** / **GOV-02** / **GOV-03** / **GOV-05** / GOV-08（应用运行期凭据 · 不作产品概念）/ GOV-04（发布类与接入能力审计事件）/ §3.3 末「实现锚点与前置」表 GOV-02 三行（⚠️ 阻塞前置）；PRD-2 最小面 **WB-14 发布面 / WB-15 版本与差异**（§1 分册说明）；《3.0 应用工场 产品方案》§4.4 / §4.5
 **同步记录**: 2026-08-17 初稿；同日按 `/sdd-review` 独立审查 33 条发现修订（补 `logs` 服务端 / 待上线态再提交 / 预检失败版本处置 / 发布摘要落点 / 拉起失败分支 / 声明引用校验 / 场景配置界面 / 集合相等 / 接入能力审计；理清申请人身份、应用运行期凭据主体形态、档位实体层级；去 How；INV-36 补审批例外）
 **优先级**: P0
 **所属版本**: v3.0.0
@@ -232,4 +232,4 @@
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.4 / §2.5 / §2.6 / §2.8
 - 上游 / 姊妹 Feature: [../054-app-domain-runtime/spec.md](../054-app-domain-runtime/spec.md)（领域对象、状态动作、运行时、预览入口）· [../049-openapi-auth-baseline/spec.md](../049-openapi-auth-baseline/spec.md)（凭据底座与资源归属人）· [../056-app-square-governance/spec.md](../056-app-square-governance/spec.md)（可见范围区、审计面）· [../053-dev-cli-skills/spec.md](../053-dev-cli-skills/spec.md)（CLI 命令侧）
 - UI 参考: [features/v3.0.0/000-prd1-discovery/ui-demo/](../000-prd1-discovery/ui-demo/)（以 PRD 为准、demo 为参考）
-- PRD: `docs/product/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0；`docs/product/3.0 应用工场 PRD-2 造应用工作台.md`（WB-14 / WB-15 完整形态）
+- PRD: `docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0；`docs/customer-guides/3.0 应用工场 PRD-2 造应用工作台.md`（WB-14 / WB-15 完整形态）

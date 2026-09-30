@@ -555,4 +555,4 @@ SUPPORTED_SHAREABLE_TYPES: set[str] = {'llm_server'}
 - [用户与权限体系](./10-permission-rbac.md) — ReBAC/OpenFGA
 - [数据模型与存储层](./07-data-models.md)
 - [商业版 API 网关](./11-gateway.md)
-- **对外口径的使用说明** → [`docs/product/多租户产品使用说明.md`](../product/多租户产品使用说明.md)（客户交付版，不含本文的实现细节与缺口记录）
+- **对外口径的使用说明** → [`docs/customer-guides/多租户产品使用说明.md`](../customer-guides/多租户产品使用说明.md)（客户交付版，不含本文的实现细节与缺口记录）

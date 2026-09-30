@@ -1,6 +1,6 @@
 # F053 开放 API 鉴权：实现与 PRD 偏离清单（评审转交）
 
-日期：2026-09-09　范围：`src/backend/bisheng/open_api/` 及相关模块　基准：`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md`（含 §7 决策记录 D1–D20）
+日期：2026-09-09　范围：`src/backend/bisheng/open_api/` 及相关模块　基准：`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md`（含 §7 决策记录 D1–D20）
 性质：代码静态审计，未跑接口。首轮对 `feat/3.0.0-beta2`（da2be5697）审计，随后按 `feat/3.0.0-beta1` 最新提交（59b27d1c1，2026-09-09 20:27）逐项复核；行号以 beta2 为准，复核结论以 beta1 为准。
 
 ## 结论
