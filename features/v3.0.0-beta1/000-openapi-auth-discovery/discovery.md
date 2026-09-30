@@ -4,7 +4,7 @@
 > 因此 §1 的「拆 4 个 Feature、分 2 批」方案**不采纳**，改为**一个 Feature（F053）+ 7 个工作流**；§4 的决策 A（范围）= 全量，B（扩展位）= 原样搬、开关默认关，C（share-token）= 随本 Feature 做，D（目录）= `features/v3.0.0-beta1/053-openapi-auth-and-identity/`。
 > 设计见 [../053-openapi-auth-and-identity/design.md](../053-openapi-auth-and-identity/design.md)。以下正文保留作调研记录（§2 代码基线事实与 §3 差异清单仍有效）。
 > **日期**: 2026-08-31
-> **上游 PRD**: 《3.0 开放 API 鉴权与身份传递 PRD》**v2.4**（飞书 `WItBws4zUiGP6YkrpUccBo6sn8e`，2026-08-27/28）；同一文件已存于 `3.0-vibe:docs/product/`，落分支时随第一个 Feature 一并拷入 `docs/product/`
+> **上游 PRD**: 《3.0 开放 API 鉴权与身份传递 PRD》**v2.4**（飞书 `WItBws4zUiGP6YkrpUccBo6sn8e`，2026-08-27/28）；同一文件已存于 `3.0-vibe:docs/PRD/3.0-beta2/`，落分支时随第一个 Feature 一并拷入 `docs/PRD/3.0-beta2/`
 > **代码基线**: `feat/3.0.0-beta1` @ `972397fbe`；参考实现 `3.0-vibe`（merge-base `db18f31e9`，vibe 基于 beta1 分叉）
 > **本文目的**: 只回答「拆几个 Feature、各自边界、先后顺序、哪些代码能从 vibe 搬、PRD v2.4 相对 vibe 上旧 spec 改了什么」。不写 How。
 

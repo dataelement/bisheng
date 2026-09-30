@@ -19,7 +19,7 @@
 
 | 文件 | 当前写法 | 与本次口径的关系 |
 |---|---|---|
-| [PRD 附录 B.1](</home/highway/PycharmProjects/bisheng/docs/product/3.0 开放 API 鉴权与身份传递 PRD.md:2379>) | workflow invoke/stop/WS、assistant completions/WS/info、flows 详情全部列为 v2 加鉴权能力；2408 行将 ASR/TTS 列为加鉴权能力 | PRD 尚未体现“这组发布接口整体迁离 v2” |
+| [PRD 附录 B.1](</home/highway/PycharmProjects/bisheng/docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md:2379>) | workflow invoke/stop/WS、assistant completions/WS/info、flows 详情全部列为 v2 加鉴权能力；2408 行将 ASR/TTS 列为加鉴权能力 | PRD 尚未体现“这组发布接口整体迁离 v2” |
 | [spec §1](/home/highway/PycharmProjects/bisheng/features/v3.0.0-beta1/053-openapi-auth-and-identity/spec.md:11) | v2 全部密钥鉴权，工作流/助手免登录发布用 v3 allowlist | 没有明确写删除哪些旧 v2 入口，留下了双版本解释空间 |
 | [design §5.F F1](/home/highway/PycharmProjects/bisheng/features/v3.0.0-beta1/053-openapi-auth-and-identity/design.md:318) | “相同业务能力的 v2 路由保留为密钥鉴权版本” | 直接造成 7 个重复发布入口；需要改为列明迁移、删除清单 |
 | [design §5.F F1 allowlist](/home/highway/PycharmProjects/bisheng/features/v3.0.0-beta1/053-openapi-auth-and-identity/design.md:320) | 只列 9 个 v3 入口 | 未列语音配置、ASR/TTS，也没有逐项核对页面共用辅助请求 |

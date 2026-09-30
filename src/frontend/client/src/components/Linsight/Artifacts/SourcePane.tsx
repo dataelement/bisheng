@@ -34,7 +34,7 @@ const iconBtn =
     'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-text-4';
 
 export interface SourceOccurrence {
-    /** 1-based position among the report's citations of this same file. */
+    /** 1-based position among the distinct passages of this file the report cites. */
     index: number;
     total: number;
 }
