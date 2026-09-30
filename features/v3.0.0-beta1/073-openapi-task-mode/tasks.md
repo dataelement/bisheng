@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-30 用户确认；同日复核：执行身份失效时已受理任务继续执行至终态（维持），AC-15 改为不提供已下线的个人知识库，AC-34 改为自身身份下模型用量记在资源归属人名下 |
 | design.md | ✅ 已评审 | 2026-09-30 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-30 `/sdd-review tasks` 两轮；余 low：T008、T009、T014、T015 测试与实现同任务（改动小），T018 多文档登记 |
-| 实现 | 🔲 未开始 | 0 / 20 完成 |
+| 实现 | 🔄 进行中 | 10 / 20 完成（Wave 1–2） |
 
 ---
 
@@ -30,20 +30,20 @@
 
 ### Wave 1 — 基础设施（互不依赖）
 
-- [ ] **T001**: `linsight_session_version.api_meta` 列与迁移
+- [x] **T001**: `linsight_session_version.api_meta` 列与迁移
   **文件**: `src/backend/bisheng/linsight/domain/models/linsight_session_version.py`，`src/backend/bisheng/core/database/alembic/versions/v3_0_0b1_f073_linsight_api_meta.py`
   **逻辑**: 增加可空 `api_meta`（`JsonType`）；迁移只加列、无回填，降级删列；`public_dump()` 不输出该列（design 决策 6、§4.3）
   **测试**: MySQL 与 DM8 各执行一次 upgrade / downgrade
   **覆盖 AC**: AC-21、AC-19（为其提供开关）
   **依赖**: 无
 
-- [ ] **T002**: 错误码 26060–26067 与三语文案
+- [x] **T002**: 错误码 26060–26067 与三语文案
   **文件**: `src/backend/bisheng/common/errcode/open_api.py`，`src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`
   **逻辑**: 按 design 决策 14 定义 8 个类（继承 `OpenApiAuthError`，带 `http_status`）；26062 / 26065 支持 `data` 载荷；运行文案生成脚本，不手改生成物；`pnpm check-i18n` 通过
   **覆盖 AC**: AC-02、AC-09、AC-12、AC-13、AC-17、AC-18、AC-23
   **依赖**: 无
 
-- [ ] **T003**: 请求与视图 schema
+- [x] **T003**: 请求与视图 schema
   **文件**: `src/backend/bisheng/open_api/domain/schemas/task_mode.py`
   **逻辑**: `OpenTaskSubmitReq`（`extra=forbid`，字段与长度上限见 design §4.2）；`OpenTaskView`、`OpenTaskResult`、`OpenTaskFile` 等视图；状态枚举含 `waiting_input`（design 决策 12）
   **测试**: `test/open_api/test_task_mode_schema.py`——多余字段、个人知识库字段、`conversationId`、超长文本均被拒
@@ -52,47 +52,47 @@
 
 ### Wave 2 — 执行内核改动（依赖 T001）
 
-- [ ] **T004**: 共享提交核心测试
+- [x] **T004**: 共享提交核心测试
   **文件**: `src/backend/test/workstation/test_task_submit_service.py`
   **逻辑**: 断言 v1 路径行为不变（先写任务轮再入队、入队失败 best-effort）；v2 路径入队失败置版本为失败并抛出；传入 `session_subject` 时会话带主体标记、附件分区为 `subject.storage_partition`；`api_meta` 写入；埋点 `source` 取值
   **覆盖 AC**: AC-08、AC-32、AC-33、AC-34
   **依赖**: T001
 
-- [ ] **T005**: `submit_user_question` 接收主体、来源与 `api_meta`
+- [x] **T005**: `submit_user_question` 接收主体、来源与 `api_meta`
   **文件**: `src/backend/bisheng/linsight/domain/services/workbench_impl.py`
   **逻辑**: 签名增加 `*, session_subject: SessionSubject | None = None, api_meta: dict | None = None, telemetry_source: str = "platform"`；传入主体时新会话经 `session_subject.stamp()` 创建，附件提升用 `session_subject.storage_partition`；`api_meta` 写入版本；埋点 `source=telemetry_source`。默认参数下行为与现状完全一致（design 决策 5、决策 6）
   **测试**: T004 中 `submit_user_question` 相关用例通过
   **覆盖 AC**: AC-32、AC-33、AC-34
   **依赖**: T001、T004
 
-- [ ] **T020**: 抽出共享提交核心 `submit_task_turn`
+- [x] **T020**: 抽出共享提交核心 `submit_task_turn`
   **文件**: `src/backend/bisheng/workstation/domain/services/task_submit_service.py`（新），`workstation/domain/services/chat_service.py`
   **逻辑**: `async def submit_task_turn(data: APIChatCompletion, login_user: UserPayload, *, session_subject=None, api_meta=None, telemetry_source="platform", strict_enqueue=False) -> LinsightSessionVersion`：`_to_linsight_submit` → `submit_user_question`（T005）→ `persist_task_turn_message` → `enqueue_session_for_execution`；`strict_enqueue=True` 时入队失败把版本置为 `failed`（`output_result.error_message` 写明原因）并抛 503。内容安全与标题生成**不在**核心内，由调用方处理。`_task_mode_stream_completion` 改为调用它（`strict_enqueue=False`），SSE 交接与标题生成原样保留（design 决策 3）
   **测试**: T004 全部通过；`test/workstation/` 既有任务模式用例不回归
   **覆盖 AC**: AC-08
   **依赖**: T005
 
-- [ ] **T006**: 无人值守装配测试
+- [x] **T006**: 无人值守装配测试
   **文件**: `src/backend/test/linsight/test_agent_factory_headless.py`
   **逻辑**: `channel` 为空时工具含 `ask_user`、提示词含第 0 步；`channel="open_api_v2"` 时二者同时不存在、含无人值守段与业务上下文指令段（断言 prompt ⟺ tool 同步）
   **覆盖 AC**: AC-21、AC-10
   **依赖**: T001
 
-- [ ] **T007**: 无人值守装配实现
+- [x] **T007**: 无人值守装配实现
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`
   **逻辑**: 按 `api_meta.channel` 从实际工具列表生成提示词；去掉 `ask_user`（含修复中间件列表）；追加无人值守段与 `instructions`（design 决策 7）。worker 已按队列项携带的 `tenant_id` 恢复租户上下文（`encode_queue_item`），本任务不改该机制
   **测试**: T006 全部通过
   **覆盖 AC**: AC-21、AC-10
   **依赖**: T001、T006
 
-- [ ] **T008**: 执行前复核技能（测试 + 实现）
+- [x] **T008**: 执行前复核技能（测试 + 实现）
   **文件**: `src/backend/bisheng/linsight/domain/services/skill_provisioning.py`，`src/backend/test/linsight/test_skill_provisioning_open_api.py`
   **逻辑**: `channel="open_api_v2"` 且所选技能有缺失时抛出，任务以「失败」结束，说明列出技能名；工作台任务仍静默丢弃（design 决策 8）
   **测试**: 两种 channel 各一例
   **覆盖 AC**: AC-19
   **依赖**: T001
 
-- [ ] **T009**: 终止逻辑下沉
+- [x] **T009**: 终止逻辑下沉
   **文件**: `src/backend/bisheng/linsight/domain/services/workbench_impl.py`，`linsight/api/endpoints/linsight.py`，`src/backend/test/linsight/test_terminate_shared.py`
   **逻辑**: 抽出 `async def terminate(cls, session_version: LinsightSessionVersion) -> None`（出队 → 置 `terminated` → 写任务轮 → 推终止事件），不含归属与终态判定；v1 端点保留自身判定后调用它，响应不变（design 决策 13）
   **测试**: 排队中、执行中各终止一次，状态与任务轮一致；v1 端点响应不变
@@ -109,7 +109,7 @@
 
 - [ ] **T011**: `OpenTaskModeService.submit`
   **文件**: `src/backend/bisheng/open_api/domain/services/task_mode_service.py`（新）
-  **逻辑**: `async def submit(cls, principal: OpenApiPrincipal, req: OpenTaskSubmitReq) -> OpenTaskSubmitted`：决策 9 校验（判定函数单独成 `_check_*`，供 T014 复用）→ 内容安全 → `req.to_internal()` → `submit_task_turn(..., strict_enqueue=True, telemetry_source="api")`（T020）→ `asyncio.create_task` 后台生成标题（异常只记日志）→ 返回 `{task_id, status, queue_position}`
+  **逻辑**: `async def submit(cls, principal: OpenApiPrincipal, req: OpenTaskSubmitReq) -> OpenTaskSubmitted`：决策 9 校验（判定函数单独成 `_check_*`，供 T014 复用）→ 内容安全 → `req.to_internal()` → `submit_task_turn(..., strict_enqueue=True, telemetry_source="api")`（T020）（`session_name` = 任务描述首行前 30 字）→ 返回 `{task_id, status, queue_position}`
   **测试**: T010 全部通过
   **覆盖 AC**: AC-02、AC-08、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-18
   **依赖**: T002、T003、T020、T010
@@ -196,4 +196,8 @@
 
 ## 实际偏差记录
 
-（无）
+- T011 偏离 → 标题不再调用 LLM，改截取任务描述（design 决策 3）
+- T008 扩展 → 技能复制失败在开放 API 任务中也判失败（design 决策 8）
+- T003 扩展 → 附件改强类型并补 `file_id`（design §5 第 15 条）
+- T009 → 调整既有 `test_terminate_persists_task_turn.py` 的 patch 位置（design §5 第 17 条）
+- 测试基线（2026-09-30，`feat/3.0.0-beta2` @ 9d01474d8）：`test/linsight` + `test/workstation` 在基线上即有 12 条失败（`test_conversation_export_renderers` ×4、`test_conversation_export_service` ×1、`test_workbench_content_safety_input` ×2、`test_workbench_content_safety_output` ×4、`test_workstation_model_migration` ×1），与本 Feature 无关；Wave 2 后同一批 12 条、无新增

@@ -29,7 +29,7 @@
 - **身份**：沿用 F053 `OpenApiPrincipal` 与 `SessionSubject`。自身身份下服务账号不是自然人，凡要求 `user.user_id` 的旧表（`message_session.user_id`、`linsight_session_version.user_id` 外键、LLM 调用的 `invoke_user_id`）一律写**资源归属人**作兼容 id，真实主体写 `message_session.api_subject_*`——与日常模式一致（F053 design §8 第 6 条）。
 - **执行在独立进程**：灵思 worker 从 Redis `linsight:queue` 取任务，与 HTTP 进程不共享 ContextVar。worker 执行期**不做任何用户级权限判定**（知识检索只按提交时的 id 白名单，`tool/domain/langchain/linsight_knowledge.py:44-70`），因此全部权限判定必须在提交时完成。
 - **队列无上限**（PRD DT-5）：API 与工作台共用一个队列，先到先执行。
-- **附件临时桶 3 天回收**（`core/storage/minio/minio_storage.py:318-330`），上传返回的预签名链接却标 7 天；提交时附件被复制到正式存储（`core/storage/chat_attachment.py:95`），之后不再受 3 天限制。
+- **附件临时桶 3 天回收**（`core/storage/minio/minio_storage.py:318-330`），上传返回的预签名链接却标 7 天。提交时复制到正式存储的只是会话里展示用的副本（`core/storage/chat_attachment.py:95`）；worker 在**执行时**才按 `pending_files` 里的临时桶地址读取附件（`linsight/domain/services/workbench_impl.py` `ingest_pending_files`），所以排队超过 3 天的附件会过期，结果中列为「已过期」（spec 边界情况）。
 - **双 DB**：新增一列 JSON，须用项目既有 `JsonType`，MySQL / DM8 同时验证。
 - **prompt ⟺ tool 同步**（`linsight/AGENTS.md:24`）：关闭 `ask_user` 必须同时去掉工具与系统提示词中的相关段落。
 
@@ -59,7 +59,7 @@
   - A. 从 `_task_mode_stream_completion`（`workstation/domain/services/chat_service.py:2465`）抽出 `submit_task_turn(...)`：内容安全 → 建会话与版本 → 写任务轮 → 入队；v1 在其外包 SSE 交接与标题生成，v2 在其外返回 JSON。
   - B. v2 另写一份编排。
 - **选定**：A。
-- **原因**：两份编排必然漂移（v1 已修过「先写任务轮再入队」的竞态，`chat_service.py:2526-2541` 注释）。共享核心增加两个 v2 必需的差异，由参数控制：① 入队失败在 v2 **不是 best-effort**——v1 可依赖前端 start-execute 兜底，v2 没有前端，入队失败即把版本置为「失败」并向调用方返回 503，不返回任务标识；② 标题生成在 v2 **不阻塞响应**，改为提交后后台执行（v1 在 SSE 流里最多等 30 秒，`chat_service.py:2462`）。
+- **原因**：两份编排必然漂移（v1 已修过「先写任务轮再入队」的竞态，`chat_service.py:2526-2541` 注释）。共享核心增加两个 v2 必需的差异，由参数控制：① 入队失败在 v2 **不是 best-effort**——v1 可依赖前端 start-execute 兜底，v2 没有前端，入队失败即把版本置为「失败」并向调用方返回 503，不返回任务标识；② v2 **不调用 LLM 生成标题**，建会话时直接取任务描述首行前 30 个字作会话名（v1 在 SSE 流里最多等 30 秒生成标题，`chat_service.py:2462`）。原因：fire-and-forget 的后台任务会在请求结束后被回收、标题永远停在「New Chat」（v1 代码注释记录过这个坑）；且开放 API 的任务描述多为客户应用内置的同一段提示词，LLM 标题也会千篇一律。
 - **何时该重新考虑**：v1 前端不再需要 start-execute 兜底时，v1 也可改为入队失败即报错。
 
 ### 决策 4：身份——提交时判定，worker 不恢复开放 API 身份
@@ -96,7 +96,7 @@
 
 ### 决策 8：执行前复核——仅对开放 API 任务，技能缺失即失败
 
-- **选定**：worker 装配技能时（`linsight/domain/services/skill_provisioning.py:68` 起），`channel == "open_api_v2"` 且所选技能中有不存在或未启用的，任务以「失败」结束，失败说明列出技能名，不继续执行。模型无需改动：解析失败或已下线本就抛错并以「失败」结束（`agent_factory.py:1192-1231` → `task_exec.py:2454`）。
+- **选定**：worker 装配技能时（`materialize_session_skills(..., strict=True)`），`channel == "open_api_v2"` 且所选技能中有不存在、未启用或复制失败的，抛 `SkillsUnavailableForRunError`，经 `_handle_task_failure` 以「失败」结束，失败说明列出技能名，不继续执行。模型无需改动：解析失败或已下线本就抛错并以「失败」结束（`agent_factory.py:1192-1231` → `task_exec.py:2454`）。
 - **原因**：spec AC-19。工作台任务模式的静默丢弃是既有行为，本 Feature 不改（非目标）。
 - **何时该重新考虑**：工作台也决定「技能缺失即失败」时，去掉 channel 条件。
 
@@ -187,7 +187,6 @@
 → 端点按原始 body 的 `run_mode` 分派：缺省或 `daily` 走现有 `OpenDailyChatCompletionReq`（不变）；`task` 走 `OpenTaskSubmitReq`；其它值 `26017`
 → `OpenTaskModeService.submit(principal, req)`（新，`open_api/domain/services/task_mode_service.py`）：决策 9 校验
 → `submit_task_turn(...)`（新共享核心，自 `chat_service._task_mode_stream_completion` 抽出）：`submit_user_question(..., session_subject, api_meta, telemetry_source="api")` → `persist_task_turn_message` → `enqueue_session_for_execution`（失败即置失败并 503）
-→ 后台生成会话标题（不阻塞）
 → 返回 `{task_id, status: "queued", queue_position}`
 
 **执行**：worker（不变）出队 → `agent_factory` 读 `api_meta.channel` 切换无人值守提示词与工具集（决策 7）→ 装配技能，缺失即失败（决策 8）→ 执行 → 写 `output_result` 与状态。
@@ -244,11 +243,14 @@
 | 7 | v1 终止只拦 `completed` / `terminated`，会把「失败」改写成「已终止」 | v2 终止失败任务变成已终止 | 决策 13 |
 | 8 | 产物条目的 `file_path` 是 worker 本地绝对路径，`public_dump` 原样输出（`linsight/domain/utils.py:455-462`、`linsight_session_version.py:157-169`） | 泄露服务器路径 | 决策 12 投影不输出 |
 | 9 | v1 灵思端点多处不校验归属：`task-message-stream`、`queue-status`、`batch-download-files`、`download-md-to-pdf-or-docx`、`file-parsing-status`；且自身身份任务的兼容 `user_id` 是资源归属人，归属人凭 id 可经 v1 读到任务详情 | 越权读取 | **本期不修**（用户 2026-09-30 裁定与日常模式同类问题另行处理）；v2 端点不复用这些 v1 端点 |
-| 10 | 上传返回的预签名链接标 7 天，临时桶实际 3 天回收 | 对外文档写错有效期 | 对外文档写「3 天内提交」；提交时已复制到正式存储，排队中不会过期 |
+| 10 | 上传返回的预签名链接标 7 天，临时桶实际 3 天回收 | 对外文档写错有效期 | 对外文档写「上传后 3 天内开始执行」，见第 16 条 |
 | 11 | 任务模式有意不读个人知识库开关（`task_exec.py:1556-1558`），个人知识库类型已下线 | 误开放个人知识库 | spec AC-15；schema 不含该字段 |
 | 12 | 自身身份下 LLM 调用的 `invoke_user_id` 是资源归属人（`agent_factory.py:1225`，外键约束） | 模型用量统计记在归属人名下 | 与日常模式一致；审计记录可查到服务账号，见 §8 |
 | 13 | v1 提交遇到「会话不存在或不属于你」会静默新建会话（`workbench_impl.py:271-276`） | — | v2 不接受 `conversationId`（26061），不经过该分支 |
 | 14 | 内容安全拦截在 v1 会建会话并写一条自动回复 | v2 若复用会留下空会话 | v2 在建会话前判定，命中即返回 26065，不写任何行 |
+| 15 | `_to_linsight_submit` 静默跳过没有 `file_id` 的附件，而开放 API 上传返回值里没有 `file_id` | 附件全部丢失、任务照常跑 | `OpenTaskSubmitReq` 把附件定义为 `{file_path, file_name}`，`to_internal()` 为每个附件生成 `file_id` |
+| 16 | worker 执行时才从临时桶读附件，排队超过 3 天即过期 | 以为提交时已转存、对外文档写错 | 对外文档写明；结果中列为「已过期」 |
+| 17 | v1 终止相关测试原先 patch 的是端点模块上的依赖 | 抽出共享函数后测试失败或空跑 | 终止主体已移到 `LinsightWorkbenchImpl.terminate`，测试改 patch 新位置 |
 
 ---
 
@@ -315,3 +317,4 @@
 |---|---|---|
 | 2026-09-30 | 初版 | spec 评审通过 |
 | 2026-09-30 | 用户确认 design；spec AC-34 按自身身份模型用量记在资源归属人名下改写 | design 评审 |
+| 2026-09-30 | 决策 3 标题改为截取任务描述；决策 8 复制失败也判失败；§2 附件有效期订正；§5 增第 15–17 条 | 实现 Wave 1–2 |
