@@ -1,5 +1,11 @@
 /* eslint-disable no-restricted-syntax -- fixtures are Chinese document text being matched, not UI copy */
-import { buildLocateAnchors, findCitedSpan, highlightCitedText, normalizeForLocate } from './citationLocate';
+import {
+    buildLocateAnchors,
+    clearCitedHighlight,
+    findCitedSpan,
+    highlightCitedText,
+    normalizeForLocate,
+} from './citationLocate';
 
 describe('normalizeForLocate', () => {
     it('keeps letters, digits and CJK; folds case and full-width', () => {
@@ -72,5 +78,27 @@ describe('highlightCitedText', () => {
         const root = document.getElementById('root')!;
         expect(highlightCitedText(root, ['第二十二条 个人奖励：个人季度得分达到零点八以上者'])).toBe(false);
         expect(root.querySelectorAll('[data-cite-hit]')).toHaveLength(0);
+    });
+
+    it('draws one continuous band per passage and clears it', () => {
+        document.body.innerHTML = `<div id="root">
+            <p>第一条 目的 为建立科学、透明、高效的绩效管理体系，推动公司战略目标落地。</p>
+            <p>第二条 适用范围 本规则适用于公司全体正式员工，包括高管团队与研发团队。</p>
+            <p>第三条 基本原则 透明公开、挑战导向、聚焦重点、结果量化、持续反馈。</p>
+        </div>`;
+        const root = document.getElementById('root')!;
+        Element.prototype.scrollIntoView = jest.fn();
+        const chunk = '第一条 目的 为建立科学、透明、高效的绩效管理体系，推动公司战略目标落地。\n第二条 适用范围 本规则适用于公司全体正式员工，包括高管团队与研发团队。';
+        expect(highlightCitedText(root, [chunk])).toBe(true);
+        // two paragraphs, one band: the passage reads as one quotation
+        expect(root.querySelectorAll('[data-cite-hit]')).toHaveLength(2);
+        expect(root.querySelectorAll('[data-cite-band]')).toHaveLength(1);
+        // re-locating (next occurrence) never stacks bands
+        highlightCitedText(root, [chunk]);
+        expect(root.querySelectorAll('[data-cite-band]')).toHaveLength(1);
+        clearCitedHighlight(root);
+        expect(root.querySelectorAll('[data-cite-band]')).toHaveLength(0);
+        expect(root.querySelectorAll('[data-cite-hit]')).toHaveLength(0);
+        expect(root.style.position).toBe('');
     });
 });

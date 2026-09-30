@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Outlined } from 'bisheng-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -10,6 +10,7 @@ import { cn } from '~/utils';
 import {
   getCitationDocumentFileType,
   getCitationDocumentName,
+  getCitationItem,
   getCitationItemBBoxes,
   isFilePreviewCitation,
   isMediaCitation,
@@ -18,6 +19,7 @@ import {
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
 } from './citationUtils';
+import { useCitedPassageLocate } from './useCitedPassageLocate';
 
 export type CitationDocumentPreviewState = {
   detail: ChatCitation;
@@ -37,9 +39,6 @@ type CitationDocumentPreviewContentProps = {
   preview: CitationDocumentPreviewState | null;
   compactMode?: boolean;
   className?: string;
-  /** F071: report the viewer type once the file url resolves (pdf / docx / md …),
-   *  so a host can locate the cited text in viewers that have no bbox support. */
-  onFileTypeResolved?: (fileType: string) => void;
 };
 
 function getExtFromUrl(url: string) {
@@ -66,7 +65,6 @@ export function CitationDocumentPreviewContent({
   preview,
   compactMode = false,
   className,
-  onFileTypeResolved,
 }: CitationDocumentPreviewContentProps) {
   const localize = useLocalize();
   const detail = preview?.detail ?? null;
@@ -94,9 +92,18 @@ export function CitationDocumentPreviewContent({
     : [];
   const targetBBox = bboxes[0] ?? null;
 
-  useEffect(() => {
-    if (fileUrl && fileType) onFileTypeResolved?.(fileType);
-  }, [fileType, fileUrl, onFileTypeResolved]);
+  // Viewers without bbox support (docx / md / txt) land on the cited passage by
+  // matching the chunk text; see useCitedPassageLocate.
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const citedChunks = useMemo(() => {
+    if (!locateChunk || !detail) return [];
+    const ids = preview?.itemIds?.length ? preview.itemIds : [preview?.itemId];
+    return ids
+      .map((id) => getCitationItem(detail, id))
+      .map((item) => item?.content || item?.snippet || '')
+      .filter(Boolean) as string[];
+  }, [detail, locateChunk, preview?.itemId, preview?.itemIds]);
+  const locate = useCitedPassageLocate(viewerRef, fileUrl ? fileType : '', citedChunks);
 
   useEffect(() => {
     let active = true;
@@ -127,16 +134,26 @@ export function CitationDocumentPreviewContent({
 
   return (
     <div className={cn('flex h-full min-h-0 flex-1 flex-col', className)}>
+      {locate === 'missed' && citedChunks.length > 0 && (
+        <div className="max-h-40 shrink-0 overflow-y-auto border-b border-border-base bg-orange-50 px-4 py-3 text-[13px] scrollbar-os">
+          <p className="mb-1 font-medium text-orange-600">{localize('com_citation.locate_missed')}</p>
+          <p className="whitespace-pre-wrap break-words border-l-2 border-border-base pl-2 text-text-2">
+            {citedChunks.join('\n\n')}
+          </p>
+        </div>
+      )}
       {fileUrl ? (
-        <FilePreview
-          fileName={fileName}
-          fileType={fileType}
-          fileUrl={fileUrl}
-          transcriptUrl={transcriptUrl}
-          highlightBboxes={bboxes}
-          targetBBox={targetBBox}
-          compactMode={compactMode}
-        />
+        <div ref={viewerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <FilePreview
+            fileName={fileName}
+            fileType={fileType}
+            fileUrl={fileUrl}
+            transcriptUrl={transcriptUrl}
+            highlightBboxes={bboxes}
+            targetBBox={targetBBox}
+            compactMode={compactMode}
+          />
+        </div>
       ) : isResolvingFileUrl ? (
         <div className="flex h-full items-center justify-center text-[14px] text-text-3">
           {localize('com_citation.preview_loading')}
