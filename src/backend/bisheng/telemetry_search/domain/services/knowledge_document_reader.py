@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from bisheng.common.errcode.telemetry import DocumentStatisticsNotReadyError
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.telemetry.domain.repositories.implementations.knowledge_statistics_repository_impl import (
     KnowledgeStatisticsRepositoryImpl as KnowledgeStatisticsRepository,
@@ -119,7 +118,18 @@ class DocumentReader:
             for bucket in page:
                 if bucket["doc_count"] != 1:
                     raise ValueError("同一文件存在重复统计投影，请检查索引别名或重新导入")
-                records.append(bucket["record"]["hits"]["hits"][0]["_source"])
+                records.append(dict(bucket["record"]["hits"]["hits"][0]["_source"]))
+        # 旧索引记录在查询内补齐身份, 不要求迁移或改写 ES 数据。
+        missing = [row for row in records if not row.get("knowledge_identity")]
+        if missing:
+            identities = await asyncio.to_thread(
+                KnowledgeStatisticsRepository.identities, [int(row["file_id"]) for row in missing]
+            )
+            for row in missing:
+                identity = identities.get(int(row["file_id"]))
+                if not identity:
+                    raise ValueError(f"文件统计无法关联文档身份，请检查库存同步：file_id={row['file_id']}")
+                row["knowledge_identity"] = identity
         stats = DocumentStatistics(records, {})
         if not include_usage:
             return stats
@@ -171,11 +181,6 @@ class DocumentReader:
 @asynccontextmanager
 async def document_reader(index: str):
     client = await get_es_connection()
-    mapping = await client.indices.get_mapping(index=index)
-    if not mapping or any(
-        value.get("mappings", {}).get("_meta", {}).get("document_statistics_version") != 1 for value in mapping.values()
-    ):
-        raise DocumentStatisticsNotReadyError()
     response = await client.open_point_in_time(index=index, keep_alive="2m", allow_partial_search_results=False)
     reader = DocumentReader(client, response["id"])
     try:

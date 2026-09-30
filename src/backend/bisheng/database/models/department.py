@@ -21,6 +21,7 @@ from sqlalchemy import (
     update,
 )
 from sqlmodel import Field, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
@@ -305,6 +306,78 @@ class UserDepartment(SQLModelSerializable, table=True):
 
 
 class DepartmentDao:
+    @classmethod
+    async def arebuild_subtree_paths(
+        cls,
+        session: AsyncSession,
+        department: Department,
+        parent_id: int | None,
+    ) -> Department:
+        """按父关系重建目标子树, 调用者负责同一事务的提交与回滚。"""
+        from bisheng.common.errcode.department import DepartmentCircularMoveError, DepartmentNotFoundError
+
+        root = (await session.exec(
+            select(Department).where(Department.id == department.id)
+            .with_for_update().execution_options(populate_existing=True)
+        )).first()
+        if root is None or root.tenant_id != department.tenant_id:
+            raise DepartmentNotFoundError()
+
+        ancestors: list[int] = []
+        ancestor_has_mount = False
+        seen = {int(root.id)}
+        ancestor_id = parent_id
+        while ancestor_id is not None:
+            if ancestor_id in seen:
+                raise DepartmentCircularMoveError()
+            seen.add(ancestor_id)
+            ancestor = (await session.exec(
+                select(Department).where(Department.id == ancestor_id)
+                .with_for_update().execution_options(populate_existing=True)
+            )).first()
+            if ancestor is None or ancestor.tenant_id != root.tenant_id:
+                raise DepartmentNotFoundError(msg="父组织不存在于当前组织所属租户")
+            ancestors.append(int(ancestor.id))
+            ancestor_has_mount |= ancestor.is_tenant_root == 1
+            ancestor_id = ancestor.parent_id
+
+        # 不使用缓存的父路径, 也不按旧路径前缀选择后代, 避免漏改或误改。
+        paths = {int(root.id): "/" + "/".join(map(str, [*reversed(ancestors), root.id])) + "/"}
+        nodes = {int(root.id): root}
+        frontier = [int(root.id)]
+        while frontier:
+            following = []
+            for offset in range(0, len(frontier), 400):
+                children = (await session.exec(
+                    select(Department).where(Department.parent_id.in_(frontier[offset:offset + 400]))
+                    .order_by(Department.id).with_for_update().execution_options(populate_existing=True)
+                )).all()
+                for child in children:
+                    child_id = int(child.id)
+                    if child.tenant_id != root.tenant_id:
+                        raise DepartmentNotFoundError(msg="子组织存在跨租户父关系")
+                    if child_id in nodes:
+                        raise DepartmentCircularMoveError()
+                    nodes[child_id] = child
+                    paths[child_id] = f"{paths[child.parent_id]}{child_id}/"
+                    following.append(child_id)
+            frontier = following
+        if any(len(path) > 512 for path in paths.values()):
+            raise ValueError("组织路径超过数据库字段允许的 512 个字符")
+        if root.parent_id != parent_id and ancestor_has_mount and any(n.is_tenant_root == 1 for n in nodes.values()):
+            # 使用真实父关系复核既有挂载规则, 旧路径不能成为绕过检查的入口。
+            from bisheng.common.errcode.tenant_tree import TenantTreeNestingForbiddenError
+
+            raise TenantTreeNestingForbiddenError()
+
+        # 验证整棵目标子树后再写入, 归档、挂载和成员字段保持不变。
+        root.parent_id = parent_id
+        for node_id, node in nodes.items():
+            node.path = paths[node_id]
+            session.add(node)
+        await session.flush()
+        return root
+
     @classmethod
     def get_by_id(cls, dept_id: int) -> Department | None:
         with get_sync_db_session() as session:
@@ -841,42 +914,16 @@ class DepartmentDao:
         parent_path: str,
         last_sync_ts: int,
     ) -> Department | None:
-        """Update parent linkage and keep the entire materialized subtree aligned."""
-
-        def final_path(path_prefix: str, child_id: int) -> str:
-            base = (path_prefix or "").strip()
-            if base and not base.endswith("/"):
-                base = f"{base}/"
-            if not base.startswith("/"):
-                base = f"/{base}" if base else "/"
-            return f"{base}{child_id}/".replace("//", "/")
+        """更新父关系及真实后代路径, parent_path 仅保留调用兼容。"""
 
         existing = await cls.aget_by_id(dept_id)
         if existing is None:
             return None
-        new_path = final_path(parent_path, dept_id)
         async with get_async_db_session() as session:
-            old_path = (existing.path or "").strip()
-            if old_path and old_path != new_path:
-                if not old_path.endswith(f"/{dept_id}/"):
-                    raise ValueError(
-                        f"unsafe materialized path for department {dept_id}: {old_path!r}"
-                    )
-                await session.exec(
-                    update(Department)
-                    .where(Department.path.like(f"{old_path}%"))
-                    .values(path=func.replace(Department.path, old_path, new_path))
-                )
-            await session.exec(
-                update(Department)
-                .where(Department.id == dept_id)
-                .values(
-                    parent_id=parent_id,
-                    path=new_path,
-                    sync_parent_external_id=None,
-                    last_sync_ts=last_sync_ts,
-                )
-            )
+            dept = await cls.arebuild_subtree_paths(session, existing, parent_id)
+            dept.sync_parent_external_id = None
+            dept.last_sync_ts = last_sync_ts
+            session.add(dept)
             await session.commit()
         return await cls.aget_by_id(dept_id)
 
@@ -904,14 +951,6 @@ class DepartmentDao:
         so the department becomes visible again.
         """
 
-        def final_path(parent_path: str, dept_id: int) -> str:
-            base = (parent_path or "").strip()
-            if base and not base.endswith("/"):
-                base = f"{base}/"
-            if not base.startswith("/"):
-                base = f"/{base}" if base else "/"
-            return f"{base}{dept_id}/".replace("//", "/")
-
         existing = await cls.aget_by_source_external_id(source, external_id)
         resolved_pending_parent = None if parent_id is not None else sync_parent_external_id
         async with get_async_db_session() as session:
@@ -921,7 +960,7 @@ class DepartmentDao:
                     name=name,
                     parent_id=parent_id,
                     tenant_id=tenant_id,
-                    path=path,
+                    path="",
                     sort_order=sort_order,
                     source=source,
                     external_id=external_id,
@@ -931,39 +970,20 @@ class DepartmentDao:
                     sync_parent_external_id=resolved_pending_parent,
                 )
                 session.add(dept)
-                await session.commit()
-                await session.refresh(dept)
-                dept.path = final_path(path, int(dept.id))
-                session.add(dept)
+                # 先 flush 获取 ID, 路径验证完成后统一提交, 失败不留下半创建记录。
+                await session.flush()
+                dept = await cls.arebuild_subtree_paths(session, dept, parent_id)
                 await session.commit()
                 await session.refresh(dept)
                 return dept
-            new_path = final_path(path, int(existing.id))
-            old_path = (existing.path or "").strip()
-            if old_path and old_path != new_path:
-                if not old_path.endswith(f"/{existing.id}/"):
-                    raise ValueError(
-                        f"unsafe materialized path for department {existing.id}: {old_path!r}"
-                    )
-                await session.exec(
-                    update(Department)
-                    .where(Department.path.like(f"{old_path}%"))
-                    .values(path=func.replace(Department.path, old_path, new_path))
-                )
-            await session.exec(
-                update(Department)
-                .where(Department.id == existing.id)
-                .values(
-                    name=name,
-                    parent_id=parent_id,
-                    path=new_path,
-                    sort_order=sort_order,
-                    status="active",
-                    is_deleted=0,
-                    last_sync_ts=last_sync_ts,
-                    sync_parent_external_id=resolved_pending_parent,
-                )
-            )
+            dept = await cls.arebuild_subtree_paths(session, existing, parent_id)
+            dept.name = name
+            dept.sort_order = sort_order
+            dept.status = "active"
+            dept.is_deleted = 0
+            dept.last_sync_ts = last_sync_ts
+            dept.sync_parent_external_id = resolved_pending_parent
+            session.add(dept)
             await session.commit()
         refreshed = await cls.aget_by_id(existing.id)
         return refreshed if refreshed is not None else existing

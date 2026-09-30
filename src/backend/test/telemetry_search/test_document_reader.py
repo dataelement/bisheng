@@ -105,22 +105,53 @@ async def test_partial_responses_are_errors(response):
         await module.DocumentReader(client, "pit").load([], include_usage=False)
 
 
-async def test_readiness_gate_and_pit_close_on_failure(monkeypatch):
+async def test_fixed_index_without_version_metadata_and_pit_close_on_failure(monkeypatch):
     client = type("ES", (), {})()
     client.indices = type("Indices", (), {"get_mapping": AsyncMock(return_value={"i": {"mappings": {}}})})()
     client.open_point_in_time = AsyncMock(return_value={"id": "pit"})
     client.close_point_in_time = AsyncMock()
     monkeypatch.setattr(module, "get_es_connection", AsyncMock(return_value=client))
-    with pytest.raises(module.DocumentStatisticsNotReadyError):
-        async with module.document_reader("index"):
-            pytest.fail("不应读取未迁移索引")
-    client.open_point_in_time.assert_not_awaited()
-    client.indices.get_mapping.return_value = {"i": {"mappings": {"_meta": {"document_statistics_version": 1}}}}
     with pytest.raises(RuntimeError):
-        async with module.document_reader("index") as reader:
+        async with module.document_reader("mid_knowledge_space_content_stat") as reader:
             reader.pit_id = "latest"
             raise RuntimeError("query failed")
+    client.indices.get_mapping.assert_not_awaited()
+    client.open_point_in_time.assert_awaited_once_with(
+        index="mid_knowledge_space_content_stat", keep_alive="2m", allow_partial_search_results=False
+    )
     client.close_point_in_time.assert_awaited_once_with(id="latest")
+
+
+@pytest.mark.parametrize("include_usage", [False, True])
+async def test_legacy_records_resolve_identity_without_reindex(monkeypatch, include_usage):
+    rows = [
+        {"file_id": 1, "record_type": "file", "file_type": 1, "timestamp": 1},
+        {"file_id": 2, "record_type": "file", "file_type": 1, "timestamp": 2, "knowledge_identity": None},
+        {"file_id": 3, "record_type": "file", "file_type": 1, "timestamp": 3, "knowledge_identity": "file:3"},
+        {"file_id": 9, "record_type": "preview_daily", "space_level": "team", "preview_count": 1, "timestamp": 4},
+    ]
+    identity_calls = []
+
+    def identities(ids):
+        identity_calls.append(ids)
+        return {1: "document:10", 2: "document:10"}
+
+    monkeypatch.setattr(module.KnowledgeStatisticsRepository, "identities", identities)
+    monkeypatch.setattr(module.KnowledgeStatisticsRepository, "aliases", lambda ids: {9: "document:10"})
+    stats = await module.DocumentReader(ES(rows), "pit").load([], include_usage=include_usage)
+    assert identity_calls == [[1, 2]]
+    assert stats.aggregate([], "total_file_count") == [[2]]
+    assert len(stats.detail("total_file_count", start=None, end=None)) == 2
+    assert stats.aggregate([], "called_document_count") == [[int(include_usage)]]
+    assert "knowledge_identity" not in rows[0]
+    assert rows[1]["knowledge_identity"] is None
+
+
+async def test_unresolvable_legacy_record_fails_without_guessing_identity(monkeypatch):
+    monkeypatch.setattr(module.KnowledgeStatisticsRepository, "identities", lambda ids: {})
+    rows = [{"file_id": 1, "record_type": "file", "file_type": 1, "timestamp": 1}]
+    with pytest.raises(ValueError, match="无法关联文档身份"):
+        await module.DocumentReader(ES(rows), "pit").load([], include_usage=False)
 
 
 def test_time_range_removed_from_candidates_and_intersected():

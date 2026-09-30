@@ -346,6 +346,37 @@ def test_history_gap_never_publishes_zero_report(tmp_path, gap):
     assert (args.output_dir / "来源诊断.csv").exists()
 
 
+@pytest.mark.parametrize("missing_event_id", [False, True])
+def test_explicit_raw_qa_policy_keeps_legacy_events_without_adding_projection_gaps(tmp_path, missing_event_id):
+    raw, dashboard = sources()
+    for row in raw.records[RAW_INDEX]:
+        if row["event_type"] == "portal_qa":
+            row["event_data"]["portal_qa_question_id"] = None
+            if missing_event_id:
+                row["event_id"] = None
+    dashboard.records[QA_INDEX].append(
+        {"tenant_id": 1, "timestamp": STAMP, "qa_type": "expert", "question_id": "deleted", "user_id": 102}
+    )
+    directory = tmp_path / "legacy"
+    with ExitStack() as stack:
+        report = CsvReport(directory, stack)
+        metrics = collect_database(fake_repository(), arguments(directory), report)
+        readers = [EsReader(c, 1, report.diagnose, lambda text: None) for c in (raw, dashboard)]
+        if missing_event_id:
+            with pytest.raises(ValueError, match="问题 ID"):
+                collect_events(metrics, *readers, report, qa_history_policy="raw")
+            return
+        collect_events(metrics, *readers, report, qa_history_policy="raw")
+        summary = metrics.reports()[0]
+        assert summary[0]["智能问答数"] == 1  # 两份重复旧事件仅计一次，不叠加不同投影标识。
+        assert summary[1]["专家问答数"] == 1  # 不叠加数据库中不存在的专家问题。
+        assert "event_id" in summary[-1]["备注"]
+        report.finish(metrics)
+    messages = (directory / "来源诊断.csv").read_text(encoding="utf-8-sig")
+    assert "event_id" in messages and "不叠加" in messages
+    assert (directory / "科室指标汇总.csv").exists()
+
+
 def test_cli_success_and_sanitized_failure(tmp_path, monkeypatch, capsys):
     from contextlib import nullcontext
 
@@ -395,6 +426,38 @@ def test_organization_mapping_conflicts_and_unknown_people_are_visible():
     metrics.login({"user_id": 101, "event_id": "old-member", "timestamp": STAMP})
     assert metrics.reports()[0][0]["登录次数"] == 1
     assert any("缺少租户成员关系" in item[-1] for item in diagnostics)
+
+
+def test_parent_tree_overrides_stale_paths_without_mutating_source(tmp_path):
+    scope = scope_fixture()
+    departments = [dict(row) for row in scope.departments.values()]
+    for row in departments:
+        if row["id"] == 10:
+            row["path"] = "/2/10/"  # 生产中的旧祖先前缀缺失。
+        if row["id"] == 30:
+            row["path"] = "/1/3/30/"  # 迁移后的旧分支仍留在路径字段。
+    repo = fake_repository()
+    repo.departments = lambda: departments
+    with ExitStack() as stack:
+        report = CsvReport(tmp_path / "parent-tree", stack)
+        metrics = collect_database(repo, arguments(tmp_path / "parent-tree"), report)
+        assert metrics.scope.locate(101)["group"] == "10"
+        assert metrics.scope.locate(101)["department_path"] == "/1/2/10/30/"
+        assert metrics.scope.locate(104)["manufacturing"] == 0
+        report.verify()
+    assert next(row for row in departments if row["id"] == 30)["path"] == "/1/3/30/"
+    messages = (tmp_path / "parent-tree" / "来源诊断.csv").read_text(encoding="utf-8-sig")
+    assert "/1/3/30/" in messages and "/1/2/10/30/" in messages
+    assert "parent_id" in messages
+
+
+@pytest.mark.parametrize("parent_id,expected", [(30, "环"), (999, "父组织不存在")])
+def test_invalid_parent_tree_is_rejected(parent_id, expected):
+    scope = scope_fixture()
+    departments = [dict(row) for row in scope.departments.values()]
+    next(row for row in departments if row["id"] == 10)["parent_id"] = parent_id
+    with pytest.raises(ValueError, match=expected):
+        OrganizationScope(departments, list(scope.members.values()), 1, 2)
 
 
 def test_document_events_follow_actual_serialization_and_ignore_failed_questions(tmp_path):

@@ -33,7 +33,16 @@
   _Depends: T001, T002, T003, T004, T005_
   _Verification: 记录实际执行结果与未验证环境边界_
 
-- [ ] T007 部署环境验收：真实 ES 快照分页、克隆和别名切换/回退，实际数据量性能，暂停写入并迁移后与脚本逐分类对账。
+- [ ] T007 部署环境验收：真实 ES 固定索引查询、快照分页、旧记录身份补齐及实际数据量性能，与脚本逐分类对账；仅在主动使用可选迁移工具时验证克隆和别名切换/回退。
   _Status: 未执行；本机 Docker 未运行，尚无本次获确认的目标部署环境。_
   _Requirements: REQ-002, REQ-006, REQ-007, REQ-008_
   _Depends: T006_
+
+- [x] T008 固定索引查询，移除版本门禁并兼容旧库存记录。
+  _Requirements: REQ-001, REQ-002, REQ-004, REQ-009_
+  _Acceptance: AC-001, AC-002, AC-004, AC-009_
+  _Verification: 无版本标记及旧记录回归修改前 4 项失败，修改后 4 项通过；`.venv/bin/python -m pytest test/telemetry_search/test_document_reader.py test/telemetry_search/test_document_statistics.py test/telemetry_search/test_document_query_contract.py test/telemetry_search/test_dashboard_export_detail.py test/telemetry_search/test_dashboard_export_service.py -q`：36 passed；改动 Python 文件 ruff check 通过。真实部署环境待 T007 验收。_
+
+## 实际偏差记录
+
+- 2026-09-30 用户要求固定使用既有索引，取消索引版本及迁移前置条件。正常查询不再检查 `_meta.document_statistics_version`；历史迁移工具保留为可选运维工具，不自动执行。缺失身份通过共享仓储只读补齐，不能关联的数据明确报库存同步错误。

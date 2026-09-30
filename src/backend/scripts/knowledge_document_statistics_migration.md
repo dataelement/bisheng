@@ -1,5 +1,7 @@
 # 知识空间文档统计升级
 
+正常查询固定使用 `mid_knowledge_space_content_stat`，不要求 `_meta.document_statistics_version`。旧库存记录缺少文档身份时，查询通过数据库只读补齐。本工具仅用于按需重建和校验统计投影，不是部署或查询的必经步骤。
+
 看板与 `export_portal_category_usage.py` 共用文档身份：优先 `reference_document_id`，其次版本表 `document_id`，无文档关系时使用独立 `file_id`。文件 ID 与文档 ID 使用不同前缀。同一知识的发布、分享引用合并计 1，独立上传不按名字或 MD5 合并。
 
 ## 指标口径
@@ -29,7 +31,7 @@
 
 1. 在测试环境运行只读预检，检查库存、历史记录、无法关联数量，确认 ES 有新索引和备份所需磁盘空间及克隆、别名权限。对真实数据量做查询耗时与内存验证。
 2. 安排维护窗口，暂停知识业务写入、遥测消费、统计 worker 和 beat；等待在途任务完成。保留原配置、原应用版本。仅停止定时任务不足以阻止请求路径写入日统计。
-3. 使用新版本代码运行迁移；此时新版 API 暂不对外提供统计查询。新版数据集未迁移时会明确返回“统计尚未就绪”。
+3. 如需执行本工具，使用新版本代码运行迁移；维护窗口内暂不对外提供统计查询。
 
 ```bash
 .venv/bin/python scripts/migrate_knowledge_document_statistics.py \
@@ -60,7 +62,7 @@
   --rollback
 ```
 
-确认仍暂停写入后，加 `--apply --writers-paused --confirm-index mid_knowledge_space_content_stat` 执行回切，并恢复原 API、worker、前端及原数据集定义。备份为旧结构，新版精确查询不会接受它。工具保留新索引，便于复核。
+确认仍暂停写入后，加 `--apply --writers-paused --confirm-index mid_knowledge_space_content_stat` 执行回切，并恢复原 API、worker、前端及原数据集定义。备份保留迁移前的结构和数据。工具保留新索引，便于复核。
 如果迁移后已有新写入，回退校验会拒绝切换；必须先对账并处理新增数据，避免用旧备份覆盖新行为。回退过程中若检测到并发写入，目标保留只读，需要人工核查后处理。
 
 ## 验收记录

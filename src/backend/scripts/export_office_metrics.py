@@ -73,7 +73,7 @@ def normalize_name(value: str) -> str:
 
 
 class OrganizationScope:
-    """只认当前主关系和完整组织路径，不按名称模糊推断人员归属。"""
+    """按当前父组织关系构建统计路径，不回写数据库或模糊推断人员归属。"""
 
     def __init__(
         self,
@@ -83,20 +83,35 @@ class OrganizationScope:
         manufacturing_id: int,
         office_map: dict | None = None,
     ) -> None:
-        self.departments = {positive(d["id"], "组织ID"): d for d in departments}
+        self.departments = {positive(d["id"], "组织ID"): dict(d) for d in departments}
         if len(self.departments) != len(departments):
             raise ReportError("组织 ID 重复")
         self.company_id, self.manufacturing_id = company_id, manufacturing_id
-        for org_id, department in self.departments.items():
-            path = department.get("path") or ""
-            if not re.fullmatch(r"/(?:[1-9][0-9]*/)+", path) or not path.endswith(f"/{org_id}/"):
-                raise ReportError(f"组织路径无效：{org_id}")
-            chain = [int(part) for part in path.strip("/").split("/")]
-            if len(set(chain)) != len(chain):
-                raise ReportError(f"组织路径存在环：{org_id}")
-            parent = department.get("parent_id")
-            if parent in self.departments and path != self.departments[parent]["path"] + f"{org_id}/":
-                raise ReportError(f"组织父链与路径冲突：{org_id}")
+        paths: dict[int, str] = {}
+        self.path_differences: list[tuple[int, str, str]] = []
+        for org_id in self.departments:
+            chain: list[int] = []
+            seen: set[int] = set()
+            current: int | None = org_id
+            while current is not None and current not in paths:
+                if current in seen:
+                    raise ReportError(f"组织父链存在环：{current}")
+                if current not in self.departments:
+                    raise ReportError(f"组织父组织不存在于指定租户：{chain[-1]} -> {current}")
+                seen.add(current)
+                chain.append(current)
+                parent = self.departments[current].get("parent_id")
+                current = positive(parent, "父组织ID") if parent is not None else None
+            path = paths[current] if current is not None else "/"
+            for node_id in reversed(chain):
+                path += f"{node_id}/"
+                paths[node_id] = path
+        for org_id, path in paths.items():
+            department = self.departments[org_id]
+            stored_path = department.get("path") or ""
+            if stored_path != path:
+                self.path_differences.append((org_id, stored_path, path))
+            department["path"] = path
         if company_id not in self.departments or manufacturing_id not in self.departments:
             raise ReportError("公司或制造部组织不存在于指定租户")
         self.company_path = self.departments[company_id]["path"]
@@ -110,7 +125,7 @@ class OrganizationScope:
         for name in OFFICES:
             candidates = [
                 d["id"]
-                for d in departments
+                for d in self.departments.values()
                 if d["path"].startswith(self.manufacturing_path) and normalize_name(d["name"]) == normalize_name(name)
             ]
             org_id = positive(office_map[name], "科室ID") if name in office_map else None
@@ -205,6 +220,7 @@ class Metrics:
         self.unknown_users: set[int] = set()
         self.membership_warnings: set[int] = set()
         self.has_warnings = False
+        self.qa_history_note = ""
 
     def groups(self, user_id: int) -> tuple[dict, list[Bucket]]:
         location = self.scope.locate(user_id)
@@ -297,6 +313,8 @@ class Metrics:
             row.update({name: len(bucket.documents[level]) for level, name in LEVELS.items()})
             row.update({name: bucket.questions[typ] for typ, name in QA.items()})
             notes = ["存在来源/归属异常，见诊断；仅统计可归属记录"] if self.has_warnings else []
+            if self.qa_history_note:
+                notes.append(self.qa_history_note)
             if extra:
                 notes.append("计入制造部合计，不进入主表十科室使用占比分母；本表不计算比例")
             else:
@@ -739,6 +757,11 @@ def collect_database(repository: OfficeRepository, args: argparse.Namespace, rep
         office_map,
     )
     metrics = Metrics(scope, report.diagnose)
+    for org_id, stored, derived in scope.path_differences:
+        report.diagnose(
+            "WARNING", "组织路径", str(org_id),
+            f"按 parent_id 构建统计路径；数据库path={stored};统计路径={derived};未修改数据库",
+        )
     for name, org_id in zip(OFFICES, scope.office_ids, strict=True):
         report.diagnose("INFO", "组织", name, f"匹配组织ID={org_id};路径={scope.departments[org_id]['path']}")
     seen_files = set()
@@ -760,8 +783,13 @@ def collect_database(repository: OfficeRepository, args: argparse.Namespace, rep
 
 
 def collect_events(
-    metrics: Metrics, raw: EsReader, dashboard: EsReader, report: CsvReport, raw_index: str = RAW_INDEX
+    metrics: Metrics, raw: EsReader, dashboard: EsReader, report: CsvReport, raw_index: str = RAW_INDEX,
+    qa_history_policy: str = "strict",
 ) -> None:
+    if qa_history_policy not in {"strict", "raw"}:
+        raise ReportError("未知问答历史策略")
+    if qa_history_policy == "raw":
+        metrics.qa_history_note = "问答以原始来源为准；旧记录按event_id去重，不能保证真实问题去重；看板独有记录不叠加"
     daily = Counter()
     fields = [
         "tenant_id",
@@ -794,10 +822,18 @@ def collect_events(
             scene = data.get("portal_qa_scene")
             if scene not in {"smart_qa", "document_qa", "my_knowledge_document_qa"}:
                 raise ReportError("存在未知问答场景，不能猜测归入智能或文档问答")
-            # portal_qa 是成功事件类型；兼容旧事件未保存 status 的情况，但问题 ID 不能缺失。
+            # 仅显式选择 raw 时兼容历史事件标识；不按用户、时间或会话猜测问题身份。
+            question_id = data.get("portal_qa_question_id")
+            if not question_id and qa_history_policy == "raw":
+                question_id = record.get("event_id")
+                if question_id:
+                    report.diagnose(
+                        "WARNING", raw_index, str(question_id),
+                        "旧成功问答缺少 question_id，按 event_id 去重；不能保证按真实问题 ID 完全去重",
+                    )
             row = {
                 "qa_type": "smart" if scene == "smart_qa" else "document",
-                "question_id": data.get("portal_qa_question_id"),
+                "question_id": question_id,
                 "user_id": uid,
                 "timestamp": stamp,
                 "source": raw_index,
@@ -807,7 +843,7 @@ def collect_events(
             raise ReportError("ES 返回不符合筛选条件的事件")
 
     compare_login(metrics, daily, dashboard, report)
-    compare_questions(metrics, dashboard, report)
+    compare_questions(metrics, dashboard, report, qa_history_policy)
 
 
 def compare_login(metrics: Metrics, daily: Counter, dashboard: EsReader, report: CsvReport) -> None:
@@ -852,7 +888,9 @@ def compare_login(metrics: Metrics, daily: Counter, dashboard: EsReader, report:
         raise ReportError(f"{gaps} 组登录日统计多于原始事件，历史覆盖不一致；已保留诊断，不能交付完整登录统计")
 
 
-def compare_questions(metrics: Metrics, dashboard: EsReader, report: CsvReport) -> None:
+def compare_questions(
+    metrics: Metrics, dashboard: EsReader, report: CsvReport, qa_history_policy: str = "strict"
+) -> None:
     seen = set()
     gaps = 0
     fields = ["tenant_id", "timestamp", "user_id", "qa_type", "question_id"]
@@ -876,7 +914,13 @@ def compare_questions(metrics: Metrics, dashboard: EsReader, report: CsvReport) 
     for key in metrics.question_events.keys() - seen:
         report.diagnose("WARNING", QA_INDEX, "/".join(key), "缺少看板投影，使用原始问题记录")
         metrics.has_warnings = True
-    if gaps:
+    if gaps and qa_history_policy == "raw":
+        metrics.has_warnings = True
+        report.diagnose(
+            "WARNING", QA_INDEX, "原始来源优先",
+            f"{gaps} 个看板独有问题不叠加；智能/文档按原始成功事件，专家按当前数据库问题；差异已逐条保留",
+        )
+    elif gaps:
         raise ReportError(f"{gaps} 个投影问题在原始来源中不存在；已保留诊断，不能冒充完整问答统计")
 
 
@@ -888,12 +932,18 @@ def write_rules(report: CsvReport, args: argparse.Namespace) -> None:
         "导出开始时间": datetime.now(CHINA).isoformat(),
         "时间范围": "不设日期筛选；知识为当前有效库存，行为为现存历史。来源读取窗口不同，不承诺跨系统同一快照。",
         "归属": "按文件 user_id、登录人、提问人的当前主组织，含子组织；不按在职状态排除。无当前主组织单列诊断。",
+        "组织树": "按指定租户当前 parent_id 关系在内存构建；原 path 差异写入诊断，不回写数据库。父节点缺失或环路拒绝统计。",
         "库存": "普通个人库及公共/部门/科室/团队库；当前成功、有效入口；排除软删除、历史版本、收藏夹和退役空间。",
         "去重": "按 document:<id>，无文档关联时 file:<id>；五列分别去重，贡献数为并集；入口上传人冲突保留诊断。",
         "科室贡献比": "本科室人员向制造部部门库贡献的去重文档数 / 制造部部门库文档并集（含外部人员贡献）",
         "部门贡献比": "制造部人员五类库贡献并集 / 公司人员五类库贡献并集",
         "登录次数": "原始 user_login 成功事件按事件 ID 去重，非登录人数或登录人天数；与日投影核对但不叠加。",
         "问答次数": "智能/文档统计成功问题，专家统计提交问题；按类型和问题 ID 去重，不按会话或回答数。",
+        "问答历史策略": (
+            "raw：原始来源优先，旧成功问答缺 question_id 时按 event_id 去重；不能保证真实问题去重；看板独有记录仅诊断、不叠加。"
+            if getattr(args, "qa_history_policy", "strict") == "raw"
+            else "strict：缺少问题 ID 或看板存在原始来源未覆盖的问题时停止导出。"
+        ),
         "科室使用比例": "本科室登录/三类问答次数 / 主表十科室对应总次数",
         "部门使用比例": "制造部（含其他科室和直属人员）登录/三类问答次数 / 公司对应总次数",
         "零分母": "比例留空并备注分母为 0；缺来源/分页失败为错误，不按零处理。比例保留两位小数。",
@@ -911,6 +961,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=Path, required=True, help="必须是不存在的新目录")
     parser.add_argument("--office-map", type=Path, help="可选 JSON：固定科室行名到组织 ID 的映射")
     parser.add_argument("--raw-index", default=RAW_INDEX, help="原始埋点 ES 索引或别名")
+    parser.add_argument(
+        "--qa-history-policy", choices=("strict", "raw"), default="strict",
+        help="strict 严格校验；raw 兼容旧问答 event_id，以原始来源为准并保留看板差异诊断",
+    )
     parser.add_argument("--config", help="使用项目已有配置文件")
     parser.add_argument("--verbose", action="store_true", help="显示每页 ES 查询进度")
     return parser
@@ -967,7 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
                     report.diagnose("INFO", name, "连接", es_nodes(client))
                 raw = EsReader(raw_client, args.tenant_id, report.diagnose, progress)
                 dashboard = EsReader(dashboard_client, args.tenant_id, report.diagnose, progress)
-                collect_events(metrics, raw, dashboard, report, args.raw_index)
+                collect_events(metrics, raw, dashboard, report, args.raw_index, args.qa_history_policy)
                 report.diagnose("INFO", "报表", "计算完成", f"来源/归属提示数={report.warnings}")
                 report.finish(metrics)
                 print(f"输出目录：{args.output_dir.resolve()}；提示数：{report.warnings}")

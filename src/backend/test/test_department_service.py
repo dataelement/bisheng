@@ -85,6 +85,9 @@ def svc_engine():
                               mounted_tenant_id INTEGER,
                               is_deleted INTEGER NOT NULL DEFAULT 0,
                               last_sync_ts BIGINT NOT NULL DEFAULT 0,
+                              sync_parent_external_id VARCHAR(128),
+                              concurrent_session_limit INTEGER NOT NULL DEFAULT 0,
+                              org_level VARCHAR(16),
                               default_role_ids JSON,
                               create_user INTEGER,
                               create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
@@ -341,12 +344,18 @@ class TestCreateDepartment:
         async def fake_session():
             yield db_session
 
+        async def rebuild_path(_session, dept, parent_id):
+            dept.parent_id = parent_id
+            dept.path = f"/1/{dept.id}/"
+            return dept
+
         with (
             patch.object(
                 m,
                 "get_async_db_session",
                 fake_session,
             ),
+            patch.object(m.DepartmentDao, "arebuild_subtree_paths", side_effect=rebuild_path),
             patch.object(
                 m,
                 "_get_dept_id_prefix",
@@ -1424,6 +1433,21 @@ class TestAdminDepartmentsBypassTenantFilter:
 
 
 class TestMoveDepartmentSubtreeSync:
+    @pytest.fixture(autouse=True)
+    def path_repository(self, monkeypatch):
+        from bisheng.database.models.department import DepartmentDao
+
+        async def rebuild(_session, dept, parent_id):
+            dept.parent_id = parent_id
+            dept.path = f"/1/{dept.id}/" if parent_id == 1 else f"/1/{parent_id}/{dept.id}/"
+            return dept
+
+        # 此组只验证提交后事件, 真实 ORM 路径重建由独立集成测试覆盖。
+        monkeypatch.setattr(DepartmentDao, "arebuild_subtree_paths", AsyncMock(side_effect=rebuild))
+        monkeypatch.setattr(
+            "bisheng.department.domain.services.department_service.aassert_default_root_parent_immutable", AsyncMock()
+        )
+
     @staticmethod
     def _move_test_setup(*, dept_path="/1/7/", new_parent_path="/1/9/", new_parent_id=9):
         """Build the minimum mocks for amove_department to reach the sync hook.

@@ -190,8 +190,11 @@ export function PermissionGrantTab({
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
   const effectiveSubjectType = normalizeSubjectType(fixedSubjectType ?? subjectType);
   const usesKnowledgeUserTree = KNOWLEDGE_RESOURCE_TYPES.has(resourceType);
+  // 子资源接口会解析所属知识库的组织范围，同时校验当前文件或文件夹的成员管理权限。
   const grantSubjectScopeResourceId =
-    grantSubjectScopeSpaceId || (resourceType === "knowledge_space" ? resourceId : undefined);
+    resourceType === "folder" || resourceType === "knowledge_file"
+      ? undefined
+      : grantSubjectScopeSpaceId || (resourceType === "knowledge_space" ? resourceId : undefined);
 
   const applyRelationModels = useCallback((
     relationModels: RelationModel[] | undefined,
