@@ -45,6 +45,15 @@ PRD_ERRORS = [
     (open_api.PersonalTokenTtlExceededError(), 26042, 400),
     (open_api.PersonalTokenHolderInvalidError(), 26043, 401),
     (open_api.PersonalTokenDataScopeError(), 26044, 403),
+    # F073 (task-mode PRD §4.10)
+    (open_api.OpenApiTaskModeSyncUnsupportedError(), 26060, 400),
+    (open_api.OpenApiTaskConversationNotAcceptedError(), 26061, 400),
+    (open_api.OpenApiTaskSkillUnavailableError(unavailable=["x"]), 26062, 400),
+    (open_api.OpenApiTaskModeForbiddenError(), 26063, 403),
+    (open_api.OpenApiTaskAlreadyFinishedError(), 26064, 409),
+    (open_api.OpenApiContentBlockedError(auto_reply="blocked"), 26065, 400),
+    (open_api.OpenApiModelUnavailableError(), 26066, 400),
+    (open_api.OpenApiToolUnavailableError(), 26067, 400),
 ]
 
 

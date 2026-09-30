@@ -85,8 +85,9 @@ class OpenApiDelegationHeaderRequiredError(OpenApiAuthError):
 
 
 class OpenApiTaskModeUnsupportedError(OpenApiAuthError):
+    # F073: task mode is open now; the code only means an unknown run mode.
     Code = 26017
-    Msg = "Task mode is not available through the Open API"
+    Msg = "Invalid run mode; only daily or task is supported"
     http_status = 400
 
 
@@ -208,3 +209,60 @@ class PersonalTokenDataScopeError(OpenApiAuthError):
     def __init__(self, **kwargs):
         kwargs.setdefault("scope", "personal_only")
         super().__init__(**kwargs)
+
+
+# F073 task-mode Open API. Numbered from 26060: 26045-26049 are reserved by
+# F053, and 26050-26052 are already taken on 3.0-vibe (hosted apps), which will
+# merge this release line later.
+
+
+class OpenApiTaskModeSyncUnsupportedError(OpenApiAuthError):
+    Code = 26060
+    Msg = "Task mode only runs asynchronously; set execution to async"
+    http_status = 400
+
+
+class OpenApiTaskConversationNotAcceptedError(OpenApiAuthError):
+    Code = 26061
+    Msg = "Task mode starts a new conversation and does not accept a conversation ID"
+    http_status = 400
+
+
+class OpenApiTaskSkillUnavailableError(OpenApiAuthError):
+    """``unavailable`` lists every rejected skill name (surfaces in ``data``)."""
+
+    Code = 26062
+    Msg = "Some selected skills do not exist or are not enabled"
+    http_status = 400
+
+
+class OpenApiTaskModeForbiddenError(OpenApiAuthError):
+    Code = 26063
+    Msg = "The user being acted for has no permission to use task mode"
+    http_status = 403
+
+
+class OpenApiTaskAlreadyFinishedError(OpenApiAuthError):
+    Code = 26064
+    Msg = "The task has already finished and cannot be stopped"
+    http_status = 409
+
+
+class OpenApiContentBlockedError(OpenApiAuthError):
+    """``auto_reply`` carries the tenant's configured reply (surfaces in ``data``)."""
+
+    Code = 26065
+    Msg = "The content did not pass the safety review"
+    http_status = 400
+
+
+class OpenApiModelUnavailableError(OpenApiAuthError):
+    Code = 26066
+    Msg = "The selected model is not available"
+    http_status = 400
+
+
+class OpenApiToolUnavailableError(OpenApiAuthError):
+    Code = 26067
+    Msg = "The selected tool is not available"
+    http_status = 400
