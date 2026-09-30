@@ -108,16 +108,102 @@ export function findCitedSpan(haystack: string, chunk: string): LocatedSpan | nu
     };
 }
 
-/** Attribute marking the blocks that hold the cited text; styled by the source pane. */
+/** Attribute marking the blocks that hold the cited text. */
 export const CITE_HIT_ATTR = 'data-cite-hit';
+/** The drawn band behind one cited passage. */
+export const CITE_BAND_ATTR = 'data-cite-band';
 const BLOCK_SELECTOR = 'p,li,td,th,h1,h2,h3,h4,h5,h6,pre,blockquote,dt,dd';
+/** Breathing room between the band edge and the text it covers. */
+const BAND_PAD_X = 8;
+const BAND_PAD_Y = 4;
+
+// Per-root teardown of the drawn bands (observers, restored positions).
+const bandTeardown = new WeakMap<HTMLElement, () => void>();
 
 export function clearCitedHighlight(root: HTMLElement) {
+    bandTeardown.get(root)?.();
+    bandTeardown.delete(root);
+    root.querySelectorAll(`[${CITE_BAND_ATTR}]`).forEach((el) => el.remove());
     root.querySelectorAll(`[${CITE_HIT_ATTR}]`).forEach((el) => el.removeAttribute(CITE_HIT_ATTR));
 }
 
+function inDocumentOrder(a: Node, b: Node): number {
+    return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+}
+
+function commonAncestor(blocks: HTMLElement[], root: HTMLElement): HTMLElement {
+    let anchor: HTMLElement | null = blocks[0].parentElement;
+    while (anchor && anchor !== root && !blocks.every((b) => anchor!.contains(b))) {
+        anchor = anchor.parentElement;
+    }
+    return anchor ?? root;
+}
+
 /**
- * Mark and scroll to the blocks inside `root` that contain any of `chunks`.
+ * Draw one continuous band behind each cited passage.
+ *
+ * Tinting every paragraph on its own leaves white stripes at the paragraph
+ * margins and puts the rule flush against the text; a single band per passage
+ * reads as one quotation, keeps a small gutter, and never changes the layout of
+ * the document (it is absolutely positioned inside the passage's own container,
+ * so it scrolls with it). It is redrawn when the panel is resized.
+ */
+function drawBands(root: HTMLElement, passages: HTMLElement[][]) {
+    const drawn: Array<{ anchor: HTMLElement; blocks: HTMLElement[]; band: HTMLDivElement }> = [];
+    const restored: HTMLElement[] = [];
+    for (const blocks of passages) {
+        if (!blocks.length) continue;
+        const anchor = commonAncestor(blocks, root);
+        if (getComputedStyle(anchor).position === 'static') {
+            anchor.style.position = 'relative';
+            restored.push(anchor);
+        }
+        const band = document.createElement('div');
+        band.setAttribute(CITE_BAND_ATTR, '');
+        band.setAttribute('aria-hidden', 'true');
+        Object.assign(band.style, {
+            position: 'absolute',
+            pointerEvents: 'none',
+            background: 'rgb(var(--brand-500) / 0.07)',
+            borderLeft: '2px solid rgb(var(--brand-500))',
+            borderRadius: '2px 6px 6px 2px',
+            // The band sits over the text; multiply keeps the text at full contrast.
+            mixBlendMode: 'multiply',
+        });
+        anchor.appendChild(band);
+        drawn.push({ anchor, blocks, band });
+    }
+
+    const layout = () => {
+        for (const { anchor, blocks, band } of drawn) {
+            const box = anchor.getBoundingClientRect();
+            const rects = blocks.map((b) => b.getBoundingClientRect());
+            const top = Math.min(...rects.map((r) => r.top));
+            const bottom = Math.max(...rects.map((r) => r.bottom));
+            const left = Math.min(...rects.map((r) => r.left));
+            const right = Math.max(...rects.map((r) => r.right));
+            Object.assign(band.style, {
+                top: `${top - box.top + anchor.scrollTop - BAND_PAD_Y}px`,
+                left: `${left - box.left + anchor.scrollLeft - BAND_PAD_X}px`,
+                width: `${right - left + BAND_PAD_X * 2}px`,
+                height: `${bottom - top + BAND_PAD_Y * 2}px`,
+            });
+        }
+    };
+    layout();
+
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(layout);
+    observer?.observe(root);
+    bandTeardown.set(root, () => {
+        observer?.disconnect();
+        restored.forEach((el) => {
+            el.style.position = '';
+        });
+    });
+}
+
+/**
+ * Mark, band and scroll to the passages inside `root` that match `chunks`.
  * Returns true when at least one chunk was located.
  */
 export function highlightCitedText(root: HTMLElement, chunks: string[]): boolean {
@@ -137,22 +223,23 @@ export function highlightCitedText(root: HTMLElement, chunks: string[]): boolean
         }
     }
 
-    const blocks = new Set<HTMLElement>();
+    const passages: HTMLElement[][] = [];
     for (const chunk of chunks) {
         const span = findCitedSpan(haystack, chunk);
         if (!span) continue;
+        const blocks = new Set<HTMLElement>();
         for (let i = span.start; i < span.end; i++) {
             const parent = owners[i]?.parentElement;
             const block = (parent?.closest(BLOCK_SELECTOR) as HTMLElement | null) ?? parent;
             if (block && root.contains(block)) blocks.add(block);
         }
+        if (blocks.size) passages.push([...blocks].sort(inDocumentOrder));
     }
-    if (!blocks.size) return false;
+    if (!passages.length) return false;
 
-    blocks.forEach((el) => el.setAttribute(CITE_HIT_ATTR, 'true'));
-    const first = [...blocks].sort((a, b) =>
-        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
-    )[0];
+    passages.flat().forEach((el) => el.setAttribute(CITE_HIT_ATTR, 'true'));
+    drawBands(root, passages);
+    const first = passages.map((p) => p[0]).sort(inDocumentOrder)[0];
     first.scrollIntoView({ block: 'center' });
     return true;
 }
