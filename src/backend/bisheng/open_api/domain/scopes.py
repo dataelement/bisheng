@@ -68,6 +68,11 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         (
             ("POST", f"{_V2}/workstation/chat/completions"),
             ("GET", f"{_V2}/workstation/config"),
+            # F073 task mode
+            ("GET", f"{_V2}/workstation/config/knowledge"),
+            ("GET", f"{_V2}/workstation/tasks/{{task_id}}"),
+            ("GET", f"{_V2}/workstation/tasks/{{task_id}}/files/{{file_id}}"),
+            ("POST", f"{_V2}/workstation/tasks/{{task_id}}/terminate"),
             ("GET", f"{_V2}/chat/list"),
             ("POST", f"{_V2}/knowledge/upload"),
             ("GET", f"{_V2}/chat/info"),

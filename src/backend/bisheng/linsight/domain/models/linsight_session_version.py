@@ -99,6 +99,15 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     skills: list[str] | None = Field(
         None, description="Selected skill names for this run", sa_column=Column(JsonType, nullable=True)
     )
+    # F073: set only for runs submitted through the Open API (``channel`` ==
+    # "open_api_v2"). The worker switches to unattended assembly (no ask_user,
+    # no clarify step) and fails fast on missing skills when it is present;
+    # workbench runs leave it NULL and keep their behaviour. Also carries the
+    # caller's business-context instructions and audit hints (credential id,
+    # identity mode). Never exposed through ``public_dump``.
+    api_meta: dict | None = Field(
+        None, description="Open API submission metadata", sa_column=Column(JsonType, nullable=True)
+    )
     sop: str | None = Field(None, description="SOPContents", sa_type=Text, nullable=True)
     output_result: dict | None = Field(None, description="Output Results", sa_column=Column(JsonType, nullable=True))
     status: SessionVersionStatusEnum = Field(
@@ -165,6 +174,8 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         """
         data = self.model_dump()
         data.pop("pending_files", None)
+        # F073: credential id and caller instructions are internal to the run.
+        data.pop("api_meta", None)
         return data
 
 

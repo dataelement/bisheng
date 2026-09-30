@@ -2500,53 +2500,12 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             )
         return _respond_blocked_workbench(conversation, message, model_info, data, blocked.auto_reply or "")
 
-    # Local import avoids a module-level workstation->linsight coupling/cycle.
-    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+    # F073: session + version + task-turn row + enqueue live in the shared
+    # submit core so the Open API entry cannot drift from this one. Enqueue
+    # failures stay best-effort here: the client's start-execute is the fallback.
+    from bisheng.workstation.domain.services.task_submit_service import submit_task_turn
 
-    submit_obj = _to_linsight_submit(data)
-    # Pass the original daily-shape files (filepath/type/file_id) so the user
-    # question turn persists its attachments and they render after a refresh
-    # (the submit schema's SubmitFileSchema drops the display fields).
-    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(
-        submit_obj, login_user, display_files=data.files
-    )
-
-    # Enqueue HERE, not from the browser after it receives the handoff below.
-    # Attachment parsing no longer happens in this request (submit parks the raw
-    # refs in pending_files and the worker ingests them), so the request itself is
-    # fast — but the run must not depend on the browser coming back at all: a user
-    # who refreshes, closes the tab or hits a proxy timeout never sends the
-    # follow-up start-execute, and the session is stranded at NOT_STARTED with no
-    # one to pick it up. Enqueueing server-side decouples "the task runs" from
-    # "the client is still listening". The client's start-execute remains as a
-    # late retry and is safe to arrive after this: the executor rejects re-entry
-    # on an already-running session.
-    from bisheng.linsight.domain import utils as linsight_execute_utils
-
-    # Persist the bot task turn BEFORE enqueueing. The worker's start-time call
-    # (`_execute_workflow`) is the same find-then-insert upsert with no unique
-    # key, and an idle worker dequeues within milliseconds — persisting after
-    # the enqueue raced it, both sides found no row, and every task turn landed
-    # as two category="task" rows (the whole task panel rendered twice in the
-    # conversation). Writing the row first makes the worker's call a plain
-    # update. Best-effort on its own: a persist failure must not stop the run.
-    try:
-        await linsight_execute_utils.persist_task_turn_message(session_version)
-    except Exception:
-        logger.exception(
-            f"[TASK_SUBMIT] task turn persist failed chat_id={session_version.session_id} "
-            f"svid={session_version.id}; the worker writes the row at execution start"
-        )
-
-    try:
-        await linsight_execute_utils.enqueue_session_for_execution(session_version)
-    except Exception:
-        # Keep streaming the handoff: the client's start-execute is the fallback
-        # path, and failing the whole submit here would lose the question too.
-        logger.exception(
-            f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
-            f"svid={session_version.id}; relying on client start-execute"
-        )
+    _session, session_version = await submit_task_turn(data, login_user)
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
@@ -2555,7 +2514,7 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     # linsight model being configured.
     logger.info(
         f"[TASK_TITLE] entry chat_id={session_version.session_id} model={data.model!r} "
-        f"question={(submit_obj.question or '')[:40]!r}"
+        f"question={(data.text or '')[:40]!r}"
     )
     title_llm = await LLMService.get_bisheng_llm(
         model_id=data.model,
@@ -2590,7 +2549,7 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         try:
             await asyncio.wait_for(
                 gen_title(
-                    submit_obj.question or "",
+                    data.text or "",
                     title_llm,
                     session_version.session_id,
                     login_user,
