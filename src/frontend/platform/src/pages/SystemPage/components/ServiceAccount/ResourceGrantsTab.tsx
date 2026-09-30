@@ -44,6 +44,7 @@ import type {
 import { copyText } from "@/utils"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { GrantScopeNotice } from "./GrantScopeNotice"
 import { ResourceGrantDialog } from "./ResourceGrantDialog"
 import { ResourceGrantRevokeDialogs } from "./ResourceGrantRevokeDialogs"
 import {
@@ -55,6 +56,7 @@ import {
   RESOURCE_GRANT_FILTER_ALL,
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
+  summarizeGrantKeys,
 } from "./resourceGrantUtils"
 
 export interface ResourceGrantsTabProps {
@@ -121,6 +123,7 @@ export function ResourceGrantsTab({
     (grant) =>
       grant.editable && !grant.protected && grant.source_type === "DIRECT",
   )
+  const hasOwnKeys = summarizeGrantKeys(keys).own > 0
   const automaticGrants = grants.filter(
     (grant) => grant.source_type === "CREATOR_GRANT",
   )
@@ -256,16 +259,10 @@ export function ResourceGrantsTab({
   return (
     <TooltipProvider delayDuration={100}>
       <div className="space-y-4 py-4">
+        {!loadingData ? <GrantScopeNotice keys={keys} /> : null}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h3 className="text-base font-medium">
-              {t("openApiManagement.grants.accessTitle")}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {t("openApiManagement.grants.accessHint")}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SearchInput
               className="w-52"
               value={keyword}
@@ -310,13 +307,17 @@ export function ResourceGrantsTab({
                 </SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              disabled={loading || loadingData || !directGrants.length}
-              onClick={() => setRevokeAllOpen(true)}
-            >
-              {t("openApiManagement.grants.revokeAll")}
-            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {directGrants.length ? (
+              <Button
+                variant="outline"
+                disabled={loading || loadingData}
+                onClick={() => setRevokeAllOpen(true)}
+              >
+                {t("openApiManagement.grants.revokeAll")}
+              </Button>
+            ) : null}
             <Button
               disabled={loading || loadingData}
               onClick={() => setDialogOpen(true)}
@@ -383,12 +384,12 @@ export function ResourceGrantsTab({
                           </Portal>
                         </Tooltip>
                       </div>
-                      {!effective && requiredScope ? (
+                      {!effective && requiredScope && hasOwnKeys ? (
                         <p className="mt-1 flex items-center gap-1 text-xs text-orange-500">
                           <TipIcon className="size-3.5 shrink-0" />
                           {t("openApiManagement.grants.missingScope", {
                             scope: t(
-                              `openApiManagement.grants.scopeCodes.${requiredScope.replace(":", "_")}`,
+                              `openApiManagement.scopes.${requiredScope.replace(":", "_")}.label`,
                             ),
                           })}
                         </p>
@@ -512,14 +513,18 @@ export function ResourceGrantsTab({
                   colSpan={7}
                   className="text-center text-muted-foreground"
                 >
-                  {t("openApiManagement.grants.empty")}
+                  {t(
+                    grants.length
+                      ? "openApiManagement.grants.noMatch"
+                      : "openApiManagement.grants.empty",
+                  )}
                 </TableCell>
               </TableRow>
             ) : null}
           </TableBody>
         </Table>
 
-        {!loadingData ? (
+        {!loadingData && filteredGrants.length ? (
           <p className="text-sm text-muted-foreground">
             {t("openApiManagement.grants.total", {
               count: filteredGrants.length,
