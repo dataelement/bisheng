@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-30 用户确认（直接迁移、无开关无过渡期） |
 | design.md | ✅ 已评审 | 2026-09-30 用户确认 |
 | tasks.md | ✅ 已拆解 | |
-| 实现 | 🟡 进行中 | 17 / 18 完成（T018 的 test 环境验收待合并部署） |
+| 实现 | ✅ 完成 | 18 / 18；test 环境验收见 e2e-checklist.md |
 
 ---
 
@@ -121,7 +121,7 @@
 
 ### Wave 4：回归与验收
 
-- [ ] **T018**: 回归 + test 环境验收
+- [x] **T018**: 回归 + test 环境验收
   **逻辑**: `test/citation`、`test/linsight`、`test/workstation`、`test/knowledge` 引用相关、`test/channel` 全跑（F054 非回归用例不变）；client lint / typecheck / jest；部署 test 按 design §7 手动验证与 116 对比
   **覆盖 AC**: AC-16, AC-20
   **依赖**: 全部
