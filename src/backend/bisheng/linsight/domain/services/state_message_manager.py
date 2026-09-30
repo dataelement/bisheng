@@ -106,6 +106,11 @@ class LinsightStateMessageManager:
         # task_id -> event-loop monotonic time of its last `history` DB flush;
         # drives THINKING_DB_FLUSH_INTERVAL coalescing in add_execution_task_step.
         self._last_history_db_flush: dict[str, float] = {}
+        # task_id -> history held back by that coalescing (Redis has it, the DB
+        # doesn't yet). Written out by the next status / session-info write, so a
+        # run whose LAST step is a short thinking segment doesn't end with only
+        # that segment's first delta in the DB.
+        self._pending_history: dict[str, list] = {}
 
     async def _handle_redis_operation(self, operation, *args, **kwargs):
         """
@@ -168,6 +173,11 @@ class LinsightStateMessageManager:
         Args:
             session_version_model: Session Version Model
         """
+        # Every terminal path (completed / failed / terminated / waiting for input)
+        # saves the session info before announcing it, so the history rows must be
+        # complete by then — a reload right after reads them from the DB.
+        await self.flush_pending_history()
+
         # Using Transactions to Ensure Data Consistency
         async with self._redis_client.async_pipeline() as pipe:
             try:
@@ -187,6 +197,16 @@ class LinsightStateMessageManager:
             except Exception as e:
                 self._logger.error(f"Failed to set session version info: {e}")
                 raise
+
+    async def flush_pending_history(self) -> None:
+        """Write the history held back by thinking-delta coalescing to the DB."""
+        for task_id in list(self._pending_history):
+            history = self._pending_history.pop(task_id)
+            try:
+                await LinsightExecuteTaskDao.update_by_id(task_id, history=history)
+                self._last_history_db_flush[task_id] = asyncio.get_event_loop().time()
+            except Exception as e:
+                self._logger.error(f"Failed to flush pending history for task {task_id}: {e}")
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_session_version_info(self) -> LinsightSessionVersion | None:
@@ -249,7 +269,12 @@ class LinsightStateMessageManager:
             Updated task data
         """
         try:
-            # Update database first
+            # Update database first. Carry any throttled history along: the row read
+            # back below replaces the Redis copy, so without it the unflushed tail of
+            # a thinking segment would be lost from both stores.
+            pending = self._pending_history.pop(task_id, None)
+            if pending is not None and "history" not in kwargs:
+                kwargs["history"] = pending
             task_model = await LinsightExecuteTaskDao.update_by_id(task_id, status=status, **kwargs)
             if task_model is None:
                 # Orphan task_id (e.g. a session-level interrupt whose task_id is
@@ -496,9 +521,12 @@ class LinsightStateMessageManager:
             recently_flushed = (
                 now - self._last_history_db_flush.get(task_id, float("-inf"))
             ) < self.THINKING_DB_FLUSH_INTERVAL
-            if not (is_thinking_delta and recently_flushed):
+            if is_thinking_delta and recently_flushed:
+                self._pending_history[task_id] = task_model.history
+            else:
                 await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
                 self._last_history_db_flush[task_id] = now
+                self._pending_history.pop(task_id, None)
 
             # Tool-call steps carry the model's chosen input params (e.g. the
             # knowledge_id / query passed to search_knowledge_base) + result. The
