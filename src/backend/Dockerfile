@@ -26,4 +26,11 @@ RUN SITE=$(python -c "import site; print(site.getsitepackages()[0])") && \
 # DM_HOME 指向 venv 内的 dmssl，与 base 镜像的 uv sync venv 路径保持一致。
 ENV DM_HOME="/app/.venv/lib/python3.11/site-packages/dmssl/"
 
+# 代码节点沙箱。用本镜像自带的解释器生成只读监狱 /opt/code-root。
+# code.py / code_parse.py 已随上面的 COPY 进入镜像，这里不再覆盖。
+# 构建自检失败则镜像构建失败。运行时容器仍须是 root，并保留 chroot / setuid / setgid。
+RUN rm -rf /app/bisheng/workflow/nodes/code/__pycache__ \
+    && sh /app/docker/build-code-root.sh \
+    && rm -rf /app/docker
+
 CMD ["sh", "entrypoint.sh"]
