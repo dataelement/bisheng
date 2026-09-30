@@ -263,17 +263,38 @@ class CitationResolveService:
             return None
         return getattr(row, "chat_id", None) if row is not None else None
 
+    @staticmethod
+    def _share_covers_temp_chat(share_link, chat_id: str) -> bool:
+        """A workflow conversation share opens temp sources of that chat only.
+
+        ``resource_id`` is the shared chat id (ShareChat). A published-app link
+        stores the flow id there instead, so it does not match and stays closed.
+        Anonymous callers are rejected before this runs.
+        """
+        if share_link is None or not chat_id:
+            return False
+        resource_type = getattr(share_link.resource_type, "value", share_link.resource_type)
+        if resource_type != "workflow":
+            return False
+        return str(share_link.resource_id) == str(chat_id)
+
     async def _can_read_temp(
         self,
         item: CitationRegistryItemSchema,
         login_user: UserPayload | None,
+        share_link=None,
     ) -> bool:
-        """Session-owner gate. Anonymous callers never pass (AC-15)."""
+        """Session-owner gate, plus the recipient of this conversation's share link.
+
+        Anonymous callers never pass, share token or not.
+        """
         if login_user is None:
             return False
         chat_id = await self._temp_chat_id(item)
         if not chat_id:
             # Cache-only / debug run: only the currently logged-in executor.
+            return True
+        if self._share_covers_temp_chat(share_link, chat_id):
             return True
         from bisheng.database.models.session import MessageSessionDao
 
@@ -334,6 +355,7 @@ class CitationResolveService:
         self,
         citation_id: str,
         login_user: UserPayload | None = None,
+        share_link=None,
     ) -> CitationRegistryItemSchema:
         """Resolve one citation item by business ID.
 
@@ -361,7 +383,7 @@ class CitationResolveService:
             # refused without a logged-in user. Temp is not anonymous-readable.
             raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
         if item.type == CitationType.TEMP:
-            if not await self._can_read_temp(item, login_user):
+            if not await self._can_read_temp(item, login_user, share_link):
                 raise NotFoundError(reason=CitationUnresolvedReason.FORBIDDEN.value)
             try:
                 return await self._enrich_item(item, login_user)
@@ -385,18 +407,20 @@ class CitationResolveService:
         self,
         citation_ids: list[str],
         login_user: UserPayload | None = None,
+        share_link=None,
     ) -> list[CitationRegistryItemSchema]:
         """Resolve multiple citation items, returning only the ones that resolved.
 
         Kept for callers that do not need the reasons; the reasons live on
         ``resolve_citations_with_reasons``.
         """
-        return (await self.resolve_citations_with_reasons(citation_ids, login_user)).items
+        return (await self.resolve_citations_with_reasons(citation_ids, login_user, share_link)).items
 
     async def resolve_citations_with_reasons(
         self,
         citation_ids: list[str],
         login_user: UserPayload | None = None,
+        share_link=None,
     ) -> ResolveCitationResponse:
         """Resolve citations and say why each unresolved one did not make it.
 
@@ -444,7 +468,7 @@ class CitationResolveService:
             visible_items = self._apply_tier_filter(items, permitted)
             gated_items: list[CitationRegistryItemSchema] = []
             for item in visible_items:
-                if item.type == CitationType.TEMP and not await self._can_read_temp(item, login_user):
+                if item.type == CitationType.TEMP and not await self._can_read_temp(item, login_user, share_link):
                     unresolved[item.citationId] = CitationUnresolvedReason.FORBIDDEN
                     continue
                 gated_items.append(item)

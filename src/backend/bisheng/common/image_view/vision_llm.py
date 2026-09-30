@@ -3,8 +3,10 @@
 When an Image View model is passed in, pixels go to that model after retrieval.
 view_image is bound only when no Image View model is provided.
 
-Must not be a Runnable — create_react_agent treats a non-Runnable callable as a
-per-turn model factory and will not compile-time bind ToolNode tools.
+create_react_agent calls bind_tools once while compiling the graph. That call
+returns this wrapper unchanged. invoke / ainvoke then bind view_image and
+knowledge retrieval for the current turn, so the compile-time tool list is not
+frozen onto the chat model.
 """
 
 from __future__ import annotations
@@ -292,7 +294,7 @@ class _VisionCallRunnable(Runnable):
             yield chunk
 
 
-class VisionToolBindWrapper:
+class VisionToolBindWrapper(Runnable):
     """Per-turn model factory.
 
     With ``vision_llm`` (the Image View builtin model), pixels are sent to that
@@ -315,6 +317,25 @@ class VisionToolBindWrapper:
         self._view_tool = build_view_image_tool(registry)
         self._retrieve_tool_name = retrieve_tool_name
         self._vision_llm = vision_llm
+
+    def bind_tools(self, tools, **kwargs):
+        """Satisfy create_react_agent's compile-time bind without freezing tools."""
+        del tools, kwargs
+        return self
+
+    def _turn_runnable(self, inp: Any) -> _VisionCallRunnable:
+        messages = messages_from_model_input(inp)
+        return self({"messages": messages}, None)
+
+    def invoke(self, inp: Any, config=None, **kwargs: Any):
+        return self._turn_runnable(inp).invoke(inp, config, **kwargs)
+
+    async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
+        return await self._turn_runnable(inp).ainvoke(inp, config, **kwargs)
+
+    async def astream(self, inp: Any, config=None, **kwargs: Any):
+        async for chunk in self._turn_runnable(inp).astream(inp, config, **kwargs):
+            yield chunk
 
     def __call__(self, state, runtime):
         messages = _messages_from_state(state)

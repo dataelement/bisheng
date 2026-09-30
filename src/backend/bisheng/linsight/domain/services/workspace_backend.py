@@ -647,14 +647,17 @@ class WorkspaceBackend(FilesystemBackend):
         if not text or not self._citation_handles_active():
             return text
         try:
-            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+            from bisheng.citation.domain.services.citation_handle_service import (
+                attach_web_url_markers,
+                convert_handles_to_markers,
+            )
 
             result = convert_handles_to_markers(text, self.citation_scope.handles)
             if note:
                 note_conversion = getattr(self.citation_scope, "note_conversion", None)
                 if note_conversion is not None:
                     note_conversion(result.converted, result.unknown)
-            return result.text
+            return attach_web_url_markers(result.text, getattr(self.citation_scope, "entries", None))
         except Exception:
             logger.opt(exception=True).warning(
                 "[linsight-citation] svid={} handle conversion failed, writing text unconverted", self.svid

@@ -103,6 +103,67 @@ async def test_anonymous_caller_is_forbidden_including_share_page():
     assert _reasons(result) == {item.citationId: FORBIDDEN}
 
 
+def _workflow_share(resource_id: str = "chat-1", resource_type: str = "workflow"):
+    return SimpleNamespace(resource_id=resource_id, resource_type=resource_type)
+
+
+async def test_share_recipient_of_this_workflow_chat_gets_signed_url():
+    item = _temp_item()
+    service = _service(item)
+    minio = _minio()
+    with (
+        patch(
+            "bisheng.core.storage.minio.minio_manager.get_minio_storage",
+            AsyncMock(return_value=minio),
+        ),
+        patch(
+            "bisheng.database.models.session.MessageSessionDao.async_get_one",
+            AsyncMock(return_value=SimpleNamespace(user_id=42, chat_id="chat-1")),
+        ) as session_mock,
+    ):
+        resolved = await service.resolve_citation(
+            item.citationId,
+            login_user=_other(),
+            share_link=_workflow_share(),
+        )
+
+    assert resolved.sourcePayload.previewUrl == SIGNED_URL
+    assert resolved.sourcePayload.downloadUrl == SIGNED_URL
+    session_mock.assert_not_awaited()
+
+
+async def test_share_of_another_chat_does_not_open_temp_sources():
+    item = _temp_item()
+    service = _service(item)
+    with patch(
+        "bisheng.database.models.session.MessageSessionDao.async_get_one",
+        AsyncMock(return_value=SimpleNamespace(user_id=42, chat_id="chat-1")),
+    ):
+        result = await service.resolve_citations_with_reasons(
+            [item.citationId],
+            login_user=_other(),
+            share_link=_workflow_share(resource_id="other-chat"),
+        )
+    assert result.items == []
+    assert _reasons(result) == {item.citationId: FORBIDDEN}
+
+
+async def test_non_workflow_share_does_not_open_temp_sources():
+    item = _temp_item()
+    service = _service(item)
+    with patch(
+        "bisheng.database.models.session.MessageSessionDao.async_get_one",
+        AsyncMock(return_value=SimpleNamespace(user_id=42, chat_id="chat-1")),
+    ):
+        with pytest.raises(NotFoundError) as exc:
+            await service.resolve_citation(
+                item.citationId,
+                login_user=_other(),
+                share_link=_workflow_share(resource_type="workbench_chat"),
+            )
+    assert exc.value.kwargs.get("reason") == FORBIDDEN
+
+
 async def test_logged_in_non_owner_is_forbidden():
     item = _temp_item()
     service = _service(item)

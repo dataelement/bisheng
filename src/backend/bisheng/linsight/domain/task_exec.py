@@ -2103,16 +2103,24 @@ class LinsightWorkflowTask:
         too). No-op under the verbatim contract or without a handle table.
         """
         scope = getattr(self, "_citation_scope", None)
-        if not answer or scope is None or not getattr(scope, "enabled", False) or not getattr(scope, "handles", None):
+        if not answer or scope is None or not getattr(scope, "enabled", False):
             return answer
+        text = answer
         try:
-            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+            from bisheng.citation.domain.services.citation_handle_service import (
+                attach_web_url_markers,
+                convert_handles_to_markers,
+            )
 
-            result = convert_handles_to_markers(answer, scope.handles)
-            scope.note_conversion(result.converted, result.unknown)
-            return result.text
+            if getattr(scope, "handles", None):
+                result = convert_handles_to_markers(text, scope.handles)
+                scope.note_conversion(result.converted, result.unknown)
+                text = result.text
+            return attach_web_url_markers(text, getattr(scope, "entries", None))
         except Exception:
-            logger.opt(exception=True).warning("answer citation handle conversion failed; keeping the answer as written")
+            logger.opt(exception=True).warning(
+                "answer citation handle conversion failed; keeping the answer as written"
+            )
             return answer
 
     def _audit_report_citations(self, session_model, answer: str, final_files: list[dict] | None) -> dict:
@@ -2240,6 +2248,11 @@ class LinsightWorkflowTask:
                 logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
             else:
                 logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
+            from bisheng.citation.domain.services.citation_handle_service import collected_web_sources
+
+            web_sources = collected_web_sources(getattr(getattr(self, "_citation_scope", None), "entries", None))
+            if web_sources:
+                output_result["web_sources"] = web_sources
             session_model.output_result = output_result
             # Saved in both branches: the persisted count on the audit must reach
             # the DB row too (history / version-list), not only the FINAL_RESULT push.

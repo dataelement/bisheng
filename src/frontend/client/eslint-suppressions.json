@@ -570,9 +570,6 @@
     },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
@@ -704,9 +701,6 @@
   "src/components/Chat/Messages/Content/citationUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 15
     }
   },
   "src/components/Chat/Messages/Content/useCitationReferencePanel.tsx": {
@@ -951,11 +945,6 @@
   "src/components/Input/SetKeyDialog/InputWithLabel.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 4
-    }
-  },
-  "src/components/Linsight/Artifacts/WorkspacePanel.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
     }
   },
   "src/components/Linsight/Artifacts/artifactUtils.test.ts": {
