@@ -196,7 +196,7 @@ export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: n
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
                         >{null}</ToggleSection> */}
-                        {/* Sidebar entry name — required, capped at MENU_NAME_MAX_WIDTH */}
+                        {/* Sidebar entry name — optional (blank = localized default), capped at MENU_NAME_MAX_WIDTH */}
                         <div ref={homeMenuDisplayNameRef}>
                             <FormInput
                                 label={t('chatConfig.menuDisplayName')}
@@ -398,8 +398,8 @@ const useChatConfig = (
         // menuShow: true,
         // Fresh-deployment default — overwritten by API value when present.
         systemPrompt: t('chatConfig.systemPrompt2'),
-        // 接口为空时展示默认菜单名，用户可直接改
-        homeMenuDisplayName: t('bench.home'),
+        // Blank until configured — the input placeholder shows the default name
+        homeMenuDisplayName: '',
         appCenterMenuDisplayName: '',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
@@ -532,10 +532,8 @@ const useChatConfig = (
 
                 return {
                     ...prev,
-                    // 空字符串同样视为「未配置」，回落到默认菜单名
-                    homeMenuDisplayName: typeof cfg.homeMenuDisplayName === 'string' && cfg.homeMenuDisplayName.trim()
-                        ? cfg.homeMenuDisplayName.trim()
-                        : prev.homeMenuDisplayName,
+                    // Blank = unconfigured; the placeholder shows the default and the client localizes it
+                    homeMenuDisplayName: typeof cfg.homeMenuDisplayName === 'string' ? cfg.homeMenuDisplayName.trim() : '',
                     appCenterMenuDisplayName: cfg.appCenterMenuDisplayName ?? prev.appCenterMenuDisplayName,
                     welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
                     functionDescription: cfg.functionDescription ?? prev.functionDescription,
@@ -594,7 +592,7 @@ const useChatConfig = (
         }
     };
 
-    // 菜单显示名称：超出显示宽度的部分直接截掉，非空校验留到保存时做
+    // Menu name: truncate past the display-width cap; blank is allowed (client localizes it)
     const handleMenuNameChange = (field: 'homeMenuDisplayName', value: string) => {
         setFormData(prev => ({ ...prev, [field]: clampMenuName(value) }));
         setErrors(prev => ({ ...prev, [field]: '' }));
@@ -640,13 +638,6 @@ const useChatConfig = (
             applicationCenterDescription: '',
             systemPrompt: '',
         };
-
-        // 菜单显示名称必填（长度已在输入时截断，这里只查空）
-        if (!formData.homeMenuDisplayName.trim()) {
-            newErrors.homeMenuDisplayName = t('chatConfig.errors.required');
-            if (!firstErrorRef) firstErrorRef = refs.homeMenuDisplayNameRef;
-            isValid = false;
-        }
 
         // F035: 日常模式展示名称 was removed from the UI (the value still
         // round-trips through dataToSave) — no validation for it anymore.

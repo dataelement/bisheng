@@ -313,8 +313,8 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         maxChunkSize: 15000,
         autoTagVisible: false,
         assistantName: '',
-        // 接口为空时展示默认菜单名，用户可直接改
-        menuDisplayName: t('bench.knowledgeSpace'),
+        // Blank until configured — the input placeholder shows the default name
+        menuDisplayName: '',
     });
 
     const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string; menuDisplayName: string }>({
@@ -349,8 +349,8 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
                 // Keep blank when unset — empty means "use client i18n default".
                 assistantName: resolveConfigString(assistantNameFromRes, ''),
-                // 空字符串同样视为「未配置」，回落到默认菜单名
-                menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim() || t('bench.knowledgeSpace'),
+                // Blank = unconfigured; the client falls back to its localized default
+                menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim(),
             }));
         });
     }, [scopeVersion, t]);
@@ -375,11 +375,6 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         let isValid = true;
         const nextErrors = { systemPrompt: '', userPrompt: '', menuDisplayName: '' };
 
-        // 菜单显示名称必填（长度在输入时已截断）
-        if (!(formData.menuDisplayName || '').trim()) {
-            nextErrors.menuDisplayName = t('chatConfig.errors.required');
-            isValid = false;
-        }
         if (finalSystemPrompt.length > 30000) {
             nextErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
