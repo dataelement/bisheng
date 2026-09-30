@@ -250,7 +250,7 @@ class SqlEPlusTargetProvider:
             async with self._session_factory() as session:
                 rows = await session.exec(
                     select(EPlusBotConfig.tenant_id, EPlusBotConfig.id).where(
-                        EPlusBotConfig.is_deleted.is_(False),
+                        EPlusBotConfig.is_deleted == False,  # noqa: E712 -- DM8-compatible equality
                     )
                 )
                 return tuple(
