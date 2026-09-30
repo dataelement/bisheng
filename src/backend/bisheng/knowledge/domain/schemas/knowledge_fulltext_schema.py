@@ -81,6 +81,8 @@ class KnowledgeFulltextFileSnapshot(StrictSchema):
     status: str
     deleted_at: datetime | None = None
     logical_document_id: int | None = None
+    # 内部正文定位信息不改变条目业务身份，也不进入全文 ES 文档。
+    canonical_document_id: int | None = Field(default=None, exclude=True)
     document_version_id: int | None = None
     content_file_id: int | None = None
     content_generation: int = Field(default=0, ge=0)

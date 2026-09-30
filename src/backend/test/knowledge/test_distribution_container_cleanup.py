@@ -112,6 +112,9 @@ async def _seed(
     document_predecessor_id: int | None,
     extra_entries: list[KnowledgeFile],
 ) -> None:
+    from test.knowledge.document_recycle_helpers import create_recycle_tables
+
+    await create_recycle_tables(session)
     space_ids = sorted(
         {MANAGER_SPACE, SOURCE_SPACE, SHARE_SPACE, *(int(e.knowledge_id) for e in extra_entries)}
     )
@@ -189,15 +192,18 @@ async def test_manager_rolls_back_when_predecessor_alive(async_db_session: Async
 
 
 @pytest.mark.asyncio
-async def test_manager_hard_deletes_without_predecessor(async_db_session: AsyncSession):
+async def test_manager_recycles_without_predecessor(async_db_session: AsyncSession):
     await _seed(async_db_session, document_predecessor_id=None, extra_entries=[])
     service = _cleanup_service(async_db_session)
 
     outcomes = await service.cleanup_entries([await _reload(async_db_session, MANAGER_ID)])
 
-    assert [item.action for item in outcomes] == [EntryCleanupAction.FINAL_DELETE]
+    assert [item.action for item in outcomes] == [EntryCleanupAction.RECYCLE]
     manager = await _reload(async_db_session, MANAGER_ID)
-    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.INVALID.value
+    assert manager.deleted_at is not None
+    repeated = await service.cleanup_entries([manager])
+    assert repeated[0].action == EntryCleanupAction.SKIPPED
 
 
 @pytest.mark.asyncio

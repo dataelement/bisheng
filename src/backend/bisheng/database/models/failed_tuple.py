@@ -32,6 +32,9 @@ class FailedTupleBase(SQLModelSerializable):
     )
     retry_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default='0'))
     max_retries: int = Field(default=3, sa_column=Column(Integer, nullable=False, server_default='3'))
+    lease_owner: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    lease_until: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    next_retry_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     status: str = Field(
         default='pending',
         sa_column=Column(String(16), nullable=False, server_default='pending',

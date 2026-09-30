@@ -303,39 +303,96 @@ class KnowledgeFulltextEngagementQueueRepositoryImpl(KnowledgeFulltextEngagement
     HISTORY_LOCK_KEY = f"{PREFIX}:history_lock"
     HISTORY_CURSOR_PREFIX = f"{PREFIX}:history_cursor"
 
+    ATTEMPTS_KEY = f"{PREFIX}:attempts"
+    DEAD_KEY = f"{PREFIX}:dead"
+    MAX_ATTEMPTS = 8
+    BATCH_SIZE = 200
+
+    ENQUEUE_SCRIPT = """
+local added = 0
+for i = 2, #ARGV do
+  if redis.call('hexists', KEYS[5], ARGV[i]) == 0 then
+    added = added + redis.call('zadd', KEYS[1], 'NX', ARGV[1], ARGV[i])
+  end
+end
+return added
+"""
     CLAIM_SCRIPT = """
 local members = redis.call('zrangebyscore', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, ARGV[4])
 local claimed = {}
 for _, member in ipairs(members) do
-  if redis.call('zrem', KEYS[1], member) == 1 then
-    redis.call('zadd', KEYS[2], ARGV[2], member)
-    redis.call('hset', KEYS[3], member, ARGV[3])
-    table.insert(claimed, member)
+  local lease = redis.call('zscore', KEYS[2], member)
+  if lease then
+    redis.call('zadd', KEYS[1], math.max(tonumber(lease), tonumber(ARGV[1]) + 1), member)
+  elseif redis.call('hexists', KEYS[5], member) == 1 then
+    redis.call('zrem', KEYS[1], member)
+  else
+    local attempts = tonumber(redis.call('hget', KEYS[4], member) or '0')
+    redis.call('zrem', KEYS[1], member)
+    if attempts >= tonumber(ARGV[5]) then
+      redis.call('hset', KEYS[5], member, ARGV[1])
+    else
+      redis.call('hincrby', KEYS[4], member, 1)
+      redis.call('zadd', KEYS[2], ARGV[2], member)
+      redis.call('hset', KEYS[3], member, ARGV[3])
+      table.insert(claimed, member)
+    end
   end
 end
 return claimed
 """
-    ACK_SCRIPT = """
-if redis.call('hget', KEYS[2], ARGV[1]) ~= ARGV[2] then return 0 end
-redis.call('zrem', KEYS[1], ARGV[1])
-redis.call('hdel', KEYS[2], ARGV[1])
-return 1
-"""
-    RETRY_SCRIPT = """
-if redis.call('hget', KEYS[3], ARGV[1]) ~= ARGV[2] then return 0 end
-redis.call('zrem', KEYS[2], ARGV[1])
-redis.call('hdel', KEYS[3], ARGV[1])
-redis.call('zadd', KEYS[1], 'NX', ARGV[3], ARGV[1])
-return 1
+    SETTLE_SCRIPT = """
+local settled = 0
+for i = 6, #ARGV do
+  local member = ARGV[i]
+  if redis.call('hget', KEYS[3], member) == ARGV[2] then
+    redis.call('zrem', KEYS[2], member)
+    redis.call('hdel', KEYS[3], member)
+    if ARGV[1] == 'ack' then
+      redis.call('hdel', KEYS[4], member)
+    else
+      local attempts = tonumber(redis.call('hget', KEYS[4], member) or '0')
+      if attempts >= tonumber(ARGV[5]) then
+        redis.call('hset', KEYS[5], member, ARGV[3])
+        redis.call('zrem', KEYS[1], member)
+      else
+        local delay = math.min(3600, tonumber(ARGV[4]) * 2 ^ math.max(0, attempts - 1))
+        local ready = math.max(tonumber(redis.call('zscore', KEYS[1], member) or '0'), tonumber(ARGV[3]) + delay)
+        redis.call('zadd', KEYS[1], ready, member)
+      end
+    end
+    settled = settled + 1
+  end
+end
+return settled
 """
     RECLAIM_SCRIPT = """
-local members = redis.call('zrangebyscore', KEYS[2], '-inf', ARGV[1])
+local members = redis.call('zrangebyscore', KEYS[2], '-inf', ARGV[1], 'LIMIT', 0, ARGV[4])
 for _, member in ipairs(members) do
-  redis.call('zadd', KEYS[1], 'NX', ARGV[1], member)
+  local attempts = tonumber(redis.call('hget', KEYS[4], member) or '0')
+  if attempts >= tonumber(ARGV[3]) then
+    redis.call('hset', KEYS[5], member, ARGV[1])
+    redis.call('zrem', KEYS[1], member)
+  else
+    local delay = math.min(3600, tonumber(ARGV[2]) * 2 ^ math.max(0, attempts - 1))
+    local ready = math.max(tonumber(redis.call('zscore', KEYS[1], member) or '0'), tonumber(ARGV[1]) + delay)
+    redis.call('zadd', KEYS[1], ready, member)
+  end
   redis.call('zrem', KEYS[2], member)
   redis.call('hdel', KEYS[3], member)
 end
 return #members
+"""
+    RESTORE_SCRIPT = """
+local restored = 0
+for i = 2, #ARGV do
+  if redis.call('hdel', KEYS[5], ARGV[i]) == 1 then
+    redis.call('hdel', KEYS[4], ARGV[i])
+    redis.call('zadd', KEYS[1], ARGV[1], ARGV[i])
+    restored = restored + 1
+  end
+end
+return restored
 """
     RELEASE_LOCK_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end
@@ -358,69 +415,55 @@ return 0
             self.redis_client = await get_redis_client()
         return self.redis_client.async_connection
 
-    async def enqueue(self, *, file_id: int, now_epoch: int) -> bool:
+    def _queue_keys(self):
+        return (self.PENDING_KEY, self.PROCESSING_KEY, self.PROCESSING_OWNER_KEY,
+                self.ATTEMPTS_KEY, self.DEAD_KEY)
+
+    async def _bulk(self, script: str, file_ids: list[int], *args) -> int:
         redis = await self._connection()
-        return bool(
-            await redis.zadd(
-                self.PENDING_KEY,
-                {str(file_id): int(now_epoch) + self.delay_seconds},
-                nx=True,
-            )
-        )
+        ids = list(dict.fromkeys(str(int(value)) for value in file_ids))
+        total = 0
+        for start in range(0, len(ids), self.BATCH_SIZE):
+            total += int(await redis.eval(script, 5, *self._queue_keys(), *args,
+                                          *ids[start:start + self.BATCH_SIZE]))
+        return total
+
+    async def enqueue_many(self, *, file_ids: list[int], now_epoch: int) -> int:
+        return await self._bulk(self.ENQUEUE_SCRIPT, file_ids, int(now_epoch) + self.delay_seconds)
+
+    async def enqueue(self, *, file_id: int, now_epoch: int) -> bool:
+        return bool(await self.enqueue_many(file_ids=[file_id], now_epoch=now_epoch))
 
     async def claim(self, *, now_epoch: int, lease_owner: str, limit: int) -> list[int]:
         redis = await self._connection()
         values = await redis.eval(
-            self.CLAIM_SCRIPT,
-            3,
-            self.PENDING_KEY,
-            self.PROCESSING_KEY,
-            self.PROCESSING_OWNER_KEY,
-            int(now_epoch),
-            int(now_epoch) + self.lease_seconds,
-            lease_owner,
-            max(1, int(limit)),
+            self.CLAIM_SCRIPT, 5, *self._queue_keys(), int(now_epoch),
+            int(now_epoch) + self.lease_seconds, lease_owner, max(1, int(limit)), self.MAX_ATTEMPTS,
         )
         return [int(value) for value in values]
 
+    async def ack_many(self, *, file_ids: list[int], lease_owner: str) -> int:
+        return await self._bulk(self.SETTLE_SCRIPT, file_ids, "ack", lease_owner, 0,
+                                self.delay_seconds, self.MAX_ATTEMPTS)
+
     async def ack(self, *, file_id: int, lease_owner: str) -> bool:
-        redis = await self._connection()
-        result = await redis.eval(
-            self.ACK_SCRIPT,
-            2,
-            self.PROCESSING_KEY,
-            self.PROCESSING_OWNER_KEY,
-            str(file_id),
-            lease_owner,
-        )
-        return bool(result)
+        return bool(await self.ack_many(file_ids=[file_id], lease_owner=lease_owner))
+
+    async def retry_many(self, *, file_ids: list[int], lease_owner: str, now_epoch: int) -> int:
+        return await self._bulk(self.SETTLE_SCRIPT, file_ids, "retry", lease_owner, int(now_epoch),
+                                self.delay_seconds, self.MAX_ATTEMPTS)
 
     async def retry(self, *, file_id: int, lease_owner: str, now_epoch: int) -> bool:
-        redis = await self._connection()
-        result = await redis.eval(
-            self.RETRY_SCRIPT,
-            3,
-            self.PENDING_KEY,
-            self.PROCESSING_KEY,
-            self.PROCESSING_OWNER_KEY,
-            str(file_id),
-            lease_owner,
-            int(now_epoch) + self.delay_seconds,
-        )
-        return bool(result)
+        return bool(await self.retry_many(file_ids=[file_id], lease_owner=lease_owner, now_epoch=now_epoch))
 
     async def reclaim_expired(self, *, now_epoch: int) -> int:
         redis = await self._connection()
-        return int(
-            await redis.eval(
-                self.RECLAIM_SCRIPT,
-                3,
-                self.PENDING_KEY,
-                self.PROCESSING_KEY,
-                self.PROCESSING_OWNER_KEY,
-                int(now_epoch),
-            )
-        )
+        return int(await redis.eval(self.RECLAIM_SCRIPT, 5, *self._queue_keys(), int(now_epoch),
+                                    self.delay_seconds, self.MAX_ATTEMPTS, self.BATCH_SIZE))
+
+    async def restore_dead(self, *, file_ids: list[int], now_epoch: int) -> int:
+        """仅供人工按 ID 恢复; 普通事件及定时校准不会重置耗尽预算。"""
+        return await self._bulk(self.RESTORE_SCRIPT, file_ids, int(now_epoch) + self.delay_seconds)
 
     async def acquire_schedule(self) -> bool:
         redis = await self._connection()

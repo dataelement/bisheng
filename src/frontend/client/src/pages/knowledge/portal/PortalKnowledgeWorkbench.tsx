@@ -2950,7 +2950,7 @@ export default function PortalKnowledgeWorkbench() {
         }
         const ok = await confirm({
             title: "确认删除所选内容？",
-            description: "删除后不可恢复。",
+            description: "可退回的文档将退回上一层知识库，其余文档进入回收站；单独删除发布或分享引用时，仅移除该引用。",
             confirmText: "删除",
             cancelText: "取消",
         });

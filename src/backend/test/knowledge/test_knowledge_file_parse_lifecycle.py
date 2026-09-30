@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import (
@@ -80,6 +83,27 @@ def _load_file_worker():
 
 
 file_worker = _load_file_worker()
+
+
+def test_inline_similarity_waits_for_result_and_preserves_parse_trace() -> None:
+    refresh = AsyncMock(return_value=3)
+    token = file_worker.trace_id_var.set("parse_file_101")
+    try:
+        with (
+            patch.object(file_worker, "_refresh_file_similarity_candidates", refresh),
+            patch.dict(
+                sys.modules,
+                {"bisheng.worker._asyncio_utils": SimpleNamespace(
+                    run_async_task=lambda factory: asyncio.run(factory()),
+                )},
+            ),
+        ):
+            assert file_worker.refresh_file_similarity_candidates(101) == 3
+            refresh.assert_awaited_once_with(101)
+            assert file_worker.trace_id_var.get() == "parse_file_101"
+
+    finally:
+        file_worker.trace_id_var.reset(token)
 
 
 def _title_worker_stub(events: list[str]) -> ModuleType:
@@ -227,3 +251,72 @@ def test_new_and_legacy_formal_parse_messages_follow_compatible_paths() -> None:
         "callback",
         complete_filelib_sync=True,
     )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "space_level", "should_publish"),
+    [
+        pytest.param({}, "department", True, id="shared-manager"),
+        pytest.param({"entry_type": None, "reference_document_id": None}, "department", True, id="legacy-file"),
+        pytest.param({"entry_type": "publish"}, "department", False, id="publish-reference"),
+        pytest.param({"entry_type": "share"}, "department", False, id="share-reference"),
+        pytest.param({"entry_type": "projection_tombstone"}, "department", False, id="tombstone"),
+        pytest.param({"entry_status": "preparing"}, "department", False, id="preparing-manager"),
+        pytest.param({"entry_status": "deleting"}, "department", False, id="deleting-manager"),
+        pytest.param({"entry_status": "invalid"}, "department", False, id="invalid-manager"),
+        pytest.param({"deleted_at": "2026-09-23"}, "department", False, id="recycled-manager"),
+        pytest.param({"reference_document_id": None}, "department", False, id="manager-without-document"),
+        pytest.param({}, "public", False, id="published-manager-in-public-space"),
+        pytest.param({"file_subcategory_code": None}, "department", False, id="missing-subcategory"),
+        pytest.param({"file_type": 0}, "department", False, id="directory"),
+        pytest.param({"status": KnowledgeFileStatus.FAILED.value}, "department", False, id="failed-parse"),
+    ],
+)
+def test_parse_completion_dispatches_auto_publish_for_eligible_manager(overrides, space_level, should_publish):
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    file = SimpleNamespace(**{
+        "id": 101,
+        "tenant_id": 7,
+        "knowledge_id": 9,
+        "file_type": 1,
+        "status": KnowledgeFileStatus.SUCCESS.value,
+        "entry_type": "manager",
+        "entry_status": "active",
+        "reference_document_id": 42,
+        "deleted_at": None,
+        "file_subcategory_code": "POL-A",
+        "split_rule": {},
+        **overrides,
+    })
+    scope_lookup = AsyncMock(return_value=SimpleNamespace(level=KnowledgeSpaceLevelEnum(space_level)))
+    dispatch = MagicMock()
+    with (
+        patch.object(file_worker, "_parse_knowledge_file", return_value=SimpleNamespace(id=9)),
+        patch.object(file_worker.KnowledgeFileDao, "get_file_by_ids", return_value=[file]),
+        patch.object(file_worker, "_mark_manager_projection_after_parse"),
+        patch.object(file_worker, "_complete_filelib_sync_version_link_if_needed"),
+        patch.object(file_worker, "_enqueue_recommendation_projection_refresh"),
+        patch.object(file_worker, "_enqueue_current_pdf_artifact_sync"),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_scope.KnowledgeSpaceScopeDao.aget_by_space_id",
+            scope_lookup,
+        ),
+        patch(
+            "bisheng.knowledge.domain.constants.get_file_category_code_from_split_rule",
+            return_value="POL",
+        ),
+        patch.dict(sys.modules, {
+            "bisheng.worker._asyncio_utils": SimpleNamespace(run_async_task=lambda factory: asyncio.run(factory())),
+            "bisheng.worker.knowledge.auto_publish_worker": SimpleNamespace(
+                auto_publish_file_celery=SimpleNamespace(apply_async=dispatch),
+            ),
+        }),
+    ):
+        file_worker._run_formal_parse_delivery(101, complete_filelib_sync=True)
+
+    if should_publish:
+        dispatch.assert_called_once_with(args=(101, 7), queue="celery")
+        scope_lookup.assert_awaited_once_with(9)
+    else:
+        dispatch.assert_not_called()

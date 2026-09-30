@@ -107,7 +107,7 @@ export const PivotTable = memo(function PivotTable({
   // ahead of the individual child rows.
   const groupDimensionIndex = data.groupDimensionIndex ?? null
   const displayRows = useMemo((): DisplayRow[] => {
-    const groups = groupCrossTabRows(data.rows, groupDimensionIndex)
+    const groups = groupCrossTabRows(data.rows, groupDimensionIndex, data.groupTotals)
     if (!groups) {
       return data.rows.map(row => ({ kind: "child" as const, row }))
     }
@@ -115,7 +115,7 @@ export const PivotTable = memo(function PivotTable({
       { kind: "subtotal" as const, group },
       ...group.childRows.map(row => ({ kind: "child" as const, row })),
     ])
-  }, [data.rows, groupDimensionIndex])
+  }, [data.rows, data.groupTotals, groupDimensionIndex])
 
   const cellBackground = (value: number) => {
     if (!value || !maxValue) return isDark ? "rgba(71, 85, 105, 0.18)" : "#f8fafc"
@@ -125,6 +125,11 @@ export const PivotTable = memo(function PivotTable({
 
   return (
     <div className="flex size-full min-h-0 flex-col gap-2">
+      {data.exactDocumentTotals && (
+        <p className="shrink-0 text-xs text-muted-foreground" role="note">
+          合计按全部筛选结果重新计算；同一知识跨组出现时只计一次，合计可能不等于各项相加。
+        </p>
+      )}
       {data.truncated && (
         <div
           className="shrink-0 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100"

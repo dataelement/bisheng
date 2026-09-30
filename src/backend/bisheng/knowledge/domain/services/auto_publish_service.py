@@ -7,7 +7,15 @@ and distribution service invocation. Called by the Celery task.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
+
+from bisheng.utils.task_dispatch import run_sync_dispatch
+
+if TYPE_CHECKING:
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+    from bisheng.knowledge.domain.services.auto_publish_target_resolver import AutoPublishTarget
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +52,8 @@ class AutoPublishService:
         *,
         file_id: int,
         tenant_id: int,
+        publish_context: dict | None = None,
+        save_publish_context: Callable[[dict], Awaitable[None]] | None = None,
     ) -> AutoPublishResult:
         """Execute auto-publish for a given file.
 
@@ -62,7 +72,6 @@ class AutoPublishService:
             get_file_category_code_from_split_rule,
         )
         from bisheng.knowledge.domain.models.knowledge_file import (
-            KnowledgeFile,
             KnowledgeFileDao,
             KnowledgeFileEntryType,
         )
@@ -83,6 +92,24 @@ class AutoPublishService:
                 skipped=True,
                 skip_reason="file not found",
             )
+
+        if int(db_file.tenant_id or 1) != tenant_id or db_file.deleted_at is not None:
+            return AutoPublishResult(published=False, skipped=True, skip_reason="file no longer eligible")
+        if db_file.status != 2:
+            raise RuntimeError("auto_publish_source_not_ready")
+        if publish_context is not None:
+            return await cls._publish(
+                db_file=db_file,
+                tenant_id=tenant_id,
+                publish_context=publish_context,
+            )
+        if getattr(db_file, "entry_status", None) == "preparing":
+            # 历史记录缺少原命令时不能按当前规则猜测目标, 更不能提前激活 manager。
+            raise RuntimeError("auto_publish_recovery_context_missing")
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao, KnowledgeSpaceLevelEnum
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(db_file.knowledge_id))
+        if scope is None or scope.level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+            return AutoPublishResult(published=False, skipped=True, skip_reason="source is not department space")
 
         file_category_code = get_file_category_code_from_split_rule(getattr(db_file, "split_rule", None))
         file_subcategory_code = getattr(db_file, "file_subcategory_code", None) or ""
@@ -132,11 +159,7 @@ class AutoPublishService:
                 file_category_code,
                 matched_rule.id,
             )
-            return AutoPublishResult(
-                published=False,
-                skipped=True,
-                skip_reason="target space not resolved",
-            )
+            raise RuntimeError("auto_publish_target_space_not_resolved")
 
         target = await AutoPublishTargetResolver.resolve_or_create_target_folder(
             target_space_id=target_space_id,
@@ -160,9 +183,26 @@ class AutoPublishService:
                 db_file.reference_document_id,
             )
 
-        # -----------------------------------------------------------
-        # Step 5: Execute distribution (normalize_manager + publish_approved)
-        # -----------------------------------------------------------
+        return await cls._publish(
+            db_file=db_file,
+            tenant_id=tenant_id,
+            target_space_id=target_space_id,
+            target=target,
+            save_publish_context=save_publish_context,
+        )
+
+    @classmethod
+    async def _publish(
+        cls,
+        *,
+        db_file: KnowledgeFile,
+        tenant_id: int,
+        target_space_id: int | None = None,
+        target: AutoPublishTarget | None = None,
+        publish_context: dict | None = None,
+        save_publish_context: Callable[[dict], Awaitable[None]] | None = None,
+    ) -> AutoPublishResult:
+        """首次发布先保存原命令; 重试继续已有权限流程, 不重新匹配发布规则。"""
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
             KnowledgeDocumentRepositoryImpl,
@@ -182,7 +222,7 @@ class AutoPublishService:
             KnowledgeDocumentPermissionActivationService,
         )
 
-        auto_publish_instance_id = _generate_auto_publish_instance_id(file_id, target_space_id)
+        file_id = int(db_file.id)
 
         async with get_async_db_session() as session:
             file_repository = KnowledgeFileRepositoryImpl(session)
@@ -196,23 +236,55 @@ class AutoPublishService:
                 ),
             )
 
-            # normalize_manager ensures the source file is tagged as
-            # the canonical manager and creates the KnowledgeDocument if needed.
-            manager_snapshot = await service.normalize_manager(
-                tenant_id=tenant_id,
-                source_file_id=file_id,
-            )
-
-            command = PublishKnowledgeDocumentCommand(
-                tenant_id=tenant_id,
-                approval_instance_id=auto_publish_instance_id,
-                document_id=manager_snapshot.document_id,
-                source_entry_id=file_id,
-                target_space_id=target_space_id,
-                target_file_level_path=target.target_file_level_path,
-                target_level=target.target_level,
-                target_document_id=None,
-            )
+            current = await file_repository.find_by_id_for_update(file_id)
+            if (
+                current is None
+                or int(current.tenant_id or 1) != tenant_id
+                or current.deleted_at is not None
+                or current.status != 2
+            ):
+                raise RuntimeError("auto_publish_source_changed")
+            if publish_context is not None:
+                command = PublishKnowledgeDocumentCommand(**publish_context)
+                if (
+                    command.tenant_id != tenant_id
+                    or command.source_entry_id != file_id
+                    or command.document_id != current.reference_document_id
+                    or command.approval_instance_id
+                    != _generate_auto_publish_instance_id(file_id, command.target_space_id)
+                    or command.target_document_id is not None
+                    or command.metadata_only_migration
+                    or current.entry_type != "manager"
+                    or current.entry_status not in {"active", "preparing"}
+                    or (
+                        current.entry_status == "preparing"
+                        and current.approval_instance_id != command.approval_instance_id
+                    )
+                ):
+                    raise RuntimeError("auto_publish_recovery_context_mismatch")
+            else:
+                if current.entry_status == "preparing":
+                    raise RuntimeError("auto_publish_recovery_context_missing")
+                if current.entry_type not in {None, "manager"} or (
+                    current.entry_type == "manager" and current.entry_status != "active"
+                ):
+                    raise RuntimeError("auto_publish_source_changed")
+                assert target_space_id is not None and target is not None
+                manager_snapshot = await service.normalize_manager(tenant_id=tenant_id, source_file_id=file_id)
+                command = PublishKnowledgeDocumentCommand(
+                    tenant_id=tenant_id,
+                    approval_instance_id=_generate_auto_publish_instance_id(file_id, target_space_id),
+                    document_id=manager_snapshot.document_id,
+                    source_entry_id=file_id,
+                    target_space_id=target_space_id,
+                    target_file_level_path=target.target_file_level_path,
+                    target_level=target.target_level,
+                    target_document_id=None,
+                )
+                if save_publish_context is not None:
+                    # 保存失败就停止, 确保 preparing 入口总有可恢复的原始目标。
+                    await save_publish_context(asdict(command))
+            target_space_id = command.target_space_id
 
             try:
                 result = await service.publish_approved(command)
@@ -229,8 +301,8 @@ class AutoPublishService:
                         published=False,
                         skipped=True,
                         skip_reason="duplicate content in target space",
-                        document_id=manager_snapshot.document_id,
-                        manager_file_id=manager_snapshot.manager_file_id,
+                        document_id=command.document_id,
+                        manager_file_id=file_id,
                         target_space_id=target_space_id,
                         idempotent=True,
                     )
@@ -244,7 +316,7 @@ class AutoPublishService:
                 enqueue_document_projection_entries,
             )
 
-            enqueue_document_projection_entries(
+            await run_sync_dispatch(enqueue_document_projection_entries,
                 tenant_id=tenant_id,
                 entry_ids=[
                     result.manager_file_id,

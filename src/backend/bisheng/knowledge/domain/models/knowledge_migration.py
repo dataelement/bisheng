@@ -143,6 +143,8 @@ class KnowledgeMigrationBatch(SQLModelSerializable, table=True):
         sa_column=Column(String(32), nullable=False, server_default=text("'preflight_queued'")),
     )
     round_no: int = Field(default=1, sa_column=Column(Integer, nullable=False, server_default=text("1")))
+    reconcile_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
+    next_reconcile_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     scanned_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     total_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))
     executable_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default=text("0")))

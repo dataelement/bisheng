@@ -211,4 +211,4 @@ def rebuild_fulltext_projection(file_id: int, fingerprint: str, repair_task_id: 
         )
     finally:
         run_async_task(lambda: _finish(file_id, fingerprint, repair_task_id, kind, ok))
-    return {"status": "finished"}
+    return {"status": "waiting_projection" if ok is None else "finished"}

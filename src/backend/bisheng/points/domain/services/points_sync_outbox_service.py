@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from bisheng.core.database import get_async_db_session
 from bisheng.points.domain.models import PointSyncOutbox
@@ -43,17 +45,31 @@ class PointsSyncOutboxService:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 repo = PointsRepository(session)
+                await repo.recover_sync_outbox(datetime.utcnow())
                 rows = await repo.list_due_sync_outbox(limit=limit)
-                for row in rows:
+                ids = [row.id for row in rows]
+                await session.commit()
+            for row_id in ids:
+                owner = uuid4().hex
+                async with get_async_db_session() as session:
+                    repo = PointsRepository(session)
+                    row = await repo.claim_sync_outbox(row_id, owner, datetime.utcnow())
+                    snapshot = PointSyncOutbox.model_validate(row.model_dump()) if row else None
+                    await session.commit()
+                if snapshot is not None:
                     processed += 1
-                    outcome = await self._process_one(repo, row)
+                    # 适配器以稳定 outbox ID 幂等, 超时不代表远端一定未执行。
+                    snapshot.payload = {**snapshot.payload, "idempotency_key": f"points-outbox:{snapshot.id}"}
+                    async with get_async_db_session() as session:
+                        repo = PointsRepository(session)
+                        outcome = await self._process_one(repo, snapshot, owner=owner)
+                        await session.commit()
                     if outcome == "sent":
                         sent += 1
                     elif outcome == "skipped":
                         skipped += 1
                     else:
                         failed += 1
-                await session.commit()
 
         result = {
             "processed": processed,
@@ -64,41 +80,40 @@ class PointsSyncOutboxService:
         logger.info("points.outbox.drain_done %s", result)
         return result
 
-    async def _process_one(self, repo: PointsRepository, row: PointSyncOutbox) -> str:
+    async def _process_one(self, repo: PointsRepository, row: PointSyncOutbox, *, owner: str) -> str:
         """投递单条；适配器未配置 → skipped；瞬时失败 → failed+backoff。"""
         try:
-            ok = await self._deliver(row)
+            ok = await asyncio.wait_for(self._deliver(row), timeout=60)
             if not ok:
                 raise RuntimeError("deliver_returned_false")
             row.status = "sent"
             row.sent_at = datetime.utcnow()
             row.last_error = None
-            await repo.save_outbox(row)
-            return "sent"
         except Exception as exc:
             message = str(exc)[:500]
             # 未配置适配器：标 skipped，避免永久占用 pending 队列。
             if "points_sync_adapter_not_configured" in message:
                 row.status = "skipped"
                 row.last_error = message
-                row.retry_count = int(row.retry_count or 0) + 1
-                await repo.save_outbox(row)
-                return "skipped"
-            row.retry_count = int(row.retry_count or 0) + 1
-            row.last_error = message
-            if row.retry_count >= MAX_RETRIES:
-                row.status = "failed"
+                row.next_retry_at = None
+            elif row.retry_count >= MAX_RETRIES:
+                row.status = "dead"
                 row.next_retry_at = None
             else:
                 row.status = "failed"
                 # 指数退避，供下次 drain 捞起（status 仍为 failed 但 next_retry_at 到期）。
                 backoff = min(3600, 30 * (2 ** max(row.retry_count - 1, 0)))
                 row.next_retry_at = datetime.utcnow() + timedelta(seconds=backoff)
-            await repo.save_outbox(row)
+            row.last_error = message
             logger.warning(
                 "points.outbox.deliver_failed id=%s retry=%s err=%s",
                 row.id,
                 row.retry_count,
                 message,
             )
-            return "failed"
+        # 外部投递与数据库结算分开, 结算故障不能被误判为投递失败。
+        settled = await repo.settle_sync_outbox(row.id, owner, {
+            "status": row.status, "sent_at": row.sent_at, "last_error": row.last_error,
+            "next_retry_at": None if row.status == "sent" else row.next_retry_at,
+        })
+        return row.status if settled else "lease_lost"

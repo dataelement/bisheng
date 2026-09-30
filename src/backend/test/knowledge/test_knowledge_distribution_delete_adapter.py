@@ -36,6 +36,15 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def mock_write_freeze_dependency(monkeypatch):
+    # 本文件验证删除调用适配，不连接实际共享存储配置库。
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+        AsyncMock(),
+    )
+
+
 def _service() -> KnowledgeSpaceService:
     service = KnowledgeSpaceService(
         request=MagicMock(),
@@ -249,6 +258,7 @@ def test_container_delete_rejects_any_distribution_state() -> None:
 
 async def test_delete_space_routes_to_retirement_without_distribution_blocker() -> None:
     service = _service()
+    service._require_no_active_shared_managers = AsyncMock()
     service.knowledge_space_retirement_service = SimpleNamespace(
         retire=AsyncMock(
             return_value=SimpleNamespace(entry_ids=[101, 102])

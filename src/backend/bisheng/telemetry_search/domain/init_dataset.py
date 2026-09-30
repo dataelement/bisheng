@@ -1717,6 +1717,31 @@ def _clone_dashboard_dataset(dataset: DashboardDataset) -> DashboardDataset:
     return DashboardDataset(**data)
 
 
+def _configure_document_statistics() -> None:
+    """保留已保存图表的指标 ID，改由精确文档统计路径计算。"""
+    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == KNOWLEDGE_SPACE_CONTENT_STAT_INDEX)
+    metrics = dataset.schema_config["metrics"]
+    for metric in metrics:
+        if metric["field"] in {"total_file_count", "new_file_count", "knowledge_contribution_ratio"}:
+            metric.update(
+                calculation="document_statistics", aggregations=None,
+                sum_field=None, index=None,
+            )
+    for field, name in [
+        ("called_document_count", "被系统化调用知识数"),
+        ("document_usage_ratio", "调用比例"),
+    ]:
+        metrics.append(MetricConfig(
+            field=field, name=name, is_virtual=True,
+            calculation=VirtualMetricCalculationEnum.DOCUMENT_STATISTICS,
+            default_number_format={"type": "percent", "decimalPlaces": 2, "thousandSeparator": False}
+            if field == "document_usage_ratio" else None,
+        ).model_dump())
+
+
+_configure_document_statistics()
+
+
 DASHBOARD_DATASET_REFRESH_CODES = (
     "mid_knowledge_space_content_stat",
     "mid_realtime_qa_question_fact",

@@ -12,6 +12,13 @@ from bisheng.knowledge.domain.services.portal_recommendation_service import Port
 
 
 @dataclass(frozen=True, slots=True)
+class PortalRecommendationPoolRebuildRequest:
+    generation: int
+    config_version: int
+    fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
 class PortalRecommendationPoolVersionState:
     desired_generation: int = 0
     active_generation: int = 0
@@ -84,6 +91,9 @@ class PortalRecommendationRedisRepository(ABC):
 
     @abstractmethod
     async def invalidate_user(self, tenant_id: int, user_id: int) -> None: ...
+
+    @abstractmethod
+    async def invalidate_users(self, tenant_id: int, user_ids: Sequence[int]) -> int: ...
 
     @abstractmethod
     async def set_top_n(
@@ -162,6 +172,16 @@ class PortalRecommendationRedisRepository(ABC):
 
     @abstractmethod
     async def increment_desired_generation(self, tenant_id: int) -> int: ...
+
+    @abstractmethod
+    async def get_pool_rebuild_request(
+        self, tenant_id: int, request_id: str,
+    ) -> PortalRecommendationPoolRebuildRequest | None: ...
+
+    @abstractmethod
+    async def get_or_create_pool_rebuild_request(
+        self, tenant_id: int, request_id: str, *, config_version: int, fingerprint: str, ttl_seconds: int,
+    ) -> PortalRecommendationPoolRebuildRequest: ...
 
     @abstractmethod
     async def get_pool_state(self, tenant_id: int) -> PortalRecommendationPoolVersionState: ...

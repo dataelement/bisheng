@@ -24,6 +24,7 @@ from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
     RealtimeQaQuestionRecord,
 )
+from bisheng.telemetry.domain.mid_table.retry_budget import bounded_telemetry_task, checkpoint, frozen_value
 from bisheng.user.domain.models.user import User
 from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
@@ -154,6 +155,7 @@ def _sync_expert_questions(
     offset = 0
     synced = 0
     while True:
+        checkpoint()
         rows = _get_expert_question_rows(
             offset=offset,
             limit=PAGE_SIZE,
@@ -182,8 +184,9 @@ def _sync_expert_questions(
             )
             for question, user, tenant_id in rows
         ]
-        fact.insert_records_sync(records)
+        result = fact.reconcile_records_sync(records)
         synced += len(records)
+        logger.info("qa.reconcile.progress source=expert checked={} batch={}", synced, result)
     return synced
 
 
@@ -251,7 +254,9 @@ def _flush_portal_hits(
         is not None
     ]
     if records:
-        fact.insert_records_sync(records)
+        checkpoint()
+        result = fact.reconcile_records_sync(records)
+        logger.info("qa.reconcile.progress source=portal batch={}", result)
     return len(records)
 
 
@@ -286,25 +291,29 @@ def _sync_portal_questions(
     )
     batch: list[dict[str, Any]] = []
     synced = 0
-    for hit in hits:
-        batch.append(hit)
-        if len(batch) >= PAGE_SIZE:
+    try:
+        for hit in hits:
+            batch.append(hit)
+            if len(batch) >= PAGE_SIZE:
+                synced += _flush_portal_hits(
+                    fact,
+                    batch,
+                    projection_updated_at=projection_updated_at,
+                )
+                batch = []
+        if batch:
             synced += _flush_portal_hits(
                 fact,
                 batch,
                 projection_updated_at=projection_updated_at,
             )
-            batch = []
-    if batch:
-        synced += _flush_portal_hits(
-            fact,
-            batch,
-            projection_updated_at=projection_updated_at,
-        )
+    finally:
+        hits.close()
     return synced
 
 
 @bisheng_celery.task()
+@bounded_telemetry_task
 def sync_mid_realtime_qa_question_fact(
     start_date: str | None = None,
     end_date: str | None = None,
@@ -317,6 +326,8 @@ def sync_mid_realtime_qa_question_fact(
         end_date=end_date,
         full_history=full_history,
     )
+    saved = frozen_value("window", lambda: [start.isoformat() if start else None, end.isoformat()])
+    start, end = datetime.fromisoformat(saved[0]) if saved[0] else None, datetime.fromisoformat(saved[1])
     projection_updated_at = int(datetime.now().timestamp())
     fact = RealtimeQaQuestionFact()
     expert_count = _sync_expert_questions(

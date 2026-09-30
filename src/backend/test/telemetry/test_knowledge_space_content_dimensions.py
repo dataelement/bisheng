@@ -100,9 +100,10 @@ def test_mapping_contains_only_new_organization_fields():
     }
 
     assert expected.issubset(mapping)
+    assert mapping["tenant_id"] == {"type": "integer"}
+    assert mapping["knowledge_identity"] == {"type": "keyword"}
     assert mapping["favorite_count"] == {"type": "long"}
     assert not {
-        "tenant_id",
         "space_department_id",
         "space_department_name",
         "primary_department_id",

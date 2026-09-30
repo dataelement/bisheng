@@ -264,6 +264,33 @@ async def query_detail_rows(
         return DetailRows(columns=[], rows=[])
 
     metric_config = _metric_config_for(data_config, metric_map)
+    from .knowledge_document_statistics import DOCUMENT_METRICS
+
+    if dataset_code == "mid_knowledge_space_content_stat" and metric_config and metric_config.field in DOCUMENT_METRICS:
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from .knowledge_document_reader import document_reader, split_time_filters
+
+        clauses, start, end = split_time_filters(filters)
+        clauses.extend([
+            {"term": {"tenant_id": get_current_tenant_id() or 1}},
+            {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+        ])
+        async with document_reader(dataset.es_index_name) as reader:
+            statistics = await reader.load(
+                clauses, include_usage=metric_config.field in {"called_document_count", "document_usage_ratio"},
+            )
+        rows = statistics.detail(metric_config.field, start=start, end=end)
+        columns = _ordered_unique([
+            DetailColumn(field="knowledge_identity", label="文档唯一标识"),
+            DetailColumn(field="file_id", label="关联文件入口ID"),
+            *[DetailColumn(field=field, label=label) for field, label in DETAIL_IDENTITY_COLUMNS[dataset_code]],
+            *_dimension_columns(data_config),
+        ])
+        if len(rows) > row_limit:
+            from bisheng.common.errcode.telemetry import DashboardExportLimitExceededError
+
+            raise DashboardExportLimitExceededError()
+        return DetailRows(columns=columns, rows=rows)
     filters = DataQueryService.merge_filters(filters, _metric_filter(metric_config))
     detail_query = _build_bool_query(filters)
     if metric_config and metric_config.calculation == "login_participation":

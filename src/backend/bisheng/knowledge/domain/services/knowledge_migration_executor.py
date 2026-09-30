@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
+from loguru import logger
+
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationAttemptResult,
     KnowledgeMigrationBatchStatus,
@@ -22,7 +25,7 @@ from bisheng.knowledge.domain.services.file_migration.executor import (
     MigrationExecutionUnit,
     MigrationOperations,
     StaleMigrationAttemptError,
-    execute_unit,
+    execute_units,
 )
 from bisheng.knowledge.domain.services.file_migration.state import (
     aggregate_batch_status,
@@ -34,6 +37,7 @@ from bisheng.knowledge.domain.services.knowledge_migration_service import (
 
 DEFAULT_LEASE_TTL_SECONDS = 300
 DEFAULT_RECONCILE_STALE_SECONDS = 1800
+DEFAULT_RECONCILE_MAX_RECOVERIES = 4
 
 
 class BatchMigrationOperations(MigrationOperations, Protocol):
@@ -101,6 +105,39 @@ class DatabaseMigrationCheckpointStore:
             await repository.commit()
 
 
+class BatchMigrationCheckpointStore(DatabaseMigrationCheckpointStore):
+    """同一阶段批量检查执行代、批量回写；DB 切换仍在业务事务中落盘。"""
+
+    def __init__(self, repository_factory):
+        super().__init__(repository_factory)
+        self.active = set()
+        self.pending = {}
+        self.token = ""
+
+    async def refresh(self, units):
+        self.token = units[0].execution_token
+        async with self.repository_factory() as repository:
+            active = await repository.active_attempts([unit.attempt_id for unit in units], self.token)
+            self.active = set(active)
+            await repository.commit()
+
+    async def is_attempt_active(self, unit):
+        return unit.attempt_id in self.active and not (unit.cancelled and unit.cancelled())
+
+    async def save_checkpoint(self, unit, checkpoint):
+        self.pending[unit.attempt_id] = checkpoint
+
+    async def flush(self):
+        if not self.pending:
+            return
+        async with self.repository_factory() as repository:
+            if not await repository.update_checkpoints(self.pending, execution_token=self.token):
+                await repository.rollback()
+                raise StaleMigrationAttemptError("batch checkpoint write was fenced")
+            await repository.commit()
+        self.pending.clear()
+
+
 class _LeaseHeartbeat:
     def __init__(
         self,
@@ -165,12 +202,14 @@ class KnowledgeMigrationExecutionService:
         operations: BatchMigrationOperations,
         dispatcher: KnowledgeMigrationTaskDispatcher,
         lease_ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
+        execution_batch_size: int = 20,
     ):
         self.repository_factory = repository_factory
         self.lock_repository = lock_repository
         self.operations = operations
         self.dispatcher = dispatcher
         self.lease_ttl_seconds = lease_ttl_seconds
+        self.execution_batch_size = min(100, max(1, int(execution_batch_size)))
         self.checkpoint_store = DatabaseMigrationCheckpointStore(
             repository_factory
         )
@@ -198,7 +237,7 @@ class KnowledgeMigrationExecutionService:
                 "round_no": int(batch.round_no),
             }
 
-    async def _claim_unit(
+    async def _claim_units(
         self,
         *,
         batch_id: int,
@@ -207,23 +246,49 @@ class KnowledgeMigrationExecutionService:
         worker_task_id: str | None,
     ):
         async with self.repository_factory() as repository:
-            claimed = await repository.claim_next_unit(
+            claimed = await repository.claim_next_units(
+                limit=self.execution_batch_size,
                 batch_id=batch_id,
                 round_no=round_no,
                 execution_token=execution_token,
                 worker_task_id=worker_task_id,
             )
             await repository.commit()
-            if claimed is None:
-                return None
-            unit, attempt = claimed
-            return {
-                "unit_id": int(unit.id),
-                "checkpoint": unit.checkpoint,
-                "attempt_id": int(attempt.id),
-                "execution_token": execution_token,
-                "restart_pre_switch": int(unit.attempt_count) > 1,
-            }
+            return [
+                MigrationExecutionUnit(
+                    unit_id=int(unit.id),
+                    checkpoint=unit.checkpoint,
+                    attempt_id=int(attempt.id),
+                    execution_token=execution_token,
+                    restart_pre_switch=int(unit.attempt_count) > 1,
+                )
+                for unit, attempt in claimed
+            ]
+
+    async def _finish_units(self, batch_id, units, results) -> bool:
+        values = []
+        for unit, result in zip(units, results):
+            if result.interrupted:
+                continue
+            values.append(
+                {
+                    "attempt_id": unit.attempt_id,
+                    "unit_status": "succeeded" if result.succeeded else "failed",
+                    "checkpoint": result.checkpoint,
+                    "result": "succeeded" if result.succeeded else "failed",
+                    "reason_code": None
+                    if result.succeeded
+                    else ("source_cleanup_pending" if result.source_cleanup_pending else "unit_execution_failed"),
+                    "error_summary": sanitize_error_summary(result.error_summary),
+                }
+            )
+        async with self.repository_factory() as repository:
+            if not await repository.finish_attempts(values, execution_token=units[0].execution_token):
+                await repository.rollback()
+                return False
+            await repository.recompute_progress(batch_id)
+            await repository.commit()
+        return not any(result.interrupted for result in results)
 
     async def _finish_unit(
         self,
@@ -307,7 +372,7 @@ class KnowledgeMigrationExecutionService:
             batch_id = int(next_batch.id)
             round_no = int(next_batch.round_no)
         try:
-            self.dispatcher.dispatch_execution(batch_id, round_no)
+            await run_sync_dispatch(self.dispatcher.dispatch_execution, batch_id, round_no)
         except Exception:
             # queued 状态仍是 DB 真相源, reconcile 会再次投递.
             return
@@ -354,33 +419,21 @@ class KnowledgeMigrationExecutionService:
             round_no = int(claimed_batch["round_no"])
             heartbeat.batch_id = batch_id
 
+            from dataclasses import replace
+
             while not heartbeat.lost.is_set():
-                claimed = await self._claim_unit(
-                    batch_id=batch_id,
-                    round_no=round_no,
-                    execution_token=execution_token,
-                    worker_task_id=worker_task_id,
+                units = await self._claim_units(
+                    batch_id=batch_id, round_no=round_no, execution_token=execution_token, worker_task_id=worker_task_id
                 )
-                if claimed is None:
+                if not units:
                     break
-                result = await execute_unit(
-                    MigrationExecutionUnit(
-                        unit_id=int(claimed["unit_id"]),
-                        checkpoint=str(claimed["checkpoint"]),
-                        restart_pre_switch=bool(claimed["restart_pre_switch"]),
-                        attempt_id=int(claimed["attempt_id"]),
-                        execution_token=str(claimed["execution_token"]),
-                        cancelled=heartbeat.lost.is_set,
-                    ),
-                    self.operations,
-                    self.checkpoint_store,
+                units = [replace(unit, cancelled=heartbeat.lost.is_set) for unit in units]
+                if hasattr(self.operations, "prepare_batch"):
+                    await self.operations.prepare_batch(units)
+                results = await execute_units(
+                    units, self.operations, BatchMigrationCheckpointStore(self.repository_factory)
                 )
-                finished = await self._finish_unit(
-                    attempt_id=int(claimed["attempt_id"]),
-                    execution_token=str(claimed["execution_token"]),
-                    result=result,
-                )
-                if not finished:
+                if not await self._finish_units(batch_id, units, results):
                     ownership_lost = True
                     break
 
@@ -434,54 +487,67 @@ class KnowledgeMigrationReconcileService:
         lock_repository: KnowledgeMigrationLockRepository,
         dispatcher: KnowledgeMigrationTaskDispatcher,
         stale_seconds: int = DEFAULT_RECONCILE_STALE_SECONDS,
+        max_recoveries: int = DEFAULT_RECONCILE_MAX_RECOVERIES,
     ):
         self.repository_factory = repository_factory
         self.lock_repository = lock_repository
         self.dispatcher = dispatcher
         self.stale_seconds = stale_seconds
+        self.max_recoveries = max(1, int(max_recoveries))
 
     async def reconcile(self, *, limit: int = 100) -> int:
-        older_than = datetime.now() - timedelta(seconds=self.stale_seconds)
-        has_active_lease = await self.lock_repository.is_locked()
+        now = datetime.now()
+        older_than = now - timedelta(seconds=self.stale_seconds)
+        statuses = {"preflight_queued", "preflighting", "queued", "running"}
+        if await self.lock_repository.is_locked():
+            # 正式迁移占用执行器时只扫描预检, 避免排队批次挤占扫描额度。
+            statuses -= {"queued", "running"}
         async with self.repository_factory() as repository:
             batches = await repository.list_reconcile_candidates(
-                {
-                    KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value,
-                    KnowledgeMigrationBatchStatus.PREFLIGHTING.value,
-                    KnowledgeMigrationBatchStatus.QUEUED.value,
-                    KnowledgeMigrationBatchStatus.RUNNING.value,
-                },
+                statuses,
                 older_than=older_than,
-                limit=limit,
+                now=now,
+                limit=max(1, min(int(limit), 100)),
             )
-            recovered: list[tuple[str, int, int]] = []
-            for batch in batches:
-                status = batch.status
-                if status == KnowledgeMigrationBatchStatus.PREFLIGHTING.value:
-                    if not await repository.recover_stale_preflight_batch(
-                        int(batch.id)
-                    ):
-                        continue
-                    status = (
-                        KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
-                    )
-                elif status == KnowledgeMigrationBatchStatus.RUNNING.value:
-                    if has_active_lease:
-                        continue
-                    if not await repository.recover_stale_running_batch(
-                        int(batch.id),
-                        queued_at=datetime.now(),
-                    ):
-                        continue
-                    status = KnowledgeMigrationBatchStatus.QUEUED.value
-                recovered.append(
-                    (status, int(batch.id), int(batch.round_no))
-                )
-            await repository.commit()
+            candidates = [(int(batch.id), batch.status, int(batch.round_no)) for batch in batches]
 
-        for status, batch_id, round_no in recovered:
-            if status == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value:
-                self.dispatcher.dispatch_preflight(batch_id)
-            elif status == KnowledgeMigrationBatchStatus.QUEUED.value:
-                self.dispatcher.dispatch_execution(batch_id, round_no)
-        return len(recovered)
+        dispatched = 0
+        for batch_id, status, round_no in candidates:
+            token = None
+            try:
+                if status in {"queued", "running"}:
+                    # 与执行 worker 竞争同一租约, 避免先查无锁后接管的竞态。
+                    token = uuid4().hex
+                    if not await self.lock_repository.acquire(token, ttl_seconds=DEFAULT_LEASE_TTL_SECONDS):
+                        token = None
+                        continue
+                async with self.repository_factory() as repository:
+                    recovered = await repository.claim_reconcile_batch(
+                        batch_id,
+                        expected_status=status,
+                        expected_round_no=round_no,
+                        older_than=older_than,
+                        now=now,
+                        max_recoveries=self.max_recoveries,
+                    )
+                    delivery = (recovered.status, int(recovered.round_no)) if recovered else None
+                    await repository.commit()
+            except Exception:
+                logger.exception("迁移恢复领取失败 batch_id={}", batch_id)
+                continue
+            finally:
+                if token is not None:
+                    await self.lock_repository.release(token)
+
+            if delivery is None:
+                continue
+            try:
+                if delivery[0] == KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value:
+                    await run_sync_dispatch(self.dispatcher.dispatch_preflight, batch_id)
+                else:
+                    await run_sync_dispatch(self.dispatcher.dispatch_execution, batch_id, delivery[1])
+                dispatched += 1
+            except Exception:
+                # 保留已提交的预算和退避, 单条发布失败不阻塞后续批次。
+                logger.exception("迁移恢复投递失败 batch_id={}", batch_id)
+        return dispatched

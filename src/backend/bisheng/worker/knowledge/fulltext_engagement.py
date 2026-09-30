@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from celery.schedules import crontab
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
@@ -38,7 +39,7 @@ def register_fulltext_engagement_beat_schedule() -> None:
         "reconcile_knowledge_fulltext_engagement",
         {
             "task": constants.KNOWLEDGE_FULLTEXT_ENGAGEMENT_RECONCILE_TASK,
-            "schedule": 86400.0,
+            "schedule": crontab(hour=5, minute=0),  # 固定每日时间，与共享存储对账错峰
         },
     )
     bisheng_celery.conf.beat_schedule = schedule
@@ -120,12 +121,9 @@ async def _sync_engagement() -> dict[str, int]:
     try:
         result = await service.sync_file_ids(file_ids, updated_at=now)
     except Exception:
-        for file_id in file_ids:
-            await queue_repository.retry(
-                file_id=file_id,
-                lease_owner=lease_owner,
-                now_epoch=now_epoch,
-            )
+        await queue_repository.retry_many(
+            file_ids=file_ids, lease_owner=lease_owner, now_epoch=int(datetime.now(timezone.utc).timestamp()),
+        )
         logger.bind(
             claimed_count=len(file_ids),
             status="failed",

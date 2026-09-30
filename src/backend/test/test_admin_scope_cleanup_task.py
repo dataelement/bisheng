@@ -18,6 +18,7 @@ directly with a stubbed ``@bisheng_celery.task`` decorator.
 from __future__ import annotations
 
 import asyncio
+import pickle
 import importlib.util
 import sys
 from pathlib import Path
@@ -69,36 +70,26 @@ tasks_module = _load_tasks_module()
 
 
 class _FakeRedis:
-    def __init__(self, store: dict[str, str]):
+    def __init__(self, store):
         self.store = dict(store)
-        self.deleted: list[str] = []
-        self.sync_get_calls: list[str] = []
-        self.sync_delete_calls: list[str] = []
+        self.deleted = []
 
-    def keys(self, pattern: str):
-        prefix = pattern.rstrip("*")
-        return [k for k in self.store if k.startswith(prefix)]
+    async def ascan_batches(self, pattern, batch_size=200):
+        keys = [k for k in self.store if k.startswith(pattern.rstrip("*"))]
+        for start in range(0, len(keys), batch_size):
+            yield keys[start:start + batch_size]
 
-    def get(self, key: str):
-        self.sync_get_calls.append(key)
-        return self.store.get(key)
+    async def aget_raw_many(self, keys):
+        return [pickle.dumps(self.store[k]) if k in self.store else None for k in keys]
 
-    def delete(self, key: str):
-        self.sync_delete_calls.append(key)
-        if key in self.store:
-            del self.store[key]
-            self.deleted.append(key)
-            return 1
-        return 0
-
-    async def akeys(self, pattern: str):  # pragma: no cover - regression guard
-        raise AssertionError("admin_scope_cleanup must not use async Redis keys")
-
-    async def aget(self, key: str):  # pragma: no cover - regression guard
-        raise AssertionError("admin_scope_cleanup must not use async Redis get")
-
-    async def adelete(self, key: str):  # pragma: no cover - regression guard
-        raise AssertionError("admin_scope_cleanup must not use async Redis delete")
+    async def adelete_unchanged_many(self, values):
+        count = 0
+        for key, raw in values:
+            if key in self.store and pickle.dumps(self.store[key]) == raw:
+                del self.store[key]
+                self.deleted.append(key)
+                count += 1
+        return count
 
 
 @pytest.fixture()
@@ -136,7 +127,7 @@ def _patch_deps(monkeypatch, redis_store, non_active_ids):
     import importlib
 
     rm_mod = importlib.import_module("bisheng.core.cache.redis_manager")
-    monkeypatch.setattr(rm_mod, "get_redis_client_sync", lambda: fake)
+    monkeypatch.setattr(rm_mod, "get_redis_client", AsyncMock(return_value=fake))
 
     from bisheng.database.models.tenant import TenantDao
 

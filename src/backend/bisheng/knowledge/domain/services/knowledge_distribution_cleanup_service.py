@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 class EntryCleanupAction(str, Enum):
     ROLLBACK = "rollback"
+    RECYCLE = "recycle"
     FINAL_DELETE = "final_delete"
     DETACHED = "detached"
     FORCE_DETACHED = "force_detached"
@@ -77,7 +78,7 @@ class KnowledgeDistributionCleanupService:
         entry_type = str(entry.entry_type or "")
         document_id = int(entry.reference_document_id or 0)
 
-        if not document_id:
+        if not document_id or entry.deleted_at is not None:
             return self._outcome(entry_id, entry_type, EntryCleanupAction.SKIPPED)
         if entry.entry_status == KnowledgeFileEntryStatus.DELETING.value:
             # Already on its way out; the projection worker owns it from here.
@@ -115,6 +116,7 @@ class KnowledgeDistributionCleanupService:
                 action = (
                     EntryCleanupAction.ROLLBACK
                     if result.action == "rollback"
+                    else EntryCleanupAction.RECYCLE if result.action == "recycle"
                     else EntryCleanupAction.FINAL_DELETE
                 )
                 return self._outcome(entry_id, entry_type, action)

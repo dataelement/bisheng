@@ -119,6 +119,32 @@ class FakeSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         ]:
             del self.content[key]
 
+    async def relocate_content(self, request) -> None:
+        self.calls.append("relocate_content")
+
+        def key(identity: ContentProjectionIdentity):
+            return (
+                identity.tenant_id,
+                identity.canonical_document_id,
+                identity.canonical_version_id,
+                identity.content_generation,
+            )
+
+        source, target = key(request.source), key(request.target)
+        chunks = self.content.get(source) or self.content.get(target)
+        if not chunks:
+            raise RuntimeError("migration source chunks are missing")
+        self.content[target] = copy.deepcopy(chunks)
+        await self.update_membership(
+            MembershipUpdateRequest(
+                tenant_id=request.target.tenant_id,
+                canonical_document_id=request.target.canonical_document_id,
+                knowledge_ids=request.knowledge_ids,
+                membership_generation=request.membership_generation,
+                content_generation=request.target.content_generation,
+            )
+        )
+
     # --- test helpers -----------------------------------------------------
     def membership_of(self, tenant_id: int, document_id: int) -> tuple[int, ...] | None:
         snapshot = self.membership.get((tenant_id, document_id))

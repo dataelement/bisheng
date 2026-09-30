@@ -3,12 +3,24 @@ from typing import Any
 
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable, BaseRecord
+from bisheng.telemetry.domain.mid_table.content_stat_reconcile import ContentStatReconciler
 
 QA_TYPE_LABELS = {
     "expert": "专家问答",
     "smart": "智能问答",
     "document": "文档内AI对话",
 }
+
+
+def merge_qa_document(current: dict, desired: dict) -> dict:
+    result = dict(desired)
+    if current.get("department_source") == "event_time":
+        for field in ("primary_department_id", "primary_department_name", "department_source"):
+            if field in current:
+                result[field] = current[field]
+            else:
+                result.pop(field, None)
+    return result
 
 
 class RealtimeQaQuestionRecord(BaseRecord):
@@ -31,6 +43,12 @@ class RealtimeQaQuestionRecord(BaseRecord):
 class RealtimeQaQuestionFact(BaseMidTable):
     _index_name = "mid_realtime_qa_question_fact"
     _update_mappings_on_existing = True
+
+    def reconcile_records_sync(self, records: list[RealtimeQaQuestionRecord]) -> dict:
+        result = ContentStatReconciler(self._es_client_sync, self._index_name, str).reconcile(
+            {record.es_id: record.model_dump(exclude={"es_id"}) for record in records}, merge_qa_document
+        )
+        return result
     _mappings: dict[str, Any] = {
         "tenant_id": {"type": "keyword"},
         "question_id": {"type": "keyword"},

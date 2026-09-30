@@ -1,5 +1,6 @@
 # ruff: noqa: F401
 # register tasks
+from bisheng.worker.knowledge.background_jobs import drain_knowledge_background_jobs
 from bisheng.open_endpoints.worker.filelib_sync_worker import (
     fanout_automotive_sheet_intro_sync,
     run_automotive_sheet_intro_sync,
@@ -15,9 +16,9 @@ from bisheng.worker.knowledge.auto_publish_worker import (
     auto_publish_file_celery,
 )
 from bisheng.worker.knowledge.document_projection import (
-    fanout_document_projection_scan,
     process_document_projection,
-    scan_tenant_document_projections,
+    rebuild_document_content,
+    scan_document_projections,
 )
 from bisheng.worker.knowledge.shared_storage_reconcile import (
     fanout_shared_storage_reconcile,
@@ -31,13 +32,9 @@ from bisheng.worker.knowledge.file_migration import (
     preflight_knowledge_migration,
     reconcile_knowledge_migrations,
 )
-from bisheng.worker.knowledge.file_title_worker import (
-    extract_knowledge_file_title_celery,
-)
 from bisheng.worker.knowledge.file_worker import (
     file_copy_celery,
     parse_knowledge_file_celery,
-    refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
 )
 from bisheng.worker.knowledge.fulltext_engagement import (
@@ -62,18 +59,16 @@ from bisheng.worker.knowledge.pdf_artifact_worker import (
 from bisheng.worker.knowledge.portal_hot_search import (
     fanout_portal_hot_search_rebuild,
     rebuild_portal_hot_search_snapshot_celery,
-    trigger_portal_hot_search_rebuild_celery,
 )
 from bisheng.worker.knowledge.portal_recommendation import (
     fanout_portal_recommendation_maintenance,
     invalidate_department_users_celery,
-    prepare_pool_rebuild_celery,
     purge_expired_searches_celery,
     rebuild_shared_pools_celery,
     rebuild_user_interest_celery,
     reconcile_full_celery,
     reconcile_incremental_celery,
-    refresh_projection_celery,
+    refresh_projection_batch_celery,
 )
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery
 from bisheng.worker.knowledge.rebuild_knowledge_worker import rebuild_knowledge_celery, rebuild_knowledge_file_chunk

@@ -52,17 +52,15 @@ def rebuild_knowledge_celery(knowledge_id: int, new_model_id: int, invoke_user_i
             route = resolve_space_shared_routing(int(knowledge.tenant_id or 1), knowledge.type)
             if int(new_model_id) != int(route.embedding_model_id):
                 raise ValueError("SPACE embedding model must match the tenant shared target")
-            rebuilt_documents = set()
-            for file in files:
-                document_id = file.reference_document_id
-                if (not document_id or document_id in rebuilt_documents
-                        or file.entry_status != "active" or file.deleted_at is not None):
-                    continue
-                run_async_task(lambda file=file: _rebuild_shared_file(file))
-                rebuilt_documents.add(document_id)
-            knowledge.state = KnowledgeState.PUBLISHED.value
+            entry_ids = [
+                int(file.id) for file in files
+                if file.reference_document_id and file.entry_status == "active" and file.deleted_at is None
+            ]
+            result = run_async_task(lambda: _rebuild_shared_files(int(knowledge.tenant_id or 1), entry_ids))
+            completed = all(status == "ready" for status in result["results"].values())
+            knowledge.state = KnowledgeState.PUBLISHED.value if completed else KnowledgeState.REBUILDING.value
             KnowledgeDao.update_one(knowledge)
-            return f"knowledge {knowledge_id} shared rebuild completed"
+            return f"knowledge {knowledge_id} shared rebuild {'completed' if completed else 'pending'}"
 
         # 2. According to thecollection_namewentmilvusDelete Vector Store in
         KnowledgeService.delete_knowledge_file_in_vector(knowledge=knowledge, del_es=False)
@@ -302,11 +300,16 @@ def rebuild_knowledge_file_chunk(file_id: int):
         logger.warning(f"No knowledge file found for file_id={file_id}")
         return
     try:
-        _rebuild_knowledge_file_chunk(db_file)
+        return _rebuild_knowledge_file_chunk(db_file)
     except BaseErrorCode as e:
+        if db_file.reference_document_id:
+            raise
         KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED, e.to_json_str())
     except Exception as e:
         logger.exception(f"Failed to rebuild knowledge file chunk: {str(e)}")
+        # 投影失败由投影状态及重试次数记录, 不污染原文件的解析状态。
+        if db_file.reference_document_id:
+            raise
         KnowledgeFileDao.update_file_status([db_file.id], KnowledgeFileStatus.FAILED,
                                             ServerError(exception=e).to_json_str())
 
@@ -401,29 +404,40 @@ def _rebuild_knowledge_file_chunk(
     logger.info(f"rebuild_knowledge_file_chunk completed successfully for file_id={db_file.id}")
 
 
-async def _rebuild_shared_file(db_file: KnowledgeFile) -> None:
-    """从原文件重建规范文档，禁止逐空间删除或复制分块。"""
+async def _rebuild_shared_file(db_file: KnowledgeFile) -> dict:
+    return await _rebuild_shared_files(int(db_file.tenant_id or 1), [int(db_file.id)])
+
+
+async def _rebuild_shared_files(tenant_id: int, entry_ids: list[int]) -> dict:
+    """批量核验已有内容, 缺失内容通过投影服务交给解析 Worker。"""
     import uuid
 
     from bisheng.core.database import get_async_db_session
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import KnowledgeDocumentRepositoryImpl
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import KnowledgeDocumentVersionRepositoryImpl
-    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import KnowledgeFileRepositoryImpl
-    from bisheng.worker.knowledge.document_projection import _build_document_projection_service
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.worker.knowledge.document_projection import _process_projection_batch_async
 
+    entry_ids = sorted(set(entry_ids))
+    if not entry_ids:
+        return {"total": 0, "results": {}, "status": "completed"}
     async with get_async_db_session() as session:
         repository = KnowledgeFileRepositoryImpl(session)
-        service = await _build_document_projection_service(
-            session, file_repository=repository,
-            document_repository=KnowledgeDocumentRepositoryImpl(session),
-            version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
-            tenant_id=int(db_file.tenant_id or 1),
-        )
-        await repository.request_projection_rebuild(int(db_file.id))
+        await repository.request_projection_checks(entry_ids)
         await session.commit()
-        result = await service.process_entry(
-            tenant_id=int(db_file.tenant_id or 1), entry_id=int(db_file.id),
-            lease_owner=f"rebuild:{uuid.uuid4()}", force_content_upsert=True,
-        )
-        if result.status != "ready":
-            raise RuntimeError(f"shared projection rebuild did not converge: {result.status}")
+    result = await _process_projection_batch_async(tenant_id, entry_ids, f"check:{uuid.uuid4().hex}")
+    # 未领取可能是已有任务占用, 也可能已达重试上限; 读取持久状态区分。
+    unclaimed_ids = [entry_id for entry_id, status in result["results"].items() if status == "not_claimed"]
+    if unclaimed_ids:
+        async with get_async_db_session() as session:
+            repository = KnowledgeFileRepositoryImpl(session)
+            for offset in range(0, len(unclaimed_ids), 500):
+                for row in await repository.find_by_ids(unclaimed_ids[offset:offset + 500]):
+                    if row.projection_status == "failed":
+                        result["results"][row.id] = "failed"
+    if any(status in {"failed", "exhausted"} for status in result["results"].values()):
+        raise RuntimeError("shared projection check failed; inspect persisted projection errors")
+    result["status"] = (
+        "completed" if all(status == "ready" for status in result["results"].values()) else "completed_with_pending"
+    )
+    return result

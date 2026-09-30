@@ -93,6 +93,7 @@ from bisheng.knowledge.domain.services.department_file_view_lifecycle_service im
     DepartmentFileViewLifecycleService,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import KnowledgeAuditTelemetryService
+from bisheng.knowledge.domain.services.knowledge_file_cleanup_policy import needs_legacy_file_cleanup
 from bisheng.knowledge.domain.services.knowledge_metadata_service import KnowledgeMetadataService
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -1727,8 +1728,10 @@ class KnowledgeService(KnowledgeUtils):
         minio_share_host = minio_client.get_minio_share_host()
         if file_path.startswith(minio_share_host):
             url_obj = urlparse(file_path)
-            bucket_name, object_name = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
-            minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
+            path_parts = url_obj.path.replace(minio_share_host, "", 1).lstrip("/").split("/", 1)
+            if len(path_parts) == 2:
+                bucket_name, object_name = path_parts
+                minio_client.remove_object_sync(bucket_name=bucket_name, object_name=object_name)
 
     @classmethod
     def get_knowledge_files_title(cls, db_knowledge: Knowledge, files: list[KnowledgeFile]) -> dict[str, str]:
@@ -1940,6 +1943,7 @@ class KnowledgeService(KnowledgeUtils):
         space_id: int,
         file_ids: list[int],
         login_user: UserPayload,
+        cleanup_payload: dict | None = None,
     ) -> None:
         async with get_async_db_session() as session:
             lifecycle_service = DepartmentFileViewLifecycleService(
@@ -1948,6 +1952,10 @@ class KnowledgeService(KnowledgeUtils):
                 grant_repository=DepartmentFileViewGrantRepositoryImpl(session),
             )
             try:
+                if cleanup_payload is not None:
+                    from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import KnowledgeBackgroundRepositoryImpl
+                    await session.run_sync(lambda sync: KnowledgeBackgroundRepositoryImpl(sync).request_delete(
+                        tenant_id=tenant_id, **cleanup_payload))
                 await lifecycle_service.prepare_file_delete(
                     tenant_id=int(tenant_id),
                     space_id=int(space_id),
@@ -1999,11 +2007,6 @@ class KnowledgeService(KnowledgeUtils):
             for file in knowledge_file
         ]
 
-        # <g id="Bold">Medical Treatment:</g>vectordb
-        delete_knowledge_file_vectors(
-            file_ids,
-            pdf_artifact_snapshots=pdf_artifact_snapshots,
-        )
         asyncio.run(
             cls._delete_knowledge_file_rows_atomic(
                 tenant_id=int(
@@ -2014,6 +2017,8 @@ class KnowledgeService(KnowledgeUtils):
                 space_id=int(knowledge_file[0].knowledge_id),
                 file_ids=file_ids,
                 login_user=login_user,
+                cleanup_payload={"knowledge": db_knowledge, "files": knowledge_file_snapshots,
+                                 "artifacts": [snapshot.to_dict() for snapshot in pdf_artifact_snapshots]},
             )
         )
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
@@ -2021,24 +2026,34 @@ class KnowledgeService(KnowledgeUtils):
         # Delete Audit Log for Knowledge Base Files
         cls.delete_knowledge_file_hook(request, login_user, db_knowledge.id, knowledge_file)
 
-        # 5Minutes to check if the file was actually deleted
-        file_worker.delete_knowledge_file_celery.apply_async(
-            args=(
-                file_ids,
-                knowledge_file[0].knowledge_id,
-                True,
-                [snapshot.to_dict() for snapshot in pdf_artifact_snapshots],
-                knowledge_file_snapshots,
-            ),
-            headers={
-                "tenant_id": int(
-                    file_tenant_id
-                    or getattr(db_knowledge, "tenant_id", None)
-                    or DEFAULT_TENANT_ID
+        pdf_snapshot_payload = [snapshot.to_dict() for snapshot in pdf_artifact_snapshots]
+        if needs_legacy_file_cleanup(
+            db_knowledge,
+            file_ids,
+            pdf_artifact_snapshots=pdf_snapshot_payload,
+            knowledge_file_snapshots=knowledge_file_snapshots,
+        ):
+            # 清理意图已提交; 消息只用于加速, 投递失败由扫描任务恢复。
+            try:
+                file_worker.delete_knowledge_file_celery.apply_async(
+                    args=(
+                        file_ids,
+                        knowledge_file[0].knowledge_id,
+                        True,
+                        pdf_snapshot_payload,
+                        knowledge_file_snapshots,
+                    ),
+                    headers={
+                        "tenant_id": int(
+                            file_tenant_id
+                            or getattr(db_knowledge, "tenant_id", None)
+                            or DEFAULT_TENANT_ID
+                        )
+                    },
+                    countdown=300,
                 )
-            },
-            countdown=300,
-        )
+            except Exception:
+                logger.exception("delete_file_cleanup_dispatch_failed file_ids={}", file_ids)
 
         return True
 

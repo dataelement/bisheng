@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -245,6 +245,113 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
             )
         ).all()
         return MigrationPage(items=items, total=total, page=page, page_size=page_size)
+
+    async def claim_next_units(
+        self, *, batch_id: int, round_no: int, execution_token: str, worker_task_id: str | None, limit: int = 20
+    ):
+        batch = await self.find_batch_by_id(batch_id, for_update=True)
+        if batch is None or batch.status != "running":
+            return []
+        units = list(
+            (
+                await self.session.exec(
+                    select(KnowledgeMigrationUnit)
+                    .where(
+                        KnowledgeMigrationUnit.batch_id == batch_id,
+                        KnowledgeMigrationUnit.current_round_no == round_no,
+                        col(KnowledgeMigrationUnit.status).in_({"planned", "unprocessed"}),
+                    )
+                    .order_by(KnowledgeMigrationUnit.id)
+                    .limit(max(1, min(limit, 100)))
+                    .with_for_update()
+                )
+            ).all()
+        )
+        claimed = []
+        now = datetime.now()
+        for unit in units:
+            unit.status = "running"
+            unit.attempt_count += 1
+            unit.started_at = unit.started_at or now
+            attempt = KnowledgeMigrationAttempt(
+                batch_id=batch_id,
+                unit_id=unit.id,
+                round_no=round_no,
+                attempt_no=unit.attempt_count,
+                worker_task_id=worker_task_id,
+                execution_token=execution_token,
+                start_checkpoint=unit.checkpoint,
+                started_at=now,
+            )
+            self.session.add_all([unit, attempt])
+            claimed.append((unit, attempt))
+        await self.session.flush()
+        return claimed
+
+    async def active_attempts(self, attempt_ids: list[int], execution_token: str):
+        if not attempt_ids:
+            return {}
+        rows = (
+            await self.session.exec(
+                select(KnowledgeMigrationAttempt, KnowledgeMigrationUnit)
+                .join(KnowledgeMigrationUnit, KnowledgeMigrationUnit.id == KnowledgeMigrationAttempt.unit_id)
+                .join(KnowledgeMigrationBatch, KnowledgeMigrationBatch.id == KnowledgeMigrationUnit.batch_id)
+                .where(
+                    col(KnowledgeMigrationAttempt.id).in_(attempt_ids),
+                    KnowledgeMigrationAttempt.execution_token == execution_token,
+                    KnowledgeMigrationAttempt.result == "running",
+                    KnowledgeMigrationUnit.status == "running",
+                    KnowledgeMigrationBatch.status == "running",
+                    KnowledgeMigrationUnit.attempt_count == KnowledgeMigrationAttempt.attempt_no,
+                )
+                .with_for_update()
+            )
+        ).all()
+        return {int(attempt.id): (attempt, unit) for attempt, unit in rows}
+
+    async def update_checkpoints(self, updates: dict[int, str], *, execution_token: str) -> bool:
+        active = await self.active_attempts(list(updates), execution_token)
+        if set(active) != set(updates):
+            return False
+        groups = {}
+        for attempt_id, checkpoint in updates.items():
+            _, unit = active[attempt_id]
+            if _CHECKPOINT_ORDER[checkpoint] < _CHECKPOINT_ORDER[unit.checkpoint]:
+                raise ValueError("migration checkpoint cannot move backwards")
+            unit.checkpoint = checkpoint
+            self.session.add(unit)
+            groups.setdefault(checkpoint, []).append(unit.id)
+        for checkpoint, ids in groups.items():
+            await self.session.exec(
+                update(KnowledgeMigrationFile)
+                .where(col(KnowledgeMigrationFile.unit_id).in_(ids))
+                .values(checkpoint=checkpoint)
+            )
+        await self.session.flush()
+        return True
+
+    async def finish_attempts(self, results: list[dict], *, execution_token: str) -> bool:
+        active = await self.active_attempts([row["attempt_id"] for row in results], execution_token)
+        if len(active) != len(results):
+            return False
+        groups = {}
+        now = datetime.now()
+        for value in results:
+            attempt, unit = active[value["attempt_id"]]
+            unit.status, unit.checkpoint = value["unit_status"], value["checkpoint"]
+            unit.reason_code, unit.summary, unit.finished_at = value.get("reason_code"), value.get("error_summary"), now
+            attempt.end_checkpoint, attempt.result = unit.checkpoint, value["result"]
+            attempt.reason_code, attempt.error_summary, attempt.finished_at = unit.reason_code, unit.summary, now
+            self.session.add_all([unit, attempt])
+            groups.setdefault((unit.status, unit.checkpoint, unit.reason_code, unit.summary), []).append(unit.id)
+        for (status, checkpoint, reason, summary), ids in groups.items():
+            await self.session.exec(
+                update(KnowledgeMigrationFile)
+                .where(col(KnowledgeMigrationFile.unit_id).in_(ids))
+                .values(status=status, checkpoint=checkpoint, reason_code=reason, summary=summary)
+            )
+        await self.session.flush()
+        return True
 
     async def claim_next_unit(
         self,
@@ -578,6 +685,21 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         }:
             return None
         next_round = batch.round_no + 1
+        if batch.last_error_code == "preflight_recovery_exhausted":
+            # 预检未完成时必须重新预检, 不能将残缺计划直接送入正式执行。
+            batch.round_no = next_round
+            batch.status = KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value
+            batch.current_stage = batch.status
+            batch.reconcile_count = 0
+            batch.next_reconcile_at = None
+            batch.last_error_code = None
+            batch.last_error_summary = None
+            batch.preflight_task_id = None
+            batch.finished_at = None
+            batch.update_time = queued_at
+            self.session.add(batch)
+            await self.session.flush()
+            return batch
         result = await self.session.exec(
             update(KnowledgeMigrationUnit)
             .where(
@@ -604,6 +726,11 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         batch.current_stage = KnowledgeMigrationBatchStatus.QUEUED.value
         batch.queued_at = queued_at
         batch.finished_at = None
+        batch.reconcile_count = 0
+        batch.next_reconcile_at = None
+        batch.last_error_code = None
+        batch.last_error_summary = None
+        batch.update_time = queued_at
         self.session.add(batch)
         await self.session.flush()
         return batch
@@ -647,6 +774,7 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
         statuses: set[str],
         *,
         older_than: datetime,
+        now: datetime,
         limit: int,
     ) -> list[KnowledgeMigrationBatch]:
         return list(
@@ -656,6 +784,10 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
                     .where(
                         col(KnowledgeMigrationBatch.status).in_(statuses),
                         KnowledgeMigrationBatch.update_time < older_than,
+                        or_(
+                            KnowledgeMigrationBatch.next_reconcile_at.is_(None),
+                            KnowledgeMigrationBatch.next_reconcile_at <= now,
+                        ),
                         KnowledgeMigrationBatch.deleted_at.is_(None),
                     )
                     .order_by(KnowledgeMigrationBatch.update_time, KnowledgeMigrationBatch.id)
@@ -663,6 +795,79 @@ class KnowledgeMigrationRepositoryImpl(KnowledgeMigrationRepository):
                 )
             ).all()
         )
+
+    async def claim_reconcile_batch(
+        self,
+        batch_id: int,
+        *,
+        expected_status: str,
+        expected_round_no: int,
+        older_than: datetime,
+        now: datetime,
+        max_recoveries: int,
+    ) -> KnowledgeMigrationBatch | None:
+        batch = (
+            await self.session.exec(
+                select(KnowledgeMigrationBatch)
+                .where(KnowledgeMigrationBatch.id == batch_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        if batch is None:
+            return None
+        count = int(batch.reconcile_count)
+        exhausted = count >= max_recoveries
+        preflight = expected_status in {"preflight_queued", "preflighting"}
+        error_code = "preflight_recovery_exhausted" if preflight else "migration_recovery_exhausted"
+        summary = f"自动恢复已达 {max_recoveries} 次上限, 已停止自动投递, 请检查后手动重试"
+        values = {"update_time": now}
+        if exhausted:
+            values.update(
+                status="failed",
+                current_stage="failed",
+                finished_at=now,
+                last_error_code=error_code,
+                last_error_summary=summary,
+                next_reconcile_at=None,
+            )
+        else:
+            # 领取即计数: 即使发布失败或进程退出, 也不能绕过累计预算。
+            values.update(
+                reconcile_count=count + 1,
+                next_reconcile_at=now + timedelta(seconds=1800 * (2 ** min(count, 3))),
+            )
+        result = await self.session.exec(
+            update(KnowledgeMigrationBatch)
+            .where(
+                KnowledgeMigrationBatch.id == batch_id,
+                KnowledgeMigrationBatch.status == expected_status,
+                KnowledgeMigrationBatch.round_no == expected_round_no,
+                KnowledgeMigrationBatch.reconcile_count == count,
+                KnowledgeMigrationBatch.update_time < older_than,
+                KnowledgeMigrationBatch.deleted_at.is_(None),
+                or_(
+                    KnowledgeMigrationBatch.next_reconcile_at.is_(None),
+                    KnowledgeMigrationBatch.next_reconcile_at <= now,
+                ),
+            )
+            .values(**values)
+        )
+        if int(result.rowcount or 0) != 1:
+            return None
+        if exhausted:
+            if not preflight:
+                await self.mark_remaining_unprocessed(
+                    batch_id, round_no=expected_round_no, reason_code=error_code, summary=summary
+                )
+                await self.recompute_progress(batch_id)
+            return None
+        if expected_status == "running":
+            await self.recover_stale_running_batch(batch_id, queued_at=now)
+        elif expected_status == "preflighting":
+            await self.recover_stale_preflight_batch(batch_id)
+        await self.session.refresh(batch)
+        return batch
 
     async def recover_stale_running_batch(
         self,

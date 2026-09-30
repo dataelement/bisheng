@@ -115,7 +115,7 @@ async def test_push_text_message_treats_http_200_with_business_error_as_failure(
 
     client = ShougangMADPClient()
     with patch("bisheng.notification.external.shougang_madp_client.settings") as mock_settings:
-        mock_settings.get_shougang_wechat_message_push_conf.return_value = conf
+        mock_settings.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=conf)
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response):
             success, error = await client.push_text_message(
                 outbox_id=1,
@@ -136,7 +136,7 @@ async def test_push_text_message_treats_http_200_with_code_zero_as_success():
 
     client = ShougangMADPClient()
     with patch("bisheng.notification.external.shougang_madp_client.settings") as mock_settings:
-        mock_settings.get_shougang_wechat_message_push_conf.return_value = conf
+        mock_settings.aget_shougang_wechat_message_push_conf = AsyncMock(return_value=conf)
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response):
             success, error = await client.push_text_message(
                 outbox_id=2,

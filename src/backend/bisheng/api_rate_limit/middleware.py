@@ -72,6 +72,7 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
         if route_template is None:
             return await call_next(request)
 
+        decision = None
         try:
             config = await self._config_provider()
             resolved = ApiRateLimitService.resolve_policy(
@@ -79,9 +80,8 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
                 method=method,
                 route_template=route_template,
             )
-            if resolved.policy.limits.is_disabled():
-                return await call_next(request)
-            decision = await self._counter(method, route_template, resolved.policy.limits)
+            if not resolved.policy.limits.is_disabled():
+                decision = await self._counter(method, route_template, resolved.policy.limits)
         except Exception:
             # Rate limiting is explicitly fail-open when Redis/config runtime access fails.
             logger.exception(
@@ -89,9 +89,9 @@ class ApiRateLimitMiddleware(BaseHTTPMiddleware):
                 method,
                 route_template,
             )
-            return await call_next(request)
 
-        if decision.allowed:
+        # 业务执行必须在限流异常边界之外，避免业务失败被当成限流故障后重复执行。
+        if decision is None or decision.allowed:
             return await call_next(request)
 
         retry_after = max(1, decision.retry_after)

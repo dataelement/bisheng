@@ -178,3 +178,70 @@ async def execute_unit(
             source_cleanup_pending=switched,
             error_summary=f"{type(exc).__name__}: {exc}",
         )
+
+
+async def execute_units(units, operations, checkpoint_store) -> list[ExecutionResult]:
+    """有界批次按阶段推进，成功检查点成组提交，失败仅影响对应文档。"""
+    checkpoints = {unit.unit_id: unit.checkpoint for unit in units}
+    results = {}
+    await checkpoint_store.refresh(units)
+
+    async def failed(unit, exc):
+        checkpoint = checkpoints[unit.unit_id]
+        interrupted = isinstance(exc, StaleMigrationAttemptError)
+        switched = _CHECKPOINT_INDEX[checkpoint] >= _CHECKPOINT_INDEX["db_switched"]
+        checkpoint_store.pending.pop(unit.attempt_id, None)
+        if not interrupted and not switched:
+            try:
+                await _ensure_active(unit, checkpoint_store)
+                await operations.cleanup_new_target(unit)
+                await checkpoint_store.reset_after_compensation(unit)
+                checkpoint = "planned"
+            except Exception as cleanup_exc:
+                exc = RuntimeError(f"{exc}; compensation failed: {cleanup_exc}")
+        results[unit.unit_id] = ExecutionResult(False, checkpoint, switched, str(exc), interrupted)
+
+    for unit in units:
+        if unit.restart_pre_switch and _CHECKPOINT_INDEX[unit.checkpoint] < _CHECKPOINT_INDEX["db_switched"]:
+            try:
+                await _ensure_active(unit, checkpoint_store)
+                await operations.cleanup_new_target(unit)
+                await checkpoint_store.reset_after_compensation(unit)
+                checkpoints[unit.unit_id] = "planned"
+            except Exception as exc:
+                await failed(unit, exc)
+
+    for method, next_checkpoint in (*_STEPS, (None, "completed")):
+        active = [unit for unit in units if unit.unit_id not in results]
+        if not active:
+            break
+        await checkpoint_store.refresh(active)
+        if hasattr(operations, "prepare_stage"):
+            await operations.prepare_stage(
+                [
+                    unit
+                    for unit in active
+                    if _CHECKPOINT_INDEX[checkpoints[unit.unit_id]] < _CHECKPOINT_INDEX[next_checkpoint]
+                ],
+                method,
+            )
+        for unit in active:
+            if _CHECKPOINT_INDEX[checkpoints[unit.unit_id]] >= _CHECKPOINT_INDEX[next_checkpoint]:
+                continue
+            try:
+                await _ensure_active(unit, checkpoint_store)
+                if method:
+                    await getattr(operations, method)(unit)
+                checkpoints[unit.unit_id] = next_checkpoint
+                await _ensure_active(unit, checkpoint_store)
+                await checkpoint_store.save_checkpoint(unit, next_checkpoint)
+            except Exception as exc:
+                await failed(unit, exc)
+        try:
+            await checkpoint_store.flush()
+        except StaleMigrationAttemptError as exc:
+            for unit in active:
+                if unit.unit_id not in results:
+                    results[unit.unit_id] = ExecutionResult(False, checkpoints[unit.unit_id], False, str(exc), True)
+            break
+    return [results.get(unit.unit_id) or ExecutionResult(True, checkpoints[unit.unit_id], False) for unit in units]

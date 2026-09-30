@@ -192,6 +192,7 @@ async def test_admin_trigger_rebuild_dispatches_current_tenant(monkeypatch):
     assert result.scope == "tenant"
     assert result.tenant_id == 7
     assert result.task_id == "tenant-task"
+    assert result.task_name == "bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot"
     assert captured["tenant_id"] == 7
 
 

@@ -51,6 +51,15 @@ class KnowledgeFulltextEngagementRepository(ABC):
 
 class KnowledgeFulltextEngagementQueueRepository(ABC):
     @abstractmethod
+    async def enqueue_many(self, *, file_ids: list[int], now_epoch: int) -> int: ...
+
+    @abstractmethod
+    async def ack_many(self, *, file_ids: list[int], lease_owner: str) -> int: ...
+
+    @abstractmethod
+    async def retry_many(self, *, file_ids: list[int], lease_owner: str, now_epoch: int) -> int: ...
+
+    @abstractmethod
     async def enqueue(self, *, file_id: int, now_epoch: int) -> bool: ...
 
     @abstractmethod

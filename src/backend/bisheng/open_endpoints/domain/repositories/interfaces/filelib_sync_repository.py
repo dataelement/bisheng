@@ -25,6 +25,15 @@ class FilelibSyncRepository(BaseRepository[KnowledgeFile, int], ABC):
         pass
 
     @abstractmethod
+    async def find_users_by_external_code(
+        self,
+        external_code: str,
+        *,
+        tenant_id: int,
+    ) -> list[User]:
+        pass
+
+    @abstractmethod
     async def find_primary_departments(self, user_id: int) -> list[UserDepartment]:
         pass
 

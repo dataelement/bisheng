@@ -34,6 +34,8 @@ export interface PivotTableDataResponse {
   rows: PivotTableRow[]
   columnTotals: number[]
   grandTotal: number
+  groupTotals?: Record<string, { values: number[]; total: number }>
+  exactDocumentTotals?: boolean
   truncated?: boolean
   // F058 AC-12/AC-13: row-dimension index to group by (rowSpan-merge in the UI), or
   // null when no org-hierarchy row dimension has an active filter value (flat rendering).

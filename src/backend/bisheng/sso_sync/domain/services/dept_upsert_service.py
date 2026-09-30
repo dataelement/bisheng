@@ -16,10 +16,9 @@ enforcing three invariants:
    19312). This keeps the tree consistent; fail-fast over build-a-tiny-
    orphan.
 
-3. **Materialised path stays consistent.** On upsert the ``path`` column is
-   recomputed from the parent row's path; legacy rows with broken paths
-   still upsert successfully because we derive the child path from the
-   (freshly looked-up) parent's current path, not from any cached value.
+3. **Materialised path stays consistent.** The DAO derives paths from
+   current parent relationships and rewrites actual descendants in one
+   transaction. Cached or legacy materialized paths are not authoritative.
 """
 
 from collections.abc import Iterable

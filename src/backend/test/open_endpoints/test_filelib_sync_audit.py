@@ -15,6 +15,8 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
 from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import (
+    ACTION_INSPECTION_BATCH_FAILED,
+    ACTION_INSPECTION_BATCH_SUCCESS,
     ACTION_UPLOAD_FAILED,
     ACTION_UPLOAD_SUCCESS,
     FilelibSyncAuditWriter,
@@ -348,3 +350,47 @@ async def test_sync_from_staged_file_audit_failure_does_not_break_success():
 
     assert result.file_id == 9
     assert result.external_file_id == "DOC-001"
+
+
+def _inspection_audit_kwargs() -> dict:
+    return {
+        "request": None,
+        "login_user": UserPayload(user_id=1, user_name="caller", tenant_id=1),
+        "token_id": 42,
+        "token_name": "SG-HR",
+        "knowledge_id": 118,
+        "knowledge_name": "智能制造室",
+        "data_start_time": "2026-08-01T00:00:00",
+        "data_end_time": "2026-08-14T23:59:59",
+        "group_count": 1,
+        "responsible_person_id": "EMP002",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("writer_name", "action", "extra"),
+    [
+        ("write_inspection_batch_success", ACTION_INSPECTION_BATCH_SUCCESS, {"file_count": 1}),
+        (
+            "write_inspection_batch_failed",
+            ACTION_INSPECTION_BATCH_FAILED,
+            {
+                "success_count": 0,
+                "error": FilelibSyncNotFoundError(msg="responsible person does not exist"),
+            },
+        ),
+    ],
+)
+async def test_inspection_batch_audit_records_responsible_person_id(writer_name: str, action: str, extra: dict):
+    writer = getattr(FilelibSyncAuditWriter, writer_name)
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_audit_writer.AuditLogDao.ainsert_v2",
+        new_callable=AsyncMock,
+    ) as ainsert:
+        await writer(**_inspection_audit_kwargs(), **extra)
+
+    kwargs = ainsert.await_args.kwargs
+    assert kwargs["action"] == action
+    assert kwargs["metadata"]["responsible_person_id"] == "EMP002"
+    assert "责任人ID: EMP002" in kwargs["note"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta
 
 from sqlalchemy import func, or_
@@ -8,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.permission.domain.models.department_transfer_permission_cleanup import (
+    DEPARTMENT_TRANSFER_CLEANUP_MAX_ATTEMPTS,
     DepartmentTransferCleanupEventStatus,
     DepartmentTransferCleanupItemStatus,
     DepartmentTransferPermissionCleanupEvent,
@@ -16,6 +18,8 @@ from bisheng.permission.domain.models.department_transfer_permission_cleanup imp
 from bisheng.permission.domain.repositories.interfaces.department_transfer_permission_cleanup_repository import (
     DepartmentTransferPermissionCleanupRepository,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DepartmentTransferPermissionCleanupRepositoryImpl(
@@ -212,6 +216,13 @@ class DepartmentTransferPermissionCleanupRepositoryImpl(
             return False
         if event.next_retry_at is not None and event.next_retry_at > now:
             return False
+        # 旧版本把成功分批也计为重试, 升级时只兼容明确的正常续跑标记。
+        if event.last_error == "batch_remaining":
+            event.retry_count = 0
+            event.last_error = None
+        if event.retry_count >= DEPARTMENT_TRANSFER_CLEANUP_MAX_ATTEMPTS:
+            await self._mark_retry_exhausted(event)
+            return False
         event.status = DepartmentTransferCleanupEventStatus.PROCESSING
         event.retry_count += 1
         event.next_retry_at = now.replace(microsecond=0) + timedelta(seconds=30)
@@ -328,16 +339,41 @@ class DepartmentTransferPermissionCleanupRepositoryImpl(
         event = await self._event_for_update(event_id)
         if event is None or event.status in DepartmentTransferCleanupEventStatus.TERMINAL:
             return event
+        event.last_error = self._sanitize_error(error_summary)
+        if error_summary == "batch_remaining":
+            # 本批全部完成, 剩余明细属于正常续跑, 不占失败/中断额度。
+            event.retry_count = 0
+        elif event.retry_count >= DEPARTMENT_TRANSFER_CLEANUP_MAX_ATTEMPTS:
+            await self._mark_retry_exhausted(event)
+            return event
         event.status = (
             DepartmentTransferCleanupEventStatus.OVERDUE
             if event.overdue_at is not None
             else DepartmentTransferCleanupEventStatus.FAILED
         )
-        event.last_error = self._sanitize_error(error_summary)
         event.next_retry_at = next_retry_at
         self.session.add(event)
         await self.session.flush()
         return event
+
+    async def _mark_retry_exhausted(self, event: DepartmentTransferPermissionCleanupEvent) -> None:
+        event.status = DepartmentTransferCleanupEventStatus.DEAD
+        event.next_retry_at = None
+        event.last_error = event.last_error or "retry_exhausted_after_interruption"
+        self.session.add(event)
+        await self.session.flush()
+        logger.critical(
+            "department transfer cleanup retry exhausted event_id=%s user_id=%s "
+            "old_department_id=%s new_department_id=%s source=%s retry_count=%s "
+            "max_attempts=%s status=dead; manual intervention required",
+            event.id,
+            event.user_id,
+            event.old_department_id,
+            event.new_department_id,
+            event.trigger_source,
+            event.retry_count,
+            DEPARTMENT_TRANSFER_CLEANUP_MAX_ATTEMPTS,
+        )
 
     async def mark_event_overdue(self, event_id: int, *, now: datetime) -> bool:
         event = await self._event_for_update(event_id)
@@ -360,7 +396,7 @@ class DepartmentTransferPermissionCleanupRepositoryImpl(
         completed_at: datetime,
     ) -> DepartmentTransferPermissionCleanupEvent | None:
         event = await self._event_for_update(event_id)
-        if event is None or event.status == DepartmentTransferCleanupEventStatus.CANCELLED:
+        if event is None or event.status in DepartmentTransferCleanupEventStatus.TERMINAL:
             return event
         await self.refresh_event_counts(event_id)
         await self.session.refresh(event)

@@ -3,7 +3,7 @@
 import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlmodel import col, select
@@ -12,9 +12,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.knowledge.domain.contracts.shared_storage_reconcile import DocumentSnapshot
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument, KnowledgeDocumentRepairState
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import KnowledgeSpaceSharedStorageRouting
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
@@ -191,17 +192,65 @@ class SharedStorageReconcileRepositoryImpl(
             signature=signature,
         )
 
+    async def _repair_state(self, document, file):
+        from bisheng.common.services.config_service import settings
+        conf = settings.knowledge_space_shared_storage
+        routing = (await self.session.execute(select(KnowledgeSpaceSharedStorageRouting).where(
+            KnowledgeSpaceSharedStorageRouting.tenant_id == document.tenant_id,
+        ))).scalars().first()
+        fingerprint = hashlib.sha256(json.dumps([
+            document.primary_version_id, file.id, document.content_generation,
+            file.md5, file.object_name, file.split_rule,
+            conf.collection_prefix, conf.index_prefix, conf.tenant_embedding_model_id, conf.es_routing_enabled,
+            [routing.collection_name, routing.index_name, routing.embedding_model_id, routing.schema_fingerprint] if routing else None,
+        ], sort_keys=True, default=str).encode()).hexdigest()
+        state = await self.session.get(KnowledgeDocumentRepairState, document.id)
+        if state is None:
+            state = KnowledgeDocumentRepairState(document_id=document.id,
+                tenant_id=int(document.tenant_id or 1), fingerprint=fingerprint)
+        elif state.fingerprint != fingerprint:
+            state.fingerprint, state.attempts, state.rebuild_attempts, state.next_retry_at = fingerprint, 0, 0, None
+        return state
+
+    async def claim_content_rebuild(self, file_id: int) -> bool:
+        result = await self.session.execute(select(KnowledgeDocument).join(
+            KnowledgeDocumentVersion, KnowledgeDocumentVersion.id == KnowledgeDocument.primary_version_id,
+        ).where(KnowledgeDocumentVersion.knowledge_file_id == file_id,
+                KnowledgeDocument.lifecycle_status == "active").with_for_update())
+        document = result.scalars().first()
+        file = await self.session.get(KnowledgeFile, file_id)
+        if document is None or file is None:
+            return False
+        state = await self._repair_state(document, file)
+        if state.rebuild_attempts >= 8:
+            state.status = "dead"
+            self.session.add(state)
+            return False
+        state.rebuild_attempts += 1
+        state.status = "rebuilding"
+        self.session.add(state)
+        await self.session.flush()
+        return True
+
     async def queue_rebuild(self, snapshot: DocumentSnapshot) -> int:
-        # 调用者已按 ID 锁定文档和入口; 嵌入失败仍由原投影重试链路接管。
+        # 文档锁将同一内容的对账申请串行化; 不制造新内容代次来清空投影预算。
         async with self.session.begin_nested():
             document = await self.session.get(KnowledgeDocument, snapshot.document_id)
             if document.content_generation != snapshot.generation or document.primary_version_id != snapshot.version_id:
                 raise ValueError("source changed before rebuild")
-            document.content_generation += 1
-            self.session.add(document)
-            await KnowledgeFileRepositoryImpl(self.session).mark_document_entries_content_generation(
-                snapshot.document_id,
-                int(document.content_generation),
-            )
+            file = await self.session.get(KnowledgeFile, snapshot.file_id)
+            state = await self._repair_state(document, file)
+            now = datetime.now()
+            if state.attempts >= 8 or state.rebuild_attempts >= 8:
+                state.status = "dead"
+                self.session.add(state)
+                return 0
+            if state.next_retry_at and state.next_retry_at > now:
+                return 0
+            state.attempts += 1
+            state.status = "requested"
+            state.next_retry_at = now + timedelta(seconds=min(3600, 300 * 2 ** (state.attempts - 1)))
+            self.session.add(state)
+            await KnowledgeFileRepositoryImpl(self.session).request_projection_checks([snapshot.entry_id])
             await self.session.flush()
         return snapshot.entry_id

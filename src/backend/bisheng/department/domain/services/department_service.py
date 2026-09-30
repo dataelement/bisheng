@@ -9,7 +9,7 @@ import logging
 import re
 import secrets
 
-from sqlalchemy import and_, delete, func, or_, update
+from sqlalchemy import and_, delete, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
@@ -397,8 +397,8 @@ class DepartmentService:
             await session.flush()
             await session.refresh(dept)
 
-            # UPDATE path (two-phase: need auto_increment id first)
-            dept.path = f"{parent.path}{dept.id}/"
+            # 从真实父链计算路径, 避免继承父组织的历史错误路径。
+            dept = await DepartmentDao.arebuild_subtree_paths(session, dept, data.parent_id)
             # 租户已有公司根且新 path 在其子树内才打标, 否则保持 NULL
             from bisheng.points.domain.services.department_org_level_labeler import (
                 apply_org_level_to_node,
@@ -727,10 +727,6 @@ class DepartmentService:
             if data.new_parent_id == dept.id:
                 raise DepartmentCircularMoveError()
 
-            # Circular detection: can't move to own subtree
-            if new_parent.path.startswith(dept.path):
-                raise DepartmentCircularMoveError()
-
             await aassert_default_root_parent_immutable(dept.id, data.new_parent_id)
 
             # INV-T1 (2-layer lock): reject moves that would land a mounted
@@ -739,20 +735,8 @@ class DepartmentService:
             await DepartmentDao.aassert_reparent_legal(dept.id, new_parent.id)
 
             old_parent_id = dept.parent_id
-            old_path = dept.path
-            new_path = f"{new_parent.path}{dept.id}/"
-
-            # Batch update subtree paths
-            await session.execute(
-                update(Department)
-                .where(Department.path.like(f"{old_path}%"))
-                .values(path=func.replace(Department.path, old_path, new_path))
-            )
-
-            # Update department itself
-            dept.parent_id = data.new_parent_id
-            dept.path = new_path
-            session.add(dept)
+            dept = await DepartmentDao.arebuild_subtree_paths(session, dept, data.new_parent_id)
+            new_path = dept.path
             # 移动后按新 path 重算子树; 公司子树外清成 NULL
             from bisheng.points.domain.services.department_org_level_labeler import (
                 relabel_subtree,

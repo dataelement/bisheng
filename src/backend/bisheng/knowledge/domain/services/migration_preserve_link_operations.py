@@ -253,6 +253,7 @@ class PreserveLinkMigrationOperations:
             # overwrite: publishing then merges, making the source content the
             # target's new primary version and keeping the old one as history.
             target_document_id=context["target_document_id"],
+            metadata_only_migration=True,
         )
         async with self.publish_service_factory() as service:
             result = await service.publish_approved(command)
@@ -286,11 +287,30 @@ class PreserveLinkAwareOperations:
         self.default_operations = default_operations
         self.preserve_link_operations = preserve_link_operations
         self.preserve_link_lookup = preserve_link_lookup
+        self._batch_modes = {}
+
+    async def prepare_batch(self, units) -> None:
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_runtime_repository_impl import (
+            KnowledgeMigrationRuntimeRepositoryImpl,
+        )
+
+        async with get_async_db_session() as session:
+            self._batch_modes = await KnowledgeMigrationRuntimeRepositoryImpl(session).find_batch_modes(
+                [unit.unit_id for unit in units]
+            )
 
     async def _operations_for(self, unit: MigrationExecutionUnit) -> Any:
-        if await self.preserve_link_lookup(unit.unit_id):
+        mode = self._batch_modes.get(unit.unit_id)
+        if mode is None:
+            mode = await self.preserve_link_lookup(unit.unit_id)
+        if mode:
             return self.preserve_link_operations
         return self.default_operations
+
+    async def prepare_stage(self, units, stage):
+        await self.default_operations.prepare_stage(
+            [unit for unit in units if not self._batch_modes.get(unit.unit_id)], stage
+        )
 
     async def create_target_rows(self, unit: MigrationExecutionUnit) -> None:
         await (await self._operations_for(unit)).create_target_rows(unit)

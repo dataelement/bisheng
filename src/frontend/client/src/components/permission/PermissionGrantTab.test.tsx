@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import {
   authorizeResource,
@@ -100,7 +100,16 @@ describe("PermissionGrantTab", () => {
       },
     ]);
     mockedGetResourceGrantUsers.mockResolvedValue([]);
-    mockedGetResourceGrantDepartments.mockResolvedValue([]);
+    mockedGetResourceGrantDepartments.mockResolvedValue([
+      {
+        id: 7,
+        dept_id: "dept-7",
+        name: "测试部门",
+        parent_id: null,
+        member_count: 3,
+        children: [],
+      },
+    ]);
     mockedGetKnowledgeSpaceGrantDepartments.mockResolvedValue([
       {
         id: 7,
@@ -131,12 +140,59 @@ describe("PermissionGrantTab", () => {
     );
 
     expect(await screen.findByTestId("permission-user-tree-department-7")).toBeInTheDocument();
-    expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
-      "space-1",
-      { signal: expect.any(AbortSignal) },
-    );
+    if (resourceType === "folder" || resourceType === "knowledge_file") {
+      expect(mockedGetResourceGrantDepartments).toHaveBeenCalledWith(
+        resourceType, "resource-1", { signal: expect.any(AbortSignal) },
+      );
+      expect(mockedGetKnowledgeSpaceGrantDepartments).not.toHaveBeenCalled();
+    } else {
+      expect(mockedGetKnowledgeSpaceGrantDepartments).toHaveBeenCalledWith(
+        "space-1", { signal: expect.any(AbortSignal) },
+      );
+    }
     expect(mockedGetResourceGrantUsers).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ["folder", "user"],
+    ["knowledge_file", "user"],
+    ["folder", "department"],
+    ["knowledge_file", "department"],
+  ] as const)(
+    "grants %s to a %s without requiring knowledge space member management",
+    async (resourceType, subjectType) => {
+      mockedGetKnowledgeSpaceGrantDepartments.mockRejectedValue(new Error("Permission denied"));
+      mockedGetResourceGrantUsers.mockResolvedValue([
+        { user_id: 8, user_name: "Alice" },
+      ]);
+      const onSuccess = jest.fn();
+      render(
+        <PermissionGrantTab resourceType={resourceType} resourceId="resource-1"
+          grantSubjectScopeSpaceId="space-1" fixedSubjectType={subjectType}
+          onSuccess={onSuccess} />,
+      );
+
+      await screen.findByText("com_permission.level_viewer");
+      if (subjectType === "user") {
+        const department = await screen.findByTestId("permission-user-tree-department-7");
+        fireEvent.click(within(department).getByRole("button"));
+        fireEvent.click(await screen.findByText("Alice"));
+      } else {
+        fireEvent.click(await screen.findByText("测试部门"));
+      }
+      fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      expect(mockedAuthorizeResource).toHaveBeenCalledWith(
+        resourceType, "resource-1",
+        [expect.objectContaining({
+          subject_type: subjectType, subject_id: subjectType === "user" ? 8 : 7,
+          relation: "viewer", model_id: "viewer",
+        })], [],
+      );
+      expect(mockedGetKnowledgeSpaceGrantDepartments).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps channel user grants on the flat user list", async () => {
     render(

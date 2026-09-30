@@ -1404,12 +1404,14 @@ class KnowledgeVersionService:
 
         # 2) Tokenize misses locally.
         to_write: dict[str, list[str]] = {}
-        for i, (_, text) in enumerate(items):
-            if results[i] is None:
-                toks = tokenize(text)
-                results[i] = toks
-                if keys[i] is not None and toks:
-                    to_write[keys[i]] = toks
+        missing = [(i, text) for i, (_, text) in enumerate(items) if results[i] is None]
+        def tokenize_missing():
+            return [(i, tokenize(text)) for i, text in missing]
+
+        for i, toks in await asyncio.to_thread(tokenize_missing):
+            results[i] = toks
+            if keys[i] is not None and toks:
+                to_write[keys[i]] = toks
 
         # 3) Batch write back (best-effort).
         if redis_client is not None and to_write:
@@ -1475,7 +1477,7 @@ class KnowledgeVersionService:
             ]
         )
         query_tokens, candidate_tokens = all_tokens[0], all_tokens[1:]
-        cosines = tfidf_cosine_scores_from_tokens(query_tokens, candidate_tokens)
+        cosines = await asyncio.to_thread(tfidf_cosine_scores_from_tokens, query_tokens, candidate_tokens)
 
         refined: list[tuple[float, float | None, KnowledgeFile]] = []
         unscored: list[tuple[float, float | None, KnowledgeFile]] = []

@@ -838,6 +838,22 @@ class LLMService:
                                         user_id=invoke_user_id)
 
     @classmethod
+    async def aget_knowledge_similar_llm(
+        cls, invoke_user_id: int, tenant_id: Optional[int] = None,
+    ) -> Optional[BaseChatModel]:
+        """异步加载知识库相似问模型及租户配置。"""
+        config = await cls.aget_knowledge_llm(tenant_id=tenant_id)
+        if not config.qa_similar_model_id:
+            return None
+        return await cls.get_bisheng_llm(
+            model_id=config.qa_similar_model_id,
+            app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+            app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+            app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+            user_id=invoke_user_id,
+        )
+
+    @classmethod
     def get_knowledge_default_embedding(
         cls, invoke_user_id: int, tenant_id: Optional[int] = None,
     ) -> Optional[Embeddings]:

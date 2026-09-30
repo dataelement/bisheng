@@ -477,6 +477,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
                     KnowledgeFile.file_name,
                 )
                 .filter(KnowledgeFile.knowledge_id == knowledge_id)
+                .filter(col(KnowledgeFile.deleted_at).is_(None))
                 .order_by(KnowledgeFile.id.asc())
                 .offset(offset)
                 .limit(page_size)
@@ -487,7 +488,9 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def count_file_by_knowledge_id(cls, knowledge_id: int):
         with get_sync_db_session() as session:
             return (
-                session.query(func.count(KnowledgeFile.id)).filter(KnowledgeFile.knowledge_id == knowledge_id).scalar()
+                session.query(func.count(KnowledgeFile.id))
+                .filter(KnowledgeFile.knowledge_id == knowledge_id, col(KnowledgeFile.deleted_at).is_(None))
+                .scalar()
             )
 
     @classmethod

@@ -90,6 +90,16 @@ def _after_commit(session: OrmSession) -> None:
     refs = session.info.pop(_PENDING_REFS_KEY, {})
     session.info.pop(_NESTED_SNAPSHOTS_KEY, None)
     session.info.pop(_ROLLED_BACK_NESTED_KEY, None)
+    if len(refs) > 1:
+        ordered = sorted(refs.values(), key=lambda item: item.outbox_id)
+        for start in range(0, len(ordered), 100):
+            try:
+                from bisheng.worker.knowledge.fulltext_index import publish_knowledge_fulltext_batch
+                publish_knowledge_fulltext_batch(items=[{"outbox_id": ref.outbox_id, "revision": ref.revision}
+                                                      for ref in ordered[start:start + 100]])
+            except Exception:
+                logger.exception("fulltext batch publish failed; committed intents will be recovered")
+        return
     for ref in sorted(refs.values(), key=lambda item: item.outbox_id):
         try:
             _publish_ref(

@@ -25,6 +25,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Literal
 
 from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
@@ -148,6 +149,34 @@ class ContentDeleteRequest:
     content_generation: int | None = None
 
 
+@dataclass(frozen=True)
+class ContentRelocationRequest:
+    """迁移已有内容，只替换标识和归属，不计算新分块或向量。"""
+
+    source: ContentProjectionIdentity
+    target: ContentProjectionIdentity
+    knowledge_ids: tuple[int, ...]
+    membership_generation: int
+    manager_knowledge_id: int | None = None
+
+
+@dataclass(frozen=True)
+class SharedProjectionWrite:
+    """一个文档一次写入计划；先补内容，再应用最终归属。"""
+
+    membership: MembershipUpdateRequest
+    content: ContentUpsertRequest | None = None
+
+
+@dataclass(frozen=True)
+class ProjectionContentInspection:
+    """两端内容核验结论; 查询失败不属于内容缺失。"""
+
+    action: Literal["reuse", "embed", "rebuild", "defer"]
+    reason: str
+    chunks: tuple[SharedContentChunk, ...] = ()
+
+
 class SharedSpaceStorageWriter(ABC):
     """The only write surface for tenant-shared SPACE storage."""
 
@@ -162,3 +191,17 @@ class SharedSpaceStorageWriter(ABC):
     @abstractmethod
     async def delete_content(self, request: ContentDeleteRequest) -> None:
         """Idempotently delete chunk content (single version or whole document)."""
+
+    async def relocate_content(self, request: ContentRelocationRequest) -> None:
+        """复用已有内容并校验目标，缺失内容不得回退到解析。"""
+        raise NotImplementedError("metadata relocation is not supported")
+
+    async def apply_projection_batch(self, requests: Sequence[SharedProjectionWrite], *, guard) -> dict[int, str]:
+        """返回失败文档及原因；缺少批量实现时禁止退化为逐文件调用。"""
+        raise NotImplementedError("batch projection is not supported")
+
+    async def inspect_projection_content(
+        self, identities: Sequence[ContentProjectionIdentity], *, guard,
+    ) -> dict[int, ProjectionContentInspection]:
+        """批量核验正文和向量, 不以入口状态推断内容存在性。"""
+        raise NotImplementedError("projection content inspection is not supported")

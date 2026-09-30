@@ -117,3 +117,43 @@ async def test_heartbeat_failure_marks_lease_lost(monkeypatch):
     assert lease.lost
     with pytest.raises(ReconcileLockLost):
         await lease.guard()
+
+
+@pytest.mark.parametrize("publish_fails", [False, True])
+async def test_reconcile_publishes_one_batch_and_preserves_pending_on_failure(monkeypatch, publish_fails):
+    lock = SimpleNamespace(
+        acquire=AsyncMock(return_value=True), owned=AsyncMock(return_value=True), release=AsyncMock()
+    )
+    connection = SimpleNamespace(lock=MagicMock(return_value=lock))
+    monkeypatch.setattr(
+        subject, "get_redis_client", AsyncMock(return_value=SimpleNamespace(async_connection=connection))
+    )
+    monkeypatch.setattr(subject, "load_tenant_routing_snapshot", MagicMock(return_value=object()))
+    monkeypatch.setattr(subject, "require_initialized_shared_routing", lambda tenant_id, snapshot: snapshot)
+    store = SimpleNamespace(close=AsyncMock())
+    monkeypatch.setattr(subject, "SharedStorageReconcileAdapter", MagicMock(return_value=store))
+    publish = MagicMock(side_effect=ConnectionError("broker unavailable") if publish_fails else None)
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.worker.knowledge.document_projection",
+        SimpleNamespace(enqueue_document_projection_entries=publish),
+    )
+
+    class ReconcileService:
+        def __init__(self, **kwargs):
+            self.dispatch = kwargs["dispatch"]
+
+        async def run(self):
+            await self.dispatch(102)
+            await self.dispatch(101)
+            publish.assert_not_called()
+            return {"status": "complete", "rebuild_submitted": 2, "rebuild_pending": 0}
+
+    monkeypatch.setattr(subject, "SharedStorageReconcileService", ReconcileService)
+    result = await subject._run_tenant(1)
+    publish.assert_called_once_with(tenant_id=1, entry_ids=[101, 102])
+    assert result["status"] == ("incomplete" if publish_fails else "complete")
+    assert result["rebuild_submitted"] == (0 if publish_fails else 2)
+    assert result["rebuild_pending"] == (2 if publish_fails else 0)
+    lock.release.assert_awaited_once()
+    store.close.assert_awaited_once()

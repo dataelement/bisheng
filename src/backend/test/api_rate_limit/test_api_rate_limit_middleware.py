@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -8,10 +9,12 @@ from starlette.testclient import TestClient
 from bisheng.api_rate_limit.domain.repositories.implementations import RateLimitDecision
 from bisheng.api_rate_limit.domain.schemas import ApiRateLimitConfig, RateLimitDimension
 from bisheng.api_rate_limit.middleware import ApiRateLimitMiddleware
+from bisheng.common.middleware.http_request_diagnostics import HttpRequestDiagnosticsMiddleware
 
 
 def _build_app(config_provider, counter):
     app = FastAPI()
+    app.add_middleware(HttpRequestDiagnosticsMiddleware)
     app.add_middleware(ApiRateLimitMiddleware, config_provider=config_provider, counter=counter)
     app.add_middleware(
         CORSMiddleware,
@@ -127,3 +130,26 @@ def test_websocket_bypasses_rate_limit_middleware():
 
     provider.assert_not_awaited()
     counter.assert_not_awaited()
+
+
+@pytest.mark.parametrize("mode", ["disabled", "allowed", "config_failed", "counter_failed"])
+def test_business_failure_never_reexecutes_request(mode):
+    config = ApiRateLimitConfig() if mode == "disabled" else _limited_config()
+    provider = AsyncMock(return_value=config)
+    counter = AsyncMock(return_value=RateLimitDecision(allowed=True))
+    if mode == "config_failed":
+        provider.side_effect = RuntimeError("config unavailable")
+    if mode == "counter_failed":
+        counter.side_effect = RuntimeError("counter unavailable")
+    app = _build_app(provider, counter)
+    calls = []
+
+    @app.post("/api/v1/failure")
+    async def failure():
+        calls.append("side_effect")
+        raise ValueError("original business failure")
+
+    with TestClient(app) as client:
+        with pytest.raises(ValueError, match="original business failure"):
+            client.post("/api/v1/failure")
+    assert calls == ["side_effect"]

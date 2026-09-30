@@ -151,7 +151,8 @@ _MISSING = object()
 def _import_worker_mid_table():
     class _DummyTask:
         def __init__(self, fn):
-            self.run = fn
+            # 这里验证业务处理；持久预算由独立 Lua/调度契约测试验证。
+            self.run = getattr(fn, "__wrapped__", fn)
 
         def __call__(self, *args, **kwargs):
             return self.run(*args, **kwargs)
@@ -177,6 +178,9 @@ def _import_worker_mid_table():
         worker_module = importlib.util.module_from_spec(spec)
         assert spec and spec.loader
         spec.loader.exec_module(worker_module)
+        worker_module.KnowledgeStatisticsRepository = SimpleNamespace(
+            identities=lambda ids: {file_id: f"document:{file_id}" for file_id in ids},
+        )
         return worker_module
     finally:
         for name, previous in previous_modules.items():
@@ -326,7 +330,8 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
 
     dumped = record.model_dump(exclude={"es_id"})
     assert record.es_id == "11"
-    assert "tenant_id" not in dumped
+    assert dumped["tenant_id"] == 7
+    assert dumped["knowledge_identity"] == "file:11"
     assert not {
         "user_id",
         "user_name",
@@ -503,7 +508,7 @@ def test_original_upload_organization_falls_back_to_current_space_when_original_
     assert records[0].original_upload_department_name == "部门A"
 
 
-def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context():
+def test_knowledge_space_content_mapping_keeps_tenant_without_common_user_context():
     from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
         KnowledgeSpaceContentStat,
     )
@@ -511,7 +516,6 @@ def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context
     stat = KnowledgeSpaceContentStat(ensure_sync_index=False)
     assert stat._include_common_mappings is False
     assert not {
-        "tenant_id",
         "user_id",
         "user_name",
         "user_group_infos",
@@ -736,7 +740,9 @@ def test_delete_stale_download_daily_records_uses_sync_run_id(monkeypatch):
 
 def test_portal_download_aggregation_query_filters_source_and_uses_after_key(monkeypatch):
     worker_module = _import_worker_mid_table()
+    monkeypatch.setattr(worker_module, "telemetry_service", SimpleNamespace(index_name="base_telemetry_events"))
     search_calls = []
+    monkeypatch.setattr(worker_module.telemetry_service, "index_name", "base_telemetry_events")
 
     class _FakeStatisticsEs:
         def search(self, **kwargs):
@@ -928,6 +934,7 @@ def test_rebuild_download_projection_does_not_cleanup_after_failed_write(monkeyp
 def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatch):
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
+    monkeypatch.setattr(stat_cls, "dead_file_ids_sync", lambda ids: set())
     monkeypatch.setattr(
         "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
         lambda: _FakeSyncIndexClient(),
@@ -936,7 +943,17 @@ def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatc
     monkeypatch.setattr(
         stat_cls,
         "delete_stale_file_records_sync",
-        lambda self, _sync_run_id: 2,
+        lambda self, _sync_run_id: (_ for _ in ()).throw(AssertionError("unchanged files keep old run IDs")),
+    )
+    monkeypatch.setattr(
+        worker_module.ContentStatReconciler,
+        "file_batches",
+        lambda self, *args, **kwargs: (item for item in []),
+    )
+    monkeypatch.setattr(
+        worker_module,
+        "_get_content_stat_reconcile_scope",
+        lambda: (0, 0),
     )
     monkeypatch.setattr(
         stat_cls,
@@ -954,8 +971,8 @@ def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatc
     )
     monkeypatch.setattr(
         worker_module,
-        "_get_success_space_file_rows",
-        lambda _page, _page_size: [],
+        "_get_content_stat_reconcile_rows",
+        lambda _after_id, _max_id, _limit: [],
     )
     monkeypatch.setattr(worker_module, "_get_favorite_space_ids", lambda: [])
     monkeypatch.setattr(
@@ -969,7 +986,7 @@ def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatc
     result = worker_module.rebuild_knowledge_space_content_file_projection("owner-a")
 
     assert result["synced"] == 0
-    assert result["deleted_stale"] == 2
+    assert result["deleted_stale"] == 0
     assert result["deleted_favorite"] == 1
     assert not {
         "synced_download_daily",
@@ -1047,10 +1064,10 @@ def test_sync_pending_knowledge_space_content_stat_reloads_current_file_state(mo
         "queue_status_sync",
         lambda: {"pending_count": 0, "processing_count": 0, "oldest_pending_age_ms": 0},
     )
-    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
+    monkeypatch.setattr(stat_cls, "reconcile_file_records_sync", lambda self, records: upserted.extend(records))
     monkeypatch.setattr(
         stat_cls,
-        "delete_file_records_sync",
+        "reconcile_delete_file_records_sync",
         lambda self, file_ids: deleted.extend(file_ids),
     )
     monkeypatch.setattr(
@@ -1104,7 +1121,7 @@ def test_sync_pending_knowledge_space_content_stat_does_not_ack_failed_write(mon
     monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False)
     monkeypatch.setattr(
         stat_cls,
-        "insert_records_sync",
+        "reconcile_file_records_sync",
         lambda self, records: (_ for _ in ()).throw(RuntimeError("es down")),
     )
     monkeypatch.setattr(

@@ -163,7 +163,7 @@ async def test_folder_without_distribution_entries_skips_the_sweep():
 
 
 @pytest.mark.asyncio
-async def test_preflight_reports_rollback_and_permanent_counts():
+async def test_preflight_reports_rollback_and_recyclable_counts():
     service = _service()
     manager_rollback = _distribution_entry(201, KnowledgeFileEntryType.MANAGER.value)
     manager_permanent = _distribution_entry(202, KnowledgeFileEntryType.MANAGER.value)
@@ -176,7 +176,7 @@ async def test_preflight_reports_rollback_and_permanent_counts():
     ]
     service._get_folder_for_action = AsyncMock(return_value=_folder())
     service.document_distribution_service = SimpleNamespace(
-        preflight_delete_entry=AsyncMock(side_effect=["rollback", "final_delete"])
+        preflight_delete_entry=AsyncMock(side_effect=["rollback", "recycle"])
     )
 
     with patch(
@@ -189,10 +189,10 @@ async def test_preflight_reports_rollback_and_permanent_counts():
         )
 
     assert summary["rollback_count"] == 1
-    assert summary["permanent_delete_count"] == 1
+    assert summary["permanent_delete_count"] == 0
     assert summary["soft_link_count"] == 1
     assert summary["share_count"] == 1
-    assert summary["recyclable_count"] == 1
+    assert summary["recyclable_count"] == 2
     assert summary["irreversible"] is True
     assert summary["rollback_samples"] == [
         {"file_id": 201, "file_name": "entry-201.pdf"}

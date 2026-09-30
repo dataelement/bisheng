@@ -204,8 +204,10 @@ GET /api/v1/admin/developer-tokens/config/file-sync-target-children
 | `file_name` | string | 是 | 最终文件名，1～200 字符；必须是 base name，不能包含 `/` 或 `\`。 |
 | `department` | string | 否 | 主责单位名称；与 `department_id` 同传时必须一致。 |
 | `department_id` | string | 条件必填 | 第三方部门 ID，1～128 字符；与 `filelib_department_mapping.external_department_id` 对应；当 Token 的 `dynamic_source=department_id` 时必须显式提供；否则可用于文件元数据。 |
-| `responsible_person` | string | 否 | 责任人 `user.external_id`；单独传入时按此外部人员 ID 解析用户；与 `responsible_person_id` 同传时必须一致；解析成功后作为文件上传人/更新人写入。 |
-| `responsible_person_id` | string | 条件必填 | 责任人 `user.external_id`，1～128 字符；当 Token 的 `dynamic_source=responsible_person_id` 时必须提供本字段或等价的 `responsible_person`；两者语义相同，任选其一。 |
+| `responsible_person` | string | 否 | 责任人标识；先匹配 `user.external_id`，无匹配时再匹配 `user.external_code`；与 `responsible_person_id` 同传时必须一致；解析成功后作为文件上传人/更新人写入。 |
+| `responsible_person_id` | string | 条件必填 | 责任人标识，1～128 字符；先匹配 `user.external_id`，无匹配时再匹配 `user.external_code`；当 Token 的 `dynamic_source=responsible_person_id` 时必须提供本字段或等价的 `responsible_person`；两者语义相同，任选其一。 |
+
+责任人匹配沿用当前租户和有效用户过滤。任一步匹配到多人均返回 HTTP 400、业务码 `19901`，不会继续回退；两步均未匹配到用户返回 HTTP 404、业务码 `19903`。
 
 未知 `params` 字段按既有行为忽略，但任何分类、业务域或目标知识空间覆盖字段都不会参与业务解析。
 

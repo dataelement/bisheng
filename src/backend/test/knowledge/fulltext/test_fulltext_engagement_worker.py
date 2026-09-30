@@ -10,11 +10,11 @@ async def test_worker_acknowledges_terminal_items_and_retries_only_failed():
             self.acked = []
             self.retried = []
 
-        async def ack(self, *, file_id, lease_owner):
-            self.acked.append((file_id, lease_owner))
+        async def ack_many(self, *, file_ids, lease_owner):
+            self.acked.extend((file_id, lease_owner) for file_id in file_ids)
 
-        async def retry(self, *, file_id, lease_owner, now_epoch):
-            self.retried.append((file_id, lease_owner, now_epoch))
+        async def retry_many(self, *, file_ids, lease_owner, now_epoch):
+            self.retried.extend((file_id, lease_owner, now_epoch) for file_id in file_ids)
 
     queue = Queue()
     result = KnowledgeFulltextEngagementBulkResult(

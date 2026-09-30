@@ -155,12 +155,29 @@ class InspectionStandardSyncRequest(BaseModel):
 
     start_time: str = Field(default="", min_length=0)
     end_time: str = Field(default="", min_length=0)
+    responsible_person_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Responsible person identifier: match user.external_id first, then user.external_code "
+            "if not found. Multiple matches at either step are an error. Defaults to the API caller when omitted."
+        ),
+    )
     data: InspectionStandardSyncData = Field(default_factory=InspectionStandardSyncData)
 
     @field_validator("start_time", "end_time", mode="before")
     @classmethod
     def normalize_time(cls, value: Any) -> str:
         return str(value or "").strip()
+
+    @field_validator("responsible_person_id", mode="before")
+    @classmethod
+    def normalize_responsible_person_id(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
 
 
 class InspectionStandardSyncFileResult(BaseModel):

@@ -115,7 +115,7 @@ class PortalHotSearchPipelineService:
             distinct_cleaned = list(dict.fromkeys(r.cleaned_query for r in cleaned))
             stats.distinct_query_count = len(distinct_cleaned)
 
-            intent_result = self.intent_service.group(distinct_cleaned[: self.config.candidate_top_n])
+            intent_result = await self.intent_service.agroup(distinct_cleaned[: self.config.candidate_top_n])
             stats.llm_degraded = intent_result.degraded
             stats.llm_group_calls = 0 if intent_result.degraded else 1
 
@@ -127,7 +127,7 @@ class PortalHotSearchPipelineService:
             for item in ranked:
                 if item.final_rank is None:
                     continue
-                display, source = self.rewrite_service.rewrite(item.canonical_query)
+                display, source = await self.rewrite_service.arewrite(item.canonical_query)
                 item.display_query = display
                 item.rewrite_source = source
                 if source != "passthrough":

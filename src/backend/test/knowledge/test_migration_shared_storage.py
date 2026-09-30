@@ -21,13 +21,13 @@ async def test_index_stage_validates_shared_contract_without_legacy_copy(monkeyp
 async def test_projection_failure_keeps_source_objects_and_permissions(monkeypatch):
     projection = N(converge_unit=AsyncMock(side_effect=RuntimeError("ES unavailable")))
     operations = module.KnowledgeMigrationOperationsImpl(shared_projection=projection)
-    load = AsyncMock()
+    load = AsyncMock(return_value=N(files=[N(source=N(id=1), target=N(id=2))]))
     cleanup = Mock(side_effect=AssertionError("must retain source objects"))
     monkeypatch.setattr(operations, "_load_context", load)
     monkeypatch.setattr(module, "delete_minio_files", cleanup)
     with pytest.raises(RuntimeError, match="ES unavailable"):
         await operations.cleanup_source_external(MigrationExecutionUnit(unit_id=1))
-    load.assert_not_awaited()
+    load.assert_awaited_once()
     cleanup.assert_not_called()
 
 

@@ -104,12 +104,14 @@ class FilelibSyncAuditWriter:
         failed_count: int | None = None,
         error_code: int | None = None,
         error_message: str | None = None,
+        responsible_person_id: str | None = None,
     ) -> str:
         lines: list[str] = []
         token_label = token_name.strip() or f"Token#{token_id}"
         cls._append_note_line(lines, "Token", f"{token_label} (ID: {token_id})")
         space_label = (knowledge_name or "").strip() or f"知识空间#{knowledge_id}"
         cls._append_note_line(lines, "知识空间", f"{space_label} (ID: {knowledge_id})")
+        cls._append_note_line(lines, "责任人ID", responsible_person_id)
         cls._append_note_line(lines, "数据时间范围", f"{data_start_time} ~ {data_end_time}")
         cls._append_note_line(lines, "分组数", group_count)
         if file_count is not None:
@@ -332,14 +334,9 @@ class FilelibSyncAuditWriter:
             error_code=error_code,
             error_message=error_message,
         )
-        target_id = (
-            str(created_file.id)
-            if created_file is not None
-            else str(params.external_file_id or "")
-        )
-        tenant_id = int(
-            getattr(target.space, "tenant_id", None) if target is not None else login_user.tenant_id
-        )
+        target_id = str(created_file.id) if created_file is not None else str(params.external_file_id or "")
+        target_space_tenant = getattr(target.space, "tenant_id", None) if target is not None else None
+        tenant_id = int(target_space_tenant or login_user.tenant_id)
         try:
             await AuditLogDao.ainsert_v2(
                 tenant_id=tenant_id,
@@ -375,6 +372,7 @@ class FilelibSyncAuditWriter:
         data_end_time: str,
         group_count: int,
         file_count: int,
+        responsible_person_id: str | None = None,
     ) -> None:
         metadata = {
             "endpoint": "inspection_standard_sync",
@@ -388,6 +386,7 @@ class FilelibSyncAuditWriter:
             "failed_count": 0,
             "start_time": data_start_time,
             "end_time": data_end_time,
+            "responsible_person_id": responsible_person_id,
             "request_id": cls._request_id(request),
         }
         note = cls._build_inspection_batch_note(
@@ -401,6 +400,7 @@ class FilelibSyncAuditWriter:
             file_count=file_count,
             success_count=file_count,
             failed_count=0,
+            responsible_person_id=responsible_person_id,
         )
         try:
             await AuditLogDao.ainsert_v2(
@@ -437,6 +437,7 @@ class FilelibSyncAuditWriter:
         group_count: int,
         success_count: int,
         error: Exception,
+        responsible_person_id: str | None = None,
     ) -> None:
         error_code: int | None = None
         error_message = str(error)
@@ -456,6 +457,7 @@ class FilelibSyncAuditWriter:
             "failed_count": max(group_count - success_count, 1),
             "start_time": data_start_time,
             "end_time": data_end_time,
+            "responsible_person_id": responsible_person_id,
             "error_code": error_code,
             "error_message": error_message,
             "request_id": cls._request_id(request),
@@ -472,6 +474,7 @@ class FilelibSyncAuditWriter:
             failed_count=max(group_count - success_count, 1),
             error_code=error_code,
             error_message=error_message,
+            responsible_person_id=responsible_person_id,
         )
         try:
             await AuditLogDao.ainsert_v2(

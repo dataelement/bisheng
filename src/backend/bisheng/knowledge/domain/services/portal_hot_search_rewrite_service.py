@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 
 from bisheng.knowledge.domain.services.portal_hot_search_text_utils import count_han
 
@@ -75,8 +77,31 @@ class PortalHotSearchRewriteService:
     pipeline inject the real LLM while tests pass a stub.
     """
 
-    def __init__(self, llm_invoke: LLMInvoke | None = None) -> None:
+    def __init__(self, llm_invoke: LLMInvoke | None = None, *,
+                 llm_ainvoke: Callable[[str], Awaitable[str]] | None = None,
+                 request_timeout: float = 60.0) -> None:
         self._llm_invoke = llm_invoke
+        self._llm_ainvoke = llm_ainvoke
+        self._request_timeout = request_timeout
+
+    async def arewrite(self, canonical_query: str) -> tuple[str, str]:
+        """等待模型期间释放事件循环，保留原有降级语义。"""
+        if self._llm_ainvoke is None:
+            return await asyncio.to_thread(self.rewrite, canonical_query)
+        canonical_query = (canonical_query or "").strip()
+        if is_complete_question(canonical_query):
+            return canonical_query, "passthrough"
+        try:
+            response = await asyncio.wait_for(
+                self._llm_ainvoke(REWRITE_PROMPT.format(query=canonical_query)),
+                timeout=self._request_timeout,
+            )
+            candidate = _sanitize_llm_question(response)
+            if candidate:
+                return candidate, "llm"
+        except Exception:
+            logging.getLogger(__name__).warning("热搜改写模型失败，保留原始问题", exc_info=True)
+        return PortalHotSearchRewriteService().rewrite(canonical_query)
 
     def rewrite(self, canonical_query: str) -> tuple[str, str]:
         """Return (display_query, rewrite_source).

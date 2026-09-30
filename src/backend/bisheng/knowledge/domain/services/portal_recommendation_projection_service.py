@@ -13,6 +13,7 @@ from bisheng.knowledge.domain.constants import get_business_domain_code_from_fil
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_repository import (
+    PortalRecommendationProjectionDelete,
     PortalRecommendationProjectionUpsert,
 )
 
@@ -34,8 +35,14 @@ class PortalRecommendationSourceFile:
 class _SourceRepository(Protocol):
     async def find_by_id(self, file_id: int) -> PortalRecommendationSourceFile | None: ...
 
+    async def find_by_ids(self, file_ids: Sequence[int]) -> list[PortalRecommendationSourceFile]: ...
+
 
 class _ProjectionRepository(Protocol):
+    async def apply_batch(
+        self, changes: Sequence[PortalRecommendationProjectionUpsert | PortalRecommendationProjectionDelete],
+    ) -> int: ...
+
     async def upsert(self, value: PortalRecommendationProjectionUpsert) -> bool: ...
 
     async def delete(self, file_id: int, projection_version: int) -> bool: ...
@@ -156,6 +163,49 @@ class PortalRecommendationProjectionService:
             projection_version=version,
         )
         return await self.projection_repository.upsert(value)
+
+    async def refresh_batch(
+        self,
+        events: Sequence[dict],
+        *,
+        sources: Sequence[PortalRecommendationSourceFile] | None = None,
+    ) -> int:
+        if not events:
+            return 0
+        if sources is None:
+            ids = sorted({int(event["file_id"]) for event in events if not event.get("deleted", False)})
+            sources = await self.source_repository.find_by_ids(ids) if ids else []
+        by_id = {source.file_id: source for source in sources}
+        try:
+            maybe_bindings = self.binding_loader()
+            bindings = await maybe_bindings if inspect.isawaitable(maybe_bindings) else maybe_bindings
+            # 一批只构建一次 ACL 查找表, 避免逐文件扫描全部绑定配置。
+            acl_keys = {(str(item.get("resource_type") or ""), str(item.get("resource_id") or "")) for item in bindings}
+        except Exception:
+            acl_keys = None
+        changes = []
+        for event in events:
+            file_id = int(event["file_id"])
+            version = event.get("projection_version")
+            source = None if event.get("deleted", False) else by_id.get(file_id)
+            if source is None:
+                if version is None:
+                    raise ValueError("projection_version is required for a delete event")
+                changes.append(PortalRecommendationProjectionDelete(file_id, max(int(version), 0)))
+                continue
+            scope = "unknown" if acl_keys is None else "custom" if self._lineage_keys(source) & acl_keys else "inherited"
+            eligible, reason = self._eligibility(source, scope)
+            changes.append(PortalRecommendationProjectionUpsert(
+                file_id=source.file_id,
+                space_id=source.space_id,
+                business_domain_code=get_business_domain_code_from_file(source),
+                permission_scope=scope,
+                recommendable=eligible,
+                reason_code=reason,
+                source_update_time=source.source_update_time,
+                projection_version=self.projection_version_for(source) if version is None else max(int(version), 0),
+            ))
+        return await self.projection_repository.apply_batch(changes)
 
     @staticmethod
     def _eligibility(

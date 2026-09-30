@@ -1,3 +1,4 @@
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -44,7 +45,7 @@ def _file():
 
 def _install_common_fakes(monkeypatch, *, routed: bool):
     from bisheng.api.services import workstation as workstation_api
-    from bisheng.worker.knowledge import file_worker
+    file_worker = importlib.import_module("bisheng.worker.knowledge.file_worker")
 
     space = _space()
     pipeline_calls = []
@@ -103,12 +104,64 @@ def _install_common_fakes(monkeypatch, *, routed: bool):
         ),
         raising=False,
     )
-    monkeypatch.setattr(
-        file_worker.refresh_file_similarity_candidates_celery,
-        "apply_async",
-        lambda **_kwargs: None,
-    )
+    monkeypatch.setattr(file_worker, "refresh_file_similarity_candidates", MagicMock(), raising=False)
     return space, pipeline_calls
+
+
+@pytest.mark.parametrize("routed", [True, False], ids=["shared", "legacy"])
+@pytest.mark.parametrize("similarity_fails", [False, True], ids=["success", "similarity_failure"])
+def test_parse_refreshes_similarity_inline_after_persisting_success(
+    monkeypatch, routed, similarity_fails,
+):
+    from bisheng.knowledge.domain.services.shared_space_direct_ingestion_service import (
+        SharedSpaceDirectIngestionService,
+    )
+    file_worker = importlib.import_module("bisheng.worker.knowledge.file_worker")
+
+    _install_common_fakes(monkeypatch, routed=routed)
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
+        lambda **_kwargs: SimpleNamespace(routing_version=3) if routed else None,
+    )
+    monkeypatch.setattr(SharedSpaceDirectIngestionService, "ingest_documents_sync", MagicMock())
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeRag, "init_knowledge_milvus_vectorstore_sync", MagicMock(),
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeRag, "init_knowledge_es_vectorstore_sync", MagicMock(),
+    )
+    monkeypatch.setattr(knowledge_imp.KnowledgeUtils, "ensure_milvus_schema_ready", MagicMock())
+    file_record = _file()
+    events = []
+
+    def persist(record):
+        assert record.status == KnowledgeFileStatus.SUCCESS.value
+        events.append("persist_success")
+
+    def refresh(file_id):
+        assert file_id == file_record.id
+        assert events == ["persist_success"]
+        events.append("similarity")
+        if similarity_fails:
+            raise RuntimeError("similarity unavailable")
+        file_record.similar_status = 1
+        return 1
+
+    monkeypatch.setattr(knowledge_imp, "persist_parse_result_with_fulltext_intent", persist)
+    monkeypatch.setattr(file_worker, "refresh_file_similarity_candidates", refresh)
+    monkeypatch.setattr(
+        knowledge_imp.telemetry_service, "log_event_sync",
+        lambda **_kwargs: events.append("telemetry"),
+    )
+    callback = MagicMock(side_effect=lambda **_kwargs: events.append("callback"))
+    monkeypatch.setattr(knowledge_imp.requests, "post", callback)
+
+    knowledge_imp.addEmbedding(3, [file_record], callback="https://example.test/parse")
+
+    assert events == ["persist_success", "similarity", "telemetry", "callback"]
+    assert file_record.status == KnowledgeFileStatus.SUCCESS.value
+    assert file_record.similar_status == (0 if similarity_fails else 1)
+    assert callback.call_args.kwargs["json"]["file_status"] == KnowledgeFileStatus.SUCCESS.value
 
 
 def test_routed_parse_writes_directly_without_initializing_legacy_stores(monkeypatch):
@@ -154,6 +207,7 @@ def test_routed_parse_failure_does_not_fallback_to_legacy_stores(monkeypatch):
     from bisheng.knowledge.domain.services.shared_space_direct_ingestion_service import (
         SharedSpaceDirectIngestionService,
     )
+    file_worker = importlib.import_module("bisheng.worker.knowledge.file_worker")
 
     _install_common_fakes(monkeypatch, routed=True)
     monkeypatch.setattr(
@@ -182,6 +236,7 @@ def test_routed_parse_failure_does_not_fallback_to_legacy_stores(monkeypatch):
     knowledge_imp.addEmbedding(3, [file_record])
 
     assert file_record.status == KnowledgeFileStatus.FAILED.value
+    file_worker.refresh_file_similarity_candidates.assert_not_called()
     legacy_milvus.assert_not_called()
     legacy_es.assert_not_called()
 

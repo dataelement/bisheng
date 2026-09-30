@@ -36,3 +36,17 @@ def test_source_mapping_carries_current_space_level():
     )
 
     assert source.space_level == KnowledgeSpaceLevelEnum.PERSONAL.value
+
+
+async def test_department_invalidation_queries_batches_and_deduplicates_users(async_db_session, monkeypatch):
+    from sqlalchemy import text
+    from unittest.mock import AsyncMock
+
+    await async_db_session.execute(text("INSERT INTO user_department (user_id, department_id, is_primary) VALUES (21,1,1),(21,501,1),(22,999,1),(23,999,0)"))
+    await async_db_session.commit()
+    execute = AsyncMock(wraps=async_db_session.execute)
+    monkeypatch.setattr(async_db_session, 'execute', execute)
+    repo = PortalRecommendationSourceRepositoryImpl(async_db_session)
+    result = await repo.primary_department_user_ids(list(range(1, 1002)) + [1, 501])
+    assert result == [21, 22]
+    assert execute.await_count == 3

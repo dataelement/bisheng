@@ -734,15 +734,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     def _split_distribution_entries(
         files: list[KnowledgeFile],
     ) -> tuple[list[KnowledgeFile], list[KnowledgeFile]]:
-        """Separate container children into distribution entries and plain files.
-
-        Plain files go to the recycle bin as before. Distribution entries must
-        not: the bin only sets a deleted flag, which the distribution state
-        machine cannot see, so a shortcut sitting in the bin would still count
-        as a live link and a manager delete would "roll back" into a folder
-        nobody can open. They go through the state machine instead, which also
-        means they cannot be restored.
-        """
+        """分发入口由状态机处理: 管理入口退回或整文档回收, 普通文件直接回收。"""
         live_statuses = {
             KnowledgeFileEntryStatus.PREPARING.value,
             KnowledgeFileEntryStatus.ACTIVE.value,
@@ -889,6 +881,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     tenant_id=int(file_record.tenant_id),
                     document_id=int(file_record.reference_document_id),
                     manager_file_id=int(file_record.id),
+                    actor_id=int(self.login_user.user_id),
+                    actor_name=str(self.login_user.user_name),
                 )
                 logger.info(
                     "F059 manager delete transition tenant_id={} "
@@ -995,13 +989,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         folder_id: int | None = None,
     ) -> dict:
-        """Summarise what deleting this container would do to distributed files.
-
-        Read-only. Callers use it to warn before an irreversible step: files in
-        the container that were published elsewhere go back to where they came
-        from, the rest are destroyed, and neither can be undone from the
-        recycle bin.
-        """
+        """只读预览容器删除: 管理文档退回或回收, 发布及分享引用移除。"""
         from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
             KnowledgeDocumentDistributionError,
         )
@@ -1035,6 +1023,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         rollback_files: list[KnowledgeFile] = []
         permanent_count = 0
+        recycled_manager_count = 0
         for manager in managers:
             action = "final_delete"
             if self.document_distribution_service is not None:
@@ -1050,6 +1039,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     action = "final_delete"
             if action == "rollback":
                 rollback_files.append(manager)
+            elif action == "recycle":
+                recycled_manager_count += 1
             else:
                 permanent_count += 1
 
@@ -1058,8 +1049,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "permanent_delete_count": permanent_count,
             "soft_link_count": soft_link_count,
             "share_count": share_count,
-            "recyclable_count": sum(1 for item in ordinary if item.file_type != FileType.DIR.value),
-            "irreversible": bool(distribution),
+            "recyclable_count": sum(1 for item in ordinary if item.file_type != FileType.DIR.value) + recycled_manager_count,
+            "irreversible": bool(rollback_files or soft_link_count or share_count or permanent_count),
             "rollback_samples": [
                 {"file_id": int(item.id), "file_name": str(item.file_name or "")}
                 for item in rollback_files[: self._PREFLIGHT_SAMPLE_LIMIT]
@@ -17074,7 +17065,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # Check file names against sensitive words before processing any files.
         for fp in file_path:
-            fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
+            clean_fp = fp.split("?", 1)[0].split("#", 1)[0]
+            fname = clean_fp.rsplit("/", 1)[-1] if "/" in clean_fp else clean_fp
             self._check_filename_sensitive_words(fname)
             try:
                 validate_knowledge_upload_file_extension(fname)
@@ -17351,7 +17343,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
-        if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
+        if resolved is None and updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
@@ -17426,7 +17418,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
 
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
-        if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
+        if resolved is None and updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
 
@@ -17839,6 +17831,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         documents_to_delete: list[int] = []
 
         for doc_id, pending_versions in pending_per_doc.items():
+            if self.document_distribution_service is not None:
+                entries = await self.document_distribution_service.file_repository.find_distribution_entries_by_document_id(doc_id)
+                if any(entry.entry_type == KnowledgeFileEntryType.MANAGER.value for entry in entries):
+                    # 容器级联不得通过隐藏的物理历史版本绕过管理入口生命周期。
+                    expanded.difference_update(int(version.knowledge_file_id) for version in pending_versions)
+                    continue
             chain = await self.version_repo.find_by_document_id(doc_id)
             pending_ids = {v.id for v in pending_versions}
             primary_in_pending = any(v.is_primary for v in pending_versions)

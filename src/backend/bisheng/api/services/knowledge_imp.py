@@ -429,15 +429,13 @@ def addEmbedding(
                 KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
                 try:
                     from bisheng.worker.knowledge.file_worker import (
-                        refresh_file_similarity_candidates_celery,
+                        refresh_file_similarity_candidates,
                     )
 
-                    refresh_file_similarity_candidates_celery.apply_async(
-                        args=(db_file.id,),
-                        queue="celery",
-                    )
+                    refresh_file_similarity_candidates(db_file.id)
                 except Exception:
-                    logger.exception("enqueue similarity candidate refresh failed file_id={}", db_file.id)
+                    # Similarity recommendations must not invalidate a persisted successful parse.
+                    logger.exception("inline similarity candidate refresh failed file_id={}", db_file.id)
             telemetry_service.log_event_sync(
                 user_id=db_file.user_id,
                 event_type=BaseTelemetryTypeEnum.FILE_PARSE,

@@ -171,27 +171,27 @@ class CeleryConf(BaseModel):
         if "telemetry_mid_user_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_user_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_increment",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("10 0 * * *"),  # 每日错峰执行
             }
         if "telemetry_mid_knowledge_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_mid_knowledge_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_increment",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("35 0 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_app_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_app_increment"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_app_increment",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("20 0 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_user_interact_dtl" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_user_interact_dtl"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_user_interact_dtl",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("25 3 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_knowledge_space_content_stat" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_knowledge_space_content_stat"] = {
                 "task": "bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("40 3 * * *"),  # 每天 03:40，在每日统计之后对账
             }
         if "telemetry_recover_knowledge_space_content_stat_leases" not in self.beat_schedule:
             self.beat_schedule["telemetry_recover_knowledge_space_content_stat_leases"] = {
@@ -204,7 +204,7 @@ class CeleryConf(BaseModel):
                     "bisheng.worker.telemetry.mid_table."
                     "sync_mid_user_daily_participation_fact"
                 ),
-                "schedule": crontab.from_string("*/5 * * * *"),
+                "schedule": crontab.from_string("0,30 * * * *"),  # 每半小时兜底人员对账
             }
         if "telemetry_backfill_mid_user_daily_participation_fact" not in self.beat_schedule:
             self.beat_schedule["telemetry_backfill_mid_user_daily_participation_fact"] = {
@@ -221,70 +221,79 @@ class CeleryConf(BaseModel):
                     "bisheng.worker.telemetry.realtime_dashboard."
                     "sync_mid_realtime_qa_question_fact"
                 ),
-                "schedule": crontab.from_string("*/10 * * * *"),
+                "schedule": crontab.from_string("15,45 * * * *"),  # 与人员对账错开 15 分钟
             }
         if "telemetry_sync_mid_active_user" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_active_user"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_active_user",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("20 1 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_doc_parse_dtl" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_doc_parse_dtl"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_doc_parse_dtl",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("35 1 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_knowledge_file_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_knowledge_file_increment"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_knowledge_file_increment",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("50 0 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_model_call_dtl" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_model_call_dtl"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_model_call_dtl",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("50 1 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_sessions_increment" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_sessions_increment"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_sessions_increment",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("10 2 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_tool_call_dtl" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_tool_call_dtl"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_tool_call_dtl",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
+                "schedule": crontab.from_string("40 2 * * *"),  # 每日错峰执行
             }
         if "telemetry_sync_mid_session_run_dtl" not in self.beat_schedule:
             self.beat_schedule["telemetry_sync_mid_session_run_dtl"] = {
                 "task": "bisheng.worker.telemetry.derived_mid_table.sync_mid_session_run_dtl",
-                "schedule": crontab.from_string("30 0 * * *"),  # 00:30 exec every day
-            }
-        if "sync_information_article" not in self.beat_schedule:
-            self.beat_schedule["sync_information_article"] = {
-                "task": "bisheng.worker.information.article.sync_information_article",
-                "schedule": crontab.from_string("30 5 * * *"),  # 05:30 exec every day
+                "schedule": crontab.from_string("10 3 * * *"),  # 每日错峰执行
             }
         if "retry_failed_tuples" not in self.beat_schedule:
             self.beat_schedule["retry_failed_tuples"] = {
                 "task": "bisheng.worker.permission.retry_failed_tuples.retry_failed_tuples",
-                "schedule": 30.0,  # Every 30 seconds
+                "schedule": 300.0,  # 每 5 分钟扫描一次
             }
         if "scan_department_transfer_permission_cleanup" not in self.beat_schedule:
             self.beat_schedule["scan_department_transfer_permission_cleanup"] = {
                 "task": "bisheng.worker.permission.department_transfer_cleanup.scan_due_events",
-                "schedule": 30.0,
+                "schedule": 300.0,
             }
         if "fanout_shared_storage_reconcile" not in self.beat_schedule:
             self.beat_schedule["fanout_shared_storage_reconcile"] = {
                 "task": "bisheng.worker.knowledge.shared_storage_reconcile.fanout_shared_storage_reconcile",
-                "schedule": crontab(hour=2, minute=0),
+                "schedule": crontab(hour=4, minute=20),  # 与全文及内容统计对账错峰
             }
-        if "fanout_document_projection_scan" not in self.beat_schedule:
-            self.beat_schedule["fanout_document_projection_scan"] = {
-                "task": (
-                    "bisheng.worker.knowledge.document_projection."
-                    "fanout_document_projection_scan"
-                ),
-                "schedule": 60.0,
+        projection_scan_task = "bisheng.worker.knowledge.document_projection.scan_document_projections"
+        old_projection_tasks = {
+            "bisheng.worker.knowledge.document_projection.fanout_document_projection_scan",
+            "bisheng.worker.knowledge.document_projection.scan_tenant_document_projections",
+        }
+        old_projection_schedule = self.beat_schedule.pop("fanout_document_projection_scan", None)
+        if old_projection_schedule is not None and "scan_document_projections" not in self.beat_schedule:
+            self.beat_schedule["scan_document_projections"] = old_projection_schedule
+        # 仅迁移旧扫描目标, 保留显式周期、租户参数及自定义调度选项。
+        for key, entry in list(self.beat_schedule.items()):
+            if entry.get("task") in old_projection_tasks:
+                self.beat_schedule[key] = {**entry, "task": projection_scan_task}
+        if "scan_document_projections" not in self.beat_schedule and not any(
+            entry.get("task") == projection_scan_task
+            and not entry.get("args")
+            and (entry.get("kwargs") or {}).get("tenant_id") is None
+            for entry in self.beat_schedule.values()
+        ):
+            self.beat_schedule["scan_document_projections"] = {
+                "task": projection_scan_task,
+                "schedule": 300.0,
             }
         if "reconcile_knowledge_migrations" not in self.beat_schedule:
             self.beat_schedule["reconcile_knowledge_migrations"] = {
@@ -292,7 +301,7 @@ class CeleryConf(BaseModel):
                     "bisheng.worker.knowledge.file_migration."
                     "reconcile"
                 ),
-                "schedule": 60.0,
+                "schedule": 300.0,
             }
         if "dispatch_approval_notifications" not in self.beat_schedule:
             self.beat_schedule["dispatch_approval_notifications"] = {
@@ -308,7 +317,7 @@ class CeleryConf(BaseModel):
         if "reconcile_user_tenant_assignments" not in self.beat_schedule:
             self.beat_schedule["reconcile_user_tenant_assignments"] = {
                 "task": "bisheng.worker.tenant_reconcile.tasks.reconcile_user_tenant_assignments",
-                "schedule": crontab.from_string("0 */6 * * *"),  # every 6 hours
+                "schedule": crontab.from_string("55 */6 * * *"),  # 在组织对账启动 30 分钟后执行
             }
         # v2.5.1 F019: 10min admin_scope Redis key sweep (AC-13).
         if "admin_scope_cleanup" not in self.beat_schedule:
@@ -323,12 +332,12 @@ class CeleryConf(BaseModel):
         if "reconcile_all_organizations" not in self.beat_schedule:
             self.beat_schedule["reconcile_all_organizations"] = {
                 "task": "bisheng.worker.org_sync.reconcile_tasks.reconcile_all_organizations",
-                "schedule": crontab.from_string("0 */6 * * *"),  # every 6h
+                "schedule": crontab.from_string("25 */6 * * *"),  # 与租户归属及推荐池维护错峰
             }
         if "report_ts_conflicts_weekly" not in self.beat_schedule:
             self.beat_schedule["report_ts_conflicts_weekly"] = {
                 "task": "bisheng.worker.org_sync.reconcile_tasks.report_ts_conflicts_weekly",
-                "schedule": crontab.from_string("0 9 * * MON"),  # Mon 09:00
+                "schedule": crontab.from_string("20 9 * * MON"),  # 周一 09:20，与每日冲突报告错峰
             }
         if "report_ts_conflicts_daily_escalation" not in self.beat_schedule:
             self.beat_schedule["report_ts_conflicts_daily_escalation"] = {
@@ -336,7 +345,11 @@ class CeleryConf(BaseModel):
                 "schedule": crontab.from_string("0 9 * * *"),  # every 09:00
             }
 
-        if "sync_information_article_hourly" not in self.beat_schedule:
+        # 已显式配置资讯同步时不再追加默认调度, 避免同一任务重复执行。
+        if "sync_information_article_hourly" not in self.beat_schedule and not any(
+            entry.get("task") == "bisheng.worker.information.article.sync_information_article"
+            for entry in self.beat_schedule.values()
+        ):
             self.beat_schedule["sync_information_article_hourly"] = {
                 "task": "bisheng.worker.information.article.sync_information_article",
                 "schedule": crontab.from_string("*/30 * * * *"),  # exec Every half hour
@@ -352,13 +365,13 @@ class CeleryConf(BaseModel):
         if "scan_portal_course_media_cleanup" not in self.beat_schedule:
             self.beat_schedule["scan_portal_course_media_cleanup"] = {
                 "task": "bisheng.worker.portal_course.tasks.scan_portal_course_media_cleanup",
-                "schedule": 60.0,
+                "schedule": 300.0,
             }
 
         if "purge_expired_knowledge_recycle_items" not in self.beat_schedule:
             self.beat_schedule["purge_expired_knowledge_recycle_items"] = {
                 "task": "bisheng.worker.knowledge.recycle_bin.purge_expired_recycle_items",
-                "schedule": crontab.from_string("0 1 * * *"),
+                "schedule": crontab.from_string("25 1 * * *"),
             }
 
         # F056: root Beat entries only fan out; every tenant child task carries
@@ -384,17 +397,16 @@ class CeleryConf(BaseModel):
         if "portal_recommendation_full_weekly" not in self.beat_schedule:
             self.beat_schedule["portal_recommendation_full_weekly"] = {
                 "task": "bisheng.worker.knowledge.portal_recommendation.fanout_portal_recommendation_maintenance",
-                "schedule": crontab.from_string("30 3 * * SUN"),
+                "schedule": crontab.from_string("40 6 * * SUN"),  # 避开凌晨每日全量对账
                 "args": ("full",),
             }
 
         # F048: portal home hot-search daily rebuild. Root Beat only fans out;
-        # each tenant child task carries an explicit tenant header (02:00,
-        # staggered ahead of the portal recommendation jobs at 02:20/02:50).
+        # 每租户任务携带租户标识, 02:55 与推荐增量对账错开。
         if "portal_hot_search_rebuild_daily" not in self.beat_schedule:
             self.beat_schedule["portal_hot_search_rebuild_daily"] = {
                 "task": "bisheng.worker.knowledge.portal_hot_search.fanout_portal_hot_search_rebuild",
-                "schedule": crontab.from_string("0 2 * * *"),
+                "schedule": crontab.from_string("55 2 * * *"),
             }
 
         # F070: 积分排行快照，每小时第 5 分钟刷新（受 points.rank_cron_enabled 控制）。
@@ -415,7 +427,7 @@ class CeleryConf(BaseModel):
         if "points_reconcile_balances" not in self.beat_schedule:
             self.beat_schedule["points_reconcile_balances"] = {
                 "task": "bisheng.worker.points.tasks.reconcile_point_balances",
-                "schedule": crontab.from_string("30 2 * * *"),
+                "schedule": crontab.from_string("40 5 * * *"),  # 在互动统计校准之后执行
             }
 
         # F070: 外部同步 outbox drain（AC-23）；受 points.sync_outbox_enabled 控制。
@@ -871,11 +883,16 @@ class KnowledgeSpaceSharedStorageConf(BaseModel):
         description="旧库只读 quarantine 保留天数（LEGACY_PURGED 前不得物理删除）",
     )
     projection_max_retries: int = Field(
-        default=8,
+        default=4,
         ge=1,
         le=100,
-        description="共享存储投影失败后的最大自动重试次数",
+        description="共享存储投影最大失败尝试次数，含首次执行；默认首次加三次重试",
     )
+    projection_batch_size: int = Field(default=100, ge=1, le=500, description="一个投影任务内部每批文档数")
+    projection_scan_max_pages: int = Field(default=15, ge=1, le=100, description="每租户单轮兜底扫描总页数, 每页最多100条")
+    projection_scan_time_budget_seconds: int = Field(default=45, ge=5, le=120, description="每租户单轮兜底扫描时间预算")
+    projection_scan_tenant_concurrency: int = Field(default=3, ge=1, le=16, description="一个扫描任务内部同时扫描的租户数")
+    projection_scan_total_time_budget_seconds: int = Field(default=120, ge=10, le=240, description="全部租户单轮扫描总时间预算")
 
 
 class IntelligenceCenterConf(BaseModel):

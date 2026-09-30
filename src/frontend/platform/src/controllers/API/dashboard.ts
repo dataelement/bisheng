@@ -9,6 +9,7 @@ import {
     resolvePersonDedupIndices,
 } from "@/pages/Dashboard/utils/groupCrossTabRows";
 import axios from "../request";
+import { documentRollupLookup } from "@/pages/Dashboard/utils/documentRollups";
 
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -266,6 +267,9 @@ export function transformPivotData(
     });
 
     const columnKeys = columnPaths.map(path => JSON.stringify(path));
+    const exactTotal = documentRollupLookup(resData.rollups);
+    const rowIndexes = Array.from({ length: rowDimensionCount }, (_, index) => index);
+    const columnIndexes = Array.from({ length: columnDimensionCount }, (_, index) => rowDimensionCount + index);
     const columnTotals = columnPaths.map(() => 0);
     const pivotRows = Array.from(rows.values()).map(row => {
         const values = columnKeys.map((columnKey, index) => {
@@ -276,9 +280,14 @@ export function transformPivotData(
         return {
             key: row.key,
             values,
-            total: values.reduce((sum, value) => sum + value, 0),
+            total: exactTotal ? exactTotal(rowIndexes, row.key) : values.reduce((sum, value) => sum + value, 0),
         };
     });
+    if (exactTotal) {
+        columnPaths.forEach((path, index) => {
+            columnTotals[index] = exactTotal(columnIndexes, columnDimensionCount ? path : []);
+        });
+    }
 
     // F058 AC-11: when both a person-name field (e.g. uploader_user_name) and its
     // paired department field are configured as row dimensions, merge them into one
@@ -319,6 +328,20 @@ export function transformPivotData(
     // already-flat rows above; the backend response/aggregation contract is unchanged).
     // Computed on the post-merge field list so indices line up with the returned rows.
     const groupDimensionIndex = resolveGroupDimensionIndex(mergedRowFieldIds, dimensionFilters);
+    const groupTotals: Record<string, { values: number[], total: number }> = {};
+    if (exactTotal && groupDimensionIndex !== null) {
+        const field = mergedRowFieldIds[groupDimensionIndex];
+        const rawIndex = rawRowFieldIds.indexOf(field);
+        for (const row of pivotRows) {
+            const label = row.key[groupDimensionIndex];
+            groupTotals[label] = {
+                total: exactTotal([rawIndex], [label]),
+                values: columnPaths.map(path => exactTotal(
+                    [rawIndex, ...columnIndexes], [label, ...(columnDimensionCount ? path : [])],
+                )),
+            };
+        }
+    }
 
     return {
         rowHeaders: mergedRowHeaders,
@@ -333,7 +356,9 @@ export function transformPivotData(
         originalColumnPaths: columnPaths,
         rows: pivotRows,
         columnTotals,
-        grandTotal: columnTotals.reduce((sum, value) => sum + value, 0),
+        grandTotal: exactTotal ? exactTotal([], []) : columnTotals.reduce((sum, value) => sum + value, 0),
+        groupTotals: exactTotal ? groupTotals : undefined,
+        exactDocumentTotals: Boolean(exactTotal),
         truncated,
         groupDimensionIndex,
         rowFieldIds: mergedRowFieldIds,

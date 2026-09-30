@@ -337,6 +337,82 @@ class BaseTelemetryService(object):
         except Exception as e:
             logger.error(f"Failed to log telemetry event sync: {e}", exc_info=True)
 
+    @staticmethod
+    def _init_user_contexts_sync(user_ids: list[int]) -> dict[int, UserContext]:
+        try:
+            with get_sync_db_session() as session:
+                users = UserRepositoryImpl(session).get_users_with_groups_and_roles_by_ids_sync(user_ids)
+        except NoTenantContextError:
+            with bypass_tenant_filter(), get_sync_db_session() as session:
+                users = UserRepositoryImpl(session).get_users_with_groups_and_roles_by_ids_sync(user_ids)
+        result = {user_id: UserContext(user_id=user_id, user_name=str(user_id)) for user_id in user_ids}
+        for user in users:
+            result[user.user_id] = UserContext(
+                user_id=user.user_id,
+                user_name=user.user_name,
+                user_group_infos=[
+                    UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups or []
+                ],
+                user_role_infos=[
+                    UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                    for role in user.roles or []
+                ],
+                user_department_infos=[
+                    UserDepartmentInfo(department_id=dept.id, department_name=dept.name) for dept in user.departments or []
+                ],
+            )
+        return result
+
+    def record_events_sync_strict(self, events: list[dict], guard=None) -> dict[str, str]:
+        """批量持久化确定 ID 的事件, 重复事件不改写, 返回逐项失败原因。"""
+        if not events:
+            return {}
+        if not self._es_client_sync:
+            self._es_client_sync = get_statistics_es_connection_sync()
+        if not self._index_initialized:
+            self._ensure_index_sync()
+        if guard:
+            guard()
+        users = self._init_user_contexts_sync(sorted({event["user_id"] for event in events}))
+        errors, operations, ids = {}, [], []
+        for offset, event in enumerate(events):
+            if guard and offset % 50 == 0:
+                guard()
+            key = event["event_id"]
+            try:
+                user_id = event["user_id"]
+                document = BaseTelemetryEvent(
+                    tenant_id=get_current_tenant_id() or DEFAULT_TENANT_ID,
+                    user_context=users[user_id],
+                    **{field: value for field, value in event.items() if field != "user_id"},
+                ).model_dump()
+                operations.extend([{"create": {"_index": self.index_name, "_id": key}}, document])
+                ids.append(key)
+            except Exception as exc:
+                errors[key] = f"{type(exc).__name__}: {exc}"
+                logger.exception("Failed to prepare telemetry event %s", key)
+        if not operations:
+            return errors
+        if guard:
+            guard()
+        response = self._es_client_sync.bulk(operations=operations, refresh=False)
+        items = response.get("items", [])
+        if len(items) != len(ids):
+            raise RuntimeError("Telemetry raw event bulk incomplete response")
+        for key, item in zip(ids, items, strict=True):
+            result = item.get("create", {})
+            if result.get("_id") != key:
+                raise RuntimeError("Telemetry raw event bulk mismatched response")
+            if result.get("status") not in (201, 409):
+                errors[key] = str(result.get("error") or result.get("status"))
+        # 后续按日计数必须看见原始事件; 包括上次响应丢失、本次 create 返回 409 的事件。
+        if guard:
+            guard()
+        refreshed = self._es_client_sync.indices.refresh(index=self.index_name)
+        if refreshed.get("_shards", {}).get("failed", 0):
+            raise RuntimeError("Telemetry raw event refresh partially failed")
+        return errors
+
     def record_event_sync_strict(
         self,
         *,

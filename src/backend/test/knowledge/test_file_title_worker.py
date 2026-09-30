@@ -50,18 +50,7 @@ def _load_file_title_worker():
 file_title_worker = _load_file_title_worker()
 
 
-class TestExtractKnowledgeFileTitleCelery:
-    @patch("bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task_sync")
-    def test_legacy_title_message_finishes_initial_lifecycle_without_requeue(self, mock_dispatch):
-        mock_lifecycle = MagicMock()
-        file_worker_stub = ModuleType("bisheng.worker.knowledge.file_worker")
-        file_worker_stub.run_initial_knowledge_parse_lifecycle = mock_lifecycle
-        with patch.dict(sys.modules, {"bisheng.worker.knowledge.file_worker": file_worker_stub}):
-            file_title_worker.extract_knowledge_file_title_celery(10, "preview-key", "callback")
-
-        mock_lifecycle.assert_called_once_with(10, "preview-key", "callback")
-        mock_dispatch.assert_not_called()
-
+class TestExtractAndGenerateAlias:
     def test_alias_generated_and_persisted(self, tmp_path):
         db_file = SimpleNamespace(
             id=1,

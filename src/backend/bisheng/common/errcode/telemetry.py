@@ -59,3 +59,8 @@ class LoginParticipationFilterError(BaseErrorCode):
 class LoginParticipationDataError(BaseErrorCode):
     Code: int = 17020
     Msg: str = '登录参与统计数据读取不完整或格式异常, 请重试并检查统计索引'
+
+
+class DocumentStatisticsNotReadyError(BaseErrorCode):
+    Code: int = 17018
+    Msg: str = '知识空间文档统计尚未就绪，请先完成索引迁移与校验'

@@ -546,14 +546,18 @@ async def test_unapproved_cleanup_does_not_demote_distributed_manager(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("metadata_only", [False, True])
 async def test_publish_moves_manager_and_creates_payload_free_source_entry(
     async_db_session: AsyncSession,
+    metadata_only,
 ):
     await _seed_manager(async_db_session)
     tuple_writer = AsyncMock()
     service = _service(async_db_session, tuple_writer=tuple_writer)
 
-    result = await service.publish_approved(_command())
+    from dataclasses import replace
+
+    result = await service.publish_approved(replace(_command(), metadata_only_migration=metadata_only))
 
     assert result.manager_file_id == 100
     assert result.publish_entry_id != 100
@@ -590,7 +594,9 @@ async def test_publish_moves_manager_and_creates_payload_free_source_entry(
     assert publish.approval_instance_id == 7001
     assert document.knowledge_id == 20
     assert document.predecessor_logic_file_id == publish.id
-    assert document.content_generation == 4
+    assert document.content_generation == (3 if metadata_only else 4)
+    if metadata_only:
+        assert manager.projection_next_retry_at.year == publish.projection_next_retry_at.year == 9999
     assert {file.knowledge_id for file in physical_files} == {20}
     assert len(versions) == 2
     assert tuple_writer.await_count == 2
@@ -1095,8 +1101,10 @@ async def test_switch_primary_rejects_name_conflict_before_permission_prewrite(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("metadata_only", [False, True])
 async def test_publish_merge_migrates_existing_version_row_without_copy(
     async_db_session: AsyncSession,
+    metadata_only,
 ):
     await _seed_manager(async_db_session)
     source_versions = await KnowledgeDocumentVersionRepositoryImpl(
@@ -1140,6 +1148,7 @@ async def test_publish_merge_migrates_existing_version_row_without_copy(
         target_file_level_path="/88",
         target_level=2,
         target_document_id=92,
+        metadata_only_migration=metadata_only,
     )
     service = _service(async_db_session)
 
@@ -1177,6 +1186,9 @@ async def test_publish_merge_migrates_existing_version_row_without_copy(
     assert first.document_id == 92
     assert second.document_id == 92
     assert second.idempotent is True
+
+    if metadata_only:
+        assert manager.projection_next_retry_at.year == publish.projection_next_retry_at.year == 9999
 
 
 @pytest.mark.asyncio

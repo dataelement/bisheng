@@ -1,9 +1,9 @@
 """真实 ORM 查询覆盖规范文档聚合与既有投影代次登记。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from bisheng.knowledge.domain.models.knowledge import Knowledge
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument, KnowledgeDocumentRepairState
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.repositories.implementations.shared_storage_reconcile_repository_impl import (
@@ -13,6 +13,10 @@ from bisheng.knowledge.domain.repositories.implementations.shared_storage_reconc
 
 async def test_full_scan_includes_ready_and_rebuild_uses_existing_generations(async_db_session):
     session = async_db_session
+    connection = await session.connection()
+    await connection.run_sync(lambda conn: KnowledgeDocumentRepairState.__table__.create(conn, checkfirst=True))
+    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import KnowledgeSpaceSharedStorageRouting
+    await connection.run_sync(lambda conn: KnowledgeSpaceSharedStorageRouting.__table__.create(conn, checkfirst=True))
     now = datetime(2026, 9, 17, 1)
     session.add_all(
         [
@@ -82,6 +86,35 @@ async def test_full_scan_includes_ready_and_rebuild_uses_existing_generations(as
     await session.refresh(await session.get(KnowledgeFile, 101))
     file = await session.get(KnowledgeFile, 101)
     assert file.projection_status == "pending"
-    assert file.desired_content_generation == 3
-    assert (await session.get(KnowledgeDocument, 81)).content_generation == 3
+    assert file.desired_content_generation == 2
+    assert (await session.get(KnowledgeDocument, 81)).content_generation == 2
     assert (await repo.snapshots([81]))[81].skip_reason == "projection_busy"
+
+    state = await session.get(KnowledgeDocumentRepairState, 81)
+    assert state.attempts == 1
+    file.projection_retry_count = 3
+    await session.flush()
+    for attempt in range(1, 8):
+        state.next_retry_at = datetime.now() - timedelta(seconds=1)
+        file.projection_status = "ready"
+        await session.flush()
+        snapshot = (await repo.snapshots([81], lock=True))[81]
+        assert await repo.queue_rebuild(snapshot) == 101
+        assert file.projection_retry_count == 3
+    state.next_retry_at = None
+    file.projection_status = "ready"
+    await session.flush()
+    snapshot = (await repo.snapshots([81], lock=True))[81]
+    assert await repo.queue_rebuild(snapshot) == 0
+    assert state.status == "dead"
+    assert state.attempts == 8
+    assert (await session.get(KnowledgeDocument, 81)).content_generation == 2
+    for _ in range(8):
+        assert await repo.claim_content_rebuild(101)
+        await session.commit()
+    assert not await repo.claim_content_rebuild(101)
+    assert state.rebuild_attempts == 8
+    file.md5 = "new-content"
+    await session.flush()
+    assert await repo.claim_content_rebuild(101)
+    assert state.rebuild_attempts == 1

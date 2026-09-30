@@ -7,19 +7,14 @@ from sqlmodel import col, func, select
 
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import Tag, TagLink
-from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileReadError
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileReadError, ReconcileSourceRelationError
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
-from bisheng.knowledge.domain.models.knowledge_space_shared_storage import KnowledgeSpaceSharedStorageRouting
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_source_identity import (
+    group_source_rows,
+    unique_source_row,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_source_repository_impl import (
     KnowledgeFulltextSourceRepositoryImpl,
-)
-from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import KnowledgeFulltextChunkSource
-from bisheng.knowledge.rag.shared_space_storage import (
-    TenantRoutingSnapshot,
-    es_routing_value,
-    get_shared_storage_conf,
-    require_initialized_shared_routing,
 )
 from bisheng.user.domain.models.user import User
 
@@ -54,7 +49,8 @@ class KnowledgeFulltextReconcileSourceRepository(KnowledgeFulltextSourceReposito
             )
         ).all()
         existing = set((await self._execute(select(KnowledgeFile.id).where(col(KnowledgeFile.id).in_(ids)))).scalars())
-        files = [row[0] for row in rows]
+        grouped = group_source_rows(rows)
+        files = [group[0][0] for group in grouped.values()]
         self.tags = defaultdict(list)
         tag_rows = (
             await self._execute(
@@ -103,17 +99,13 @@ class KnowledgeFulltextReconcileSourceRepository(KnowledgeFulltextSourceReposito
             config = await ShougangPortalConfigService.get_config(tenant_id=tenant_id)
             self.categories[tenant_id] = getattr(getattr(config, "portal", None), "document_types", None) or []
         result = {i: ReconcileReadError("file exists but source relation is incomplete") for i in existing}
-        seen = set()
-        for row in rows:
-            file_id = int(row[0].id)
-            if file_id in seen:
-                result[file_id] = ReconcileReadError("ambiguous file source relations")
-                continue
-            seen.add(file_id)
+        for file_id, group in grouped.items():
             try:
-                if row[0].reference_document_id is not None and (row[3] is None or row[4] is None):
-                    raise ReconcileReadError("logical document or primary version relation is incomplete")
+                row = unique_source_row(group)
                 result[file_id] = await self._snapshot_from_row(row)
+            except ReconcileSourceRelationError as exc:
+                # 预期数据问题由持久化状态统一告警；重复扫描不打印整段堆栈。
+                result[file_id] = exc
             except Exception as exc:
                 logger.exception("fulltext reconcile source snapshot failed file_id={}", file_id)
                 result[file_id] = exc
@@ -145,55 +137,9 @@ class KnowledgeFulltextReconcileSourceRepository(KnowledgeFulltextSourceReposito
         )
 
     async def chunk_sources(self, snapshots: list) -> dict:
-        knowledge_ids = {s.knowledge_id for s in snapshots}
-        indexes = dict(
-            (
-                await self._execute(
-                    select(Knowledge.id, Knowledge.index_name).where(col(Knowledge.id).in_(knowledge_ids))
-                )
-            ).all()
-        )
-        tenant_ids = {s.tenant_id for s in snapshots}
-        routes = {
-            r.tenant_id: r
-            for r in (
-                await self._execute(
-                    select(KnowledgeSpaceSharedStorageRouting).where(
-                        col(KnowledgeSpaceSharedStorageRouting.tenant_id).in_(tenant_ids)
-                    )
-                )
-            ).scalars()
+        # 与普通全文消费复用同一正文定位规则，保留父类的批量路由查询。
+        sources = await self.get_chunk_sources(snapshots)
+        return {
+            file_id: value if value is not None else ReconcileReadError("RAG source is not configured")
+            for file_id, value in sources.items()
         }
-        conf = get_shared_storage_conf()
-        result = {}
-        for snapshot in snapshots:
-            try:
-                common = {"file_id": snapshot.file_id, "knowledge_id": snapshot.knowledge_id}
-                if snapshot.knowledge_type == KnowledgeTypeEnum.SPACE.value:
-                    row = routes.get(snapshot.tenant_id)
-                    route = require_initialized_shared_routing(
-                        snapshot.tenant_id, TenantRoutingSnapshot.from_row(row) if row else None
-                    )
-                    if snapshot.logical_document_id is None or snapshot.document_version_id is None:
-                        raise ReconcileReadError("canonical content is not ready")
-                    result[snapshot.file_id] = KnowledgeFulltextChunkSource(
-                        **common,
-                        index_name=route.index_name,
-                        tenant_id=snapshot.tenant_id,
-                        canonical_document_id=snapshot.logical_document_id,
-                        canonical_version_id=snapshot.document_version_id,
-                        content_generation=snapshot.content_generation,
-                        routing=es_routing_value(snapshot.tenant_id, snapshot.logical_document_id)
-                        if conf.es_routing_enabled
-                        else None,
-                    )
-                else:
-                    if not indexes.get(snapshot.knowledge_id):
-                        raise ReconcileReadError("RAG index is not configured")
-                    result[snapshot.file_id] = KnowledgeFulltextChunkSource(
-                        **common, index_name=indexes[snapshot.knowledge_id]
-                    )
-            except Exception as exc:
-                logger.exception("fulltext reconcile chunk routing failed file_id={}", snapshot.file_id)
-                result[snapshot.file_id] = exc
-        return result

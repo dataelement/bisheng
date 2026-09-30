@@ -77,6 +77,8 @@ class DepartmentTransferPermissionCleanupService:
                 0,
             )
         if not await self.repository.claim_event(event_id, now=now):
+            # 领取时可能将耗尽中断重试额度的事件终止, 必须持久化。
+            await self.session.commit()
             return CleanupResult(event_id, False, 0, 0)
         await self.session.commit()
 
@@ -187,6 +189,8 @@ class DepartmentTransferPermissionCleanupService:
                     )
                 ],
                 enforce_fga_success=True,
+                # 由调岗事件统一管理重试, 避免额外补偿绕过上限或误撤新授权。
+                record_failures=False,
             )
             binding_key = item.snapshot.get("binding_key") or item.source_ref
             if binding_key:

@@ -192,3 +192,26 @@ with patch("bisheng.utils.async_utils.set_preferred_bridge_loop") as unregister:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_storage_clients_close_on_original_loop_only_after_worker_stops() -> None:
+    script = r'''
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import patch
+from bisheng.worker import main, _asyncio_utils
+from bisheng.core.context.manager import app_context
+
+loop = _asyncio_utils.get_worker_loop()
+closed = []
+async def close():
+    assert asyncio.get_running_loop() is loop
+    closed.append(True)
+with patch.object(app_context, "get_context", return_value=SimpleNamespace(async_close=close)):
+    main.on_worker_shutdown()
+    assert closed == []
+    main.on_worker_stopped()
+assert closed == [True, True]
+'''
+    result = subprocess.run([sys.executable, "-c", script], cwd=BACKEND_ROOT, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

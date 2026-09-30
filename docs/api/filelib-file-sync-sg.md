@@ -110,7 +110,7 @@ POST /api/v2/filelib/file/sync
 | `external_file_id` | 文件 ID | string | 是 | - | 第三方系统文件唯一标识，用于校验第三方系统文件的唯一性。 |
 | `file_name` | 文件名称 | string | 是 | - | 同步文件的名称（仅文件名，不含路径）。扩展名须属于 [2.4.1 支持的文件格式](#241-支持的文件格式)。 |
 | `department_id` | 主责单位 ID | integer / string | 否 | 接口调用人所属部门 ID | 文件所属部门的 ID，不传时默认填入接口调用人所属部门。 |
-| `responsible_person_id` | 责任人 ID | integer / string | 否 | 接口调用人 ID | 责任人的 ID（`user.external_id`），不传时默认填入接口调用人。 |
+| `responsible_person_id` | 责任人 ID | integer / string | 否 | 接口调用人 ID | 先匹配 `user.external_id`，无匹配时再匹配 `user.external_code`；任一步匹配多人则报错；不传时默认填入接口调用人。 |
 | `tags` | 标签 | string[] | 否 | `[]` | 同步到知识库文件上的标签名称列表。trim 后去空、保序去重。目标知识库已绑定标签库时：库中已有同名标签则复用并挂到文件；没有则写入该知识库绑定的第一个标签库再挂到文件。目标知识库未绑定标签库时**忽略 tags，文件仍入库**。解析完成后仍可追加 AI 自动标签。数量不限制。 |
 
 `params` 示例：

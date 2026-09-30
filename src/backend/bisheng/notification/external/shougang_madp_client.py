@@ -110,7 +110,7 @@ class ShougangMADPClient:
             logger.debug("wechat_push skipped: empty user_ids outbox_id=%s", outbox_id)
             return False, "empty_user_ids"
 
-        conf = settings.get_shougang_wechat_message_push_conf()
+        conf = await settings.aget_shougang_wechat_message_push_conf()
         url = conf.api_url
         payload = {
             "id": conf.id,

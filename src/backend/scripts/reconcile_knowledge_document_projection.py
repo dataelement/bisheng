@@ -171,7 +171,7 @@ async def execute(args) -> dict:
             task = process_document_projection.apply_async(
                 kwargs={
                     "tenant_id": int(args.tenant_id),
-                    "entry_id": int(args.entry_id),
+                    "entry_ids": [int(args.entry_id)],
                 },
                 headers={"tenant_id": int(args.tenant_id)},
                 queue="celery",

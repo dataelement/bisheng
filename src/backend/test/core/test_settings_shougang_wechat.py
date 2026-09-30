@@ -6,7 +6,7 @@ circular imports in the broader test suite. These tests need the real
 """
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 # Names of modules pre-mocked by conftest.
 _MOCKED_MODULES = [
@@ -129,3 +129,17 @@ def test_shougang_wechat_conf_invalid_db_block_falls_back_to_yaml():
         conf = service.get_shougang_wechat_message_push_conf()
     assert conf.enabled is True
     assert conf.api_url == "https://yaml.example.com/push"
+
+
+async def test_async_config_uses_async_store_and_preserves_merge_rules():
+    service = _make_settings()
+    payload = {"in_app_message_forwarding": {"shougang_wechat": {
+        "enabled": False, "api_url": "https://db.example.com/push",
+    }}}
+    with patch.object(ConfigService, "get_all_config", side_effect=AssertionError("同步读取不应执行")), \
+            patch.object(ConfigService, "aget_all_config", new=AsyncMock(return_value=payload)) as read:
+        conf = await service.aget_shougang_wechat_message_push_conf()
+    read.assert_awaited_once()
+    assert conf.enabled is False
+    assert conf.api_url == "https://db.example.com/push"
+    assert conf.agentid == "yaml-agentid"

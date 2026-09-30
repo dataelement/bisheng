@@ -5,18 +5,12 @@ import tempfile
 
 from loguru import logger
 
-from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-from bisheng.knowledge.domain.schemas.knowledge_parse_queue_schema import KnowledgeParseAttemptKind
 from bisheng.knowledge.domain.services.file_alias_name_generator import (
     FileAliasNameGeneratorService,
 )
 from bisheng.knowledge.domain.services.file_title_extractor import FileTitleExtractorService
-from bisheng.knowledge.domain.services.knowledge_parse_processing_lease import (
-    track_knowledge_parse_delivery,
-)
 from bisheng.utils.file import download_minio_file
-from bisheng.worker.main import bisheng_celery
 
 
 def extract_and_generate_alias(file_id: int) -> str | None:
@@ -103,26 +97,3 @@ def extract_and_generate_alias(file_id: int) -> str | None:
         # Alias generation is best-effort; failures must not block parsing.
         logger.warning("title extraction / alias generation failed file_id={} error={}", file_id, e)
     return None
-
-
-@bisheng_celery.task(acks_late=True, priority=3)
-@track_knowledge_parse_delivery(KnowledgeParseAttemptKind.INITIAL)
-def extract_knowledge_file_title_celery(
-    file_id: int,
-    preview_cache_key: str | None = None,
-    callback_url: str | None = None,
-):
-    """Consume a legacy title message as one complete initial lifecycle."""
-    trace_id_var.set(f"extract_title_{file_id}")
-    logger.info(
-        "extract_knowledge_file_title_celery start file_id={} preview_cache_key={}",
-        file_id,
-        preview_cache_key,
-    )
-    from bisheng.worker.knowledge.file_worker import run_initial_knowledge_parse_lifecycle
-
-    return run_initial_knowledge_parse_lifecycle(
-        file_id,
-        preview_cache_key,
-        callback_url,
-    )

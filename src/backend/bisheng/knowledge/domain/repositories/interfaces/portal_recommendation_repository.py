@@ -19,12 +19,24 @@ class PortalRecommendationProjectionUpsert:
 
 
 @dataclass(frozen=True)
+class PortalRecommendationProjectionDelete:
+    file_id: int
+    projection_version: int
+
+
+@dataclass(frozen=True)
 class PortalRecommendationProjectionRecord(PortalRecommendationProjectionUpsert):
     id: int
     tenant_id: int
 
 
 class PortalRecommendationRepository(ABC):
+    @abstractmethod
+    async def apply_batch(
+        self, changes: Sequence[PortalRecommendationProjectionUpsert | PortalRecommendationProjectionDelete],
+    ) -> int:
+        """按事件顺序校验版本, 批量锁定并写入, 不提交调用方事务。"""
+
     @abstractmethod
     async def upsert(self, value: PortalRecommendationProjectionUpsert) -> bool:
         """Apply only a newer projection version and flush without commit."""

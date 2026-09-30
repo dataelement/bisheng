@@ -843,9 +843,12 @@ class KnowledgeDao(KnowledgeBase):
             session.commit()
 
     @classmethod
-    async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
+    async def async_delete_knowledge(cls, knowledge_id: int, only_clear: bool = False, preserve_recycled: bool = False):
         async with get_async_db_session() as session:
-            await session.exec(delete(KnowledgeFile).where(col(KnowledgeFile.knowledge_id) == knowledge_id))
+            statement = delete(KnowledgeFile).where(col(KnowledgeFile.knowledge_id) == knowledge_id)
+            if preserve_recycled:
+                statement = statement.where(col(KnowledgeFile.deleted_at).is_(None))
+            await session.exec(statement)
             if not only_clear:
                 await session.exec(delete(Knowledge).where(col(Knowledge.id) == knowledge_id))
             await session.commit()

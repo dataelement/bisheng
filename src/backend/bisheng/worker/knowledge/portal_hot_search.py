@@ -7,11 +7,13 @@ ContextVar, so all downstream repos see the right tenant.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from random import randrange
 
 from loguru import logger
 
+from bisheng.utils.task_dispatch import run_sync_dispatch
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -48,23 +50,28 @@ DEFAULT_QUEUE = "celery"
 
 def _dispatch_task_for_tenants(task, tenant_ids: list[int]) -> None:
     for tenant_id in sorted({int(value) for value in tenant_ids if int(value) > 0}):
-        task.apply_async(headers={"tenant_id": tenant_id}, queue=DEFAULT_QUEUE)
+        task.apply_async(
+            kwargs={"trigger": "scheduled"},
+            headers={"tenant_id": tenant_id},
+            queue=DEFAULT_QUEUE,
+            time_limit=1800,
+        )
 
 
-def _build_llm_invoke(tenant_id: int) -> Callable[[str], str] | None:
+async def _build_llm_invoke(tenant_id: int) -> Callable[[str], Awaitable[str]] | None:
     """Return a prompt->text callable backed by the tenant knowledge LLM, or None."""
     from bisheng.llm.domain.services import LLMService
 
     try:
-        llm = LLMService.get_knowledge_similar_llm(invoke_user_id=0, tenant_id=tenant_id)
+        llm = await LLMService.aget_knowledge_similar_llm(invoke_user_id=0, tenant_id=tenant_id)
     except Exception:
         logger.warning("hot-search LLM resolve failed tenant={}", tenant_id)
         return None
     if llm is None:
         return None
 
-    def _invoke(prompt: str) -> str:
-        response = llm.invoke(prompt)
+    async def _invoke(prompt: str) -> str:
+        response = await llm.ainvoke(prompt)
         return getattr(response, "content", None) or str(response)
 
     return _invoke
@@ -78,7 +85,7 @@ async def _rebuild_async(now: datetime | None = None) -> str:
         return "disabled"
 
     now = now or datetime.now(timezone.utc)
-    llm_invoke = _build_llm_invoke(tenant_id)
+    llm_invoke = await _build_llm_invoke(tenant_id)
     telemetry_repository = PortalHotSearchTelemetryRepositoryImpl()
     redis_repository = PortalHotSearchRedisRepositoryImpl(
         cache_ttl=config.redis_ttl,
@@ -90,8 +97,8 @@ async def _rebuild_async(now: datetime | None = None) -> str:
         min_search_count=config.min_search_count,
         window_days=config.window_days,
     )
-    intent_service = PortalHotSearchIntentService(llm_invoke=llm_invoke)
-    rewrite_service = PortalHotSearchRewriteService(llm_invoke=llm_invoke)
+    intent_service = PortalHotSearchIntentService(llm_ainvoke=llm_invoke)
+    rewrite_service = PortalHotSearchRewriteService(llm_ainvoke=llm_invoke)
 
     async with get_async_db_session() as session:
         pipeline = PortalHotSearchPipelineService(
@@ -127,29 +134,24 @@ async def _rebuild_async(now: datetime | None = None) -> str:
 @bisheng_celery.task(
     bind=True,
     name="bisheng.worker.knowledge.portal_hot_search.rebuild_portal_hot_search_snapshot",
-    autoretry_for=(Exception,),
-    retry_backoff=True,
-    retry_kwargs={"max_retries": 3},
-    time_limit=1800,
     acks_late=True,
 )
-def rebuild_portal_hot_search_snapshot_celery(_task):
-    return run_async_task(_rebuild_async)
-
-
-@bisheng_celery.task(
-    bind=True,
-    name="bisheng.worker.knowledge.portal_hot_search.trigger_portal_hot_search_rebuild",
-    acks_late=True,
-)
-def trigger_portal_hot_search_rebuild_celery(_task):
-    """Manual single-tenant rerun (AC-34); reuses the same pipeline and lock."""
-    return run_async_task(_rebuild_async)
+def rebuild_portal_hot_search_snapshot_celery(_task, trigger: str = "scheduled"):
+    if trigger not in {"manual", "scheduled"}:
+        raise ValueError("unknown hot-search rebuild trigger")
+    try:
+        return run_async_task(_rebuild_async)
+    except Exception as exc:
+        if trigger == "manual":
+            raise
+        # Preserve Celery's capped exponential backoff with full jitter.
+        countdown = randrange(min(600, 2 ** _task.request.retries) + 1)
+        raise _task.retry(exc=exc, countdown=countdown, max_retries=3)
 
 
 async def _fanout_async() -> int:
     tenant_ids = [DEFAULT_TENANT_ID, *(await TenantDao.aget_children_ids_active(DEFAULT_TENANT_ID))]
-    _dispatch_task_for_tenants(rebuild_portal_hot_search_snapshot_celery, tenant_ids)
+    await run_sync_dispatch(_dispatch_task_for_tenants, rebuild_portal_hot_search_snapshot_celery, tenant_ids)
     return len(set(tenant_ids))
 
 

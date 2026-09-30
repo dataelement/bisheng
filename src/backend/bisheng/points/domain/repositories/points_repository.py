@@ -1,8 +1,8 @@
 """积分仓储：集中持有 ORM 读写，服务层不直接拼装查询。"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import and_, delete, func, insert, or_
+from sqlalchemy import and_, case, delete, func, insert, or_, update
 from sqlmodel import select
 
 from bisheng.points.domain.models import (
@@ -579,6 +579,7 @@ class PointsRepository:
                 select(PointSyncOutbox)
                 .where(
                     PointSyncOutbox.status.in_(["pending", "failed"]),
+                    PointSyncOutbox.retry_count < 8,
                     or_(
                         PointSyncOutbox.next_retry_at.is_(None),
                         PointSyncOutbox.next_retry_at <= current,
@@ -589,6 +590,41 @@ class PointsRepository:
             )
         ).all()
         return list(rows)
+
+    async def claim_sync_outbox(self, row_id: int, owner: str, now: datetime) -> PointSyncOutbox | None:
+        result = await self.session.execute(
+            update(PointSyncOutbox).where(
+                PointSyncOutbox.id == row_id,
+                PointSyncOutbox.status.in_(["pending", "failed"]),
+                PointSyncOutbox.retry_count < 8,
+                or_(PointSyncOutbox.next_retry_at.is_(None), PointSyncOutbox.next_retry_at <= now),
+            ).values(status="processing", lease_owner=owner,
+                     lease_until=now + timedelta(seconds=180),
+                     retry_count=PointSyncOutbox.retry_count + 1)
+        )
+        if result.rowcount != 1:
+            return None
+        return await self.session.get(PointSyncOutbox, row_id, populate_existing=True)
+
+    async def recover_sync_outbox(self, now: datetime) -> None:
+        await self.session.execute(update(PointSyncOutbox).where(
+            PointSyncOutbox.status.in_(["pending", "failed"]), PointSyncOutbox.retry_count >= 8,
+        ).values(status="dead", next_retry_at=None, lease_owner=None, lease_until=None))
+        await self.session.execute(update(PointSyncOutbox).where(
+            PointSyncOutbox.status == "processing", PointSyncOutbox.lease_until <= now,
+        ).values(
+            status=case((PointSyncOutbox.retry_count >= 8, "dead"), else_="failed"),
+            lease_owner=None, lease_until=None, next_retry_at=now + timedelta(minutes=5),
+            last_error="delivery_interrupted",
+        ))
+
+    async def settle_sync_outbox(self, row_id: int, owner: str, values: dict) -> bool:
+        result = await self.session.execute(update(PointSyncOutbox).where(
+            PointSyncOutbox.id == row_id, PointSyncOutbox.status == "processing",
+            PointSyncOutbox.lease_owner == owner,
+            PointSyncOutbox.lease_until > datetime.utcnow(),
+        ).values(**values, lease_owner=None, lease_until=None))
+        return result.rowcount == 1
 
     async def save_outbox(self, row: PointSyncOutbox) -> PointSyncOutbox:
         """持久化 outbox 状态变更。"""

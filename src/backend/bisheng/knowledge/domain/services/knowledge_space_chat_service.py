@@ -1,7 +1,9 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
+from time import perf_counter
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -55,10 +57,10 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.utils import extract_reasoning_content
-from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
 )
+from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.utils import generate_uuid
 
 
@@ -80,6 +82,23 @@ class KnowledgeSpaceChatService:
 
             self.retrieval_runtime = await get_async_retrieval_runtime()
         return self.retrieval_runtime
+
+    @asynccontextmanager
+    async def _retrieval_stage(self, stage: str, knowledge_id: int) -> AsyncIterator[None]:
+        started = perf_counter()
+        outcome = "error"
+        try:
+            yield
+            outcome = "success"
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            logger.info(
+                "knowledge_chat_retrieval stage={} space_id={} user_id={} outcome={} elapsed_ms={:.1f}",
+                stage, knowledge_id, self.login_user.user_id, outcome,
+                (perf_counter() - started) * 1000,
+            )
 
     def _permission_service(self):
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -302,12 +321,21 @@ class KnowledgeSpaceChatService:
 
         try:
             if knowledge_id is not None:
-                chunks = await self.aretrieve_chunks(
-                    query=query, knowledge_base_ids=[knowledge_id],
-                    kb_filters={knowledge_id: {"file_ids": target_file_ids}} if target_file_ids is not None else None,
-                    top_k=100, max_content=space_conf.max_chunk_size,
-                    preauthorized_file_ids=preauthorized_file_ids,
-                )
+                runtime = await self._get_retrieval_runtime()
+                async with self._retrieval_stage("total", knowledge_id):
+                    retrieval = self.aretrieve_chunks(
+                        query=query, knowledge_base_ids=[knowledge_id],
+                        kb_filters={knowledge_id: {"file_ids": target_file_ids}} if target_file_ids is not None else None,
+                        top_k=100, max_content=space_conf.max_chunk_size,
+                        preauthorized_file_ids=preauthorized_file_ids,
+                    )
+                    # 单文档预算覆盖排队、搜索及结果权限映射, 超时取消整个检索任务。
+                    if preauthorized_file_ids is not None:
+                        chunks = await asyncio.wait_for(
+                            retrieval, timeout=runtime.config.total_timeout_seconds,
+                        )
+                    else:
+                        chunks = await retrieval
                 finally_docs = [document for _, document in chunks]
             else:
                 finally_docs = await self._retrieve_visible_documents(
@@ -323,8 +351,16 @@ class KnowledgeSpaceChatService:
             raise StreamStageError(error, stage="retrieval") from error
         logger.debug(f"retrieved_finally_docs: {len(finally_docs)}")
         file_content = ""
+        content_budget = max(0, int(space_conf.max_chunk_size if space_conf.max_chunk_size is not None else 15000))
         for one in finally_docs:
-            file_content += one.page_content + "\n"
+            if preauthorized_file_ids is not None:
+                # 共享检索的单片段上限不能替代模型参考正文的总长度上限。
+                remaining = content_budget - len(file_content)
+                if remaining <= 0:
+                    break
+                file_content += (one.page_content + "\n")[:remaining]
+            else:
+                file_content += one.page_content + "\n"
 
         prompt_service = await get_prompt_manager()
 
@@ -353,11 +389,12 @@ class KnowledgeSpaceChatService:
             inputs = history
 
         logger.info(
-            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} | messages={}",
+            "space_rag llm inputs | chat_id={} model_id={} retrieved_chunks={} reference_chars={} input_chars={}",
             session.chat_id,
             model_id,
             len(finally_docs),
-            [{"role": m.type, "content": m.content} for m in inputs],
+            len(file_content),
+            sum(len(message.content) for message in inputs),
         )
 
         def is_visible_model_chunk(chunk) -> bool:
@@ -961,19 +998,28 @@ class KnowledgeSpaceChatService:
                 return False
             return True
 
+        # 只在本次检索复用文件权限; 下一次提问重新校验, 异常不写入缓存。
+        entry_permissions: dict[tuple[int, str, int, int], bool] = {}
+
         async def _entry_view_checker(_tenant_id, _user_id, space_id, entry_id):
+            key = (int(_tenant_id), str(_user_id), int(space_id), int(entry_id))
+            if key in entry_permissions:
+                return entry_permissions[key]
             if self.department_file_view_access_service is not None:
                 await self._require_portal_file_view_permission(
                     int(space_id),
                     int(entry_id),
                 )
-                return True
-            permissions = await permission_service._get_effective_permission_ids(
-                "knowledge_file",
-                int(entry_id),
-                space_id=int(space_id),
-            )
-            return "view_file" in permissions
+                allowed = True
+            else:
+                permissions = await permission_service._get_effective_permission_ids(
+                    "knowledge_file",
+                    int(entry_id),
+                    space_id=int(space_id),
+                )
+                allowed = "view_file" in permissions
+            entry_permissions[key] = allowed
+            return allowed
 
         resolver = SqlKnowledgeRetrievalScopeResolver(
             file_repository=file_repo,
@@ -1027,21 +1073,23 @@ class KnowledgeSpaceChatService:
             async def _dense_search():
                 if query_vector is None:
                     raise RuntimeError("shared retrieval embedding is unavailable")
-                return await reader.search_milvus(
-                    filter_=backend_filter,
-                    vector=query_vector,
-                    limit=limit,
-                )
+                async with self._retrieval_stage("milvus", kb_id):
+                    return await reader.search_milvus(
+                        filter_=backend_filter,
+                        vector=query_vector,
+                        limit=limit,
+                    )
 
             async def _sparse_search():
-                return await asyncio.wait_for(
-                    reader.search_es(
-                        filter_=backend_filter,
-                        query_text=query,
-                        limit=limit,
-                    ),
-                    timeout=runtime.config.elasticsearch_timeout_seconds,
-                )
+                async with self._retrieval_stage("elasticsearch", kb_id):
+                    return await asyncio.wait_for(
+                        reader.search_es(
+                            filter_=backend_filter,
+                            query_text=query,
+                            limit=limit,
+                        ),
+                        timeout=runtime.config.elasticsearch_timeout_seconds,
+                    )
 
             dense_result, sparse_result = await asyncio.gather(
                 _dense_search(),
@@ -1161,7 +1209,8 @@ class KnowledgeSpaceChatService:
                 seen.add(key)
                 merged.append(hit)
 
-            mapped = await resolver.map_and_authorize_hits(scope, merged)
+            async with self._retrieval_stage("authorization_mapping", kb_id):
+                mapped = await resolver.map_and_authorize_hits(scope, merged)
             for hit in mapped[:top_k]:
                 doc = Document(
                     page_content=getattr(hit, 'text', '')[:max_content],

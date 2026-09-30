@@ -538,15 +538,13 @@ async def _refresh_file_similarity_candidates(file_id: int) -> int:
             return await service.refresh_similar_candidates_for_file(file_id)
 
 
-@bisheng_celery.task(acks_late=True)
-def refresh_file_similarity_candidates_celery(file_id: int) -> int:
-    trace_id_var.set(f"refresh_file_similarity_candidates_{file_id}")
-    logger.info("refresh_file_similarity_candidates_celery start file_id={}", file_id)
+def refresh_file_similarity_candidates(file_id: int) -> int:
+    logger.info("refresh_file_similarity_candidates start file_id={}", file_id)
     from bisheng.worker._asyncio_utils import run_async_task
 
     count = run_async_task(lambda: _refresh_file_similarity_candidates(file_id))
     logger.info(
-        "refresh_file_similarity_candidates_celery done file_id={} candidate_count={}",
+        "refresh_file_similarity_candidates done file_id={} candidate_count={}",
         file_id,
         count,
     )
@@ -604,8 +602,15 @@ def _try_enqueue_auto_publish(file_record: KnowledgeFile) -> None:
         if not getattr(file_record, "file_subcategory_code", None):
             return
 
-        # Skip if file is already an F059 distribution entry
-        if getattr(file_record, "entry_type", None) is not None:
+        # 共享入库会创建 manager, 不能据此判定文件已经发布.
+        entry_type = getattr(file_record, "entry_type", None)
+        if entry_type not in (None, KnowledgeFileEntryType.MANAGER.value):
+            return
+        if entry_type == KnowledgeFileEntryType.MANAGER.value and (
+            getattr(file_record, "entry_status", None) != KnowledgeFileEntryStatus.ACTIVE.value
+            or getattr(file_record, "reference_document_id", None) is None
+            or getattr(file_record, "deleted_at", None) is not None
+        ):
             return
 
         # Skip non-files (directories)
@@ -843,22 +848,29 @@ def delete_knowledge_file_celery(
     pdf_artifact_snapshots: list[dict] | None = None,
     knowledge_file_snapshots: list[dict] | None = None,
 ):
-    """ Asynchronous deletion of knowledge files and their vectors """
-    trace_id_var.set(f'delete_knowledge_file_{file_ids}')
-    logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
-    try:
-        knowledge = KnowledgeDao.query_by_id(knowledge_id)
-        if not knowledge:
-            logger.warning(f"knowledge_id={knowledge_id} is deleted, skip delete file")
-            return
-        delete_vector_files(file_ids, knowledge)
-    except Exception as e:
-        logger.error("delete_knowledge_file_celery error: {}", str(e))
-    finally:
-        if clear_minio and (knowledge_file_snapshots or pdf_artifact_snapshots):
-            from bisheng.api.services.knowledge_imp import delete_minio_file_snapshot_objects
-
-            delete_minio_file_snapshot_objects(
-                knowledge_file_snapshots,
-                pdf_artifact_snapshots,
-            )
+    """兼容旧消息, 新生产者在删除源记录的事务内已保存清理清单。"""
+    from bisheng.core.database import get_sync_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_background_repository_impl import KnowledgeBackgroundRepositoryImpl
+    from bisheng.knowledge.domain.services.knowledge_background_service import KnowledgeBackgroundService
+    from bisheng.core.context.tenant import get_current_tenant_id
+    from bisheng.worker._asyncio_utils import run_async_task
+    knowledge = KnowledgeDao.query_by_id(knowledge_id)
+    tenant_id = int(getattr(knowledge, "tenant_id", None) or get_current_tenant_id() or 1)
+    if knowledge is None:
+        # 新意图已包含目标存储快照, 即使知识库已经删除仍可由周期任务收敛。
+        async def resume_saved():
+            service = KnowledgeBackgroundService()
+            return {file_id: await service.process(KnowledgeBackgroundRepositoryImpl.key(tenant_id, "delete_file", str(file_id)), tenant_id)
+                    for file_id in file_ids}
+        return run_async_task(resume_saved)
+    snapshots = knowledge_file_snapshots or [{"id": file_id} for file_id in file_ids]
+    with get_sync_db_session() as session:
+        ids = KnowledgeBackgroundRepositoryImpl(session).request_delete(
+            tenant_id=tenant_id, knowledge=knowledge, files=snapshots,
+            artifacts=pdf_artifact_snapshots or [], clear_minio=clear_minio and bool(knowledge_file_snapshots or pdf_artifact_snapshots),
+        )
+        session.commit()
+    async def run():
+        service = KnowledgeBackgroundService()
+        return {job_id: await service.process(job_id, tenant_id) for job_id in ids}
+    return run_async_task(run)

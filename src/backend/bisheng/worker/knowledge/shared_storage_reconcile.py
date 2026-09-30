@@ -72,6 +72,7 @@ async def _run_tenant(tenant_id: int) -> dict[str, Any]:
     acquired = False
     heartbeat = None
     store = None
+    pending_projection_ids: set[int] = set()
     result = {"run_id": run_id, "status": "incomplete", "tenant_id": tenant_id}
     try:
         redis = await asyncio.wait_for(get_redis_client(), timeout=10)
@@ -92,16 +93,8 @@ async def _run_tenant(tenant_id: int) -> dict[str, Any]:
         store = SharedStorageReconcileAdapter(snapshot, guard=lease.guard)
 
         async def dispatch(entry_id: int) -> None:
-            from bisheng.worker.knowledge.document_projection import process_document_projection
-
             await lease.guard()
-            await asyncio.to_thread(
-                process_document_projection.apply_async,
-                kwargs={"tenant_id": tenant_id, "entry_id": entry_id},
-                headers={"tenant_id": tenant_id},
-                queue="celery",
-                retry=False,
-            )
+            pending_projection_ids.add(entry_id)
 
         result.update(
             await SharedStorageReconcileService(
@@ -112,11 +105,22 @@ async def _run_tenant(tenant_id: int) -> dict[str, Any]:
                 run_id=run_id,
             ).run()
         )
+        if pending_projection_ids:
+            from bisheng.worker.knowledge.document_projection import enqueue_document_projection_entries
+
+            await lease.guard()
+            await asyncio.to_thread(
+                enqueue_document_projection_entries, tenant_id=tenant_id, entry_ids=sorted(pending_projection_ids),
+            )
+            pending_projection_ids.clear()
     except Exception as exc:
         logger.error(
             "shared_reconcile tenant_failed run_id=%s tenant_id=%s error_type=%s", run_id, tenant_id, type(exc).__name__
         )
         result["status"] = "incomplete"
+        if pending_projection_ids:
+            result["rebuild_submitted"] = max(0, int(result.get("rebuild_submitted", 0)) - len(pending_projection_ids))
+            result["rebuild_pending"] = int(result.get("rebuild_pending", 0)) + len(pending_projection_ids)
     finally:
         if heartbeat:
             heartbeat.cancel()

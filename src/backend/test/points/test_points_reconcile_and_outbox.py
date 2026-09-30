@@ -1,11 +1,13 @@
 """对账与 sync outbox drain。"""
 
+import importlib
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
+from bisheng.points.domain.models import PointSyncOutbox
 from bisheng.points.domain.services.points_reconcile_service import PointsReconcileService
 from bisheng.points.domain.services.points_sync_outbox_service import PointsSyncOutboxService
 
@@ -51,7 +53,7 @@ async def test_reconcile_reports_mismatch_without_mutating():
 async def test_outbox_drain_keeps_pending_when_disabled():
     service = PointsSyncOutboxService()
     fake_settings = SimpleNamespace(points=SimpleNamespace(sync_outbox_enabled=False))
-    with patch("bisheng.common.services.config_service.settings", fake_settings):
+    with patch.object(importlib.import_module("bisheng.common.services.config_service"), "settings", fake_settings):
         out = await service.drain()
     assert out["skipped"] is True
     assert out["reason"] == "sync_outbox_disabled"
@@ -59,8 +61,8 @@ async def test_outbox_drain_keeps_pending_when_disabled():
 
 @pytest.mark.asyncio
 async def test_outbox_drain_marks_skipped_without_adapter():
-    row = SimpleNamespace(
-        id=1,
+    row = PointSyncOutbox(
+        id=1, log_id=1,
         status="pending",
         retry_count=0,
         next_retry_at=None,
@@ -73,8 +75,19 @@ async def test_outbox_drain_marks_skipped_without_adapter():
         async def list_due_sync_outbox(self, *, limit=100, now=None):
             return [row]
 
-        async def save_outbox(self, item):
-            return item
+        async def recover_sync_outbox(self, now):
+            return None
+
+        async def claim_sync_outbox(self, row_id, owner, now):
+            row.retry_count += 1
+            row.status = "processing"
+            row.lease_owner = owner
+            return row
+
+        async def settle_sync_outbox(self, row_id, owner, values):
+            for key, value in values.items():
+                setattr(row, key, value)
+            return True
 
     class _Session:
         async def __aenter__(self):
@@ -93,7 +106,7 @@ async def test_outbox_drain_marks_skipped_without_adapter():
     fake_settings = SimpleNamespace(points=SimpleNamespace(sync_outbox_enabled=True))
     service = PointsSyncOutboxService()
     with (
-        patch("bisheng.common.services.config_service.settings", fake_settings),
+        patch.object(importlib.import_module("bisheng.common.services.config_service"), "settings", fake_settings),
         patch("bisheng.core.context.tenant.bypass_tenant_filter", _bypass),
         patch(
             "bisheng.points.domain.services.points_sync_outbox_service.get_async_db_session",
@@ -113,8 +126,8 @@ async def test_outbox_drain_marks_skipped_without_adapter():
 
 @pytest.mark.asyncio
 async def test_outbox_deliver_success_marks_sent():
-    row = SimpleNamespace(
-        id=2,
+    row = PointSyncOutbox(
+        id=2, log_id=2,
         status="pending",
         retry_count=0,
         next_retry_at=None,
@@ -127,8 +140,19 @@ async def test_outbox_deliver_success_marks_sent():
         async def list_due_sync_outbox(self, *, limit=100, now=None):
             return [row]
 
-        async def save_outbox(self, item):
-            return item
+        async def recover_sync_outbox(self, now):
+            return None
+
+        async def claim_sync_outbox(self, row_id, owner, now):
+            row.retry_count += 1
+            row.status = "processing"
+            row.lease_owner = owner
+            return row
+
+        async def settle_sync_outbox(self, row_id, owner, values):
+            for key, value in values.items():
+                setattr(row, key, value)
+            return True
 
     class _Session:
         async def __aenter__(self):
@@ -150,7 +174,7 @@ async def test_outbox_deliver_success_marks_sent():
     fake_settings = SimpleNamespace(points=SimpleNamespace(sync_outbox_enabled=True))
     service = PointsSyncOutboxService(deliver=ok_deliver)
     with (
-        patch("bisheng.common.services.config_service.settings", fake_settings),
+        patch.object(importlib.import_module("bisheng.common.services.config_service"), "settings", fake_settings),
         patch("bisheng.core.context.tenant.bypass_tenant_filter", _bypass),
         patch(
             "bisheng.points.domain.services.points_sync_outbox_service.get_async_db_session",

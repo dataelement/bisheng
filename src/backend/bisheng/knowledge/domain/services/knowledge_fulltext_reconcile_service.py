@@ -12,6 +12,7 @@ from bisheng.knowledge.domain.contracts.fulltext_reconcile import (
     Mutation,
     ReconcileDependencyUnavailable,
     ReconcileLeaseLost,
+    ReconcileSourceRelationError,
     matches,
 )
 from bisheng.knowledge.domain.services.knowledge_fulltext_document_service import KnowledgeFulltextDocumentService
@@ -133,11 +134,17 @@ class KnowledgeFulltextReconcileService:
         try:
             async with self.repository_factory() as repo:
                 snapshots = await repo.source.snapshots(ids)
+                relation_errors = {
+                    i: value for i, value in snapshots.items() if isinstance(value, ReconcileSourceRelationError)
+                }
+                source_failures = (
+                    await repo.state.record_source_failures(relation_errors, self.now()) if relation_errors else {}
+                )
             candidates, failures, successes = [], {}, {}
             for file_id in ids:
                 snapshot = snapshots.get(file_id)
                 if isinstance(snapshot, Exception):
-                    failures[file_id] = "source_relation_failed"
+                    failures[file_id] = source_failures.get(file_id, "source_relation_failed")
                 elif snapshot is None or self.document.decide(snapshot).value == "delete":
                     candidates.append(file_id)
                 else:
@@ -198,15 +205,23 @@ class KnowledgeFulltextReconcileService:
         failures, successes, eligible = {}, {}, []
         async with self.repository_factory() as repo:
             snapshots = await repo.source.snapshots(ids)
+            relation_errors = {
+                i: value for i, value in snapshots.items() if isinstance(value, ReconcileSourceRelationError)
+            }
+            if relation_errors:
+                failures.update(await repo.state.record_source_failures(relation_errors, self.now()))
             for file_id in ids:
                 snapshot = snapshots.get(file_id)
                 if isinstance(snapshot, Exception):
-                    failures[file_id] = f"source:{type(snapshot).__name__}"
+                    failures.setdefault(file_id, f"source:{type(snapshot).__name__}")
                 elif snapshot is not None and self.document.decide(snapshot).value == "upsert":
                     eligible.append(snapshot)
             sources = await repo.source.chunk_sources(eligible) if eligible else {}
-        observed = await self._retry(lambda: self.es.read(ids))
-        if ids and all(isinstance(observed.get(i), Exception) or observed.get(i) is None for i in ids):
+        read_ids = [file_id for file_id in ids if file_id not in failures]
+        if not read_ids:
+            return failures, successes
+        observed = await self._retry(lambda: self.es.read(read_ids))
+        if all(isinstance(observed.get(i), Exception) or observed.get(i) is None for i in read_ids):
             raise ReconcileDependencyUnavailable("all fulltext mget items failed")
         chunks = await asyncio.wait_for(
             self.es.chunks([s for s in sources.values() if not isinstance(s, Exception)]), timeout=90

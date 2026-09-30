@@ -121,6 +121,20 @@ class KnowledgeMigrationRepository(ABC):
     ) -> MigrationPage: ...
 
     @abstractmethod
+    async def claim_next_units(
+        self, *, batch_id: int, round_no: int, execution_token: str, worker_task_id: str | None, limit: int = 20
+    ): ...
+
+    @abstractmethod
+    async def active_attempts(self, attempt_ids: list[int], execution_token: str): ...
+
+    @abstractmethod
+    async def update_checkpoints(self, updates: dict[int, str], *, execution_token: str) -> bool: ...
+
+    @abstractmethod
+    async def finish_attempts(self, results: list[dict], *, execution_token: str) -> bool: ...
+
+    @abstractmethod
     async def claim_next_unit(
         self,
         *,
@@ -210,8 +224,23 @@ class KnowledgeMigrationRepository(ABC):
         statuses: set[str],
         *,
         older_than: datetime,
+        now: datetime,
         limit: int,
     ) -> list[KnowledgeMigrationBatch]: ...
+
+    @abstractmethod
+    async def claim_reconcile_batch(
+        self,
+        batch_id: int,
+        *,
+        expected_status: str,
+        expected_round_no: int,
+        older_than: datetime,
+        now: datetime,
+        max_recoveries: int,
+    ) -> KnowledgeMigrationBatch | None:
+        """原子领取恢复预算; 超限时终止批次, 不返回待投递对象。"""
+        ...
 
     @abstractmethod
     async def recover_stale_running_batch(

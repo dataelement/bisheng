@@ -8,6 +8,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.core.context.tenant import strict_tenant_filter
+from bisheng.database.models.department import UserDepartment
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
@@ -22,6 +23,17 @@ from bisheng.knowledge.domain.services.portal_recommendation_projection_service 
 class PortalRecommendationSourceRepositoryImpl(PortalRecommendationSourceRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def primary_department_user_ids(self, department_ids: Sequence[int]) -> list[int]:
+        ids = sorted(set(int(value) for value in department_ids))
+        users: set[int] = set()
+        for start in range(0, len(ids), 500):
+            result = await self.session.execute(select(UserDepartment.user_id).where(
+                col(UserDepartment.department_id).in_(ids[start:start + 500]),
+                UserDepartment.is_primary == 1,
+            ).distinct())
+            users.update(int(value) for value in result.scalars())
+        return sorted(users)
 
     @staticmethod
     def _to_source(row) -> PortalRecommendationSourceFile:

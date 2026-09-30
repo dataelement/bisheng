@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlmodel import col, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
+from bisheng.knowledge.domain.contracts.fulltext_reconcile import ReconcileSourceRelationError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
     KnowledgeFulltextAggregateType,
@@ -148,7 +149,7 @@ class KnowledgeFulltextReconcileRepository:
         old_outbox = (await self.outboxes([file_id], lock=True)).get(file_id)
         old_repair = dict((old_outbox.payload_snapshot or {}).get("fulltext_auto_repair") or {}) if old_outbox else {}
         if old_repair.get("fingerprint") == fingerprint and old_repair.get("coordinator") != "daily_reconcile":
-            if old_repair.get("state") in {"exhausted", "completed", "failed"}:
+            if old_repair.get("state") in {"exhausted", "completed", "failed", "superseded"}:
                 return "repair_exhausted_existing"
             if old_repair.get("state") in {"requested", "processing"}:
                 return "repair_pending_existing"
@@ -191,11 +192,23 @@ class KnowledgeFulltextReconcileRepository:
             .all()
         )
         ticket = await self.session.get(FulltextReconcileIssue, ("repair", file_id))
-        if not rows or ticket is None or ticket.task_id != task_id or ticket.fingerprint != fingerprint:
+        if ticket is None or ticket.task_id != task_id or ticket.fingerprint != fingerprint:
+            return None
+        if not rows:
+            ticket.status = "exhausted"
+            self.session.add(ticket)
+            await self.session.flush()
             return None
         file = rows[0]
         source = await self.source.get_auto_repair_source(file_id)
-        current = await KnowledgeFulltextSourceRepositoryImpl(self.session).get_current_snapshot(file_id)
+        try:
+            current = await KnowledgeFulltextSourceRepositoryImpl(self.session).get_current_snapshot(file_id)
+        except ReconcileSourceRelationError as exc:
+            await self.state.record_source_failures({file_id: exc}, now)
+            ticket.status = "exhausted"
+            self.session.add(ticket)
+            await self.session.flush()
+            return None
         valid = (
             file.deleted_at is None
             and source is not None
@@ -224,8 +237,11 @@ class KnowledgeFulltextReconcileRepository:
         return ticket.reason
 
     async def finish_repair(
-        self, file_id: int, fingerprint: str, task_id: str, kind: str, execution_ok: bool, now: datetime
+        self, file_id: int, fingerprint: str, task_id: str, kind: str, execution_ok: bool | None, now: datetime
     ) -> None:
+        if kind == "projection" and execution_ok is None:
+            await self.state.finish_repair(file_id, fingerprint, task_id, None, now)
+            return
         files = (await self.source._execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))).scalars().all()
         success = bool(execution_ok and files and files[0].status == 2 and files[0].deleted_at is None)
         if kind == "projection":

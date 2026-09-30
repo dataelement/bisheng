@@ -32,6 +32,8 @@ class KnowledgeFulltextDocumentService:
         status = str(snapshot.status).upper()
         if snapshot.file_type.upper() != "FILE" or snapshot.deleted_at is not None:
             return KnowledgeFulltextProjectionAction.DELETE
+        if snapshot.logical_document_id is not None and snapshot.entry_status in {"deleting", "invalid"}:
+            return KnowledgeFulltextProjectionAction.DELETE
         if status in cls.TRANSIENT_STATUSES:
             return KnowledgeFulltextProjectionAction.KEEP
         if status not in cls.SUCCESS_STATUSES:

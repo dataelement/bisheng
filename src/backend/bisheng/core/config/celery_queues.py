@@ -16,14 +16,10 @@ KNOWLEDGE_PARSE_TASKS = frozenset(
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
         "bisheng.worker.knowledge.fulltext_index.repair_source",
         "bisheng.worker.knowledge.fulltext_reconcile.reparse_file",
+        "bisheng.worker.knowledge.document_projection.rebuild_document_content",
     }
 )
-KNOWLEDGE_PARSE_COMPAT_TASKS = frozenset(
-    {
-        "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
-    }
-)
-KNOWLEDGE_PARSE_ROUTED_TASKS = KNOWLEDGE_PARSE_TASKS | KNOWLEDGE_PARSE_COMPAT_TASKS
+KNOWLEDGE_PARSE_ROUTED_TASKS = KNOWLEDGE_PARSE_TASKS
 PDF_ARTIFACT_TASK = "bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery"
 POINTS_AWARD_TASK = "bisheng.worker.points.tasks.process_points_award_event"
 

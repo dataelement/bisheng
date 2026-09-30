@@ -470,6 +470,8 @@ class PointSyncOutbox(SQLModelSerializable, table=True):
         sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
     log_id: int = Field(sa_column=Column(BigInteger, nullable=False, comment="关联 user_point_log.id"))
+    lease_owner: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    lease_until: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     payload: dict = Field(
         default_factory=dict,
         sa_column=Column(JsonType, nullable=False, comment="同步载荷 JSON"),

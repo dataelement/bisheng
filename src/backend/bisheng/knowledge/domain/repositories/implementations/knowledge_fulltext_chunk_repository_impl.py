@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from elasticsearch import AsyncElasticsearch
+from collections import defaultdict
 
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_chunk_repository import (
     KnowledgeFulltextChunkRepository,
@@ -21,6 +22,71 @@ class KnowledgeFulltextChunkRepositoryImpl(KnowledgeFulltextChunkRepository):
             raise ValueError("page_size must be between 1 and 2000")
         self.client = client
         self.page_size = page_size
+
+    @staticmethod
+    def _query(source):
+        if not source.shared:
+            return {"term": {"metadata.document_id": source.file_id}}
+        return {"bool": {"filter": [{"term": {f"metadata.{key}": value}} for key, value in {
+            "tenant_id": source.tenant_id, "canonical_document_id": source.canonical_document_id,
+            "canonical_version_id": source.canonical_version_id, "content_generation": source.content_generation,
+            "knowledge_ids": source.knowledge_id,
+        }.items()]}}
+
+    async def list_many(self, sources: list[KnowledgeFulltextChunkSource]) -> dict[int, list[KnowledgeFulltextChunk] | Exception]:
+        groups = defaultdict(list)
+        for source in sources:
+            groups[source.index_name].append(source)
+        results = {source.file_id: [] for source in sources}
+        for index, group in groups.items():
+            pit_id = None
+            try:
+                response = await self.client.open_point_in_time(index=index, keep_alive=self.PIT_KEEP_ALIVE)
+                pit_id = response.get("id")
+                if not pit_id:
+                    raise ValueError("RAG chunk point in time has no id")
+                after = None
+                # 同索引一次读取多文档; 持续分页直到空页, 不截断大文档。
+                while True:
+                    kwargs = dict(pit={"id": pit_id, "keep_alive": self.PIT_KEEP_ALIVE},
+                        query={"bool": {"should": [self._query(source) for source in group], "minimum_should_match": 1}},
+                        sort=[{"_shard_doc": "asc"}], size=self.page_size,
+                        source=["text", "metadata"])
+                    if after is not None:
+                        kwargs["search_after"] = after
+                    response = await self.client.search(**kwargs)
+                    pit_id = response.get("pit_id") or pit_id
+                    if response.get("timed_out") or response.get("_shards", {}).get("failed", 0):
+                        raise RuntimeError("RAG chunk batch query incomplete")
+                    hits = response.get("hits", {}).get("hits", [])
+                    if not hits:
+                        break
+                    for hit in hits:
+                        content = hit.get("_source", {})
+                        metadata = content.get("metadata", {})
+                        for source in group:
+                            if source.shared:
+                                match = all(metadata.get(key) == value for key, value in {
+                                    "tenant_id": source.tenant_id, "canonical_document_id": source.canonical_document_id,
+                                    "canonical_version_id": source.canonical_version_id, "content_generation": source.content_generation,
+                                }.items()) and source.knowledge_id in (metadata.get("knowledge_ids") or [])
+                            else:
+                                match = str(metadata.get("document_id")) == str(source.file_id)
+                            if match:
+                                results[source.file_id].append(KnowledgeFulltextChunk(
+                                    es_id=str(hit["_id"]), document_id=source.file_id, knowledge_id=source.knowledge_id,
+                                    chunk_index=int(metadata["chunk_index"]), text=str(content.get("text", "")),
+                                ))
+                    next_after = hits[-1].get("sort")
+                    if not isinstance(next_after, list) or next_after == after:
+                        raise ValueError("RAG chunk batch pagination did not advance")
+                    after = next_after
+            except Exception as exc:
+                results.update({source.file_id: exc for source in group})
+            finally:
+                if pit_id:
+                    await self.client.close_point_in_time(id=pit_id)
+        return results
 
     async def list_all(
         self,

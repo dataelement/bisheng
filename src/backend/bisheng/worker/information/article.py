@@ -1,3 +1,4 @@
+import asyncio
 from bisheng.worker._asyncio_utils import run_async_task
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -385,7 +386,11 @@ async def _dispatch_all(
     async def _one(config: ChannelKnowledgeSync, req: AddArticlesToKnowledgeSpaceRequest):
         try:
             await _async_add_articles_to_knowledge(req, int(config.user_id))
-            ChannelKnowledgeSyncDao.touch_update_time(config.id)
+            from bisheng.core.database import get_async_db_session
+            from bisheng.channel.domain.repositories.implementations.channel_knowledge_sync_repository_impl import ChannelKnowledgeSyncRepositoryImpl
+            async with get_async_db_session() as session:
+                await ChannelKnowledgeSyncRepositoryImpl(session).touch_update_time(config.id, datetime.now())
+                await session.commit()
             logger.info(
                 f"Synced {len(req.article_ids)} articles from channel "
                 f"{config.channel_id} → knowledge_space {config.knowledge_space_id} "

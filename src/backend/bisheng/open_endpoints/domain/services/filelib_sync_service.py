@@ -547,6 +547,11 @@ class FilelibSyncService:
                 tenant_id=tenant_id,
             )
             if not matches:
+                matches = await self.repository.find_users_by_external_code(
+                    external_id,
+                    tenant_id=tenant_id,
+                )
+            if not matches:
                 raise FilelibSyncNotFoundError(msg="responsible person does not exist")
             if len(matches) != 1:
                 raise FilelibSyncInvalidParamsError(msg="responsible person is ambiguous")
@@ -554,7 +559,7 @@ class FilelibSyncService:
             return (
                 int(responsible_user.user_id),
                 str(responsible_user.user_name or ""),
-                external_id,
+                self._normalize_user_external_id(responsible_user) or external_id,
             )
 
         if int(self.login_user.user_id) > 0:

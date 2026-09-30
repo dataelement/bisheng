@@ -49,7 +49,7 @@ async def test_execute_uses_file_subcategory(monkeypatch, subcategory, matched):
     from bisheng.knowledge.domain import constants
 
     monkeypatch.setattr(KnowledgeFileDao, "query_by_id", AsyncMock(return_value=SimpleNamespace(
-        knowledge_id=10, split_rule=None, file_subcategory_code=subcategory,
+        knowledge_id=10, split_rule=None, file_subcategory_code=subcategory, tenant_id=1, deleted_at=None, status=2,
     )))
     monkeypatch.setattr(constants, "get_file_category_code_from_split_rule", lambda _: "POL")
     rule = AutoPublishConfigService._dict_to_rule(dict(
@@ -57,10 +57,16 @@ async def test_execute_uses_file_subcategory(monkeypatch, subcategory, matched):
         subcategory_codes=["POL-A"],
     ))
     monkeypatch.setattr(AutoPublishConfigService, "get_enabled_rules", AsyncMock(return_value=[rule]))
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao, KnowledgeSpaceLevelEnum
+    monkeypatch.setattr(KnowledgeSpaceScopeDao, "aget_by_space_id", AsyncMock(return_value=SimpleNamespace(level=KnowledgeSpaceLevelEnum.DEPARTMENT)))
     resolver = AsyncMock(return_value=None)
     monkeypatch.setattr(AutoPublishTargetResolver, "resolve_target_space_id", resolver)
-    result = await AutoPublishService.execute(file_id=7, tenant_id=1)
-    assert result.skip_reason == ("target space not resolved" if matched else "no matching rule")
+    if matched:
+        with pytest.raises(RuntimeError, match="auto_publish_target_space_not_resolved"):
+            await AutoPublishService.execute(file_id=7, tenant_id=1)
+    else:
+        result = await AutoPublishService.execute(file_id=7, tenant_id=1)
+        assert result.skip_reason == "no matching rule"
     assert resolver.await_count == int(matched)
 
 
