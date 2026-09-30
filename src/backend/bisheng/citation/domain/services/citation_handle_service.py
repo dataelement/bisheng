@@ -188,8 +188,9 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
 
     Redis is the allocator; ``scope`` mirrors the table in-process
     (``scope.handles`` handle→key, ``scope.key_to_handle``, ``scope.entries``).
-    Any Redis failure returns an EMPTY mapping so the caller keeps the raw key
-    contract for this batch (AC-17) — never partial numbering.
+    Any Redis failure returns an EMPTY mapping — never partial numbering. The
+    task mode then keeps the raw-key contract for the batch (F069 AC-17); the
+    daily chat shows no source id at all (F072 AC-17).
     """
     if not items or not getattr(scope, "enabled", True):
         return {}
@@ -217,8 +218,11 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
                     handle = _decode(existing)
             if handle is None:
                 number = await redis_client.ahincrby(name, "next", 1)
-                if number == 1:
-                    # table just came into existence: pin the contract this session runs under
+                if number == 1 and getattr(scope, "pins_contract", True):
+                    # table just came into existence: pin the task-mode contract this
+                    # session runs under. The daily chat (F072) shares the table but has
+                    # no switch; it must not pin, or it would override the task-mode
+                    # kill switch for this conversation.
                     await redis_client.ahsetnx(name, "meta:enabled", "1" if scope.enabled else "0")
                 candidate = f"{HANDLE_PREFIX}{number}"
                 if identity:
@@ -267,6 +271,80 @@ async def load_handle_table(session_id: str) -> tuple[dict[str, dict], bool | No
         elif field_name == "meta:enabled":
             enabled = value == "1"
     return entries, enabled
+
+
+# --------------------------------------------------------------------------
+# tool-output rewriting (shared by the task mode and the daily chat)
+# --------------------------------------------------------------------------
+_CHUNK_ID_RE = re.compile(r"<chunk_id>(.*?)</chunk_id>", re.S)
+
+
+def swap_chunk_id_for_handle(chunk: str, handles: dict[str, str]) -> str:
+    """Show the model ``<ref>S3</ref>`` instead of ``<chunk_id>registry-key</chunk_id>``.
+
+    ``format_retrieved_chunk`` is shared platform-wide and stays untouched; the
+    swap happens on its output. Keys without a handle keep their tag.
+    """
+
+    def _repl(match: re.Match[str]) -> str:
+        handle = handles.get(match.group(1).strip())
+        return f"<ref>{handle}</ref>" if handle else match.group(0)
+
+    return _CHUNK_ID_RE.sub(_repl, chunk)
+
+
+def drop_chunk_ids(chunk: str) -> str:
+    """Remove the registry key from a formatted chunk (no handle available)."""
+    return _CHUNK_ID_RE.sub("", chunk)
+
+
+def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], entries: list[dict] | None = None) -> Any:
+    """Show the model ``"ref": "S7"`` instead of the registry key on web results.
+
+    ``annotated`` is the JSON string a web-search tool returns. Results without
+    a handle keep their shape. ``entries`` (the task-mode scope mirror) records
+    the URL the model saw, for the task mode's URL-marker pass.
+    """
+    if not handles or not isinstance(annotated, str):
+        return annotated
+    try:
+        results = json.loads(annotated)
+    except json.JSONDecodeError:
+        return annotated
+    if not isinstance(results, list):
+        return annotated
+    changed = False
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        key = str(result.get("citation_key") or "")
+        handle = handles.get(key)
+        if not handle:
+            continue
+        result["ref"] = handle
+        if entries is not None:
+            remember_web_surface_url(entries, key, str(result.get("url") or result.get("link") or ""))
+        result.pop("citation_key", None)
+        result.pop("itemId", None)
+        changed = True
+    return json.dumps(results, ensure_ascii=False) if changed else annotated
+
+
+def drop_web_citation_keys(annotated: Any) -> Any:
+    """Remove registry keys from web results (no handle available)."""
+    if not isinstance(annotated, str):
+        return annotated
+    try:
+        results = json.loads(annotated)
+    except json.JSONDecodeError:
+        return annotated
+    if not isinstance(results, list):
+        return annotated
+    for result in results:
+        if isinstance(result, dict):
+            result.pop("citation_key", None)
+            result.pop("itemId", None)
+    return json.dumps(results, ensure_ascii=False)
 
 
 # --------------------------------------------------------------------------

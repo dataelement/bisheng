@@ -63,6 +63,8 @@
 | **LicenseInfo**（平台级当前授权状态：每个商业模块一行；无 `tenant_id`；不含密文 / 私钥 / 设备指纹） | **F067-commercial-license-expiry-reminder** | 拥有 `license_info` 的写入语义与聚合读取。`etl` 由 BISHENG 拉 ETL 授权接口后 upsert；`dashboard` 由商业看板服务定期更新对应行；`gateway` 由管理后台读取 Gateway 状态后再交给 BISHENG upsert。不拥有 Gateway / ETL / 看板各自的授权密文与解密 |
 | —（无新增） | F068-nvdb-security-fixes | NVDB 2026-09-02 批次 5 个漏洞的修复：JWT 密钥去代码默认值（未配置时生成一次存 `config` 表，键 `jwt_secret`）、知识空间排序参数白名单、HTML 本地媒体目录围栏、文件下载工具本地路径围栏、创建工作流 / 助手接口校验 `create_app` 菜单权限。复用既有 `Config` 表与 `RoleAccess` WEB_MENU，不新增领域对象、错误码、对外 API 或 Alembic。工作流代码节点沙箱不在本 Feature |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上为灵思任务模式增加会话级来源编号表与完成时审计） | **F069-linsight-citation-handles** | 拥有 Redis `linsight:cite_handles:<session_id>` / `linsight:cite_seen:<svid>` 的写入语义与 `output_result.citation_audit` 字段。不拥有 registry item 生成、`message_citation` 写入（仍经 F047 路径）、resolve 与权限过滤 |
+| —（无新增领域对象；日常模式成为 F069 会话级来源编号表的第二个写入方） | **F072-daily-chat-citation-handles** | 工作台日常模式检索结果改呈现 `[Sn]` 短编号、流式下发前转回私有区标记、零引用不落库、历史回放标记转编号。编号表 `linsight:cite_handles:<session_id>` 的写入语义仍归 F069，本 Feature 只调用其分配接口且**不写** `meta:enabled`。不拥有 registry item 生成、`message_citation` schema、resolve 与权限过滤；不改知识空间 / 频道 / 工作流 / 助手的引用链路与共享的 `citation.yaml`、`format_retrieved_chunk`、`select_registry_items_for_persistence` |
+| `LinsightSessionVersion.api_meta`（增量字段，本体归灵思既有 Feature） | **F073-openapi-task-mode** | 开放 API 发起的任务模式任务的元数据（`channel=open_api_v2`、业务上下文指令、凭据 id、身份模式）；worker 据此无人值守执行（不装配 `ask_user`、技能缺失即失败）。只写本列，不改 `LinsightSessionVersion` 其余字段的写入语义；工作台任务该列为空、行为不变。复用 F053 `SessionSubject` 标记会话归属，不新增表 / 领域对象 / 不变量 |
 
 > ⚠️ **F054 编号冲突未决**：上表两行都占用 F054。`unified-citation-entries` 在 `feat/3.0.0-beta1` 取号，`contextual-department-membership` 在 `feat/3.0.0-beta1-test` 上已从 F053 改号而来，合并后再次撞号。两行都保留，改哪一个由各自 Feature owner 决定。
 >
@@ -147,6 +149,8 @@
 | F067-commercial-license-expiry-reminder | v2.6.0 F037（Gateway 状态接口与 Banner 入口）；ETL4LM 2.1.0-beta1 `GET /api/license_info`；商业看板服务写 `license_info` | 统一到期提醒；推翻 F037「Banner 只直连 Gateway」的展示路径，不改 Gateway 降级拦截范围 |
 | F068-nvdb-security-fixes | 既有 `Config` 表、`RoleAccess` WEB_MENU（`create_app`）、F027 目录 / 搜索排序参数、知识库 HTML 解析管线、`core/cache/utils` 下载工具 | 安全修复；每处只修根因所在层并加一道数据层再校验；不改前端、不加错误码。升级后全员重新登录 |
 | F069-linsight-citation-handles | F047（下游契约全部沿用）；F054（AC-07 / AC-12 导出契约，P2 改为烘焙）；F029 / F041（`view_file` 与 INV-7，本 Feature **不改**） | 上游契约替换型：模型只写 `[Sn]`，写盘边界转回私有区标记；下游零改动。不做自动补引用与事后归因写回；kill switch 可整体回退到 F047 契约 |
+| F072-daily-chat-citation-handles | F069（编号表、转换文法、`assign_handles`）；F047 / F054（私有区标记、`message_citation`、resolve 分态、会话导出剥标 AC-07 / AC-12）；F029 / F041（`view_file` 与 INV-7，本 Feature **不改**） | 上游契约替换型：日常模式模型只写 `[Sn]`，下游零改动；无开关、无过渡期；无新增错误码 / 对外 API / 表 / Alembic / 系统配置项 |
+| F073-openapi-task-mode | F053（密钥管线、`OpenApiPrincipal`、`SessionSubject`、会话附件上传、`/api/v2/workstation/*`）；F063（任务模式输入内容安全）；F048（`knowledge_library` 的 `use`、`knowledge_space` 的可见性、`tool` 的 `use`）；灵思任务模式执行内核（v2.6.0 F035 存量） | 接线型：在 F053 会话接口上点亮「任务 × 异步」，查询 / 下载 / 终止 / 可用配置查询；全部权限在提交时判定，worker 执行期无用户级判定；抽出共享提交核心 `submit_task_turn` 与 `LinsightWorkbenchImpl.terminate`（工作台行为不变）。Alembic 一列 |
 
 ---
 
@@ -170,7 +174,9 @@
 | F029-knowledge-qa-permission-filter（AC-20）· F041（匿名分档） | **F054 覆盖其匿名放行语义**。F029 AC-20 当初有意为分享链接 / 公开流程保留「匿名调用不过滤」，F041 的分档同样在匿名时全放行——这正是本期要堵的越权口子。F054 起：**无已登录用户的调用不再返回知识库与文章来源详情（含 `shared` 档），网页来源仍放行**；已登录用户的 `per_user` / `shared` 两档语义完全不变，INV-7 及其 F041 例外不受影响。F029 AC-20 与 F041 匿名断言的三个既有用例随 F054 T006 一并改写为新预期 |
 | v2.6.0 F037-gateway-license-expiry-reminder | **F067 覆盖其 Banner 数据源与文案合同**。`GET /api/license/status` 与「只拦网关付费接口」的降级范围保持不动；管理后台 Banner 改为先上报 Gateway 状态再读平台聚合接口，文案必须点名授权对象，不再单独按 Gateway `warning/critical` 分色渲染「软件授权」 |
 | v3.0.0-beta1 F054-unified-citation-entries | **F069 P2 修订其 AC-07 / AC-12 导出契约**：任务模式报告导出（Word / PDF / 打包 md / 单文件转换 / 前端另存 md）允许出现可见编号 `[n]` 与文末参考资料段，仍不得出现内部引用键、片段标识与协议标记；会话导出（日常模式）不在 F069 范围、维持剥标 |
+| v3.0.0-beta1 F054-unified-citation-entries（AC-18）· F069 | **F072 修订 F054 AC-18 对日常模式的约束**：日常模式的溯源上游契约改为短编号，零引用不再全量落库（工作流 / 助手 / 知识空间仍受 AC-18 约束）。**F069 编号表改为两模式共写**：日常模式先建表时不钉 `meta:enabled`，任务模式开关语义不变 |
 | 既有工作流「代码节点」 | **代码节点改为默认关闭**（系统配置 `workflow.code_node_enabled`，缺省即关闭）。该节点执行用户填写的 Python，当前版本无执行沙箱，开启后所有能编辑工作流的用户等同于持有服务器命令执行权限，因此在沙箱（F068-code-execution-sandbox）落地前默认不开。门禁位于节点构造处而非运行处——解析代码本身即执行代码。**存量含代码节点的工作流在管理员开启前不可运行**，需在发版说明中明示 |
+| v3.0.0-beta1 F053-openapi-auth-and-identity · 灵思任务模式（v2.6.0 F035） | **F073 修订 F053**：`26017` 含义收窄为「枚举外运行模式」（`run_mode="task"` 合法）；`POST /api/v2/workstation/chat/completions` 改收原始 body 按 `run_mode` 分派（日常分支校验与响应不变，请求体 schema 以 `oneOf` 发布）；`GET /api/v2/workstation/config` 增加 `run_mode` 参数；日常模式「模型不可用」由裸 400 改为 `26066`；`chat:invoke` 在管理界面更名「调用会话与任务」并覆盖任务模式（存量密钥升级后即可发起任务模式，见 PRD §7.1）。**F073 对灵思任务模式**：提交编排抽成共享核心、终止主体下沉为 `LinsightWorkbenchImpl.terminate`，v1 端点判定与响应不变 |
 
 ---
 
@@ -184,7 +190,7 @@
 | —（不新增） | 工作流会话打开时自动重新运行 | F052 复用既有系统配置、工作流状态与重新运行错误响应 |
 | 250 | ReBAC 权限 Catalog、Grant、投影、迁移与完整枚举 | F048；25001～25014，具体语义见 F048 Design §6.3 |
 | —（不新增） | 信息源订阅对账、公共文章同步与知识空间一次投递 | F060 仅调整内部任务与状态，不新增对外 API 或业务错误码 |
-| 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；落码时按 C5 回写 `docs/constitution.md` |
+| 260 | 开放 API 鉴权、身份传递、个人访问令牌、日常模式会话、限流 / 幂等 | F053；26001～26043 分段见 `053-openapi-auth-and-identity/design.md` §6.3（26013 / 26014 已废止不复用）；`26044`（PAT 数据范围受限，403）随 F066 增补（PRD v2.9 附录 C）；`26060`～`26068`（任务模式开放 API，F073；跳过 `3.0-vibe` 已占用的 `26050`～`26052`）；落码时按 C5 回写 `docs/constitution.md` |
 | 270 | 商业授权状态聚合与上报 | F067；实现时按 C5 回写 `docs/constitution.md`；不得占用 11x（灵思）或把 Gateway 11001 当成 BISHENG 模块号 |
 | —（不新增） | NVDB 漏洞修复 | F068-nvdb-security-fixes 复用 403 / 422 与既有 `ValueError` 路径，不占模块号 |
 | 280 | 代码执行沙箱（执行环境可达性、容量、超时、copy-in 超限、代码节点出参序列化、协议不符） | F068-code-execution-sandbox；28001～28006，具体语义见该 Feature Design §4.2。落码时按 C5 回写 `docs/constitution.md`。已按 C5 重新派生占用列表确认 280 空闲；不得占用 11x（灵思）或 150（tool） |
@@ -227,3 +233,5 @@
 | 2026-09-20 | 登记 F069 灵思任务模式引用溯源可靠性（PRD《灵思任务模式引用溯源优化方案》2026-09-20 评审通过，D1～D8）：表 1 标无新领域对象（会话级来源编号表 + `citation_audit` 字段）；表 3 记依赖 F047 / F054 / F029；表 4 记 P2 修订 F054 AC-07 / AC-12 为烘焙措辞；无新增错误码 / 对外 API / 不变量 / Alembic；新增系统开关 `linsight.citation_handles_enabled` | F069、F047、F054 |
 | 2026-09-21 | F069 P0 / P1 已上 release（A/B uncited 44% → 0%）；P2 导出烘焙交付：F054 AC-07 / AC-12 补任务模式报告例外措辞（导出件出现可见编号与参考资料段，来源按导出者 `view_file` 过滤，日常模式会话导出维持剥标）；无新增错误码 / 对外 API / 表 | F069、F054 |
 | 2026-09-22 | 代码节点默认关闭开关（沙箱落地前的过渡措施，对应 GitHub issue #2189）：系统配置新增 `workflow.code_node_enabled`，仅字面量 `true` 视为开启；门禁置于 `CodeNode` 构造处，覆盖正式运行与 `run_once` 调试两条路径；拒绝以 `IgnoreException` 呈现为本次运行的失败原因；`/api/v1/env` 增加 `workflow.code_node_enabled` 供编排页展示禁用提示。表 4 记存量工作流受影响；无新增错误码 / 领域对象 / 表 / Alembic | F068-code-execution-sandbox |
+| 2026-09-30 | 登记 F072 工作台日常模式引用改用短句柄：表 1 标无新领域对象（日常模式为 F069 编号表第二写入方，不写 `meta:enabled`）；表 3 记依赖 F069 / F047 / F054 / F029；表 4 记修订 F054 AC-18（仅日常模式）与 F069 编号表共写；无开关、无新增错误码 / 对外 API / 表 / Alembic | F072、F069、F054 |
+| 2026-09-30 | 登记 F073 任务模式开放 API（PRD《3.0 任务模式开放 API PRD》v1.4、父 PRD v2.11）：表 1 记 `LinsightSessionVersion.api_meta` 增量归 F073；表 3 记依赖 F053 / F063 / F048 / 灵思执行内核；表 4 记修订 F053（`26017` 收窄、提交端点分派、`/config` 增 `run_mode`、日常模式 `26066`、`chat:invoke` 覆盖任务模式）与灵思任务模式（共享提交核心与终止，行为不变）；260 段增补 `26060`～`26068`；Alembic `f073_linsight_api_meta` | F073、F053 |

@@ -799,7 +799,7 @@
       "count": 2
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/components/bs-ui/select/select.tsx": {

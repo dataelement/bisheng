@@ -1067,6 +1067,7 @@ class LinsightWorkflowTask:
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
+        from bisheng.linsight.domain.services.unattended_run import is_unattended_run
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
@@ -1104,8 +1105,12 @@ class LinsightWorkflowTask:
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
         # fresh agent each time. skills_present gates attaching the skills middleware.
+        # F073: an Open API run fails naming the skill instead of running without it.
         skills = await materialize_session_skills(
-            backend, session_model.tenant_id, getattr(session_model, "skills", None)
+            backend,
+            session_model.tenant_id,
+            getattr(session_model, "skills", None),
+            strict=is_unattended_run(session_model),
         )
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)

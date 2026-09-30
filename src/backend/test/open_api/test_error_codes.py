@@ -37,6 +37,15 @@ EXPECTED_CODES = {
     # that declaration derives (``knowledge:read``) also admits six neighbouring
     # routes that would run as the application's owner.
     26052,
+    26060,
+    26061,
+    26062,
+    26063,
+    26064,
+    26065,
+    26066,
+    26067,
+    26068,
 }
 
 

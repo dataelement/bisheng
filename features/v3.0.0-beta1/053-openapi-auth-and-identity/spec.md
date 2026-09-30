@@ -12,7 +12,7 @@
 - 服务账号使用独立 `service_account` 表和 F048 `service_account:{id}` 主体，不创建影子 User/UserTenant。
 - R8/P2（IP 白名单、限流、配额、幂等）移出本期；不预埋运行时代码或字段。
 - 现有分享链接不改；工作流/助手免登录发布使用 `/api/v3` allowlist。
-- 日常模式 v2 复用既有 v1 业务能力；不开放任务模式和异步执行。
+- 日常模式 v2 复用既有 v1 业务能力；日常模式不开放异步执行。任务模式 × 异步由 F073（《3.0 任务模式开放 API PRD》）开放，2026-09-30 起 `26017` 只表示枚举外的运行模式。
 - v2 身份头只接受 `X-On-Behalf-Of` / `X-End-User`；query、JSON、multipart、urlencoded 中的裸 `user_id` 均明确拒绝。v3 不使用这套密钥与身份传递机制，按 AC-R15 忽略调用方凭据和身份参数。
 
 ## 2. 本轮补充验收
