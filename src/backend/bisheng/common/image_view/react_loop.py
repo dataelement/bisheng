@@ -128,6 +128,11 @@ def _strip_picture_citations(text: str, question: str) -> str:
     """Picture answers should not carry retrieval footnotes."""
     if not question_wants_pictures(question):
         return text
+    # F072: the daily chat cites with [Sn] handles, converted to markers after
+    # this point — strip them here too or a picture answer grows badges.
+    from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
+
+    text = strip_citation_handles(text)
     if "\ue200" not in text and "ue200" not in text.lower():
         return text
     text = _CITE_SPAN.sub("", text)

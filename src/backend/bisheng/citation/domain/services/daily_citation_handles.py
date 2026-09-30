@@ -49,7 +49,7 @@ STREAM_LEGACY_HOLD_LIMIT = 256
 
 # A (possibly unfinished) sequence of handle groups at the end of the text:
 # "[", "[S", "[S1", "[S12, S", "[S3] ", "[S3][S7". Fullmatch only.
-_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:S\d{0,4}(?:\s*[,，、]\s*(?:S\d{0,4})?)*)?\s*\]?\s*)+")
+_OPEN_RUN_TAIL_RE = re.compile(r"(?:\[\s*(?:S\d{0,4}(?:\s*[,，、]\s*(?:S\d{0,4})?)*)?\s*\]?\s*)+")  # noqa: RUF001 - full-width comma is part of the grammar
 # The beginning of an escaped marker ("" written as six characters).
 _ESCAPE_TAIL_RE = re.compile(r"\\{1,4}(?:u(?:e(?:2(?:0)?)?)?)?$", re.IGNORECASE)
 _FENCE_RE = re.compile(r"^[ \t]*(```|~~~)", re.M)
@@ -291,6 +291,16 @@ _HEADING_RE = re.compile(r"^[ \t]*(#{1,6})[ \t]+(.+?)[ \t]*$", re.M)
 _LEGACY_HINT_RE = re.compile(r"<chunk_id>|citation_key|\\ue20[012]|[]", re.I)
 
 
+# Headings of the handle-rules section: the runtime rules (zh) plus the
+# translated copies in the shipped en / ja default templates. A prompt carrying
+# any of them already teaches handles and is left alone.
+DAILY_RULES_HEADERS = (HANDLE_RULES_HEADER, "# Source Numbers", "# ソース番号")
+
+
+def has_handle_rules(prompt: str | None) -> bool:
+    return bool(prompt) and any(header in prompt for header in DAILY_RULES_HEADERS)
+
+
 def load_daily_handle_rules() -> str:
     if "rules" not in _DAILY_RULES_CACHE:
         try:
@@ -313,7 +323,7 @@ def replace_legacy_citation_rules(prompt: str | None) -> str:
     appended and win by their own "this section prevails" sentence.
     """
     prompt = prompt or ""
-    if HANDLE_RULES_HEADER in prompt:
+    if has_handle_rules(prompt):
         return prompt
     rules = load_daily_handle_rules()
     match = _LEGACY_HEADING_RE.search(prompt)
@@ -336,7 +346,7 @@ def replace_legacy_citation_rules(prompt: str | None) -> str:
 def ensure_daily_handle_rules(prompt: str | None) -> str:
     """Append the daily rules once (idempotent on the shared header)."""
     prompt = prompt or ""
-    if HANDLE_RULES_HEADER in prompt:
+    if has_handle_rules(prompt):
         return prompt
     base = prompt.rstrip()
     rules = load_daily_handle_rules()

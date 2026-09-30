@@ -444,3 +444,16 @@ def test_wrapper_bind_tools_returns_self():
     wrapper = VisionToolBindWrapper(_SkipGraphLLM(), ImageRegistry(), [])
     assert isinstance(wrapper, Runnable)
     assert wrapper.bind_tools([]) is wrapper
+
+
+def test_picture_answer_drops_short_handles_too():
+    """F072 AC-19: daily chat cites with [Sn]; a picture answer must not keep them."""
+    text = "有一张冰箱结构图。[S3][S7]\n![](/bisheng/knowledge/images/1/12/image1.png)"
+    cleaned = _strip_picture_citations(text, "展示图片：冰箱结构")
+    assert "[S3]" not in cleaned and "[S7]" not in cleaned
+    assert "![](/bisheng/knowledge/images/1/12/image1.png)" in cleaned
+
+
+def test_non_picture_answer_keeps_short_handles():
+    text = "冰箱容量为 500L。[S3]"
+    assert _strip_picture_citations(text, "冰箱容量多大？") == text

@@ -22,6 +22,7 @@ from bisheng.api.services import knowledge_imp
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.citation.domain.services.citation_handle_service import drop_web_citation_keys
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
@@ -30,12 +31,14 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    ensure_citation_rules,
     save_message_citations,
     save_message_citations_sync,
-    select_registry_items_for_persistence,
-    strip_unregistered_citation_markers,
 )
+from bisheng.citation.domain.services.daily_citation_handles import (
+    HandleStreamConverter,
+    replace_legacy_citation_rules,
+)
+from bisheng.citation.domain.services.daily_citation_scope import DailyCitationScope
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -95,6 +98,14 @@ from .content_safety import (
     build_blocked_answer_row,
     iter_blocked_sse,
     workbench_tenant_id,
+)
+from .daily_citation import (
+    handles_for_chunks,
+    handles_for_web_results,
+    log_citation_audit,
+    select_cited_items,
+    select_cited_items_sync,
+    strip_ids_for_sync_path,
 )
 from .workstation_service import WorkStationService
 
@@ -248,6 +259,8 @@ class DailyChatCitationToolWrapper(BaseTool):
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
     kb_name_by_id: dict[str, str] = PydanticField(default_factory=dict, exclude=True)
     image_registry: Any = PydanticField(default=None, exclude=True)
+    # F072: session handle table mirror; results show [Sn] handles, not registry keys
+    citation_scope: Any = PydanticField(default=None, exclude=True)
 
     @classmethod
     def wrap(
@@ -255,6 +268,7 @@ class DailyChatCitationToolWrapper(BaseTool):
         tool: BaseTool,
         citation_collector: CitationRegistryCollector,
         image_registry: ImageRegistry | None = None,
+        citation_scope: DailyCitationScope | None = None,
     ) -> BaseTool:
         return cls(
             name=tool.name,
@@ -263,6 +277,7 @@ class DailyChatCitationToolWrapper(BaseTool):
             tool=tool,
             citation_collector=citation_collector,
             image_registry=image_registry,
+            citation_scope=citation_scope,
         )
 
     def _is_web_search_tool(self) -> bool:
@@ -282,7 +297,9 @@ class DailyChatCitationToolWrapper(BaseTool):
             return output
         results = annotate_web_results_with_citations(results)
         self._extend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        dumped = json.dumps(results, ensure_ascii=False)
+        # Sync calls cannot await the handle allocator: show no source id.
+        return drop_web_citation_keys(dumped) if self.citation_scope is not None else dumped
 
     async def _aappend_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -294,30 +311,37 @@ class DailyChatCitationToolWrapper(BaseTool):
         if not isinstance(results, list):
             return output
         results = annotate_web_results_with_citations(results)
-        await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
-        return json.dumps(results, ensure_ascii=False)
+        items = collect_web_citation_registry_items(results)
+        await self._aextend_citation_registry_items(items)
+        return await handles_for_web_results(self.citation_scope, items, json.dumps(results, ensure_ascii=False))
 
     def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        return self._dump_knowledge_chunks(source_documents)
+        chunks = strip_ids_for_sync_path(self.citation_scope, self._format_knowledge_chunks(source_documents))
+        return self._dump_knowledge_chunks(chunks)
 
     async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
-        await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        return self._dump_knowledge_chunks(source_documents)
+        items = collect_rag_citation_registry_items(source_documents)
+        await self._aextend_citation_registry_items(items)
+        chunks = await handles_for_chunks(self.citation_scope, items, self._format_knowledge_chunks(source_documents))
+        return self._dump_knowledge_chunks(chunks)
 
-    def _dump_knowledge_chunks(self, source_documents: list) -> str:
-        results = []
+    def _format_knowledge_chunks(self, source_documents: list) -> list[str]:
+        chunks = []
         for doc in source_documents:
             meta = getattr(doc, "metadata", {}) or {}
             kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
             kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
             kb_name = self.kb_name_by_id.get(kb_id, "")
-            chunk = knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name)
-            results.append(_annotate_retrieved_chunk(chunk, self.image_registry))
+            chunks.append(knowledge_imp.KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
+        return chunks
+
+    def _dump_knowledge_chunks(self, chunks: list[str]) -> str:
+        results = [_annotate_retrieved_chunk(chunk, self.image_registry) for chunk in chunks]
         return json.dumps(results, ensure_ascii=False)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
@@ -360,9 +384,12 @@ def _wrap_daily_chat_citation_tool(
     tool: BaseTool,
     citation_collector: CitationRegistryCollector,
     image_registry: ImageRegistry | None = None,
+    citation_scope: DailyCitationScope | None = None,
 ) -> BaseTool:
     if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
-        return DailyChatCitationToolWrapper.wrap(tool, citation_collector, image_registry=image_registry)
+        return DailyChatCitationToolWrapper.wrap(
+            tool, citation_collector, image_registry=image_registry, citation_scope=citation_scope
+        )
     return tool
 
 
@@ -681,6 +708,7 @@ async def _build_knowledge_search_tool(
     max_token: int,
     citation_collector: CitationRegistryCollector,
     image_registry: ImageRegistry | None = None,
+    citation_scope: DailyCitationScope | None = None,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -982,7 +1010,9 @@ async def _build_knowledge_search_tool(
         citation_items = collect_rag_citation_registry_items(docs)
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
-        results = [_annotate_retrieved_chunk(_format_chunk(doc), image_registry) for doc in docs]
+        # F072: the model sees <ref>S3</ref>, never the registry key.
+        chunks = await handles_for_chunks(citation_scope, citation_items, [_format_chunk(doc) for doc in docs])
+        results = [_annotate_retrieved_chunk(chunk, image_registry) for chunk in chunks]
 
         # Surface per-KB failures as synthetic chunks carrying
         # <retrieval_error>. The frontend detects these and renders the KB
@@ -1118,6 +1148,7 @@ async def _prepare_tools(
     citation_collector: CitationRegistryCollector,
     knowledge_bases_info: list[dict] | None = None,
     image_registry: ImageRegistry | None = None,
+    citation_scope: DailyCitationScope | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
     """Assemble the BaseTool list passed to LangGraph create_react_agent.
 
@@ -1157,7 +1188,11 @@ async def _prepare_tools(
                 logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
-            tools.append(_wrap_daily_chat_citation_tool(t, citation_collector, image_registry=image_registry))
+            tools.append(
+                _wrap_daily_chat_citation_tool(
+                    t, citation_collector, image_registry=image_registry, citation_scope=citation_scope
+                )
+            )
         elif err:
             failures.append(
                 {
@@ -1177,6 +1212,7 @@ async def _prepare_tools(
             max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
             citation_collector=citation_collector,
             image_registry=image_registry,
+            citation_scope=citation_scope,
         )
         if kb_tool is not None:
             tools.append(kb_tool)
@@ -1565,6 +1601,10 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         citation_collector = CitationRegistryCollector()
+        # F072: the model cites with [Sn] handles from the session table shared
+        # with the task mode; answer text is converted before it is stored or sent.
+        citation_scope = DailyCitationScope(conversation_id)
+        stream_converter = HandleStreamConverter(citation_scope.handles)
         image_registry = ImageRegistry()
         from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
         from bisheng.common.image_view.loop import image_view_configured, resolve_image_view_llm
@@ -1654,6 +1694,16 @@ async def _agent_stream_chat_completion(
                 events.append({"type": "text", "content": extra.lstrip()})
             return extra
 
+        def record_answer_text(text: str) -> str:
+            """Append converted answer text to the message and return its SSE delta."""
+            nonlocal final_msg
+            final_msg += text
+            if events and events[-1].get("type") == "text":
+                events[-1]["content"] = events[-1].get("content", "") + text
+            else:
+                events.append({"type": "text", "content": text})
+            return _sse_resp("agent_answer", "stream", {"msg": text}, conversation_id)
+
         def build_answer_row(db_content: dict) -> ChatMessage:
             return ChatMessage(
                 user_id=conversation.user_id,
@@ -1718,21 +1768,21 @@ async def _agent_stream_chat_completion(
             persisted = True
             error_flag = True
             error_msg = error_msg or reason
+            pending = stream_converter.flush()
+            if pending:
+                record_answer_text(pending)
             finalise_dangling_events()
             splice_viewed_image_markdown()
             try:
-                citation_items = select_registry_items_for_persistence(
-                    citation_collector.list_items(),
-                    final_msg,
+                citation_items = select_cited_items_sync(citation_collector.list_items(), final_msg)
+                log_citation_audit(
+                    chat_id=conversation_id,
+                    model=data.model,
+                    scope=citation_scope,
+                    stats=stream_converter.stats,
+                    cited=citation_items,
                 )
-                resp = ChatMessageDao.insert_one(
-                    build_answer_row(
-                        {
-                            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
-                            "events": events,
-                        }
-                    )
-                )
+                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
                 save_message_citations_sync(
                     message_id=resp.id,
                     items=citation_items,
@@ -1763,6 +1813,9 @@ async def _agent_stream_chat_completion(
             knowledge_bases_info = await _resolve_user_kb_selection(data)
 
             # ---- Step 2: assemble LangChain tools ----
+            # Hydrate the handle table first: history replay and cross-turn
+            # citations both need the numbers earlier turns handed out.
+            await citation_scope.load()
             tool_payloads = [t.model_dump() for t in (data.tools or [])]
             langchain_tools, tool_failures = await _prepare_tools(
                 tool_payloads=tool_payloads,
@@ -1771,6 +1824,7 @@ async def _agent_stream_chat_completion(
                 citation_collector=citation_collector,
                 knowledge_bases_info=knowledge_bases_info,
                 image_registry=image_registry if visual_enabled else None,
+                citation_scope=citation_scope,
             )
 
             # Surface init failures as synthetic tool_call events so the user
@@ -1836,6 +1890,7 @@ async def _agent_stream_chat_completion(
                     conversation_id,
                     size=10,
                     max_tokens=history_max_tokens,
+                    citation_key_to_handle=citation_scope.key_to_handle,
                 )
             )[:-1]
 
@@ -1855,10 +1910,10 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # Shared citation backstop: the default template already carries the
-            # rules (no-op there), but an admin may replace it with a prompt that
-            # does not — or leave it empty — and citations must keep working.
-            sys_prompt = ensure_citation_rules(sys_prompt)
+            # F072: the saved prompt may still teach the verbatim-id format
+            # (tenants saved the old default); swap that section for the handle
+            # rules at run time, or append them when the prompt has none.
+            sys_prompt = replace_legacy_citation_rules(sys_prompt)
             llm_messages = [*history, HumanMessage(content=content_payload)]
 
             logger.info(
@@ -1999,17 +2054,10 @@ async def _agent_stream_chat_completion(
                                     {"duration_ms": d},
                                     conversation_id,
                                 )
-                            final_msg += text
-                            if events and events[-1].get("type") == "text":
-                                events[-1]["content"] = events[-1].get("content", "") + text
-                            else:
-                                events.append({"type": "text", "content": text})
-                            yield _sse_resp(
-                                "agent_answer",
-                                "stream",
-                                {"msg": text},
-                                conversation_id,
-                            )
+                            text = stream_converter.feed(text)
+                            if not text:
+                                continue
+                            yield record_answer_text(text)
                             if scanner:
                                 hit = scanner.feed(text)
                                 if hit:
@@ -2027,6 +2075,23 @@ async def _agent_stream_chat_completion(
                         if _is_nested_tool_event(ev, visible_tool_run_ids):
                             ignored_tool_run_ids.add(tc_id)
                             continue
+
+                        # A text run ends here: release whatever the handle
+                        # converter was still holding back.
+                        pending = stream_converter.flush()
+                        if pending:
+                            yield record_answer_text(pending)
+                            if scanner:
+                                hit = scanner.feed(pending)
+                                if hit:
+                                    logger.warning(
+                                        "workbench content safety hit tenant_id={} mode=output chat_id={}",
+                                        tenant_id,
+                                        conversation_id,
+                                    )
+                                    async for chunk in persist_safety_replacement(hit.auto_reply or ""):
+                                        yield chunk
+                                    return
 
                         # Close any in-flight thinking before the tool call
                         # so each ReAct round gets its own collapsible block.
@@ -2179,17 +2244,10 @@ async def _agent_stream_chat_completion(
                                 {"duration_ms": d},
                                 conversation_id,
                             )
-                        final_msg += text
-                        if events and events[-1].get("type") == "text":
-                            events[-1]["content"] = events[-1].get("content", "") + text
-                        else:
-                            events.append({"type": "text", "content": text})
-                        yield _sse_resp(
-                            "agent_answer",
-                            "stream",
-                            {"msg": text},
-                            conversation_id,
-                        )
+                        text = stream_converter.feed(text)
+                        if not text:
+                            continue
+                        yield record_answer_text(text)
                         if scanner:
                             hit = scanner.feed(text)
                             if hit:
@@ -2236,6 +2294,22 @@ async def _agent_stream_chat_completion(
             persist_interrupted_turn("stream interrupted")
             raise
 
+        # Release whatever the handle converter was still holding back.
+        pending = stream_converter.flush()
+        if pending:
+            yield record_answer_text(pending)
+            if scanner:
+                hit = scanner.feed(pending)
+                if hit:
+                    logger.warning(
+                        "workbench content safety hit tenant_id={} mode=output chat_id={}",
+                        tenant_id,
+                        conversation_id,
+                    )
+                    async for chunk in persist_safety_replacement(hit.auto_reply or ""):
+                        yield chunk
+                    return
+
         # Finalise any dangling thinking / tool events (e.g. stream interrupted
         # mid-reasoning or mid-tool).
         finalise_dangling_events()
@@ -2262,17 +2336,19 @@ async def _agent_stream_chat_completion(
                 return
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        # Citations are resolved BEFORE the insert so a marker the registry
-        # cannot back never reaches storage: an invented id would still render
-        # as a footnote, and its detail lookup would 404 as "溯源详情加载失败".
-        citation_items = select_registry_items_for_persistence(
-            citation_collector.list_items(),
-            final_msg,
+        # F072: every marker in the text was produced by the handle converter
+        # from the session table (model-written ids were dropped while
+        # streaming), so there is nothing to scrub. Bind exactly the sources
+        # the answer cites, earlier turns included; none when it cites none.
+        citation_items = await select_cited_items(citation_collector.list_items(), final_msg)
+        log_citation_audit(
+            chat_id=conversation_id,
+            model=data.model,
+            scope=citation_scope,
+            stats=stream_converter.stats,
+            cited=citation_items,
         )
-        db_content: dict = {
-            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
-            "events": events,
-        }
+        db_content: dict = {"msg": final_msg, "events": events}
 
         persisted = True
         resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))

@@ -503,3 +503,11 @@ def test_build_turns_agent_answer_strips_citations_from_events_text():
     assert '' not in turns[0].answers[0]
     assert 'knowledgesearch' not in turns[0].answers[0]
     assert turns[0].answers[0] == '答  完'
+
+
+def test_strip_citations_drops_unresolved_short_handles():
+    """F072 AC-15: an [Sn] the session table never knew does not reach the export."""
+    from bisheng.workstation.domain.services.conversation_export_service import ConversationExportService
+
+    text = "结论一。knowledgesearch_ab12cd34:0结论二。[S99] 编号 [3] 保留"
+    assert ConversationExportService._strip_citations(text) == "结论一。结论二。 编号 [3] 保留"

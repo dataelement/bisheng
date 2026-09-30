@@ -79,7 +79,7 @@
   1. 找 `# 引用规则` / `# Citation Rules` / `# 引用ルール` 这一行（整行匹配，前后可有空白）。
   2. 段落结束位置 = 之后第一个"不属于旧规则的小节"或下一个一级标题。旧规则的小节标题是已知集合（zh `来源 ID / 标记格式 / 使用要求`，en `Source ID / Format / Requirements`，ja `ソースID / フォーマット / 要件`）；`## 其他信息 / ## Other / ## その他` 不在集合里，因为它装着 `当前时间：{cur_date}`，必须保留（见 §5 #2）。
   3. 用 `daily_handle_rules` 替换这一段；没找到标题但正文里有 `<chunk_id>` 或私有区字符时（管理员改写过），不动原文、直接在末尾追加新规则，靠"以本段为准"覆盖；两者都没有则追加。
-- **默认模板**（spec AC-04）：三语 `chatConfig.systemPrompt2` 的 `# 引用规则` 段改为新规则文本（与 yaml 同义，按语言翻译），`## 其他信息` 保留。已保存旧模板的存量租户靠运行时替换生效，不做数据迁移。
+- **默认模板**（spec AC-04）：三语 `chatConfig.systemPrompt2` 的 `# 引用规则` 段改为新规则文本（与 yaml 同义，按语言翻译，标题分别为 `# 来源编号` / `# Source Numbers` / `# ソース番号`），`## 其他信息` 保留。运行时判定"已有句柄规则"识别这三个标题，否则 en / ja 模板会被再追加一份中文规则。已保存旧模板的存量租户靠运行时替换生效，不做数据迁移。
 - **何时该重新考虑**：出现第四种语言的默认模板，或管理员普遍改写引用段导致替换命中率低时，改为"去掉提示词中所有引用相关段落再追加"。
 
 ### 决策 5：历史回放 —— 标记反向映射成编号，映射不到就去掉
@@ -145,15 +145,18 @@ POST /api/v1/workstation/chat/completions → stream_chat_completion → _agent_
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `citation/domain/services/citation_handle_service.py` | 新增 `HandleStreamConverter`、`replace_legacy_citation_rules`、`ensure_daily_handle_rules`、`markers_to_handles`（历史反向映射）、`swap_chunk_id_for_handle` / `rewrite_web_results_with_handles`（从 `linsight_knowledge.py`、`agent_factory.py` 上移，两模式共用）；`assign_handles` 读 `scope.pins_contract` | 不查权限；不改 `citation_registry_service` |
-| `citation/domain/services/daily_citation_scope.py`（新） | 日常模式一轮的编号表镜像 + 本轮统计（seen / unknown / legacy） | 不写 `meta:enabled`，不写 `cite_seen` |
+| `citation/domain/services/citation_handle_service.py` | 新增两模式共用的 `swap_chunk_id_for_handle` / `rewrite_web_results_with_handles`（从 `linsight_knowledge.py`、`agent_factory.py` 上移）与 `drop_chunk_ids` / `drop_web_citation_keys`（分配失败时去掉 key）；`assign_handles` 读 `scope.pins_contract` | 不查权限；不改 `citation_registry_service` |
+| `citation/domain/services/daily_citation_handles.py`（新） | 日常模式专用：`HandleStreamConverter`、`replace_legacy_citation_rules` / `ensure_daily_handle_rules`（识别 zh / en / ja 三种规则标题）、`markers_to_handles` | 不碰编号表 |
+| `citation/domain/services/daily_citation_scope.py`（新） | 日常模式一轮的编号表镜像 + 本轮 seen 统计 | 不写 `meta:enabled`，不写 `cite_seen` |
+| `workstation/domain/services/daily_citation.py`（新） | 工具输出换编号 / 失败去 key、完成时选绑定来源（含跨轮补查，异步 + 同步两版）、`[daily-citation-audit]` 日志 | 不改共享的 `select_registry_items_for_persistence` |
 | `workstation/domain/services/chat_service.py` | 构造 scope、工具换编号、流式转换、完成与中断落库、审计日志、规则替换 | 不再调 `ensure_citation_rules`、`select_registry_items_for_persistence`、`strip_unregistered_citation_markers` |
 | `workstation/domain/services/workstation_service.py` | 历史回放时标记 → 编号 | 不改其它类别的回放 |
 | `workstation/domain/services/conversation_export_service.py` | 导出时追加剥未识别编号 | 不烘焙 |
 | `common/image_view/react_loop.py` | 识图答案剥引用时一并剥 `[Sn]` | — |
 | `linsight/…`（`linsight_knowledge.py`、`agent_factory.py`、`linsight_citation_scope.py`） | 改为调用上移后的共用函数；scope 加 `pins_contract=True` | 行为不变 |
 | platform `public/locales/{zh-Hans,en-US,ja}/bs.json` | `chatConfig.systemPrompt2` 引用段改写 | `chatConfig.aiPrompt` 不动 |
-| client `AiMessageBubble.tsx` / `AiChatMessages.tsx` / `ChatView.tsx` / `ShareView.tsx` | 新增显式 prop，日常模式复制多剥一次未识别编号 | 知识空间、频道不传该 prop |
+| client `AiMessageBubble.tsx` / `AiChatMessages.tsx` / `ChatView.tsx` / `ShareView.tsx` | 新增显式 prop `stripCitationHandlesOnCopy`，只有日常模式与分享页传 | 知识空间、频道不传该 prop |
+| client `MessageCopyButton.tsx`（从 `AiMessageBubble.tsx` 抽出） | 复制按钮；`stripHandles` 为真时先剥未识别编号 | — |
 
 ---
 
@@ -226,3 +229,4 @@ POST /api/v1/workstation/chat/completions → stream_chat_completion → _agent_
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-09-30 | 初版 | spec 确认（直接迁移、无开关无过渡期） |
+| 2026-09-30 | §4.3 模块落点改为新文件；§3 决策 4 补三语标题识别 | 实现（`citation_handle_service.py` 已 659 行，日常专用件另立模块） |

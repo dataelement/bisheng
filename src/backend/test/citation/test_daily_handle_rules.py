@@ -108,13 +108,16 @@ LOCALE_DIR = Path(__file__).resolve().parents[3] / "frontend" / "platform" / "pu
 
 
 @pytest.mark.parametrize("lang", ["zh-Hans", "en-US", "ja"])
-def test_shipped_default_template_ends_up_on_handle_rules(lang):
-    """Whatever the shipped template holds (legacy before T016, handle rules
-    after), the prompt the model receives teaches handles only."""
+def test_shipped_default_template_already_teaches_handles(lang):
+    """AC-04: the shipped default templates carry the handle rules in their own
+    language, so the run-time swap leaves them untouched (no second, Chinese
+    copy appended) and they never mention the verbatim-id format."""
     data = json.loads((LOCALE_DIR / lang / "bs.json").read_text(encoding="utf-8"))
-    out = replace_legacy_citation_rules(data["chatConfig"]["systemPrompt2"])
+    template = data["chatConfig"]["systemPrompt2"]
 
-    assert HANDLE_RULES_HEADER in out or "[S3]" in out
-    assert "<chunk_id>" not in out
-    assert "\\ue200" not in out
-    assert "{cur_date}" in out
+    assert replace_legacy_citation_rules(template) == template
+    assert template.count("[S3][S7]") == 1
+    assert "<chunk_id>" not in template
+    assert "citation_key" not in template
+    assert "\\ue200" not in template
+    assert "{cur_date}" in template

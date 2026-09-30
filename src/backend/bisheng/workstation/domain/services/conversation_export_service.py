@@ -25,17 +25,16 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 import httpx
 import pypandoc
+from fastapi import UploadFile
 from loguru import logger
 
-from io import BytesIO
-
-from fastapi import UploadFile
-
+from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileNameDuplicateError,
     SpaceFileSizeLimitError,
@@ -69,7 +68,6 @@ from bisheng.workstation.domain.schemas.conversation_export import (
     ImportMessagesToKnowledgeRequest,
     ImportMessagesToKnowledgeResponse,
 )
-
 
 # --- Constants -------------------------------------------------------------
 
@@ -497,13 +495,18 @@ class ConversationExportService:
            surrounding markers were dropped earlier (the front-end has been
            observed to render ``U+E200`` as the literal ``"200"`` glyph, which
            our PUA passes can't reach).
+
+        A fourth pass (F072) drops ``[Sn]`` handles the model wrote but the
+        session table did not know: recognised handles were already turned
+        into markers while streaming, so only unresolved ones are left.
         """
         if not text:
             return text
         text = _CITATION_PATTERN.sub('', text)
         text = text.translate(_LONE_MARKER_TABLE)
         text = _LITERAL_PUA_ESCAPE_PATTERN.sub('', text)
-        return _BARE_CITATION_KEY_PATTERN.sub('', text)
+        text = _BARE_CITATION_KEY_PATTERN.sub('', text)
+        return strip_citation_handles(text)
 
     # ----------------------------------------------------------------------
     # Markdown intermediate representation (AD-03, AD-04)
