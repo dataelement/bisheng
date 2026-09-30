@@ -14,7 +14,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import { FormInput } from "./FormInput";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -395,7 +395,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             max_chunk_size: formData.maxChunkSize,
             auto_tag_visible: formData.autoTagVisible,
             assistant_name: (formData.assistantName || '').trim(),
-            menu_display_name: (formData.menuDisplayName || '').trim(),
+            menu_display_name: await toStoredMenuName(formData.menuDisplayName, 'bench.knowledgeSpace'),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));

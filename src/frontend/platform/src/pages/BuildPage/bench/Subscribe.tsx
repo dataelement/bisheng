@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import { FormInput } from "./FormInput";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import {
@@ -418,7 +418,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
             assistant_name: (formData.assistantName || '').trim(),
-            menu_display_name: (formData.menuDisplayName || '').trim(),
+            menu_display_name: await toStoredMenuName(formData.menuDisplayName, 'bench.subscribe'),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));

@@ -13,7 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 
 const MAX_LEN = 1000;
 
@@ -51,10 +51,12 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
         }));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
-            appCenterMenuDisplayName: menuDisplayName.trim(),
+            // Round-tripped from the home tab; normalize so a saved default name doesn't stay frozen
+            homeMenuDisplayName: await toStoredMenuName(loadedCfgRef.current?.homeMenuDisplayName ?? '', 'bench.home'),
+            appCenterMenuDisplayName: await toStoredMenuName(menuDisplayName, 'bench.appCenter'),
             applicationCenterWelcomeMessage: welcome.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
             applicationCenterDescription: description.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
         };

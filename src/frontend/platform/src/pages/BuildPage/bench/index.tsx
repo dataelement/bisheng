@@ -26,7 +26,7 @@ import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
 import { WorkbenchSensitivePolicy, type WorkbenchSensitivePolicyHandle } from "./WorkbenchSensitivePolicy";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
@@ -766,8 +766,8 @@ const useChatConfig = (
 
         const dataToSave = {
             // Blank stays blank: the client falls back to its localized menu name.
-            homeMenuDisplayName: formData.homeMenuDisplayName.trim(),
-            appCenterMenuDisplayName: formData.appCenterMenuDisplayName.trim(),
+            homeMenuDisplayName: await toStoredMenuName(formData.homeMenuDisplayName, 'bench.home'),
+            appCenterMenuDisplayName: await toStoredMenuName(formData.appCenterMenuDisplayName, 'bench.appCenter'),
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
             welcomeMessage: formData.welcomeMessage.trim(),
