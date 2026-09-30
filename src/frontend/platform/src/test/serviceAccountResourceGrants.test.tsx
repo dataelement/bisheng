@@ -212,30 +212,36 @@ describe("service-account resource grants", () => {
     expect(screen.getByText("openApiManagement.grants.total:1")).toBeVisible()
   })
 
-  it("explains which keys the grant list applies to", async () => {
-    const cases: Array<[ApiKeyItem[], string]> = [
-      [[], "openApiManagement.grants.notice.noKeyTitle"],
-      [
-        [apiKey(["delegate", "knowledge:read"])],
-        "openApiManagement.grants.notice.delegateOnlyTitle",
-      ],
-      [
-        [apiKey(["knowledge:read"]), apiKey(["delegate"]), apiKey(["delegate"])],
-        "openApiManagement.grants.notice.mixedTitle:1",
-      ],
-      [[apiKey(["knowledge:read"])], "openApiManagement.grants.notice.ownOnlyTitle"],
-    ]
-    for (const [keys, title] of cases) {
-      vi.mocked(listServiceAccountKeysApi).mockResolvedValue(keys)
-      const { unmount } = render(
-        <ResourceGrantsTab
-          serviceAccountId={7}
-          serviceAccountName="Application test"
-        />,
-      )
-      expect(await screen.findByText(title)).toBeVisible()
-      unmount()
-    }
+  it("lists which keys the grants apply to and which they do not", async () => {
+    vi.mocked(listServiceAccountKeysApi).mockResolvedValue([
+      { ...apiKey(["knowledge:read"]), id: 1, name: "Sync key" },
+      { ...apiKey(["delegate"]), id: 2, name: "Delegate key" },
+      { ...apiKey(["knowledge:read"]), id: 3, name: "Old key", is_valid: false },
+    ])
+    const { unmount } = render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    const applies = await screen.findByText(
+      "openApiManagement.grants.notice.appliesTo",
+    )
+    expect(applies.nextElementSibling).toHaveTextContent("Sync key")
+    const notApplies = screen.getByText(
+      "openApiManagement.grants.notice.notAppliesTo",
+    )
+    expect(notApplies.nextElementSibling).toHaveTextContent("Delegate key")
+    expect(notApplies.nextElementSibling).toHaveTextContent(
+      "openApiManagement.grants.notice.delegateReason",
+    )
+    expect(screen.queryByText("Old key")).not.toBeInTheDocument()
+    unmount()
+
+    vi.mocked(listServiceAccountKeysApi).mockResolvedValue([])
+    render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    expect(
+      await screen.findByText("openApiManagement.grants.notice.noKey"),
+    ).toBeVisible()
   })
 
   it("names the missing key permission only when an own-identity key exists", async () => {

@@ -56,7 +56,7 @@ import {
   RESOURCE_GRANT_FILTER_ALL,
   SERVICE_ACCOUNT_PERMISSION_TIERS,
   SERVICE_ACCOUNT_RESOURCE_TYPES,
-  summarizeGrantKeys,
+  splitGrantKeys,
 } from "./resourceGrantUtils"
 
 export interface ResourceGrantsTabProps {
@@ -123,7 +123,7 @@ export function ResourceGrantsTab({
     (grant) =>
       grant.editable && !grant.protected && grant.source_type === "DIRECT",
   )
-  const hasOwnKeys = summarizeGrantKeys(keys).own > 0
+  const hasOwnKeys = splitGrantKeys(keys).own.length > 0
   const automaticGrants = grants.filter(
     (grant) => grant.source_type === "CREATOR_GRANT",
   )
