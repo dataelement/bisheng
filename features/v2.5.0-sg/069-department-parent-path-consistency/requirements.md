@@ -3,7 +3,7 @@
 - Feature ID: `069-department-parent-path-consistency`
 - Mode: `bugfix`
 - Created: `2026-09-30`
-- Status: `implementing`
+- Status: `implemented-locally`
 
 ## 已确认问题与范围
 生产只读核查发现 330 条存储路径与父链不一致。现有同步与手工移动按旧 path 前缀查找后代：缺失前缀的真实后代会遗漏，具有伪前缀的无关组织可能被误改；根节点路径未改变时也不会修复损坏后代。上游传入或缓存的父路径还可能继续传播错误。
