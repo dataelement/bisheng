@@ -250,6 +250,8 @@
 | 14 | 内容安全拦截在 v1 会建会话并写一条自动回复 | v2 若复用会留下空会话 | v2 在建会话前判定，命中即返回 26065，不写任何行 |
 | 15 | `_to_linsight_submit` 静默跳过没有 `file_id` 的附件，而开放 API 上传返回值里没有 `file_id` | 附件全部丢失、任务照常跑 | `OpenTaskSubmitReq` 把附件定义为 `{file_path, file_name}`，`to_internal()` 为每个附件生成 `file_id` |
 | 16 | worker 执行时才从临时桶读附件，排队超过 3 天即过期 | 以为提交时已转存、对外文档写错 | 对外文档写明；结果中列为「已过期」 |
+| 18 | 顶层待办行里有一条 `id == svid` 的会话级伪任务（「执行准备」，`task_exec.py` `_ensure_session_pseudo_task`） | 进度总数多 1、且永远有一项不完成 | `_progress` 排除该行 |
+| 19 | `KnowledgeSpaceService.alist_mine_and_joined_cursor` 的「我创建的」按 `login_user.user_id` 查，自身身份下是资源归属人 | 配置查询列出归属人的空间，提交时却按服务账号判可见被拒（违反 AC-05） | 知识空间列表改为按 permission actor 的 `list_visible_objects` 枚举 |
 | 17 | v1 终止相关测试原先 patch 的是端点模块上的依赖 | 抽出共享函数后测试失败或空跑 | 终止主体已移到 `LinsightWorkbenchImpl.terminate`，测试改 patch 新位置 |
 
 ---

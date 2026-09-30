@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-30 用户确认；同日复核：执行身份失效时已受理任务继续执行至终态（维持），AC-15 改为不提供已下线的个人知识库，AC-34 改为自身身份下模型用量记在资源归属人名下 |
 | design.md | ✅ 已评审 | 2026-09-30 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-30 `/sdd-review tasks` 两轮；余 low：T008、T009、T014、T015 测试与实现同任务（改动小），T018 多文档登记 |
-| 实现 | 🔄 进行中 | 10 / 20 完成（Wave 1–2） |
+| 实现 | 🔄 进行中 | 16 / 20 完成（Wave 1–3） |
 
 ---
 
@@ -101,40 +101,40 @@
 
 ### Wave 3 — 开放 API 服务（依赖 Wave 1、Wave 2）
 
-- [ ] **T010**: 提交校验测试
+- [x] **T010**: 提交校验测试
   **文件**: `src/backend/test/open_api/test_task_mode_submit.py`
   **逻辑**: design 决策 9 每一项的拒绝路径与错误码；校验顺序（内容安全命中不建会话）；任一失败不写任何行；自身身份下「资源归属人有权、服务账号无权」的知识库被拒；权限引擎抛错 → 503
   **覆盖 AC**: AC-02、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-18
   **依赖**: T002、T003
 
-- [ ] **T011**: `OpenTaskModeService.submit`
+- [x] **T011**: `OpenTaskModeService.submit`
   **文件**: `src/backend/bisheng/open_api/domain/services/task_mode_service.py`（新）
   **逻辑**: `async def submit(cls, principal: OpenApiPrincipal, req: OpenTaskSubmitReq) -> OpenTaskSubmitted`：决策 9 校验（判定函数单独成 `_check_*`，供 T014 复用）→ 内容安全 → `req.to_internal()` → `submit_task_turn(..., strict_enqueue=True, telemetry_source="api")`（T020）（`session_name` = 任务描述首行前 30 字）→ 返回 `{task_id, status, queue_position}`
   **测试**: T010 全部通过
   **覆盖 AC**: AC-02、AC-08、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-18
   **依赖**: T002、T003、T020、T010
 
-- [ ] **T012**: 查询、下载、终止测试
+- [x] **T012**: 查询、下载、终止测试
   **文件**: `src/backend/test/open_api/test_task_mode_view.py`
   **逻辑**: 六种内部状态的投影；`queue_position` 为 0 → 空；进度计数；`partial`；缺 `error_type` → `unknown`；答复去引用标记；清单不含路径；幻影与格式错误交付物；附件失败原因；四种主体组合归属校验 → 404；终态终止 → 26064；下载只认本任务清单内的 `file_id`
   **覆盖 AC**: AC-20、AC-22、AC-23、AC-24、AC-25、AC-26、AC-28、AC-29、AC-30、AC-31
   **依赖**: T003
 
-- [ ] **T013**: `OpenTaskModeService` 查询、下载、终止
+- [x] **T013**: `OpenTaskModeService` 查询、下载、终止
   **文件**: `src/backend/bisheng/open_api/domain/services/task_mode_service.py`
   **逻辑**: 归属校验（`SessionSubject.matches`）；design 决策 12 投影；MinIO 流式读与 RFC 5987 文件名；终止调用 T009
   **测试**: T012 全部通过
   **覆盖 AC**: AC-20、AC-22、AC-23、AC-24、AC-25、AC-26、AC-28、AC-29、AC-30、AC-31
   **依赖**: T003、T009、T012
 
-- [ ] **T014**: 可用配置查询（测试 + 实现）
+- [x] **T014**: 可用配置查询（测试 + 实现）
   **文件**: `src/backend/bisheng/workstation/domain/services/workstation_service.py`，`open_api/domain/services/task_mode_service.py`，`src/backend/test/open_api/test_task_mode_config.py`
   **逻辑**: `run_mode=task` 返回模型、默认模型、工具、技能；知识接口按类型分页搜索；与 T011 共用同一批判定函数；日常模式响应逐字节不变（design 决策 10）
   **测试**: 查询结果中任意一组提交均通过；停用技能不出现；代表他人无任务模式权限 → 26063；权限引擎抛错 → 503
   **覆盖 AC**: AC-04、AC-05、AC-06、AC-07
   **依赖**: T002、T011
 
-- [ ] **T015**: 日常模式「模型不可用」改用 26066
+- [x] **T015**: 日常模式「模型不可用」改用 26066
   **文件**: `src/backend/bisheng/open_api/domain/services/daily_chat_service.py`，`src/backend/test/open_api/test_daily_chat_model_error.py`
   **逻辑**: 替换 `:35` 的裸 400；工具裸 400 不动
   **覆盖 AC**: AC-13
