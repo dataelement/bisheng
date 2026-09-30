@@ -1,6 +1,6 @@
 # Feature: 开放 API 鉴权与身份传递（F053）
 
-> 需求正文与验收标准的唯一真相是上游 PRD：`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.6。本 spec 只登记 beta1 范围裁定和本轮缺陷修复验收，技术实现见 [design.md](./design.md)。
+> 需求正文与验收标准的唯一真相是上游 PRD：`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.6。本 spec 只登记 beta1 范围裁定和本轮缺陷修复验收，技术实现见 [design.md](./design.md)。
 
 **所属版本**: v3.0.0-beta1
 **最后同步**: 2026-09-16
