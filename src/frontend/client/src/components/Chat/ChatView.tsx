@@ -811,6 +811,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           shareToken={shareToken}
                           knowledgeChatLayout
                           allowExport
+                          stripCitationHandlesOnCopy
                           contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}

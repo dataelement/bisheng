@@ -76,14 +76,17 @@ def _locale_prompts():
         if not path.is_file():
             continue
         chat_config = json.loads(path.read_text(encoding="utf-8-sig")).get("chatConfig", {})
-        for key in ("aiPrompt", "systemPrompt2"):
-            yield pytest.param(chat_config.get(key, ""), id=f"{lang}:{key}")
+        # Knowledge-space / channel default. The daily chat default
+        # (systemPrompt2) teaches [Sn] handles since F072 and is pinned in
+        # test/citation/test_daily_handle_rules.py.
+        yield pytest.param(chat_config.get("aiPrompt", ""), id=f"{lang}:aiPrompt")
 
 
 @pytest.mark.parametrize("prompt", list(_locale_prompts()))
 def test_locale_default_prompts_already_carry_the_rules(prompt):
-    """Every admin-editable default template spells the rules itself, so the
-    backstop is a no-op on a freshly saved default and never double-appends."""
+    """Every admin-editable default template on the verbatim-id contract spells
+    the rules itself, so the backstop is a no-op on a freshly saved default and
+    never double-appends."""
     if not prompt:
         pytest.skip("platform locales not present in this checkout")
     assert prompt_has_citation_rules(prompt)

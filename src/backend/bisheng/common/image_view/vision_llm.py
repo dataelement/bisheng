@@ -213,6 +213,7 @@ class _VisionCallRunnable(Runnable):
             _attach_viewed_pixels,
             _strip_picture_citations,
             cited_ids_on_shown_lines,
+            strip_picture_handles,
             strip_view_narration,
         )
 
@@ -225,7 +226,7 @@ class _VisionCallRunnable(Runnable):
         raw = "".join(parts)
         question = _last_user_question(messages)
         cited_ids = cited_ids_on_shown_lines(raw)
-        cleaned = _strip_picture_citations(strip_view_narration(raw), question)
+        cleaned = strip_picture_handles(_strip_picture_citations(strip_view_narration(raw), question), question)
         visible = cleaned or ""
         extra = missing_viewed_markdown(visible, self._registry, question=question, only_ids=cited_ids)
         return AIMessage(content=(visible + extra).strip())
