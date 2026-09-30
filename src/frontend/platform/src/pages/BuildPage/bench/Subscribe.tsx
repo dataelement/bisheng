@@ -17,7 +17,7 @@ import { useNavigate } from "react-router-dom";
 import WebSearchForm from "../tools/builtInTool/WebSearchFrom";
 import { resolveConfigString } from "./configValue";
 import { FormInput } from "./FormInput";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import {
@@ -276,8 +276,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
         assistantName: '',
-        // 接口为空时展示默认菜单名，用户可直接改
-        menuDisplayName: t('bench.subscribe'),
+        // Blank until configured — the input placeholder shows the default name
+        menuDisplayName: '',
     });
     const [configMeta, setConfigMeta] = useState<any>(null);
 
@@ -306,8 +306,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                     feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
                     // Keep blank when unset — empty means "use client i18n default".
                     assistantName: resolveConfigString(assistantNameFromRes, ''),
-                    // 空字符串同样视为「未配置」，回落到默认菜单名
-                    menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim() || t('bench.subscribe'),
+                    // Blank = unconfigured; the client falls back to its localized default
+                    menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim(),
                 };
             });
         });
@@ -383,12 +383,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             isValid = false;
         }
 
-        // 菜单显示名称必填（长度在输入时已截断）
-        if (!(formData.menuDisplayName || '').trim()) {
-            newErrors.menuDisplayName = t('chatConfig.errors.required');
-            isValid = false;
-        }
-
         setErrors(newErrors);
         return isValid;
     };
@@ -424,7 +418,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
             assistant_name: (formData.assistantName || '').trim(),
-            menu_display_name: (formData.menuDisplayName || '').trim(),
+            menu_display_name: await toStoredMenuName(formData.menuDisplayName, 'bench.subscribe'),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));
