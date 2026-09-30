@@ -446,14 +446,25 @@ def test_wrapper_bind_tools_returns_self():
     assert wrapper.bind_tools([]) is wrapper
 
 
-def test_picture_answer_drops_short_handles_too():
-    """F072 AC-19: daily chat cites with [Sn]; a picture answer must not keep them."""
+
+def test_daily_picture_answer_drops_short_handles():
+    """F072 AC-19: the daily chat cites with [Sn]; a picture answer must not keep them."""
+    from bisheng.common.image_view.react_loop import strip_picture_handles
+
     text = "有一张冰箱结构图。[S3][S7]\n![](/bisheng/knowledge/images/1/12/image1.png)"
-    cleaned = _strip_picture_citations(text, "展示图片：冰箱结构")
+    cleaned = strip_picture_handles(text, "展示图片：冰箱结构")
     assert "[S3]" not in cleaned and "[S7]" not in cleaned
     assert "![](/bisheng/knowledge/images/1/12/image1.png)" in cleaned
 
 
 def test_non_picture_answer_keeps_short_handles():
+    from bisheng.common.image_view.react_loop import strip_picture_handles
+
     text = "冰箱容量为 500L。[S3]"
-    assert _strip_picture_citations(text, "冰箱容量多大？") == text
+    assert strip_picture_handles(text, "冰箱容量多大？") == text
+
+
+def test_shared_picture_citation_strip_leaves_bracket_text_alone():
+    """F072 AC-20: the knowledge-space / channel vision stream is unchanged."""
+    text = "型号 [S1] 的冰箱。"
+    assert _strip_picture_citations(text, "展示图片：冰箱") == text

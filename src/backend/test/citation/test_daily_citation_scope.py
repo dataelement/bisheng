@@ -109,7 +109,11 @@ async def test_same_source_gets_the_same_number_across_modes_and_turns(redis):
     )
 
     assert handles == {"knowledgesearch_bbbb2222:0": "S1", "knowledgesearch_cccc3333:4": "S2"}
-    assert daily.handles["S1"] == "knowledgesearch_aaaa1111:0"  # loaded from the task turn
+    # the number is the task turn's; it now points at this turn's fresh key so
+    # the answer binds to an item collected this turn ...
+    assert daily.handles["S1"] == "knowledgesearch_bbbb2222:0"
+    # ... while the task turn's key still maps back for history replay
+    assert daily.key_to_handle["knowledgesearch_aaaa1111:0"] == "S1"
 
 
 async def test_load_failure_leaves_an_empty_usable_scope(monkeypatch):

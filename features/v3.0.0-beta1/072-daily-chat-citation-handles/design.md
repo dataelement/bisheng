@@ -101,7 +101,7 @@
 
 - **选定**：
   - 前端复制：`AiMessageBubble` 的复制按钮对日常模式消息在 `stripCitationMarkers` 之后再调既有的 `stripCitationHandles`（`citationUtils.ts:118`）。知识空间、频道共用同一气泡组件，而且日常模式（`ChatView.tsx:812`）、分享页（`ShareView.tsx:63`）与知识空间、频道都传 `knowledgeChatLayout`，这个 prop 区分不了入口；因此经 `AiChatMessages` 向气泡新增一个显式 prop（如 `stripCitationHandlesOnCopy`），只由 `ChatView` 与日常模式的分享页传 true，知识空间与频道不传，行为不变（spec AC-20）。
-  - 会话导出：`ConversationExportService._strip_citations`（`conversation_export_service.py:486`）在剥私有区标记后追加 `strip_citation_handles`。该服务只服务日常模式会话导出。
+  - 会话导出：`ConversationExportService._build_turns` 对**回答**在 `_strip_citations` 之后追加 `strip_citation_handles`；用户问题不剥（用户可能自己写了 `[S1]`）。该服务只服务日常模式会话导出。
 - **原因**：已识别编号在正文里已经是标记，复制时本就会被剥；只剩未识别编号需要处理（spec AC-15）。
 - **何时该重新考虑**：知识空间或频道也迁移到短句柄时，去掉这个 prop，复制路径对所有入口统一剥编号。
 
@@ -152,7 +152,7 @@ POST /api/v1/workstation/chat/completions → stream_chat_completion → _agent_
 | `workstation/domain/services/chat_service.py` | 构造 scope、工具换编号、流式转换、完成与中断落库、审计日志、规则替换 | 不再调 `ensure_citation_rules`、`select_registry_items_for_persistence`、`strip_unregistered_citation_markers` |
 | `workstation/domain/services/workstation_service.py` | 历史回放时标记 → 编号 | 不改其它类别的回放 |
 | `workstation/domain/services/conversation_export_service.py` | 导出时追加剥未识别编号 | 不烘焙 |
-| `common/image_view/react_loop.py` | 识图答案剥引用时一并剥 `[Sn]` | — |
+| `common/image_view/react_loop.py` / `vision_llm.py` | 新增 `strip_picture_handles`，只在日常模式的识图 runnable（`vision_llm._VisionCallRunnable`）里调用，识图答案剥 `[Sn]` | 知识空间 / 频道共用的 `_strip_picture_citations` 与 `run_react_vision_stream` 不变 |
 | `linsight/…`（`linsight_knowledge.py`、`agent_factory.py`、`linsight_citation_scope.py`） | 改为调用上移后的共用函数；scope 加 `pins_contract=True` | 行为不变 |
 | platform `public/locales/{zh-Hans,en-US,ja}/bs.json` | `chatConfig.systemPrompt2` 引用段改写 | `chatConfig.aiPrompt` 不动 |
 | client `AiMessageBubble.tsx` / `AiChatMessages.tsx` / `ChatView.tsx` / `ShareView.tsx` | 新增显式 prop `stripCitationHandlesOnCopy`，只有日常模式与分享页传 | 知识空间、频道不传该 prop |
@@ -171,7 +171,9 @@ POST /api/v1/workstation/chat/completions → stream_chat_completion → _agent_
 | 5 | 流式分片会把 `[S1` 和 `2]` 切开，模型也可能先写 `[S3]` 再紧跟 `[S7]` | 提前下发半截或把一组拆成两组 | 转换器扣住尾巴，上限 64 字符 |
 | 6 | `format_retrieved_chunk` 的 `<chunk_id>` 同时被工作流、助手使用 | 直接改它会让其它入口丢掉来源标识 | 只在日常模式调用点之后替换标签 |
 | 7 | `chatConfig.aiPrompt` 也含旧引用规则，但它是知识空间 / 频道的默认模板 | 顺手改掉会破坏 spec AC-20 | 只改 `systemPrompt2` |
-| 8 | 识图问题的答案在 `react_loop._strip_picture_citations` 里剥私有区标记 | 若 `[Sn]` 先到了这里没被剥、后被转换，图片答案会出现角标 | 同处追加 `strip_citation_handles`；实现时核对该函数与日常流式转换的先后顺序 |
+| 8 | 识图问题的答案在 `_strip_picture_citations` 里剥私有区标记，而该函数同时被知识空间 / 频道的 `run_react_vision_stream` 使用 | 在共享函数里加剥编号会改动知识空间 / 频道的识图答案（违反 spec AC-20） | 剥编号放在只有日常模式使用的 `vision_llm._VisionCallRunnable` 出口 |
+| 11 | 流结束处的 `yield` 若落在 `try/except (CancelledError, GeneratorExit)` 之外，客户端恰在此时断开会跳过中断落库，整轮丢失（`1859573d5` 修过的现象）；回答以 `[S3]` 结尾时末尾 flush 几乎必然有内容 | 以编号结尾的回答在最后一刻断开就丢整轮 | 末尾 flush 放进 try 体内；try 之后只对错误路径补记正文、不再 yield |
+| 12 | 同一来源本轮再次检索会拿到新的 registry key，但编号沿用旧的 | 镜像若仍指向旧 key，本轮绑定要走跨轮补查 | `DailyCitationScope.register_handle` 让编号指向最新 key，旧 key 仍保留在 `key_to_handle` 供历史回放 |
 | 9 | 同一会话多标签页并发提问会并发分配编号 | 按进程锁分配会撞号 | 沿用 F069 `HINCRBY + HSETNX` 原子分配，允许空洞 |
 | 10 | 迁移前的老消息里是长 key，编号表里没有它们 | 历史回放若保留原样会诱导模型写旧格式 | 决策 5：映射不到就去掉 |
 
@@ -230,3 +232,4 @@ POST /api/v1/workstation/chat/completions → stream_chat_completion → _agent_
 |---|---|---|
 | 2026-09-30 | 初版 | spec 确认（直接迁移、无开关无过渡期） |
 | 2026-09-30 | §4.3 模块落点改为新文件；§3 决策 4 补三语标题识别 | 实现（`citation_handle_service.py` 已 659 行，日常专用件另立模块） |
+| 2026-09-30 | §5 #8 改落点、增 #11 #12；导出只对回答剥编号 | 代码审查 |

@@ -284,3 +284,24 @@ async def test_tool_branch_converts_and_flushes_before_a_tool_call(env, monkeypa
     assert body["msg"] == expected
     texts = [e["content"] for e in body["events"] if e["type"] == "text"]
     assert texts == [f"先查一下。{S}{K1}{E}", f"结论{S}{K2}{E}。"]
+
+
+async def test_hang_up_on_the_final_flush_still_persists_the_turn(env):
+    """An answer ending in a handle is held back until the end of the stream;
+    the client hanging up on that last delta must still save the turn (the
+    interruption branch only covers yields inside the try)."""
+    env.state["chunks"] = ["结论[S1]"]
+
+    response = await chat_service._agent_stream_chat_completion(MagicMock(), _data(), MagicMock())
+    body_iterator = response.body_iterator
+    answer_deltas = 0
+    async for chunk in body_iterator:
+        if '"agent_answer"' in chunk and '"stream"' in chunk:
+            answer_deltas += 1
+            if answer_deltas == 2:  # the flushed tail
+                break
+    await body_iterator.aclose()
+
+    rows = [row for row in env.inserted if row.category == "agent_answer"]
+    assert len(rows) == 1
+    assert json.loads(rows[0].message)["msg"] == f"结论{S}{K1}{E}"

@@ -323,7 +323,8 @@ class ConversationExportService:
                 sender_name = session.flow_name or ''
 
             answer_texts = [cls._extract_answer_text(a) for a in answer_msgs]
-            answer_texts = [cls._strip_citations(t) for t in answer_texts]
+            # Answers only: a user may type [S1] on purpose; unresolved model handles live in answers.
+            answer_texts = [strip_citation_handles(cls._strip_citations(t)) for t in answer_texts]
             # Drop fully-empty answer blocks (e.g. agent_tool_call / agent_thinking
             # categories sneak in via parent linkage; we don't render them).
             answer_texts = [t for t in answer_texts if t]
@@ -495,18 +496,13 @@ class ConversationExportService:
            surrounding markers were dropped earlier (the front-end has been
            observed to render ``U+E200`` as the literal ``"200"`` glyph, which
            our PUA passes can't reach).
-
-        A fourth pass (F072) drops ``[Sn]`` handles the model wrote but the
-        session table did not know: recognised handles were already turned
-        into markers while streaming, so only unresolved ones are left.
         """
         if not text:
             return text
         text = _CITATION_PATTERN.sub('', text)
         text = text.translate(_LONE_MARKER_TABLE)
         text = _LITERAL_PUA_ESCAPE_PATTERN.sub('', text)
-        text = _BARE_CITATION_KEY_PATTERN.sub('', text)
-        return strip_citation_handles(text)
+        return _BARE_CITATION_KEY_PATTERN.sub('', text)
 
     # ----------------------------------------------------------------------
     # Markdown intermediate representation (AD-03, AD-04)

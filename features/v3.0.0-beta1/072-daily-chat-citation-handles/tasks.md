@@ -134,4 +134,5 @@
 - T016 → en / ja 模板用本语言标题，运行时判重识别三种标题（design §3 决策 4）
 - T015 → `test_stream_interrupt_persist.py`、`test_daily_chat_citation_backstop.py` 在本 Feature 之前就因 `image_view_configured` 查库而失败（fixture 未 mock），本次在 fixture 里补 mock 后恢复为真实运行；`test_citation_prompt_rules.py` 的默认模板用例收窄到 `aiPrompt`
 - T017 → 复制按钮从 `AiMessageBubble.tsx`（837 行）抽成 `MessageCopyButton.tsx`
+- 代码审查（5 路）修复：末尾 flush 移入 try（design §5 #11）、识图剥编号改落日常专用出口（#8）、导出只剥回答、编号指向最新 key（#12）、规则加载失败记日志、`load()` 容错、三处注释订正
 - T018 回归：`test/citation`、`test/linsight`、`test/workstation`、`test/channel`、`test/common`、`test/tool`、知识空间对话引用用例共 2190 通过；剩余 15 个失败在基线提交 9ca1e6ea3 上同样失败（本地 config 开了多租户 / 需真实 MySQL），与本 Feature 无关

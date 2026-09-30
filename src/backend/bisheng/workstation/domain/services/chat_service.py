@@ -2259,6 +2259,23 @@ async def _agent_stream_chat_completion(
                                 async for chunk in persist_safety_replacement(hit.auto_reply or ""):
                                     yield chunk
                                 return
+            # Release whatever the handle converter was still holding back.
+            # Inside the try: a client hang-up on this yield must still reach
+            # the interruption branch that persists the turn.
+            pending = stream_converter.flush()
+            if pending:
+                yield record_answer_text(pending)
+                if scanner:
+                    hit = scanner.feed(pending)
+                    if hit:
+                        logger.warning(
+                            "workbench content safety hit tenant_id={} mode=output chat_id={}",
+                            tenant_id,
+                            conversation_id,
+                        )
+                        async for chunk in persist_safety_replacement(hit.auto_reply or ""):
+                            yield chunk
+                        return
         except BaseErrorCode as exc:
             error_flag = True
             error_msg = str(exc)
@@ -2294,21 +2311,12 @@ async def _agent_stream_chat_completion(
             persist_interrupted_turn("stream interrupted")
             raise
 
-        # Release whatever the handle converter was still holding back.
+        # Error paths skip the in-try flush above; keep the held-back tail in
+        # the stored answer (nothing is yielded out here — a client hang-up on
+        # a yield outside the try would lose the whole turn).
         pending = stream_converter.flush()
         if pending:
-            yield record_answer_text(pending)
-            if scanner:
-                hit = scanner.feed(pending)
-                if hit:
-                    logger.warning(
-                        "workbench content safety hit tenant_id={} mode=output chat_id={}",
-                        tenant_id,
-                        conversation_id,
-                    )
-                    async for chunk in persist_safety_replacement(hit.auto_reply or ""):
-                        yield chunk
-                    return
+            record_answer_text(pending)
 
         # Finalise any dangling thinking / tool events (e.g. stream interrupted
         # mid-reasoning or mid-tool).
@@ -2338,8 +2346,10 @@ async def _agent_stream_chat_completion(
         # Persist agent_answer — new unified shape is `{msg, events}`.
         # F072: every marker in the text was produced by the handle converter
         # from the session table (model-written ids were dropped while
-        # streaming), so there is nothing to scrub. Bind exactly the sources
-        # the answer cites, earlier turns included; none when it cites none.
+        # streaming), so none is invented. Bind exactly the sources the answer
+        # cites, earlier turns included; none when it cites none. A cited
+        # source whose runtime entry has expired keeps its badge and resolves
+        # from its earlier binding or reads as expired (spec AC-12).
         citation_items = await select_cited_items(citation_collector.list_items(), final_msg)
         log_citation_audit(
             chat_id=conversation_id,

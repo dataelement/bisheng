@@ -188,8 +188,9 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
 
     Redis is the allocator; ``scope`` mirrors the table in-process
     (``scope.handles`` handle→key, ``scope.key_to_handle``, ``scope.entries``).
-    Any Redis failure returns an EMPTY mapping so the caller keeps the raw key
-    contract for this batch (AC-17) — never partial numbering.
+    Any Redis failure returns an EMPTY mapping — never partial numbering. The
+    task mode then keeps the raw-key contract for the batch (F069 AC-17); the
+    daily chat shows no source id at all (F072 AC-17).
     """
     if not items or not getattr(scope, "enabled", True):
         return {}

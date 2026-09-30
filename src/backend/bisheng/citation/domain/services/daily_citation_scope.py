@@ -39,8 +39,10 @@ class DailyCitationScope:
         self.loaded = False
 
     def register_handle(self, handle: str, key: str, entry: dict) -> None:
-        if handle in self.handles:
-            return
+        # A source retrieved again this turn keeps its number but gets a fresh
+        # registry key; point the handle at the fresh key so the answer binds
+        # to this turn's item instead of needing a cross-turn lookup. Older
+        # keys stay mapped for history replay.
         self.handles[handle] = key
         self.key_to_handle[key] = handle
         self.entries.append(dict(entry, handle=handle, key=key))
@@ -61,7 +63,7 @@ class DailyCitationScope:
             logger.opt(exception=True).warning(f"[daily-citation] failed to load handle table chat={self.session_id}")
             return
         for handle, entry in entries.items():
-            key = entry.get("key")
+            key = entry.get("key") if isinstance(entry, dict) else None
             if handle and key:
                 self.register_handle(handle, key, entry)
         self.loaded = True

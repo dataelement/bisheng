@@ -119,7 +119,9 @@ class HandleStreamConverter:
     not finished, an inline code span that has not closed.
 
     Invariant (pinned by tests): however the text is chunked, the concatenated
-    output equals converting the whole text at once.
+    output equals converting the whole text at once — as long as no held tail
+    outgrows its hold limit (then it is released literally) and the model
+    does not interrupt a text run with a tool call mid-handle.
     """
 
     def __init__(self, handles: dict[str, str] | None = None):
@@ -308,7 +310,8 @@ def load_daily_handle_rules() -> str:
 
             prompt_obj = PromptLoader().render_prompt("citation_handles", "daily_handle_rules")
             _DAILY_RULES_CACHE["rules"] = str(prompt_obj.prompt).strip()
-        except Exception as e:  # pragma: no cover - configuration error surfaced in the prompt itself
+        except Exception as e:  # pragma: no cover - configuration error
+            logger.exception("[daily-citation] failed to load daily_handle_rules prompt")
             _DAILY_RULES_CACHE["rules"] = f"{HANDLE_RULES_HEADER}\n\nFailed to load daily handle rules: {e}"
     return _DAILY_RULES_CACHE["rules"]
 
