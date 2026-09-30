@@ -212,6 +212,91 @@ describe("service-account resource grants", () => {
     expect(screen.getByText("openApiManagement.grants.total:1")).toBeVisible()
   })
 
+  it("explains which keys the grant list applies to", async () => {
+    const cases: Array<[ApiKeyItem[], string]> = [
+      [[], "openApiManagement.grants.notice.noKeyTitle"],
+      [
+        [apiKey(["delegate", "knowledge:read"])],
+        "openApiManagement.grants.notice.delegateOnlyTitle",
+      ],
+      [
+        [apiKey(["knowledge:read"]), apiKey(["delegate"]), apiKey(["delegate"])],
+        "openApiManagement.grants.notice.mixedTitle:1",
+      ],
+      [[apiKey(["knowledge:read"])], "openApiManagement.grants.notice.ownOnlyTitle"],
+    ]
+    for (const [keys, title] of cases) {
+      vi.mocked(listServiceAccountKeysApi).mockResolvedValue(keys)
+      const { unmount } = render(
+        <ResourceGrantsTab
+          serviceAccountId={7}
+          serviceAccountName="Application test"
+        />,
+      )
+      expect(await screen.findByText(title)).toBeVisible()
+      unmount()
+    }
+  })
+
+  it("names the missing key permission only when an own-identity key exists", async () => {
+    vi.mocked(listServiceAccountResourceGrantsApi).mockResolvedValue([
+      directGrant,
+    ])
+    vi.mocked(listServiceAccountKeysApi).mockResolvedValue([
+      apiKey(["workflow:read"]),
+    ])
+    const { unmount } = render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    expect(
+      await screen.findByText(
+        "openApiManagement.grants.missingScope:openApiManagement.scopes.knowledge_read.label",
+      ),
+    ).toBeVisible()
+    unmount()
+
+    vi.mocked(listServiceAccountKeysApi).mockResolvedValue([
+      apiKey(["delegate"]),
+    ])
+    render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    expect(
+      await screen.findByText("openApiManagement.grants.ineffective"),
+    ).toBeVisible()
+    expect(
+      screen.queryByText(/openApiManagement\.grants\.missingScope/),
+    ).not.toBeInTheDocument()
+  })
+
+  it("separates an empty list from a filter with no matches", async () => {
+    const user = userEvent.setup()
+    const { unmount } = render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    await screen.findByText("Contract library")
+    await user.type(
+      screen.getByRole("textbox", {
+        name: "openApiManagement.grants.resourceSearch",
+      }),
+      "nothing-matches",
+    )
+    expect(screen.getByText("openApiManagement.grants.noMatch")).toBeVisible()
+    unmount()
+
+    vi.mocked(listServiceAccountResourceGrantsApi).mockResolvedValue([])
+    render(
+      <ResourceGrantsTab serviceAccountId={7} serviceAccountName="Application test" />,
+    )
+    expect(
+      await screen.findByText("openApiManagement.grants.empty"),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole("button", { name: "openApiManagement.grants.revokeAll" }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/openApiManagement\.grants\.total/)).not.toBeInTheDocument()
+  })
+
   it("uses distinct creator and direct single-revoke dialogs", async () => {
     const user = userEvent.setup()
     render(
