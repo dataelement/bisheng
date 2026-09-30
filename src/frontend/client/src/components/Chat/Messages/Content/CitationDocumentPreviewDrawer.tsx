@@ -37,6 +37,9 @@ type CitationDocumentPreviewContentProps = {
   preview: CitationDocumentPreviewState | null;
   compactMode?: boolean;
   className?: string;
+  /** F071: report the viewer type once the file url resolves (pdf / docx / md …),
+   *  so a host can locate the cited text in viewers that have no bbox support. */
+  onFileTypeResolved?: (fileType: string) => void;
 };
 
 function getExtFromUrl(url: string) {
@@ -63,7 +66,9 @@ export function CitationDocumentPreviewContent({
   preview,
   compactMode = false,
   className,
+  onFileTypeResolved,
 }: CitationDocumentPreviewContentProps) {
+  const localize = useLocalize();
   const detail = preview?.detail ?? null;
   const canRenderPreview = !!detail && isFilePreviewCitation(detail);
   const itemId = preview?.itemIds?.length ? preview.itemIds : preview?.itemId;
@@ -88,6 +93,10 @@ export function CitationDocumentPreviewContent({
     ? getCitationItemBBoxes(detail as ChatCitation, itemId)
     : [];
   const targetBBox = bboxes[0] ?? null;
+
+  useEffect(() => {
+    if (fileUrl && fileType) onFileTypeResolved?.(fileType);
+  }, [fileType, fileUrl, onFileTypeResolved]);
 
   useEffect(() => {
     let active = true;
@@ -130,11 +139,11 @@ export function CitationDocumentPreviewContent({
         />
       ) : isResolvingFileUrl ? (
         <div className="flex h-full items-center justify-center text-[14px] text-text-3">
-          正在加载文件预览...
+          {localize('com_citation.preview_loading')}
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-text-3">
-          暂无可预览文件地址
+          {localize('com_citation.preview_unavailable')}
         </div>
       )}
     </div>
@@ -246,7 +255,7 @@ export default function CitationDocumentPreviewDrawer({
         !isFullBleedMobile &&
         'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
-      aria-label="文档预览"
+      aria-label={localize('com_citation.document_preview')}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -296,7 +305,7 @@ export default function CitationDocumentPreviewDrawer({
               ? 'inline-flex size-8 rounded-md'
               : 'inline-flex size-6 rounded-md',
           )}
-          aria-label="关闭文档预览"
+          aria-label={localize('com_citation.close_document_preview')}
         >
           <Outlined.Close className="size-4" strokeWidth={1.5} />
         </button>

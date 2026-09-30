@@ -168,16 +168,29 @@ function joinExportParts(parts: Array<string | undefined | null>) {
   return cleaned.join(EXPORT_PART_SEPARATOR);
 }
 
-function formatCitationLocation(detail: ChatCitation, itemId: string) {
-  const payload = detail.sourcePayload;
+/**
+ * Where a cited chunk sits in its file: "第 N 页" when it has a real page,
+ * else "第 N 段". Two page conventions reach here. Chunks parsed with a layout
+ * (PDF, and office files converted to PDF) carry bboxes, and their page is the
+ * zero-based index the bboxes use — the first page is 0 (PdfViewer adds 1 the
+ * same way). Chunks without a layout carry a one-based page (slides) or 0 for
+ * "not paginated" (docx / xlsx / md). The chunk index is zero-based too.
+ * Mirrors the backend export (citation_handle_service._location_label).
+ */
+export function formatCitationLocation(detail: ChatCitation | null, itemId?: string) {
+  const payload = detail?.sourcePayload;
   const item = getCitationItem(detail, itemId);
   const page = Number(item?.page ?? payload?.page);
-  if (Number.isFinite(page) && page > 0) {
-    return i18next.t('com_linsight_export_page', { 0: page });
+  if (Number.isFinite(page)) {
+    if (parseCitationBBoxes(item?.bbox).length) {
+      if (page >= 0) return i18next.t('com_linsight_export_page', { 0: page + 1 });
+    } else if (page > 0) {
+      return i18next.t('com_linsight_export_page', { 0: page });
+    }
   }
   const chunkIndex = Number(item?.chunkIndex);
-  if (Number.isFinite(chunkIndex) && chunkIndex >= 0) {
-    return i18next.t('com_linsight_export_chunk', { 0: chunkIndex });
+  if (item?.chunkIndex != null && Number.isFinite(chunkIndex) && chunkIndex >= 0) {
+    return i18next.t('com_linsight_export_chunk', { 0: chunkIndex + 1 });
   }
   return '';
 }
@@ -485,7 +498,7 @@ export function getCitationDocumentName(detail?: ChatCitation | null) {
     // Avoid using chat-session titles as document names.
     .filter((item) => !/^(new chat|新对话)$/i.test(item));
 
-  return normalized[0] || '文档预览';
+  return normalized[0] || i18next.t('com_message.document_preview');
 }
 
 export function getCitationDocumentFileType(detail?: ChatCitation | null) {
@@ -674,9 +687,9 @@ export function getLegacyCitationPreview(webContent: any, label?: number): Citat
   }
 
   return {
-    title: item.title || item.url || `引用 ${label}`,
+    title: item.title || item.url || i18next.t('com_citation.untitled', { index: label }),
     snippet: item.snippet || item.content || '',
-    sourceName: item.source || item.url || '网页',
+    sourceName: item.source || item.url || i18next.t('com_message.source_name_fallback_web'),
     sourceMeta: formatCitationWebDate(item.datePublished || item.date || ''),
     link: item.url,
     type: 'web',
@@ -722,9 +735,9 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
 
   if (type === 'web') {
     return {
-      title: item?.title || payload.title || payload.url || `引用 ${data.label ?? ''}`,
+      title: item?.title || payload.title || payload.url || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: extractWebSnippetContent(item?.snippet || payload.snippet),
-      sourceName: payload.source || payload.url || '网页',
+      sourceName: payload.source || payload.url || i18next.t('com_message.source_name_fallback_web'),
       sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
@@ -733,20 +746,20 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
 
   if (type === 'temp') {
     return {
-      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+      title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
       sourceName: i18next.t('com_citation.source_temp_kb'),
-      sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : '',
+      sourceMeta: formatCitationLocation(detail, data.itemId),
       link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
       type,
     };
   }
 
   return {
-    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+    title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
-    sourceName: payload.knowledgeName || payload.fileType || '政策文件',
-    sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : '',
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t('com_message.source_name_fallback_document'),
+    sourceMeta: formatCitationLocation(detail, data.itemId),
     link: payload.downloadUrl,
     type,
   };
@@ -773,9 +786,9 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
 
   if (type === 'web') {
     return {
-      title: payload.title || payload.url || `引用 ${data.label ?? ''}`,
+      title: payload.title || payload.url || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: '',
-      sourceName: payload.source || payload.url || '网页',
+      sourceName: payload.source || payload.url || i18next.t('com_message.source_name_fallback_web'),
       sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
@@ -784,7 +797,7 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
 
   if (type === 'temp') {
     return {
-      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+      title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: '',
       sourceName: i18next.t('com_citation.source_temp_kb'),
       sourceMeta: payload.fileType || '',
@@ -794,9 +807,9 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
   }
 
   return {
-    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+    title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
     snippet: '',
-    sourceName: payload.knowledgeName || payload.fileType || '政策文件',
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t('com_message.source_name_fallback_document'),
     sourceMeta: payload.fileType || '',
     link: payload.downloadUrl,
     type,

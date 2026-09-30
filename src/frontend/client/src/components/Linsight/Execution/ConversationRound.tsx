@@ -80,6 +80,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                         versionId={versionId}
                         citations={round.output_result?.citations}
                         citationAudit={round.output_result?.citation_audit}
+                        webSources={round.output_result?.web_sources}
                         onPreview={onPreview}
                     />
                 </ResultPanel>

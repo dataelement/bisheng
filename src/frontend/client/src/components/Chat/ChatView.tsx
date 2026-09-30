@@ -764,7 +764,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               sidebar navigation (otherwise the centered welcome-page layout
               briefly floats the input up before messages arrive). */}
           {(() => {
-            const loadingExistingConvo = isLoading && conversationId !== 'new';
+            // A history fetch must not blank a turn that is already on screen.
+            // Content-safety replies finish in one SSE tick, which used to flip
+            // isLoading while the just-sent messages were still mounted.
+            const loadingExistingConvo = isLoading && conversationId !== 'new' && !hasMessages;
             // Keep input pinned to bottom as soon as a send starts (before first token lands),
             // otherwise mobile can briefly fall back to the centered landing layout.
             // An EXISTING conversation (id !== 'new') always uses the detail layout,
@@ -782,14 +785,22 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 useMessagesLayout ? 'h-full' : 'max-md:h-full'
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
-                {isLoading && conversationId !== 'new' ? (
+                {loadingExistingConvo ? (
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
                 ) : (hasMessages || !isNew) ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input). */}
-                    <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+                    {/* Left: Chat Main (Messages + Input). F071: while the report is
+                        compared with a cited source the workspace takes this column's
+                        width; fade it so the squeezed messages don't reflow visibly. */}
+                    <div
+                      className={cn(
+                        'relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden transition-opacity duration-200',
+                        taskArtifacts.comparing && !isTouchLayout && 'pointer-events-none opacity-0',
+                      )}
+                      aria-hidden={taskArtifacts.comparing && !isTouchLayout ? true : undefined}
+                    >
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
                         <AiChatMessages
                           messages={messages}
@@ -906,7 +917,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
                           taskArtifacts.open ? 'p-1 opacity-100' : 'pointer-events-none p-0 opacity-0',
                         )}
-                        style={{ width: taskArtifacts.open ? 'clamp(440px, 46%, 720px)' : '0px' }}
+                        // F071: compare view → the whole row (the chat column gives way).
+                        style={{
+                          width: !taskArtifacts.open ? '0px' : taskArtifacts.comparing ? '100%' : 'clamp(440px, 46%, 720px)',
+                        }}
                       >
                         {!fsMounted && (
                           <div ref={dockedCardRef} className="h-full min-w-[420px]">
@@ -917,6 +931,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               messageId={taskLinsight?.message_id ?? undefined}
                               previewFile={taskArtifacts.previewFile}
                               fullscreen={false}
+                              sourcePreview={taskArtifacts.sourcePreview}
+                              onOpenSource={taskArtifacts.openSource}
+                              onCloseSource={taskArtifacts.closeSource}
                               onPreview={taskArtifacts.openPreview}
                               onBack={taskArtifacts.backToList}
                               onClose={taskArtifacts.closeWorkspace}
@@ -945,6 +962,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           previewFile={taskArtifacts.previewFile}
                           fullscreen
                           hideFullscreenToggle
+                          sourcePreview={taskArtifacts.sourcePreview}
+                          compareLayout="tabs"
+                          onOpenSource={taskArtifacts.openSource}
+                          onCloseSource={taskArtifacts.closeSource}
                           onPreview={taskArtifacts.openPreview}
                           onBack={taskArtifacts.backToList}
                           onClose={taskArtifacts.closeWorkspace}
@@ -1097,6 +1118,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 messageId={taskLinsight?.message_id ?? undefined}
                 previewFile={taskArtifacts.previewFile}
                 fullscreen={true}
+                sourcePreview={taskArtifacts.sourcePreview}
+                onOpenSource={taskArtifacts.openSource}
+                onCloseSource={taskArtifacts.closeSource}
                 onPreview={taskArtifacts.openPreview}
                 onBack={taskArtifacts.backToList}
                 onClose={taskArtifacts.closeWorkspace}

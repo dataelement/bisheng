@@ -67,4 +67,22 @@ describe('ResultSection citation audit notice', () => {
 
         expect(screen.getByTestId('citation-uncited-note')).toHaveTextContent('com_linsight_citation_uncited:0');
     });
+
+    it('lists retrieved web pages so they can be opened without an inline badge', () => {
+        render(
+            <ResultSection
+                answer="report body"
+                files={[]}
+                versionId="sv-1"
+                onPreview={noop}
+                citationAudit={{ status: 'uncited', sources_seen: 1 }}
+                webSources={[{ title: '示例报道', url: 'https://news.example.com/a' }]}
+            />,
+        );
+
+        const link = screen.getByRole('link', { name: '示例报道' });
+        expect(link).toHaveAttribute('href', 'https://news.example.com/a');
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(screen.getByTestId('web-sources')).toHaveTextContent('com_linsight_web_sources');
+    });
 });
