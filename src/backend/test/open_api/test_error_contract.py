@@ -149,7 +149,10 @@ async def test_legacy_business_http_exception_keeps_business_code(contract_app, 
     "payload,code",
     [
         ({"task_mode": True}, 26017),
-        ({"run_mode": "task"}, 26017),
+        # F073: task is a valid run mode now; without execution=async it is 26060.
+        ({"run_mode": "task"}, 26060),
+        ({"run_mode": "task", "execution": "sync"}, 26060),
+        ({"run_mode": "task", "execution": "async"}, 400),
         ({"run_mode": "unknown"}, 26017),
         ({"execution": "async"}, 26015),
         ({"background": True}, 26015),

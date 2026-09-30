@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-30 用户确认；同日复核：执行身份失效时已受理任务继续执行至终态（维持），AC-15 改为不提供已下线的个人知识库，AC-34 改为自身身份下模型用量记在资源归属人名下 |
 | design.md | ✅ 已评审 | 2026-09-30 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-30 `/sdd-review tasks` 两轮；余 low：T008、T009、T014、T015 测试与实现同任务（改动小），T018 多文档登记 |
-| 实现 | 🔄 进行中 | 16 / 20 完成（Wave 1–3） |
+| 实现 | 🔄 进行中 | 18 / 20 完成（Wave 1–4 代码） |
 
 ---
 
@@ -142,13 +142,13 @@
 
 ### Wave 4 — 端点与接线（依赖 Wave 3）
 
-- [ ] **T016**: 端点测试
+- [x] **T016**: 端点测试
   **文件**: `src/backend/test/open_api/test_task_mode_endpoints.py`
   **逻辑**: `run_mode` 分派（缺省 / `daily` 走原路径且响应不变，`task` 走新路径，其它 → 26017）；任务 × 同步 → 26060、日常 × 异步 → 26015，三者可区分；PAT 调用被拒；缺 `chat:invoke` → 26003；新端点均已在 `OPEN_API_SCOPES` 登记
   **覆盖 AC**: AC-01、AC-03、AC-09
   **依赖**: T011、T013、T014
 
-- [ ] **T017**: 端点实现与异常处理器调整
+- [x] **T017**: 端点实现与异常处理器调整
   **文件**: `src/backend/bisheng/open_endpoints/api/endpoints/workstation.py`，`open_api/domain/scopes.py`，`open_api/api/exception_handlers.py`
   **逻辑**: 提交端点按原始 body 分派；新增 `/tasks/{task_id}`、`/tasks/{task_id}/files/{file_id}`、`/tasks/{task_id}/terminate`、`/config/knowledge`；`/config` 接收 `run_mode`；异常处理器不再把 `run_mode="task"` 映射为 26017（design §6.2）
   **测试**: T016 全部通过；F053 既有 `test/open_api/` 全部通过
@@ -200,4 +200,5 @@
 - T008 扩展 → 技能复制失败在开放 API 任务中也判失败（design 决策 8）
 - T003 扩展 → 附件改强类型并补 `file_id`（design §5 第 15 条）
 - T009 → 调整既有 `test_terminate_persists_task_turn.py` 的 patch 位置（design §5 第 17 条）
+- T017 → 提交端点改收原始 body 按 `run_mode` 分派，请求体 schema 在 `openapi_schema.py` 以 `oneOf` 注入；F053 契约测试两处断言随之更新（`run_mode="task"` 由 26017 改为 26060、请求体由 `$ref` 改为 `oneOf`），对外接口 JSON 重新生成并带出生成前已有的漂移（design §5 第 20 条）
 - 测试基线（2026-09-30，`feat/3.0.0-beta2` @ 9d01474d8）：`test/linsight` + `test/workstation` 在基线上即有 12 条失败（`test_conversation_export_renderers` ×4、`test_conversation_export_service` ×1、`test_workbench_content_safety_input` ×2、`test_workbench_content_safety_output` ×4、`test_workstation_model_migration` ×1），与本 Feature 无关；Wave 2 后同一批 12 条、无新增

@@ -103,6 +103,38 @@ def _session_name(text: str) -> str:
     return "New Chat"
 
 
+def validate_body(model, payload: dict):
+    """Validate a raw JSON body the way FastAPI would for a typed body parameter.
+
+    The chat endpoint takes a raw body so it can dispatch on ``run_mode``; this
+    keeps the validation error payload identical to FastAPI's own
+    (``loc`` prefixed with ``"body"``, no ``url``), so the daily contract and
+    the v2 validation handler see exactly what they saw before.
+    """
+    from fastapi.exceptions import RequestValidationError
+    from pydantic import ValidationError
+
+    try:
+        return model.model_validate(payload)
+    except ValidationError as exc:
+        errors = [{**err, "loc": ("body", *err.get("loc", ()))} for err in exc.errors(include_url=False)]
+        raise RequestValidationError(errors, body=payload) from exc
+
+
+def parse_task_submission(payload: dict) -> OpenTaskSubmitReq:
+    """Task-mode body: transport and conversation are rejected with their own codes first."""
+    from bisheng.common.errcode.open_api import (
+        OpenApiTaskConversationNotAcceptedError,
+        OpenApiTaskModeSyncUnsupportedError,
+    )
+
+    if payload.get("execution") != "async":
+        raise OpenApiTaskModeSyncUnsupportedError()
+    if payload.get("conversationId") not in (None, ""):
+        raise OpenApiTaskConversationNotAcceptedError()
+    return validate_body(OpenTaskSubmitReq, payload)
+
+
 class OpenTaskModeService:
     # ------------------------------------------------------------------ checks
 
@@ -564,4 +596,4 @@ def _knowledge_item(row) -> dict:
     }
 
 
-__all__ = ["OpenTaskModeService"]
+__all__ = ["OpenTaskModeService", "parse_task_submission", "validate_body"]

@@ -252,6 +252,8 @@
 | 16 | worker 执行时才从临时桶读附件，排队超过 3 天即过期 | 以为提交时已转存、对外文档写错 | 对外文档写明；结果中列为「已过期」 |
 | 18 | 顶层待办行里有一条 `id == svid` 的会话级伪任务（「执行准备」，`task_exec.py` `_ensure_session_pseudo_task`） | 进度总数多 1、且永远有一项不完成 | `_progress` 排除该行 |
 | 19 | `KnowledgeSpaceService.alist_mine_and_joined_cursor` 的「我创建的」按 `login_user.user_id` 查，自身身份下是资源归属人 | 配置查询列出归属人的空间，提交时却按服务账号判可见被拒（违反 AC-05） | 知识空间列表改为按 permission actor 的 `list_visible_objects` 枚举 |
+| 20 | 提交端点为按 `run_mode` 分派改收原始 dict，FastAPI 不再为它生成请求体 schema | 对外接口文档显示成无类型对象 | `open_api/api/openapi_schema.py` `_publish_chat_completion_request` 注入 `oneOf`（日常 / 任务两个模型）；两个分支用 `validate_body` 复现 FastAPI 的校验错误形状（`loc` 前缀 `body`、无 `url`），日常模式错误响应不变 |
+| 21 | `open_endpoints` 各端点从 `bisheng.open_api.api.dependencies` 导入 v2 鉴权依赖，arch-guard 报 RULE-5 | 误以为本 Feature 引入 | F053 既有接入方式，改动前即报；本期不动 |
 | 17 | v1 终止相关测试原先 patch 的是端点模块上的依赖 | 抽出共享函数后测试失败或空跑 | 终止主体已移到 `LinsightWorkbenchImpl.terminate`，测试改 patch 新位置 |
 
 ---
