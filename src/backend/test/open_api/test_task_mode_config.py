@@ -170,3 +170,19 @@ async def test_unknown_knowledge_type_is_rejected(task_mode_seams):
         await OpenTaskModeService.list_knowledge(
             None, sa_principal(), LOGIN_USER, knowledge_type="personal", name=None, cursor=None, page_size=10
         )
+
+
+@pytest.mark.parametrize(
+    "model_state",
+    [
+        SimpleNamespace(model_type="llm", online=False),
+        SimpleNamespace(model_type="embedding", online=True),
+        None,
+    ],
+)
+async def test_models_submit_would_reject_are_not_listed(task_mode_seams, workbench, model_state):
+    """AC-05 / AC-06: offline, non-LLM or deleted workbench models are not offered."""
+    task_mode_seams.model = model_state
+    config = await OpenTaskModeService.task_config(sa_principal(), LOGIN_USER)
+    assert config["models"] == []
+    assert config["default_model_id"] is None

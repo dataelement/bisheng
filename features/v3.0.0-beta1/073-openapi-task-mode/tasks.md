@@ -202,4 +202,5 @@
 - T009 → 调整既有 `test_terminate_persists_task_turn.py` 的 patch 位置（design §5 第 17 条）
 - T017 → 提交端点改收原始 body 按 `run_mode` 分派，请求体 schema 在 `openapi_schema.py` 以 `oneOf` 注入；F053 契约测试两处断言随之更新（`run_mode="task"` 由 26017 改为 26060、请求体由 `$ref` 改为 `oneOf`），对外接口 JSON 重新生成并带出生成前已有的漂移（design §5 第 20 条）
 - T018 → 对外文档落在本目录 `task-mode-api.md`（F053 的接口文档无生成脚本、为人工维护，只加指向与计数）；管理界面 `chat:invoke` 三语名称与说明改为覆盖任务模式（PRD §7.1 升级须知的界面落点）
+- `/code-review`（2026-09-30）→ 三处修正：配置查询过滤不可用模型、入队失败 `26068`、v1 SOP 展示接口去掉 `api_meta`（design 修订历史）
 - 测试基线（2026-09-30，`feat/3.0.0-beta2` @ 9d01474d8）：`test/linsight` + `test/workstation` 在基线上即有 12 条失败（`test_conversation_export_renderers` ×4、`test_conversation_export_service` ×1、`test_workbench_content_safety_input` ×2、`test_workbench_content_safety_output` ×4、`test_workstation_model_migration` ×1），与本 Feature 无关；Wave 2 后同一批 12 条、无新增

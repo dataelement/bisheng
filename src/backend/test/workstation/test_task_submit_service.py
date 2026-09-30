@@ -10,9 +10,9 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from starlette.exceptions import HTTPException
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -113,17 +113,17 @@ def _request() -> APIChatCompletion:
     return APIChatCompletion(clientTimestamp="t", model="7", text="do it", task_mode=True)
 
 
-async def test_strict_enqueue_failure_fails_the_version_and_raises_503(io, monkeypatch):
+async def test_strict_enqueue_failure_fails_the_version_and_raises_26068(io, monkeypatch):
     persisted = AsyncMock()
     monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", persisted)
     monkeypatch.setattr(
         linsight_execute_utils, "enqueue_session_for_execution", AsyncMock(side_effect=RuntimeError("redis down"))
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(OpenApiTaskQueueUnavailableError) as exc_info:
         await task_submit_service.submit_task_turn(_request(), _user(), strict_enqueue=True)
 
-    assert exc_info.value.status_code == 503
+    assert (exc_info.value.code, exc_info.value.http_status) == (26068, 503)
     version = io["versions"][-1]
     assert version.status == SessionVersionStatusEnum.FAILED
     assert version.output_result["error_type"] == "service_unavailable"

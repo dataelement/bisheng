@@ -127,7 +127,7 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
-- **260 is assigned** to Open API authentication, identity and the task-mode Open API (`/api/v2`; 26060–26067 are task mode, F073). Do not reuse it.
+- **260 is assigned** to Open API authentication, identity and the task-mode Open API (`/api/v2`; 26060–26068 are task mode, F073). Do not reuse it.
 - **270 is assigned** to commercial license status aggregation and reporting (`commercial_license`). Do not reuse it. Do not treat Gateway business code 11001 as a BISHENG module number.
 - When you claim a number, add it here in the same change.
 

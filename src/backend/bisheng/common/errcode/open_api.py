@@ -266,3 +266,11 @@ class OpenApiToolUnavailableError(OpenApiAuthError):
     Code = 26067
     Msg = "The selected tool is not available"
     http_status = 400
+
+
+class OpenApiTaskQueueUnavailableError(OpenApiAuthError):
+    """The task was not queued; the version is marked failed and no id is returned."""
+
+    Code = 26068
+    Msg = "The task queue is temporarily unavailable; submit again later"
+    http_status = 503

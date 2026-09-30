@@ -54,6 +54,7 @@ PRD_ERRORS = [
     (open_api.OpenApiContentBlockedError(auto_reply="blocked"), 26065, 400),
     (open_api.OpenApiModelUnavailableError(), 26066, 400),
     (open_api.OpenApiToolUnavailableError(), 26067, 400),
+    (open_api.OpenApiTaskQueueUnavailableError(), 26068, 503),
 ]
 
 

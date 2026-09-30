@@ -6,8 +6,10 @@ identity, the delegated user when acting on someone's behalf). The linsight
 worker does no user-level checks while it runs (design decision 4), so what is
 not rejected here is not rejected at all.
 
-The same ``_check_*`` functions back the configuration query, so anything the
-query lists is accepted at submit (spec AC-05).
+The configuration query is built from the same sources and filters as these
+checks (``usable_models``, the tool ``use`` filter, the enabled-skill set, the
+library ``use`` / space ``visible`` listings), so anything it lists is accepted
+at submit (spec AC-05).
 """
 
 from __future__ import annotations
@@ -155,24 +157,38 @@ class OpenTaskModeService:
             raise OpenApiTaskModeForbiddenError() from exc
 
     @staticmethod
-    async def check_model(model_id: str, config: dict) -> None:
+    async def model_is_usable(model_id) -> bool:
+        """Exists, is an LLM, its provider exists, and it is online."""
         from bisheng.llm.domain.const import LLMModelType
         from bisheng.llm.domain.llm.base import BishengBase
 
-        allowed = {str(item.get("id")) for item in config.get("models", [])}
-        if str(model_id) not in allowed:
-            raise OpenApiModelUnavailableError(model=model_id)
         try:
             numeric_id = int(model_id)
-        except (TypeError, ValueError) as exc:
-            raise OpenApiModelUnavailableError(model=model_id) from exc
+        except (TypeError, ValueError):
+            return False
         model_info, server_info = await BishengBase.get_model_server_info(numeric_id)
-        if (
-            model_info is None
-            or server_info is None
-            or model_info.model_type != LLMModelType.LLM.value
-            or not model_info.online
-        ):
+        return bool(
+            model_info is not None
+            and server_info is not None
+            and model_info.model_type == LLMModelType.LLM.value
+            and model_info.online
+        )
+
+    @classmethod
+    async def usable_models(cls, config: dict) -> list[dict]:
+        """The workbench models this run may use — the list the config query shows.
+
+        The workbench list alone keeps offline and non-LLM entries, so it is
+        filtered with the same test ``check_model`` applies (spec AC-05, AC-06).
+        """
+        models = list(config.get("models", []))
+        usable = await asyncio.gather(*(cls.model_is_usable(item.get("id")) for item in models))
+        return [item for item, ok in zip(models, usable, strict=True) if ok]
+
+    @classmethod
+    async def check_model(cls, model_id: str, config: dict) -> None:
+        allowed = {str(item.get("id")) for item in config.get("models", [])}
+        if str(model_id) not in allowed or not await cls.model_is_usable(model_id):
             raise OpenApiModelUnavailableError(model=model_id)
 
     @staticmethod
@@ -485,13 +501,14 @@ class OpenTaskModeService:
         config = await WorkStationService.get_open_api_daily_config(login_user)
         workbench = await LLMService.get_workbench_llm()
         default_model_id = getattr(workbench, "linsight_default_model_id", None)
-        allowed_models = {str(item.get("id")) for item in config.get("models", [])}
+        models = await cls.usable_models(config)
+        allowed_models = {str(item.get("id")) for item in models}
         skills = [
             OpenTaskSkill(name=row.name, display_name=row.display_name or row.name, description=row.description)
             for row in await cls.enabled_skill_rows()
         ]
         return {
-            "models": config.get("models", []),
+            "models": models,
             "default_model_id": default_model_id if str(default_model_id) in allowed_models else None,
             "tools": config.get("tools", []),
             "skills": [skill.model_dump() for skill in skills],

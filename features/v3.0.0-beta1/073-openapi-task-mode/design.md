@@ -59,7 +59,7 @@
   - A. 从 `_task_mode_stream_completion`（`workstation/domain/services/chat_service.py:2465`）抽出 `submit_task_turn(...)`：内容安全 → 建会话与版本 → 写任务轮 → 入队；v1 在其外包 SSE 交接与标题生成，v2 在其外返回 JSON。
   - B. v2 另写一份编排。
 - **选定**：A。
-- **原因**：两份编排必然漂移（v1 已修过「先写任务轮再入队」的竞态，`chat_service.py:2526-2541` 注释）。共享核心增加两个 v2 必需的差异，由参数控制：① 入队失败在 v2 **不是 best-effort**——v1 可依赖前端 start-execute 兜底，v2 没有前端，入队失败即把版本置为「失败」并向调用方返回 503，不返回任务标识；② v2 **不调用 LLM 生成标题**，建会话时直接取任务描述首行前 30 个字作会话名（v1 在 SSE 流里最多等 30 秒生成标题，`chat_service.py:2462`）。原因：fire-and-forget 的后台任务会在请求结束后被回收、标题永远停在「New Chat」（v1 代码注释记录过这个坑）；且开放 API 的任务描述多为客户应用内置的同一段提示词，LLM 标题也会千篇一律。
+- **原因**：两份编排必然漂移（v1 已修过「先写任务轮再入队」的竞态，`chat_service.py:2526-2541` 注释）。共享核心增加两个 v2 必需的差异，由参数控制：① 入队失败在 v2 **不是 best-effort**——v1 可依赖前端 start-execute 兜底，v2 没有前端，入队失败即把版本置为「失败」并向调用方返回 503 / `26068`，不返回任务标识；② v2 **不调用 LLM 生成标题**，建会话时直接取任务描述首行前 30 个字作会话名（v1 在 SSE 流里最多等 30 秒生成标题，`chat_service.py:2462`）。原因：fire-and-forget 的后台任务会在请求结束后被回收、标题永远停在「New Chat」（v1 代码注释记录过这个坑）；且开放 API 的任务描述多为客户应用内置的同一段提示词，LLM 标题也会千篇一律。
 - **何时该重新考虑**：v1 前端不再需要 start-execute 兜底时，v1 也可改为入队失败即报错。
 
 ### 决策 4：身份——提交时判定，worker 不恢复开放 API 身份
@@ -104,7 +104,7 @@
 
 | 入参 | 判定 | 入口 |
 |---|---|---|
-| 模型 | 在执行身份的工作台模型列表内，且在线 | `WorkStationService.get_open_api_daily_config` 的 `models` + `LLMService.get_bisheng_linsight_llm` 预解析（不调用模型）；失败 `26066` |
+| 模型 | 在执行身份的工作台模型列表内，且存在、为 LLM、提供方存在、在线 | `WorkStationService.get_open_api_daily_config` 的 `models` + `OpenTaskModeService.model_is_usable`（`BishengBase.get_model_server_info`，不构造客户端）；失败 `26066`。配置查询的模型列表经同一 `model_is_usable` 过滤（`usable_models`） |
 | 技能 | 在本租户已启用集合内（`LinsightSkillDao.list_enabled`，`strict_tenant_filter`） | 任一不在即 `26062`，`data.unavailable` 列出全部技能名 |
 | 平台工具 | 工具组 `use` 动作 | `WorkStationService.afilter_tools_by_use_permission`（`workstation_service.py:556`）；不可用 `26067` |
 | 文档知识库 | `Knowledge.type == 0`，`knowledge_library` 的 `use` 动作 | `KnowledgeService` 批量动作判定（与 `GET /api/v2/filelib/` 同一实现）；沿用知识模块既有 403 / 404 码 |
@@ -159,7 +159,7 @@
 - **被否**：v2 直接调用 v1 端点函数——F053 禁止 v2 import `*.api.*`（F053 design §5.E E3）。
 - **何时该重新考虑**：修 v1 终止判定时，把终态判定也下沉到共享 `terminate`。
 
-### 决策 14：错误码 26060–26067
+### 决策 14：错误码 26060–26068
 
 | 码 | 类名（`common/errcode/open_api.py`） | HTTP | 场景 |
 |---|---|---|---|
@@ -171,6 +171,7 @@
 | 26065 | `OpenApiContentBlockedError` | 400 | 内容安全拦截；`data.auto_reply` |
 | 26066 | `OpenApiModelUnavailableError` | 400 | 模型不在可用列表、不存在或未上线；**日常模式同场景一并替换原裸 400**（`open_api/domain/services/daily_chat_service.py:35`） |
 | 26067 | `OpenApiToolUnavailableError` | 400 | 任务模式所选平台工具不可用（日常模式的工具裸 400 本期不动） |
+| 26068 | `OpenApiTaskQueueUnavailableError` | 503 | 入队失败（版本已置失败、不返回任务标识）。不复用 26030：后者语义是「密钥校验服务不可用」 |
 
 - **为什么从 26060 起**：26045–26049 为 F053 预留（F053 design §6.3）；26050–26052 已被 `3.0-vibe` 托管应用占用（vibe `common/errcode/open_api.py`），vibe 日后从发版线合入时会撞号。
 - 任务不存在或归属不匹配用既有 `NotFoundError` → 404，不新增码（防枚举）。
@@ -214,7 +215,7 @@
 ### 4.3 数据库迁移与版本契约登记
 
 - **Alembic**：一个迁移，`linsight_session_version` 增加可空列 `api_meta`（`JsonType`），无回填、无索引；降级删列。MySQL 与 DM8 各跑一次升级 / 降级。
-- **release-contract**（`features/v3.0.0-beta1/release-contract.md`）：表 1 新增 F073 行（无新领域对象；`LinsightSessionVersion.api_meta` 增量归 F073）；表 3 记依赖 F053 / F063 / F048；表 4 记修订 F053 日常模式「模型不可用」错误码（26066）与 `26017` 收窄；260 段登记 26060–26067。
+- **release-contract**（`features/v3.0.0-beta1/release-contract.md`）：表 1 新增 F073 行（无新领域对象；`LinsightSessionVersion.api_meta` 增量归 F073）；表 3 记依赖 F053 / F063 / F048；表 4 记修订 F053 日常模式「模型不可用」错误码（26066）与 `26017` 收窄；260 段登记 26060–26068。
 
 ### 4.4 关键模块职责
 
@@ -253,6 +254,7 @@
 | 18 | 顶层待办行里有一条 `id == svid` 的会话级伪任务（「执行准备」，`task_exec.py` `_ensure_session_pseudo_task`） | 进度总数多 1、且永远有一项不完成 | `_progress` 排除该行 |
 | 19 | `KnowledgeSpaceService.alist_mine_and_joined_cursor` 的「我创建的」按 `login_user.user_id` 查，自身身份下是资源归属人 | 配置查询列出归属人的空间，提交时却按服务账号判可见被拒（违反 AC-05） | 知识空间列表改为按 permission actor 的 `list_visible_objects` 枚举 |
 | 20 | 提交端点为按 `run_mode` 分派改收原始 dict，FastAPI 不再为它生成请求体 schema | 对外接口文档显示成无类型对象 | `open_api/api/openapi_schema.py` `_publish_chat_completion_request` 注入 `oneOf`（日常 / 任务两个模型）；两个分支用 `validate_body` 复现 FastAPI 的校验错误形状（`loc` 前缀 `body`、无 `url`），日常模式错误响应不变 |
+| 22 | v1 `GET /sop/showcase/result` 直接返回原始版本模型、不做归属校验 | 同租户拿到任务 id 即可读到 `api_meta`（调用方指令、凭据 id） | 该端点显式 `exclude={"api_meta"}`；越权问题本身属既有、另行处理 |
 | 21 | `open_endpoints` 各端点从 `bisheng.open_api.api.dependencies` 导入 v2 鉴权依赖，arch-guard 报 RULE-5 | 误以为本 Feature 引入 | F053 既有接入方式，改动前即报；本期不动 |
 | 17 | v1 终止相关测试原先 patch 的是端点模块上的依赖 | 抽出共享函数后测试失败或空跑 | 终止主体已移到 `LinsightWorkbenchImpl.terminate`，测试改 patch 新位置 |
 
@@ -269,7 +271,7 @@
 | `GET /api/v2/workstation/tasks/{task_id}/files/{file_id}` | HTTP，文件流 | 同上 |
 | `POST /api/v2/workstation/tasks/{task_id}/terminate` | HTTP | 同上 |
 | `GET /api/v2/workstation/config?run_mode=task`、`GET /api/v2/workstation/config/knowledge` | HTTP | 同上 |
-| 错误码 26060–26067、`26017` 收窄 | 对外可观测 | 调用方、三语文案 |
+| 错误码 26060–26068、`26017` 收窄 | 对外可观测 | 调用方、三语文案 |
 | `submit_task_turn`、`LinsightWorkbenchImpl.terminate` | 内部 Python API | v1 工作台任务模式（行为不变） |
 | `linsight_session_version.api_meta` | 数据列 | worker |
 
@@ -321,4 +323,5 @@
 |---|---|---|
 | 2026-09-30 | 初版 | spec 评审通过 |
 | 2026-09-30 | 用户确认 design；spec AC-34 按自身身份模型用量记在资源归属人名下改写 | design 评审 |
+| 2026-09-30 | `/code-review` 修正：配置查询的模型列表经 `model_is_usable` 过滤（原先会列出提交时被拒的下线 / 非 LLM 模型）；入队失败改为 `26068`；v1 `sop/showcase/result` 不再回显 `api_meta` | code review |
 | 2026-09-30 | 决策 3 标题改为截取任务描述；决策 8 复制失败也判失败；§2 附件有效期订正；§5 增第 15–17 条 | 实现 Wave 1–2 |

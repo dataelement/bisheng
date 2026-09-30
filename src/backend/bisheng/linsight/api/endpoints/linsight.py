@@ -863,4 +863,9 @@ async def get_sop_showcase_result(
     if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
         return resp_200(data={"version_info": None, "execute_tasks": []})
     execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(linsight_version_id)
-    return resp_200(data={"version_info": version_info, "execute_tasks": execute_task_models})
+    # F073: never echo the Open API submission metadata (caller instructions,
+    # credential id). This endpoint does no ownership check; that gap is
+    # pre-existing and tracked separately.
+    return resp_200(
+        data={"version_info": version_info.model_dump(exclude={"api_meta"}), "execute_tasks": execute_task_models}
+    )

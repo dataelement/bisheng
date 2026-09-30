@@ -13,10 +13,10 @@ turn, the Open API writes nothing) and generate titles differently.
 from __future__ import annotations
 
 from loguru import logger
-from starlette.exceptions import HTTPException
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.open_api import OpenApiTaskQueueUnavailableError
 from bisheng.database.models.session import MessageSession
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
@@ -43,8 +43,8 @@ async def submit_task_turn(
     ``strict_enqueue=False`` (workbench): an enqueue failure is logged and the
     browser's later start-execute is the fallback. ``strict_enqueue=True``
     (Open API, no browser to fall back on): an enqueue failure marks the version
-    failed and raises 503, so the caller never receives an id for a task that
-    will not run.
+    failed and raises 26068 (HTTP 503), so the caller never receives an id for a
+    task that will not run.
     """
     # Local imports avoid a module-level workstation->linsight cycle.
     from bisheng.linsight.domain import utils as linsight_execute_utils
@@ -98,7 +98,7 @@ async def submit_task_turn(
             f"svid={session_version.id}; marking the version failed"
         )
         await _mark_enqueue_failed(session_version, linsight_execute_utils)
-        raise HTTPException(status_code=503, detail=ENQUEUE_FAILED_MESSAGE) from exc
+        raise OpenApiTaskQueueUnavailableError() from exc
 
     return session, session_version
 
