@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-09-30 用户确认；同日复核：执行身份失效时已受理任务继续执行至终态（维持），AC-15 改为不提供已下线的个人知识库，AC-34 改为自身身份下模型用量记在资源归属人名下 |
 | design.md | ✅ 已评审 | 2026-09-30 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-09-30 `/sdd-review tasks` 两轮；余 low：T008、T009、T014、T015 测试与实现同任务（改动小），T018 多文档登记 |
-| 实现 | 🔄 进行中 | 18 / 20 完成（Wave 1–4 代码） |
+| 实现 | 🔄 进行中 | 19 / 20 完成（待 T019 端到端） |
 
 ---
 
@@ -155,7 +155,7 @@
   **覆盖 AC**: AC-01、AC-03、AC-09
   **依赖**: T011、T013、T014、T016
 
-- [ ] **T018**: release-contract 登记与对外文档
+- [x] **T018**: release-contract 登记与对外文档
   **文件**: `features/v3.0.0-beta1/release-contract.md`，`docs/constitution.md`（C5 错误码表），F053 的 v2 接口文档（`features/v3.0.0-beta1/053-openapi-auth-and-identity/generate_openapi_contract.py` 生成物），对客文档「任务模式」章节
   **逻辑**: 按 design §4.3 登记表 1 / 表 3 / 表 4 / 260 段；对外文档逐项写可用配置、入参、状态、结果、错误码及处置、失败类别处置、附件 3 天有效期、执行身份失效时的行为（与 workflow 不同）、完整示例、本期不支持项；升级说明写明存量 `chat:invoke` 密钥须复核
   **覆盖 AC**: AC-36、AC-37
@@ -201,4 +201,5 @@
 - T003 扩展 → 附件改强类型并补 `file_id`（design §5 第 15 条）
 - T009 → 调整既有 `test_terminate_persists_task_turn.py` 的 patch 位置（design §5 第 17 条）
 - T017 → 提交端点改收原始 body 按 `run_mode` 分派，请求体 schema 在 `openapi_schema.py` 以 `oneOf` 注入；F053 契约测试两处断言随之更新（`run_mode="task"` 由 26017 改为 26060、请求体由 `$ref` 改为 `oneOf`），对外接口 JSON 重新生成并带出生成前已有的漂移（design §5 第 20 条）
+- T018 → 对外文档落在本目录 `task-mode-api.md`（F053 的接口文档无生成脚本、为人工维护，只加指向与计数）；管理界面 `chat:invoke` 三语名称与说明改为覆盖任务模式（PRD §7.1 升级须知的界面落点）
 - 测试基线（2026-09-30，`feat/3.0.0-beta2` @ 9d01474d8）：`test/linsight` + `test/workstation` 在基线上即有 12 条失败（`test_conversation_export_renderers` ×4、`test_conversation_export_service` ×1、`test_workbench_content_safety_input` ×2、`test_workbench_content_safety_output` ×4、`test_workstation_model_migration` ×1），与本 Feature 无关；Wave 2 后同一批 12 条、无新增

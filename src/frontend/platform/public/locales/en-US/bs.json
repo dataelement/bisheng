@@ -2442,8 +2442,8 @@
         "desc": "List assistants and read their details."
       },
       "chat_invoke": {
-        "label": "Invoke daily chat",
-        "desc": "Start daily-mode chats, read chat configuration, and upload chat attachments."
+        "label": "Invoke chats and tasks",
+        "desc": "Start daily-mode chats and task-mode tasks, read chat configuration, upload attachments, and query, download or stop tasks."
       },
       "knowledge_read": {
         "label": "Read knowledge",
