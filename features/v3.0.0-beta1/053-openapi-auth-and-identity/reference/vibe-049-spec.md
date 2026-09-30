@@ -240,7 +240,7 @@
 - 执行与落档: [tasks.md](./tasks.md)（尚未编写）
 - 版本契约: [features/v3.0.0/release-contract.md](../release-contract.md)（写 spec 前必须先阅读；INV-27–31 与本 Feature 直接相关）
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md)
-- PRD: `docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（伴生册，本 Feature 的需求真相）；`docs/customer-guides/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0 DEV-01 / GOV-08 / GOV-10（上册总纲）
+- PRD: `docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1（伴生册，本 Feature 的需求真相）；`docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0 DEV-01 / GOV-08 / GOV-10（上册总纲）
 
 ---
 
