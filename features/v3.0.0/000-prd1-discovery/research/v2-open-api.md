@@ -10,7 +10,7 @@ v2 开放 API（/api/v2/**，实现在 src/backend/bisheng/open_endpoints/，8 �
 【既有 api-key 类机制】grep 全仓证实无任何 API key 表/模型/bs- 前缀/require_api_key 配置。最接近的四件均不可复用（与 PRD §4.2.1 逐条一致）：share_link token 明文存储且 expire_time 注释明写 intentionally not enforced（share_link_service.py:52-58）；gpts_tools.api_key（tool/domain/models/gpts_tools.py:61）是用户手填的第三方密钥非平台签发；invite_code 非密码学随机；sso_sync 网关 HMAC 是共享密钥签名不签发凭据。User 模型（user/domain/models/user.py:71）无 user_type 字段，服务账号主体需 Alembic 变更。
 
 ## key_files
-- docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md — 伴生 PRD v2.0 全文 1014 行已通读；R1-R9、六步校验流程、六道准入、附录 B 端点改造清单与旧检索路径事实澄清、附录 C 错误码 26001-26012
+- docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md — 伴生 PRD v2.0 全文 1014 行已通读；R1-R9、六步校验流程、六道准入、附录 B 端点改造清单与旧检索路径事实澄清、附录 C 错误码 26001-26012
 - src/backend/bisheng/api/router.py — :94-102 router_rpc = APIRouter(prefix='/api/v2') 聚合 8 子路由——HTTP 层鉴权依赖的天然挂点（router 级 dependencies）
 - src/backend/bisheng/main.py — :144 app.include_router(router_rpc) 挂载 v2
 - src/backend/bisheng/open_endpoints/domain/utils.py — get_default_operator(:26)/get_default_operator_async(:53)/resolve_operator(:77) 三个身份解析函数＝改造的核心替换点；均在末尾 set_current_tenant_id 补种租户上下文

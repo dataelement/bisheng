@@ -222,4 +222,4 @@
 - 上游 Feature spec: [../054-app-domain-runtime/spec.md](../054-app-domain-runtime/spec.md)（`app` 资源类型 / 入口 / 详情页壳 / 开关 / 五个状态动作及其审计写入 AC-65 / 访问记录 AC-38 / 数据行编辑 AC-56 / ⚙️ 裁剪 AC-42 · AC-53）；[../055-app-publish-pipeline/spec.md](../055-app-publish-pipeline/spec.md)（发布管线与管线事件审计写入 AC-01 / 元信息 AC-05 / 上线与待上线成因 AC-31 / 因删除取消 AC-35 / 发布 tab AC-61 / 触达 AC-64 / 决议-8）；[../049-openapi-auth-baseline/spec.md](../049-openapi-auth-baseline/spec.md)（密钥审计事件 AC-12、INV-29 选人排除）
 - Spec Discovery: [features/v3.0.0/000-prd1-discovery/discovery.md](../000-prd1-discovery/discovery.md) §2.2 / §2.6 / §2.7 / §2.8 / §5 风险 7 · 9
 - UI 参考: [features/v3.0.0/000-prd1-discovery/ui-demo/](../000-prd1-discovery/ui-demo/)（以 PRD 为准、demo 为参考）
-- PRD: `docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（§3.0.3 / RT-02 / GOV-01 / GOV-04 / GOV-07 / §3.3 矩阵与锚点表 / §5.2）；`docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1 §4.5 定义 6（资源归属人）/ §4.8 审计双归属（F050 引入的字段口径）
+- PRD: `docs/PRD/3.0-release/3.0 应用工场 PRD-1 专业开发者通道与应用运行时.md` v2.0（§3.0.3 / RT-02 / GOV-01 / GOV-04 / GOV-07 / §3.3 矩阵与锚点表 / §5.2）；`docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md` v2.1 §4.5 定义 6（资源归属人）/ §4.8 审计双归属（F050 引入的字段口径）

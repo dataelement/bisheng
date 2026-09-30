@@ -19,7 +19,7 @@
 - src/backend/bisheng/tool/domain/langchain/knowledge.py — KnowledgeRetrieverTool(:34)：双路召回+RRF 融合；search_kwargs 的 milvus expr/es filter 即索引层预过滤注入点
 - src/backend/bisheng/user/domain/services/auth.py — UserPayload.init_login_user(:565)：任意 user_id 构造完整登录态（roles+is_global_super）；rebac_list_accessible(:498)
 - src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py — _get_child_item_effective_permission_ids(:1158)/_build_child_permission_context(:1137)——结果层 view_file 有效权限解析 primitive（lineage+nearest_binding_wins）；self.request 仅审计用已判空(:4633)
-- docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md — 附录 B(:913-946)：两条检索路径强度对照表+行号；澄清 FGA relation 实为 can_read/visible，view_file/view_space 是描述性叫法（代码中 view_file 是 effective permission id 非 FGA relation）
+- docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md — 附录 B(:913-946)：两条检索路径强度对照表+行号；澄清 FGA relation 实为 can_read/visible，view_file/view_space 是描述性叫法（代码中 view_file 是 effective permission id 非 FGA relation）
 
 ## reuse
 - 双层过滤引擎整体可复用：KnowledgeFileVisibilityService（build_index_prefilter + post_filter_visible_files）与 _retrieve_and_filter 的循环骨架（knowledge_file_visibility_service.py / knowledge_space_chat_service.py:481-570），且已被三条链共用（chat_folder、workstation queryChunksFromDB、CitationResolveService——见 visibility service 模块 docstring），MCP 检索工具接同一引擎即可满足『与平台 UI 同源』

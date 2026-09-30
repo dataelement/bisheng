@@ -5,7 +5,7 @@
 **版本契约**：[release-contract.md](./release-contract.md)
 **Spec Discovery**：[000-prd1-discovery/discovery.md](./000-prd1-discovery/discovery.md)（含 11 维代码调研锚点 research/ 与 F048 基线重核 baseline-recheck.md；**2026-08-17 已按 PRD-1 v2.0 重排为拆分 v2**）
 
-> ⚠️ **推送前必读**：本分支 `3.0-vibe` 汇集了应用工场与开放 API 鉴权的全部产品文档与调研记录，其中 `000-prd1-discovery/research/` 与 `docs/customer-guides/3.0 开放 API 鉴权与身份传递 PRD.md` **含未修复安全缺口的行级定位**。origin 是公开仓，**未经确认不得推送本分支**。
+> ⚠️ **推送前必读**：本分支 `3.0-vibe` 汇集了应用工场与开放 API 鉴权的全部产品文档与调研记录，其中 `000-prd1-discovery/research/` 与 `docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md` **含未修复安全缺口的行级定位**。origin 是公开仓，**未经确认不得推送本分支**。
 
 > 编号说明：F043–F048 已被 `features/v3.0.0-beta1/` 占用（该目录仅存在于 origin/feat/3.0.0-beta1 分支、未合入主线），本版本从 F049 起；拆分 v2 新增 F058 / F059。
 
