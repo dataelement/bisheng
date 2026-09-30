@@ -1,11 +1,12 @@
 /**
  * F071: ties the report's citation badges to the source pane.
  *
- *  - marks the badge being checked (`data-compare-active`) so it stays visible
- *    while the reader's eyes are on the source;
- *  - counts the badges that cite the SAME file (same knowledge document, even
- *    across citation groups) in reading order, and steps through them — each
- *    step scrolls the report to the badge and re-locates the source.
+ *  - marks the badges citing the passage being checked (`data-compare-active`)
+ *    so they stay visible while the reader's eyes are on the source;
+ *  - counts the distinct passages of the SAME file (same knowledge document,
+ *    even across citation groups) that the report cites, and steps through
+ *    them — each step moves the source to the next passage and scrolls the
+ *    report to the nearest badge citing it (sourcePassages).
  *
  * Works on the rendered report DOM: the badges already carry
  * data-citation-id / data-citation-item-id (Markdown.tsx), and the order a
@@ -18,6 +19,7 @@ import type { ChatCitation } from '~/api/chatApi';
 import type { CitationDocumentPreviewState } from '~/components/Chat/Messages/Content/CitationDocumentPreviewDrawer';
 import type { SourcePreview } from './useWorkspacePanel';
 import type { SourceOccurrence } from './SourcePane';
+import { type BadgeRef, fileKeyOf, listSourcePassages, nearestBadge, passageKeyOf } from './sourcePassages';
 
 const BADGE_SELECTOR = '[data-citation-trigger="true"][data-citation-id]';
 const ACTIVE_ATTR = 'data-compare-active';
@@ -27,6 +29,11 @@ interface Options {
     sourcePreview: SourcePreview | null;
     onOpenSource?: (preview: SourcePreview) => void;
 }
+
+const refOf = (el: HTMLElement): BadgeRef => ({
+    citationId: el.dataset.citationId,
+    itemId: el.dataset.citationItemId,
+});
 
 export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }: Options) {
     const reportRef = useRef<HTMLDivElement>(null);
@@ -40,34 +47,26 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
         [],
     );
 
-    // One file can be cited through several citation groups; group by the
-    // knowledge document when the payload names it.
-    const fileKeyOf = useCallback(
-        (citationId?: string) => {
-            const citation = citations?.find((c) => c.citationId === citationId);
-            const documentId = citation?.sourcePayload?.documentId;
-            return documentId != null ? `doc:${documentId}` : `cid:${citationId ?? ''}`;
-        },
-        [citations],
+    /** The passages of the file `citationId` belongs to, in stepping order. */
+    const passagesOf = useCallback(
+        (citationId?: string) =>
+            listSourcePassages(citations, allBadges().map(refOf), fileKeyOf(citations, citationId)),
+        [allBadges, citations],
     );
 
-    /** Positions (in allBadges) of the badges citing this file, in reading order. */
-    const indicesOfFile = useCallback(
-        (fileKey: string) =>
-            allBadges().flatMap((el, i) => (fileKeyOf(el.dataset.citationId) === fileKey ? [i] : [])),
-        [allBadges, fileKeyOf],
-    );
-
+    // Every badge citing the active passage is marked, not only the one clicked.
     const applyMark = useCallback(() => {
         const badges = allBadges();
-        badges.forEach((el, i) => {
-            const active = i === activeIndexRef.current;
+        const activeIndex = activeIndexRef.current;
+        const activeKey = activeIndex != null && badges[activeIndex] ? passageKeyOf(citations, refOf(badges[activeIndex])) : null;
+        badges.forEach((el) => {
+            const active = activeKey != null && passageKeyOf(citations, refOf(el)) === activeKey;
             if (active !== el.hasAttribute(ACTIVE_ATTR)) {
                 if (active) el.setAttribute(ACTIVE_ATTR, 'true');
                 else el.removeAttribute(ACTIVE_ATTR);
             }
         });
-    }, [allBadges]);
+    }, [allBadges, citations]);
 
     /** Remember which badge was clicked — the same chunk can be cited twice. */
     const handleReportClickCapture = useCallback(
@@ -103,7 +102,8 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
         const { detail, itemId } = sourcePreview;
         const resolve = () => {
             const badges = allBadges();
-            const list = indicesOfFile(fileKeyOf(detail.citationId));
+            const passages = passagesOf(detail.citationId);
+            const list = passages.flatMap((p) => p.badges);
             const matchesItem = (i: number) => !itemId || badges[i]?.dataset.citationItemId === itemId;
             const tagged = sourcePreview.badgeIndex;
             const active =
@@ -117,7 +117,8 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
             // the top; bring the badge being checked back into view. 'nearest'
             // leaves an already-visible badge (the one just clicked) alone.
             if (active != null) badges[active]?.scrollIntoView({ block: 'nearest' });
-            setOccurrence(active == null ? null : { index: list.indexOf(active) + 1, total: list.length });
+            const position = active == null ? -1 : passages.findIndex((p) => p.badges.includes(active));
+            setOccurrence(position < 0 ? null : { index: position + 1, total: passages.length });
         };
         resolve();
 
@@ -129,7 +130,7 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
         const observer = new MutationObserver(() => (activeIndexRef.current == null ? resolve() : applyMark()));
         observer.observe(root, { childList: true, subtree: true });
         return () => observer.disconnect();
-    }, [allBadges, applyMark, fileKeyOf, indicesOfFile, sourcePreview]);
+    }, [allBadges, applyMark, passagesOf, sourcePreview]);
 
     const revealActive = useCallback(() => {
         // After a tab switch the report is display:none until the next paint.
@@ -143,10 +144,11 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
         (delta: 1 | -1) => {
             const current = activeIndexRef.current;
             if (!sourcePreview || current == null || !onOpenSource) return;
-            const list = indicesOfFile(fileKeyOf(sourcePreview.detail.citationId));
-            const position = list.indexOf(current);
-            if (position < 0 || list.length < 2) return;
-            const nextIndex = list[(position + delta + list.length) % list.length];
+            const passages = passagesOf(sourcePreview.detail.citationId);
+            const position = passages.findIndex((p) => p.badges.includes(current));
+            if (position < 0 || passages.length < 2) return;
+            const target = passages[(position + delta + passages.length) % passages.length];
+            const nextIndex = nearestBadge(target, current);
             const next = allBadges()[nextIndex];
             next.scrollIntoView({ block: 'center', behavior: 'smooth' });
             const nextCitationId = next.dataset.citationId;
@@ -157,7 +159,7 @@ export function useSourceOccurrences({ citations, sourcePreview, onOpenSource }:
                     : citations?.find((c) => c.citationId === nextCitationId) ?? sourcePreview.detail;
             onOpenSource({ detail, itemId: next.dataset.citationItemId, locateChunk: true, badgeIndex: nextIndex });
         },
-        [allBadges, citations, fileKeyOf, indicesOfFile, onOpenSource, sourcePreview],
+        [allBadges, citations, onOpenSource, passagesOf, sourcePreview],
     );
 
     return { reportRef, handleReportClickCapture, openFromReport, occurrence, step, revealActive };
