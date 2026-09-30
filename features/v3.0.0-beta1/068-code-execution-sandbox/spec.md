@@ -1,6 +1,6 @@
 # Feature: 代码执行沙箱统一底座
 
-**关联 PRD**: [docs/PRD/2.6 灵思 deepagents 迁移 PRD/灵思代码执行沙箱选型调研（私有化场景）.md](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/灵思代码执行沙箱选型调研（私有化场景）.md) §6 推荐路线图 · §8 POC 记录；[docs/product/3.0 应用工场 产品方案.md](../../../docs/product/3.0%20应用工场%20产品方案.md) §4.6 平台既有资产复用 · §5.2 存量代码执行点迁入沙箱设施
+**关联 PRD**: [docs/PRD/2.6 灵思 deepagents 迁移 PRD/灵思代码执行沙箱选型调研（私有化场景）.md](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/灵思代码执行沙箱选型调研（私有化场景）.md) §6 推荐路线图 · §8 POC 记录；[docs/customer-guides/3.0 应用工场 产品方案.md](../../../docs/customer-guides/3.0%20应用工场%20产品方案.md) §4.6 平台既有资产复用 · §5.2 存量代码执行点迁入沙箱设施
 **优先级**: P0
 **所属版本**: v3.0.0-beta1
 **依赖**: 无（与 F103 应用工场 sandbox-core 并行；本 Feature 不依赖其交付）
