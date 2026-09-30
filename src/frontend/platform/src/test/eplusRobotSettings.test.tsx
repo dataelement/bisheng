@@ -82,7 +82,7 @@ describe("EPlusRobotSettings", () => {
     vi.mocked(deleteEPlusBotConfigApi).mockResolvedValue(true);
   });
 
-  it("loads safe values and saves CA text, hosts, and multiple tenant spaces", async () => {
+  it("loads safe values and saves CA text and multiple tenant spaces without media hosts", async () => {
     class MockFileReader {
       result: string | ArrayBuffer | null = null;
       onload: null | (() => void) = null;
@@ -102,6 +102,7 @@ describe("EPlusRobotSettings", () => {
     expect(screen.getByText("build.eplusWsWarning")).toBeInTheDocument();
     expect(screen.getByText("build.eplusStatusError")).toBeInTheDocument();
     expect(screen.getByText("build.eplusScopeNotice")).toBeInTheDocument();
+    expect(screen.queryByLabelText("build.eplusMediaHosts")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("build.eplusCaCertificate"), {
       target: { files: [new File(["certificate"], "customer-ca.pem")] },
@@ -117,7 +118,7 @@ describe("EPlusRobotSettings", () => {
         bot_id: "bot-1",
         secret: undefined,
         ca_pem: expect.stringContaining("BEGIN CERTIFICATE"),
-        media_hosts: ["media.example.test"],
+        media_hosts: [],
         space_ids: [10, 20],
         enabled: true,
       }),

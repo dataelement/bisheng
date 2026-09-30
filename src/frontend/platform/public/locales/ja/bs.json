@@ -1018,8 +1018,6 @@
     "eplusCaConfigured": "CA ルート証明書が設定されています",
     "eplusCaReady": "証明書を読み込みました。保存後に反映されます",
     "eplusRemoveCa": "証明書を削除",
-    "eplusMediaHosts": "画像ダウンロードホスト許可リスト",
-    "eplusMediaHostsPlaceholder": "スキームやパスを付けず、1 行に 1 ホストを入力してください",
     "eplusKnowledgeSpaces": "ロボットのナレッジスペース",
     "eplusKnowledgeSpacesPlaceholder": "1 つ以上のナレッジスペースを選択してください",
     "eplusScopeNotice": "ここで設定したスペースは、このロボットのすべての利用者に適用され、個人のスペース権限は使用されません。",

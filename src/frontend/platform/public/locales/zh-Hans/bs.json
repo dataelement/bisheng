@@ -1024,8 +1024,6 @@
     "eplusCaConfigured": "已上传 CA 根证书",
     "eplusCaReady": "证书文件已读取，保存后生效",
     "eplusRemoveCa": "移除证书",
-    "eplusMediaHosts": "图片下载域名白名单",
-    "eplusMediaHostsPlaceholder": "每行填写一个域名，不要带协议和路径",
     "eplusKnowledgeSpaces": "机器人知识空间",
     "eplusKnowledgeSpacesPlaceholder": "请选择一个或多个知识空间",
     "eplusScopeNotice": "这里绑定的知识空间对该机器人的所有用户生效，不使用用户个人空间权限。",

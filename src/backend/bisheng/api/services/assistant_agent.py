@@ -106,12 +106,18 @@ class AssistantCitationToolWrapper(BaseTool):
 
     def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
+        if getattr(self.tool, "robot_scope_enforced", False):
+            # E+ replies are text-only; robot-bound sources have no internal
+            # citation resolve contract and must not enter that registry.
+            return self._dump_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
 
     async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
+        if getattr(self.tool, "robot_scope_enforced", False):
+            return self._dump_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)

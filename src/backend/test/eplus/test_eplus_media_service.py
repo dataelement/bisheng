@@ -64,28 +64,43 @@ def _service(payload=None, *, extractor=None):
     return service, downloader, store
 
 
-async def test_exact_host_allowlist_and_tls_ca_are_enforced():
+async def test_image_download_accepts_callback_host_without_allowlist_and_passes_tls_ca():
     service, downloader, _ = _service()
     with patch("bisheng.eplus.domain.services.media_service.decrypt_media", return_value=PNG):
         ref = await service.ingest_image(
             tenant_id=9,
             url="https://media.example/path?id=secret",
             aes_key="key",
-            allowed_hosts=("media.example",),
+            allowed_hosts=(),
             ca_pem=b"customer-ca",
         )
 
     assert ref.object_key.startswith("eplus/media/9/")
     assert downloader.calls[0][1] == b"customer-ca"
 
-    with pytest.raises(MediaIngestionError, match="host is not allowed"):
-        await service.ingest_image(
+    with patch("bisheng.eplus.domain.services.media_service.decrypt_media", return_value=PNG):
+        other_ref = await service.ingest_image(
             tenant_id=9,
-            url="https://evilmedia.example/path",
+            url="https://other.example/path",
             aes_key="key",
             allowed_hosts=("media.example",),
             ca_pem=None,
         )
+    assert other_ref == ref
+    assert downloader.calls[1][0] == "https://other.example/path"
+
+
+async def test_image_download_rejects_invalid_url_without_opening_connection():
+    service, downloader, _ = _service()
+    with pytest.raises(MediaIngestionError, match="URL is invalid"):
+        await service.ingest_image(
+            tenant_id=9,
+            url="file:///etc/passwd",
+            aes_key="key",
+            allowed_hosts=(),
+            ca_pem=None,
+        )
+    assert downloader.calls == []
 
 
 @pytest.mark.parametrize(
@@ -188,7 +203,7 @@ async def test_mixed_blocks_keep_order_and_one_bad_image_does_not_drop_text():
     service, _, _ = _service()
     blocks = (
         EPlusContentBlock(kind=EPlusContentKind.TEXT, text="before"),
-        EPlusContentBlock(kind=EPlusContentKind.IMAGE, url="https://bad.example/1", aes_key="key"),
+        EPlusContentBlock(kind=EPlusContentKind.IMAGE, url="file:///etc/passwd", aes_key="key"),
         EPlusContentBlock(kind=EPlusContentKind.TEXT, text="after"),
     )
 

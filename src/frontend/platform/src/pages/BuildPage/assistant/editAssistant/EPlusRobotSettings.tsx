@@ -1,7 +1,7 @@
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
-import { Input, PasswordInput, Textarea } from "@/components/bs-ui/input";
+import { Input, PasswordInput } from "@/components/bs-ui/input";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Switch } from "@/components/bs-ui/switch";
 import { toast } from "@/components/bs-ui/toast/use-toast";
@@ -31,7 +31,6 @@ interface RobotFormState {
   secret: string;
   caPem?: string;
   removeCa: boolean;
-  mediaHosts: string;
   spaceIds: string[];
   enabled: boolean;
 }
@@ -41,7 +40,6 @@ const emptyForm: RobotFormState = {
   connectionUrl: "",
   secret: "",
   removeCa: false,
-  mediaHosts: "",
   spaceIds: [],
   enabled: false,
 };
@@ -53,7 +51,6 @@ function formFromConfig(config: EPlusBotConfig | null): RobotFormState {
     connectionUrl: config.connection_url,
     secret: "",
     removeCa: false,
-    mediaHosts: config.media_hosts.join("\n"),
     spaceIds: config.space_ids.map(String),
     enabled: config.enabled,
   };
@@ -147,17 +144,13 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
 
   const handleSave = async () => {
     if (!validate()) return;
-    const mediaHosts = form.mediaHosts
-      .split(/[\n,]/)
-      .map((host) => host.trim())
-      .filter(Boolean);
     const payload: EPlusBotConfigInput = {
       bot_id: form.botId.trim(),
       connection_url: form.connectionUrl.trim(),
       secret: form.secret.trim() || undefined,
       ca_pem: form.caPem,
       remove_ca: form.removeCa,
-      media_hosts: Array.from(new Set(mediaHosts)),
+      media_hosts: [],
       space_ids: form.spaceIds.map(Number),
       enabled: form.enabled,
     };
@@ -291,19 +284,6 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
             </Button>
           </div>
         )}
-      </div>
-
-      <div>
-        <label htmlFor="eplus-media-hosts" className="bisheng-label">
-          {t("build.eplusMediaHosts")}
-        </label>
-        <Textarea
-          id="eplus-media-hosts"
-          className="mt-2 min-h-20"
-          value={form.mediaHosts}
-          placeholder={t("build.eplusMediaHostsPlaceholder")}
-          onChange={(event) => updateForm("mediaHosts", event.target.value)}
-        />
       </div>
 
       <div>

@@ -97,7 +97,9 @@ class EPlusMediaService:
         allowed_hosts: tuple[str, ...],
         ca_pem: bytes | None,
     ) -> EPlusMediaRef:
-        _validate_download_url(url, allowed_hosts)
+        # Retained in the call contract for existing bot configurations; host
+        # matching was removed for E+ callback media URLs.
+        _validate_download_url(url)
         try:
             downloaded = await self.downloader.download(
                 url,
@@ -232,14 +234,11 @@ class EPlusMediaService:
         return content
 
 
-def _validate_download_url(url: str, allowed_hosts: tuple[str, ...]) -> None:
+def _validate_download_url(url: str) -> None:
     parsed = urlsplit(url)
     host = (parsed.hostname or "").lower().rstrip(".")
-    normalized_allowed = {value.lower().rstrip(".") for value in allowed_hosts}
     if parsed.scheme not in {"http", "https"} or not host or parsed.username or parsed.password:
         raise MediaIngestionError("image download URL is invalid")
-    if host not in normalized_allowed:
-        raise MediaIngestionError("image download host is not allowed")
 
 
 def _normalize_ip(value: str) -> str:

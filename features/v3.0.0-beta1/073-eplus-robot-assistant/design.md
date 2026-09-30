@@ -120,7 +120,7 @@ E+ 允许同一用户对同一机器人同时有 3 条消息在途。“在途�
 
 #### 4.2.1 助手详细执行流程
 
-1. **协议与媒体预处理**：E+ 适配层解析 `text/image/mixed`，剥离群聊 `@机器人`；对图片校验下载域名、时效、大小与文件头，使用配置的 TLS CA 下载，再按消息自带 `aeskey` 解密并存入 MinIO。该步骤属于 E+ 接入层，不让通用 `AssistantAgent` 感知企微协议。
+1. **协议与媒体预处理**：E+ 适配层解析 `text/image/mixed`，剥离群聊 `@机器人`；对图片校验 URL 格式、大小与文件头，禁止下载跳转并限制超时，使用配置的 TLS CA 下载，再按消息自带 `aeskey` 解密并存入 MinIO。该步骤属于 E+ 接入层，不让通用 `AssistantAgent` 感知企微协议。
 2. **图片能力分流**：复用日常对话的图片处理能力。助手模型明确支持视觉时，生成有序的文字/图片内容块；非视觉模型使用已配置的文字提取/OCR，将结果作为本轮文字上下文；两种能力都不可用时明确告知无法理解图片。这里不是固定把所有图片都 OCR 成文字。
 3. **建立执行上下文**：读取一对一绑定的助手配置、模型、系统提示词和完整会话历史，注入真实发送者、机器人 ID、空间绑定版本和不可扩大的空间 ID 快照；本轮启动后不再因配置变化替换该快照。
 4. **装载工具**：保留普通工具及其原授权。仅在 E+ 本次执行路径中，不加载助手原来关联的知识入口，改为注入只允许检索机器人绑定空间的 `RobotSpaceRetrievalPolicy`；这不是修改助手配置，也不影响助手在毕昇内部的原有行为。任何间接访问毕昇知识空间的工具必须携带同一范围，否则不装载或执行失败关闭。
@@ -221,7 +221,7 @@ Assistant 1 ── 0..1 EPlusBotConfig 1 ── N EPlusBotSpace
 | `credential_version` | BIGINT，NOT NULL，默认 1 | Secret/CA/地址轮换时递增，worker 据此重建连接 |
 | `ca_object_key` | VARCHAR(512)，NULL | 私有 CA/自签根证书在 MinIO 的对象引用；公网可信证书为空 |
 | `ca_sha256` | CHAR(64)，NULL | 上传证书完整性及变更识别；上传内容必须是 CA 证书，拒绝私钥 |
-| `media_host_allowlist` | `JsonType`，NOT NULL | 允许下载临时图片的主机白名单；不从消息 URL 动态放宽 |
+| `media_host_allowlist` | `JsonType`，NOT NULL | 历史兼容列；不再用于限制 E+ 图片下载域名，新配置由管理页传空数组，后续版本再评估删除 |
 | `enabled` | BOOL，NOT NULL | 是否启用 E+ 接入；关闭后释放租约并断开连接 |
 | `is_deleted` | BOOL，NOT NULL，默认 false | 解除接入时逻辑删除并断开；重新配置同一助手时复用该稳定配置行，历史引用不失效 |
 | `connection_status` | VARCHAR(32)，NOT NULL | `DISABLED/CONNECTING/AUTHENTICATED/RETRYING/TAKEN_OVER/ERROR`；用于管理页展示，不以它代替 Redis 租约 |
@@ -327,7 +327,7 @@ Assistant 1 ── 0..1 EPlusBotConfig 1 ── N EPlusBotSpace
 | `body.aibotid` | 机器人 ID | 必须等于当前已认证订阅的 BotID，不能仅凭消息体选择租户 |
 | `body.from.userid` | 中粮员工原始 ID | 与 IAM `userid`、网关同步报文 `external_user_id`、毕昇 `user.external_id` 是同一原始值；固定用 `(WECOM_SOURCE='wecom', from.userid)` 查本租户自然人，无记录返回固定文案 |
 | `body.chattype` / `body.chatid` | 单聊/群聊会话键 | 群聊必须有 `chatid`；单聊以发送者 ID 为键，不能把昵称当键 |
-| `body.msgtype`、`text.content`、`mixed.msg_item[]`、`image.url/aeskey` | 本轮有序文字/图片内容 | 只接受本期三类（纯图片仅单聊会出现）；`msg_item` 各项优先看 `msgtype`，缺失时按是否含 `text`/`image` 键判断（demo 测试用例里的 `msg_item` 就没有 `msgtype`）；文本去掉 `@机器人` 前缀；图片类型按文件头魔数判断，不信下载响应里的文件名；图片 URL 只从该机器人配置的 E+ 下载域名下载（私有化域名各异，按机器人配置，不写死文档示例域名）并解密 |
+| `body.msgtype`、`text.content`、`mixed.msg_item[]`、`image.url/aeskey` | 本轮有序文字/图片内容 | 只接受本期三类（纯图片仅单聊会出现）；`msg_item` 各项优先看 `msgtype`，缺失时按是否含 `text`/`image` 键判断（demo 测试用例里的 `msg_item` 就没有 `msgtype`）；文本去掉 `@机器人` 前缀；图片类型按文件头魔数判断，不信下载响应里的文件名；图片下载不限制域名，但校验 URL 格式、禁止跳转、限制超时与大小，并按消息密钥解密 |
 | `stream.id`、`stream.finish/content` | 同一回答的创建、刷新和结束 | 同 `msgid` 稳定生成；每次刷新发送完整累计内容；超 20,480 字节截断并附提示；超时/失败也发送明确终态 |
 | `aibot_event_callback` 的 `body.msgid`、`event.eventtype` | 事件去重与分派 | 仅处理 `disconnected_event`；`enter_chat`、`template_card_event`、`feedback_event` 按 `msgid` 去重后忽略 |
 
@@ -389,9 +389,9 @@ Assistant 1 ── 0..1 EPlusBotConfig 1 ── N EPlusBotSpace
 |---|---|
 | F048 统一权限入口 | 仅在后台保存绑定时校验操作者具备助手 `edit`（作为首期 E+ 接入管理权限）；不校验空间 `manage_permission`，不新增动作、不改 OpenFGA 模型、不写 Grant。空间只做同租户、存在和有效性校验。权限服务不可用时保存失败，已生效绑定不受影响。 |
 | 组织同步 User | 复用既有 `WECOM_SOURCE = 'wecom'`；网关把 IAM `userid` 原样放入 `external_user_id` 并落为 `user.external_id`，机器人入口以 `(WECOM_SOURCE, body.from.userid)` 精确映射真实自然人，不自动创建缺失员工。 |
-| F041 空间检索、F029/F054 引用 | 内部入口原路径不变；E+ 独立检索范围和空间内文件口径。E+ 只回安全文字，不公开内部 citation token/直链；若后续开放来源详情，需新增按机器人范围的解析校验，不能套 `shared` 档。 |
+| F041 空间检索、F029/F054 引用 | 内部入口原路径不变；E+ 独立检索范围和空间内文件口径。`robot_bound` 检索结果不进入内部引用注册表；E+ 只回文字，不发来源卡片、citation token 或直链。若后续开放来源详情，需新增按机器人范围的解析校验，不能套 `shared` 档。 |
 | 助手与工具框架 | 共用模型、提示词、非知识工具；助手关联的普通知识库和知识空间不能在 E+ 入口旁路机器人范围，任意 API/MCP 工具若触及毕昇知识须可传入范围，否则拒用。 |
-| E+ 私有化网络/证书/Secret | 连接地址、CA、Secret、图片下载域名由客户提供；不拿文档示例地址当生产地址。Secret 与临时图片 URL、AES key 不入普通日志。客户侧须保持机器人为「长连接」模式。待确认项见 [e2e-checklist.md](./e2e-checklist.md)。 |
+| E+ 私有化网络/证书/Secret | 连接地址、CA、Secret 由客户提供；图片下载域名不再配置白名单（2026-09-30 客户确认），保留 URL 格式、跳转、超时、大小、DNS 固定及解密校验。接受外部回调 URL 可指向其他域名的剩余风险；Secret 与临时图片 URL、AES key 不入普通日志。客户侧须保持机器人为「长连接」模式。待确认项见 [e2e-checklist.md](./e2e-checklist.md)。 |
 
 ### 6.4 错误与文案
 

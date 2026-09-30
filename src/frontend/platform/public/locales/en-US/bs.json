@@ -1035,8 +1035,6 @@
     "eplusCaConfigured": "A CA root certificate is configured",
     "eplusCaReady": "Certificate loaded and ready to save",
     "eplusRemoveCa": "Remove certificate",
-    "eplusMediaHosts": "Image Download Host Allowlist",
-    "eplusMediaHostsPlaceholder": "Enter one host per line, without a scheme or path",
     "eplusKnowledgeSpaces": "Robot Knowledge Spaces",
     "eplusKnowledgeSpacesPlaceholder": "Select one or more knowledge spaces",
     "eplusScopeNotice": "These spaces apply to every user of this robot; personal space permissions are not used.",
