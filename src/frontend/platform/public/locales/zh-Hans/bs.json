@@ -597,6 +597,7 @@
     "shareToChildren": "共享给子租户",
     "tenantSharedReadonly": "{{tenantName}} 共享 · 只读",
     "silicon": "硅基流动",
+    "atlascloud": "Atlas Cloud",
     "timesPerDay": "次/天",
     "tts": "语音合成(TTS)",
     "updateSuccess": "更新成功",

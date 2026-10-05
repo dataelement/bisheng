@@ -213,6 +213,7 @@ _llm_node_type: dict = {
     LLMServerType.MOONSHOT.value: {"client": ChatMoonshot, "params_handler": _get_moonshot_params},
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    LLMServerType.ATLASCLOUD.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
     LLMServerType.MIND_IE.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
 }
 

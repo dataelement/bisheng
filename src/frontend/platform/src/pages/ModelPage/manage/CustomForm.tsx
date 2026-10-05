@@ -345,6 +345,24 @@ const modelProviders = {
             required: true,
             key: "api_key",
         },
+    ],
+    "atlascloud": [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "",
+            default: "https://api.atlascloud.ai/v1",
+            required: true,
+            key: "openai_api_base",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: true,
+            key: "api_key",
+        },
     ]
 };
 

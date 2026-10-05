@@ -65,6 +65,15 @@ export interface AdvancedParams {
       "top_p": 1
     },
   
+    'atlascloud-llm': {
+      "cache": null,
+      "request_timeout": null,
+      "seed": null,
+      "streaming": false,
+      "temperature": 1,
+      "top_p": 1
+    },
+
     'silicon-llm': {
       "cache": null,
       "extra_body": {
@@ -237,6 +246,7 @@ export interface AdvancedParams {
     'ollama': 'ollama-llm',
     'volcengine': 'volcengine-llm',
     'silicon': 'silicon-llm',
+    'atlascloud': 'atlascloud-llm',
     'MindIE': 'mindie-llm',
     'qwen': 'qwen-llm',       // 通义千问
     'qianfan': 'qianfan-llm', // 百度千帆

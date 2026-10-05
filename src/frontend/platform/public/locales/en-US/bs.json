@@ -753,6 +753,7 @@
     "shareToChildren": "Share with child tenants",
     "tenantSharedReadonly": "Shared by {{tenantName}} · Read-only",
     "silicon": "Silicon Flow",
+    "atlascloud": "Atlas Cloud",
     "timesPerDay": "times/day",
     "tts": "Text-to-Speech (TTS)",
     "updateSuccess": "Update Success",

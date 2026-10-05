@@ -24,6 +24,7 @@ class LLMServerType(Enum):
     MOONSHOT = 'moonshot'  # Dark Side of the Moonkimi
     VOLCENGINE = 'volcengine'  # Large model of a volcanic engine
     SILICON = 'silicon'  # Silicon-based flow
+    ATLASCLOUD = 'atlascloud'  # Atlas Cloud OpenAI-compatible gateway
     MIND_IE = 'MindIE'  # Ascendant Inference Engine MindIE
 
 

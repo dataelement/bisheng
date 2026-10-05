@@ -43,6 +43,10 @@ const modelProviderInfo: Record<string, ProviderInfo> = {
         apiKeyUrl: 'https://cloud.siliconflow.cn/me/account/ak',
         modelUrl: 'https://cloud.siliconflow.cn/me/models',
     },
+    atlascloud: {
+        apiKeyUrl: 'https://atlascloud.ai/docs/api-keys',
+        modelUrl: 'https://atlascloud.ai/models',
+    },
     deepseek: {
         apiKeyUrl: 'https://platform.deepseek.com/api_keys',
         modelUrl: 'https://platform.deepseek.com/docs',

@@ -378,6 +378,7 @@ export const modelProvider = [
     { "name": "阿里云百炼", "value": "qwen" },
     { "name": "DeepSeek", "value": "deepseek" },
     { "name": "硅基流动", "value": "silicon" },
+    { "name": "Atlas Cloud", "value": "atlascloud" },
     { "name": "火山引擎", "value": "volcengine" },
     { "name": "智谱 AI", "value": "zhipu" },
     { "name": "讯飞星火", "value": "spark" },

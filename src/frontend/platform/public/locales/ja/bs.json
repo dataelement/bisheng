@@ -592,6 +592,7 @@
     "shareToChildren": "子テナントと共有",
     "tenantSharedReadonly": "{{tenantName}} で共有 · 読み取り専用",
     "silicon": "硅基流动",
+    "atlascloud": "Atlas Cloud",
     "timesPerDay": "回/日",
     "tts": "音声合成(TTS)",
     "updateSuccess": "更新に成功しました",
