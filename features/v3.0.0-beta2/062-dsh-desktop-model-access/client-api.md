@@ -493,6 +493,8 @@ SSE 仅在 `stream_options.include_usage=true` 时返回最终 usage 块；未�
 
 ## 9. 错误码与客户端动作
 
+逐码原因、建议提示、SSE/关键字兼容和客户端验收见 [客户端错误原因适配清单](client-errors.md)（2026-10-08，按实现核对）。
+
 错误体统一为：
 
 ```json
@@ -507,6 +509,7 @@ error.message 为可展示的服务端说明，不解析其文案；error.code �
 | 400 | invalid_grant / pkce_verification_failed / authorization_expired | authentication_error | 清理当前授权事务，重新浏览器登录；不重用 ticket |
 | 401 | invalid_access_token | authentication_error | 仅按 §5.1 刷新一次；仍失败重新登录 |
 | 401 | invalid_refresh_token / refresh_token_reused / session_expired / session_revoked | authentication_error | 清理凭证与 provider，要求重新登录 |
+| 403 | seat_not_assigned | permission_error | 尚未分配席位，联系管理员授权后重新登录；登录不会自动分配席位 |
 | 403 | seat_limit_reached | permission_error | 席位已满，联系管理员，不循环登录抢席 |
 | 403 | seat_revoked | permission_error | 停止新请求；提示管理员重新分配后必须重新登录，旧凭证不会复活 |
 | 403 | license_invalid / license_expired / dsh_disabled | permission_error | 显示对应不可用原因，联系管理员；不切换到普通登录凭证 |
