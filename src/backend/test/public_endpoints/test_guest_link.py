@@ -182,7 +182,7 @@ async def _async_value(value):
     return value
 
 
-async def test_app_switch_off_is_26103(operator_lookups, monkeypatch) -> None:
+async def test_app_switch_off_is_26403(operator_lookups, monkeypatch) -> None:
     operator_lookups.app_row = AppGuestLink(enabled=False, user_id=None)
     monkeypatch.setattr(guest_policy, "load_app_guest_link", lambda *a, **k: _async_value(operator_lookups.app_row))
     with pytest.raises(PublicGuestAccessDisabledError) as caught:
@@ -213,7 +213,7 @@ async def test_specified_user_overrides_default(operator_lookups, monkeypatch) -
     assert operator.user_id == 7
 
 
-async def test_follow_default_outside_tenant_is_26103(operator_lookups, monkeypatch) -> None:
+async def test_follow_default_outside_tenant_is_26403(operator_lookups, monkeypatch) -> None:
     operator_lookups.memberships.pop((41, 23), None)
     monkeypatch.setattr(guest_policy, "load_app_guest_link", lambda *a, **k: _async_value(AppGuestLink()))
     monkeypatch.setattr(
@@ -329,7 +329,7 @@ def test_guest_skip_does_not_cover_knowledge_or_tools() -> None:
         reset_current_public_api_principal(token)
 
 
-async def test_use_check_rereads_switch_and_raises_26103(monkeypatch) -> None:
+async def test_use_check_rereads_switch_and_raises_26403(monkeypatch) -> None:
     from bisheng.permission.application.business_authorization import check_business_action
 
     token = set_current_public_api_principal(
