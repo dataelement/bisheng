@@ -2348,6 +2348,9 @@
       "revealTitle": "キーを生成しました",
       "once": "完全なキーが表示されるのは今回だけです。今すぐコピーして安全に保存してください。",
       "saved": "キーを安全に保存しました",
+      "verifyTitle": "キーが使えるか確認する",
+      "verifyHint": "ターミナルで次のコマンドを実行します。サービスアカウント名が返れば、キーは使用できます。",
+      "verifyDelegateHint": "委任キーでは代理するユーザーの指定が必要です。ユーザー ID は委任範囲内の別のユーザーに置き換えられます。",
       "mask": "キー",
       "permissions": "権限",
       "noPermissions": "権限なし",
@@ -2364,8 +2367,8 @@
       "revokeAllConfirm": "このサービスアカウントの有効なキーがすべて直ちに無効になります。続行しますか？"
     },
     "scopeGroups": {
-      "workflow": "ワークフロー",
-      "assistant": "アシスタントとチャット",
+      "app": "アプリ",
+      "workstation": "ワークスペース",
       "knowledge": "ナレッジ",
       "delegation": "ID 委任",
       "local_dev_toolkit": "ローカル開発ツールキット"

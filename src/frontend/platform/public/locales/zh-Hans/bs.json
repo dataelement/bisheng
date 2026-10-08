@@ -2348,6 +2348,9 @@
       "revealTitle": "密钥已生成",
       "once": "这是唯一一次显示完整密钥，请立即复制并安全保存。",
       "saved": "我已安全保存此密钥",
+      "verifyTitle": "验证密钥是否可用",
+      "verifyHint": "在终端运行下面的命令，返回服务账号名称即说明密钥可以使用。",
+      "verifyDelegateHint": "委托密钥必须指明代表哪位用户，命令里的用户 ID 可换成委托范围内的其他用户。",
       "mask": "密钥",
       "permissions": "权限位",
       "noPermissions": "未授予权限",
@@ -2364,8 +2367,8 @@
       "revokeAllConfirm": "全部吊销后，该服务账号当前所有有效密钥都会立即失效。确定继续吗？"
     },
     "scopeGroups": {
-      "workflow": "工作流",
-      "assistant": "助手与会话",
+      "app": "应用",
+      "workstation": "工作台",
       "knowledge": "知识库",
       "delegation": "身份委托",
       "local_dev_toolkit": "本地开发工具包"
