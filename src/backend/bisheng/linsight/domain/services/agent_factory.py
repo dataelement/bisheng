@@ -473,6 +473,16 @@ def _build_linsight_system_prompt(
             "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
             "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
+            # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
+            # description. Reduces attempts only; isolation is the real control.
+            "# 执行环境边界\n\n"
+            "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
+            "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
+            "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。\n"
+            "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
+            "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
+            "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
+            "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
         )
 
     # F069: the deliverable step names the citation requirement explicitly, but
