@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/layout/HeaderMenu", () => ({
   default: () => <div data-testid="header-menu" />,
+  HeaderMenu: () => <div data-testid="header-menu" />,
 }));
 
 vi.mock("@/components/bs-icons", () => {
@@ -84,6 +85,13 @@ vi.mock("@/controllers/API/tenant", () => ({
 
 vi.mock("@/controllers/request", () => ({
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
+}));
+
+vi.mock("@/hooks/useDshBrowserConfig", () => ({
+  useDshBrowserConfig: () => ({
+    config: { management_enabled: true, enabled: true },
+    failed: false,
+  }),
 }));
 
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({

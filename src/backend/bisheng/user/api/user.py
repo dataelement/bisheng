@@ -713,10 +713,7 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
     if db_user.delete == 0:  # Enable User
         # Count of cleanup password errors
         clear_error_password_key(db_user.user_id)
-    with get_sync_db_session() as session:
-        session.add(db_user)
-        session.commit()
-        session.refresh(db_user)
+    db_user = UserService.persist_profile_update(db_user)
     if disabled_just_now:
         await UserService.ainvalidate_jwt_after_account_disabled(db_user.user_id)
     update_user_delete_hook(request, login_user, db_user)

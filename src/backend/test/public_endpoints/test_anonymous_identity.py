@@ -171,7 +171,7 @@ def test_ignored_credentials_do_not_override_publication_denial(client, publicat
     response = client.get(f"/api/v3/flows/{WORKFLOW_ID}", headers=CALLER_HEADERS[-1])
 
     assert response.status_code == 404
-    assert response.json()["status_code"] == 26102
+    assert response.json()["status_code"] == 26402
     publication.decode.assert_not_called()
 
 

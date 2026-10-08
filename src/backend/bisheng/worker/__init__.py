@@ -3,6 +3,7 @@
 from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
+from bisheng.worker.dsh.registry import register_dsh_tasks
 from bisheng.worker.information.article import dispatch_information_article_poll, sync_information_articles
 from bisheng.worker.information.knowledge_delivery import (
     deliver_information_articles_to_config,
@@ -27,6 +28,7 @@ from bisheng.worker.knowledge.scheduler import (
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
+from bisheng.worker.main import bisheng_celery
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
     retry_failed_tuples,
@@ -40,3 +42,37 @@ from bisheng.worker.telemetry.mid_table import (
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
+
+register_dsh_tasks(bisheng_celery)
+
+__all__ = [
+    "add",
+    "admin_scope_cleanup",
+    "cleanup_succeeded_failed_tuples",
+    "continue_workflow",
+    "copy_qa_knowledge_celery",
+    "dispatch_information_article_poll",
+    "dispatch_information_subscription_reconcile",
+    "execute_approval_outbox",
+    "execute_workflow",
+    "file_copy_celery",
+    "insert_qa_celery",
+    "migrate_file_vectors",
+    "parse_knowledge_file_celery",
+    "rebuild_knowledge_celery",
+    "rebuild_knowledge_file_chunk",
+    "rebuild_qa_knowledge_celery",
+    "reconcile_file_scheduler_task",
+    "reconcile_information_subscriptions",
+    "reconcile_user_tenant_assignments",
+    "retry_approval_outbox",
+    "retry_failed_tuples",
+    "retry_knowledge_file_celery",
+    "stop_workflow",
+    "sync_information_articles",
+    "sync_mid_app_increment",
+    "sync_mid_knowledge_increment",
+    "sync_mid_user_increment",
+    "sync_mid_user_interact_dtl",
+    "trigger_dispatch_task",
+]
