@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import ClassVar, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_, func, or_, text, update
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, UniqueConstraint, and_, func, or_, text, update
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, Relationship, col, select
 
@@ -89,6 +89,12 @@ class User(UserBase, table=True):
             server_default=text("0"),
             comment="v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change",
         ),
+    )
+
+    # F062: increment in the owning user transaction before publishing a profile snapshot.
+    dsh_profile_version: int = Field(
+        default=0,
+        sa_column=Column(BigInteger, nullable=False, server_default=text("0")),
     )
 
     # DefinitiongroupsAndrolesQuery Relationships for

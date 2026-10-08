@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/layout/HeaderMenu", () => ({
   default: () => <div data-testid="header-menu" />,
+  HeaderMenu: () => <div data-testid="header-menu" />,
 }));
 
 vi.mock("@/components/bs-icons", () => {
@@ -85,6 +86,13 @@ vi.mock("@/controllers/request", () => ({
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 
+vi.mock("@/hooks/useDshBrowserConfig", () => ({
+  useDshBrowserConfig: () => ({
+    config: { management_enabled: true, enabled: true },
+    failed: false,
+  }),
+}));
+
 beforeAll(() => {
   (globalThis as any).__APP_ENV__ = { BASE_URL: "" };
 });
@@ -109,7 +117,10 @@ const baseUser = {
   leaf_tenant_name: "华东子公司",
 };
 
-function renderLayout(userOverrides: Record<string, unknown> = {}) {
+function renderLayout(
+  userOverrides: Record<string, unknown> = {},
+  appConfigOverrides: Record<string, unknown> = {},
+) {
   return render(
     <darkContext.Provider value={{ dark: false, setDark: vi.fn() } as any}>
       <locationContext.Provider
@@ -124,7 +135,11 @@ function renderLayout(userOverrides: Record<string, unknown> = {}) {
           setExtraNavigation: vi.fn(),
           extraComponent: null,
           setExtraComponent: vi.fn(),
-          appConfig: { multiTenantEnabled: true, noFace: true },
+          appConfig: {
+            multiTenantEnabled: true,
+            noFace: true,
+            ...appConfigOverrides,
+          },
           reloadConfig: vi.fn(),
         } as any}
       >
@@ -174,6 +189,7 @@ describe("MainLayout identity-specific navigation", () => {
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.getByRole("link", { name: "menu.dshDesktop" })).toBeInTheDocument();
     expect(screen.queryByText("tenant.management")).toBeNull();
   });
 
@@ -184,6 +200,7 @@ describe("MainLayout identity-specific navigation", () => {
     });
 
     expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "menu.dshDesktop" })).toBeNull();
     expect(screen.queryByText("menu.dataset")).toBeNull();
     expect(screen.queryByText("menu.skills")).toBeNull();
     expect(screen.queryByText("menu.knowledge")).toBeNull();
@@ -202,12 +219,35 @@ describe("MainLayout identity-specific navigation", () => {
   it("plain user without any admin flag sees neither system nor tenant management", () => {
     renderLayout();
     expect(screen.queryByText("menu.system")).toBeNull();
+    expect(screen.queryByRole("link", { name: "menu.dshDesktop" })).toBeNull();
     expect(screen.queryByText("tenant.management")).toBeNull();
   });
 
   it("global super admin still sees both system and tenant management entries", () => {
     renderLayout({ role: "admin" });
     expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "menu.dshDesktop" })).toBeInTheDocument();
     expect(screen.getByText("tenant.management")).toBeInTheDocument();
+  });
+
+  it("aligns the DSH icon column with adjacent menus and distributes the label across three em", () => {
+    renderLayout({ role: "admin" });
+    const link = screen.getByRole("link", { name: "menu.dshDesktop" });
+    const modelLink = screen.getByRole("link", { name: "menu.models" });
+    expect(link).toHaveAttribute("href", "/dsh");
+    expect(link).toHaveClass("inline-flex", "items-center", "px-6", "w-full", "h-12");
+    expect(modelLink).toHaveClass("inline-flex", "px-6", "w-full", "h-12");
+    expect(link.querySelector("svg")).toHaveClass("h-6", "w-6", "shrink-0");
+    const label = link.querySelector("span[aria-hidden='true']");
+    expect(label).toHaveClass("mx-[14px]", "inline-flex", "w-[3em]", "justify-between", "text-sm");
+    expect(screen.getByText("menu.models")).toHaveClass("mx-[14px]");
+    expect(label?.textContent).toBe("menu.dshDesktop");
+  });
+
+  it("keeps single-tenant organization naming inside system management", () => {
+    renderLayout({ role: "admin" }, { multiTenantEnabled: false });
+    expect(screen.getByText("menu.system")).toBeInTheDocument();
+    expect(screen.queryByText("tenant.profile")).toBeNull();
+    expect(screen.queryByText("tenant.management")).toBeNull();
   });
 });
