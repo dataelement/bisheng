@@ -69,9 +69,10 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     setOauthLoading(false)
                     return
                 }
+                const ssoLoginUrl = urls?.redirect_login_url || urls?.sso
                 // Persist redirect URLs for interceptor access (401 / logout)
-                if (urls?.redirect_login_url) {
-                    localStorage.setItem('THIRD_PARTY_LOGIN_URL', urls.redirect_login_url)
+                if (ssoLoginUrl) {
+                    localStorage.setItem('THIRD_PARTY_LOGIN_URL', ssoLoginUrl)
                 } else {
                     localStorage.removeItem('THIRD_PARTY_LOGIN_URL')
                 }
@@ -81,8 +82,8 @@ export const LoginPage = ({ forceLocal = false }: LoginPageProps) => {
                     localStorage.removeItem('THIRD_PARTY_LOGOUT_URL')
                 }
                 // Redirect immediately if third-party login URL is configured
-                if (urls?.redirect_login_url) {
-                    window.location.href = urls.redirect_login_url
+                if (ssoLoginUrl) {
+                    window.location.href = ssoLoginUrl
                     return
                 }
                 setOauthLoading(false)

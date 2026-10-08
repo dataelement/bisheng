@@ -132,7 +132,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       {
-        path: __APP_ENV__.BISHENG_HOST,
+        path: '/admin',
         element: <LoginLayout />,
         children: [
           { path: 'login', element: <Login /> },

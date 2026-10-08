@@ -12,7 +12,10 @@ import svgr from "vite-plugin-svgr";
  * 开启后一般外层网管匹配【custom】时直接透传转到内层网关
  * 内层网关访问 api或者前端静态资源需要去掉【custom】前缀
  */
-const app_env = { BASE_URL: '' } // /custom
+function normalizeBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/^\/+|\/+$/g, '');
+  return normalized ? `/${normalized}` : '';
+}
 
 const commonProxyOptions = {
   changeOrigin: true,
@@ -39,11 +42,17 @@ const warnMinioSignatureMismatch = (targetHost: string, requestUrl: string) => {
   );
 };
 
-const createProxyConfig = (target: string, rewrite = true, isMinio = false, verbose = false) => ({
+const createProxyConfig = (
+  target: string,
+  baseUrl: string,
+  rewrite = true,
+  isMinio = false,
+  verbose = false,
+) => ({
   ...commonProxyOptions,
   target,
   ...(rewrite && {
-    rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
+    rewrite: (p: string) => baseUrl && p.startsWith(baseUrl) ? p.slice(baseUrl.length) || '/' : p
   }),
   configure: (proxy: import('http-proxy').ProxyServer) => {
     // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
@@ -98,6 +107,7 @@ export default defineConfig(({ command, mode }) => {
   // 必须从 .env.development.local 等文件加载；仅用 process.env 时配置阶段读不到 VITE_ 变量，会回落到 7860，
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
+  const baseUrl = normalizeBaseUrl(env.VITE_BASE_URL || '');
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860/";
   const fileServiceTarget = resolveMinioProxyTarget(env);
   // MinIO presigned URLs sign the Host header; this proxy's host MUST equal the
@@ -109,7 +119,7 @@ export default defineConfig(({ command, mode }) => {
     );
   }
   const app_env_define = {
-    ...app_env,
+    BASE_URL: baseUrl,
     WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',
     // Origin the OnlyOffice Document Server can reach us at. It downloads the report
     // template and POSTs the save callback server-side, so `location.origin`
@@ -119,18 +129,18 @@ export default defineConfig(({ command, mode }) => {
   };
 
   const proxyLog = env.VITE_PROXY_LOG === '1';
-  const apiProxyConfig = createProxyConfig(target, true, false, proxyLog);
-  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, true, true, proxyLog);
+  const apiProxyConfig = createProxyConfig(target, baseUrl, true, false, proxyLog);
+  const fileServiceProxyConfig = createProxyConfig(fileServiceTarget, baseUrl, true, true, proxyLog);
   const proxyTargets: Record<string, ReturnType<typeof createProxyConfig>> = {};
   apiRoutes.forEach(route => {
-    proxyTargets[`${app_env.BASE_URL}${route}`] = apiProxyConfig;
+    proxyTargets[`${baseUrl}${route}`] = apiProxyConfig;
   });
   fileServiceRoutes.forEach(route => {
-    proxyTargets[`${app_env.BASE_URL}${route}`] = fileServiceProxyConfig;
+    proxyTargets[`${baseUrl}${route}`] = fileServiceProxyConfig;
   });
 
   return {
-    base: app_env.BASE_URL || '/',
+    base: baseUrl ? `${baseUrl}/` : '/',
     // Strip all console.* / debugger from production bundles so no debug data
     // (API payloads, tokens, filenames) leaks to the browser console — same
     // policy as the client app's terser drop_console. Dev keeps them.
@@ -180,8 +190,8 @@ export default defineConfig(({ command, mode }) => {
           data: {
             // `command` is vite's own signal; process.env.NODE_ENV isn't reliably
             // set during the config phase.
-            aceScriptSrc: `<script src="${command === 'build' ? app_env.BASE_URL : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
-            baseUrl: app_env.BASE_URL
+            aceScriptSrc: `<script src="${command === 'build' ? baseUrl : ''}/node_modules/ace-builds/src-min-noconflict/ace.js" type="text/javascript"></script>`,
+            baseUrl
           }
         }
       }),

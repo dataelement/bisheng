@@ -24,12 +24,14 @@ function buildVersion(): string {
   return `v${pkg.version} (${stamp})`;
 }
 
-const app_env = {
-  BASE_URL: '/workspace',
-  BISHENG_HOST: '/admin'
+function normalizeBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/^\/+|\/+$/g, '');
+  return normalized ? `/${normalized}` : '';
 }
 
-const minioPathRE = /^\/(?:workspace\/)?(?:bisheng|tmp-dir)(?:\/|$)/;
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // Emit one loud, actionable warning the first time MinIO answers a proxied
 // object request with 403. For presigned (SigV4) URLs to the public bucket a
@@ -50,8 +52,9 @@ function warnMinioSignatureMismatch(envVar: string, targetHost: string, requestU
   );
 }
 
-function minioFileProxyPlugin(minioTarget: string): Plugin {
+function minioFileProxyPlugin(minioTarget: string, workspaceBaseUrl: string): Plugin {
   const minioTargetHost = new URL(minioTarget).host;
+  const minioPathRE = new RegExp(`^(?:${escapeRegExp(workspaceBaseUrl)})?/(?:bisheng|tmp-dir)(?:/|$)`);
   return {
     name: 'bisheng:minio-file-proxy',
     apply: 'serve',
@@ -68,7 +71,9 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
           return;
         }
 
-        const rewrittenUrl = requestUrl.replace(/^\/workspace(?=\/(?:bisheng|tmp-dir)(?:\/|$))/, '');
+        const rewrittenUrl = requestUrl.startsWith(`${workspaceBaseUrl}/`)
+          ? requestUrl.slice(workspaceBaseUrl.length)
+          : requestUrl;
         const targetUrl = new URL(rewrittenUrl, minioTarget);
         const proxyReq = http.request(
           {
@@ -112,6 +117,12 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.join(__dirname, '..'));
+  const deploymentBaseUrl = normalizeBaseUrl(env.VITE_BASE_URL || '');
+  const workspaceBaseUrl = `${deploymentBaseUrl}/workspace`;
+  const appEnv = {
+    BASE_URL: workspaceBaseUrl,
+    BISHENG_HOST: `${deploymentBaseUrl}/admin`,
+  };
   // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
   // NOT the backend (7860 only 404s on object keys). Override per environment via
   // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
@@ -124,9 +135,9 @@ export default defineConfig(({ command, mode }) => {
   const proxyLog = env.VITE_PROXY_LOG === '1';
 
   return {
-    base: app_env.BASE_URL || '/',
+    base: `${workspaceBaseUrl}/`,
     define: {
-      __APP_ENV__: JSON.stringify(app_env),
+      __APP_ENV__: JSON.stringify(appEnv),
       // vconsole ships ONLY when explicitly requested (npm run build:vconsole,
       // which sets VITE_ENABLE_VCONSOLE=true). A plain `npm run build` never
       // bundles the debug console — do not hardcode this back to 'true'.
@@ -142,15 +153,15 @@ export default defineConfig(({ command, mode }) => {
       // Pin to 4001: fail loudly if the port is taken instead of drifting to 4002+.
       strictPort: true,
       proxy: {
-        '^(/workspace)?/bisheng': {
+        [`^(${workspaceBaseUrl})?/bisheng`]: {
           target: minioTarget,
           changeOrigin: true,
           secure: false,
           rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
+            return path.startsWith(`${workspaceBaseUrl}/`) ? path.slice(workspaceBaseUrl.length) : path;
           },
         },
-        '/workspace/api': {
+        [`${workspaceBaseUrl}/api`]: {
           target: apiTarget,
           changeOrigin: true,
           secure: false,
@@ -163,15 +174,15 @@ export default defineConfig(({ command, mode }) => {
             }
           },
           rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
+            return path.slice(workspaceBaseUrl.length);
           },
         },
-        '/workspace/tmp-dir': {
+        [`${workspaceBaseUrl}/tmp-dir`]: {
           target: minioTarget,
           changeOrigin: true,
           secure: false,
           rewrite: (path) => {
-            return path.replace(/^\/workspace/, '');
+            return path.slice(workspaceBaseUrl.length);
           },
         },
       },
@@ -180,7 +191,7 @@ export default defineConfig(({ command, mode }) => {
     envDir: '../',
     envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
     plugins: [
-      minioFileProxyPlugin(minioTarget),
+      minioFileProxyPlugin(minioTarget, workspaceBaseUrl),
       react(),
       nodePolyfills(),
       VitePWA({
@@ -248,7 +259,7 @@ export default defineConfig(({ command, mode }) => {
       createHtmlPlugin({
         inject: {
           data: {
-            baseUrl: app_env.BASE_URL.replace(/\/$/, ''),
+            baseUrl: workspaceBaseUrl,
           },
         },
       }),

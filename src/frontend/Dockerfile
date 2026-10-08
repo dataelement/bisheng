@@ -1,5 +1,7 @@
 FROM node:20-alpine as frontend_build
 ARG BACKEND
+ARG VITE_BASE_URL=""
+ENV VITE_BASE_URL=${VITE_BASE_URL}
 WORKDIR /app
 COPY . /app
 # pnpm workspace build (registry comes from .npmrc; packageManager pins the version).

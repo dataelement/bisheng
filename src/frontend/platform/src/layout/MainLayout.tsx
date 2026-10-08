@@ -24,6 +24,7 @@ import { ApprovalMenuIcon } from "@/components/bs-icons/menu/approval";
 import { TenantMenuIcon } from "@/components/bs-icons/menu/tenant";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Separator } from "../components/bs-ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/bs-ui/tooltip";
@@ -176,7 +177,7 @@ export default function MainLayout() {
                                     {user.user_name} <ChevronDown className="inline-block mt-[-2px]" />
                                 </span>
                             }>
-                            {hasWorkbenchEntry && <SelectHoverItem onClick={() => window.open('/workspace/')}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
+                            {hasWorkbenchEntry && <SelectHoverItem onClick={() => window.open(getWorkspaceClientUrl('/'))}><GanttChartIcon className="w-4 h-4 mr-1" /><span>{t('menu.workspace')}</span></SelectHoverItem>}
                             <SelectHoverItem onClick={JumpResetPage}><Lock className="w-4 h-4 mr-1" /><span>{t('menu.changePwd')}</span></SelectHoverItem>
                             <SelectHoverItem onClick={handleLogout} className="text-[#f53f3f] hover:bg-red-50 dark:hover:bg-red-950/30 dark:text-[#f53f3f]"><QuitIcon className="w-4 h-4 mr-1" /><span>{t('menu.logout')}</span></SelectHoverItem>
                         </SelectHover>

@@ -11,6 +11,7 @@ import { AppNumType } from "../types/app";
 import RouteErrorBoundary from "./RouteErrorBoundary";
 import EditorPage from "@/pages/Dashboard/editor";
 import SharePage from "@/pages/Dashboard/share";
+import { getWorkspaceClientUrl, getWorkspaceRedirectUrl } from "@/utils/workspaceUrl";
 
 // 异步加载页面组件
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
@@ -51,8 +52,9 @@ const baseConfig = {
 
 const RedirectToExternalLink = () => {
   useEffect(() => {
-    const path = import.meta.env.DEV ? '/admin' : '/workspace/'
-    window.location.href = window.location.origin + path;
+    window.location.href = import.meta.env.DEV
+      ? `${window.location.origin}${__APP_ENV__.BASE_URL}/admin`
+      : getWorkspaceClientUrl('/');
   }, []);
 
   return null;
@@ -61,7 +63,7 @@ const RedirectToExternalLink = () => {
 // Redirect standalone chat routes to client app (separate SPA at /workspace)
 const RedirectToClient = () => {
   useEffect(() => {
-    window.location.replace('/workspace' + window.location.pathname + window.location.search);
+    window.location.replace(getWorkspaceRedirectUrl(window.location.pathname, window.location.search));
   }, []);
 
   return null;
