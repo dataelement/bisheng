@@ -878,8 +878,12 @@ async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
     if not isinstance(results, list):
         return output, []
     annotated = annotate_web_results_with_citations(results)
-    items = await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
-    return json.dumps(annotated, ensure_ascii=False), list(items or [])
+    items = collect_web_citation_registry_items(annotated)
+    # Hand back the snippet-level items, not what the cache returns: the cache
+    # groups them per page and those records carry no ``key`` / ``itemId``, so a
+    # handle would map to a bare ``websearch_xxx`` that no marker parser accepts.
+    await cache_citation_registry_items(items)
+    return json.dumps(annotated, ensure_ascii=False), list(items)
 
 
 async def _annotate_web_search_output(output: Any) -> Any:
