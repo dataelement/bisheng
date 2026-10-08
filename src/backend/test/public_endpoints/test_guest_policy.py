@@ -234,5 +234,5 @@ async def test_operator_liveness_fails_closed(guest_config, operator_identity, b
         auth_module.UserRoleDao.aget_user_roles = original
 
     assert caught.value.http_status == 403
-    assert caught.value.code == 26103
+    assert caught.value.code == 26403
     assert resolved == []
