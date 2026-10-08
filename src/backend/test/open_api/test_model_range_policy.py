@@ -71,7 +71,7 @@ async def test_service_account_presenting_an_access_token_is_refused():
     with pytest.raises(ModelFaceAccessTokenRefusedError) as excinfo:
         await resolve_range_and_subject(principal, {ACCESS_TOKEN_HEADER: "anything at all"})
 
-    assert excinfo.value.code == 26204
+    assert excinfo.value.code == 26504
 
 
 @pytest.mark.parametrize("principal_factory", [service_account_principal, hosted_app_principal])
@@ -85,7 +85,7 @@ async def test_a_well_formed_end_user_header_is_refused_for_every_actor(principa
     with pytest.raises(ModelFaceIdentityHeaderRefusedError) as excinfo:
         await resolve_range_and_subject(principal_factory(), {END_USER_HEADER: "external-1"})
 
-    assert excinfo.value.code == 26205
+    assert excinfo.value.code == 26505
     assert port.calls == []
 
 
@@ -111,10 +111,10 @@ async def test_a_forged_token_is_refused_even_when_the_declaration_is_unreadable
     with pytest.raises(ModelFaceAccessTokenRefusedError) as excinfo:
         await resolve_range_and_subject(hosted_app_principal(), {ACCESS_TOKEN_HEADER: "forged"})
 
-    # Step 2 before step 3: answering 26216 ("cannot tell right now, retry")
+    # Step 2 before step 3: answering 26516 ("cannot tell right now, retry")
     # to a permanently invalid token sends the caller round a loop that can
     # never succeed.
-    assert excinfo.value.code == 26204
+    assert excinfo.value.code == 26504
 
 
 async def test_header_lookup_is_case_insensitive():
@@ -135,7 +135,7 @@ async def test_hosted_app_without_a_registered_declaration_port_is_refused():
     with pytest.raises(ModelFaceCatalogUnavailableError) as excinfo:
         await resolve_range_and_subject(hosted_app_principal(), {})
 
-    assert excinfo.value.code == 26216
+    assert excinfo.value.code == 26516
 
 
 async def test_hosted_app_declaration_port_failure_is_refused_not_widened():
@@ -189,7 +189,7 @@ async def test_an_invalid_access_token_is_refused_rather_than_downgraded():
 
     # Silently recording it as "the app itself" would make audit attribution
     # something a caller can steer by sending a broken token.
-    assert excinfo.value.code == 26204
+    assert excinfo.value.code == 26504
 
 
 async def test_registration_replaces_the_default_port():

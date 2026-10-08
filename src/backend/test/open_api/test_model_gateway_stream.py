@@ -176,7 +176,7 @@ async def test_the_daily_provider_limit_is_a_real_429_not_half_a_stream(monkeypa
     # this a status code rather than an error buried inside a 200 stream.
     assert response.status_code == 429
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26217
+    assert body["bisheng_code"] == 26517
     assert body["type"] == "rate_limit_error"
     assert records[0].result == "limit_exceeded"
 
@@ -191,7 +191,7 @@ async def test_an_upstream_rejection_keeps_the_provider_status(monkeypatch, reco
     response = await _post({**BODY, "stream": True})
 
     assert response.status_code == 413
-    assert response.json()["error"]["bisheng_code"] == 26232
+    assert response.json()["error"]["bisheng_code"] == 26532
     assert "context length exceeded" in response.json()["error"]["message"]
 
 
@@ -201,7 +201,7 @@ async def test_an_upstream_connection_failure_is_a_502(monkeypatch, records):
     response = await _post(BODY)
 
     assert response.status_code == 502
-    assert response.json()["error"]["bisheng_code"] == 26231
+    assert response.json()["error"]["bisheng_code"] == 26531
     assert records[0].result == "upstream_failed"
     assert records[0].total_tokens is None
 
@@ -217,7 +217,7 @@ async def test_a_mid_stream_failure_ends_the_stream_readably(monkeypatch, record
     # the connection must close rather than hang.
     assert response.status_code == 200
     errors = [item for item in _events(response.text) if "error" in item]
-    assert errors[0]["error"]["bisheng_code"] == 26234
+    assert errors[0]["error"]["bisheng_code"] == 26534
     assert response.text.endswith("data: [DONE]\n\n")
     assert records[0].result == "upstream_failed"
 
@@ -225,11 +225,11 @@ async def test_a_mid_stream_failure_ends_the_stream_readably(monkeypatch, record
 @pytest.mark.parametrize(
     ("platform_error", "expected_code", "expected_result"),
     [
-        ("LlmModelConfigDeletedError", 26213, "model_unavailable"),
-        ("LlmProviderDeletedError", 26213, "model_unavailable"),
-        ("LlmModelOfflineError", 26212, "model_unavailable"),
-        ("LlmModelTypeError", 26211, "model_unavailable"),
-        ("InitLlmError", 26231, "upstream_failed"),
+        ("LlmModelConfigDeletedError", 26513, "model_unavailable"),
+        ("LlmProviderDeletedError", 26513, "model_unavailable"),
+        ("LlmModelOfflineError", 26512, "model_unavailable"),
+        ("LlmModelTypeError", 26511, "model_unavailable"),
+        ("InitLlmError", 26531, "upstream_failed"),
     ],
 )
 async def test_a_model_withdrawn_inside_the_cache_window_is_reported_as_such(
@@ -237,7 +237,7 @@ async def test_a_model_withdrawn_inside_the_cache_window_is_reported_as_such(
 ):
     # The catalog caches for up to 60s, so a name can still resolve after an
     # administrator has deleted or taken down the model. Instantiation is where
-    # that is discovered, and it is the only place 26212 / 26213 can come from:
+    # that is discovered, and it is the only place 26512 / 26513 can come from:
     # deleting a provider deletes its model rows, leaving resolution nothing to
     # explain.
     import bisheng.common.errcode.server as server_errors

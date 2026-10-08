@@ -1,4 +1,4 @@
-"""Model protocol face errors (module 262, F051).
+"""Model protocol face errors (module 265, F051).
 
 Every code here is rendered twice: as the platform envelope on non-model-face
 paths, and as an OpenAI-shaped error body under ``/api/v2/model/v1`` (design
@@ -13,10 +13,10 @@ v2 exception handler resolves a real transport status through
 
 Sub-bands (design D11):
 
-* ``26200-26209`` protocol face / endpoint / request shape
-* ``26210-26229`` callable range and name resolution
-* ``26230-26249`` upstream and streaming
-* ``26250-26259`` records and ledger (reserved, no outward code this release)
+* ``26500-26509`` protocol face / endpoint / request shape
+* ``26510-26529`` callable range and name resolution
+* ``26530-26549`` upstream and streaming
+* ``26550-26559`` records and ledger (reserved, no outward code this release)
 """
 
 from bisheng.common.errcode.open_api import OpenApiAuthError
@@ -29,32 +29,32 @@ OPENAI_TYPE_SERVER = "server_error"
 
 
 class ModelFaceError(OpenApiAuthError):
-    """Base for the 262 band; carries its own OpenAI error rendering."""
+    """Base for the 265 band; carries its own OpenAI error rendering."""
 
     http_status: int = 400
     openai_type: str = OPENAI_TYPE_INVALID_REQUEST
     openai_code: str = "model_face_error"
 
 
-# --- 26200-26209: protocol face / endpoint / request shape -------------------
+# --- 26500-26509: protocol face / endpoint / request shape -------------------
 
 
 class ModelFaceEndpointNotSupportedError(ModelFaceError):
-    Code: int = 26201
+    Code: int = 26501
     Msg: str = "This release does not provide that endpoint; only chat completions and model list are available"
     http_status: int = 404
     openai_code: str = "endpoint_not_supported"
 
 
 class ModelFaceAnthropicNotSupportedError(ModelFaceError):
-    Code: int = 26202
+    Code: int = 26502
     Msg: str = "This release provides an OpenAI-compatible face only"
     http_status: int = 404
     openai_code: str = "anthropic_protocol_not_supported"
 
 
 class ModelFaceRequestInvalidError(ModelFaceError):
-    Code: int = 26203
+    Code: int = 26503
     Msg: str = "The request body is not a valid chat completion request"
     http_status: int = 400
     openai_code: str = "invalid_request"
@@ -63,7 +63,7 @@ class ModelFaceRequestInvalidError(ModelFaceError):
 class ModelFaceAccessTokenRefusedError(ModelFaceError):
     """A service-account key carried an access token, or an app's token failed verification."""
 
-    Code: int = 26204
+    Code: int = 26504
     Msg: str = "This credential does not accept an access token on this face"
     http_status: int = 403
     openai_type: str = OPENAI_TYPE_PERMISSION
@@ -79,20 +79,20 @@ class ModelFaceIdentityHeaderRefusedError(ModelFaceError):
     refusal is ours rather than the base's.
     """
 
-    Code: int = 26205
+    Code: int = 26505
     Msg: str = "This face carries no delegation; drop the X-End-User / X-On-Behalf-Of header"
     http_status: int = 403
     openai_type: str = OPENAI_TYPE_PERMISSION
     openai_code: str = "identity_header_not_accepted"
 
 
-# --- 26210-26229: callable range and name resolution -------------------------
+# --- 26510-26529: callable range and name resolution -------------------------
 
 
 class ModelFaceModelNotFoundError(ModelFaceError):
     """Also the answer for another tenant's model — existence is never revealed."""
 
-    Code: int = 26211
+    Code: int = 26511
     Msg: str = "Model {model} does not exist in this tenant"
     http_status: int = 404
     openai_code: str = "model_not_found"
@@ -102,7 +102,7 @@ class ModelFaceModelNotFoundError(ModelFaceError):
 
 
 class ModelFaceModelOfflineError(ModelFaceError):
-    Code: int = 26212
+    Code: int = 26512
     Msg: str = "Model {model} is offline; ask a tenant administrator to bring it back online"
     http_status: int = 404
     openai_code: str = "model_offline"
@@ -112,7 +112,7 @@ class ModelFaceModelOfflineError(ModelFaceError):
 
 
 class ModelFaceModelRevokedError(ModelFaceError):
-    Code: int = 26213
+    Code: int = 26513
     Msg: str = "Model {model} is no longer available; its provider was removed"
     http_status: int = 404
     openai_code: str = "model_revoked"
@@ -124,7 +124,7 @@ class ModelFaceModelRevokedError(ModelFaceError):
 class ModelFaceModelAmbiguousError(ModelFaceError):
     """Several providers publish this model name; refuse rather than pick one."""
 
-    Code: int = 26214
+    Code: int = 26514
     Msg: str = "Model name {model} is ambiguous in this tenant; call it by a qualified name such as {hint}"
     http_status: int = 400
     openai_code: str = "model_name_ambiguous"
@@ -143,7 +143,7 @@ class ModelFaceModelAmbiguousError(ModelFaceError):
 class ModelFaceCapabilityUndeclaredError(ModelFaceError):
     """Hosted-app credential: the model exists but is outside the effective declaration."""
 
-    Code: int = 26215
+    Code: int = 26515
     Msg: str = "Model {model} is not in this application's declared capabilities; declare it and publish again"
     http_status: int = 403
     openai_type: str = OPENAI_TYPE_PERMISSION
@@ -156,7 +156,7 @@ class ModelFaceCapabilityUndeclaredError(ModelFaceError):
 class ModelFaceCatalogUnavailableError(ModelFaceError):
     """Second gate fail-closed: never fall back to a wider cached set (AC-35)."""
 
-    Code: int = 26216
+    Code: int = 26516
     Msg: str = "The callable model range cannot be determined right now; the call was refused rather than guessed"
     http_status: int = 503
     openai_type: str = OPENAI_TYPE_SERVER
@@ -164,18 +164,18 @@ class ModelFaceCatalogUnavailableError(ModelFaceError):
 
 
 class ModelFaceProviderLimitExceededError(ModelFaceError):
-    Code: int = 26217
+    Code: int = 26517
     Msg: str = "The provider's daily call limit configured in model management is used up; it resets at midnight"
     http_status: int = 429
     openai_type: str = OPENAI_TYPE_RATE_LIMIT
     openai_code: str = "provider_daily_limit_exceeded"
 
 
-# --- 26230-26249: upstream and streaming -------------------------------------
+# --- 26530-26549: upstream and streaming -------------------------------------
 
 
 class ModelFaceUpstreamError(ModelFaceError):
-    Code: int = 26231
+    Code: int = 26531
     Msg: str = "The upstream model provider failed"
     http_status: int = 502
     openai_type: str = OPENAI_TYPE_SERVER
@@ -189,7 +189,7 @@ class ModelFaceUpstreamRejectedError(ModelFaceError):
     provider said instead of a repackaged 400.
     """
 
-    Code: int = 26232
+    Code: int = 26532
     Msg: str = "The upstream model provider rejected the request"
     http_status: int = 400
     openai_type: str = OPENAI_TYPE_INVALID_REQUEST
@@ -197,7 +197,7 @@ class ModelFaceUpstreamRejectedError(ModelFaceError):
 
 
 class ModelFaceUpstreamRateLimitedError(ModelFaceError):
-    Code: int = 26233
+    Code: int = 26533
     Msg: str = "The upstream model provider is rate limiting this request"
     http_status: int = 429
     openai_type: str = OPENAI_TYPE_RATE_LIMIT
@@ -207,7 +207,7 @@ class ModelFaceUpstreamRateLimitedError(ModelFaceError):
 class ModelFaceStreamInterruptedError(ModelFaceError):
     """Only ever rendered inside an SSE error event — the 200 header is long gone."""
 
-    Code: int = 26234
+    Code: int = 26534
     Msg: str = "The streaming response was interrupted"
     http_status: int = 500
     openai_type: str = OPENAI_TYPE_SERVER

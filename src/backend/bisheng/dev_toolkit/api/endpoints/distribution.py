@@ -149,7 +149,7 @@ def get_dev_toolkit_versions(request: Request):
             # access-information panel and ``bisheng dev`` read it rather than
             # each appending ``/api/v2/model/v1`` to an origin of their own.
             # ``protocol`` says which client dialect the address speaks, because
-            # the face answers Anthropic paths with a refusal (26202).
+            # the face answers Anthropic paths with a refusal (26502).
             "model": {
                 "base_url": model_gateway_base_url(request),
                 "protocol": "openai",

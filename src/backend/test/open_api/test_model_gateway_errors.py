@@ -42,7 +42,7 @@ async def test_an_empty_message_list_is_a_readable_400(admitted):
 
     assert response.status_code == 400
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26203
+    assert body["bisheng_code"] == 26503
     assert body["type"] == "invalid_request_error"
     assert body["param"] == "messages"
 
@@ -59,7 +59,7 @@ async def test_a_refused_header_is_reported_before_a_bad_body(admitted):
 
     # Two things are wrong; the caller hears about the header. Answering the
     # body first would give an agent a different verdict on each retry.
-    assert response.json()["error"]["bisheng_code"] == 26205
+    assert response.json()["error"]["bisheng_code"] == 26505
 
 
 @pytest.mark.parametrize(
@@ -79,7 +79,7 @@ async def test_the_rest_of_the_openai_family_is_refused_readably(admitted, metho
 
     assert response.status_code == 404
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26201
+    assert body["bisheng_code"] == 26501
     assert body["code"] == "endpoint_not_supported"
 
 
@@ -98,7 +98,7 @@ async def test_the_anthropic_messages_path_gets_its_own_answer(admitted, path):
 
     assert response.status_code == 404
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26202
+    assert body["bisheng_code"] == 26502
     assert body["code"] == "anthropic_protocol_not_supported"
 
 
@@ -122,7 +122,7 @@ async def test_an_unresolvable_model_is_a_404_with_the_reason(admitted):
 
     assert response.status_code == 404
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26211
+    assert body["bisheng_code"] == 26511
     assert body["code"] == "model_not_found"
 
 
@@ -137,7 +137,7 @@ async def test_an_ambiguous_bare_name_lists_the_qualified_alternatives(monkeypat
 
     assert response.status_code == 400
     body = response.json()["error"]
-    assert body["bisheng_code"] == 26214
+    assert body["bisheng_code"] == 26514
     assert body["candidates"] == ["azure-openai/shared", "qwen-cloud/shared"]
 
 
@@ -147,7 +147,7 @@ async def test_an_undecidable_catalog_refuses_with_503_rather_than_a_narrower_se
     response = await _call("POST", CHAT_PATH, json=BODY)
 
     assert response.status_code == 503
-    assert response.json()["error"]["bisheng_code"] == 26216
+    assert response.json()["error"]["bisheng_code"] == 26516
 
 
 async def test_a_permission_backend_outage_is_still_openai_shaped(monkeypatch, admitted):

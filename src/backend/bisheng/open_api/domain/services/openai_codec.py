@@ -285,9 +285,9 @@ class ChunkAssembler:
 
 
 def classify_upstream_error(exc: Exception) -> ModelFaceError:
-    """Map a provider SDK failure onto the 262 upstream band.
+    """Map a provider SDK failure onto the 265 upstream band.
 
-    An unrecognised exception becomes 26231 with a truncated, scrubbed message
+    An unrecognised exception becomes 26531 with a truncated, scrubbed message
     rather than a bare 5xx string — an agent needs something it can read.
     """
 
@@ -309,7 +309,7 @@ def classify_upstream_error(exc: Exception) -> ModelFaceError:
 
 
 def classify_stream_error(exc: Exception) -> ModelFaceError:
-    """Same mapping, but an unrecognised failure mid-stream is 26234."""
+    """Same mapping, but an unrecognised failure mid-stream is 26534."""
 
     if isinstance(exc, ModelFaceError):
         return exc

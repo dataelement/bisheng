@@ -1,0 +1,238 @@
+{
+  "schema_version": 2,
+  "test_only": true,
+  "source": "license-issuer-contract.md",
+  "verification_jwks": {
+    "keys": [
+      {
+        "kty": "RSA",
+        "kid": "fixture-only-key-1",
+        "alg": "RS256",
+        "use": "sig",
+        "n": "tV-L5j_g_VwsFRoEu0sYjONml-_Hk0oc8e36QZAvv3sZ-uw9NjUWn7LAQvk5oajh7S2CsnPdEMTQp4P_FZuA8cq77lTre8mZThhsCrBXqrgoonSBbZ-P1qKhs-Lft4X-PfXmT6PqO7hrv7Y9n8wX5SqETD9ICJR4eQFwjwB3dvoiQ4M7k8PgBFR-MlopMxbiKzdmxLGFWjauPcxtvjQOYttt2CAmFQ1UDdBhzmzsgjQ6KruWrbyOgxtwvAuq5o5vLAdXosOngAf2PjlxsFncepzRS8kW-BbiJF85YAar1zZz0wBhWtb7b78taw2luxKgWsMdD7vsDOu-KJlhTL9eZQ",
+        "e": "AQAB"
+      }
+    ]
+  },
+  "decoded_valid_payload": {
+    "schema_version": 2,
+    "iss": "bisheng-license-issuer",
+    "aud": "bisheng-gateway:dsh",
+    "jti": "license_fixture_001",
+    "iat": 1788919200,
+    "nbf": 1788919200,
+    "exp": 1789005600,
+    "legacy_binding": {
+      "name": "Fixture Customer",
+      "version": "pro",
+      "expireDay": "2025-05-25",
+      "finger": "fixture-fingerprint"
+    },
+    "capabilities": {
+      "dsh": {
+        "enabled": true,
+        "seat_limit": 10
+      }
+    }
+  },
+  "vectors": [
+    {
+      "name": "valid_pro",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.DHjoRkToAihCwxoEAqiWNMp4Tfh93315C8SjXkVXLpG3kGt3iT3fuyuJceGaqmX2CGh5Ezt8GGgrworuLJabW64Hi53in29YARXLmMlaYy9N3WyZxwhwV1B3qCWFOJCMMtFwNrRNkMZs6aRf4MmJF2DygymVp7gydC2IX2yfwKFLqoBsdxUEgtzhBi3tX_bs3dkyhHzBJyQ_wAPM10hPCoy25Mxxk2QW81rPfwIpDhmEGNcoNbdD1dRrk1JsbUkE7UaPvRa6wnnAi4ZfZUSUq6fBu96q3Fza7JOdG2cL-2kc_C-3_yMsDIksMRTk0pgSgDYekq2ipKTUpSOmLXlrcw"
+      },
+      "expected": "active"
+    },
+    {
+      "name": "expired_trial_valid_dsh",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "trial",
+        "expireDay": "2020-01-01",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDIwLTAxLTAxIiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InRyaWFsIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjJ9.bWTTt8wrFJdS9h5hN_MeUTl5PwEyFPXrf4ncUuB7IqRHPI2w4Apwe0a7uICTS5p8PTPchQgwISExhyq5xZwiFNC8m27miv8aWH0D5bBU7XHpXZLtwUFHhdpturAtViFumxtZ7JRZbzGmXi1S4PG2shI02_pyLC3w-RWKXvB7loM4oFlejap2vjWe7rlHZ8kcSEd_6QcKWCwo06YygtSkSLe1_fdQu_FtBE2R_fwSgJUKzMTg6lrOY71wNWMAijW140cq0BwTFcTXmnJkfeF71iM1F1GxymuVLchsxOI1XPmSkktkOR1Qt7yvA05XoFFfcW6-Vzhe5rrAfZJKp8mzJA"
+      },
+      "expected": "active"
+    },
+    {
+      "name": "expired",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODg5MTkyMDAsImlhdCI6MTc4ODkxOTE4MCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkxOTAsInNjaGVtYV92ZXJzaW9uIjoyfQ.WSyKFslXvHyj2cAfztnuM-OCXqPyyuBe1q3iloDoO3fjp9jPW43BYfXMgkwWoudKjMebFBKq1l7cybfqsL91-sJnHsMM7sxXI-rIXZ25V77U71RktmvVcXdM4qaigj6JlxUVVZiLSHsbm7GBI7qnYLHfunVLHxiOyIx9wIHWGmFHUU1VKnjIuMpRp4Sqj4Xs4oaxBniDRWCb5W2CZFevWk3RtlwfqwIz44k8KKNvSOQw0HhFjCxLNWt4xU_xCpk-ZKzqGjwxR1GScIbFcAawVppPd2OQ4a1_v4Ny1P485Hm00azZbTBRbLlNyZJixN0iOu6Ogux4ek4uC17sBpNUHQ"
+      },
+      "expected": "license_expired"
+    },
+    {
+      "name": "not_yet_valid",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyNjAsInNjaGVtYV92ZXJzaW9uIjoyfQ.D94dINMtlMNhz1aJFCQ8PTnwNFPn52wcAGW99PDZty7tIGGRkHgUttNjwJ6HEhQanM45XTHNecG-b5rvY5FK4jB2hyGTSfLb4SrwS_akw9NsyXs5Bvzm3L0-pT6rE8eJR4EbN7vDXO_WvryCnPq6FCdX72hcjZ57E3hIzLivLtjGB5YsUYDEiVxZDht3Ws3Ecwozw_NONB5X69EQo567KSrRBpkGWbyT-ODyUf0xztpx9NMjZJVxHG7cFgpWkhdDNvvMw4WReoZSeqFaQgBqiXx6UljDJBjkdQZTpGDnqdNoGVoA-JiAETmgWAZOgeHVU23O_FiZTIFQ7GFauB_Mfg"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "old_schema_rejected",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaW5zdGFsbGF0aW9uX2lkIjoib2xkLXRlc3QtaW5zdGFsbGF0aW9uIiwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoxfQ.H3PPoa3G-hORYj-BY114QjeNDsgob2mnYjjUdsKbXuR0vvTn4vA56W_uyXdqNHR24ahriXnZXNJ4C37RJsARMZGx3CxVbLMiD9PZPeS9DhkRBSDHqJyG3xxjYJUkkEOPxfOoDS6tZrnz61bBMHc-OqYTtxSh7b8Z6EsXm3swtov5ZY0XhHdNru8xcK99tyZ4HhjxVyI9zHhHf20SkguMOvLsqLwVOwRQAlNTtFMEvLh081zLdIaUzaJklPeTeNTV0-3O3g-w2Bqv8XiC0wxGW0yc5Bh0LXpFwJHKZZmwRYA-53n0g-SCHpLXbcs3Fu8Jq-8oJ0qDwmddA0WUbTXPnA"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "unknown_schema",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjozfQ.SDdT6umeiHjdkmrLARbm0cjIy5ZkIx2JXW5odoPx4Y8yvGTFTNNhpK_cU8dcRfG7VZm92BuQi0UgJJQE5c0JOQSCDG6STh24qy2xP0ivxa6wSAmwIxpYbeA_Qec1lqRIFJqFer-BpeUITXjDfJqVhd5McRnwFbRxPKC62_UZToa5JvnUtADcBhtbMjtr1oc76IjPIwhMxryUsPFZd_61ro6SaHANCZZ4W9oREwKX_HguGpnMu07_TH5-WUbLL6X39BcUsYUyvTumTac8h0OJeQxC1nmfKAZg7Wx60uWuggM5aqKllzpCDyRtn0WbIxTUfRQugPWFSr23OUAiW_S1HA"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "wrong_audience",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJvdGhlciIsImNhcGFiaWxpdGllcyI6eyJkc2giOnsiZW5hYmxlZCI6dHJ1ZSwic2VhdF9saW1pdCI6MTB9fSwiZXhwIjoxNzg5MDA1NjAwLCJpYXQiOjE3ODg5MTkyMDAsImlzcyI6ImJpc2hlbmctbGljZW5zZS1pc3N1ZXIiLCJqdGkiOiJsaWNlbnNlX2ZpeHR1cmVfMDAxIiwibGVnYWN5X2JpbmRpbmciOnsiZXhwaXJlRGF5IjoiMjAyNS0wNS0yNSIsImZpbmdlciI6ImZpeHR1cmUtZmluZ2VycHJpbnQiLCJuYW1lIjoiRml4dHVyZSBDdXN0b21lciIsInZlcnNpb24iOiJwcm8ifSwibmJmIjoxNzg4OTE5MjAwLCJzY2hlbWFfdmVyc2lvbiI6Mn0.TRf-6BTkrMJSCLcPbywDBwiGUH05EqLezP5rQRcFs6I9jqdViCs0N_y28wRNnIGmov7aJqLsP8NUsF8ytLvNya9w4OnvfYy-C46XNbuaWalhUZBULfdTKNZ4sIzIz2cv0JU5X-HXymjrYHL7WhYzYgZ_XhWyj0AJhYDjst5zRaE-gG8CejzfSu2WVSF6CPVeTjkWNo0CPMylRd1GEYWupXGxpDcOJD3SZMQqpRDFygLsqRJwmhbnXQsCDAzZXMv7TJ5xc-I0Z0oiWs8fHOvR4R6Ext702Y1OPYYNYPW90aD73Af50HzuQMgjEJ5mRJzJg1mgYzIQACPuFGtTNeUsbg"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_-1",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjotMX19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.lApBHe3h8k1wouoC8pG0a6CRb_O64E1zUmz7ayJaTokrLPjKQ8SwTnLM7V5UqyOT9yURnS5BYM4wTSLQi_6znRjCQWITcMpyf_v5qDr9f4g2biIoixdhOvcUHP8GZ_ouo96okGdIYHUdqLNSLRSaZx-cPyvORtCwRCJm2hh-h0XUqqmk0O4suAeHn03CxgcGrxZz4xjWXLGgpP5ZLDSdBTkaqOWY-smMXmNwsIVbMudMucg7rvRqC-HhMclsZQrgIy_-y_mFpMsOG1SLm64SxiuXYHmYdRdvGT4s8vdAfmOwgD8iYu8wi1dnDGHZNr8Y0j7OKNzvcu7Qbva6nP8igw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_True",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0Ijp0cnVlfX0sImV4cCI6MTc4OTAwNTYwMCwiaWF0IjoxNzg4OTE5MjAwLCJpc3MiOiJiaXNoZW5nLWxpY2Vuc2UtaXNzdWVyIiwianRpIjoibGljZW5zZV9maXh0dXJlXzAwMSIsImxlZ2FjeV9iaW5kaW5nIjp7ImV4cGlyZURheSI6IjIwMjUtMDUtMjUiLCJmaW5nZXIiOiJmaXh0dXJlLWZpbmdlcnByaW50IiwibmFtZSI6IkZpeHR1cmUgQ3VzdG9tZXIiLCJ2ZXJzaW9uIjoicHJvIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjJ9.q9QHwHOm__uhz6PN8VX3JP3IQK_aHTBx0FqzEL1rXsxsqOxg16IXUCwzOSWbwkg3RepsS9L8JXaIRgGU2HATVTo3CEEG1FPi5dV1FMFsSMG-6SWpmo_wu-GaPXVsHN7jZY4sU9XjnV_4MUdDxTwxTDDr_V4AEMzuJXAnsxwSKUjU8yPqrpK7b6j5L8d9JHKa7WZd3EfU9Nzb0TardH149VLeNDCeeBF5iz6XMIENewPyBnORSRRD8u6rmkQlhdx_pdUhFrwoeUA5-iQCC1fOmJerRDG_CWwWwIdXtOD2r2uaI0kz1JloY7F4hJb0RTQHY-m1qyds_KmM67DzQPhgcw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "invalid_limit_10.5",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMC41fX0sImV4cCI6MTc4OTAwNTYwMCwiaWF0IjoxNzg4OTE5MjAwLCJpc3MiOiJiaXNoZW5nLWxpY2Vuc2UtaXNzdWVyIiwianRpIjoibGljZW5zZV9maXh0dXJlXzAwMSIsImxlZ2FjeV9iaW5kaW5nIjp7ImV4cGlyZURheSI6IjIwMjUtMDUtMjUiLCJmaW5nZXIiOiJmaXh0dXJlLWZpbmdlcnByaW50IiwibmFtZSI6IkZpeHR1cmUgQ3VzdG9tZXIiLCJ2ZXJzaW9uIjoicHJvIn0sIm5iZiI6MTc4ODkxOTIwMCwic2NoZW1hX3ZlcnNpb24iOjJ9.LR0P4wzPhhD5qBdnhgrTW0_bXSyZ7h-dwBj2oI_oVonT05fneajpzYwGK7TF0_i01zcQT-EYuzltLrUBCsEFEnd3cVhEoj2GK6e7m-1EQyulp1Xr2q8tZxmgQLv6Dy9w_1PKl3GW7ThrcmYysbJfIEE8S4htZnGwyo4cdQnZbdRbBZIuqlL9jWtSzbG5I2fM2VwrxMykq1dST1ZeheYoigFwpLS5n8bZLsw4YYoQQ4FhTVAlKeD_us4PB9Sz1h0wPJkqEO6HrLpTpMjRNS5_WpkfAtb_-v1WUn9tK_AVPBS_oHKC-iVL-3TMxby0uv14Q0RrS-82Y0VP14H1cmMR1g"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "disabled_entitlement",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjpmYWxzZSwic2VhdF9saW1pdCI6MTB9fSwiZXhwIjoxNzg5MDA1NjAwLCJpYXQiOjE3ODg5MTkyMDAsImlzcyI6ImJpc2hlbmctbGljZW5zZS1pc3N1ZXIiLCJqdGkiOiJsaWNlbnNlX2ZpeHR1cmVfMDAxIiwibGVnYWN5X2JpbmRpbmciOnsiZXhwaXJlRGF5IjoiMjAyNS0wNS0yNSIsImZpbmdlciI6ImZpeHR1cmUtZmluZ2VycHJpbnQiLCJuYW1lIjoiRml4dHVyZSBDdXN0b21lciIsInZlcnNpb24iOiJwcm8ifSwibmJmIjoxNzg4OTE5MjAwLCJzY2hlbWFfdmVyc2lvbiI6Mn0.Lk8Si89S8yg_GRgH0xqLFkk524gV4eiRdqJCPhBrgjNfzdiY5YtTL60wuJLyXZc9IPINc7TBNnV6yV453JCYjJxcEcKrGdLMqXikdcHfV8s0pszr0kQ7CTKHcNvIFMCKgKZHTJiTMUyu4mQ2JpbNCr6lpNUIX45yCRiFMmtSKD8-LcCNtezl14pBFny_xkOXhmjxhJQy4O7T2f41KYvfvZklWuq0lezSSUu90zVYdxJa1cRy9FUoPcA4I9jnzpdBx4rtj0zpyxhfPGixLlpjXWaOCpdd3uH8LLVziDFdFAU9vqsoCiXqoAJ64_8h-cwX5mQhmV-ESN5h0CgmZc13_g"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "legacy_field_changed",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Other Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.DHjoRkToAihCwxoEAqiWNMp4Tfh93315C8SjXkVXLpG3kGt3iT3fuyuJceGaqmX2CGh5Ezt8GGgrworuLJabW64Hi53in29YARXLmMlaYy9N3WyZxwhwV1B3qCWFOJCMMtFwNrRNkMZs6aRf4MmJF2DygymVp7gydC2IX2yfwKFLqoBsdxUEgtzhBi3tX_bs3dkyhHzBJyQ_wAPM10hPCoy25Mxxk2QW81rPfwIpDhmEGNcoNbdD1dRrk1JsbUkE7UaPvRa6wnnAi4ZfZUSUq6fBu96q3Fza7JOdG2cL-2kc_C-3_yMsDIksMRTk0pgSgDYekq2ipKTUpSOmLXlrcw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "legacy_missing_vs_null",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "extra": null,
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.DHjoRkToAihCwxoEAqiWNMp4Tfh93315C8SjXkVXLpG3kGt3iT3fuyuJceGaqmX2CGh5Ezt8GGgrworuLJabW64Hi53in29YARXLmMlaYy9N3WyZxwhwV1B3qCWFOJCMMtFwNrRNkMZs6aRf4MmJF2DygymVp7gydC2IX2yfwKFLqoBsdxUEgtzhBi3tX_bs3dkyhHzBJyQ_wAPM10hPCoy25Mxxk2QW81rPfwIpDhmEGNcoNbdD1dRrk1JsbUkE7UaPvRa6wnnAi4ZfZUSUq6fBu96q3Fza7JOdG2cL-2kc_C-3_yMsDIksMRTk0pgSgDYekq2ipKTUpSOmLXlrcw"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "untrusted_kid",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6InVudHJ1c3RlZCIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.e8ZLZPge8eTL866qGeTCKIYNfA9lGsCup-fWpAbcTZ3CsFQvdrLIVu7kzBOIYZ0SF5Ya9iH6gltsixvmHkq72AUY44LvUEeVkAxxsAhOpbHZTScnt40FkZmHrxpmqBgA7c-yRWZxxihKJsw9y_pCFchiIzAiDKKFvTlaGT-NqEeBJ5zq2eRtg7cR7KO3etZAmTacIodZ8xSZzgE2Elq39W8vp20LUsDfNJ4d3pVs1W6vPCU5yCYPpZjafScjHZffO6HGgBjIFAtmFHeTF1yNnBikJqi-wqoLSf-FwVnHfIwiOHjMVUBqq-upsvMgikDUpx6BCBVEUmszhtvO-DofEQ"
+      },
+      "expected": "license_invalid"
+    },
+    {
+      "name": "tampered_signature",
+      "now": 1788919200,
+      "outer_plaintext": {
+        "name": "Fixture Customer",
+        "version": "pro",
+        "expireDay": "2025-05-25",
+        "finger": "fixture-fingerprint",
+        "dsh_entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZpeHR1cmUtb25seS1rZXktMSIsInR5cCI6ImJpc2hlbmctZHNoLWxpY2Vuc2Urand0In0.eyJhdWQiOiJiaXNoZW5nLWdhdGV3YXk6ZHNoIiwiY2FwYWJpbGl0aWVzIjp7ImRzaCI6eyJlbmFibGVkIjp0cnVlLCJzZWF0X2xpbWl0IjoxMH19LCJleHAiOjE3ODkwMDU2MDAsImlhdCI6MTc4ODkxOTIwMCwiaXNzIjoiYmlzaGVuZy1saWNlbnNlLWlzc3VlciIsImp0aSI6ImxpY2Vuc2VfZml4dHVyZV8wMDEiLCJsZWdhY3lfYmluZGluZyI6eyJleHBpcmVEYXkiOiIyMDI1LTA1LTI1IiwiZmluZ2VyIjoiZml4dHVyZS1maW5nZXJwcmludCIsIm5hbWUiOiJGaXh0dXJlIEN1c3RvbWVyIiwidmVyc2lvbiI6InBybyJ9LCJuYmYiOjE3ODg5MTkyMDAsInNjaGVtYV92ZXJzaW9uIjoyfQ.DXjoRkToAihCwxoEAqiWNMp4Tfh93315C8SjXkVXLpG3kGt3iT3fuyuJceGaqmX2CGh5Ezt8GGgrworuLJabW64Hi53in29YARXLmMlaYy9N3WyZxwhwV1B3qCWFOJCMMtFwNrRNkMZs6aRf4MmJF2DygymVp7gydC2IX2yfwKFLqoBsdxUEgtzhBi3tX_bs3dkyhHzBJyQ_wAPM10hPCoy25Mxxk2QW81rPfwIpDhmEGNcoNbdD1dRrk1JsbUkE7UaPvRa6wnnAi4ZfZUSUq6fBu96q3Fza7JOdG2cL-2kc_C-3_yMsDIksMRTk0pgSgDYekq2ipKTUpSOmLXlrcw"
+      },
+      "expected": "license_invalid"
+    }
+  ],
+  "legacy_without_extension": [
+    {
+      "name": "Fixture Customer",
+      "version": "pro",
+      "expireDay": "2025-05-25",
+      "finger": "fixture-fingerprint"
+    },
+    {
+      "version": "trial",
+      "expireDay": "2020-01-01"
+    }
+  ],
+  "release_gates": {
+    "real_vendor_sample": "pending",
+    "target_legacy_binary": "pending",
+    "legacy_rsa_segment_compatibility": "pending"
+  }
+}

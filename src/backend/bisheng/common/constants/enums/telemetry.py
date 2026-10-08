@@ -35,6 +35,7 @@ class ApplicationTypeEnum(str, Enum):
     ASR = "asr"
     # TTS
     TTS = "tts"
+    DSH_DESKTOP = "dsh_desktop"
 
     UNKNOWN = "unknown"
 

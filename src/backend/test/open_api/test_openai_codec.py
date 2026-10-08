@@ -205,6 +205,6 @@ def test_key_shaped_text_never_survives_into_a_message(text):
 def test_stream_error_event_carries_the_openai_shape():
     payload = _payload(ChunkAssembler.error(ModelFaceStreamInterruptedError()))["error"]
 
-    assert payload["bisheng_code"] == 26234
+    assert payload["bisheng_code"] == 26534
     assert payload["type"] == "server_error"
     assert payload["code"] == "stream_interrupted"

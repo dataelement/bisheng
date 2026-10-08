@@ -174,7 +174,7 @@ class ModelGatewayService:
             llm = await cls._instantiate(principal, resolved, req)
         except ModelFaceError as exc:
             # The name resolved a moment ago, so a failure here is either "the
-            # row went away inside the catalog's cache window" (26212 / 26213 —
+            # row went away inside the catalog's cache window" (26512 / 26513 —
             # the model was withdrawn) or the provider client refusing to
             # initialise. They are different rows in the ledger, not one.
             cls._finish_record(

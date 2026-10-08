@@ -19,7 +19,7 @@ from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
 
-# ``result`` values. ``model_unavailable`` covers the whole 26211-26216 family:
+# ``result`` values. ``model_unavailable`` covers the whole 26511-26516 family:
 # the call reached model resolution and was refused there, which is exactly the
 # boundary AC-20 draws for "gets a row" vs "is only an audit event".
 RESULT_SUCCESS = "success"

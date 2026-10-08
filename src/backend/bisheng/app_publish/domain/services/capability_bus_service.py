@@ -31,7 +31,7 @@ Three decisions worth not re-litigating:
   pointer moves and the next call reads the new declaration. A cache here would
   need its own invalidation story and would be the only thing standing between
   a revoked model and a call that still works.
-* **Model refusals keep F051's 262 codes; knowledge refusals get 162** (design
+* **Model refusals keep F051's 265 codes; knowledge refusals get 162** (design
   D13). A model refusal is rendered as an OpenAI error body by the face that
   raises it; re-coding it here would strip that rendering and give an agent a
   number its client cannot classify.
@@ -308,9 +308,9 @@ def _as_tenant(tenant_id: int):
 class HostedAppDeclarationAdapter:
     """F051's ``HostedAppDeclarationPort`` — "which models may this app call".
 
-    ``None`` is F051's "cannot tell right now" and makes the face answer 26216
+    ``None`` is F051's "cannot tell right now" and makes the face answer 26516
     without calling anything. An empty frozenset is "declared zero models", which
-    refuses every name with 26215 instead — two different fixes, two different
+    refuses every name with 26515 instead — two different fixes, two different
     answers.
     """
 
@@ -841,7 +841,7 @@ async def model_capability_status(declaration: EffectiveDeclaration) -> list[Cap
             await resolve_model_name(declaration.tenant_id, name)
         except ModelFaceError as exc:
             revoked = True
-            reason = REASON_AMBIGUOUS if exc.code == 26214 else REASON_REVOKED
+            reason = REASON_AMBIGUOUS if exc.code == 26514 else REASON_REVOKED
         rows.append(
             CapabilityStatus(
                 kind=CAPABILITY_KIND_MODEL,

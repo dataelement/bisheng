@@ -114,7 +114,7 @@ async def test_a_call_refused_at_model_resolution_still_gets_a_row(monkeypatch, 
 
     row = records[0]
     assert row.result == "model_unavailable"
-    assert row.error_code == 26211
+    assert row.error_code == 26511
     assert row.model_id is None
     # The name the caller actually wrote is what makes the row diagnosable.
     assert row.requested_model == "never-configured"

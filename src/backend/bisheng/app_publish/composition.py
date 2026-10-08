@@ -135,7 +135,7 @@ def register() -> None:
     # The capability bus, in three registrations that must land together.
     #
     # ``model_range_policy`` defines two ports and fails closed on both: an
-    # unregistered declaration port answers 26216 to every hosted-app model
+    # unregistered declaration port answers 26516 to every hosted-app model
     # call, and an unregistered verifier turns every visitor token into a
     # refusal. Registering one without the other is the shape that hurts —
     # a readable declaration plus an unverifiable token would attribute every

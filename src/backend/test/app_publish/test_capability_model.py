@@ -184,8 +184,8 @@ async def test_declaring_no_models_is_an_empty_set_not_unknown(publish_db, app_f
 
     declared = await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id)
 
-    # Empty set and None are two different answers on F051's face: 26215 ("you
-    # did not declare it") versus 26216 ("the platform cannot tell right now").
+    # Empty set and None are two different answers on F051's face: 26515 ("you
+    # did not declare it") versus 26516 ("the platform cannot tell right now").
     assert declared == frozenset()
     assert declared is not None
 
@@ -375,14 +375,14 @@ async def test_the_tenants_other_models_are_refused_for_this_application(publish
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["bisheng_code"] == 26215
+    assert response.json()["error"]["bisheng_code"] == 26515
 
 
 async def test_taking_a_declared_model_offline_changes_the_verdict_not_the_declaration(published_app_client):
     """AC-53 on the model face: the declaration is untouched, the model is gone.
 
     F055's publish surface marks it 「已失效」 from the same fact; the caller
-    hears 26212, which says "ask an administrator", rather than 26215, which
+    hears 26512, which says "ask an administrator", rather than 26515, which
     would say "edit your manifest".
     """
     client, app_row, _records = await published_app_client(models=("gpt-4o",), tenant_models=(("gpt-4o", False),))
@@ -393,7 +393,7 @@ async def test_taking_a_declared_model_offline_changes_the_verdict_not_the_decla
     )
 
     assert response.status_code == 404
-    assert response.json()["error"]["bisheng_code"] == 26212
+    assert response.json()["error"]["bisheng_code"] == 26512
     # Still declared — nothing about the declaration changed.
     assert await HostedAppDeclarationAdapter().declared_model_names(app_row.id, app_row.tenant_id) == frozenset(
         {"gpt-4o"}
@@ -410,7 +410,7 @@ def test_this_features_capability_codes_are_never_raised_for_a_model():
 
     Two families describing the same event is how a caller ends up with two
     different remedies for one fix. The split is: a model capability's runtime
-    verdict is F051's (26215 未声明 / 26212 已下线 / 26213 已收回), and every
+    verdict is F051's (26515 未声明 / 26512 已下线 / 26513 已收回), and every
     ``16273`` / ``16274`` raised in this module names a knowledge capability.
     Asserted by reading the source, because the alternative — waiting for a
     model path to raise one — is exactly the regression this test exists to

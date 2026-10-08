@@ -142,7 +142,7 @@ async def test_an_unregistered_scope_error_still_renders_openai_shaped(monkeypat
     ("headers", "code"),
     [
         ({"X-On-Behalf-Of": "9"}, 26004),
-        ({"X-End-User": "external-1"}, 26205),
+        ({"X-End-User": "external-1"}, 26505),
         ({"X-On-Behalf-Of": "9", "X-End-User": "external-1"}, 26010),
         ({"x-foo-on-behalf-of": "9"}, 26019),
     ],
@@ -182,6 +182,6 @@ async def test_an_access_token_on_a_service_account_key_is_refused(monkeypatch):
     )
 
     assert response.status_code == 403
-    assert response.json()["error"]["bisheng_code"] == 26204
+    assert response.json()["error"]["bisheng_code"] == 26504
     assert fake.seen_messages == []
     assert records == []

@@ -122,9 +122,9 @@ def test_model_chapter_teaches_the_injected_names_and_no_literal_address():
     for env_name in ("OPENAI_BASE_URL", "OPENAI_API_KEY", "BISHENG_MODEL_BASE_URL"):
         assert env_name in chapter, env_name
     # The declaration is the range hosted, and an undeclared model is refused.
-    assert "capabilities" in chapter and "26215" in chapter
+    assert "capabilities" in chapter and "26515" in chapter
     # Forwarding the visitor credential, and the local case where it is refused.
-    assert "X-BiSheng-Access-Token" in chapter and "26204" in chapter
+    assert "X-BiSheng-Access-Token" in chapter and "26504" in chapter
     assert not re.search(r"https?://", chapter)
 
 

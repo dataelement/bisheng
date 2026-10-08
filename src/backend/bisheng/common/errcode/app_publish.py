@@ -487,8 +487,8 @@ class AppPreviewSessionNotFoundError(AppPublishError):
 # 16270-16289 — capability bus
 # ---------------------------------------------------------------------------
 #
-# Model refusals stay in the 262 band (``26212`` / ``26213`` offline / revoked,
-# ``26215`` undeclared) — the two codes below are for knowledge and every later
+# Model refusals stay in the 265 band (``26512`` / ``26513`` offline / revoked,
+# ``26515`` undeclared) — the two codes below are for knowledge and every later
 # non-model capability. Two pairs is deliberate: a model refusal is rendered as
 # an OpenAI error body on the model face, and translating it into a 162 code
 # would strip that rendering (design D13).

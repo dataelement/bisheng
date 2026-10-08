@@ -199,7 +199,7 @@ async def _load_callable_chat_models(tenant_id: int) -> list[CallableModel]:
 async def list_callable_chat_models(tenant_id: int) -> list[CallableModel]:
     """Online chat models this tenant may call, with their callable names.
 
-    Fail-closed: any failure reading the catalog raises 26216 rather than
+    Fail-closed: any failure reading the catalog raises 26516 rather than
     returning a narrower set. A narrower set is indistinguishable from "that
     model does not exist" at the call site, which is the worst possible answer
     to give an agent that is about to retry.
@@ -227,11 +227,11 @@ async def _explain_miss(tenant_id: int, requested: str) -> None:
     Only ever reached on the failure path, so its two extra queries never touch
     a successful call.
 
-    There is deliberately no "revoked" (26213) verdict here. Deleting a provider
+    There is deliberately no "revoked" (26513) verdict here. Deleting a provider
     deletes its model rows with it (``LLMDao.adelete_server_by_id``), so by the
     time a name misses, a taken-away model is indistinguishable from one that
     never existed — and inventing a distinction would mean keeping a tombstone
-    this feature has no other use for. 26213 is still reachable, and is the
+    this feature has no other use for. 26513 is still reachable, and is the
     honest place for it: within the catalog's cache window the name resolves and
     ``get_bisheng_llm`` is the one that finds the row gone, which the face
     translates (``model_gateway_service._LLM_ERROR_TRANSLATION``).

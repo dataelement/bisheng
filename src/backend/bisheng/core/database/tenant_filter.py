@@ -39,6 +39,7 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 # exactly how knowledgefile / flowversion / roleaccess / userrole / ...
 # kept writing child-tenant resources to root in v2.5.
 _TENANT_AWARE_MODEL_MODULES = (
+    "bisheng.dsh_market.domain.models",
     # Already on the main router import chain — listed for completeness so
     # _force_import_all_models() guarantees them even if a future refactor
     # severs an indirect import edge.
@@ -131,6 +132,13 @@ _TENANT_AWARE_MODEL_MODULES = (
     # SQLModel.metadata sees the table; _discover_tenant_aware_tables() skips it
     # for lack of the column, so it is never auto-filtered.
     "bisheng.database.models.resource_tier",
+    # F062 desktop model access.
+    "bisheng.dsh.domain.models.user_policy",
+    "bisheng.dsh.domain.models.admin_operation",
+    "bisheng.dsh.domain.models.monthly_usage",
+    "bisheng.dsh.domain.models.model_call",
+    "bisheng.dsh.domain.models.subject_policy",
+    "bisheng.dsh.domain.models.subject_grant",
 )
 
 

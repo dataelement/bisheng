@@ -179,8 +179,13 @@ async def _platform_lifespan():
         # give the in-flight ones a bounded chance to land before the database
         # goes away, so a deploy restart is not a silent gap in an audit asset.
         await flush_pending_access_records(timeout=5.0)
-        thread_pool.tear_down()
-        await close_app_context()
+        try:
+            dsh_runtime = getattr(app.state, "dsh_runtime", None)
+            if dsh_runtime is not None:
+                await dsh_runtime.close()
+        finally:
+            thread_pool.tear_down()
+            await close_app_context()
 
 
 def create_app():

@@ -8,7 +8,7 @@ about it lives in two places:
   the tenant has enabled, read through F055's real
   ``HostedAppDeclarationAdapter`` rather than a hand-written fake — the fake
   cannot get the ``None`` / empty-set distinction wrong, and that distinction
-  is the whole difference between 26216 and 26215;
+  is the whole difference between 26516 and 26515;
 * the **subject** is the visitor whose OBO token the application forwarded,
   verified by F054's real ``verify_obo_token``. A call with no token is
   attributed to ``app_self`` **explicitly**, and one with a broken token is
@@ -202,23 +202,23 @@ async def test_declaring_a_model_the_tenant_disabled_does_not_conjure_it(hosted,
     assert response.json()["data"] == []
 
 
-async def test_a_tenant_model_the_application_never_declared_is_26215(hosted, declaration):
+async def test_a_tenant_model_the_application_never_declared_is_26515(hosted, declaration):
     declaration(("gpt-4o",))
 
     response = await _call("POST", CHAT_PATH, json_body={**BODY, "model": "qwen-max"})
 
     assert response.status_code == 403
-    assert _error(response)["bisheng_code"] == 26215
+    assert _error(response)["bisheng_code"] == 26515
     assert _error(response)["code"] == "capability_undeclared"
     # The record still lands: the call reached model resolution, which is the
     # line AC-20 draws for "gets a usage row".
-    assert [(row.result, row.error_code) for row in hosted] == [("capability_undeclared", 26215)]
+    assert [(row.result, row.error_code) for row in hosted] == [("capability_undeclared", 26515)]
 
 
-async def test_a_declared_model_that_was_taken_offline_is_26212_not_26215(hosted, declaration):
+async def test_a_declared_model_that_was_taken_offline_is_26512_not_26515(hosted, declaration):
     """AC-13 — the two verdicts send the owner to different people.
 
-    26215 means "declare it and publish again"; 26212 means "ask an
+    26515 means "declare it and publish again"; 26512 means "ask an
     administrator why it disappeared". Collapsing them would send every owner
     down the wrong path half the time.
     """
@@ -227,11 +227,11 @@ async def test_a_declared_model_that_was_taken_offline_is_26212_not_26215(hosted
     response = await _call("POST", CHAT_PATH, json_body={**BODY, "model": "retired"})
 
     assert response.status_code == 404
-    assert _error(response)["bisheng_code"] == 26212
-    assert [(row.result, row.error_code) for row in hosted] == [("model_unavailable", 26212)]
+    assert _error(response)["bisheng_code"] == 26512
+    assert [(row.result, row.error_code) for row in hosted] == [("model_unavailable", 26512)]
 
 
-async def test_a_declared_model_withdrawn_inside_the_cache_window_is_26213_not_26215(monkeypatch, hosted, declaration):
+async def test_a_declared_model_withdrawn_inside_the_cache_window_is_26513_not_26515(monkeypatch, hosted, declaration):
     """The capability-revoked boundary, from the other side.
 
     The catalog caches for up to a minute, so an administrator can delete the
@@ -253,12 +253,12 @@ async def test_a_declared_model_withdrawn_inside_the_cache_window_is_26213_not_2
     response = await _call("POST", CHAT_PATH, json_body=BODY)
 
     assert response.status_code == 404
-    assert _error(response)["bisheng_code"] == 26213
-    assert [(row.result, row.error_code) for row in hosted] == [("model_unavailable", 26213)]
+    assert _error(response)["bisheng_code"] == 26513
+    assert [(row.result, row.error_code) for row in hosted] == [("model_unavailable", 26513)]
 
 
-async def test_a_declared_model_the_tenant_never_had_is_26211(hosted, declaration):
-    """Not 26215: the declaration is satisfied, the platform simply has no such
+async def test_a_declared_model_the_tenant_never_had_is_26511(hosted, declaration):
+    """Not 26515: the declaration is satisfied, the platform simply has no such
     model. Answering "undeclared" here would tell the owner to edit a manifest
     that is already correct."""
     declaration(("claude-3",))
@@ -266,7 +266,7 @@ async def test_a_declared_model_the_tenant_never_had_is_26211(hosted, declaratio
     response = await _call("POST", CHAT_PATH, json_body={**BODY, "model": "claude-3"})
 
     assert response.status_code == 404
-    assert _error(response)["bisheng_code"] == 26211
+    assert _error(response)["bisheng_code"] == 26511
 
 
 async def test_declaring_no_model_at_all_refuses_by_name_rather_than_by_range(hosted, declaration):
@@ -274,16 +274,16 @@ async def test_declaring_no_model_at_all_refuses_by_name_rather_than_by_range(ho
 
     response = await _call("POST", CHAT_PATH, json_body=BODY)
 
-    # An empty declaration is a *known* range, so the answer is 26215 — not
-    # 26216, which would tell the caller to retry something that can never work.
-    assert _error(response)["bisheng_code"] == 26215
+    # An empty declaration is a *known* range, so the answer is 26515 — not
+    # 26516, which would tell the caller to retry something that can never work.
+    assert _error(response)["bisheng_code"] == 26515
     assert (await _call("GET", MODELS_PATH)).json()["data"] == []
 
 
 # --- T022: AC-35, the second gate fails closed -------------------------------
 
 
-async def test_without_a_registered_declaration_port_every_call_is_26216(hosted):
+async def test_without_a_registered_declaration_port_every_call_is_26516(hosted):
     # The shipped default, installed explicitly rather than assumed: whichever
     # file ran before this one may have left a real adapter behind, and a test
     # about fail-closed behaviour that silently exercised a working port would
@@ -294,7 +294,7 @@ async def test_without_a_registered_declaration_port_every_call_is_26216(hosted)
         response = await _call(method, path, json_body=body)
 
         assert response.status_code == 503
-        assert _error(response)["bisheng_code"] == 26216
+        assert _error(response)["bisheng_code"] == 26516
 
 
 async def test_an_unreadable_declaration_never_falls_back_to_the_tenant_range(hosted, declaration):
@@ -306,7 +306,7 @@ async def test_an_unreadable_declaration_never_falls_back_to_the_tenant_range(ho
     response = await _call("GET", MODELS_PATH)
 
     assert response.status_code == 503
-    assert _error(response)["bisheng_code"] == 26216
+    assert _error(response)["bisheng_code"] == 26516
 
 
 async def test_another_tenants_declaration_is_unreadable_rather_than_usable(hosted, declaration):
@@ -316,7 +316,7 @@ async def test_another_tenants_declaration_is_unreadable_rather_than_usable(host
 
     response = await _call("GET", MODELS_PATH)
 
-    assert _error(response)["bisheng_code"] == 26216
+    assert _error(response)["bisheng_code"] == 26516
 
 
 # --- T023: who the call is attributed to -------------------------------------
@@ -395,7 +395,7 @@ async def test_a_token_that_does_not_verify_is_refused_not_downgraded(hosted, de
     response = await _call("POST", CHAT_PATH, headers={ACCESS_TOKEN_HEADER: token_factory(obo)}, json_body=BODY)
 
     assert response.status_code == 403
-    assert _error(response)["bisheng_code"] == 26204
+    assert _error(response)["bisheng_code"] == 26504
     # Refused before the model is touched, so no usage row and no provider call.
     assert hosted == []
 
@@ -412,13 +412,13 @@ async def test_the_callable_range_is_the_same_whoever_the_subject_is(hosted, dec
 
 
 async def test_the_subject_is_decided_before_the_range_is(hosted, declaration, obo):
-    """A permanently invalid token must not be answered 26216 ("retry later")
+    """A permanently invalid token must not be answered 26516 ("retry later")
     just because the declaration happens to be unreadable this second."""
     declaration(None)
 
     response = await _call("POST", CHAT_PATH, headers={ACCESS_TOKEN_HEADER: "not-a-jwt"}, json_body=BODY)
 
-    assert _error(response)["bisheng_code"] == 26204
+    assert _error(response)["bisheng_code"] == 26504
 
 
 # --- T023: the registration itself -------------------------------------------

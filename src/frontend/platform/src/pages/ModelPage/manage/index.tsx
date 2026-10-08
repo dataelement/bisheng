@@ -16,7 +16,7 @@ import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLL
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
-import { useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
@@ -62,7 +62,6 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                     <Badge variant="secondary" className="ml-2">
                         {t('model.tenantSharedReadonly', {
                             tenantName: data.tenant_name || 'Root',
-                            defaultValue: '{{tenantName}} 共享 · 只读',
                         })}
                     </Badge>
                 )}
@@ -149,10 +148,14 @@ export default function Management() {
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
-
     const [searchParams, setSearchParams] = useSearchParams()
+    const navigate = useNavigate()
     useEffect(() => {
         const tab = searchParams.get('systemModel')
+        if (tab === 'dsh') {
+            navigate('/dsh', { replace: true })
+            return
+        }
         // Wait for model list to load before opening SystemModelConfig — otherwise
         // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
         if (tab && data.length > 0) {
@@ -162,7 +165,7 @@ export default function Management() {
             next.delete('systemModel')
             setSearchParams(next, { replace: true })
         }
-    }, [searchParams, setSearchParams, data])
+    }, [searchParams, setSearchParams, data, navigate])
 
     const reload = async () => {
         setLoading(true)

@@ -624,7 +624,7 @@ def verify_obo_token(token: str, *, app_id: str, tenant_id: int) -> int | None:
     ``None`` for every failure, with no distinction between them: an expired,
     forged, wrong-application or wrong-tenant token must answer the same way, or
     the token becomes a probe for which applications exist and who is inside
-    them. The caller turns that ``None`` into a refusal (F051 26204 on the model
+    them. The caller turns that ``None`` into a refusal (F051 26504 on the model
     face, and no retrieval at all on the capability bus) — never into "the
     application itself", which would make attribution something the caller can
     steer by sending garbage.

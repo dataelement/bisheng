@@ -236,7 +236,7 @@ async def _dispatch_model_gateway(conn, exc) -> JSONResponse | None:
         auth_response = await _authenticate_parse_failure(conn)
         if auth_response is not None:
             return auth_response
-        conn.scope["open_api_error_code"] = 26203
+        conn.scope["open_api_error_code"] = 26503
         return _render_model_gateway_validation_error(exc)
     if isinstance(exc, BaseErrorCode):
         mark_open_api_error(conn, exc)

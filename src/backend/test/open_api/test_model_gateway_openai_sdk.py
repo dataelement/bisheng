@@ -182,7 +182,7 @@ async def test_the_provider_daily_limit_raises_rate_limit_error(monkeypatch, fac
     with pytest.raises(openai.RateLimitError) as excinfo:
         await client_for(face).chat.completions.create(model="gpt-4o", messages=MESSAGES)
 
-    assert excinfo.value.body["bisheng_code"] == 26217
+    assert excinfo.value.body["bisheng_code"] == 26517
 
 
 async def test_an_endpoint_outside_the_promise_raises_not_found(monkeypatch, face):
@@ -191,4 +191,4 @@ async def test_an_endpoint_outside_the_promise_raises_not_found(monkeypatch, fac
     with pytest.raises(openai.NotFoundError) as excinfo:
         await client_for(face).embeddings.create(model="gpt-4o", input="hi")
 
-    assert excinfo.value.body["bisheng_code"] == 26201
+    assert excinfo.value.body["bisheng_code"] == 26501

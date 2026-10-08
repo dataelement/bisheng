@@ -135,9 +135,9 @@ async def resolve_range_and_subject(
     even when the model name happens to be wrong too. Otherwise an agent's
     correction loop gets a different answer each round.
 
-    1. delegation-style identity header → refuse (26205)
-    2. access token header → refuse or verify (26204)
-    3. establish the range (26216 / declaration)
+    1. delegation-style identity header → refuse (26505)
+    2. access token header → refuse or verify (26504)
+    3. establish the range (26516 / declaration)
     4. name resolution — done by the caller, against the range returned here
     """
 
@@ -172,7 +172,7 @@ async def resolve_range_and_subject(
 
     # Step 2 before step 3, always: a forged or expired token is refused whether
     # or not the declaration happens to be readable this second. Reading the
-    # declaration first would answer 26216 ("cannot tell right now, try again")
+    # declaration first would answer 26516 ("cannot tell right now, try again")
     # to a caller whose token is permanently invalid.
     subject = ResolvedSubject(subject_kind=SUBJECT_KIND_APP_SELF, app_id=app_id)
     if access_token is not None:

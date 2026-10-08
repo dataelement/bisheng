@@ -101,7 +101,7 @@ async def test_ambiguous_bare_name_is_refused_with_the_qualified_alternatives(mo
     with pytest.raises(ModelFaceModelAmbiguousError) as excinfo:
         await resolve_model_name(TENANT, "shared-name")
 
-    assert excinfo.value.code == 26214
+    assert excinfo.value.code == 26514
     assert excinfo.value.candidates == ["azure-openai/shared-name", "qwen-cloud/shared-name"]
 
 
@@ -123,7 +123,7 @@ async def test_offline_is_distinguishable_from_missing(monkeypatch):
     with pytest.raises(ModelFaceModelNotFoundError) as missing:
         await resolve_model_name(TENANT, "never-configured")
 
-    assert (offline.value.code, missing.value.code) == (26212, 26211)
+    assert (offline.value.code, missing.value.code) == (26512, 26511)
 
 
 async def test_another_tenants_model_reads_as_missing_not_as_revoked(monkeypatch):
@@ -134,12 +134,12 @@ async def test_another_tenants_model_reads_as_missing_not_as_revoked(monkeypatch
 
     # "Not yours" and "does not exist" must be one answer, or the face becomes
     # an existence oracle for other tenants' configuration (AC-13).
-    assert excinfo.value.code == 26211
+    assert excinfo.value.code == 26511
 
 
 async def test_a_deleted_provider_leaves_no_model_row_to_explain(monkeypatch):
     # Deleting a provider deletes its models (LLMDao.adelete_server_by_id), so
-    # resolution cannot report "revoked" — there is nothing left to find. 26213
+    # resolution cannot report "revoked" — there is nothing left to find. 26513
     # is raised one step later instead, when the cached name still resolves and
     # instantiation finds the row gone; that path is asserted in
     # test_model_gateway_stream.py.
@@ -195,7 +195,7 @@ async def test_permission_failure_refuses_instead_of_narrowing(monkeypatch):
     with pytest.raises(ModelFaceCatalogUnavailableError) as excinfo:
         await list_callable_chat_models(TENANT)
 
-    assert excinfo.value.code == 26216
+    assert excinfo.value.code == 26516
     assert excinfo.value.http_status == 503
 
 
@@ -218,7 +218,7 @@ async def test_declared_range_refuses_an_undeclared_model(monkeypatch):
     with pytest.raises(ModelFaceCapabilityUndeclaredError) as excinfo:
         await resolve_model_name(TENANT, "root-model", range=declared)
 
-    assert excinfo.value.code == 26215
+    assert excinfo.value.code == 26515
 
 
 async def test_offline_beats_undeclared_so_the_owner_knows_which_fix_applies(monkeypatch):
