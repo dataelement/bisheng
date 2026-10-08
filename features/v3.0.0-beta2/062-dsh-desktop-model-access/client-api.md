@@ -1,6 +1,8 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
-> 2026-09-29 界面名称与地址默认值更新：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng-work://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。
+> 2026-10-08 唤起协议更新：默认唤起地址改为 `bisheng://login`，仍自动附加当前毕昇 origin 的 `server` 参数。已保存的地址不自动覆盖；已有环境需在“客户端 → 接入设置”保存新地址。
+
+> 2026-09-29 界面名称与地址默认值更新（唤起默认值已按 2026-10-08 修订）：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。
 
 > **2026-09-20 会话版本修复（已批准）**：创建授权事务新增可选 `client_version`，取 DSH Desktop 应用实际版本，随后保存至登录会话。协议版本仍为 `0.5.0`；该字段不是协议版本，不参与登录资格判断。两端配套更新，不为测试阶段旧 Gateway 增加降级重试。详见 [会话版本修订](./client-version-revision.md)。
 
