@@ -44,4 +44,4 @@ def test_information_runtime_defaults_are_enabled_and_limit_is_validated():
     conf = IntelligenceCenterConf()
     assert conf.information_subscription_auto_unsubscribe_enabled is True
     assert conf.information_knowledge_delivery_enabled is True
-    assert conf.information_initial_article_limit == 20
+    assert conf.information_initial_article_limit == 36

@@ -682,7 +682,7 @@ class IntelligenceCenterConf(BaseModel):
     base_url: str = Field(default="", description="Intelligence Center Service Address")
     api_key: str = Field(default="", description="Intelligence Center Service API Key")
     kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
-    information_initial_article_limit: int = Field(default=20, ge=1, le=100)
+    information_initial_article_limit: int = Field(default=36, ge=1, le=100)
     information_sync_jitter_seconds: int = Field(default=600, ge=0)
     information_subscription_auto_unsubscribe_enabled: bool = Field(default=True)
     information_knowledge_delivery_enabled: bool = Field(default=True)

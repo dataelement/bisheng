@@ -60,3 +60,4 @@ class InformationArticlesResponse(BaseModel):
     total: int = 0  # 文章总数
     current_page: int = 1
     page_size: int = 20
+    snapshot_max_create_time: int | None = None

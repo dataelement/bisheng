@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-from bisheng.channel.domain.models.information_article_sync_state import InformationArticleSyncState
+from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.services.article_es_service import ArticleBulkWriteResult
 from bisheng.channel.domain.services.information_article_sync_service import InformationArticleSyncService
 from bisheng.channel.domain.services.information_knowledge_delivery_service import (
@@ -57,23 +57,43 @@ class FakeInformationClient:
         information_id: str,
         *,
         min_create_time: int | None,
+        max_create_time: int | None = None,
         page: int,
         page_size: int,
     ) -> InformationArticlesResponse:
         assert information_id == SOURCE_ID
         assert page == 1
-        assert page_size in {20, 100}
+        assert page_size == 100
         self.article_page_calls += 1
         articles = [
             article
             for article in self.articles
             if min_create_time is None or int(article.create_time) >= min_create_time
+            if max_create_time is None or int(article.create_time) <= max_create_time
         ]
         return InformationArticlesResponse(
             articles=articles,
             total=len(articles),
             current_page=1,
             page_size=page_size,
+            snapshot_max_create_time=max((int(article.create_time) for article in self.articles), default=0),
+        )
+
+    async def get_information_articles_bootstrap(
+        self,
+        information_id: str,
+        *,
+        limit: int = 36,
+    ) -> InformationArticlesResponse:
+        assert information_id == SOURCE_ID
+        self.article_page_calls += 1
+        articles = self.articles[:limit]
+        return InformationArticlesResponse(
+            articles=articles,
+            total=len(articles),
+            current_page=1,
+            page_size=limit,
+            snapshot_max_create_time=max((int(article.create_time) for article in self.articles), default=0),
         )
 
 
@@ -87,35 +107,25 @@ class FakeMetadataRepository:
 
 class FakeStateRepository:
     def __init__(self):
-        self.state: InformationArticleSyncState | None = None
+        self.state = ChannelInfoSource(
+            id=SOURCE_ID,
+            source_name="Shared source",
+            source_type="website",
+        )
 
-    async def find_by_source_id(self, source_id: str) -> InformationArticleSyncState | None:
+    async def find_by_source_id(self, source_id: str) -> ChannelInfoSource | None:
         assert source_id == SOURCE_ID
-        return self.state
-
-    async def create_initial_boundary_if_absent(
-        self,
-        source_id: str,
-        cursor: int | None,
-    ) -> InformationArticleSyncState:
-        if self.state is None:
-            self.state = InformationArticleSyncState(
-                source_id=source_id,
-                article_cursor_create_time=cursor,
-            )
-        elif self.state.article_cursor_create_time is None and cursor is not None:
-            self.state.article_cursor_create_time = cursor
         return self.state
 
     async def commit_if_unchanged(
         self,
         source_id: str,
-        expected_state: InformationArticleSyncState,
+        expected_state: ChannelInfoSource,
         next_cursor: int | None,
         remote_sync_at: int | None,
         article_list_updated_at: int | None,
     ) -> bool:
-        if self.state is not expected_state or self.state.source_id != source_id:
+        if self.state is not expected_state or self.state.id != source_id:
             return False
         self.state.article_cursor_create_time = next_cursor
         self.state.processed_remote_sync_at = remote_sync_at

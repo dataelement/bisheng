@@ -339,6 +339,7 @@ class BishengInformationClient:
         information_id: str,
         return_information: bool = False,
         min_create_time: int | None = None,
+        max_create_time: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> InformationArticlesResponse:
@@ -351,18 +352,22 @@ class BishengInformationClient:
             "page": page,
             "page_size": page_size,
         }
-        if min_create_time:
+        if min_create_time is not None:
             params["min_create_time"] = min_create_time
+        if max_create_time is not None:
+            params["max_create_time"] = max_create_time
         timeout_value = timeout.total if timeout else None
         with httpx.Client() as client:
             response = client.get(endpoint, headers=headers, params=params, timeout=timeout_value)
         response_body = self._handle_response(response, "Failed to get information articles")
+        data = response_body.get("data", {})
         return InformationArticlesResponse(
-            information=response_body.get("data", {}).get("information"),
-            articles=response_body.get("data", {}).get("articles", []),
+            information=data.get("information"),
+            articles=data.get("articles", []),
             total=response_body.get("totalCount", 0),
             current_page=response_body.get("currentPage", page),
             page_size=response_body.get("PageSize", page_size),
+            snapshot_max_create_time=data.get("snapshot_max_create_time"),
         )
 
     async def get_information_articles_page(
@@ -371,6 +376,7 @@ class BishengInformationClient:
         *,
         return_information: bool = False,
         min_create_time: int | None = None,
+        max_create_time: int | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> InformationArticlesResponse:
@@ -384,6 +390,8 @@ class BishengInformationClient:
         }
         if min_create_time is not None:
             params["min_create_time"] = min_create_time
+        if max_create_time is not None:
+            params["max_create_time"] = max_create_time
         response = await self.http_client.get(endpoint, headers=headers, params=params, timeout=timeout)
         response_body = self._handle_response(response, "Failed to get information articles")
         data = response_body.get("data", {})
@@ -393,4 +401,30 @@ class BishengInformationClient:
             total=response_body.get("totalCount", 0),
             current_page=response_body.get("currentPage", page),
             page_size=response_body.get("PageSize", page_size),
+            snapshot_max_create_time=data.get("snapshot_max_create_time"),
+        )
+
+    async def get_information_articles_bootstrap(
+        self,
+        information_id: str,
+        *,
+        limit: int = 36,
+    ) -> InformationArticlesResponse:
+        """Read the bounded latest-published bootstrap set and its watermark."""
+        base_url, headers, timeout = self._build_request_options()
+        endpoint = f"{base_url}/information/articles/{information_id}/bootstrap"
+        response = await self.http_client.get(
+            endpoint,
+            headers=headers,
+            params={"limit": limit},
+            timeout=timeout,
+        )
+        response_body = self._handle_response(response, "Failed to bootstrap information articles")
+        data = response_body.get("data", {})
+        return InformationArticlesResponse(
+            articles=data.get("articles", []),
+            total=response_body.get("totalCount", 0),
+            current_page=1,
+            page_size=limit,
+            snapshot_max_create_time=data.get("snapshot_max_create_time"),
         )
