@@ -90,8 +90,8 @@ async def test_deployment_gate_wins_without_reading_database(settings_app, monke
         assert response.json()["data"] == {
             "management_enabled": False,
             "enabled": False,
-            "download_url": None,
-            "launch_url": "dsh-desktop://login",
+            "download_url": "https://www.dshdesktop.com/zh/enterprise/",
+            "launch_url": "bisheng-work://login",
         }
         assert (await client.get("/api/v1/dsh/config")).json() == {"enabled": False}
         assert (await client.put("/api/v1/dsh/admin/settings", json={"enabled": True})).status_code == 403
@@ -172,6 +172,20 @@ async def test_existing_settings_default_launch_and_failed_writes_preserve_it(se
         await session.commit()
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         url = "/api/v1/dsh/admin/settings"
-        assert (await client.get(url)).json()["data"]["launch_url"] == "dsh-desktop://login"
+        assert (await client.get(url)).json()["data"]["launch_url"] == "bisheng-work://login"
         assert (await client.put(url, json={"enabled": True, "launch_url": "javascript://alert"})).status_code == 400
-        assert (await client.get(url)).json()["data"]["launch_url"] == "dsh-desktop://login"
+        assert (await client.get(url)).json()["data"]["launch_url"] == "bisheng-work://login"
+
+
+async def test_fresh_settings_use_client_addresses_and_preserve_explicit_download_choice(settings_app):
+    app, _, _ = settings_app
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        for url in ("/api/v1/dsh/admin/settings", "/api/v1/dsh/browser-config"):
+            data = (await client.get(url)).json()["data"]
+            assert data["launch_url"] == "bisheng-work://login"
+            assert data["download_url"] == "https://www.dshdesktop.com/zh/enterprise/"
+        value = {"download_url": None, "launch_url": "custom-client://login"}
+        assert (await client.put("/api/v1/dsh/admin/settings", json=value)).status_code == 200
+        data = (await client.get("/api/v1/dsh/browser-config")).json()["data"]
+        assert data["download_url"] is None
+        assert data["launch_url"] == "custom-client://login"

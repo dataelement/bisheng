@@ -1,4 +1,4 @@
-export const DEFAULT_DSH_LAUNCH_URL = 'dsh-desktop://login';
+export const DEFAULT_DSH_LAUNCH_URL = 'bisheng-work://login';
 
 export function parseDshLaunchBase(value: unknown = DEFAULT_DSH_LAUNCH_URL): string {
   if (typeof value !== 'string' || !/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[a-zA-Z0-9][a-zA-Z0-9._~/-]*$/.test(value)) {

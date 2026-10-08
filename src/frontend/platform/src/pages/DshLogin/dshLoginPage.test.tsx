@@ -93,9 +93,9 @@ describe('desktop consent identity', () => {
         vi.stubGlobal('location', { origin, pathname: '/desktop-login', href: origin + '/desktop-login?auth_id=fixture', search: '?auth_id=fixture', assign })
         render(<DshLogin />)
         await screen.findByRole('button', { name: english.dsh.authorize })
-        await waitFor(() => expect(screen.getByText(/Authorize DSH Desktop as/).textContent).toContain(expected))
+        await waitFor(() => expect(screen.getByText(/Authorize Client as/).textContent).toContain(expected))
         expect(screen.queryByText(/Hidden Tenant/)).toBeNull()
-        expect(screen.getByText(/Authorize DSH Desktop as/).textContent).not.toContain('()')
+        expect(screen.getByText(/Authorize Client as/).textContent).not.toContain('()')
     })
 })
 
