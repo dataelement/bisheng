@@ -1,13 +1,11 @@
-"""管理员月奖：次月 1 日结算上月，登录≥1，多角色取最高 M*。
+"""管理员月奖：次月 1 日结算上月，不以登录记录为门槛，多角色取最高 M*。
 
 候选人按 OpenFGA owner/manager（缺 owner 时 DB 创建人兜底）；FGA 不可用则失败告警并跳过本租户。
 """
 
 from __future__ import annotations
 
-import calendar
 import logging
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -39,8 +37,6 @@ from bisheng.user.domain.models.user_role import UserRole
 logger = logging.getLogger(__name__)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
-LoginUsersFn = Callable[[int, str, str], Awaitable[set[int]]]
-
 
 def previous_month_key(now: datetime | None = None) -> str:
     """返回应结算的上月 period key（Asia/Shanghai）。"""
@@ -54,82 +50,14 @@ def previous_month_key(now: datetime | None = None) -> str:
     return prev.strftime("%Y-%m")
 
 
-def month_local_date_bounds(period_key: str) -> tuple[str, str]:
-    """`YYYY-MM` → 当月首末日 `YYYY-MM-DD`（含）。"""
-    year_s, month_s = period_key.split("-", 1)
-    year, month = int(year_s), int(month_s)
-    last = calendar.monthrange(year, month)[1]
-    return f"{year:04d}-{month:02d}-01", f"{year:04d}-{month:02d}-{last:02d}"
-
-
-async def default_login_users(tenant_id: int, start_date: str, end_date: str) -> set[int]:
-    """从日活事实索引取上月至少登录过一次的用户。"""
-    from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection
-    from bisheng.telemetry.domain.mid_table.daily_participation import DailyParticipationFact
-
-    client = await get_statistics_es_connection()
-    # BaseMidTable 是 Pydantic BaseModel：类属性 _index_name 是 PrivateAttr，
-    # 类访问会得到 ModelPrivateAttr，ES 会去查字面量 default='…'。必须取实例值。
-    index = DailyParticipationFact(ensure_sync_index=False)._index_name
-    body = {
-        "size": 0,
-        "query": {
-            "bool": {
-                "filter": [
-                    {"term": {"tenant_id": str(tenant_id)}},
-                    {"range": {"local_date": {"gte": start_date, "lte": end_date}}},
-                    {
-                        "bool": {
-                            "should": [
-                                {"term": {"logged_in": True}},
-                                {"range": {"login_count": {"gt": 0}}},
-                            ],
-                            "minimum_should_match": 1,
-                        }
-                    },
-                ]
-            }
-        },
-        "aggs": {
-            "users": {
-                "terms": {
-                    "field": "user_id",
-                    "size": 10000,
-                }
-            }
-        },
-    }
-    try:
-        resp = await client.search(index=index, body=body)
-    except Exception:
-        logger.exception(
-            "points.monthly.login_query_failed tenant_id=%s %s..%s",
-            tenant_id,
-            start_date,
-            end_date,
-        )
-        raise
-    buckets = (((resp or {}).get("aggregations") or {}).get("users") or {}).get("buckets") or []
-    result: set[int] = set()
-    for bucket in buckets:
-        key = bucket.get("key")
-        try:
-            result.add(int(key))
-        except (TypeError, ValueError):
-            continue
-    return result
-
-
 class PointsMonthlyRewardService:
     """扫描空间角色并发放上月管理员月奖。"""
 
     def __init__(
         self,
         *,
-        login_users_fn: LoginUsersFn | None = None,
         notify: PointsNotifyService | None = None,
     ):
-        self._login_users_fn = login_users_fn or default_login_users
         self.notify = notify or PointsNotifyService()
 
     async def run_all_tenants(self, now: datetime | None = None) -> dict:
@@ -156,7 +84,6 @@ class PointsMonthlyRewardService:
     async def run_for_tenant(self, tenant_id: int, *, period_key: str | None = None) -> dict:
         """对单个租户结算指定月（默认上月）。"""
         month_key = period_key or previous_month_key()
-        start_date, end_date = month_local_date_bounds(month_key)
         async with get_async_db_session() as session:
             repo = PointsRepository(session)
             rules = await repo.list_rules(tenant_id, rule_type="admin_reward", status="enabled")
@@ -188,25 +115,11 @@ class PointsMonthlyRewardService:
             return {"tenant_id": tenant_id, "period_key": month_key, "awarded": 0, "skipped": 0}
 
         exclude = await self._load_super_admin_ids()
-        try:
-            logged_in = await self._login_users_fn(tenant_id, start_date, end_date)
-        except Exception:
-            # 日活不可用时整租户跳过，避免误发无登录校验的奖励。
-            return {
-                "tenant_id": tenant_id,
-                "period_key": month_key,
-                "awarded": 0,
-                "skipped": len(user_candidates),
-                "error": "login_query_failed",
-            }
 
         awarded = 0
         skipped = 0
         for user_id, (rule_code, score) in user_candidates.items():
             if user_id in exclude:
-                skipped += 1
-                continue
-            if user_id not in logged_in:
                 skipped += 1
                 continue
             rule = rule_by_code[rule_code]

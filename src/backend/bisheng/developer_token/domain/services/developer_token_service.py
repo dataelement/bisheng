@@ -750,6 +750,7 @@ class DeveloperTokenService:
         endpoint_key: str | None = None,
         request_method: str | None = None,
         route_path: str | None = None,
+        require_explicit_route: bool = False,
     ) -> DeveloperTokenPrincipal:
         if not raw_token:
             raise DeveloperTokenMissingError()
@@ -774,6 +775,8 @@ class DeveloperTokenService:
         effective_ip_whitelist, effective_rate_limit = await cls._effective_controls(token)
         if not cls._ip_allowed(request_ip, effective_ip_whitelist):
             raise DeveloperTokenIpForbiddenError()
+        if require_explicit_route and not token.route_whitelist:
+            raise DeveloperTokenRouteForbiddenError()
         cls._check_route_access(token.route_whitelist, request_method, route_path)
         await cls._check_rate_limit(token.id, effective_rate_limit, endpoint_key=endpoint_key)
 

@@ -41,6 +41,8 @@ from bisheng.knowledge.api.router import (
 )
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
+from bisheng.mcp_server.api.router import McpServerApp as McpServerApp
+from bisheng.mcp_server.api.router import mcp_routes as mcp_routes
 from bisheng.message.api.router import router as message_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, ORJSONResponse
 from loguru import logger
 
-from bisheng.api.router import router, router_rpc
+from bisheng.api.router import McpServerApp, mcp_routes, router, router_rpc
 from bisheng.api_rate_limit.middleware import ApiRateLimitMiddleware
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.filelib_sync import FilelibSyncError
@@ -64,11 +64,13 @@ _EXCEPTION_HANDLERS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
-    await init_default_data()
-    # LangfuseInstance.update()
-    yield
-    thread_pool.tear_down()
-    await close_app_context()
+    try:
+        await init_default_data()
+        async with app.state.mcp_server.lifespan():
+            yield
+    finally:
+        thread_pool.tear_down()
+        await close_app_context()
 
 
 def create_app():
@@ -79,6 +81,8 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    app.state.mcp_server = McpServerApp()
+    app.router.routes.extend(mcp_routes(app.state.mcp_server))
 
     # Browsers reject wildcard ACAO when axios uses withCredentials=true.
     # Override with comma-separated BISHENG_CORS_ORIGINS when needed.

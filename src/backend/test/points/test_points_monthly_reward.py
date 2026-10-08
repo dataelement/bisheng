@@ -1,4 +1,4 @@
-"""月奖：结算月、取最高档与登录过滤。"""
+"""月奖：结算月、角色奖励与超管排除。"""
 
 from datetime import datetime
 from types import SimpleNamespace
@@ -14,7 +14,6 @@ from bisheng.points.domain.constants.monthly_reward_rules import (
 )
 from bisheng.points.domain.services.points_monthly_reward_service import (
     PointsMonthlyRewardService,
-    month_local_date_bounds,
     previous_month_key,
 )
 from bisheng.points.domain.services.space_fga_roles import SpaceFgaRolesError
@@ -25,11 +24,6 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 def test_previous_month_key_on_first_day():
     now = datetime(2026, 8, 1, 0, 5, tzinfo=SHANGHAI)
     assert previous_month_key(now) == "2026-07"
-
-
-def test_month_local_date_bounds():
-    assert month_local_date_bounds("2026-07") == ("2026-07-01", "2026-07-31")
-    assert month_local_date_bounds("2026-02") == ("2026-02-01", "2026-02-28")
 
 
 def test_pick_highest_reward():
@@ -62,10 +56,13 @@ async def test_notify_earn_uses_injected_message_service():
 
 
 @pytest.mark.asyncio
-async def test_run_for_tenant_skips_no_login_and_awards_highest():
-    service = PointsMonthlyRewardService(
-        login_users_fn=AsyncMock(return_value={10}),
-    )
+@pytest.mark.parametrize("login_query_error", [False, True], ids=["no-login-records", "telemetry-unavailable"])
+async def test_run_for_tenant_awards_without_login_data(login_query_error):
+    """无登录记录或统计服务不可用时仍发月奖，平台超管仍排除。"""
+    service = PointsMonthlyRewardService()
+    es = SimpleNamespace(search=AsyncMock(return_value={"aggregations": {"users": {"buckets": []}}}))
+    if login_query_error:
+        es.search.side_effect = RuntimeError("telemetry unavailable")
     m1 = SimpleNamespace(
         rule_code="M1",
         name="公共库所有者月奖",
@@ -83,15 +80,20 @@ async def test_run_for_tenant_skips_no_login_and_awards_highest():
 
     async def fake_collect(matchers, rule_by_code):
         return {
-            10: ("M1", 200),  # logged in
-            11: ("M4", 100),  # no login
+            10: ("M1", 200),
+            11: ("M4", 100),
+            12: ("M1", 200),
         }
 
     with (
         patch("bisheng.points.domain.services.points_monthly_reward_service.get_async_db_session") as session_factory,
         patch.object(service, "_collect_user_candidates", side_effect=fake_collect),
-        patch.object(service, "_load_super_admin_ids", AsyncMock(return_value=set())),
+        patch.object(service, "_load_super_admin_ids", AsyncMock(return_value={12})),
         patch.object(service, "_award_one", AsyncMock(return_value=True)) as award,
+        patch(
+            "bisheng.core.search.elasticsearch.manager.get_statistics_es_connection",
+            AsyncMock(return_value=es),
+        ) as get_es,
     ):
 
         class _Session:
@@ -113,13 +115,16 @@ async def test_run_for_tenant_skips_no_login_and_awards_highest():
         ):
             out = await service.run_for_tenant(1, period_key="2026-07")
 
-    assert out["awarded"] == 1
+    assert out["awarded"] == 2
     assert out["skipped"] == 1
-    award.assert_awaited_once()
-    kwargs = award.await_args.kwargs
-    assert kwargs["user_id"] == 10
-    assert kwargs["rule_code"] == "M1"
-    assert kwargs["score"] == 200
+    assert [
+        (call.kwargs["user_id"], call.kwargs["rule_code"], call.kwargs["score"]) for call in award.await_args_list
+    ] == [
+        (10, "M1", 200),
+        (11, "M4", 100),
+    ]
+    get_es.assert_not_awaited()
+    es.search.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -160,7 +165,7 @@ async def test_collect_user_candidates_uses_fga_owner_manager():
 
 @pytest.mark.asyncio
 async def test_run_for_tenant_aborts_when_fga_unavailable():
-    service = PointsMonthlyRewardService(login_users_fn=AsyncMock(return_value={10}))
+    service = PointsMonthlyRewardService()
     m1 = SimpleNamespace(
         rule_code="M1",
         name="公共库所有者月奖",

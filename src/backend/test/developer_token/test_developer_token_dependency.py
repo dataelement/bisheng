@@ -361,7 +361,7 @@ async def test_auth_sets_constrained_tenant_context(monkeypatch):
     )
     monkeypatch.setattr(
         "bisheng.developer_token.domain.services.developer_token_service.UserRoleDao",
-        SimpleNamespace(get_user_roles=lambda user_id: [SimpleNamespace(role_id=2)]),
+        SimpleNamespace(aget_user_roles=AsyncMock(return_value=[SimpleNamespace(role_id=2)])),
     )
 
     user = await DeveloperTokenService.authenticate(raw, request_ip="10.0.0.1")
@@ -498,7 +498,7 @@ async def test_last_used_update_is_best_effort(monkeypatch):
     )
     monkeypatch.setattr(
         "bisheng.developer_token.domain.services.developer_token_service.UserRoleDao",
-        SimpleNamespace(get_user_roles=lambda user_id: [SimpleNamespace(role_id=2)]),
+        SimpleNamespace(aget_user_roles=AsyncMock(return_value=[SimpleNamespace(role_id=2)])),
     )
 
     user = await DeveloperTokenService.authenticate(raw, request_ip="10.0.0.1")
@@ -506,10 +506,11 @@ async def test_last_used_update_is_best_effort(monkeypatch):
     assert user.user_id == 7
 
 
-def _prepare_principal_auth(monkeypatch, raw: str, *, file_sync_rule: dict | None):
+def _prepare_principal_auth(monkeypatch, raw: str, *, file_sync_rule: dict | None, route_whitelist=None):
     token = _active_token(
         token_hash=DeveloperTokenService._hash_token(raw),
         file_sync_rule=file_sync_rule,
+        route_whitelist=route_whitelist,
     )
     calls = {"lookup": 0, "last_used": 0}
 
@@ -553,9 +554,32 @@ def _prepare_principal_auth(monkeypatch, raw: str, *, file_sync_rule: dict | Non
     )
     monkeypatch.setattr(
         "bisheng.developer_token.domain.services.developer_token_service.UserRoleDao",
-        SimpleNamespace(get_user_roles=lambda user_id: [SimpleNamespace(role_id=2)]),
+        SimpleNamespace(aget_user_roles=AsyncMock(return_value=[SimpleNamespace(role_id=2)])),
     )
     return calls
+
+
+@pytest.mark.parametrize(
+    ("explicit", "rules", "allowed"),
+    [
+        (False, [], True),
+        (True, [], False),
+        (True, [{"match_type": "METHOD_PATH", "method": "POST", "path": "/mcp"}], True),
+        (True, [{"match_type": "METHOD_PATH", "method": "GET", "path": "/mcp"}], False),
+        (True, [{"match_type": "PATH", "path": "/api/v2/filelib/retrieve"}], False),
+    ],
+)
+async def test_mcp_requires_explicit_route_without_changing_rest_default(monkeypatch, explicit, rules, allowed):
+    """AC-04, AC-11: actual Token service enforces opt-in and retains legacy behavior."""
+    _prepare_principal_auth(monkeypatch, "test-mcp-route", file_sync_rule=None, route_whitelist=rules)
+    kwargs = {"request_method": "POST", "route_path": "/mcp", "require_explicit_route": explicit}
+    if not allowed:
+        with pytest.raises(DeveloperTokenRouteForbiddenError):
+            await DeveloperTokenService.authenticate_principal("test-mcp-route", **kwargs)
+    else:
+        principal = await DeveloperTokenService.authenticate_principal("test-mcp-route", **kwargs)
+        assert principal.user.user_id == 7
+        DeveloperTokenService.reset_auth_context(principal.user)
 
 
 @pytest.mark.asyncio
