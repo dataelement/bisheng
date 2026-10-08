@@ -75,7 +75,9 @@ class SecureEPlusMediaDownloader:
             use_dns_cache=False,
         )
         timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout, auto_decompress=False) as session:
+        # Remove HTTP content encoding before AES decryption. The streaming
+        # size check below also bounds the decompressed ciphertext.
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout, auto_decompress=True) as session:
             async with session.get(url, allow_redirects=False) as response:
                 if 300 <= response.status < 400:
                     return DownloadedEncryptedMedia(b"", addresses, addresses[0], redirected=True)
@@ -119,7 +121,7 @@ class MinioEPlusMediaStore:
 class DailyChatImageTextExtractor:
     @property
     def available(self) -> bool:
-        return settings.knowledge.image_parser_enabled
+        return settings.get_knowledge().image_parser_enabled
 
     async def extract(self, *, data: bytes, mime_type: str, user_id: int) -> str:
         from bisheng.workstation.domain.services.chat_service import get_file_content
