@@ -18,12 +18,13 @@ def _login_user(*, is_admin: bool = False):
     return SimpleNamespace(user_id=7, tenant_id=1, is_admin=lambda: is_admin, user_name="tester")
 
 
-def _dept(dept_id: int, *, org_level: str | None, path: str, status: str = "active"):
+def _dept(dept_id: int, *, org_level: str | None, path: str, status: str = "active", parent_id: int | None = None):
     return SimpleNamespace(
         id=dept_id,
         status=status,
         org_level=org_level,
         path=path,
+        parent_id=parent_id,
         is_deleted=0,
     )
 
@@ -109,3 +110,47 @@ async def test_create_clinic_allows_office_in_admin_grant_subtree() -> None:
     assert level == KnowledgeSpaceLevelEnum.TEAM_KS
     assert owner_type == KnowledgeSpaceOwnerTypeEnum.USER
     assert owner_id == 7
+
+
+@pytest.mark.parametrize("grant_id,target_id,allowed", [(4, 3, True), (5, 3, True), (4, 6, False)])
+async def test_create_clinic_from_lower_org_only_allows_nearest_office(grant_id, target_id, allowed) -> None:
+    svc = KnowledgeSpaceService(request=None, login_user=_login_user())
+    departments = [
+        _dept(1, org_level="dept", path="/1/"),
+        _dept(3, org_level="office", path="/1/3/", parent_id=1),
+        _dept(4, org_level="squad", path="/1/3/4/", parent_id=3),
+        _dept(5, org_level=None, path="/1/3/4/5/", parent_id=4),
+        _dept(6, org_level="office", path="/1/6/", parent_id=1),
+    ]
+    target = next(dept for dept in departments if dept.id == target_id)
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id",
+            new=AsyncMock(return_value=target),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[grant_id]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+    ):
+        request = {
+            "space_level": "department",
+            "department_id": target_id,
+            "user_group_id": None,
+            "is_clinic": True,
+        }
+        if allowed:
+            level, owner_type, owner_id = await svc._resolve_space_scope_on_create(**request)
+            assert (level, owner_type, owner_id) == (
+                KnowledgeSpaceLevelEnum.TEAM_KS,
+                KnowledgeSpaceOwnerTypeEnum.USER,
+                7,
+            )
+        else:
+            with pytest.raises(SpaceCreateDepartmentDeniedError):
+                await svc._resolve_space_scope_on_create(**request)

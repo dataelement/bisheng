@@ -31,6 +31,45 @@ def _parse_path_ids(path: Any) -> list[int]:
     return [int(part) for part in str(path or "").split("/") if part.isdigit()]
 
 
+def resolve_clinic_bind_scope_departments(departments: list[Any], grant_ids: set[int]) -> list[Any]:
+    """合并管理员授权子树；班组及以下只补入父链上最近的科室。
+
+    departments 由调用方限制为当前租户的有效组织。沿真实父链查找上级，
+    不用历史 path 猜测科室；缺失父节点或循环时停止，避免越范围扩权。
+    """
+    by_id = {int(dept.id): dept for dept in departments if getattr(dept, "id", None) is not None}
+    roots = [by_id[dept_id] for dept_id in grant_ids if dept_id in by_id]
+    root_paths = {
+        dept.path for dept in roots if org_level_of(dept) in CLINIC_TREE_ORG_LEVELS and getattr(dept, "path", None)
+    }
+    nearest_office_ids: set[int] = set()
+    for root in roots:
+        if org_level_of(root) in CLINIC_TREE_ORG_LEVELS:
+            continue
+        seen = {int(root.id)}
+        parent_id = getattr(root, "parent_id", None)
+        while parent_id is not None:
+            pid = int(parent_id)
+            if pid in seen:
+                break
+            seen.add(pid)
+            parent = by_id.get(pid)
+            if parent is None:
+                break
+            if is_clinic_bindable_department(parent):
+                nearest_office_ids.add(pid)
+                break
+            parent_id = getattr(parent, "parent_id", None)
+
+    return [
+        dept
+        for dept_id, dept in by_id.items()
+        if dept_id in grant_ids
+        or dept_id in nearest_office_ids
+        or (getattr(dept, "path", None) and any(dept.path.startswith(path) for path in root_paths))
+    ]
+
+
 def _has_office_ancestor(*, dept: Any, by_id: dict[int, Any], office_ids: set[int]) -> bool:
     """父链（含 path 祖先）上已有 office 时，当前节点视为科室以下。"""
     dept_id = _department_id(dept)

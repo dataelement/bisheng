@@ -59,8 +59,15 @@ async def clinic_env(async_db_engine, async_db_session, monkeypatch):
     failure_queue = AsyncMock()
     monkeypatch.setattr(PermissionService, "_save_failed_tuples", failure_queue)
     departments = {
-        did: SimpleNamespace(id=did, path=path, org_level="office", status="active", is_deleted=0)
-        for did, path in [(1, "/1/"), (9, "/1/9/"), (10, "/1/9/10/"), (12, "/2/12/"), (13, "/2/12/13/")]
+        did: SimpleNamespace(id=did, path=path, parent_id=parent_id, org_level=level, status="active", is_deleted=0)
+        for did, path, parent_id, level in [
+            (1, "/1/", None, "dept"),
+            (9, "/1/9/", 1, "office"),
+            (10, "/1/9/10/", 9, "squad"),
+            (12, "/2/12/", 2, "office"),
+            (13, "/2/12/13/", 12, "squad"),
+            (16, "/2/16/", 2, "office"),
+        ]
     }
     monkeypatch.setattr(fine_module.DepartmentDao, "aget_by_id", AsyncMock(side_effect=lambda did: departments[did]))
     monkeypatch.setattr(
@@ -85,6 +92,7 @@ async def clinic_env(async_db_engine, async_db_session, monkeypatch):
         fga=fga,
         bindings=bindings,
         failure_queue=failure_queue,
+        departments=departments,
     )
 
 
@@ -225,6 +233,10 @@ async def test_compensation_failure_only_queues_original_permissions(clinic_env,
         (12, True, [], True, True),
         (12, False, [12], True, True),
         (12, False, [9], True, False),
+        (12, False, [13], True, True),
+        (12, False, [14], True, True),
+        (16, False, [13], True, False),
+        (12, False, [13], False, False),
         (None, False, [], True, True),
         (12, True, [], False, False),
     ],
@@ -239,6 +251,13 @@ async def test_edit_service_enforces_scope_and_repairs_viewers_on_plain_save(
     allowed,
 ):
     env = clinic_env
+    if 14 in grants:
+        env.departments[14] = SimpleNamespace(
+            id=14, parent_id=13, path="/2/12/13/14/", org_level=None, status="active", is_deleted=0
+        )
+    monkeypatch.setattr(
+        fine_module.DepartmentDao, "aget_active_by_tenant", AsyncMock(return_value=list(env.departments.values()))
+    )
     scope = (await env.session.exec(select(KnowledgeSpaceScope))).one()
     binding = (await env.session.exec(select(DepartmentKnowledgeSpace))).one()
     env.session.expunge_all()
@@ -258,7 +277,8 @@ async def test_edit_service_enforces_scope_and_repairs_viewers_on_plain_save(
     monkeypatch.setattr(space_module.KnowledgeSpaceContentStat, "enqueue_space_rename_stat_async", AsyncMock())
     if allowed:
         await service.update_knowledge_space(space_id=11, department_id=target)
-        assert await viewer_ids(env) == ({12, 13} if target else {9, 10})
+        expected_viewers = ({12, 13, 14} if 14 in grants else {12, 13}) if target else {9, 10}
+        assert await viewer_ids(env) == expected_viewers
     else:
         with pytest.raises((space_module.SpaceCreateDepartmentDeniedError, space_module.SpacePermissionDeniedError)):
             await service.update_knowledge_space(space_id=11, department_id=target)

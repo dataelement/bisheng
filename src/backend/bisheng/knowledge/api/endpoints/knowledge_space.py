@@ -121,9 +121,7 @@ async def get_create_option_my_department_tree(
     exclude_space_id: int | None = Query(default=None),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    """Return the current user's department-admin subtrees, truncated at office,
-    plus IDs of departments already bound to other knowledge spaces.
-    """
+    """返回管理员授权子树及班组最近上级科室，裁剪到科室层级并标记已有绑定。"""
     options = await svc.get_my_department_tree_for_create(
         exclude_space_id=exclude_space_id,
     )

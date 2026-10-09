@@ -258,6 +258,7 @@ from bisheng.knowledge.domain.services.clinic_department_bind import (
     CLINIC_BIND_DENIED_MSG,
     filter_clinic_bind_tree_departments,
     is_clinic_bindable_department,
+    resolve_clinic_bind_scope_departments,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
@@ -2037,13 +2038,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return bound
 
     async def _clinic_visible_departments(self) -> list[Any]:
-        """科室库下拉的可见组织: 超管看租户全部活跃节点; 其他人只看部门管理员授权子树并集.
+        """科室绑定范围：管理员授权子树并集，班组及以下补入最近上级科室。
 
-        不含挂载部门. 授权在班组上时子树里没有 office, 裁剪后为空.
+        下拉与提交校验共用裁剪结果，不含仅因组织归属获得的范围。
         """
-        all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        all_departments = [
+            dept
+            for dept in await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+            if getattr(dept, "status", "active") == "active" and not int(getattr(dept, "is_deleted", 0) or 0)
+        ]
         if self.login_user.is_admin():
-            return all_departments
+            return filter_clinic_bind_tree_departments(all_departments)
 
         grant_ids = {
             int(department_id)
@@ -2052,19 +2057,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not grant_ids:
             return []
 
-        visible_root_paths = {
-            dept.path for dept in all_departments if int(dept.id) in grant_ids and getattr(dept, "path", None)
-        }
-        if not visible_root_paths:
-            return []
-        return [
-            dept
-            for dept in all_departments
-            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in visible_root_paths)
-        ]
+        visible = resolve_clinic_bind_scope_departments(all_departments, grant_ids)
+        return filter_clinic_bind_tree_departments(visible)
 
     async def _can_bind_clinic_department(self, department_id: int) -> bool:
-        """创建/更绑科室库时, 目标必须是授权子树内的 office."""
+        """创建/改绑目标须为候选范围内的有效科室，包含班组最近上级科室。"""
         dept = await DepartmentDao.aget_by_id(int(department_id))
         if dept is None or getattr(dept, "status", "active") != "active":
             return False
@@ -2082,12 +2079,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         exclude_space_id: int | None = None,
     ) -> dict[str, Any]:
-        """科室库绑定下拉: 部门管理员授权子树并集, 展示最多到 office.
+        """科室库绑定下拉：授权子树并集，班组及以下补入最近科室，展示最多到 office。
 
         超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回树上的 office,
         公司/部门即使已绑知识库也不标已绑定.
         """
-        departments = filter_clinic_bind_tree_departments(await self._clinic_visible_departments())
+        departments = await self._clinic_visible_departments()
         tree = await self._build_department_tree(departments)
 
         office_ids = {
