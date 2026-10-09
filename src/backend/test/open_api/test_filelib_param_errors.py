@@ -50,7 +50,7 @@ async def api(monkeypatch):
     monkeypatch.setattr(filelib.QuotaService, "get_knowledge_space_upload_limit_bytes", AsyncMock(return_value=1024))
     save_kf = AsyncMock(return_value=(SimpleNamespace(id=7), [], [SimpleNamespace(id=3)], None))
     monkeypatch.setattr(filelib.KnowledgeService, "asave_knowledge_file", save_kf)
-    monkeypatch.setattr(filelib, "text_knowledge", Mock(return_value={"id": 3}))
+    monkeypatch.setattr(filelib.KnowledgeService, "aingest_text_chunks", AsyncMock(return_value={"id": 3}))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield SimpleNamespace(

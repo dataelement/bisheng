@@ -15,7 +15,10 @@ from starlette.concurrency import run_in_threadpool
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
     delete_knowledge_file_vectors,
+    delete_minio_files,
+    delete_vector_files,
     process_file_task,
+    text_knowledge,
 )
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
@@ -30,10 +33,12 @@ from bisheng.api.v1.schemas import (
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
+    KnowledgeFileFailedError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotQAError,
@@ -1482,6 +1487,53 @@ class KnowledgeService(KnowledgeUtils):
                     logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
             raise
         return knowledge, failed_files, process_files, preview_cache_keys
+
+    @classmethod
+    async def aingest_text_chunks(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        db_file: KnowledgeFile,
+        documents: list,
+    ) -> dict:
+        """Write caller-provided text chunks for a new file record (open API chunks_string).
+
+        On failure the file record is removed with its vectors, objects and
+        permission tuples, and a business error is raised: the caller must not see
+        a success response or keep a half-written file.
+        """
+        try:
+            return await run_in_threadpool(text_knowledge, knowledge, db_file, documents)
+        except Exception as exc:
+            logger.exception(f"text_chunks_ingest_failed knowledge_id={knowledge.id} file_id={db_file.id}")
+            await cls._adiscard_unfinished_file(login_user, knowledge, db_file)
+            if isinstance(exc, BaseErrorCode):
+                raise
+            raise KnowledgeFileFailedError(exception=exc) from exc
+
+    @classmethod
+    async def _adiscard_unfinished_file(cls, login_user: UserPayload, knowledge: Knowledge, db_file: KnowledgeFile):
+        """Remove a file whose synchronous ingestion failed. Each step is best effort."""
+        file_id = int(db_file.id)
+        try:
+            # A partial write can leave chunks in one store (e.g. Milvus succeeded, ES failed).
+            await run_in_threadpool(delete_vector_files, [file_id], knowledge)
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file vectors file_id={file_id}")
+        try:
+            await run_in_threadpool(delete_minio_files, db_file)
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file minio file_id={file_id}")
+        try:
+            # Needs the DB row, so it runs before the row is deleted.
+            await cls._project_file_ids_deletion(login_user, [file_id])
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file permission file_id={file_id}")
+        try:
+            await KnowledgeFileDao.adelete_batch([file_id])
+        except Exception:
+            # Keep the ingestion error as the response; this failure is only logged.
+            logger.opt(exception=True).warning(f"discard_unfinished_file record file_id={file_id}")
 
     @classmethod
     def process_knowledge_file(
