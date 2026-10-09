@@ -39,6 +39,7 @@ KNOWLEDGE_READ_CLASSIFICATION = {
     ("GET", "/api/v2/filelib/"): "narrow",
     ("GET", "/api/v2/filelib/file/list"): "raise",
     ("POST", "/api/v2/filelib/retrieve"): "raise",
+    ("POST", "/api/v2/filelib/answer"): "raise",
     ("GET", "/api/v2/filelib/download_statistic"): "sa-only",
     ("GET", "/api/v2/filelib/detail_qa"): "raise",
     ("POST", "/api/v2/filelib/query_qa"): "raise",

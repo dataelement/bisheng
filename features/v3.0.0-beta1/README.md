@@ -22,6 +22,7 @@
 | F054 | [unified-citation-entries](./054-unified-citation-entries/) | P1 | Discovery + Spec + Design 已出，待确认 | F029, F041（F047 并行） |
 | F067 | [unified-remote-mcp-service](./067-unified-remote-mcp-service/) | P1 | Discovery、Spec、Design 已确认，Tasks 未生成 | F053, F066 |
 | F073 | [eplus-robot-assistant](./073-eplus-robot-assistant/) | P1（安全验收 P0） | 已实现；待客户环境集成验收 | F048、v2.6.0 F041、既有助手 |
+| F074 | [cofco-knowledge-answer](./074-cofco-knowledge-answer/) | P1（权限与兼容验收 P0） | 接口已实现，专项验证通过；全量未全绿，真实环境待验收 | F048、F053、F066、既有空间检索及模型调用 |
 | F068 | [knowledge-space-chat-history-retention](./068-knowledge-space-chat-history-retention/) | P1 | Discovery、Spec、修订 Design 已确认，Tasks 未生成 | v2.6.0 F034, F048, 既有知识空间问答 |
 
 ---

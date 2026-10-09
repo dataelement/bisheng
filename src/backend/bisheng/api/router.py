@@ -44,6 +44,7 @@ from bisheng.message.api.router import router as message_router
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.api.router import management_router as open_api_management_router
 from bisheng.open_api.api.router import rpc_router as open_api_rpc_router
+from bisheng.open_endpoints.api.endpoints.knowledge_answer import router as knowledge_answer_router_rpc
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
 from bisheng.open_endpoints.api.router import (
     assistant_router_rpc,
@@ -123,6 +124,7 @@ router_rpc = APIRouter(prefix="/api/v2", dependencies=[Depends(verify_open_api_a
 router_rpc.include_router(open_api_rpc_router)
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(filelib_router_rpc)
+router_rpc.include_router(knowledge_answer_router_rpc)
 router_rpc.include_router(assistant_router_rpc)
 router_rpc.include_router(workflow_router_rpc)
 router_rpc.include_router(llm_router_rpc)

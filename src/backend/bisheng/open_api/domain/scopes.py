@@ -82,6 +82,7 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("GET", f"{_V2}/filelib/"),
             ("GET", f"{_V2}/filelib/file/list"),
             ("POST", f"{_V2}/filelib/retrieve"),
+            ("POST", f"{_V2}/filelib/answer"),
             ("GET", f"{_V2}/filelib/download_statistic"),
             ("GET", f"{_V2}/filelib/detail_qa"),
             ("POST", f"{_V2}/filelib/query_qa"),

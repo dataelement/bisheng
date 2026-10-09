@@ -133,6 +133,26 @@ class KnowledgeTypeNotSupportedError(BaseErrorCode):
     Msg: str = "Unsupported knowledge resource type"
 
 
+class KnowledgeAnswerRetrievalError(BaseErrorCode):
+    Code: int = 10963
+    Msg: str = "Knowledge answer retrieval failed"
+
+
+class KnowledgeAnswerModelError(BaseErrorCode):
+    Code: int = 10964
+    Msg: str = "Knowledge answer generation failed"
+
+
+class KnowledgeAnswerTimeoutError(BaseErrorCode):
+    Code: int = 10965
+    Msg: str = "Knowledge answer request timed out"
+
+
+class KnowledgeAnswerFormatError(BaseErrorCode):
+    Code: int = 10966
+    Msg: str = "The model returned an invalid knowledge answer"
+
+
 # Knowledge base does not exist
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970
@@ -147,7 +167,7 @@ class KnowledgeFileNotExistError(BaseErrorCode):
 
 class KnowledgeTenantMismatchError(BaseErrorCode):
     Code: int = 10972
-    Msg: str = "当前租户与知识库归属租户不一致，暂不支持上传文件，请切换到知识库所属租户后重试"
+    Msg: str = "当前租户与知识库归属租户不一致，暂不支持上传文件，请切换到知识库所属租户后重试"  # noqa: RUF001
 
 
 # Conflicts with built-in metadata field name
