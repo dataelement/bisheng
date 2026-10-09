@@ -801,6 +801,9 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
                     ),
                 )
 
+                for session_version_id in tasks_to_terminate:
+                    await announce_stranded_session_failure(session_version_id)
+
             logger.warning(f"Terminated {len(tasks_to_terminate)} incomplete tasks due to worker node crash.")
 
             system_config = await settings.aget_all_config()
@@ -825,6 +828,63 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
         except Exception as e:
             logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
             return
+
+
+async def announce_stranded_session_failure(session_version_id: str) -> None:
+    """Deliver the terminal events of a task whose worker died before sending them.
+
+    A failure recorded by anyone other than the run itself (the worker-startup
+    crash sweep, the worker's force-fail backstop) used to write the DB only. The
+    task panel learns about the end of a run solely from the task-message-stream
+    queue, and its on-open DB reconcile cannot help either: when the pod restarts,
+    the client relinks before the new worker's sweep has run, sees IN_PROGRESS,
+    and then waits on a queue nobody will ever write to again. Measured on a
+    customer site: the DB said FAILED while the page spun for two hours.
+
+    So mirror ``_handle_task_failure``: land the failed turn in the conversation,
+    overwrite the Redis copies that still say in-progress, push TASK_END for every
+    converged task row and close with ERROR_MESSAGE. Caller must have already
+    written the FAILED status. Best-effort: one session's failure here must not
+    stop the sweep over the rest.
+    """
+    from bisheng.linsight.domain.services.state_message_manager import (
+        LinsightStateMessageManager,
+        MessageData,
+        MessageEventType,
+    )
+
+    try:
+        session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+        if session_model is None:
+            return
+        output = session_model.output_result or {}
+        state_manager = LinsightStateMessageManager(session_version_id)
+
+        await state_manager.set_session_version_info(session_model)
+        await persist_task_turn_message(session_model)
+
+        task_models = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id=session_version_id)
+        if task_models:
+            await state_manager.set_execution_tasks(task_models)
+        for task_model in task_models:
+            if task_model.status == ExecuteTaskStatusEnum.FAILED:
+                await state_manager.push_message(
+                    MessageData(event_type=MessageEventType.TASK_END, data=task_model.model_dump())
+                )
+
+        await state_manager.push_message(
+            MessageData(
+                event_type=MessageEventType.ERROR_MESSAGE,
+                data={
+                    "error": output.get("error_message") or "",
+                    "error_code": output.get("error_code"),
+                    "error_type": output.get("error_type") or "unknown",
+                    "detail": output.get("detail"),
+                },
+            )
+        )
+    except Exception as e:
+        logger.error(f"Failed to announce stranded session failure {session_version_id}: {e}")
 
 
 async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:
