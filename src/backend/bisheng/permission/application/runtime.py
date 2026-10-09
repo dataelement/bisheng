@@ -39,6 +39,7 @@ from bisheng.permission.application.sql_runtime import (
     stable_grant_key,
 )
 from bisheng.permission.domain.models import ProjectionOperationStatus
+from bisheng.permission.domain.repositories.creation_rollback_repository import CreationRollbackRepository
 from bisheng.permission.domain.schemas import (
     VerifiedPermissionTarget,
     VisibleObjectEnumerationResult,
@@ -77,6 +78,7 @@ from bisheng.permission.domain.services.projection_service import (
     ProjectionPlan,
     ProjectionService,
     ProjectionTupleDelta,
+    restore_projection_plan,
 )
 from bisheng.permission.domain.services.resource_lifecycle_policy import (
     build_delete_plan,
@@ -382,6 +384,74 @@ class F048PermissionRuntime:
                 permission_mode="CUSTOM",
             )
         )
+
+    async def rollback_created(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        owner_user_id: int,
+    ) -> None:
+        """Undo a fresh file/folder creation using its frozen projection ledger."""
+        if target.resource_type not in {"folder", "knowledge_file"} or target.resource_version != 0:
+            raise PermissionInvalidResourceError()
+        repository = CreationRollbackRepository()
+        creation = await repository.aget_operation_by_idempotency(
+            _idempotency_key("create", target.tenant_id, target.resource_type, target.resource_id, owner_user_id)
+        )
+        if creation is None:
+            # Validation failed before any durable permission mutation was prepared.
+            return
+        original = restore_projection_plan(creation, await repository.aget_operation_tuples(creation.id))
+        if (
+            original.tenant_id != target.tenant_id
+            or original.scope_key != f"{target.resource_type}:{target.resource_id}"
+            or original.operation_type != "RESOURCE_CREATE"
+            or original.expected_version != 0
+            or original.target_version != 1
+            or any(delta.action != "WRITE" for delta in original.deltas)
+        ):
+            raise PermissionInvalidResourceError()
+        catalog = await self._runtime_catalog()
+        if (original.store_id, original.model_id) != (catalog.store_id, catalog.model_id):
+            raise PermissionPublishNotReadyError(msg="Creation rollback catalog changed")
+        # Resolve an uncertain create before issuing its inverse. Fail-closed
+        # operations remain fenced and retain the business row for recovery.
+        await self._projection.execute(original)
+        plan = replace(
+            original,
+            idempotency_key=_idempotency_key("rollback-create", creation.id),
+            operation_type="RESOURCE_CREATE_ROLLBACK",
+            expected_version=1,
+            target_version=2,
+            deltas=tuple(
+                replace(delta, phase="COMMIT", sequence=index, action="DELETE")
+                for index, delta in enumerate(original.deltas)
+            ),
+        )
+        operation = await self._projection.prepare(plan)
+        if str(operation.status) == ProjectionOperationStatus.PREPARED.value:
+            try:
+                current_target = target.model_copy(update={"resource_version": 1})
+                mode = await self._state.mode_for_target(current_target)
+                if (
+                    mode.version != 1
+                    or mode.parent_type != target.parent_type
+                    or mode.parent_id != target.parent_id
+                    or (mode.operation_id, mode.projection_state)
+                    not in {(creation.id, "CURRENT"), (operation.id, "PROJECTING")}
+                ):
+                    raise PermissionVersionConflictError(msg="Resource changed after creation")
+                await self._state.mark_projecting(
+                    target=current_target,
+                    expected_catalog_release_id=catalog.release_id,
+                    operation_id=int(operation.id),
+                )
+            except Exception as exc:
+                await self._projection.abandon_prepared(plan, exc)
+                raise
+        outcome = await self._projection.execute(plan)
+        await repository.purge(target, outcome.operation_id)
 
     async def project_delete(
         self,
