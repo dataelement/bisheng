@@ -11,7 +11,7 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import text_knowledge
 from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.errcode.http_error import NotFoundError, ServerError
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
 from bisheng.common.errcode.permission import PermissionServiceUnavailableError
@@ -322,9 +322,9 @@ async def upload_file(
     ),
     chunk_size: int | None = Form(default=None, description="Split text length, default if not passed"),
     chunk_overlap: int | None = Form(default=None, description="Split text overlap length, default if not passed"),
-    hierarchy_level: int | None = Form(default=3),
+    hierarchy_level: int | None = Form(default=3, ge=1, le=6, description="Max heading level to keep: 1-6"),
     append_title: bool | None = Form(default=False),
-    max_chunk_size: int | None = Form(default=1000),
+    max_chunk_size: int | None = Form(default=1000, ge=1, description="Max chunk length in hierarchical mode"),
     callback_url: str | None = Form(default=None, description="Return URL"),
     file_url: str | None = Form(default=None, description="File URL"),
     file: UploadFile | None = File(default=None, description="Upload file"),
@@ -352,8 +352,16 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="file name must be not empty")
         # Cache Local
         file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file_name)
+    elif not file_url:
+        raise HTTPException(status_code=400, detail="file or file_url is required")
     else:
-        file_path, file_name = await async_file_download(file_url)
+        try:
+            file_path, file_name = await async_file_download(file_url)
+        except ValueError as exc:
+            # async_file_download raises ValueError only for caller-side causes:
+            # malformed URL, a disallowed local path, or a remote host that is
+            # unreachable or answers non-200. Storage errors still surface as 5xx.
+            raise HTTPException(status_code=400, detail=f"file_url cannot be downloaded: {exc}") from exc
 
     loging_user = await get_open_api_operator_async()
 
@@ -502,9 +510,9 @@ async def post_chunks(
     separator_rule: list[str] | None = Form(default=None),
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),
-    hierarchy_level: int | None = Form(default=3),
+    hierarchy_level: int | None = Form(default=3, ge=1, le=6, description="Max heading level to keep: 1-6"),
     append_title: bool | None = Form(default=False),
-    max_chunk_size: int | None = Form(default=1000),
+    max_chunk_size: int | None = Form(default=1000, ge=1, description="Max chunk length in hierarchical mode"),
     file: UploadFile = File(...),
 ):
     """Upload files to the knowledge base and sync the interface"""
@@ -576,13 +584,16 @@ async def post_string_chunks(request: Request, document: ChunkInput):
 
 @router.get("/download_statistic")
 @open_api_scope("knowledge:read", modes=("S",))
-def download_statistic_file(file_path: str):
-    suffix = file_path.split(".")[-1]
-    if suffix != "log":
-        raise ServerError.http_exception(msg="only .log file supported download")
-    dir_path = file_path.replace(".log", "")
-    if dir_path.find(".") != -1 or not dir_path.startswith("/app/data"):
-        raise ServerError.http_exception(msg="invalid file path, file path must not contain .")
+def download_statistic_file(
+    file_path: str = Query(
+        ...,
+        pattern=r"^/app/data/[^.]*\.log$",
+        description="Absolute path of a .log file under /app/data/; no '.' outside the extension",
+    ),
+):
+    # The pattern rejects any other directory, extension or a '..' segment (HTTP 400).
+    if not os.path.isfile(file_path):
+        raise NotFoundError.http_exception()
 
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
