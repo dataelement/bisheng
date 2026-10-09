@@ -83,7 +83,7 @@ class InitLlmError(BaseErrorCode):
 
 class NoAsrModelConfigError(BaseErrorCode):
     Code: int = 10014
-    Msg: str = "Knowledge base ASR model is not configured"
+    Msg: str = "Speech-to-text (ASR) model is not configured"
 
 
 class AsrModelConfigDeletedError(BaseErrorCode):
