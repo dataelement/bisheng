@@ -38,7 +38,13 @@ class OpenDailyChatCompletionReq(BaseModel):
     text: str | None = ""
     tools: list[OpenDailyToolPayload] | None = None
     skills: list[str] | None = None
-    files: list[dict] | None = None
+    files: list[dict] | None = Field(
+        default=None,
+        description=(
+            "Attachments. Each item carries the uploaded file URL in filepath; file_path is accepted as an alias "
+            "(the name used by task mode and the upload response). If both are sent, they must be equal."
+        ),
+    )
     search_enabled: bool | None = False
     parentMessageId: str | None = None
     overrideParentMessageId: str | None = None
@@ -50,6 +56,31 @@ class OpenDailyChatCompletionReq(BaseModel):
         if value is None or isinstance(value, str):
             return value
         return str(value)
+
+    @field_validator("files")
+    @classmethod
+    def normalize_file_path_alias(cls, value: list[dict] | None) -> list[dict] | None:
+        """Fold the task-mode key ``file_path`` into ``filepath``.
+
+        The model input reads only ``filepath``. Without this fold, a
+        ``file_path`` attachment passed the ownership check but the model never
+        saw it. After the fold, the ownership check and the model read one value.
+        """
+        if value is None:
+            return None
+        normalized = []
+        for item in value:
+            if "file_path" not in item:
+                normalized.append(item)
+                continue
+            primary = item.get("filepath")
+            alias = item.get("file_path")
+            if primary not in (None, "") and alias not in (None, "") and primary != alias:
+                raise ValueError("files item has different filepath and file_path; send only filepath")
+            folded = {key: val for key, val in item.items() if key != "file_path"}
+            folded["filepath"] = primary if primary not in (None, "") else alias
+            normalized.append(folded)
+        return normalized
 
     def to_internal(self) -> APIChatCompletion:
         payload = self.model_dump(exclude={"run_mode"})
