@@ -3251,9 +3251,6 @@
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 10
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

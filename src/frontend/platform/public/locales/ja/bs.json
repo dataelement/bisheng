@@ -660,7 +660,17 @@
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
       "qianfan": "Baidu Qianfan"
-    }
+    },
+    "sectionConnection": "接続情報",
+    "sectionUsage": "利用設定",
+    "providerType": "プロバイダーの種類",
+    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
+    "dailyLimitPrefix": "1 日最大",
+    "dailyLimitSuffix": "回",
+    "shareToChildrenTip": "オンにすると、子テナントはこのプロバイダーのモデルを利用できますが、設定の閲覧や変更はできません。",
+    "getApiKey": "{{provider}} の API キーを取得",
+    "formatExample": "形式の例：{{example}}"
   },
   "finetune": {
     "all": "すべて",

@@ -74,6 +74,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { appConfig } = useContext(locationContext);
 
     const [formData, setFormData] = useState({ ...defaultForm })
+    const [nameError, setNameError] = useState('')
 
     // Create mode reads the admin scope fresh instead of taking it from the
     // list page: the scope is a server-side lease that can expire while the
@@ -257,75 +258,91 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </ShadTooltip>
             <span>{id === -1 ? t('model.addModel') : t('model.modelConfiguration')}</span>
         </div>
-        <div className="w-[50%] min-w-64 px-4 pb-10 mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto">
-            <div className="mb-2">
-                <Label className="bisheng-label"> {t('model.interModelFormat')}</Label>
-                <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectGroup>
-                            {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{providerLabel(model, t)}</SelectItem>))}
-                        </SelectGroup>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="mb-2">
-                <Label className="bisheng-label">
-                    <span>{t('model.serviceProviderName')}</span>
-                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')}><span /></QuestionTooltip>
-                </Label>
-                <Input value={formData.name} onChange={(e) => {
-                    const name = e.target.value
-                    setFormData({ ...formData, name })
-                    document.getElementById('model_provider_name_error').style.display = !name || name.length > 100 ? 'block' : 'none'
-                }}></Input>
-                <span id="model_provider_name_error" style={{ display: 'none' }} className="text-red-500 text-xs">{
-                    formData.name ? t('model.max100Characters') : t('model.cannotBeEmpty')
-                }</span>
-            </div>
-            <CustomForm
-                ref={formRef}
-                showDefault={id === -1}
-                provider={formData.type}
-                formData={formData.config}
-                providerName={providerLabel(_modelProvider.find(el => el.value === formData.type), t)}
-                apiKeySite={providerInfo?.apiKeyUrl}
-            />
-            <div className={formData.type ? 'visible' : 'invisible'}>
-                <div className="mb-2">
-                    <div className="flex items-center gap-x-6">
-                        <Label className="bisheng-label">
-                            {t('model.dailyCallLimit')}
-                        </Label>
-                        <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
-                        <div className={`flex items-center gap-x-2 ${formData.limit_flag ? '' : 'invisible'}`}>
-                            <Input type="number" value={formData.limit} onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                className="w-24 h-8"
-                            ></Input>
-                            <span>{t('model.timesPerDay')}</span>
-                        </div>
-                    </div>
+        <div className="mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] w-full max-w-[720px] overflow-y-auto px-4 pb-10">
+            <section className="space-y-4">
+                <h3 className="text-sm font-medium">{t('model.sectionConnection')}</h3>
+                <div className="space-y-2">
+                    <Label className="bisheng-label">
+                        <span>{t('model.providerType')}</span>
+                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.providerTypeTip')} />
+                    </Label>
+                    <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectGroup>
+                                {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{providerLabel(model, t)}</SelectItem>))}
+                            </SelectGroup>
+                        </SelectContent>
+                    </Select>
                 </div>
-                {showShareToggle && (
-                    <div className="mb-2">
-                        <div className="flex items-center gap-x-6">
+                <div className="space-y-2">
+                    <Label className="bisheng-label">
+                        <span>{t('model.serviceProviderName')}</span>
+                        <span className="text-red-500">*</span>
+                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
+                    </Label>
+                    <Input value={formData.name} onChange={(e) => {
+                        const name = e.target.value
+                        setFormData({ ...formData, name })
+                        setNameError(!name ? t('model.cannotBeEmpty') : name.length > 100 ? t('model.max100Characters') : '')
+                    }}></Input>
+                    {nameError && <span className="text-xs text-red-500">{nameError}</span>}
+                </div>
+                <CustomForm
+                    ref={formRef}
+                    showDefault={id === -1}
+                    provider={formData.type}
+                    formData={formData.config}
+                    providerName={providerLabel(_modelProvider.find(el => el.value === formData.type), t)}
+                    apiKeySite={providerInfo?.apiKeyUrl}
+                />
+            </section>
+            <div className={formData.type ? 'visible' : 'invisible'}>
+                <section className="mt-6 space-y-4 border-t pt-6">
+                    <h3 className="text-sm font-medium">{t('model.sectionUsage')}</h3>
+                    <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-4">
                             <Label className="bisheng-label">
-                                {t('model.shareToChildren')}
+                                <span>{t('model.dailyCallLimit')}</span>
+                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.dailyCallLimitTip')} />
+                            </Label>
+                            <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
+                        </div>
+                        {formData.limit_flag && (
+                            <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
+                                <span>{t('model.dailyLimitPrefix')}</span>
+                                <div className="w-28 shrink-0">
+                                    <Input type="number" min={1} value={formData.limit}
+                                        onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
+                                        className="h-8"
+                                    ></Input>
+                                </div>
+                                <span>{t('model.dailyLimitSuffix')}</span>
+                            </div>
+                        )}
+                    </div>
+                    {showShareToggle && (
+                        <div className="flex items-center justify-between gap-4">
+                            <Label className="bisheng-label">
+                                <span>{t('model.shareToChildren')}</span>
+                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.shareToChildrenTip')} />
                             </Label>
                             <Switch
                                 checked={formData.share_to_children}
                                 onCheckedChange={(val) => setFormData(form => ({ ...form, share_to_children: val }))}
                             />
                         </div>
+                    )}
+                </section>
+                <section className="mt-6 border-t pt-6">
+                    <div className="flex items-center justify-between gap-4">
+                        <h3 className="text-sm font-medium">{t('model.model')}</h3>
+                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-primary hover:underline">
+                            {t('model.visitOfficialWebsiteToViewAvailableModels')}
+                        </a>}
                     </div>
-                )}
-                <div className="mb-2">
-                    <Label className="bisheng-label">
-                        {t('model.model')}
-                        {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">({t('model.visitOfficialWebsiteToViewAvailableModels')})</a>}
-                    </Label>
                     <div className="mt-2 space-y-3">
                         {
                             formData.models.map((m, i) => (
@@ -344,7 +361,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                             <span>{t('model.addModel')}</span>
                         </Button>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">

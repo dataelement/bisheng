@@ -821,7 +821,17 @@
       "tencent": "Tencent Cloud",
       "moonshot": "Moonshot AI",
       "qianfan": "Baidu Qianfan"
-    }
+    },
+    "sectionConnection": "Connection",
+    "sectionUsage": "Usage",
+    "providerType": "Provider type",
+    "providerTypeTip": "Decides how the API is called and which connection fields to fill in below. It cannot be changed after saving.",
+    "dailyCallLimitTip": "Limits the total calls per day across all models of this provider. Calls over the limit fail for the rest of the day; the count resets at midnight.",
+    "dailyLimitPrefix": "At most",
+    "dailyLimitSuffix": "calls per day",
+    "shareToChildrenTip": "When on, child tenants can use the models of this provider but cannot view or change its configuration.",
+    "getApiKey": "Get a {{provider}} API key",
+    "formatExample": "Example: {{example}}"
   },
   "finetune": {
     "all": "All",

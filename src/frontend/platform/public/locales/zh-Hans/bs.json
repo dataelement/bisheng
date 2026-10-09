@@ -665,7 +665,17 @@
       "tencent": "腾讯云",
       "moonshot": "月之暗面",
       "qianfan": "百度千帆"
-    }
+    },
+    "sectionConnection": "连接信息",
+    "sectionUsage": "使用设置",
+    "providerType": "服务提供商类型",
+    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
+    "dailyLimitPrefix": "每天最多",
+    "dailyLimitSuffix": "次",
+    "shareToChildrenTip": "开启后，子租户可以使用这个服务提供商下的模型，但不能查看或修改它的配置。",
+    "getApiKey": "获取{{provider}} API Key",
+    "formatExample": "格式示例：{{example}}"
   },
   "finetune": {
     "all": "全部",
