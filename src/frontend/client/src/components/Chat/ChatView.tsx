@@ -12,6 +12,7 @@ import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
+import { useCompareTransitionFreeze } from '~/components/Linsight/Artifacts/useCompareTransitionFreeze';
 import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { getLinsightSessionVersionList, userStopLinsightEvent } from '~/api/linsight';
@@ -602,6 +603,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // docked card's box and the content card's box, both measured in viewport-inset
   // form on enter (still mounted that render). Exiting: collapse, unmount on end.
   const dockedCardRef = useRef<HTMLDivElement>(null);
+  const compareFreeze = useCompareTransitionFreeze(
+    taskArtifacts.comparing,
+    taskArtifacts.open,
+    !isTouchLayout,
+    dockedCardRef,
+  );
   const [fsMounted, setFsMounted] = useState(false);
   const [fsExpanded, setFsExpanded] = useState(false);
   type FsInset = { top: number; left: number; right: number; bottom: number };
@@ -790,13 +797,17 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     <Spinner className="opacity-0" />
                   </div>
                 ) : (hasMessages || !isNew) ? (
-                  <div className="flex min-h-0 flex-1 overflow-hidden">
+                  <div ref={compareFreeze.rowRef} className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input). F071: while the report is
                         compared with a cited source the workspace takes this column's
-                        width; fade it so the squeezed messages don't reflow visibly. */}
+                        width; fade it, and pin its children's width for the length of
+                        the transition so the messages are clipped, not re-wrapped. */}
                     <div
+                      ref={compareFreeze.chatRef}
+                      style={compareFreeze.chatStyle}
                       className={cn(
                         'relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden transition-opacity duration-200',
+                        '[&>*]:min-w-[var(--compare-freeze-w,0px)]',
                         taskArtifacts.comparing && !isTouchLayout && 'pointer-events-none opacity-0',
                       )}
                       aria-hidden={taskArtifacts.comparing && !isTouchLayout ? true : undefined}
@@ -924,7 +935,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         }}
                       >
                         {!fsMounted && (
-                          <div ref={dockedCardRef} className="h-full min-w-[420px]">
+                          // F071: pinned to its end width while entering/leaving compare
+                          // (useCompareTransitionFreeze) so the wrapper's width animation
+                          // clips the report + source instead of re-laying them out.
+                          <div ref={dockedCardRef} className="h-full min-w-[420px]" style={compareFreeze.panelStyle}>
                             <WorkspacePanel
                               files={taskWorkspaceFiles}
                               versionId={latestTaskVersionId}
@@ -933,6 +947,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               previewFile={taskArtifacts.previewFile}
                               fullscreen={false}
                               sourcePreview={taskArtifacts.sourcePreview}
+                              deferSourceBody={compareFreeze.entering}
                               onOpenSource={taskArtifacts.openSource}
                               onCloseSource={taskArtifacts.closeSource}
                               onPreview={taskArtifacts.openPreview}
