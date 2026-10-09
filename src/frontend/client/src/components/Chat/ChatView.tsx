@@ -800,8 +800,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   <div ref={compareFreeze.rowRef} className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input). F071: while the report is
                         compared with a cited source the workspace takes this column's
-                        width; fade it, and pin its children's width for the length of
-                        the transition so the messages are clipped, not re-wrapped. */}
+                        width; fade it, and pin its children's width while compare is
+                        open so the hidden messages are clipped, never re-wrapped at
+                        ~0px (useCompareTransitionFreeze). */}
                     <div
                       ref={compareFreeze.chatRef}
                       style={compareFreeze.chatStyle}
@@ -947,7 +948,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               previewFile={taskArtifacts.previewFile}
                               fullscreen={false}
                               sourcePreview={taskArtifacts.sourcePreview}
-                              deferSourceBody={compareFreeze.entering}
                               onOpenSource={taskArtifacts.openSource}
                               onCloseSource={taskArtifacts.closeSource}
                               onPreview={taskArtifacts.openPreview}
