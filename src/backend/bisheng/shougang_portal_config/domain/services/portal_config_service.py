@@ -82,6 +82,7 @@ class ShougangPortalConfigService:
         # the aggregate Config model has no creator column.
         del create_user
         resolved_tenant_id = cls._resolve_tenant_id(tenant_id)
+        preserve_manual = "manual_items" not in payload.portal.recommendation.model_fields_set
         normalized_input = ShougangPortalAdminConfig.model_validate(payload.model_dump(mode="json"))
 
         for attempt in range(cls._MAX_SAVE_ATTEMPTS):
@@ -89,6 +90,7 @@ class ShougangPortalConfigService:
                 return await cls._save_config_once(
                     normalized_input,
                     tenant_id=resolved_tenant_id,
+                    preserve_manual_items=preserve_manual,
                 )
             except IntegrityError:
                 if attempt + 1 >= cls._MAX_SAVE_ATTEMPTS:
@@ -106,6 +108,7 @@ class ShougangPortalConfigService:
         payload: ShougangPortalAdminConfig,
         *,
         tenant_id: int,
+        preserve_manual_items: bool = False,
     ) -> ShougangPortalAdminConfig:
         affected_department_ids: list[int] = []
         rebuild_pools = False
@@ -122,6 +125,12 @@ class ShougangPortalConfigService:
 
                 normalized = payload.model_copy(deep=True)
                 normalized.version = stored_version + 1
+                if preserve_manual_items and stored_config is not None:
+                    normalized.portal.recommendation.manual_items = stored_config.portal.recommendation.manual_items
+                    normalized.portal.recommendation = type(normalized.portal.recommendation).model_validate(
+                        normalized.portal.recommendation.model_dump(mode="json")
+                    )
+
                 old_bindings = (
                     DepartmentBusinessDomainService.domain_department_pairs(
                         stored_config.portal.domains,
@@ -145,6 +154,24 @@ class ShougangPortalConfigService:
                         != normalized.portal.recommendation.home_entry_source_weight,
                     )
                 )
+
+                if normalized.portal.recommendation.manual_items:
+                    from bisheng.knowledge.domain.repositories.implementations.portal_manual_recommendation_repository_impl import (
+                        PortalManualRecommendationRepositoryImpl,
+                    )
+                    from bisheng.knowledge.domain.services.portal_manual_recommendation_service import (
+                        PortalManualRecommendationService,
+                    )
+                    from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
+                        ManualRecommendationRef,
+                    )
+
+                    manual_service = PortalManualRecommendationService(PortalManualRecommendationRepositoryImpl(session))
+                    previous = [item.model_dump() for item in old_recommendation.manual_items] if old_recommendation else []
+                    items = await manual_service.validate_items(
+                        [item.model_dump() for item in normalized.portal.recommendation.manual_items], previous,
+                    )
+                    normalized.portal.recommendation.manual_items = [ManualRecommendationRef.model_validate(item) for item in items]
 
                 await config_repository.write_value(tenant_id, normalized.model_dump_json())
         try:

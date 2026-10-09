@@ -341,3 +341,8 @@ class KnowledgeDocumentStateConflictError(BaseErrorCode):
 class KnowledgeDocumentActiveShareError(BaseErrorCode):
     Code: int = 18099
     Msg: str = "文档仍存在有效分享，请先撤回分享"
+
+
+class PortalManualRecommendationInvalidError(BaseErrorCode):
+    Code: int = 18080
+    Msg: str = "人工推荐知识无效，请检查知识库范围、文件状态及归属"

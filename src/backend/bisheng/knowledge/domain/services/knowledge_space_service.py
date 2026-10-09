@@ -5919,16 +5919,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             browse_payload["limit"] = 100
             browse_payload["cursor"] = None
-            seen_documents: set[int] = set()
+            seen_documents: set[tuple] = set()
             seen_cursors: set[str] = set()
             while True:
-                result = await self.browse_shougang_portal_files(
-                    ShougangPortalFileBrowseReq.model_validate(browse_payload)
-                )
+                if req.q and req.recommendation == "latest_selected":
+                    result = await self.search_shougang_portal_files(
+                        ShougangPortalFileSearchReq.model_validate({**browse_payload, "q": req.q})
+                    )
+                else:
+                    result = await self.browse_shougang_portal_files(
+                        ShougangPortalFileBrowseReq.model_validate(browse_payload)
+                    )
                 for item in result.get("data") or []:
-                    canonical_id = int(item.get("canonical_document_id") or item.get("id") or 0)
-                    if canonical_id > 0:
-                        seen_documents.add(canonical_id)
+                    canonical_id = int(item.get("canonical_document_id") or 0)
+                    file_id = int(item.get("id") or 0)
+                    if file_id > 0:
+                        seen_documents.add(("document", canonical_id) if canonical_id else
+                                           ("file", int(item.get("space_id") or 0), file_id))
                 next_cursor = str(result.get("next_cursor") or "")
                 if not result.get("has_more") or not next_cursor:
                     break
@@ -6658,7 +6665,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
-            result = await self._search_shougang_portal_files_impl(req)
+            result = await self._with_portal_manual_recommendations(req, self._search_shougang_portal_files_impl)
             perf.success = True
             return result
         except Exception as exc:
@@ -7065,6 +7072,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 type(exc).__name__,
             )
 
+    async def _with_portal_manual_recommendations(self, req, fetch_automatic):
+        if req.recommendation not in {"latest_selected", "personalized_v1"}:
+            return await fetch_automatic(req)
+        try:
+            config = await ShougangPortalConfigService.get_config()
+        except Exception:
+            # 人工配置是可选增强;读取失败时不使用未经确认的人工引用。
+            logger.exception("人工推荐配置读取失败,沿用自动推荐")
+            return await fetch_automatic(req)
+        if config is None or not config.portal.recommendation.manual_items:
+            return await fetch_automatic(req)
+        from bisheng.knowledge.domain.repositories.implementations.portal_manual_recommendation_repository_impl import (
+            PortalManualRecommendationRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.portal_manual_recommendation_service import (
+            PortalManualRecommendationService,
+        )
+
+        scope_signature = ""
+        if req.discovery_scope in {"portal_public", "portal_configured", "portal_enabled"}:
+            discovery = await self.resolve_portal_discovery(scope=req.discovery_scope)
+            scope_signature = discovery.snapshot
+        references = [item.model_dump() for item in config.portal.recommendation.manual_items]
+        space_ids = list({item["space_id"] for item in references})
+        tag_file_ids = None
+        for tag in (req.tag, req.filter_tag):
+            if tag:
+                ids = set(await self._get_shougang_portal_tag_file_ids(space_ids, tag) or [])
+                tag_file_ids = ids if tag_file_ids is None else tag_file_ids & ids
+
+        def accept_record(record):
+            file = record.file
+            return bool(self._filter_shougang_portal_files_by_document_type([file], req.document_type)
+                        and self._filter_shougang_portal_files_by_business_domain_code([file], req.business_domain_code)
+                        and self._filter_shougang_portal_files_by_subcategory_code([file], req.file_subcategory_code)
+                        and (tag_file_ids is None or int(file.id) in tag_file_ids))
+
+        async with get_async_db_session() as session:
+            service = PortalManualRecommendationService(PortalManualRecommendationRepositoryImpl(session))
+            return await service.recommend(
+                req, references, fetch_automatic, config_version=config.version,
+                tenant_id=int(self.login_user.tenant_id), user_id=int(self.login_user.user_id),
+                total_count=config.portal.recommendation.home_total_count,
+                display_count=config.portal.display.home.section_page_size, accept_record=accept_record,
+                scope_signature=scope_signature,
+            )
+
     async def browse_shougang_portal_files(
         self, req: ShougangPortalFileBrowseReq, *, count_only: bool = False
     ) -> dict:
@@ -7077,9 +7131,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
-            result = await self._browse_shougang_portal_files_impl(
-                req, **({"count_only": True} if count_only else {})
-            )
+            async def fetch_automatic(current_req):
+                return await self._browse_shougang_portal_files_impl(
+                    current_req, **({"count_only": True} if count_only else {})
+                )
+            result = await self._with_portal_manual_recommendations(req, fetch_automatic)
             perf.success = True
             return result
         except Exception as exc:

@@ -1980,9 +1980,10 @@ export function KnowledgeSpaceContent({
             >
                 <div
                     className={cn(
-                        "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center justify-between gap-y-1 py-3",
-                        isH5 && "flex-nowrap justify-end",
-                        !isH5 && "bg-white",
+                        "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center gap-y-1 py-3",
+                        paginationFooter ? "flex-col justify-center border-t border-[#e5e6eb] bg-[#f8faff] px-3" : "justify-between",
+                        isH5 && !paginationFooter && "flex-nowrap justify-end",
+                        !isH5 && !paginationFooter && "bg-white",
                     )}
                 >
                     {!isH5 && (
@@ -1994,7 +1995,7 @@ export function KnowledgeSpaceContent({
                                 displayFiles={displayFiles}
                             />
                         ) : (
-                            <div />
+                            paginationFooter ? null : <div />
                         )
                     )}
 

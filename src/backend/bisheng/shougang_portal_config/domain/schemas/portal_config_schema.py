@@ -357,7 +357,14 @@ class PortalDocumentTypeConfig(BaseModel):
         return next_value
 
 
+class ManualRecommendationRef(BaseModel):
+    space_id: int = Field(gt=0, strict=True)
+    file_id: int = Field(gt=0, strict=True)
+    canonical_document_id: int | None = Field(default=None, gt=0, strict=True)
+
+
 class PortalRecommendationConfig(BaseModel):
+    manual_items: list[ManualRecommendationRef] = Field(default_factory=list, max_length=50)
     provider: str
     home_strategy: str
     detail_strategy: str
@@ -368,6 +375,17 @@ class PortalRecommendationConfig(BaseModel):
     stable_shuffle_cycle_days: int = Field(default=7, ge=1, le=30, strict=True)
     personalized_shadow_enabled: StrictBool = False
     personalized_rollout_percent: int = Field(default=0, ge=0, le=100, strict=True)
+
+
+    @model_validator(mode="after")
+    def validate_manual_items(self):
+        if len(self.manual_items) > self.home_total_count:
+            raise ValueError("人工推荐数量不能超过推荐总数")
+        identities = [("document", item.canonical_document_id) if item.canonical_document_id
+                      else ("file", item.space_id, item.file_id) for item in self.manual_items]
+        if len(set(identities)) != len(identities):
+            raise ValueError("同一知识不能重复加入人工推荐")
+        return self
 
 
 class PortalDisplayHomeConfig(BaseModel):
