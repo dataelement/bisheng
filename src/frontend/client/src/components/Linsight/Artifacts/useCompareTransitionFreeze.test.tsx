@@ -1,6 +1,6 @@
 import { act, render } from '@testing-library/react';
 import { useRef } from 'react';
-import { COMPARE_SETTLE_MS, useCompareTransitionFreeze } from './useCompareTransitionFreeze';
+import { CHAT_FREEZE_VAR, COMPARE_SETTLE_MS, useCompareTransitionFreeze } from './useCompareTransitionFreeze';
 
 const ROW = 1480;
 const CHAT = 760;
@@ -10,15 +10,12 @@ function widthOf(width: number) {
     return () => ({ width } as DOMRect);
 }
 
-type Snapshot = ReturnType<typeof useCompareTransitionFreeze>;
-let latest: Snapshot;
-
 function Harness({ comparing, open = true, enabled = true }: { comparing: boolean; open?: boolean; enabled?: boolean }) {
     const panelRef = useRef<HTMLDivElement>(null);
-    latest = useCompareTransitionFreeze(comparing, open, enabled, panelRef);
+    const { rowRef, chatRef } = useCompareTransitionFreeze(comparing, open, enabled, panelRef);
     return (
-        <div ref={latest.rowRef}>
-            <div ref={latest.chatRef} data-testid="chat" />
+        <div ref={rowRef} data-testid="row">
+            <div ref={chatRef} data-testid="chat" />
             <div ref={panelRef} data-testid="panel" />
         </div>
     );
@@ -26,11 +23,21 @@ function Harness({ comparing, open = true, enabled = true }: { comparing: boolea
 
 function mount(comparing: boolean, props: { open?: boolean; enabled?: boolean } = {}) {
     const utils = render(<Harness comparing={comparing} {...props} />);
-    const [row] = utils.container.children as unknown as HTMLElement[];
-    row.getBoundingClientRect = widthOf(ROW);
+    utils.getByTestId('row').getBoundingClientRect = widthOf(ROW);
     utils.getByTestId('chat').getBoundingClientRect = widthOf(CHAT);
     utils.getByTestId('panel').getBoundingClientRect = widthOf(PANEL);
-    return utils;
+    const chatPin = () => utils.getByTestId('chat').style.getPropertyValue(CHAT_FREEZE_VAR);
+    const panelPin = () => {
+        const { width, minWidth } = utils.getByTestId('panel').style;
+        return width === minWidth ? width : `${width}|${minWidth}`;
+    };
+    return { ...utils, chatPin, panelPin };
+}
+
+function settle() {
+    act(() => {
+        jest.advanceTimersByTime(COMPARE_SETTLE_MS);
+    });
 }
 
 describe('useCompareTransitionFreeze', () => {
@@ -38,53 +45,48 @@ describe('useCompareTransitionFreeze', () => {
     afterEach(() => jest.useRealTimers());
 
     it('does nothing until compare is toggled', () => {
-        mount(false);
-        expect(latest.panelStyle).toBeUndefined();
-        expect(latest.chatStyle).toBeUndefined();
+        const { chatPin, panelPin } = mount(false);
+        expect(chatPin()).toBe('');
+        expect(panelPin()).toBe('');
     });
 
     it('pins the panel to the full row and the chat to its current width while entering', () => {
-        const { rerender } = mount(false);
+        const { rerender, chatPin, panelPin } = mount(false);
         rerender(<Harness comparing />);
-        expect(latest.panelStyle).toEqual({ minWidth: ROW - 8, width: ROW - 8 });
-        expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${CHAT}px` });
+        expect(panelPin()).toBe(`${ROW - 8}px`);
+        expect(chatPin()).toBe(`${CHAT}px`);
 
         // Settled: the panel is free, the hidden chat keeps its width so it is
         // never laid out at ~0px while compare stays open.
-        act(() => {
-            jest.advanceTimersByTime(COMPARE_SETTLE_MS);
-        });
-        expect(latest.panelStyle).toBeUndefined();
-        expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${CHAT}px` });
+        settle();
+        expect(panelPin()).toBe('');
+        expect(chatPin()).toBe(`${CHAT}px`);
     });
 
-    it('pins both to the docked layout while leaving compare', () => {
-        const { rerender } = mount(true);
+    it('pins both to the docked layout while leaving compare, then releases them', () => {
+        const { rerender, chatPin, panelPin } = mount(true);
         rerender(<Harness comparing={false} />);
         // clamp(440px, 46%, 720px) of 1480 → 680.8
         const docked = ROW * 0.46;
-        expect(latest.panelStyle).toEqual({ minWidth: docked - 8, width: docked - 8 });
-        expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${ROW - docked}px` });
+        expect(panelPin()).toBe(`${docked - 8}px`);
+        expect(chatPin()).toBe(`${ROW - docked}px`);
 
-        // Settled after closing: every pin is released.
-        act(() => {
-            jest.advanceTimersByTime(COMPARE_SETTLE_MS);
-        });
-        expect(latest.panelStyle).toBeUndefined();
-        expect(latest.chatStyle).toBeUndefined();
+        settle();
+        expect(panelPin()).toBe('');
+        expect(chatPin()).toBe('');
     });
 
     it('keeps the card as it is when the whole workspace closes', () => {
-        const { rerender } = mount(true);
+        const { rerender, chatPin, panelPin } = mount(true);
         rerender(<Harness comparing={false} open={false} />);
-        expect(latest.panelStyle).toEqual({ minWidth: PANEL, width: PANEL });
-        expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${ROW}px` });
+        expect(panelPin()).toBe(`${PANEL}px`);
+        expect(chatPin()).toBe(`${ROW}px`);
     });
 
     it('stays off in the touch layout', () => {
-        const { rerender } = mount(false, { enabled: false });
+        const { rerender, chatPin, panelPin } = mount(false, { enabled: false });
         rerender(<Harness comparing enabled={false} />);
-        expect(latest.panelStyle).toBeUndefined();
-        expect(latest.chatStyle).toBeUndefined();
+        expect(chatPin()).toBe('');
+        expect(panelPin()).toBe('');
     });
 });
