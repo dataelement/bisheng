@@ -595,7 +595,7 @@ export default function KnowledgeFile() {
                                     if (!canReadRow(el)) return;
                                     if ([KnowledgeBaseStatus.Copying, KnowledgeBaseStatus.Unpublished].includes(el.state)) return;
                                     window.libname = [el.name, el.description];
-                                    navigate(el.has_abnormal_files ? `/filelib/${el.id}?fileStatus=abnormal` : `/filelib/${el.id}`);
+                                    navigate(`/filelib/${el.id}`);
                                     handleCachePage();
                                 }}
                             >

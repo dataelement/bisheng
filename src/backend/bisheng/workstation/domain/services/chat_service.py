@@ -61,6 +61,7 @@ from bisheng.common.image_view import (
     annotate,
     missing_viewed_markdown,
 )
+from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -1169,6 +1170,10 @@ async def _prepare_tools(
             continue
         tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
         tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
+        # Image View stores which visual model to use. Pixel viewing is wired
+        # separately, so loading this row as a LangChain tool always fails.
+        if tool_key == IMAGE_VIEW_TOOL_KEY:
+            continue
 
         t = None
         err: str | None = None

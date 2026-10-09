@@ -43,3 +43,27 @@
 - 本地 API、worker 进程与临时 Redis 容器已停止。
 - 服务账号 `f073-e2e` 已删除（密钥随之失效）。
 - 保留：test 库 `linsight_session_version.api_meta` 列（可空、release 代码不读）；三条测试任务的会话记录（一条在用户 2 工作台可见，标题「审阅附件中的合同……输出 Word 文档」）。
+
+## 第二轮：test 环境经网关的 API 验收（2026-10-08）
+
+**环境**：test（120:3002 → 网关 → 116 后端），release 线已部署代码。**测试主体**：服务账号「f073-accept」（id 20），密钥 A `chat:invoke`（自身身份，`X-End-User: emp-1`），密钥 B `chat:invoke + delegate`（委托范围为用户 823）。模型 774（deepseek-v4-flash）。
+
+| AC | 验证 | 结果 |
+|---|---|---|
+| AC-04、AC-05 | `config?run_mode=task`：两种身份都返回 26 个技能；工具按身份过滤（自身身份 0 个，代表用户 823 有代码执行器） | ✅（`default_model_id` 为 null：test 租户当前未配任务模式默认模型，非缺陷） |
+| AC-09 | 缺 `execution`、`sync` → 26060；日常 × async → 26015；`run_mode=research` → 26017 | ✅ |
+| AC-12、AC-13、AC-14、AC-17 | 不存在的技能 → 26062 且 `data.unavailable` 只列两个不存在的；模型 1 → 26066；自身身份用代码执行器 → 26067；传 `conversationId` → 26061；契约外字段 → 400 | ✅ |
+| 身份头 | `X-On-Behalf-Of` + `X-End-User` 同传 → 26010；委托范围外用户 → 403 / 26004；委托密钥缺 `X-On-Behalf-Of` → 26016；无效密钥 → 401 / 26001 | ✅ |
+| AC-20 | 同时提交 `broken.pdf`（内容非 PDF）、`blob.bin`（随机字节）、`ok.txt`：任务 completed；`attachments` = broken.pdf `failed`、blob.bin `unsupported`；答复只用到 ok.txt 内容 | ✅（`expired` 未构造） |
+| AC-23 | 执行中终止 → terminated、`result` 为 null；再次终止 → 26064；已完成任务终止 → 26064 | ✅ |
+| AC-24、AC-25 | 代表他人任务 `progress` 2/5 → 5/5 只增不减；终态重复查询响应完全一致 | ✅ |
+| AC-28 | 密钥 A 查代表他人任务、换 `X-End-User: emp-2` 查询与下载、密钥 B 查自身身份任务、不存在的 file_id → 全部 404 | ✅ |
+| AC-30、AC-31 | 代表他人任务产出 md + docx，下载 docx 44107 字节、OOXML 合法，`Content-Disposition: filename*=UTF-8''…` | ✅（见下方体验问题 1、2） |
+| AC-35 | 查配置 → 上传 → 提交 → 轮询 → 下载，两种身份各一遍 | ✅ |
+
+**体验问题（不阻塞，待定）**
+
+1. 要求「输出一份 Word 报告」，`primary=true` 却是同名的 .md（实现固定取第一个文件），调用方按主交付物取到的是中间稿而非 Word。
+2. `result.answer` 里出现工作区路径（「已写入 `output/合同要点总结.md`」），外部调用方无法使用这个路径，应按文件名引用。
+
+**仍未覆盖**：工作台界面打开代表他人任务（AC-32 界面，任务 `03d3b7e0e28240a9bcf67445624b2532` 在用户 823 名下，标题以「【F073验收-代表他人】」开头）；AC-38 workflow 代码节点；MySQL / DM8 迁移升降级。

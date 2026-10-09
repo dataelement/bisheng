@@ -1,8 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Constants, QueryKeys, dataService } from '~/types/chat';
 import type { QueryObserverResult, UseQueryOptions } from '@tanstack/react-query';
 import type * as t from '~/types/chat';
 import { getKnowledgeInfo, getLinsightTools, getPersonalKnowledgeInfo } from '~/api/linsight';
+import type { OrgKnowledgePage, OrgKnowledgeQuery } from '~/api/linsight';
 
 export const useVerifyAgentToolAuth = (
   params: t.VerifyToolAuthParams,
@@ -102,3 +103,27 @@ export const useGetOrgToolList = (
     refetchOnReconnect: false,
   });
 }
+
+export const useGetOrgToolPages = (query: Omit<OrgKnowledgeQuery, 'cursor'>) => {
+  return useInfiniteQuery<OrgKnowledgePage, Error>({
+    queryKey: [
+      'OrgTools',
+      'pages',
+      query.page_size,
+      query.name,
+      query.sort_by,
+      query.preferred_ids || '',
+      query.action || 'use',
+    ],
+    queryFn: async ({ pageParam }) => {
+      const response = await getKnowledgeInfo({
+        ...query,
+        cursor: typeof pageParam === 'string' ? pageParam : undefined,
+      });
+      return response.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.has_more ? lastPage.next_cursor ?? undefined : undefined,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+};

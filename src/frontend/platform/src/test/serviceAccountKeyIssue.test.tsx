@@ -48,7 +48,7 @@ const scopes: OpenApiScopeItem[] = [
   },
   {
     code: "chat:invoke",
-    group: "assistant",
+    group: "workstation",
     label_key: "openApiManagement.scopes.chat_invoke.label",
     desc_key: "openApiManagement.scopes.chat_invoke.desc",
     endpoints: [

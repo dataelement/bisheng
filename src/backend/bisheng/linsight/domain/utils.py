@@ -232,6 +232,49 @@ def _type_rank(file_info: dict) -> int:
     return _DELIVERABLE_TYPE_RANK.get(ext, _DEFAULT_TYPE_RANK)
 
 
+# Plain-text formats a task writes first and then renders into what the user asked
+# for: the office skills draft 报告.md and build 报告.docx / .pptx from it. When the
+# rendered sibling exists, the draft is an intermediate, not the deliverable.
+_DRAFT_EXTS = frozenset({".md", ".markdown", ".txt"})
+_IMAGE_TYPE_RANK = 4
+
+
+def _draft_key(file_info: dict) -> tuple[str, str]:
+    rel_path = (file_info.get("rel_path") or file_info.get("file_name") or "").replace(os.sep, "/")
+    stem = os.path.splitext(os.path.basename(rel_path))[0].lower()
+    return os.path.dirname(rel_path), stem
+
+
+def _deliverable_sort_keys(selected: list[dict]) -> dict[int, tuple[int, int, float]]:
+    """Sort key per file: (effective type rank, is demoted draft, -mtime).
+
+    Recency cannot separate a draft from its rendering: both are written in the
+    same run, and the draft is often touched last (a final edit, or a workspace
+    sync that rewrites mtimes). So a draft that has a rendered sibling — same
+    directory, same stem, a non-draft and non-image extension — takes that
+    sibling's rank and sorts right after it. A draft without one keeps its own rank.
+    """
+    rendered_rank: dict[tuple[str, str], int] = {}
+    for info in selected:
+        ext = os.path.splitext(info.get("file_name") or "")[1].lower()
+        rank = _type_rank(info)
+        if ext in _DRAFT_EXTS or rank >= _IMAGE_TYPE_RANK:
+            continue
+        key = _draft_key(info)
+        rendered_rank[key] = min(rank, rendered_rank.get(key, rank))
+
+    keys: dict[int, tuple[int, int, float]] = {}
+    for info in selected:
+        ext = os.path.splitext(info.get("file_name") or "")[1].lower()
+        mtime = -(info.get("file_mtime") or 0.0)
+        sibling_rank = rendered_rank.get(_draft_key(info)) if ext in _DRAFT_EXTS else None
+        if sibling_rank is not None:
+            keys[id(info)] = (sibling_rank, 1, mtime)
+        else:
+            keys[id(info)] = (_type_rank(info), 0, mtime)
+    return keys
+
+
 # --- Deliverable format guard ------------------------------------------------
 # Leading bytes every container format is REQUIRED to start with. A run that
 # cannot actually build one of these has been observed writing prose under the
@@ -386,7 +429,8 @@ def select_deliverables(
     real ``output/`` file and become the headline artifact).
 
     The two criteria are mutually exclusive. The result is ordered by file TYPE
-    first and recency second (see ``_DELIVERABLE_TYPE_RANK``), so ``files[0]`` — the
+    first and recency second (see ``_DELIVERABLE_TYPE_RANK``; a draft sorts right
+    after its rendered sibling, see ``_deliverable_sort_keys``), so ``files[0]`` — the
     frontend's "已为您整理好 X" headline — is a deliberate pick rather than whatever
     ``os.walk`` happened to enumerate first (previously that was filesystem-
     dependent, and since ``os.walk`` is top-down it favoured root-level files over
@@ -419,7 +463,9 @@ def select_deliverables(
     # Type first, recency second. The frontend takes ``[0]`` as the headline file
     # and lists the rest under it, so this ordering is user-visible: it must be a
     # deliberate "which of these IS the deliverable" answer, not enumeration order.
-    selected.sort(key=lambda info: (_type_rank(info), -(info.get("file_mtime") or 0.0)))
+    # A draft with a rendered sibling (报告.md next to 报告.docx) sorts after it.
+    sort_keys = _deliverable_sort_keys(selected)
+    selected.sort(key=lambda info: sort_keys[id(info)])
     return selected
 
 
@@ -755,6 +801,9 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
                     ),
                 )
 
+                for session_version_id in tasks_to_terminate:
+                    await announce_stranded_session_failure(session_version_id)
+
             logger.warning(f"Terminated {len(tasks_to_terminate)} incomplete tasks due to worker node crash.")
 
             system_config = await settings.aget_all_config()
@@ -779,6 +828,63 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
         except Exception as e:
             logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
             return
+
+
+async def announce_stranded_session_failure(session_version_id: str) -> None:
+    """Deliver the terminal events of a task whose worker died before sending them.
+
+    A failure recorded by anyone other than the run itself (the worker-startup
+    crash sweep, the worker's force-fail backstop) used to write the DB only. The
+    task panel learns about the end of a run solely from the task-message-stream
+    queue, and its on-open DB reconcile cannot help either: when the pod restarts,
+    the client relinks before the new worker's sweep has run, sees IN_PROGRESS,
+    and then waits on a queue nobody will ever write to again. Measured on a
+    customer site: the DB said FAILED while the page spun for two hours.
+
+    So mirror ``_handle_task_failure``: land the failed turn in the conversation,
+    overwrite the Redis copies that still say in-progress, push TASK_END for every
+    converged task row and close with ERROR_MESSAGE. Caller must have already
+    written the FAILED status. Best-effort: one session's failure here must not
+    stop the sweep over the rest.
+    """
+    from bisheng.linsight.domain.services.state_message_manager import (
+        LinsightStateMessageManager,
+        MessageData,
+        MessageEventType,
+    )
+
+    try:
+        session_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
+        if session_model is None:
+            return
+        output = session_model.output_result or {}
+        state_manager = LinsightStateMessageManager(session_version_id)
+
+        await state_manager.set_session_version_info(session_model)
+        await persist_task_turn_message(session_model)
+
+        task_models = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id=session_version_id)
+        if task_models:
+            await state_manager.set_execution_tasks(task_models)
+        for task_model in task_models:
+            if task_model.status == ExecuteTaskStatusEnum.FAILED:
+                await state_manager.push_message(
+                    MessageData(event_type=MessageEventType.TASK_END, data=task_model.model_dump())
+                )
+
+        await state_manager.push_message(
+            MessageData(
+                event_type=MessageEventType.ERROR_MESSAGE,
+                data={
+                    "error": output.get("error_message") or "",
+                    "error_code": output.get("error_code"),
+                    "error_type": output.get("error_type") or "unknown",
+                    "detail": output.get("detail"),
+                },
+            )
+        )
+    except Exception as e:
+        logger.error(f"Failed to announce stranded session failure {session_version_id}: {e}")
 
 
 async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:

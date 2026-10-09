@@ -57,11 +57,11 @@ def test_the_three_extension_scopes_become_issuable_with_open_platform(monkeypat
 def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
     monkeypatch.setattr(settings.open_platform, "enabled", False)
     assert [scope.group for scope in issuable_scopes()] == [
-        "workflow",
-        "workflow",
-        "assistant",
-        "assistant",
-        "assistant",
+        "app",
+        "app",
+        "app",
+        "app",
+        "workstation",
         "knowledge",
         "knowledge",
         "delegation",
@@ -70,11 +70,11 @@ def test_issuable_scopes_have_localized_presentation_metadata(monkeypatch):
     monkeypatch.setattr(settings.open_platform, "enabled", True)
     scopes = issuable_scopes()
     assert [scope.group for scope in scopes] == [
-        "workflow",
-        "workflow",
-        "assistant",
-        "assistant",
-        "assistant",
+        "app",
+        "app",
+        "app",
+        "app",
+        "workstation",
         "knowledge",
         "knowledge",
         "local_dev_toolkit",  # model:invoke — F051 protocol face

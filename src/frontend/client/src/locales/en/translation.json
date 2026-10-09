@@ -491,7 +491,6 @@
   "com_linsight_files_ready_prefix": "Here are your files, starting with",
   "com_linsight_files_ready_suffix": "— {{0}} in total",
   "com_linsight_citation_uncited": "{{0}} sources were retrieved, but the report does not cite any of them, so no citation markers can be shown.",
-  "com_linsight_web_sources": "Web sources",
   "com_linsight_export_references": "References",
   "com_linsight_export_page": "p. {{0}}",
   "com_linsight_export_chunk": "para. {{0}}",
@@ -1947,6 +1946,9 @@
     "wechat_article_link_label": "WeChat article link",
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
+  },
+  "com_tools": {
+    "image_view": "Image View"
   },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",

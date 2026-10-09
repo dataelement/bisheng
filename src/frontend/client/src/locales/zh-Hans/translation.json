@@ -479,7 +479,6 @@
   "com_linsight_files_ready_prefix": "已为您整理好",
   "com_linsight_files_ready_suffix": "等 {{0}} 个文件",
   "com_linsight_citation_uncited": "本次检索到 {{0}} 条资料，但报告正文未标注来源，暂无法提供溯源角标。",
-  "com_linsight_web_sources": "联网检索来源",
   "com_linsight_export_references": "参考资料",
   "com_linsight_export_page": "第 {{0}} 页",
   "com_linsight_export_chunk": "第 {{0}} 段",
@@ -1876,6 +1875,9 @@
     "wechat_article_link_label": "公众号文章链接",
     "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
     "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
+  },
+  "com_tools": {
+    "image_view": "图片查看"
   },
   "com_unified_permission": {
     "access_and_share": "访问与分享",

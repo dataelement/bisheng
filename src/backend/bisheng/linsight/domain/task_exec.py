@@ -2253,11 +2253,6 @@ class LinsightWorkflowTask:
                 logger.info("linsight citations session={} saved={}", session_model.id, len(payloads))
             else:
                 logger.info("linsight citations session={} none referenced in report/answer", session_model.id)
-            from bisheng.citation.domain.services.citation_handle_service import collected_web_sources
-
-            web_sources = collected_web_sources(getattr(getattr(self, "_citation_scope", None), "entries", None))
-            if web_sources:
-                output_result["web_sources"] = web_sources
             session_model.output_result = output_result
             # Saved in both branches: the persisted count on the audit must reach
             # the DB row too (history / version-list), not only the FINAL_RESULT push.
