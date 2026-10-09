@@ -954,6 +954,7 @@
     "1008": "The current assistant or skill is not online, and direct conversation is not possible."
   },
   "build": {
+    "contentSecurityReview": "Content safety review",
     "create": "Create",
     "assistant": "Assistant",
     "workflow": "Workflow",
@@ -1056,6 +1057,7 @@
     "forExample": "For example, the identity of an assistant, specific methods and steps for completing tasks, tone of voice when answering questions, and what issues to pay attention to, etc",
     "contentSecurityR": "Content Security Review",
     "errors": {
+      "sensitivePolicyLoading": "Sensitive word settings are loading. Please try again shortly.",
       "selectAtLeastOneWordType": "At least one word type must be selected",
       "autoReplyNotEmpty": "Auto-reply content cannot be empty",
       "workbenchSelectAtLeastOneWordType": "Please select at least one sensitive word list",

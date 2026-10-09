@@ -938,6 +938,7 @@
     "blindOverwriteOk": "このまま保存"
   },
   "build": {
+    "contentSecurityReview": "コンテンツ安全性の確認",
     "create": "作成",
     "assistant": "アシスタント",
     "workflow": "ワークフロー",
@@ -1039,6 +1040,7 @@
     "forExample": "例：アシスタントの役割、タスクの具体的な方法と手順、回答時の口調、注意すべき点など",
     "contentSecurityR": "コンテンツセキュリティ審査",
     "errors": {
+      "sensitivePolicyLoading": "禁止語の設定を読み込み中です。しばらくしてから再試行してください。",
       "selectAtLeastOneWordType": "単語リストは少なくとも1種類選択してください",
       "autoReplyNotEmpty": "自動返信内容は空にできません",
       "workbenchSelectAtLeastOneWordType": "少なくとも1つのセンシティブワードリストを選択してください",

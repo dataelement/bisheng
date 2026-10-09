@@ -944,6 +944,7 @@
     "blindOverwriteOk": "仍然保存"
   },
   "build": {
+    "contentSecurityReview": "内容安全审查",
     "create": "创建",
     "assistant": "助手",
     "workflow": "工作流",
@@ -1045,6 +1046,7 @@
     "forExample": "例如助手的身份、完成任务的具体方法和步骤、回答问题时的语气以及应该注意什么问题等",
     "contentSecurityR": "内容安全审查",
     "errors": {
+      "sensitivePolicyLoading": "敏感词配置加载中，请稍后再试",
       "selectAtLeastOneWordType": "词表至少需要选择一个",
       "autoReplyNotEmpty": "自动回复内容不可为空",
       "workbenchSelectAtLeastOneWordType": "请至少选择一个敏感词表",
