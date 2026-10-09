@@ -868,6 +868,47 @@ class F048PermissionRuntime:
             idempotency_key=idempotency_key,
         )
 
+    async def remove_absent_resource_sources(
+        self,
+        *,
+        actor: PermissionActor,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+        assignees: tuple[tuple[int, int], ...],
+        idempotency_key: str,
+    ):
+        """Remove grant sources left on a resource that no longer exists.
+
+        Resource deletion only closes the ``permission_enabled`` gate; the grant
+        roster stays. The caller must confirm through the business port that the
+        resource is gone. The removal then uses the ordinary Grant mutation, so
+        the SQL roster and the OpenFGA tuples change in one projection operation.
+        ``assignees`` holds (assignee id, expected assignee version) pairs.
+        """
+
+        target = await self._state.absent_resource_target(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        catalog = await self._runtime_catalog()
+        return await self.mutate_grants(
+            actor=actor,
+            target=target,
+            changes=tuple(
+                CanonicalGrantChange(
+                    operation="REMOVE",
+                    assignee_id=assignee_id,
+                    expected_assignee_version=version,
+                )
+                for assignee_id, version in assignees
+            ),
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=catalog.release_id,
+            idempotency_key=idempotency_key,
+        )
+
     async def sync_business_source_model(
         self,
         *,
