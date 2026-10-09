@@ -171,6 +171,8 @@ async def open_api_validation_exception_handler(request: Request, exc: RequestVa
         body = exc.body if isinstance(exc.body, dict) else {}
         run_mode = body.get("run_mode")
         # F073: "task" is a valid run mode now; 26017 only means an unknown one.
+        # An explicit "daily" is accepted by the daily body model, so a failure
+        # with run_mode="daily" is a plain field error of that body.
         if body.get("task_mode") is True or ("run_mode" in body and run_mode not in ("daily", "task")):
             return await open_api_auth_exception_handler(request, OpenApiTaskModeUnsupportedError())
         if run_mode == "task":

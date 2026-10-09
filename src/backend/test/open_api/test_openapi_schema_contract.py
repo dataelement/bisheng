@@ -32,7 +32,9 @@ def test_daily_chat_openapi_contract_is_narrow():
     assert "files" in daily
     assert "task_mode" not in daily
     assert "use_knowledge_base" not in daily
-    assert "run_mode" not in daily
+    # Daily mode accepts an explicit run_mode="daily"; omitting it means daily too.
+    assert daily["run_mode"]["const"] == "daily" or daily["run_mode"].get("enum") == ["daily"]
+    assert daily["run_mode"]["default"] == "daily"
     assert {"run_mode", "execution", "text", "model"} <= set(task)
     assert "conversationId" not in task
     assert "use_knowledge_base" not in task and "personal_knowledge_enabled" not in task

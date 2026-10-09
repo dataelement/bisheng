@@ -14,7 +14,7 @@ def test_daily_schema_is_internal_schema_minus_exactly_two_fields():
     assert OpenDailyChatCompletionReq.model_fields["clientTimestamp"].is_required()
 
 
-@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "execution", "run_mode", "turn_id"])
+@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "execution", "turn_id"])
 def test_daily_schema_forbids_removed_and_unknown_fields(field):
     payload = {"clientTimestamp": "1", "model": "m", field: False}
     with pytest.raises(ValidationError):
@@ -28,3 +28,20 @@ def test_conversion_forces_daily_mode_and_preserves_files():
     assert internal.task_mode is False
     assert internal.use_knowledge_base is None
     assert internal.files == files
+
+
+def test_daily_schema_accepts_explicit_daily_run_mode():
+    request = OpenDailyChatCompletionReq.model_validate({"clientTimestamp": "1", "model": "m", "run_mode": "daily"})
+    assert request.run_mode == "daily"
+    # run_mode only selects the branch; the internal request does not carry it.
+    assert request.to_internal().task_mode is False
+
+
+def test_daily_schema_defaults_run_mode_to_daily():
+    assert OpenDailyChatCompletionReq(clientTimestamp="1", model="m").run_mode == "daily"
+
+
+@pytest.mark.parametrize("value", ["task", "research", None, False])
+def test_daily_schema_rejects_other_run_modes(value):
+    with pytest.raises(ValidationError):
+        OpenDailyChatCompletionReq.model_validate({"clientTimestamp": "1", "model": "m", "run_mode": value})

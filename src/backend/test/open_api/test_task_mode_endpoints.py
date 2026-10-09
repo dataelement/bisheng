@@ -134,6 +134,21 @@ async def test_daily_mode_is_unchanged(app, calls):
     assert calls.submitted is None
 
 
+async def test_daily_mode_accepts_explicit_run_mode(app, calls):
+    response = await _post(app, "/api/v2/workstation/chat/completions", {**DAILY_BODY, "run_mode": "daily"})
+    assert response.status_code == 200
+    assert response.text == "data: daily\n\n"
+    assert calls.daily.run_mode == "daily"
+    assert calls.submitted is None
+
+
+@pytest.mark.parametrize("run_mode", ["research", None, ""])
+async def test_daily_body_with_an_unknown_run_mode_is_26017(app, calls, run_mode):
+    response = await _post(app, "/api/v2/workstation/chat/completions", {**DAILY_BODY, "run_mode": run_mode})
+    assert (response.status_code, response.json()["status_code"]) == (400, 26017)
+    assert calls.daily is None
+
+
 async def test_daily_validation_error_keeps_fastapi_shape(app, calls):
     response = await _post(app, "/api/v2/workstation/chat/completions", {"model": "7"})
     assert response.status_code == 400

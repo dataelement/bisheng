@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 
@@ -22,6 +22,12 @@ class OpenDailyChatCompletionReq(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # Optional branch selector. The endpoint sends run_mode="task" to the task
+    # model; any other value fails here and the v2 handler answers 26017.
+    run_mode: Literal["daily"] = Field(
+        default="daily",
+        description='Run mode. Omit it or send "daily" for daily chat; send "task" for the task-mode body.',
+    )
     clientTimestamp: str
     conversationId: str | None = None
     error: bool | None = False
@@ -46,7 +52,7 @@ class OpenDailyChatCompletionReq(BaseModel):
         return str(value)
 
     def to_internal(self) -> APIChatCompletion:
-        payload = self.model_dump()
+        payload = self.model_dump(exclude={"run_mode"})
         payload["tools"] = [tool.model_dump() for tool in self.tools or []] or None
         payload["task_mode"] = False
         payload["use_knowledge_base"] = None
