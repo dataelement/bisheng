@@ -3,7 +3,7 @@
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Created**: 2026-10-08  
-**Updated**: 2026-10-08
+**Updated**: 2026-10-09
 
 需求、用户故事、范围和唯一 API 契约以 [spec.md](spec.md) 为准。
 本文只补充稳定的需求映射与验证方法，避免复制两份请求和响应定义。
@@ -16,11 +16,13 @@
 - MCP 使用绑定用户；REST 的 `external_id` 身份代理能力不带入 MCP，也不修改原能力。
 - 用户于 2026-10-08 回复“开始实施”，确认具体规格并授权实现。
 
+- 2026-10-09 用户确认默认开启、MCP 任意来源跨域，以及取消 SDK Host/Origin 白名单与 DNS 重绑定防护；Token 与资源权限保持原规则，可选关闭保留。
+
 ## 需求追溯与验收方法
 
 | Requirement | Acceptance | Verification method |
 |-------------|------------|---------------------|
-| REQ-001 | AC-01, AC-02, AC-12 | 对服务开关及生命周期执行 HTTP 集成测试；真实 SDK ClientSession 完成握手。 |
+| REQ-001 | AC-01, AC-02, AC-12, AC-14 | 对默认开启/显式关闭、生命周期、任意 Host/Origin、MCP 预检/错误响应和 REST CORS 隔离执行 HTTP 集成测试；复用 SDK 握手。 |
 | REQ-002 | AC-03, AC-04, AC-05 | HTTP 边界参数化鉴权测试，复用 Token service 定向回归；拒绝路径断言业务未执行。 |
 | REQ-003 | AC-04, AC-11 | 新入口空白名单拒绝测试，加原 REST 空白名单授权回归。 |
 | REQ-004 | AC-02, AC-08, AC-10 | SDK tools/list、未知工具与身份参数拒绝；不同 Token 并发身份断言。 |

@@ -10,7 +10,6 @@ import httpx
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
-from pydantic import ValidationError
 from starlette.applications import Starlette
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -23,7 +22,7 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenRateLimitedError,
     DeveloperTokenRouteForbiddenError,
 )
-from bisheng.core.config.settings import McpServerConf
+from bisheng.core.config.settings import McpConf, McpServerConf
 from bisheng.core.context.tenant import (
     _admin_scope_tenant_id,
     _bypass_tenant_filter,
@@ -262,21 +261,32 @@ async def test_concurrent_requests_and_cancel_restore_context(monkeypatch):
         ("http://localhost/mcp", {"Origin": "https://untrusted.example"}),
     ],
 )
-async def test_transport_security_rejects_untrusted_host_or_origin(monkeypatch, url, headers):
-    """AC-12: explicit SDK transport security denies untrusted endpoints."""
+async def test_transport_accepts_any_host_or_origin_with_token(monkeypatch, url, headers):
+    """AC-12: authorized clients no longer need Host/Origin configuration."""
     async with server(monkeypatch) as (app, calls, active):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
-            response = await client.post(url, headers={"X-Developer-Token": "first", **headers}, json={})
-        assert response.status_code in (403, 421)
+            response = await client.post(
+                url,
+                headers={
+                    "X-Developer-Token": "first",
+                    "Accept": "application/json, text/event-stream",
+                    **headers,
+                },
+                json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+            )
+        assert response.status_code == 200
+        assert response.json()["result"] == {}
         assert not calls and not active
 
 
-@pytest.mark.parametrize("field", ["allowed_hosts", "allowed_origins"])
-@pytest.mark.parametrize("values", [[], ["*"], ["https://*.example"]])
-def test_transport_config_rejects_unrestricted_allowlists(field, values):
-    """AC-12: invalid configuration never disables transport protection."""
-    with pytest.raises(ValidationError):
-        McpServerConf(**{field: values})
+@pytest.mark.parametrize(
+    "config", [{}, {"enable_stdio": False}, {"server": {}}, {"server": {"allowed_hosts": [], "allowed_origins": ["*"]}}]
+)
+def test_missing_or_legacy_server_config_defaults_to_enabled(config):
+    """AC-01: old allowlist fields are ignored and an explicit off switch is retained."""
+    conf = McpConf.model_validate(config)
+    assert conf.server.enabled
+    assert McpConf.model_validate({"server": {"enabled": False}}).server.enabled is False
 
 
 async def test_unsupported_http_methods_require_authentication(monkeypatch):

@@ -904,37 +904,9 @@ class IntelligenceCenterConf(BaseModel):
 
 
 class McpServerConf(BaseModel):
-    """Remote MCP server settings, captured at application startup."""
+    """Optional remote MCP server switch, captured at application startup."""
 
-    model_config = ConfigDict(validate_default=True)
-
-    enabled: bool = False
-    allowed_hosts: list[str] = Field(default_factory=lambda: ["localhost:*", "127.0.0.1:*", "[::1]:*"])
-    allowed_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:*", "http://127.0.0.1:*", "http://[::1]:*"],
-    )
-
-    @field_validator("allowed_hosts", "allowed_origins")
-    @classmethod
-    def validate_transport_allowlist(cls, values: list[str], info: Any) -> list[str]:
-        if not values:
-            raise ValueError("MCP transport allowlist must not be empty")
-        host_pattern = r"(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::(?:[0-9]{1,5}|\*))?"
-        normalized = []
-        for value in values:
-            value = value.strip()
-            host = value
-            if info.field_name == "allowed_origins":
-                parsed = urlsplit(value)
-                if parsed.scheme not in {"http", "https"} or parsed.path or parsed.query or parsed.fragment:
-                    raise ValueError("MCP Origin must be an explicit HTTP(S) origin")
-                host = parsed.netloc
-            if not re.fullmatch(host_pattern, host):
-                raise ValueError("MCP allowlist requires explicit hosts; only port wildcards are supported")
-            normalized.append(value)
-            if value.endswith(":*"):
-                normalized.append(value[:-2])
-        return normalized
+    enabled: bool = True
 
 
 class McpConf(BaseModel):

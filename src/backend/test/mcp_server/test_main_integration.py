@@ -16,7 +16,7 @@ from bisheng.api_rate_limit.domain.schemas import ApiRateLimitConfig
 from bisheng.api_rate_limit.domain.services import ApiRateLimitService
 from bisheng.core.config.openfga import OpenFgaGuardConf
 from bisheng.core.config.settings import McpServerConf
-from bisheng.mcp_server.api.router import McpServerApp, mcp_routes
+from bisheng.mcp_server.api.router import McpCorsMiddleware, McpServerApp, mcp_routes
 from test.mcp_server.test_mcp_server import server
 
 
@@ -27,6 +27,7 @@ def main_app(monkeypatch):
     routes.router = APIRouter(prefix="/api/v1")
     routes.router_rpc = APIRouter(prefix="/api/v2")
     routes.McpServerApp = McpServerApp
+    routes.McpCorsMiddleware = McpCorsMiddleware
     routes.mcp_routes = mcp_routes
     monkeypatch.setitem(sys.modules, "bisheng.api.router", routes)
     from bisheng import main
@@ -50,6 +51,7 @@ def main_app(monkeypatch):
     monkeypatch.setattr(main, "AuthJWTException", type("AuthJWTException", (Exception,), {}))
     monkeypatch.setattr(main.settings, "multi_tenant", SimpleNamespace(enabled=False))
     monkeypatch.setattr(main.settings, "debug", False)
+    monkeypatch.setenv("BISHENG_CORS_ORIGINS", "http://localhost:3001")
     monkeypatch.setattr(ApiRateLimitService, "get_runtime_config", AsyncMock(return_value=ApiRateLimitConfig()))
     monkeypatch.setattr(
         "bisheng.common.middleware.openfga_guard._load_guard_conf",
@@ -122,13 +124,58 @@ async def test_main_startup_failure_cleans_infrastructure(monkeypatch):
 
 
 async def test_main_shutdown_and_disabled_route(monkeypatch):
-    """AC-01, AC-12: missing server configuration leaves the MCP endpoint closed."""
+    """AC-01, AC-12: an explicit off switch leaves the MCP endpoint closed."""
     app, events = main_app(monkeypatch)
-    app.state.mcp_server.config_provider = AsyncMock(return_value=McpServerConf())
+    app.state.mcp_server.config_provider = AsyncMock(return_value=McpServerConf(enabled=False))
     async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
             assert (await client.post("http://localhost/mcp", json={})).status_code == 404
     assert events == ["initialize", "defaults", "close"]
+
+
+@pytest.mark.parametrize("path", ["/mcp", "/mcp/"])
+async def test_mcp_cors_preflight_and_errors_are_open_only_for_mcp(monkeypatch, path):
+    """AC-01, AC-03, AC-14: cross-origin preflight and errors are scoped to MCP."""
+    async with server(monkeypatch) as (fake_app, calls, active):
+        app, _ = main_app(monkeypatch)
+        runtime = app.state.mcp_server
+        runtime.config_provider = AsyncMock(return_value=McpServerConf())
+        runtime.search_service = fake_app.routes[0].endpoint.search_service
+        headers = {
+            "Origin": "https://external.example",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "X-Developer-Token, MCP-Protocol-Version, Content-Type",
+        }
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
+                response = await client.options("http://arbitrary-host.example" + path, headers=headers)
+                assert response.status_code == 200
+                assert response.headers["Access-Control-Allow-Origin"] == "*"
+                assert "x-developer-token" in response.headers["Access-Control-Allow-Headers"].lower()
+                assert "Access-Control-Allow-Credentials" not in response.headers
+                denied = await client.post(
+                    "http://arbitrary-host.example" + path, headers={"Origin": headers["Origin"]}, json={}
+                )
+                assert denied.status_code == 401
+                assert denied.headers["Access-Control-Allow-Origin"] == "*"
+                assert "Access-Control-Allow-Credentials" not in denied.headers
+                allowed = await client.post(
+                    "http://arbitrary-host.example" + path,
+                    headers={
+                        "Origin": headers["Origin"],
+                        "X-Developer-Token": "first",
+                        "Accept": "application/json, text/event-stream",
+                    },
+                    json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                )
+                assert allowed.status_code == 200
+                assert allowed.headers["Access-Control-Allow-Origin"] == "*"
+                assert "Access-Control-Allow-Credentials" not in allowed.headers
+                for other_path in ["/health", "/mcp-other", "/api/v1/mcp"]:
+                    previous = await client.options("http://localhost" + other_path, headers=headers)
+                    assert previous.status_code == 400
+                    assert "Access-Control-Allow-Origin" not in previous.headers
+        assert not calls and not active
 
 
 async def test_real_network_disconnect_closes_tool_scope(monkeypatch):

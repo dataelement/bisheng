@@ -7,10 +7,12 @@ import anyio
 from mcp.server.fastmcp import FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.services.config_service import settings
@@ -46,11 +48,8 @@ class McpServerApp:
         if not conf.enabled:
             yield
             return
-        self.security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=True,
-            allowed_hosts=conf.allowed_hosts,
-            allowed_origins=conf.allowed_origins,
-        )
+        # MCP accepts any Host/Origin; token and resource checks remain mandatory.
+        self.security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
         server = FastMCP("Bisheng", stateless_http=True, json_response=True, transport_security=self.security)
         register_tools(server, self.search_service)
         server.streamable_http_app()
@@ -123,3 +122,37 @@ class McpServerApp:
 
 def mcp_routes(runtime: McpServerApp) -> list[Route]:
     return [Route("/mcp", endpoint=runtime), Route("/mcp/", endpoint=runtime)]
+
+
+class McpCorsMiddleware:
+    """Allow header-authenticated MCP requests without changing REST CORS."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self.cors = CORSMiddleware(
+            app,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=False,
+            expose_headers=["MCP-Protocol-Version", "X-Trace-ID"],
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        path = scope.get("path", "").removeprefix(scope.get("root_path", ""))
+        if scope["type"] != "http" or path not in {"/mcp", "/mcp/"}:
+            await self.app(scope, receive, send)
+            return
+
+        async def send_mcp(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                # Inner REST CORS can add cookie credentials or a specific origin.
+                # MCP uses its developer-token header and always returns a wildcard origin.
+                if "Access-Control-Allow-Origin" in headers:
+                    headers["Access-Control-Allow-Origin"] = "*"
+                if "Access-Control-Allow-Credentials" in headers:
+                    del headers["Access-Control-Allow-Credentials"]
+            await send(message)
+
+        await self.cors(scope, receive, send_mcp)

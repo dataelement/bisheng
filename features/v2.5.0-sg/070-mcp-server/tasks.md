@@ -1,7 +1,7 @@
 # MCP Server：执行任务
 
 **Feature ID**: 070-mcp-server  
-**Status**: LOCAL_VERIFIED  
+**Status**: LOCAL_VERIFIED
 **Version**: v2.5.0-sg
 
 用户于 2026-10-08 回复“开始实施”，确认 spec.md、requirements.md、design.md；在原范围内连续实现及验证。
@@ -10,7 +10,7 @@
 |------|------|
 | spec.md | ✅ 已评审并获用户确认 |
 | tasks.md | ✅ 已拆解并完成静态评审 |
-| 实现 | ✅ T001～T006 完成；实际业务环境/DM8/正式部署验证待执行 |
+| 实现 | ✅ T001～T007 完成；实际业务环境/DM8/正式部署验证待执行 |
 
 ## 任务
 
@@ -74,6 +74,18 @@
   _Depends: T001, T002, T003, T004, T005_
   _Boundary: 不提交、不推送、不部署、不碰积分用户 diff_
 
+## 已确认追加任务
+
+- [x] **T007**：MCP 默认开启并开放任意来源，保留关闭及鉴权。
+  **文件**：`bisheng/core/config/settings.py`、`bisheng/initdb_config.yaml`、`bisheng/mcp_server/api/router.py`、`bisheng/api/router.py`、`bisheng/main.py`、`test/mcp_server/test_mcp_server.py`、`test/mcp_server/test_main_integration.py`；特性规格、接入说明和验证记录。
+  **逻辑**：先修改测试覆盖新行为，随后简化配置、关闭 SDK 来源限制；只对 MCP 路径安装独立最外层 CORS，保证预检、成功/错误响应和原 REST 隔离。
+  **覆盖 AC**：AC-01、AC-02、AC-03～05、AC-12、AC-14。
+  _Requirements: REQ-001, REQ-002, REQ-003, REQ-007, REQ-008, REQ-009_
+  _Acceptance: AC-01, AC-02, AC-03, AC-04, AC-05, AC-12, AC-14_
+  _Verification: E-007 新行为失败证据；E-008 新模块与相关回归；E-009 静态检查_
+  _Depends: T006_
+  _Boundary: 2026-10-09 用户已确认来源/DNS 防护变化；不改全局 REST CORS、不更改鉴权与资源权限、不部署_
+
 ## 任务评审
 
 根据项目 tasks checklist 静态检查：REQ/AC 引用有效、文件范围明确、依赖无环、拒绝路径先于实现、现有测试复用、
@@ -92,3 +104,7 @@
 
 T001～T006 均通过任务级自审和对应验证，见 [verification.md](verification.md) E-002～E-006、[code-review.md](code-review.md)。
 最终相关回归 181 passed；真实 SDK/TCP 和取消清理已验证。未提交、推送或部署；真实业务基础设施/DM8 仍为 MANUAL_REQUIRED。
+
+2026-10-09：用户确认 T007；不删除既有关闭开关，只取消不再需要的 Host/Origin 配置与防护；后续证据覆盖新 AC，旧 181 passed 属于原策略历史记录。
+
+T007 本地验证完成：37 项 MCP 定向测试通过；最终相关回归 190 passed，见 E-008/E-009。工作区并行出现的知识空间改动未由本任务编辑或暂存。

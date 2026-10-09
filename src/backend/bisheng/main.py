@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, ORJSONResponse
 from loguru import logger
 
-from bisheng.api.router import McpServerApp, mcp_routes, router, router_rpc
+from bisheng.api.router import McpCorsMiddleware, McpServerApp, mcp_routes, router, router_rpc
 from bisheng.api_rate_limit.middleware import ApiRateLimitMiddleware
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.filelib_sync import FilelibSyncError
@@ -127,6 +127,8 @@ def create_app():
     app.add_middleware(AdminScopeMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
+    # MCP preflights must run before the existing REST origin allowlist.
+    app.add_middleware(McpCorsMiddleware)
 
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):

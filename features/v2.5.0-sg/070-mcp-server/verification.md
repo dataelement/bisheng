@@ -2,8 +2,14 @@
 
 **Feature ID**: 070-mcp-server  
 **Status**: LOCAL_VERIFIED  
-**Updated**: 2026-10-08  
-**Branch**: codex/070-mcp-server
+**Updated**: 2026-10-09
+**Branch**: codex/mcp-default-on-cors
+
+## 当前调整与历史证据
+
+2026-10-09 用户确认默认开启和 MCP 任意来源跨域，新增 AC-14、改写 AC-01/AC-12。
+下方 E-001～E-006 与初版验收矩阵为历史证据；旧的 Host/Origin 拒绝和默认关闭不再作为当前验收结论。
+新证据 E-007～E-009 覆盖本次变化，未改变的检索、Token 和身份行为复用原测试。
 
 ## 结果与环境边界
 
@@ -105,3 +111,31 @@ baseline 命令，cwd `src/backend`：
   bisheng/open_endpoints/domain/services/filelib_retrieve_service.py \
   test/mcp_server test/open_endpoints/test_filelib_retrieve_service.py
 ```
+
+## 2026-10-09 调整验证
+
+| Evidence | Scope / Command | Result |
+|----------|-----------------|--------|
+| E-007 | 修改测试先于生产实现；`pytest test/mcp_server/test_mcp_server.py test/mcp_server/test_main_integration.py -k 'transport_accepts or legacy_server_config or cors_preflight'` | exit 1；8 failed，正确复现旧默认关闭、Host/Origin 拒绝与全局 CORS 拦截预检。 |
+| E-008 | `.venv/bin/python -m pytest test/mcp_server -q --tb=short` | PASS；37 passed，5.62 秒，含真实 SDK/TCP、Token 错误、MCP CORS/其他路径隔离与取消清理。 |
+| E-009 | 最终相关回归与静态检查 | PASS；190 passed，25 warnings，6.46 秒；新文件 Ruff/format 通过，旧 main/settings 无新增 lint，AST/架构/文档检查通过。 |
+
+当前 AC-01、AC-12、AC-14：默认开启；显式 false 可关闭；任意 Host/Origin 通过；MCP 预检及成功/401 响应 ACAO=* 且没有 ACAC；其他 REST/相邻路径 CORS 保持原样。
+真实基础设施、DM8 与正式部署仍为 MANUAL_REQUIRED。旧 DB 显式 enabled=false 仍关闭，不自动迁移该值。
+
+E-009 命令（cwd src/backend）：
+
+```bash
+.venv/bin/python -m pytest test/mcp_server \
+  test/open_endpoints/test_filelib_retrieve_service.py \
+  test/open_endpoints/test_filelib_external_user_context.py \
+  test/open_endpoints/test_filelib_retrieve_source_service.py \
+  test/knowledge/test_knowledge_space_chat_service_retrieve.py \
+  test/developer_token/test_developer_token_dependency.py \
+  test/developer_token/test_developer_token_service.py \
+  test/api_rate_limit/test_api_rate_limit_middleware.py -q --tb=short
+```
+
+本次 code review：仅 MCP 路径取消来源限制；预检不需要 Token，实际请求依然鉴权；新 wrapper 不修改其他 REST Origin 策略。
+显式 false/旧 allowlist 兼容、未知 Host/Origin、成功/401 CORS、邻近非 MCP 路径均有测试。
+保留初版真实业务基础设施替身边界，未部署、未操作真实配置/权限或知识数据。

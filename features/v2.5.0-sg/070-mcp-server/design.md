@@ -3,7 +3,7 @@
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Created**: 2026-10-08  
-**Updated**: 2026-10-08
+**Updated**: 2026-10-09
 
 关联规格：[spec.md](spec.md)。本文件随规格由用户确认，后续实现遵循已评审任务。
 
@@ -69,12 +69,12 @@ src/backend/test/open_endpoints/       # 最小共享编排与 REST 兼容测试
 
 - 路由组合在全局 `api/router.py` 暴露，ASGI 挂载在 `main.py` 完成；不伪造 REST MCP 路由。
 - 对 `/mcp`、等价 `/mcp/` 提供直接处理，统一鉴权路由键；不能靠尾斜杠重定向完成认证。
-- 启动基础设施后读取有效配置；缺失 `server` 子块按关闭处理。
+- 启动基础设施后读取有效配置；缺失 `server` 子块按默认开启处理，保留显式 enabled=false。
 - 配置有效且开启时构建 FastMCP 与传输应用；每个 HTTP 请求独立进入 SDK session manager 生命周期，关闭时入口稳定返回 404。
 - 启动时只保留静态工具注册；每个请求独立拥有 SDK task group，原始 TCP 断开和 task 取消均触发工具清理，避免锁定 SDK 常驻管理器在断连后遗留后台任务。
 - 初始化异常要清理已创建资源，不能悄悄启动为无鉴权服务。
-- Host/Origin 校验显式配置；不能通过关闭 DNS 重绑定保护适配公网域名。
-- 开关和传输安全列表以启动快照为准，修改后需配置缓存刷新/到期并重启；Token 状态每次请求重新验证。
+- 根据 2026-10-09 用户确认，不再读取 Host/Origin 白名单，SDK `enable_dns_rebinding_protection=false`；仍验证 Content-Type 与 Token，保留全部业务权限。
+- 可选开关以启动快照为准，修改后需配置缓存刷新/到期并重启；Token 状态每次请求重新验证。
 
 ### 3.2 身份与显式授权
 
@@ -110,26 +110,21 @@ src/backend/test/open_endpoints/       # 最小共享编排与 REST 兼容测试
 
 ## 4. 配置契约
 
-拟在既有系统配置中增加以下默认模板；文档示例不是线上变更：
+服务默认开启。默认模板仅保留可选关闭开关；已有 allowed_hosts/allowed_origins 由 Pydantic 忽略，不再影响运行：
 
 ```yaml
 mcp:
   enable_stdio: true
   server:
-    enabled: false
-    allowed_hosts:
-      - "localhost:*"
-      - "127.0.0.1:*"
-      - "[::1]:*"
-    allowed_origins:
-      - "http://localhost:*"
-      - "http://127.0.0.1:*"
-      - "http://[::1]:*"
+    enabled: true
 ```
 
-公网启用时填写实际外部域名与允许的 Origin，不接受无约束 `*`。没有 Origin 的服务端客户端请求可接受，
-有 Origin 时必须通过允许列表。字段边界与 SDK 传输安全配置一致，配置不合法明确报错。
-不改本地运行配置、不改线上 DB，不自动创建 Token 或增加现有 Token 的白名单。
+`McpServerConf` 仅保留 enabled=true。旧配置没有 server 块时开启，旧显式 false 继续关闭。
+新增 `McpCorsMiddleware` 作为主应用最外层中间件，仅匹配 `/mcp`、`/mcp/`（考虑 ASGI root_path）。
+该路径使用 `allow_origins/methods/headers=["*"]`、`allow_credentials=false`，预检直接返回；
+普通及错误响应统一覆盖 ACAO=*，移除内层全局 CORS 的 ACAC，避免浏览器把通配来源与 Cookie 凭证组合。
+其他 HTTP 路径、相邻路径和 WebSocket 继续既有中间件，不修改 BISHENG_CORS_ORIGINS。
+不修改本地运行配置或线上 DB，不自动更新 Token 白名单。
 
 ## 5. 需求到设计的映射
 
@@ -152,6 +147,8 @@ mcp:
 - 不按 AC 逐条复制测试；等价鉴权失败参数化，现有业务测试复用；记录命令、代码状态和结果。
 - 本地协议集成使用可控业务替身时必须注明；真实 MySQL、OpenFGA、Milvus、ES、MinIO、DM8、代理部署分别记录证据或限制。
 - 交付 `tasks.md`、`verification.md`、接入说明及发布/回退步骤；未通过或未执行项不得勾为完成。
+
+2026-10-09 更新的测试重点：默认启动、旧显式关闭、任意 Host/Origin、预检成功/鉴权错误 CORS、REST 相邻路径策略不变。
 
 ## 7. 备选方案与取舍
 

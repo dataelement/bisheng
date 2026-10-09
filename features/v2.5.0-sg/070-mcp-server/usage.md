@@ -1,32 +1,27 @@
 # MCP 知识检索接入说明
 
-实现入口为 `/mcp`，工具为 `search_knowledge`。服务默认关闭；本文是启用和接入步骤，不代表已部署或已开启。
+实现入口为 `/mcp`，工具为 `search_knowledge`。服务默认开启，不需要配置 Host/Origin 或跨域白名单；本文不代表已部署。
 
-## 1. 开启服务
+## 1. 默认行为与可选关闭
 
-在后台系统配置的 `mcp` 部分增加 `server` 子块，保留原 `enable_stdio` 值：
+没有 `mcp.server` 配置或未设置 enabled 时，MCP 默认开启。
+`/mcp`、`/mcp/` 允许任意跨域来源、请求方法和请求头，任意 Host/Origin 可进入鉴权与协议处理。
+预检可直接完成；实际请求仍要求开发者 Token 和权限，非 POST 在鉴权后返回 405。
+跨域使用 `X-Developer-Token` 请求头，不使用 Cookie 凭证；浏览器请求不要设置 `credentials: include`。
+其他 REST 路径的 CORS 策略不变，不需要修改 `BISHENG_CORS_ORIGINS`。
+
+保留可选关闭开关。若已有 DB 系统配置显式设置 enabled=false，仍保持关闭；需要开启时去掉或修改该值。
+旧 allowed_hosts/allowed_origins 配置已忽略。配置读取路径为 `settings.get_mcp_conf()`；显式开关修改需等缓存更新并重启。
 
 ```yaml
 mcp:
   enable_stdio: true
   server:
-    enabled: true
-    allowed_hosts:
-      - "bisheng.example.com:*"
-    allowed_origins:
-      - "https://bisheng.example.com:*"
+    enabled: false  # 仅需要关闭 MCP 时配置
 ```
 
-把示例域名替换为实际 MCP 服务域名。允许列表只接受明确主机，端口可以使用 `:*`；不接受无约束 `*`。
-`:*` 同时覆盖未显式指定端口的 Host/Origin。服务端客户端一般没有 Origin；有 Origin 时必须在允许列表中。
-若代理保留浏览器客户端的其他 Origin，应显式添加该来源；浏览器还需通过主应用既有 CORS 设置。
-
-配置来源是已有 DB 系统配置，读取路径为 `settings.get_mcp_conf()`，不是仅修改本地 `config.yaml`。
-已有部署的 `mcp` 块不会因模板增加子块就自动开启；缺少 `server` 时使用关闭默认值。
-确认既有配置缓存已经更新或最多 100 秒 TTL 到期后，重启后端。开关和传输安全列表是启动快照。
-
-对外使用 HTTPS，代理保留 `X-Developer-Token`、`MCP-Protocol-Version`、`Accept`、`Content-Type` 等请求头和实际 Host。
-第一版使用 JSON 响应、无状态传输，不要求客户端建立独立 GET SSE 流。
+用户于 2026-10-09 确认取消 SDK Host/Origin 白名单与 DNS 重绑定防护；来源限制放宽，不改变 Token 和知识权限。
+对外使用 HTTPS，代理保留 Token、协议、Accept 和 Content-Type 请求头；JSON 无状态传输不要求独立 GET SSE 流。
 
 ## 2. 配置 Token 与资源权限
 
@@ -109,12 +104,11 @@ asyncio.run(main())
 
 | 状态 | 意义 |
 |------|------|
-| HTTP 404 | MCP 默认关闭或已关闭，检查生效配置和重启状态。 |
+| HTTP 404 | MCP 被显式关闭，检查已有 enabled=false 配置与重启状态。 |
 | HTTP 401 / 19801～19803 | 缺失、无效、禁用 Token，或绑定用户/租户失效。 |
 | HTTP 403 / 19804、19812 | IP 或显式路由规则不允许。 |
 | HTTP 429 / 19805 | Token 请求限流。 |
 | HTTP 503 / 19806 | Token 限流基础设施不可用；主应用既有过载保护也可能提前拒绝请求。 |
-| HTTP 421 / 403 | Host 或 Origin 未在配置中允许。 |
 | HTTP 405 | 完成鉴权后请求了非 POST 方法；POST-only Token 对 GET 可能先收到 403。 |
 | MCP `isError=true` | 参数/未知工具、资源无权、检索超时或下游失败。 |
 
@@ -124,4 +118,4 @@ asyncio.run(main())
 
 把 DB 系统配置 `mcp.server.enabled` 改为 `false`，确认缓存更新后重启，`/mcp` 返回 404。
 旧 REST 保持可用。本期无数据库结构迁移，不需要数据回滚。
-本次交付未自动启用服务、创建/编辑真实 Token、提交、推送或部署。
+本次代码默认开启；没有修改实际部署的 DB 配置、创建/编辑真实 Token、提交、推送或部署。
