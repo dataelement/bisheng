@@ -805,7 +805,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         ~0px (useCompareTransitionFreeze). */}
                     <div
                       ref={compareFreeze.chatRef}
-                      style={compareFreeze.chatStyle}
                       className={cn(
                         'relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden transition-opacity duration-200',
                         '[&>*]:min-w-[var(--compare-freeze-w,0px)]',
@@ -939,7 +938,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           // F071: pinned to its end width while entering/leaving compare
                           // (useCompareTransitionFreeze) so the wrapper's width animation
                           // clips the report + source instead of re-laying them out.
-                          <div ref={dockedCardRef} className="h-full min-w-[420px]" style={compareFreeze.panelStyle}>
+                          <div ref={dockedCardRef} className="h-full min-w-[420px]">
                             <WorkspacePanel
                               files={taskWorkspaceFiles}
                               versionId={latestTaskVersionId}
