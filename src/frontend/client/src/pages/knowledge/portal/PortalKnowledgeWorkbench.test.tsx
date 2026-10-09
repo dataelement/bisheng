@@ -353,6 +353,7 @@ jest.mock("../hooks/useKnowledgeSpacePermissions", () => ({
 }));
 
 jest.mock("../hooks/useFileManager", () => ({
+    applyKnowledgeFileAliasDecision: jest.requireActual("../hooks/useFileManager").applyKnowledgeFileAliasDecision,
     useFileManager: () => ({
         files: [],
         setFiles: jest.fn(),
@@ -2406,7 +2407,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
 
         const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
-        expect(within(restoredWorkspace).getByTestId("portal-file-table")).toBeInTheDocument();
+        expect(await within(restoredWorkspace).findByTestId("portal-file-table")).toBeInTheDocument();
         expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
     });
 
@@ -2686,7 +2687,7 @@ describe("PortalKnowledgeWorkbench", () => {
         const preview = await screen.findByTestId("portal-preview-page");
         expect(preview).toHaveTextContent("README_文件清单.txt");
         // Preview-only: sidebar stays on 我的收藏, not the foreign personal space.
-        expect(screen.getByTestId("space-row-favorite-space")).toBeInTheDocument();
+        expect(await screen.findByTestId("space-row-favorite-space")).toBeInTheDocument();
         expect(screen.queryByTestId("space-row-165")).not.toBeInTheDocument();
         expect(getSpaceChildrenApi).not.toHaveBeenCalledWith(expect.objectContaining({
             space_id: "165",
@@ -2784,8 +2785,8 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
 
         const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
-        expect(within(restoredWorkspace).getByTestId("portal-file-table")).toBeInTheDocument();
-        expect(within(restoredWorkspace).getByText("目标文档.md")).toBeInTheDocument();
+        expect(await within(restoredWorkspace).findByTestId("portal-file-table")).toBeInTheDocument();
+        expect(await within(restoredWorkspace).findByText("目标文档.md")).toBeInTheDocument();
         expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
         expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
     });
@@ -2853,7 +2854,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
 
         const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
-        expect(within(restoredWorkspace).getByText("目标文档.md")).toBeInTheDocument();
+        expect(await within(restoredWorkspace).findByText("目标文档.md")).toBeInTheDocument();
         expect(within(restoredWorkspace).getByText("同目录其它.md")).toBeInTheDocument();
     });
 
@@ -3292,9 +3293,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.mouseEnter(row);
         const buttons = within(row).getAllByRole("button");
         fireEvent.click(buttons[buttons.length - 1]);
-        expect(
-            await screen.findByRole("button", { name: "com_knowledge.delete" })
-        ).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByRole("button", { name: "com_knowledge.delete" })).toBeInTheDocument());
         expect(screen.queryByText("分享")).not.toBeInTheDocument();
         expect(screen.queryByText("发布")).not.toBeInTheDocument();
         expect(screen.queryByText("权限管理")).not.toBeInTheDocument();
@@ -4422,7 +4421,7 @@ describe("PortalKnowledgeWorkbench", () => {
     test("patches search results when accepting or rejecting an alias", () => {
         const workbenchSource = stripComments(readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8"));
         expect(workbenchSource).toContain("setFiles: setDisplayFiles");
-        expect(workbenchSource).toMatch(/files:\s*searchMode/);
+        expect(workbenchSource).toContain("files: pageData");
         expect(workbenchSource).toContain("applyKnowledgeFileAliasDecision");
     });
 
@@ -6005,7 +6004,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
                 space_id: "personal-1",
-                page: 1,
+                cursor: null,
                 page_size: 20,
             }));
         });
@@ -6016,7 +6015,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
                 space_id: "personal-1",
-                page: 1,
+                cursor: null,
                 page_size: 20,
                 file_status: [2],
             }));
@@ -6048,7 +6047,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
             expect(await screen.findByText("第一页.md")).toBeInTheDocument();
 
-            await intersectionObserver.trigger();
+            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
 
             expect(await screen.findByText("第二页.md")).toBeInTheDocument();
             await waitFor(() => {
@@ -6092,7 +6091,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         if (empty) {
             expect(await within(workspace).findByAltText("empty")).toBeInTheDocument();
-            expect(within(workspace).getByText("共计 0 文件")).toBeInTheDocument();
+            expect(within(workspace).queryByText("共计 0 文件")).not.toBeInTheDocument();
         } else {
             expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
             expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
@@ -6156,7 +6155,7 @@ describe("PortalKnowledgeWorkbench", () => {
             fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
             expect(await screen.findByText("目录第一页.md")).toBeInTheDocument();
 
-            await intersectionObserver.trigger();
+            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
 
             expect(await screen.findByText("目录第二页.md")).toBeInTheDocument();
             await waitFor(() => {

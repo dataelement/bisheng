@@ -110,6 +110,9 @@ import {
     normalizeBusinessDomainOptions,
     parseFileEncoding,
 } from "./uploadMetadata";
+import { usePortalFilePageHistory, loadPortalFilePage } from "./hooks/usePortalFilePageHistory";
+import { portalFileQueryKey, type PortalFilePageQuery } from "./hooks/portalFilePageHistory";
+import { PortalFilePagination } from "./components/PortalFilePagination";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
@@ -118,13 +121,7 @@ const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 const PORTAL_LOCATION_MESSAGE = "shougang-portal:knowledge-location";
-
-async function getPortalWorkbenchChildren(
-    _space: KnowledgeSpace | null,
-    params: Parameters<typeof getSpaceChildrenApi>[0],
-) {
-    return getSpaceChildrenApi(params);
-}
+const EMPTY_PAGE_FILES: KnowledgeFile[] = [];
 
 async function getPortalWorkbenchFolderStats(
     _space: KnowledgeSpace | null,
@@ -322,6 +319,14 @@ export default function PortalKnowledgeWorkbench() {
         const key = parentId || "";
         setCanReorderFoldersByParent((prev) => (prev[key] === flag ? prev : { ...prev, [key]: flag }));
     }, []);
+    const identity = JSON.stringify([currentUser?.id, currentUser?.role, (currentUser as { tenant_id?: number } | undefined)?.tenant_id]);
+    const { history: pageHistory, snapshot: pageSnapshot } = usePortalFilePageHistory(identity);
+    const previewPageSourceRef = useRef<{ folderId?: string; mode: boolean; keyword: string; tagIds: number[] } | null>(null);
+    const previewReturnKeyRef = useRef<string | null>(null);
+    const folderNavigationIdRef = useRef(0);
+    const [pageEpoch, setPageEpoch] = useState(0);
+    const lastFolderBySpaceRef = useRef(new Map<string, { id: string; name?: string } | undefined>());
+    const previousIdentityRef = useRef(identity);
     const previousSpaceIdRef = useRef<string | undefined>(undefined);
     const lastPortalLocationKeyRef = useRef("");
     /** Skip the automatic reloadFiles in the activeSpace effect after back-to-list sets the URL.
@@ -350,7 +355,7 @@ export default function PortalKnowledgeWorkbench() {
     );
 
     useEffect(() => {
-        setRestoringDeepLinkKey(portalDeepLinkTarget?.key ?? null);
+        setRestoringDeepLinkKey(previewReturnKeyRef.current === portalDeepLinkTarget?.key ? null : portalDeepLinkTarget?.key ?? null);
     }, [portalDeepLinkTarget?.key]);
 
     useEffect(() => {
@@ -468,11 +473,12 @@ export default function PortalKnowledgeWorkbench() {
         setRestoringDeepLinkKey(null);
         // Deep-link file entry (e.g. "进入知识库") opens the AI drawer by default.
         // Search-result previews mark the URL with fromSearch=1 and keep it closed.
-        if (portalDeepLinkTarget.fromSearch === "1") return;
+        if (portalDeepLinkTarget.fromSearch === "1" || preservesCrossSpaceDeepLinkPreview) return;
         setAiDrawerOpen(true);
         setActivePanel(null);
     }, [
         portalDeepLinkTarget,
+        preservesCrossSpaceDeepLinkPreview,
         preview.error,
         preview.fileUrl,
         preview.loading,
@@ -559,6 +565,8 @@ export default function PortalKnowledgeWorkbench() {
 
     const handleSpacePermissionChanged = useCallback(async () => {
         const targetSpace = spacePermissionDialogSpace;
+        pageHistory.invalidate(targetSpace?.id);
+        setPublicFilePermissionState({ spaceId: null, permissionIdsByFileId: {} });
         if (!targetSpace) return;
         await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
         try {
@@ -569,7 +577,7 @@ export default function PortalKnowledgeWorkbench() {
         } catch {
             // 权限变更后的刷新失败不阻塞弹窗，列表会通过 invalidateQueries 继续更新。
         }
-    }, [queryClient, spacePermissionDialogSpace]);
+    }, [pageHistory, queryClient, spacePermissionDialogSpace]);
 
     const handlePinSpace = useCallback(async (space: KnowledgeSpace, pinned: boolean, group: SpaceGroup) => {
         if (group.level === SpaceLevel.PERSONAL || space.spaceLevel === SpaceLevel.PERSONAL) return;
@@ -790,14 +798,14 @@ export default function PortalKnowledgeWorkbench() {
     const isSystemAdmin = currentUser?.role === "admin";
     const loadedPublicFileIds = useMemo(() => {
         if (!isActiveSpacePublic) return [];
-        const files = searchMode ? searchResults : flattenTreeFiles(treeNodes);
+        const files = pageSnapshot.query?.spaceId === activeSpace?.id ? pageSnapshot.data : [];
         return Array.from(new Set(
             files
                 .filter((file) => !file.isCreating)
                 .map((file) => String(file.id))
                 .filter(Boolean),
         ));
-    }, [isActiveSpacePublic, searchMode, searchResults, treeNodes]);
+    }, [isActiveSpacePublic, activeSpace?.id, pageSnapshot.data, pageSnapshot.query?.spaceId]);
     const activePublicSpaceId = isActiveSpacePublic && activeSpace?.id
         ? String(activeSpace.id)
         : null;
@@ -806,6 +814,15 @@ export default function PortalKnowledgeWorkbench() {
         () => toStatusNumbers(statusFilter),
         [statusFilter],
     );
+    const makePageQuery = useCallback((spaceId: string, parentId?: string, mode: "browse" | "search" = "browse", keyword = "", tagIds: number[] = []): PortalFilePageQuery => ({
+        spaceId, parentId, mode, keyword, tagIds, pageSize: TREE_PAGE_SIZE,
+        status: statusFilterNumbers, orderField: sortBy, orderSort: sortDirection,
+    }), [sortBy, sortDirection, statusFilterNumbers]);
+    const activePageKey = activeSpace?.id
+        ? portalFileQueryKey(makePageQuery(activeSpace.id, currentFolderId, searchMode ? "search" : "browse", searchMode ? searchText : "", searchMode ? searchTagIds : []))
+        : "";
+    const isCurrentPage = pageSnapshot.key === activePageKey;
+    const pageData = isCurrentPage ? pageSnapshot.data : EMPTY_PAGE_FILES;
     const publicFileActionPermissions = useMemo<ExternalFileActionPermissions | undefined>(() => {
         if (!isActiveSpacePublic) return undefined;
 
@@ -1008,10 +1025,14 @@ export default function PortalKnowledgeWorkbench() {
 
     /** Keep search results in sync when in-place patches (tags, alias, metadata) use a functional updater. */
     const setDisplayFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
+        const nextRows = typeof value === "function" ? value(pageHistory.getSnapshot().data) : value;
+        const byId = new Map(nextRows.map(file => [file.id, file]));
+        if (activeSpace?.id) pageHistory.patch(activeSpace.id, file => byId.get(file.id) ?? file);
+        pageHistory.updateCurrent(() => nextRows);
         setCurrentFolderFiles(value);
         if (!searchModeRef.current || typeof value !== "function") return;
         setSearchResults(value as (prev: KnowledgeFile[]) => KnowledgeFile[]);
-    }, [setCurrentFolderFiles]);
+    }, [activeSpace?.id, pageHistory, setCurrentFolderFiles]);
 
     const setCurrentFileListTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
         const folderId = currentFolderId;
@@ -1035,14 +1056,15 @@ export default function PortalKnowledgeWorkbench() {
         // 与 markPendingDeletion 成对传入，供原生知识空间列表的批量删除流程调用。
     }, []);
 
-    const patchFileById = useCallback((fileId: string, updater: (file: KnowledgeFile) => KnowledgeFile) => {
+    const patchFileById = useCallback((fileId: string, updater: (file: KnowledgeFile) => KnowledgeFile, queryKey?: string) => {
+        if (activeSpace?.id) pageHistory.patch(activeSpace.id, file => file.id === fileId ? updater(file) : file, queryKey);
         setTreeNodes((prev) => updateTreeNode(prev, fileId, (node) => ({
             ...node,
             file: updater(node.file),
         })));
         setSearchResults((prev) => prev.map((file) => file.id === fileId ? updater(file) : file));
         setSelectedFile((prev) => prev?.id === fileId ? updater(prev) : prev);
-    }, []);
+    }, [activeSpace?.id, pageHistory]);
 
     const handleFileEncodingUpdated = useCallback((
         fileId: string,
@@ -1060,6 +1082,9 @@ export default function PortalKnowledgeWorkbench() {
     }, [patchFileById]);
 
     const loadFolderStats = useCallback(async (spaceId: string, files: KnowledgeFile[]) => {
+        const statsSnapshot = pageHistory.getSnapshot();
+        const statsPageKey = statsSnapshot.key;
+        const statsQuery = statsSnapshot.query;
         const folderIds = Array.from(new Set(
             files
                 .filter(shouldShowFolderStatsLoading)
@@ -1072,7 +1097,7 @@ export default function PortalKnowledgeWorkbench() {
                 ...file,
                 folderStatsLoading: true,
                 folderStatsError: false,
-            }));
+            }), statsPageKey);
         });
 
         try {
@@ -1080,18 +1105,18 @@ export default function PortalKnowledgeWorkbench() {
                 space_id: spaceId,
                 folder_ids: folderIds,
             };
-            if (statusFilterNumbers.length) {
-                statsRequest.file_status = statusFilterNumbers;
+            if (statsQuery?.status?.length) {
+                statsRequest.file_status = statsQuery.status;
             }
-            const keyword = searchMode ? searchText.trim() : "";
+            const keyword = statsQuery?.mode === "search" ? (statsQuery.keyword || "").trim() : "";
             if (keyword) {
                 statsRequest.keyword = keyword;
             }
-            if (searchMode && searchTagIds.length) {
-                statsRequest.tag_ids = searchTagIds;
+            if (statsQuery?.mode === "search" && statsQuery.tagIds?.length) {
+                statsRequest.tag_ids = statsQuery.tagIds;
             }
             const stats = await getPortalWorkbenchFolderStats(activeSpace, statsRequest);
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || (pageHistory.getSnapshot().key !== statsPageKey || pageHistory.getSnapshot().query !== statsQuery)) return;
             const statsById = new Map(stats.map((item) => [item.folderId, item]));
             folderIds.forEach((folderId) => {
                 const item = statsById.get(folderId);
@@ -1111,79 +1136,58 @@ export default function PortalKnowledgeWorkbench() {
                             folderStatsLoading: false,
                             folderStatsError: true,
                         }
-                ));
+                ), statsPageKey);
             });
         } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || (pageHistory.getSnapshot().key !== statsPageKey || pageHistory.getSnapshot().query !== statsQuery)) return;
             folderIds.forEach((folderId) => {
                 patchFileById(folderId, (file) => ({
                     ...file,
                     folderStatsLoading: false,
                     folderStatsError: true,
-                }));
+                }), statsPageKey);
             });
         }
-    }, [activeSpace, patchFileById, searchMode, searchTagIds, searchText, statusFilterNumbers]);
+    }, [activeSpace, pageHistory, patchFileById]);
 
-    const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id, background = false) => {
-        if (!spaceId) {
-            setTreeNodes([]);
-            setTreeRootTotal(0);
-            setTreeRootHasMore(false);
-            setTreeRootNextCursor(null);
-            return;
+    const loadBrowsePage = useCallback(async (spaceId: string, folderId?: string, page?: number, force = false) => {
+        const res = await pageHistory.load(makePageQuery(spaceId, folderId), loadPortalFilePage, page, force);
+        if (!res || activeSpaceIdRef.current !== spaceId) return null;
+        rememberCanReorderFolders(folderId, Boolean(res.canReorderFolders));
+        const nextFiles = markFolderStatsLoading(res.data.map(applyKnowledgeFileAliasDecision));
+        pageHistory.updateCurrent(() => nextFiles);
+        if (folderId) {
+            setTreeNodes(prev => updateTreeNode(ensureFolderNode(prev, spaceId, folderId), folderId, node => ({
+                ...node, children: nextFiles.map(createTreeNode), expanded: true, loaded: true,
+                loading: false, loadError: false, page: res.page, total: nextFiles.length,
+                hasMore: res.hasMore, nextCursor: res.nextCursor,
+            })));
+        } else {
+            setTreeNodes(prev => mergeRootTreeNodesPreservingLoadedFolders(prev, nextFiles, currentFolderIdRef.current, spaceId));
+            setTreeRootPage(res.page);
+            setTreeRootTotal(nextFiles.length);
+            setTreeRootHasMore(res.hasMore);
+            setTreeRootNextCursor(res.nextCursor);
         }
-        if (append) {
-            setTreeRootLoadingMore(true);
-        } else if (!background) {
-            setTreeLoading(true);
-        }
+        void loadFolderStats(spaceId, nextFiles);
+        if (res.resetReason) showToast({ message: "文件列表已更新，已返回第一页", severity: NotificationSeverity.INFO });
+        return res;
+    }, [loadFolderStats, makePageQuery, pageHistory, rememberCanReorderFolders, showToast]);
+
+    const loadRootTree = useCallback(async (page?: number, _append = false, spaceId = activeSpace?.id, background = false) => {
+        if (!spaceId) return;
+        if (!background) setTreeLoading(true);
         try {
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: spaceId,
-                page: append ? undefined : page,
-                cursor: append ? treeRootNextCursor : null,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId) return;
-            rememberCanReorderFolders(undefined, Boolean(res.can_reorder_folders));
-            const nextFiles = markFolderStatsLoading(res.data);
-            setTreeNodes((prev) => {
-                if (append) {
-                    return dedupeTreeNodesByFileId([...prev, ...nextFiles.map(createTreeNode)]);
-                }
-                // Deep-link folder navigate can finish before this root refresh; keep loaded children.
-                return mergeRootTreeNodesPreservingLoadedFolders(
-                    prev,
-                    nextFiles,
-                    currentFolderIdRef.current,
-                    spaceId,
-                );
-            });
-            setTreeRootPage(page);
-            setTreeRootTotal((prev) => (res as any).total ?? (append ? prev + nextFiles.length : nextFiles.length));
-            setTreeRootHasMore(Boolean(res.has_more));
-            setTreeRootNextCursor(res.next_cursor ?? null);
-            void loadFolderStats(spaceId, nextFiles);
+            await loadBrowsePage(spaceId, undefined, page, background);
         } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
-            if (!append && !background) {
-                setTreeNodes([]);
-                setTreeRootTotal(0);
-                setTreeRootHasMore(false);
-                setTreeRootNextCursor(null);
-            }
-            if (!background) showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
+            if (activeSpaceIdRef.current === spaceId && !background) showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         } finally {
-            if (activeSpaceIdRef.current === spaceId && !background) {
+            if (activeSpaceIdRef.current === spaceId) {
                 setTreeLoading(false);
                 setTreeRootLoadingMore(false);
             }
         }
-    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers, treeRootNextCursor]);
+    }, [activeSpace?.id, loadBrowsePage, showToast]);
 
     // Always-current ref to loadRootTree so the space/sort/filter reset effect
     // below can call it WITHOUT listing it as a dependency. loadRootTree's
@@ -1195,90 +1199,75 @@ export default function PortalKnowledgeWorkbench() {
     const loadRootTreeRef = useRef(loadRootTree);
     loadRootTreeRef.current = loadRootTree;
 
-    const reloadFiles = useCallback(async (_page?: number, background = false) => {
+    const reloadFiles = useCallback(async () => {
+        setPageEpoch(value => value + 1);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
         searchRequestIdRef.current += 1;
         setSearchError(false);
         setSearchLoading(false);
-        setSearchMode(false);
-        setSearchResults([]);
+        const searching = searchModeRef.current;
+        if (!searching) setSearchResults([]);
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
-        if (!currentFolderId) {
-            await loadRootTree(1, false, spaceId, background);
-            return;
-        }
-        const folderId = currentFolderId;
+        pageHistory.invalidate(spaceId);
+        setPublicFilePermissionState({ spaceId: null, permissionIdsByFileId: {} });
+        setTreeLoading(true);
         try {
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: spaceId,
-                parent_id: folderId,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId) return;
-            rememberCanReorderFolders(folderId, Boolean(res.can_reorder_folders));
-            const nextFiles = markFolderStatsLoading(res.data);
-            setTreeNodes((prev) => updateTreeNode(prev, folderId, (node) => ({
-                ...node,
-                children: dedupeFilesById(nextFiles).map(createTreeNode),
-                expanded: true,
-                loaded: true,
-                loading: false,
-                page: 1,
-                total: (res as any).total ?? res.data.length,
-                hasMore: Boolean(res.has_more),
-                nextCursor: res.next_cursor ?? null,
-            })));
-            void loadFolderStats(spaceId, nextFiles);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
-            if (!background) showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
+            if (searching) {
+                const res = await pageHistory.load(makePageQuery(spaceId, currentFolderId, "search", searchText, searchTagIds), loadPortalFilePage, 1);
+                if (res) { setSearchResults(res.data); setTreeRootTotal(res.total ?? res.data.length); }
+            } else await loadBrowsePage(spaceId, currentFolderId, 1);
         }
-    }, [activeSpace?.id, currentFolderId, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
+        catch { showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR }); }
+        finally { if (activeSpaceIdRef.current === spaceId) setTreeLoading(false); }
+    }, [activeSpace?.id, currentFolderId, loadBrowsePage, makePageQuery, pageHistory, searchTagIds, searchText, showToast]);
 
     const reloadFilesRef = useRef(reloadFiles);
     reloadFilesRef.current = reloadFiles;
 
-    const refreshViewKey = JSON.stringify([activeSpace?.id, currentFolderId, searchMode, searchText, searchTagIds, sortBy, sortDirection, statusFilterNumbers]);
-    const refreshViewKeyRef = useRef(refreshViewKey);
-    refreshViewKeyRef.current = refreshViewKey;
+    useEffect(() => {
+        const handleAuthChange = () => {
+            pageHistory.invalidate();
+            previewPageSourceRef.current = null;
+            previewReturnKeyRef.current = null;
+            setSelectedFile(null);
+            setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
+            setPublicFilePermissionState({ spaceId: null, permissionIdsByFileId: {} });
+            setUploadPermissionByContainer({});
+            void reloadFilesRef.current();
+        };
+        window.addEventListener("tokenUpdated", handleAuthChange);
+        return () => window.removeEventListener("tokenUpdated", handleAuthChange);
+    }, [pageHistory]);
+
+    const loadSearchPage = useCallback(async (keyword: string, tagIds: number[], page?: number, force = false, source?: { folderId?: string }) => {
+        if (!activeSpace?.id) return null;
+        const res = await pageHistory.load(makePageQuery(activeSpace.id, source ? source.folderId : currentFolderId, "search", keyword, tagIds), loadPortalFilePage, page, force);
+        if (!res || activeSpaceIdRef.current !== activeSpace.id) return null;
+        const nextFiles = res.data.map(applyKnowledgeFileAliasDecision);
+        pageHistory.updateCurrent(() => nextFiles);
+        setSearchResults(nextFiles);
+        setTreeRootTotal(res.total ?? res.data.length);
+        void loadFolderStats(activeSpace.id, res.data);
+        return res;
+    }, [activeSpace?.id, currentFolderId, loadFolderStats, makePageQuery, pageHistory]);
+
     const refreshVisibleFiles = useCallback(async () => {
-        if (!activeSpace?.id) return;
-        if (!searchMode) {
-            await reloadFiles(undefined, true);
-            return;
-        }
-        const requestViewKey = refreshViewKey;
+        if (!activeSpace?.id || isActiveSpaceFavorite) return;
+        pageHistory.expire(activeSpace.id, true);
+        setPublicFilePermissionState({ spaceId: null, permissionIdsByFileId: {} });
         try {
-            const res = await searchSpaceChildrenApi({
-                space_id: activeSpace.id,
-                parent_id: currentFolderId,
-                keyword: searchText.trim(),
-                tag_ids: searchTagIds,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (refreshViewKeyRef.current !== requestViewKey) return;
-            setSearchResults(res.data);
-            setTreeRootTotal(res.total);
-        } catch {
-            // Retain the current search results when background reconciliation fails.
-        }
-    }, [activeSpace?.id, currentFolderId, refreshViewKey, reloadFiles, searchMode, searchText, searchTagIds, sortBy, sortDirection, statusFilterNumbers]);
+            if (searchMode) await loadSearchPage(searchText.trim(), searchTagIds, undefined, true);
+            else await loadBrowsePage(activeSpace.id, currentFolderId, undefined, true);
+        } catch { /* 后台刷新保留仍有效的页，过期行由页状态隐藏。 */ }
+    }, [activeSpace?.id, currentFolderId, isActiveSpaceFavorite, loadBrowsePage, loadSearchPage, pageHistory, searchMode, searchTagIds, searchText]);
 
     const fileUpload = useFileUpload({
         activeSpace,
         currentFolderId,
         currentPath,
-        files: searchMode
-            ? searchResults
-            : (currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file)),
+        files: pageData,
         setFiles: setDisplayFiles,
         setTotal: setCurrentFileListTotal,
         loadFiles: reloadFiles,
@@ -1322,62 +1311,13 @@ export default function PortalKnowledgeWorkbench() {
         [visibleTreeNodes],
     );
     const currentFolderFiles = useMemo(
-        () => currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
-        [currentFolderNode, treeNodes],
+        () => pageData,
+        [pageData],
     );
     const currentFolderFilesRef = useRef(currentFolderFiles);
     currentFolderFilesRef.current = currentFolderFiles;
 
-    const refreshLoadedStatuses = useCallback(async () => {
-        if (!activeSpace?.id || searchMode) return;
-        const currentFiles = currentFolderFilesRef.current;
-        if (currentFiles.length === 0) return;
-
-        try {
-            const fetchSize = Math.min(currentFiles.length, 100);
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: activeSpace.id,
-                parent_id: currentFolderId,
-                page: 1,
-                page_size: fetchSize,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== activeSpace.id) return;
-
-            const knownIdsBeforeRefresh = new Set(currentFiles.map((file) => String(file.id)));
-            const newRowsForStats = markFolderStatsLoading(
-                res.data.filter((file) => !knownIdsBeforeRefresh.has(String(file.id))),
-            );
-            const updatesById = new Map(res.data.map((file) => [String(file.id), file]));
-            setCurrentFolderFiles((prev) => {
-                const knownIds = new Set(prev.map((file) => String(file.id)));
-                const merged = prev.map((file) => {
-                    const incoming = updatesById.get(String(file.id));
-                    return incoming ? mergeFolderStatsState(file, incoming) : file;
-                });
-                const newRows = markFolderStatsLoading(
-                    res.data
-                        .filter((file) => !knownIds.has(String(file.id)))
-                        .map(applyKnowledgeFileAliasDecision),
-                );
-                return newRows.length > 0 ? [...newRows, ...merged] : merged;
-            });
-            void loadFolderStats(activeSpace.id, newRowsForStats);
-        } catch {
-            // Silent — polling failure must not toast.
-        }
-    }, [
-        activeSpace?.id,
-        currentFolderId,
-        loadFolderStats,
-        searchMode,
-        setCurrentFolderFiles,
-        sortBy,
-        sortDirection,
-        statusFilterNumbers,
-    ]);
+    const refreshLoadedStatuses = refreshVisibleFiles;
 
     const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
     refreshLoadedStatusesRef.current = refreshLoadedStatuses;
@@ -1401,15 +1341,13 @@ export default function PortalKnowledgeWorkbench() {
         return () => clearInterval(timer);
     }, [activeSpace?.id, currentFolderFiles, searchMode]);
 
-    const currentFileListPage = currentFolderNode?.page ?? treeRootPage;
-    const currentFileListTotal = currentFolderNode?.total ?? treeRootTotal;
-    const currentFileListHasMore = searchMode
-        ? false
-        : currentFolderNode
-            ? currentFolderNode.hasMore
-            : treeRootHasMore;
-    const currentFileListLoading = treeLoading || searchLoading || treeRootLoadingMore || Boolean(currentFolderNode?.loading);
-    const displayedFiles = searchMode ? searchResults : visibleTreeFiles;
+    const currentFileListPage = isCurrentPage ? pageSnapshot.page : 1;
+    const currentFileListTotal = searchMode ? pageSnapshot.total ?? 0 : currentFolderFiles.length;
+    const currentFileListHasMore = isCurrentPage && pageSnapshot.hasMore;
+    const currentFileListLoading = treeLoading || searchLoading || pageSnapshot.loading || Boolean(currentFolderNode?.loading);
+    const displayedFiles = useMemo(() => dedupeFilesById([...(currentFolderId ? transientFolderFiles : transientRootFiles), ...currentFolderFiles]),
+        [currentFolderId, transientFolderFiles, transientRootFiles, currentFolderFiles]);
+
     // Upload-permission verdicts keyed by container ("folder:<id>" / "space:<id>").
     // Metadata (category / business domain) editability follows the upload permission
     // of each file's OWN parent container — not the folder the user happens to be
@@ -1667,6 +1605,11 @@ export default function PortalKnowledgeWorkbench() {
             return;
         }
 
+        if (skipNextReloadRef.current && String(activeSpace.id) === previousSpaceIdRef.current) {
+            skipNextReloadRef.current = false;
+            return;
+        }
+
         // Prefer deep-link target over restoringDeepLinkKey: clearing the key after preview
         // settles must not re-run this effect and wipe the file we just opened.
         const openingDeepLinkedFileHere = Boolean(
@@ -1707,7 +1650,9 @@ export default function PortalKnowledgeWorkbench() {
             }
             setCanCreateFolder(false);
             setCanUploadFile(false);
-            void loadRootTreeRef.current(1, false, activeSpace.id);
+            const savedFolder = lastFolderBySpaceRef.current.get(activeSpace.id);
+            if (savedFolder && !openingDeepLinkedFileHere) void navigateFolderRef.current?.(savedFolder.id, savedFolder.name);
+            else void loadRootTreeRef.current(undefined, false, activeSpace.id);
         } else if (!openingDeepLinkedFileHere && !skipNextReloadRef.current) {
             // Sort/filter changed: keep the current folder and reload the same view
             // with the new ordering/filter instead of jumping back to the root.
@@ -1731,6 +1676,20 @@ export default function PortalKnowledgeWorkbench() {
     ]);
 
     useEffect(() => {
+        if (previousIdentityRef.current === identity) return;
+        previousIdentityRef.current = identity;
+        lastFolderBySpaceRef.current.clear();
+        previewPageSourceRef.current = null;
+        previewReturnKeyRef.current = null;
+        setTreeNodes([]);
+        setSearchResults([]);
+        setSelectedFile(null);
+        setPublicFilePermissionState({ spaceId: null, permissionIdsByFileId: {} });
+        setUploadPermissionByContainer({});
+        if (currentUser?.id && activeSpace?.id) void reloadFilesRef.current();
+    }, [identity]);
+
+    useEffect(() => {
         if (!selectedFile) return;
         // Deep-link restore may select a file before search results / tree rows catch up;
         // clearing here races with usePortalDeepLink and drops the preview.
@@ -1750,6 +1709,7 @@ export default function PortalKnowledgeWorkbench() {
         // #4 收藏原地预览：selectedFile 是来自其它源空间的合成文件（不属于当前 activeSpace，
         // 自然不在其 displayedFiles 中），不应被此“列表中已不存在则关闭预览”的守卫清空。
         if (selectedFile.spaceId && selectedFile.spaceId !== activeSpace?.id) return;
+        if (previewPageSourceRef.current && !pageSnapshot.error) return;
         const exists = displayedFiles.some((file) => file.id === selectedFile.id);
         if (!exists) {
             setSelectedFile(null);
@@ -2120,6 +2080,7 @@ export default function PortalKnowledgeWorkbench() {
             setWebLinkUrl("");
             setWebLinkTitle("");
             setWebLinkDialogOpen(false);
+            await reloadFiles();
             showToast({ message: "网页链接已开始导入", severity: NotificationSeverity.SUCCESS });
         };
         try {
@@ -2167,93 +2128,31 @@ export default function PortalKnowledgeWorkbench() {
         webLinkUrl,
     ]);
 
-    const handleSearch = useCallback(async () => {
-        const spaceId = activeSpace?.id;
-        if (!spaceId) return;
-        const keyword = searchText.trim();
-        setSelectedFileIds(new Set());
-        setSelectedFolderIds(new Set());
-        if (!keyword) {
-            searchRequestIdRef.current += 1;
-            setSearchError(false);
-            setSearchLoading(false);
-            setSearchMode(false);
-            setSearchResults([]);
-            return;
-        }
-        const requestId = ++searchRequestIdRef.current;
-        setSearchError(false);
-        setSearchMode(true);
-        setSearchLoading(true);
-        try {
-            const res = await searchSpaceChildrenApi({
-                space_id: spaceId,
-                keyword,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
-            setSearchResults(res.data);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
-            setSearchResults([]);
-            setSearchError(true);
-            showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR });
-        } finally {
-            if (activeSpaceIdRef.current === spaceId && requestId === searchRequestIdRef.current) {
-                setSearchLoading(false);
-            }
-        }
-    }, [activeSpace?.id, searchText, showToast, statusFilterNumbers]);
-
     const handleNativeSearch = useCallback(async (params: SearchParams) => {
-        const spaceId = activeSpace?.id;
-        if (!spaceId) return;
+        if (!activeSpace?.id) return;
         const keyword = params.keyword.trim();
         setSearchText(keyword);
         setSearchTagIds(params.tagIds);
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
+        pageHistory.cancel();
         if (!keyword && params.tagIds.length === 0) {
-            searchRequestIdRef.current += 1;
-            setSearchError(false);
-            setSearchLoading(false);
             setSearchMode(false);
             setSearchResults([]);
-            setSearchTagIds([]);
+            setSearchError(false);
+            setSearchLoading(false);
+            try { await loadBrowsePage(activeSpace.id, currentFolderId); } catch { setSearchError(true); }
             return;
         }
-        const requestId = ++searchRequestIdRef.current;
         setSearchError(false);
         setSearchMode(true);
         setSearchLoading(true);
-        try {
-            const res = await searchSpaceChildrenApi({
-                space_id: spaceId,
-                parent_id: currentFolderId,
-                keyword,
-                tag_ids: params.tagIds,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
-            setSearchResults(res.data);
-            setTreeRootTotal(res.total);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId || requestId !== searchRequestIdRef.current) return;
-            setSearchResults([]);
-            setSearchError(true);
-            showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR });
-        } finally {
-            if (activeSpaceIdRef.current === spaceId && requestId === searchRequestIdRef.current) {
-                setSearchLoading(false);
-            }
-        }
-    }, [activeSpace?.id, currentFolderId, showToast, sortBy, sortDirection, statusFilterNumbers]);
+        try { await loadSearchPage(keyword, params.tagIds, 1); }
+        catch { setSearchError(true); showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR }); }
+        finally { setSearchLoading(false); }
+    }, [activeSpace?.id, currentFolderId, loadBrowsePage, loadSearchPage, pageHistory, showToast]);
+
+    const handleSearch = useCallback(() => handleNativeSearch({ scope: "current", keyword: searchText, tagIds: [] }), [handleNativeSearch, searchText]);
 
     const handleNativeStatusFilter = useCallback((nextStatus: FileStatus[]) => {
         setStatusFilter(nextStatus);
@@ -2314,12 +2213,13 @@ export default function PortalKnowledgeWorkbench() {
             }
             // Normal file-list / tree click opens the AI chat drawer by default.
             // Search-result previews keep it closed (see handleOpenSourceFile).
+            previewPageSourceRef.current = { folderId: currentFolderId, mode: searchMode, keyword: searchText, tagIds: searchTagIds };
             setSelectedFile(file);
             setActivePanel(null);
             setAiDrawerOpen(true);
             setSummaryExpanded(false);
         },
-        [],
+        [currentFolderId, searchMode, searchTagIds, searchText],
     );
 
     const handleSelectSpace = useCallback(
@@ -2475,6 +2375,29 @@ export default function PortalKnowledgeWorkbench() {
     ]);
 
     const handleBackToFileList = useCallback(() => {
+        const source = previewPageSourceRef.current;
+        if (source) {
+            previewPageSourceRef.current = null;
+            skipNextReloadRef.current = true;
+            setRestoringDeepLinkKey(null);
+            setSelectedFile(null);
+            setActivePanel(null);
+            setAiDrawerOpen(false);
+            setCurrentFolderId(source.folderId);
+            setSearchMode(source.mode);
+            setSearchText(source.keyword);
+            setSearchTagIds(source.tagIds);
+            setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.delete("fileId"); next.delete("fileName"); next.delete("openNonce");
+                if (source.folderId) next.set("folderId", source.folderId); else next.delete("folderId");
+                previewReturnKeyRef.current = resolvePortalDeepLinkTarget(next)?.key ?? null;
+                return next;
+            }, { replace: true });
+            if (source.mode) void loadSearchPage(source.keyword, source.tagIds, undefined, false, { folderId: source.folderId });
+            else if (activeSpace?.id) void loadBrowsePage(activeSpace.id, source.folderId);
+            return;
+        }
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
@@ -2532,7 +2455,7 @@ export default function PortalKnowledgeWorkbench() {
         if (folderId) {
             void navigateFolderRef.current?.(folderId, folderName, parentFolders);
         }
-    }, [activeSpace, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
+    }, [activeSpace, loadBrowsePage, loadSearchPage, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
@@ -2611,110 +2534,6 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, []);
 
-    const handleToggleFolder = useCallback(async (node: PortalFileTreeNode) => {
-        const spaceId = activeSpace?.id;
-        if (!spaceId || node.file.isCreating) return;
-        setCurrentFolderId(node.file.id);
-        if (node.expanded) {
-            const childIds = collectTreeFileIds(node.children);
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, expanded: false })));
-            setSelectedFileIds((prev) => {
-                const next = new Set(prev);
-                childIds.forEach((id) => next.delete(id));
-                return next;
-            });
-            setSelectedFolderIds((prev) => {
-                const next = new Set(prev);
-                childIds.forEach((id) => next.delete(id));
-                return next;
-            });
-            return;
-        }
-        if (node.loaded) {
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, expanded: true })));
-            return;
-        }
-
-        setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
-            ...item,
-            expanded: true,
-            loading: true,
-        })));
-        try {
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: spaceId,
-                parent_id: node.file.id,
-                page: 1,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId) return;
-            rememberCanReorderFolders(node.file.id, Boolean(res.can_reorder_folders));
-            const total = (res as any).total ?? res.data.length;
-            const nextFiles = markFolderStatsLoading(res.data);
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
-                ...item,
-                children: dedupeFilesById(nextFiles).map(createTreeNode),
-                expanded: true,
-                loaded: true,
-                loading: false,
-                page: 1,
-                total,
-                hasMore: Boolean(res.has_more),
-                nextCursor: res.next_cursor ?? null,
-            })));
-            void loadFolderStats(spaceId, nextFiles);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
-                ...item,
-                expanded: false,
-                loading: false,
-            })));
-            showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
-        }
-    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
-
-    const handleLoadMoreChildren = useCallback(async (node: PortalFileTreeNode) => {
-        const spaceId = activeSpace?.id;
-        if (!spaceId || node.loading || !node.nextCursor) return;
-        const nextPage = node.page + 1;
-        setCurrentFolderId(node.file.id);
-        setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: true })));
-        try {
-            const res = await getPortalWorkbenchChildren(activeSpace, {
-                space_id: spaceId,
-                parent_id: node.file.id,
-                cursor: node.nextCursor,
-                page_size: TREE_PAGE_SIZE,
-                order_field: sortBy,
-                order_sort: sortDirection,
-                file_status: statusFilterNumbers,
-            });
-            if (activeSpaceIdRef.current !== spaceId) return;
-            rememberCanReorderFolders(node.file.id, Boolean(res.can_reorder_folders));
-            const total = (res as any).total ?? node.total;
-            const nextFiles = markFolderStatsLoading(res.data);
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
-                ...item,
-                children: dedupeTreeNodesByFileId([...item.children, ...nextFiles.map(createTreeNode)]),
-                loading: false,
-                loaded: true,
-                page: nextPage,
-                total,
-                hasMore: Boolean(res.has_more),
-                nextCursor: res.next_cursor ?? null,
-            })));
-            void loadFolderStats(spaceId, nextFiles);
-        } catch {
-            if (activeSpaceIdRef.current !== spaceId) return;
-            setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: false })));
-            showToast({ message: "加载更多失败", severity: NotificationSeverity.ERROR });
-        }
-    }, [activeSpace?.id, loadFolderStats, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers]);
-
     const handleNavigateFolder = useCallback(async (
         folderId?: string,
         folderName?: string,
@@ -2722,6 +2541,10 @@ export default function PortalKnowledgeWorkbench() {
     ) => {
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
+        if (folderId && navigatingFolderRef.current === folderId) return;
+        const navigationId = ++folderNavigationIdRef.current;
+        lastFolderBySpaceRef.current.set(spaceId, folderId ? { id: folderId, name: folderName } : undefined);
+        pageHistory.cancel();
 
         if (!folderId) {
             searchRequestIdRef.current += 1;
@@ -2738,7 +2561,7 @@ export default function PortalKnowledgeWorkbench() {
             // Always reload the root listing when the user explicitly navigates back
             // to the space root (e.g. by clicking the root breadcrumb). Otherwise
             // folder metadata such as child counts stays stale or blank.
-            await loadRootTree(1, false, spaceId);
+            await loadRootTree(undefined, false, spaceId);
             return;
         }
 
@@ -2779,6 +2602,7 @@ export default function PortalKnowledgeWorkbench() {
                         ? { ...item.file, name: effectiveFolderName, path: effectiveFolderName }
                         : item.file,
                 })));
+                await loadBrowsePage(spaceId, folderId);
                 return;
             }
 
@@ -2795,7 +2619,7 @@ export default function PortalKnowledgeWorkbench() {
             if (!fullPath?.length) {
                 try {
                     const parentPath = await getFolderParentPathApi(spaceId, folderId);
-                    if (activeSpaceIdRef.current !== spaceId) return;
+                    if (activeSpaceIdRef.current !== spaceId || folderNavigationIdRef.current !== navigationId) return;
                     fullPath = parentPath.some((seg) => String(seg.id) === folderId)
                         ? parentPath
                         : [...parentPath, { id: folderId, name: effectiveFolderName || `文件夹 ${folderId}` }];
@@ -2803,7 +2627,7 @@ export default function PortalKnowledgeWorkbench() {
                     // Fall through to single-node placeholder below.
                 }
             }
-            if (activeSpaceIdRef.current !== spaceId) return;
+            if (activeSpaceIdRef.current !== spaceId || folderNavigationIdRef.current !== navigationId) return;
             if (fullPath?.length) {
                 setTreeNodes((prev) => ensureFolderPath(removeTreeNode(prev, folderId), fullPath, spaceId));
             }
@@ -2818,36 +2642,7 @@ export default function PortalKnowledgeWorkbench() {
                 }),
             ));
             try {
-                const res = await getPortalWorkbenchChildren(activeSpace, {
-                    space_id: spaceId,
-                    parent_id: folderId,
-                    page: 1,
-                    page_size: TREE_PAGE_SIZE,
-                    order_field: sortBy,
-                    order_sort: sortDirection,
-                    file_status: statusFilterNumbers,
-                });
-                if (activeSpaceIdRef.current !== spaceId) return;
-                rememberCanReorderFolders(folderId, Boolean(res.can_reorder_folders));
-                const total = (res as any).total ?? res.data.length;
-                const nextFiles = markFolderStatsLoading(res.data);
-                setTreeNodes((prev) => updateTreeNode(
-                    ensureFolderNode(prev, spaceId, folderId, effectiveFolderName),
-                    folderId,
-                    (item) => ({
-                        ...item,
-                        children: dedupeFilesById(nextFiles).map(createTreeNode),
-                        expanded: true,
-                        loaded: true,
-                        loading: false,
-                        loadError: false,
-                        page: 1,
-                        total,
-                        hasMore: Boolean(res.has_more),
-                        nextCursor: res.next_cursor ?? null,
-                    }),
-                ));
-                void loadFolderStats(spaceId, nextFiles);
+                await loadBrowsePage(spaceId, folderId);
             } catch {
                 if (activeSpaceIdRef.current !== spaceId) return;
                 setTreeNodes((prev) => updateTreeNode(
@@ -2864,13 +2659,13 @@ export default function PortalKnowledgeWorkbench() {
         } finally {
             if (navigatingFolderRef.current === folderId) navigatingFolderRef.current = null;
         }
-    }, [activeSpace?.id, loadFolderStats, loadRootTree, rememberCanReorderFolders, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+    }, [activeSpace?.id, loadBrowsePage, loadRootTree, pageHistory, showToast, treeNodes]);
 
     // Expose the latest handler to event callbacks defined earlier in the file.
     navigateFolderRef.current = handleNavigateFolder;
 
     usePortalDeepLink({
-        searchParams,
+        searchParams: previewReturnKeyRef.current === portalDeepLinkTarget?.key ? new URLSearchParams() : searchParams,
         activeSpace,
         activeSpaceIdRef,
         selectableSpaces,
@@ -2892,14 +2687,16 @@ export default function PortalKnowledgeWorkbench() {
     });
 
     const handleNativePageChange = useCallback((page: number) => {
-        if (searchMode) return;
-        if (currentFolderNode) {
-            void handleLoadMoreChildren(currentFolderNode);
-            return;
-        }
-        if (page > 1 && !treeRootNextCursor) return;
-        void loadRootTree(page, page > 1);
-    }, [currentFolderNode, handleLoadMoreChildren, loadRootTree, searchMode, treeRootNextCursor]);
+        if (!activeSpace?.id || pageSnapshot.loading) return;
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        const workspace = document.querySelector('[data-testid="portal-file-workspace"]');
+        workspace?.querySelectorAll("[data-radix-scroll-area-viewport]").forEach(element => { element.scrollTop = 0; });
+        const request = searchMode
+            ? loadSearchPage(searchText.trim(), searchTagIds, page)
+            : loadBrowsePage(activeSpace.id, currentFolderId, page);
+        void request.catch(() => showToast({ message: "翻页失败，请重试", severity: NotificationSeverity.ERROR }));
+    }, [activeSpace?.id, currentFolderId, loadBrowsePage, loadSearchPage, pageSnapshot.loading, searchMode, searchTagIds, searchText, showToast]);
 
     const confirmCreateFolder = useCallback(() => {
         if (!fileUpload.creatingFolder) return;
@@ -2964,21 +2761,22 @@ export default function PortalKnowledgeWorkbench() {
             });
             clearBatchSelection();
             setSelectedFile((prev) => prev && selectedFiles.some((file) => file.id === prev.id) ? null : prev);
-            await loadRootTree(1);
+            await reloadFiles();
             showToast({ message: "批量删除成功", severity: NotificationSeverity.SUCCESS });
         } catch {
             showToast({ message: "批量删除失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace, clearBatchSelection, confirm, loadRootTree, selectedDeletable, selectedFiles, showToast]);
+    }, [activeSpace, clearBatchSelection, confirm, reloadFiles, selectedDeletable, selectedFiles, showToast]);
 
     const handleDeleteFile = useCallback(async (fileId: string) => {
         if (!activeSpace) return;
         if (!fileId) {
-            await refreshVisibleFiles();
+            await reloadFiles();
             return;
         }
         if (!searchMode) {
             await fileUpload.handleDeleteFile(fileId);
+            await reloadFiles();
             return;
         }
 
@@ -3006,7 +2804,7 @@ export default function PortalKnowledgeWorkbench() {
                 return next;
             });
             setSelectedFile((prev) => prev?.id === fileId ? null : prev);
-            await loadRootTree();
+            await reloadFiles();
             showToast({ message: "删除成功", severity: NotificationSeverity.SUCCESS });
         } catch {
             showToast({ message: "删除失败", severity: NotificationSeverity.ERROR });
@@ -3015,7 +2813,7 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace,
         effectiveDeleteEntryIds,
         fileUpload,
-        loadRootTree,
+        reloadFiles,
         refreshVisibleFiles,
         searchMode,
         searchResults,
@@ -3231,12 +3029,20 @@ export default function PortalKnowledgeWorkbench() {
                                             >
                                                 <KnowledgeSpaceContent
                                                     space={activeSpace}
-                                                    files={searchMode ? searchResults : currentFolderFiles}
+                                                    files={currentFolderFiles}
                                                     currentPage={currentFileListPage}
                                                     pageSize={TREE_PAGE_SIZE}
                                                     total={currentFileListTotal}
                                                     hasMore={currentFileListHasMore}
                                                     onPageChange={handleNativePageChange}
+                                                    searchState={{ keyword: searchText, tagIds: searchTagIds }}
+                                                    paginationKey={identity + ":" + pageEpoch + ":" + activePageKey + ":" + currentFileListPage}
+                                                    paginationFooter={<PortalFilePagination currentPage={currentFileListPage}
+                                                        maxVisitedPage={isCurrentPage ? pageSnapshot.maxVisitedPage : 0}
+                                                        hasMore={currentFileListHasMore} loading={currentFileListLoading}
+                                                        terminalKnown={!pageSnapshot.error}
+                                                        total={searchMode && isCurrentPage ? pageSnapshot.total : undefined}
+                                                        onPageChange={handleNativePageChange} />}
                                                     loading={currentFileListLoading}
                                                     listError={searchMode && searchError ? (
                                                         <>
@@ -3252,6 +3058,8 @@ export default function PortalKnowledgeWorkbench() {
                                                                 重试加载
                                                             </button>
                                                         </>
+                                                    ) : isCurrentPage && pageSnapshot.error && pageSnapshot.data.length === 0 ? (
+                                                        <button type="button" onClick={() => handleNativePageChange(currentFileListPage)}>列表加载失败，点击重试</button>
                                                     ) : undefined}
                                                     canReorderFolders={!searchMode && Boolean(canReorderFoldersByParent[currentFolderId || ""])}
                                                     onSearch={(params) => void handleNativeSearch(params)}
@@ -3262,7 +3070,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onUploadFolder={(files, options) => fileUpload.handleUploadFolder(files, options)}
                                                     onCreateFolder={() => fileUpload.handleCreateFolder()}
                                                     onDownloadFile={() => undefined}
-                                                    onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
+                                                    onRenameFile={async (fileId, newName) => { await fileUpload.handleRenameFile(fileId, newName); await reloadFiles(); }}
                                                     onDeleteFile={(fileId) => void handleDeleteFile(fileId)}
                                                     onMoveFile={async (fileId, targetFolderId) => {
                                                         await fileUpload.handleMoveFile(fileId, targetFolderId);

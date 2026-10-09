@@ -89,6 +89,9 @@ interface KnowledgeSpaceContentProps {
     onPageChange: (page: number) => void;
     loading: boolean;
     listError?: ReactNode;
+    paginationFooter?: ReactNode;
+    paginationKey?: string;
+    searchState?: { keyword: string; tagIds: number[] };
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
@@ -166,6 +169,9 @@ export function KnowledgeSpaceContent({
     onPageChange,
     loading,
     listError,
+    paginationFooter,
+    paginationKey,
+    searchState,
     onSearch,
     onFilterStatus,
     onSort,
@@ -255,6 +261,11 @@ export function KnowledgeSpaceContent({
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
+    useEffect(() => {
+        if (!searchState) return;
+        setSearchQuery(searchState.keyword);
+        setSearchTagIds(searchState.tagIds);
+    }, [searchState?.keyword, searchState?.tagIds.join(",")]);
     const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
         if (typeof window === "undefined") return "list";
         return localStorage.getItem("knowledge-view-mode") === "card" ? "card" : "list";
@@ -265,6 +276,7 @@ export function KnowledgeSpaceContent({
     };
 
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+    useEffect(() => { if (paginationKey !== undefined) setSelectedFiles(new Set()); }, [paginationKey]);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
@@ -1732,7 +1744,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
-                totalFileCount={listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
+                totalFileCount={paginationFooter || listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
             />
             </div>
 
@@ -1886,7 +1898,7 @@ export function KnowledgeSpaceContent({
                                     </div>
                                 ))}
                             </div>
-                            {hasMore && (
+                            {!paginationFooter && hasMore && (
                                 <LoadMore
                                     onLoad={() => onPageChange(currentPage + 1)}
                                     loading={loading}
@@ -1946,7 +1958,7 @@ export function KnowledgeSpaceContent({
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={handleFileEncodingUpdated}
-                                    loadMore={hasMore && (
+                                    loadMore={!paginationFooter && hasMore && (
                                         <LoadMore
                                             onLoad={() => onPageChange(currentPage + 1)}
                                             loading={loading}
@@ -1986,7 +1998,7 @@ export function KnowledgeSpaceContent({
                         )
                     )}
 
-                    {/* F027 §AC-17-client-补做: PaginationBar removed; infinite scroll via <LoadMore /> sentinel inside the scroll containers above. */}
+                    {paginationFooter}
                 </div>
             </div>
 

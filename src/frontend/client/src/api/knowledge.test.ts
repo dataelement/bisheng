@@ -11,6 +11,8 @@ import {
   downloadWatermarkedKnowledgeFileApi,
   getKnowledgeParseQueuePositionsApi,
   getSpaceInfoApi,
+  getSpaceChildrenApi,
+  searchSpaceChildrenApi,
   getPortalDiscoverableSpacesApi,
   getPortalFilePreviewApi,
   getPortalSpaceFolderStatsApi,
@@ -1177,5 +1179,19 @@ describe("extractTagLibraryPreviewNames", () => {
         tag_items: [],
       }),
     ).toEqual(["系统A", "系统B"]);
+  });
+});
+
+
+describe("门户分页严格错误处理", () => {
+  it.each([getSpaceChildrenApi, searchSpaceChildrenApi])("业务拒绝不能被解析为空列表", async load => {
+    mockGet.mockReset();
+    mockGet.mockResolvedValue({ status_code: 18040, status_message: "无权限" });
+    await expect(load({ space_id: "88", strictErrors: true } as any)).rejects.toMatchObject({ status_code: 18040 });
+    const config = mockGet.mock.calls[0][1];
+    expect(config.skip403Redirect).toBe(true);
+    expect(config.params).not.toHaveProperty("strictErrors");
+    mockGet.mockResolvedValue({ status_code: 200, data: { data: [], total: 0, has_more: false } });
+    await expect(load({ space_id: "88", strictErrors: true } as any)).resolves.toMatchObject({ data: [] });
   });
 });

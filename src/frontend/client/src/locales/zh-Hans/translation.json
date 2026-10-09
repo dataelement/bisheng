@@ -1343,6 +1343,16 @@
     "19403": "当前企业存储配额已耗尽（{{used_gb}}/{{quota_gb}} GB），请联系平台方进行配额扩容"
   },
   "com_knowledge": {
+    "history_empty": "暂无已访问页",
+    "history_pagination": "文件列表分页",
+    "history_page": "第 {{page}} 页，已浏览到第 {{visited}} 页",
+    "history_end": "已到末页",
+    "history_matches": "匹配 {{count}} 条",
+    "history_previous": "上一页",
+    "history_next": "下一页",
+    "history_go_page": "前往第 {{page}} 页",
+    "history_page_input": "已访问页码",
+    "history_go": "跳转",
     "add_new": "新增",
     "ai_assistant": "AI 助手",
     "ai_input_placeholder": "请输入你的问题，输入 # 可指定标签回答...",

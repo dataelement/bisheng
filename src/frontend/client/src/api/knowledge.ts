@@ -2503,6 +2503,13 @@ export async function listKnowledgeFolders(params: {
 //   request:  { space_id, parent_id?, cursor?, page_size, order_field, order_sort, file_status? }
 //   response: { data: KnowledgeFile[], page_size, has_more, next_cursor }
 //   The legacy `total` / `page` fields are gone (spec AC-03).
+
+function requireStrictSpaceListSuccess(response: { status_code?: number; status_message?: string }, strict?: boolean) {
+    if (strict && response?.status_code !== undefined && response.status_code !== 200) {
+        throw Object.assign(new Error(response.status_message || "file list request failed"), { status_code: response.status_code });
+    }
+}
+
 export async function getSpaceChildrenApi(params: {
     space_id: string;
     parent_id?: string;
@@ -2513,6 +2520,7 @@ export async function getSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
+    strictErrors?: boolean;
 }): Promise<{
     data: KnowledgeFile[];
     page_size: number;
@@ -2537,8 +2545,10 @@ export async function getSpaceChildrenApi(params: {
                 file_ids: queryParams.file_ids?.length ? queryParams.file_ids.map(Number) : undefined,
             },
             paramsSerializer: request.paramsSerializer,
+            ...(queryParams.strictErrors ? { skip403Redirect: true } : {}),
         }
     );
+    requireStrictSpaceListSuccess(res, queryParams.strictErrors);
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return {
@@ -2717,6 +2727,7 @@ export async function searchSpaceChildrenApi(params: {
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
+    strictErrors?: boolean;
 }): Promise<{ data: KnowledgeFile[]; total: number }> {
     const { space_id, ...queryParams } = params;
     if (!space_id) return { data: [], total: 0 };
@@ -2735,9 +2746,11 @@ export async function searchSpaceChildrenApi(params: {
                 file_status: queryParams.file_status?.length ? queryParams.file_status : undefined,
             },
             paramsSerializer: request.paramsSerializer,
+            ...(queryParams.strictErrors ? { skip403Redirect: true } : {}),
         }
     );
 
+    requireStrictSpaceListSuccess(res, queryParams.strictErrors);
     const payload: any = res?.data ?? {};
     const list = extractList<RawSpaceChild>(payload);
     return {

@@ -1340,6 +1340,16 @@
     "19053": "ナレッジスペースのLLMが設定されていません。先にワークベンチ設定で設定してください"
   },
   "com_knowledge": {
+    "history_empty": "閲覧済みのページはありません",
+    "history_pagination": "ファイル一覧のページ",
+    "history_page": "{{page}} ページ目、{{visited}} ページまで閲覧済み",
+    "history_end": "最終ページ",
+    "history_matches": "{{count}} 件一致",
+    "history_previous": "前のページ",
+    "history_next": "次のページ",
+    "history_go_page": "{{page}} ページへ",
+    "history_page_input": "閲覧済みページ番号",
+    "history_go": "移動",
     "add_new": "新規追加",
     "ai_assistant": "AI アシスタント",
     "ai_input_placeholder": "質問を入力してください。# を入力すると、回答のタグを指定できます...",
