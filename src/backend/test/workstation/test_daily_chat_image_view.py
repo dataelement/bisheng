@@ -103,6 +103,26 @@ async def test_prepare_tools_does_not_include_view_image(monkeypatch):
     assert "search_knowledge_bases" in names
 
 
+@pytest.mark.asyncio
+async def test_prepare_tools_skips_image_view_config_row(monkeypatch):
+    init = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.chat_service.ToolExecutor.init_by_tool_id",
+        init,
+    )
+
+    tools, failures = await _prepare_tools(
+        tool_payloads=[{"type": "tool", "tool_key": "image_view", "id": 39}],
+        login_user=MagicMock(),
+        ws_config=SimpleNamespace(maxTokens=1000),
+        citation_collector=CitationRegistryCollector(),
+    )
+
+    assert tools == []
+    assert failures == []
+    init.assert_not_called()
+
+
 class _NamedTool:
     def __init__(self, name: str):
         self.name = name

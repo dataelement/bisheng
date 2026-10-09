@@ -51,6 +51,14 @@ function iconForGroup(group: AvailableToolGroup) {
   return <Outlined.Hammer className="size-4 text-text-2" />;
 }
 
+function labelForGroup(group: AvailableToolGroup, localize: (key: string) => string) {
+  const isImageView =
+    group.name === "Image View" ||
+    (group.children ?? []).some((child) => child.tool_key === "image_view");
+  if (isImageView) return localize("com_tools.image_view");
+  return group.name;
+}
+
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
   const localize = useLocalize();
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
@@ -144,26 +152,29 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
         className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
-        {availableTools.map((group) => (
-          <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
-            <div className="flex gap-2 items-center min-w-0">
-              {iconForGroup(group)}
-              <span
-                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
-                title={group.description || group.name}
-              >
-                {group.name}
-              </span>
+        {availableTools.map((group) => {
+          const label = labelForGroup(group, localize);
+          return (
+            <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
+              <div className="flex gap-2 items-center min-w-0">
+                {iconForGroup(group)}
+                <span
+                  className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
+                  title={group.description || label}
+                >
+                  {label}
+                </span>
+              </div>
+              <Switch
+                variant="tool"
+                className="shrink-0"
+                disabled={disabled}
+                checked={isChecked(group.id)}
+                onCheckedChange={() => toggle(group)}
+              />
             </div>
-            <Switch
-              variant="tool"
-              className="shrink-0"
-              disabled={disabled}
-              checked={isChecked(group.id)}
-              onCheckedChange={() => toggle(group)}
-            />
-          </div>
-        ))}
+          );
+        })}
       </SelectContent>
     </Select>
   );

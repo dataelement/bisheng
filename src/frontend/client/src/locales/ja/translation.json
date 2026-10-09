@@ -1861,6 +1861,9 @@
     "wechat_link_copy_tip": "記事右上の「···」をタップして「リンクをコピー」を選ぶか、「ブラウザで開く」を選んでアドレスバーの URL をコピーしてください。",
     "channel_unavailable_or_no_permission": "このチャンネルは利用できないか、閲覧権限がありません"
   },
+  "com_tools": {
+    "image_view": "画像表示"
+  },
   "com_unified_permission": {
     "access_and_share": "アクセスと共有",
     "add_authorization": "権限を追加",
