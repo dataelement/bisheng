@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any, Self, Union
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.language_models import BaseChatModel, LangSmithParams, LanguageModelInput
 from langchain_core.language_models.chat_models import agenerate_from_stream, generate_from_stream
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
@@ -366,6 +366,15 @@ class BishengLLM(BishengBase, BaseChatModel):
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
         return normalize_reasoning_content(ret)
+
+    def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
+        # Report the wrapped client's provider. The default derives "bishengllm" from
+        # the class name, which never equals the "model_provider" the client stamps on
+        # its messages (e.g. "openai"), so langchain's summarization ignored the
+        # provider-reported token usage and its trigger never fired on CJK content.
+        if self.llm is None:
+            return super()._get_ls_params(stop=stop, **kwargs)
+        return self.llm._get_ls_params(stop=stop, **kwargs)
 
     def bind_tools(
         self,
