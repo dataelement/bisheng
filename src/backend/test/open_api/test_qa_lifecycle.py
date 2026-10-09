@@ -20,16 +20,39 @@ USER = SimpleNamespace(user_id=7)
 # --- query_qa -------------------------------------------------------------
 
 
-def test_query_qa_includes_api_written_rows(monkeypatch):
+def test_query_qa_returns_every_source(monkeypatch):
     query = Mock(return_value=[])
     monkeypatch.setattr(filelib, "get_open_api_operator", Mock(return_value=USER))
     monkeypatch.setattr(filelib.QAKnoweldgeDao, "query_by_condition_v1", query)
 
     filelib.query_qa(QueryQAParam(timeRange=["2026-01-01", "2026-12-31"]))
 
-    sources = query.call_args.kwargs["source"]
-    # 1 manual, 2 audit, 3 written by add_qa / add_relative_qa of this API.
-    assert set(sources) == {1, 2, 3}
+    query.assert_called_once_with(create_start="2026-01-01", create_end="2026-12-31")
+
+
+def test_query_by_condition_v1_has_no_source_filter_by_default(monkeypatch):
+    from contextlib import contextmanager
+
+    from bisheng.knowledge.domain.models import knowledge_file
+
+    captured = []
+
+    class Session:
+        def exec(self, sql):
+            captured.append(sql)
+            return SimpleNamespace(all=lambda: [])
+
+    @contextmanager
+    def session():
+        yield Session()
+
+    monkeypatch.setattr(knowledge_file, "get_sync_db_session", session)
+
+    knowledge_file.QAKnoweldgeDao.query_by_condition_v1(create_start="2026-01-01", create_end="2026-12-31")
+    knowledge_file.QAKnoweldgeDao.query_by_condition_v1(create_start="2026-01-01", create_end="2026-12-31", source=[1])
+
+    assert "source" not in str(captured[0].whereclause)
+    assert "source" in str(captured[1].whereclause)
 
 
 @pytest.mark.parametrize("time_range", [[], ["2026-01-01"]])
