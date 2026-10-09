@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from bisheng.linsight import worker as worker_mod
+from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 from bisheng.linsight.domain.models.linsight_session_version import SessionVersionStatusEnum
 from bisheng.linsight.worker import ScheduleCenterProcess
 
@@ -62,7 +63,25 @@ async def drain_spawned_tasks():
 
 
 @pytest.fixture
-def patch_dao(monkeypatch):
+def side_effects(monkeypatch):
+    """Task-row convergence and the live-panel announcement, recorded not executed."""
+    recorded = SimpleNamespace(task_updates=[], announced=[])
+
+    class FakeTaskDao:
+        @staticmethod
+        async def batch_update_status_by_session_version_id(**kwargs):
+            recorded.task_updates.append(kwargs)
+
+    async def fake_announce(session_version_id):
+        recorded.announced.append(session_version_id)
+
+    monkeypatch.setattr(worker_mod, "LinsightExecuteTaskDao", FakeTaskDao)
+    monkeypatch.setattr(worker_mod, "announce_stranded_session_failure", fake_announce)
+    return recorded
+
+
+@pytest.fixture
+def patch_dao(monkeypatch, side_effects):
     def _apply(dao):
         monkeypatch.setattr(worker_mod, "LinsightSessionVersionDao", dao)
         return dao
@@ -87,6 +106,17 @@ async def test_stranded_in_progress_session_is_failed(patch_dao):
     assert written.output_result["error_type"]  # always renderable by the frontend
 
 
+async def test_stranded_session_converges_tasks_and_tells_the_panel(patch_dao, side_effects):
+    """Without the announcement the page keeps spinning on a task the DB calls FAILED."""
+    patch_dao(FakeDao(session_with(SessionVersionStatusEnum.IN_PROGRESS)))
+
+    await make_proc()._force_fail_stranded_session("sv1", RuntimeError("boom"))
+
+    assert [u["session_version_ids"] for u in side_effects.task_updates] == [["sv1"]]
+    assert side_effects.task_updates[0]["status"] == ExecuteTaskStatusEnum.FAILED
+    assert side_effects.announced == ["sv1"]
+
+
 @pytest.mark.parametrize(
     "status",
     [
@@ -96,13 +126,14 @@ async def test_stranded_in_progress_session_is_failed(patch_dao):
         SessionVersionStatusEnum.SOP_GENERATION_FAILED,
     ],
 )
-async def test_terminal_session_is_never_overwritten(patch_dao, status):
+async def test_terminal_session_is_never_overwritten(patch_dao, side_effects, status):
     """task_exec's own failure path is richer; the net must not clobber it."""
     dao = patch_dao(FakeDao(session_with(status)))
 
     await make_proc()._force_fail_stranded_session("sv1", RuntimeError("boom"))
 
     assert dao.written == []
+    assert side_effects.announced == []
 
 
 async def test_missing_session_is_a_no_op(patch_dao):

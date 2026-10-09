@@ -14,11 +14,17 @@ from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.logger import set_logger_config
+from bisheng.linsight.domain.models.linsight_execute_task import (
+    ExecuteTaskStatusEnum,
+    LinsightExecuteTask,
+    LinsightExecuteTaskDao,
+)
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
+from bisheng.linsight.domain.utils import announce_stranded_session_failure
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +318,15 @@ class ScheduleCenterProcess(Process):
                     "detail": detail,
                 }
                 await LinsightSessionVersionDao.insert_one(session)
+                await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
+                    session_version_ids=[session_version_id],
+                    status=ExecuteTaskStatusEnum.FAILED,
+                    where=(
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
+                    ),
+                )
+                await announce_stranded_session_failure(session_version_id)
             logger.warning(
                 f"Force-failed stranded session {session_version_id} (task died before recording a terminal status)"
             )
