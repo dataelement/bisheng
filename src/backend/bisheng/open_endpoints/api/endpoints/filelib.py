@@ -430,7 +430,7 @@ async def get_filelist(
     parent_id: int | None = None,
     keyword: str | None = None,
     status: list[int] = Query(default=None),
-    page_size: int = 10,
+    page_size: int = Query(default=10, ge=1),
     cursor: str | None = Query(default=None),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
