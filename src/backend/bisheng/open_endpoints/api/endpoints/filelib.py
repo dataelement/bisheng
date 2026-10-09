@@ -11,7 +11,7 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import text_knowledge
 from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.errcode.http_error import NotFoundError, ServerError
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.errcode.open_api import OpenApiAuthDependencyUnavailableError
 from bisheng.common.errcode.permission import PermissionServiceUnavailableError
@@ -41,6 +41,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.llm.domain.services.llm import LLMService
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
@@ -69,6 +70,13 @@ def _qa_with_knowledge_access(qa_id: int, *, login_user, action: str):
         raise NotFoundError.http_exception()
     knowledge = KnowledgeService.judge_knowledge_access(login_user, qa.knowledge_id, action)
     return qa, knowledge
+
+
+def _ensure_qa_knowledge(knowledge) -> None:
+    """QA pairs can only be written into a QA knowledge base."""
+
+    if knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise KnowledgeTypeNotSupportedError.http_exception()
 
 
 def _normalize_qa_knowledge_id(value: object) -> int | None:
@@ -145,6 +153,11 @@ async def create(
         # force defaults so they have no effect on knowledge bases.
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
+        if knowledge.model is None or not str(knowledge.model).strip():
+            # Same default as the platform create dialog (GET /api/v1/llm/knowledge).
+            # When the tenant has no default either, acreate_knowledge raises 10901.
+            knowledge_llm = await LLMService.aget_knowledge_llm(tenant_id=login_user.tenant_id)
+            knowledge.model = str(knowledge_llm.embedding_model_id) if knowledge_llm.embedding_model_id else None
         db_knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge)
         # Enrich to the unified KnowledgeRead (user_name + concrete actions), matching
         # the list/update output. The creator owns the KB → full permission ids.
@@ -322,9 +335,9 @@ async def upload_file(
     ),
     chunk_size: int | None = Form(default=None, description="Split text length, default if not passed"),
     chunk_overlap: int | None = Form(default=None, description="Split text overlap length, default if not passed"),
-    hierarchy_level: int | None = Form(default=3),
+    hierarchy_level: int | None = Form(default=3, ge=1, le=6, description="Max heading level to keep: 1-6"),
     append_title: bool | None = Form(default=False),
-    max_chunk_size: int | None = Form(default=1000),
+    max_chunk_size: int | None = Form(default=1000, ge=1, description="Max chunk length in hierarchical mode"),
     callback_url: str | None = Form(default=None, description="Return URL"),
     file_url: str | None = Form(default=None, description="File URL"),
     file: UploadFile | None = File(default=None, description="Upload file"),
@@ -352,8 +365,16 @@ async def upload_file(
             raise HTTPException(status_code=400, detail="file name must be not empty")
         # Cache Local
         file_path = await sync_func_to_async(save_download_file)(file.file, "bisheng", file_name)
+    elif not file_url:
+        raise HTTPException(status_code=400, detail="file or file_url is required")
     else:
-        file_path, file_name = await async_file_download(file_url)
+        try:
+            file_path, file_name = await async_file_download(file_url)
+        except ValueError as exc:
+            # async_file_download raises ValueError only for caller-side causes:
+            # malformed URL, a disallowed local path, or a remote host that is
+            # unreachable or answers non-200. Storage errors still surface as 5xx.
+            raise HTTPException(status_code=400, detail=f"file_url cannot be downloaded: {exc}") from exc
 
     loging_user = await get_open_api_operator_async()
 
@@ -430,7 +451,7 @@ async def get_filelist(
     parent_id: int | None = None,
     keyword: str | None = None,
     status: list[int] = Query(default=None),
-    page_size: int = 10,
+    page_size: int = Query(default=10, ge=1),
     cursor: str | None = Query(default=None),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     doc_repo: KnowledgeDocumentRepository = Depends(get_knowledge_document_repository),
@@ -502,9 +523,9 @@ async def post_chunks(
     separator_rule: list[str] | None = Form(default=None),
     chunk_size: int | None = Form(default=None),
     chunk_overlap: int | None = Form(default=None),
-    hierarchy_level: int | None = Form(default=3),
+    hierarchy_level: int | None = Form(default=3, ge=1, le=6, description="Max heading level to keep: 1-6"),
     append_title: bool | None = Form(default=False),
-    max_chunk_size: int | None = Form(default=1000),
+    max_chunk_size: int | None = Form(default=1000, ge=1, description="Max chunk length in hierarchical mode"),
     file: UploadFile = File(...),
 ):
     """Upload files to the knowledge base and sync the interface"""
@@ -576,13 +597,16 @@ async def post_string_chunks(request: Request, document: ChunkInput):
 
 @router.get("/download_statistic")
 @open_api_scope("knowledge:read", modes=("S",))
-def download_statistic_file(file_path: str):
-    suffix = file_path.split(".")[-1]
-    if suffix != "log":
-        raise ServerError.http_exception(msg="only .log file supported download")
-    dir_path = file_path.replace(".log", "")
-    if dir_path.find(".") != -1 or not dir_path.startswith("/app/data"):
-        raise ServerError.http_exception(msg="invalid file path, file path must not contain .")
+def download_statistic_file(
+    file_path: str = Query(
+        ...,
+        pattern=r"^/app/data/[^.]*\.log$",
+        description="Absolute path of a .log file under /app/data/; no '.' outside the extension",
+    ),
+):
+    # The pattern rejects any other directory, extension or a '..' segment (HTTP 400).
+    if not os.path.isfile(file_path):
+        raise NotFoundError.http_exception()
 
     file_name = os.path.basename(file_path)
     return FileResponse(file_path, filename=file_name)
@@ -594,6 +618,7 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
     login_user = get_open_api_operator()
     knowledge = KnowledgeService.judge_knowledge_access(login_user, knowledge_id, "edit")
+    _ensure_qa_knowledge(knowledge)
     logger.info("add_qa_data knowledge_id={} size={}", knowledge_id, len(data))
     res = []
     for item in data:
@@ -619,6 +644,7 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
     qa_db, knowledge = _qa_with_knowledge_access(data.id, login_user=login_user, action="edit")
     if qa_db.knowledge_id != knowledge_id:
         raise NotFoundError.http_exception()
+    _ensure_qa_knowledge(knowledge)
 
     t = qa_db.dict()
     t["answers"] = json.loads(t["answers"])
@@ -636,8 +662,14 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     login_user = get_open_api_operator()
     qa, knowledge = _qa_with_knowledge_access(qa_id, login_user=login_user, action="edit")
 
+    # A QA pair cannot exist without a question: removing the last one deletes the whole pair.
+    keep_pair = False
     if question:
-        qa.questions = [q for q in qa.questions if q != question]
+        remaining_questions = [q for q in qa.questions if q != question]
+        keep_pair = bool(remaining_questions)
+
+    if keep_pair:
+        qa.questions = remaining_questions
         QAKnoweldgeDao.update(qa)
     else:
         QAKnoweldgeDao.delete_batch([qa_id])
@@ -647,7 +679,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
             trace_id=trace_id_var.get(),
         )
     knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
-    if question:
+    if keep_pair:
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()
 
@@ -676,7 +708,9 @@ def update_qa(
         qa.answers = json.dumps(answer, ensure_ascii=False)
     QAKnoweldgeDao.update(qa)
 
-    if question:
+    # The index stores the answer in each question's metadata, so a new answer
+    # needs the same rebuild as a new question.
+    if question or answer:
         knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()
@@ -750,9 +784,9 @@ def query_qa(QueryQAParam: QueryQAParam):
 
     # Seed the tenant ContextVar before the tenant-aware read.
     login_user = get_open_api_operator()
-    sources = [1, 2]  # 3 Yes apiInverted
+    # Every QA source is returned (0 unknown, 1 manual, 2 audit, 3 API, 4 batch import).
     qa_list = QAKnoweldgeDao.query_by_condition_v1(
-        source=sources, create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
+        create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
     )
     candidates = []
     invalid_resource_count = 0
