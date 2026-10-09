@@ -32,10 +32,6 @@ function seat(id: number): DshSeat {
         display_name: `User ${id}`,
         profile_version: 1,
         profile_synced_at: null,
-        last_login_at: null,
-        last_seen_at: null,
-        active_session_count: 0,
-        login_state: 'NO_SESSIONS',
         created_at: '2026-09-09T00:00:00Z',
     }
 }
@@ -66,7 +62,7 @@ describe('DSH seat pagination and commands', () => {
         expect(filters.classList.contains('justify-end')).toBe(true)
         expect(filters.classList.contains('items-center')).toBe(true)
         expect(filters.contains(screen.getByLabelText('dsh.seatState'))).toBe(true)
-        expect(filters.contains(screen.getByLabelText('dsh.loginState'))).toBe(true)
+        expect(screen.queryByLabelText('dsh.loginState')).toBeNull()
         expect(screen.queryByRole('button', { name: 'dsh.previous' })).toBeNull()
         const next = screen.getByRole('button', { name: 'dsh.next' })
         expect(next.parentElement!.classList.contains('justify-end')).toBe(true)
@@ -196,11 +192,12 @@ describe('DSH seat pagination and commands', () => {
     })
 })
 
-it('shows department and omits a zero count after no sessions', async () => {
+it('shows the four seat management columns and department', async () => {
     vi.mocked(getDshSeats).mockResolvedValue({ items: [{ ...seat(1), department_name: 'Engineering' }], next_cursor: null, has_more: false })
     const { unmount } = render(<SeatsView operations={{}} revision={0} onOperation={vi.fn()} />)
     await screen.findByText('Engineering')
-    expect(screen.getByText('dsh.NO_SESSIONS').closest('td')?.textContent?.trim()).toBe('dsh.NO_SESSIONS')
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['dsh.user', 'dsh.department', 'dsh.seatState', 'dsh.actions'])
+    expect(vi.mocked(getDshSeats).mock.calls.at(-1)![0]).not.toHaveProperty('login_state')
     expect(screen.queryByRole('columnheader', { name: 'dsh.tenant' })).toBeNull()
     unmount()
 })

@@ -37,8 +37,6 @@ class GatewayClient:
         "introspect": "/api/internal/dsh/introspect",
         "resolve": "/api/internal/dsh/authorizations/resolve",
         "management": "/api/internal/dsh/management/read",
-        "self_sessions": "/api/internal/dsh/self/sessions",
-        "self_revoke": "/api/internal/dsh/self/sessions/revoke",
         "assign_batch": "/api/internal/dsh/seats/assign-batch",
         "revoke": "/api/internal/dsh/seats/revoke",
         "reassign": "/api/internal/dsh/seats/reassign",

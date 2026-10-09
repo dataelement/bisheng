@@ -55,7 +55,6 @@ async def users(
     keyword: Annotated[str | None, Query(max_length=128)] = None,
     seat_state: Literal["ASSIGNED", "REVOKED"] | None = None,
     user_id: Annotated[int | None, Query(gt=0, le=9223372036854775807)] = None,
-    login_state: Literal["HAS_SESSIONS", "NO_SESSIONS"] | None = None,
 ):
     return resp_200(
         data=await service.users(
@@ -66,7 +65,6 @@ async def users(
             keyword=keyword,
             seat_state=seat_state,
             user_id=user_id,
-            login_state=login_state,
         )
     )
 
@@ -298,15 +296,3 @@ async def usage_overview(
             granularity=granularity,
         )
     )
-
-
-@router.get("/users/{user_id}/sessions")
-async def sessions(
-    user_id: UserId,
-    user=Depends(admin_user),
-    service=Depends(get_management),
-    tenant_id: TenantId = None,
-    cursor: Annotated[str | None, Query(max_length=2048)] = None,
-    limit: Limit = 50,
-):
-    return resp_200(data=await service.sessions(user.user_id, user_id, tenant_id=tenant_id, cursor=cursor, limit=limit))

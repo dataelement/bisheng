@@ -25,7 +25,6 @@ async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
                 "command",
                 "operation",
                 "get_policy",
-                "sessions",
                 "model_subjects",
                 "update_subject_policy",
             )
@@ -65,12 +64,15 @@ async def test_management_routes_use_verified_actor_and_reject_body_spoofing():
             ),
             ("GET", "/operations/op", None),
             ("GET", "/users/20/policy", None),
-            ("GET", "/users/20/sessions", None),
         ]
         for method, path, body in routes:
             response = await client.request(method, "/api/v1/dsh/admin" + path, json=body)
             assert response.status_code == 200
             assert response.json()["data"]["status"] == "PROCESSING"
+        assert "login_state" not in service.users.await_args.kwargs
+        assert "login_state" not in {
+            parameter["name"] for parameter in app.openapi()["paths"]["/api/v1/dsh/admin/users"]["get"]["parameters"]
+        }
         assert service.command.await_args_list[0].args[0] == 90
         response = await client.post(
             "/api/v1/dsh/admin/users/20/revoke",

@@ -18,7 +18,6 @@ async def read(request, **patch):
             limit=2,
             keyword=None,
             seat_state=None,
-            login_state=None,
             **patch,
         ),
     )
@@ -40,7 +39,7 @@ async def test_all_pagination(assigned, revoked, limit):
     found = []
     for _ in range(10):
         page = await read_seat_page(
-            request, actor={}, target={}, cursor=cursor, limit=limit, keyword=None, seat_state=None, login_state=None
+            request, actor={}, target={}, cursor=cursor, limit=limit, keyword=None, seat_state=None
         )
         assert len(page["items"]) <= limit
         found += page["items"]
@@ -53,7 +52,7 @@ async def test_all_pagination(assigned, revoked, limit):
 async def test_cursor_bound_to_tenant_and_filters():
     request = AsyncMock(return_value={"items": [1], "has_more": True, "next_cursor": "next"})
     page = await read(request)
-    for patch in [{"target": {"tenant_id": "3"}}, {"keyword": "different"}, {"login_state": "NO_SESSIONS"}]:
+    for patch in [{"target": {"tenant_id": "3"}}, {"keyword": "different"}, {"actor": {"user_id": "9"}}]:
         args = {
             "actor": {"user_id": "1"},
             "target": {"tenant_id": "2"},
@@ -61,7 +60,6 @@ async def test_cursor_bound_to_tenant_and_filters():
             "limit": 2,
             "keyword": None,
             "seat_state": None,
-            "login_state": None,
         }
         args.update(patch)
         with pytest.raises(DshInvalidRequestError):

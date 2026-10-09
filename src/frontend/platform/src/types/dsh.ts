@@ -29,10 +29,6 @@ export type DshSeat = {
     display_name: string | null
     profile_version: number | null
     profile_synced_at: string | null
-    last_login_at: string | null
-    last_seen_at: string | null
-    active_session_count: number | null
-    login_state: 'HAS_SESSIONS' | 'NO_SESSIONS' | 'UNAVAILABLE'
     created_at: string
 }
 export type DshLicense = {
@@ -117,7 +113,6 @@ export type DshSeatQuery = {
     limit?: number
     keyword?: string
     seat_state?: 'ASSIGNED' | 'REVOKED'
-    login_state?: 'HAS_SESSIONS' | 'NO_SESSIONS'
 }
 export type DshOperationRef = {
     model_id?: number
