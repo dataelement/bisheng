@@ -62,11 +62,13 @@ async def test_non_global_or_inactive_scope_rejected_without_context_change():
 
 def test_real_celery_registration_and_existing_jwt_decoder(tmp_path):
     import os
+    import secrets
     import subprocess
     import sys
 
     configuration = tmp_path / "config.yaml"
     configuration.write_text(
+        f"jwt_secret: {secrets.token_urlsafe(48)}\n"
         "database_url: sqlite:///" + str(tmp_path / "import.db") + "\n"
         "redis_url: redis://127.0.0.1:16362/15\n"
         "celery_redis_url: redis://127.0.0.1:16362/15\n"

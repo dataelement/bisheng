@@ -4,13 +4,13 @@ import { Input } from "@/components/bs-ui/input";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
-import { deleteMarketPlugin, getMarketContext, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, resumeMarketImport } from "@/controllers/API/dshMarket";
-import type { MarketImport, MarketPlugin } from "@/controllers/API/dshMarket";
+import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, resumeMarketImport } from "@/controllers/API/dshMarket";
+import type { MarketPreview, MarketImport, MarketPlugin } from "@/controllers/API/dshMarket";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-const MAX_UPLOAD = 256 * 1024 * 1024;
+const MAX_UPLOAD = 512 * 1024 * 1024;
 
 export function PluginMarketPage() {
     const { user } = useContext(userContext);
@@ -30,6 +30,9 @@ function TenantPluginMarket() {
     const [imports, setImports] = useState<MarketImport[]>([]);
     const [busy, setBusy] = useState(false);
     const [uploadOpen, setUploadOpen] = useState(false);
+    const [preview, setPreview] = useState<MarketPreview | null>(null);
+    const [checking, setChecking] = useState(false);
+    const [previewError, setPreviewError] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [progress, setProgress] = useState<number | null>(null);
     const [refresh, setRefresh] = useState(0);
@@ -70,6 +73,21 @@ function TenantPluginMarket() {
         return () => { mounted.current = false; upload.current?.abort(); };
     }, []);
 
+    useEffect(() => {
+        setPreview(null); setPreviewError(false);
+        if (!uploadOpen || !file || tenant === null) { setChecking(false); return; }
+        if (!file.name.toLowerCase().endsWith('.zip') || file.size > MAX_UPLOAD) {
+            setPreviewError(true); setChecking(false); return;
+        }
+        const controller = new AbortController();
+        setChecking(true);
+        previewMarketBundle(file, tenant, controller.signal).then(value => {
+            if (!controller.signal.aborted) setPreview(value);
+        }).catch(() => { if (!controller.signal.aborted) setPreviewError(true); })
+          .finally(() => { if (!controller.signal.aborted) setChecking(false); });
+        return () => controller.abort();
+    }, [file, tenant, uploadOpen]);
+
     async function openDetail(id: string) {
         try {
             const result = await getMarketPlugin(id, tenant!);
@@ -94,7 +112,7 @@ function TenantPluginMarket() {
     }
 
     async function uploadFile() {
-        if (!file || tenant === null) return;
+        if (!file || tenant === null || !preview?.allowed || checking) return;
         if (!file.name.toLowerCase().endsWith(".zip") || file.size > MAX_UPLOAD) {
             toast({ title: t("invalidFile"), description: "", variant: "error" }); return;
         }
@@ -102,7 +120,7 @@ function TenantPluginMarket() {
         setBusy(true); setProgress(0);
         try {
             const task = await importMarketBundle(file, tenant, controller.signal, setProgress);
-            if (task.status === "failed") toast({ title: t("validationFailed"), description: task.error, variant: "error" });
+            if (task.status === "failed") toast({ title: t("validationFailed"), description: task.error === "lower_version" ? t("lowerVersion") : task.error === "version_conflict" ? t("versionConflict") : task.error, variant: "error" });
             else { toast({ title: t("imported"), description: "" }); setUploadOpen(false); setFile(null); }
         } catch { if (!controller.signal.aborted) setError(true); }
         finally { setBusy(false); setProgress(null); reload(); }
@@ -144,12 +162,20 @@ function TenantPluginMarket() {
                 }}>{t("resume")}</Button>}</div>)}</section>}
         <Dialog open={uploadOpen} onOpenChange={open => { if (!busy) setUploadOpen(open); }}><DialogContent><DialogHeader>
             <DialogTitle>{t("import")}</DialogTitle><DialogDescription>{t("uploadHint")}</DialogDescription></DialogHeader>
-            <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={e => setFile(e.target.files?.[0] || null)} />
+            <Input type="file" accept=".zip,application/zip" disabled={busy} aria-label={t("import")} onChange={e => { setPreview(null); setFile(e.target.files?.[0] || null); }} />
+            <p className="text-xs leading-5 text-muted-foreground">{t("bundleHelp")}</p>
+            {checking && <p role="status">{t("previewing")}</p>}
+            {previewError && <p role="alert" className="text-sm text-red-600">{t("previewFailed")}</p>}
+            {preview && <div className="rounded-md border p-3 space-y-2 text-sm">
+                <p className="font-medium">{preview.display_name}</p>
+                <p>{preview.current_version || t("newPlugin")} → {preview.incoming_version}</p>
+                <p className={preview.allowed ? "text-muted-foreground" : "text-red-600"}>{t(preview.reason === 'lower_version' ? 'lowerVersion' : preview.reason === 'version_conflict' ? 'versionConflict' : preview.duplicate ? 'duplicateVersion' : 'versionReady')}</p>
+            </div>}
             {file && <p>{file.name} · {(file.size / 1048576).toFixed(1)} MiB</p>}
             {progress !== null && <p role="status">{progress < 100 ? `${progress}%` : t("validating")}</p>}
             <div className="flex gap-3 justify-end"><Button variant="outline" onClick={() => {
                 upload.current?.abort(); if (!busy) setUploadOpen(false);
-            }}>{t("cancel")}</Button><Button disabled={!file || busy} onClick={() => void uploadFile()}>{t("import")}</Button></div>
+            }}>{t("cancel")}</Button><Button disabled={!file || busy || checking || !preview?.allowed} onClick={() => void uploadFile()}>{t("import")}</Button></div>
         </DialogContent></Dialog>
         <Dialog open={Boolean(detail)} onOpenChange={open => { if (!open && !busy) setDetail(null); }}><DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
             {detail && <><DialogHeader><DialogTitle>{detail.display_name}</DialogTitle><DialogDescription>{detail.description}</DialogDescription></DialogHeader>

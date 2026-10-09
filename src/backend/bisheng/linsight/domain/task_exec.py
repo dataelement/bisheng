@@ -1070,6 +1070,7 @@ class LinsightWorkflowTask:
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
+        from bisheng.linsight.domain.services.unattended_run import is_unattended_run
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         # Whether the code interpreter is actually bound this run (it is injected
@@ -1107,8 +1108,12 @@ class LinsightWorkflowTask:
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
         # fresh agent each time. skills_present gates attaching the skills middleware.
+        # F073: an Open API run fails naming the skill instead of running without it.
         skills = await materialize_session_skills(
-            backend, session_model.tenant_id, getattr(session_model, "skills", None)
+            backend,
+            session_model.tenant_id,
+            getattr(session_model, "skills", None),
+            strict=is_unattended_run(session_model),
         )
         if skills.failed:
             await self._push_skill_load_failure(session_model.id, skills.failed)
@@ -2111,14 +2116,20 @@ class LinsightWorkflowTask:
         too). No-op under the verbatim contract or without a handle table.
         """
         scope = getattr(self, "_citation_scope", None)
-        if not answer or scope is None or not getattr(scope, "enabled", False) or not getattr(scope, "handles", None):
+        if not answer or scope is None or not getattr(scope, "enabled", False):
             return answer
+        text = answer
         try:
-            from bisheng.citation.domain.services.citation_handle_service import convert_handles_to_markers
+            from bisheng.citation.domain.services.citation_handle_service import (
+                attach_web_url_markers,
+                convert_handles_to_markers,
+            )
 
-            result = convert_handles_to_markers(answer, scope.handles)
-            scope.note_conversion(result.converted, result.unknown)
-            return result.text
+            if getattr(scope, "handles", None):
+                result = convert_handles_to_markers(text, scope.handles)
+                scope.note_conversion(result.converted, result.unknown)
+                text = result.text
+            return attach_web_url_markers(text, getattr(scope, "entries", None))
         except Exception:
             logger.opt(exception=True).warning(
                 "answer citation handle conversion failed; keeping the answer as written"

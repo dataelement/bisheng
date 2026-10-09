@@ -191,7 +191,7 @@ describe('DSH API contract boundaries', () => {
         expect(request.put).toHaveBeenLastCalledWith(
             '/api/v1/dsh/admin/models/7/subjects/DEPARTMENT/10/policy',
             body,
-            { params: { tenant_id: 2 }, preserveError: true },
+            { params: { tenant_id: 2 }, preserveError: true, silent: true },
         )
     })
     it('validates effective user permission sources and sends department membership filters', async () => {

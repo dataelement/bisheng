@@ -124,13 +124,14 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
 | 20x–25x (org) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission |
 | 26x–27x | 260 open_api · 270 commercial_license |
-| 261 | DSH Desktop access (F062, registered 2026-09-09) |
+| 261 | DSH Desktop access (F062, registered 2026-09-09); 260 remains reserved for F053 |
 | 262 | Enterprise plugin marketplace |
+| 264 | Anonymous public v3 channel / guest share links (`public_endpoints`, moved from 261 on 2026-10-08 after colliding with DSH) |
 | 28x | 280 sandbox |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
-- **260 is assigned** to Open API authentication and identity (`/api/v2`). Do not reuse it.
+- **260 is assigned** to Open API authentication, identity and the task-mode Open API (`/api/v2`; 26060–26068 are task mode, F073). Do not reuse it.
 - **270 is assigned** to commercial license status aggregation and reporting (`commercial_license`). Do not reuse it. Do not treat Gateway business code 11001 as a BISHENG module number.
 - **280 is assigned** to isolation-environment (sandbox) execution (`sandbox`). Do not reuse it.
 - When you claim a number, add it here in the same change.

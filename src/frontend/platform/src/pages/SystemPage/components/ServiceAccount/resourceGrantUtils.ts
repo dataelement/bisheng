@@ -68,6 +68,15 @@ export function isServiceAccountGrantEffective(
   )
 }
 
+/** Valid keys split by whether they call as the account itself or on behalf of a user. */
+export function splitGrantKeys(keys: ApiKeyItem[]) {
+  const valid = keys.filter((key) => key.is_valid)
+  return {
+    own: valid.filter((key) => !key.scopes.includes("delegate")),
+    delegate: valid.filter((key) => key.scopes.includes("delegate")),
+  }
+}
+
 export function formatServiceAccountGrantTime(value: string | null) {
   if (!value) return "-"
   const date = new Date(value)

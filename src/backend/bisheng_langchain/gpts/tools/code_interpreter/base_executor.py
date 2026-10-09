@@ -81,15 +81,36 @@ _ROOT_SCAN_RE = re.compile(r"""\b(?:walk|glob|iglob|scandir|listdir)\s*\(\s*['"]
 
 WORKSPACE_ESCAPE_NOTICE = (
     "[SYSTEM NOTICE] This run was REJECTED and nothing was executed: the code reaches OUTSIDE "
-    "the working directory — a host path (/root, /etc, /app, /home, ...), the expanded home "
-    "directory (`~`), or a scan rooted at `/`. Those locations are shared infrastructure that "
-    "may hold other users' data; they are not yours to read.\n"
+    "the working directory — a system path (/root, /etc, /app, /home, ...), the expanded home "
+    "directory (`~`), or a scan rooted at `/`. Only the task workspace is available to this "
+    "run.\n"
     "Your current working directory IS your workspace. Use RELATIVE paths only: "
     "`uploads/<file>` for provided sources, `output/<file>` for deliverables, `scratch/<file>` "
     "for intermediates.\n"
     "If what you are looking for is not under the working directory, it was NOT provided to you "
     "on this turn. Say so plainly and ask for it — do not search the filesystem for it, and do "
     "not answer from memory of an earlier turn as if you had re-read the file."
+)
+
+# Shared by every executor's tool description (kept in lockstep with the linsight
+# system prompt's "执行环境边界" section). Users do ask the agent to print env vars
+# or "the keys in the config"; a model with no stated boundary just writes the
+# script. This lowers how often that happens — it is NOT the access control: a
+# determined prompt can still talk a model past it, so process-level isolation of
+# the executor is what actually keeps platform secrets unreadable.
+# Wording is deliberate: state the boundary and the expected reply, never WHY
+# (no "secrets live here" / "other users' data") — the model repeats this text
+# to the user, and the reason would only advertise where to look.
+EXECUTION_BOUNDARY_RULES = (
+    "ENVIRONMENT BOUNDARY: this interpreter is for working on the task's own files. It does "
+    "not provide the platform's environment variables, configuration files, keys, credentials "
+    "or internal service addresses. Do not write code that reads or prints them — no "
+    "os.environ dumps, no /proc, no platform config files or installed platform source code, "
+    "no connecting to the platform's database, cache or object storage. If the user asks for "
+    "any of these, reply that the task environment does not provide platform configuration or "
+    "credentials, do not try another way to get them, and carry on with the rest of the task. "
+    "Files the user uploaded under `uploads/` (including .env or config files) are the user's "
+    "own material and may be read and analysed normally. "
 )
 
 # Delivery zones of the executor working dir. ``output/`` is the ONLY zone the

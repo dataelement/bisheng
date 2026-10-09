@@ -46,6 +46,7 @@ from bisheng.linsight.domain.services.invalid_tool_call_middleware import (
 )
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
+from bisheng.linsight.domain.services.unattended_run import caller_instructions, is_unattended_run
 from bisheng.llm.domain.services import LLMService
 
 # --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
@@ -283,12 +284,69 @@ class _CitationTailMiddleware(_LanguageTailMiddleware):
         return "LinsightCitationTail"
 
 
+# F073: unattended runs (Open API submissions). Nobody is online to answer, so
+# the clarify step, the ask_user fill-in rules and the ask_user tool line are
+# replaced/removed together with the tool itself (prompt ⟺ tool lockstep, see
+# linsight/AGENTS.md). Each marker is asserted so a template edit that moves
+# them fails loudly in tests instead of silently leaving ask_user advertised.
+_CLARIFY_STEP_START = "0. 【先澄清，再动手】"
+_CLARIFY_STEP_END = "1. 【规划】"
+_ASK_USER_RULES_START = "# 如何填写 ask_user（仅第 0 步触发时）"
+_ASK_USER_RULES_END = "# 默认假设（无需追问，缺失时直接采用）"
+_ASK_USER_TOOL_LINE = "- ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。\n"
+_CLARIFIED_FORMAT_PHRASE = "按用户在澄清时选择的输出格式产出"
+_CLARIFY_WORTH_LINE = "- 仅当信息“只有用户本人才知道、且影响结果正确性”时才值得澄清。\n"
+_UNATTENDED_STEP_ZH = (
+    "0. 【无人值守，不提问】本次任务由集成系统提交，没有人在线回答问题：不得向用户提问，也不得停下来等待确认。"
+    "信息不足时直接采用下方“默认假设”补齐，或按常识做出最合理的选择，并在最终回复里单列「所做假设」一节逐条写明。\n\n"
+)
+_UNATTENDED_FORMAT_PHRASE = "按任务描述要求的输出格式产出（未指明时仅产出 markdown）"
+_UNATTENDED_WORTH_LINE = "- 所有缺失信息都按以上默认假设或常识补齐，并在最终回复的「所做假设」中写明。\n"
+
+
+def _cut_between(text: str, start: str, end: str, replacement: str) -> str:
+    i = text.index(start)
+    j = text.index(end, i)
+    return text[:i] + replacement + text[j:]
+
+
+def _to_unattended_prompt(template: str) -> str:
+    """Rewrite the main template for a run that must never ask the user."""
+
+    out = _cut_between(template, _CLARIFY_STEP_START, _CLARIFY_STEP_END, _UNATTENDED_STEP_ZH)
+    out = _cut_between(out, _ASK_USER_RULES_START, _ASK_USER_RULES_END, "")
+    for old, new in (
+        (_ASK_USER_TOOL_LINE, ""),
+        (_CLARIFIED_FORMAT_PHRASE, _UNATTENDED_FORMAT_PHRASE),
+        (_CLARIFY_WORTH_LINE, _UNATTENDED_WORTH_LINE),
+        ("、向用户的提问", ""),
+    ):
+        if old not in out:
+            raise ValueError(f"unattended prompt marker missing: {old!r}")
+        out = out.replace(old, new)
+    return out
+
+
+def _with_caller_instructions(prompt: str, instructions: str | None) -> str:
+    """Layer the Open API caller's business-context instructions under the platform rules."""
+
+    if not instructions:
+        return prompt
+    return (
+        prompt
+        + "\n\n# 业务上下文指令（由调用方提供）\n\n"
+        + "以下内容补充本次任务的业务背景与要求；与上文平台规则冲突时，以平台规则为准。\n\n"
+        + instructions
+    )
+
+
 def _build_linsight_system_prompt(
     has_knowledge_base: bool,
     skills_present: bool = False,
     has_code_interpreter: bool = False,
     has_web_search: bool = False,
     citation_handles: bool = False,
+    unattended: bool = False,
 ) -> str:
     """Resolve the main system prompt, toggling search_knowledge_base mentions.
 
@@ -415,6 +473,16 @@ def _build_linsight_system_prompt(
             "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
             "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
+            # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
+            # description. Reduces attempts only; isolation is the real control.
+            "# 执行环境边界\n\n"
+            "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
+            "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
+            "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。\n"
+            "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
+            "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
+            "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
+            "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
         )
 
     # F069: the deliverable step names the citation requirement explicitly, but
@@ -428,8 +496,14 @@ def _build_linsight_system_prompt(
     else:
         citation_deliverable_line = ""
 
+    # F073: an unattended run gets the no-questions variant (ask_user unbound).
+    template = (
+        _to_unattended_prompt(_LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH)
+        if unattended
+        else _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH
+    )
     return (
-        _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
+        template.replace("__KB_EXEC_LINE__", exec_line)
         .replace("__KB_TOOL_LINE__", tool_line)
         .replace("__KB_DELEGATE_LINE__", delegate_line)
         .replace("__SKILL_EXEC_LINE__", skill_exec_line)
@@ -804,8 +878,12 @@ async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
     if not isinstance(results, list):
         return output, []
     annotated = annotate_web_results_with_citations(results)
-    items = await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
-    return json.dumps(annotated, ensure_ascii=False), list(items or [])
+    items = collect_web_citation_registry_items(annotated)
+    # Hand back the snippet-level items, not what the cache returns: the cache
+    # groups them per page and those records carry no ``key`` / ``itemId``, so a
+    # handle would map to a bare ``websearch_xxx`` that no marker parser accepts.
+    await cache_citation_registry_items(items)
+    return json.dumps(annotated, ensure_ascii=False), list(items)
 
 
 async def _annotate_web_search_output(output: Any) -> Any:
@@ -841,7 +919,15 @@ class _LinsightWebCitationWrapper(BaseTool):
         return "not supported in sync mode, please use async version"
 
     async def _arun(self, config=None, **kwargs):
-        output = await self.tool.ainvoke(kwargs, config=config)
+        # ToolNode's default error handling re-raises anything but an argument
+        # validation error, so one search timeout or upstream 5xx would abort the
+        # whole run. Hand the failure to the model as the tool result instead; it
+        # can retry with another query or finish with what it already has.
+        try:
+            output = await self.tool.ainvoke(kwargs, config=config)
+        except Exception as e:
+            logger.warning(f"web_search failed, returning the error to the model: {e!r}")
+            return f"联网搜索失败：{e}"
         try:
             annotated, items = await _annotate_web_search_items(output)
             if self.scope is not None and items:
@@ -860,29 +946,13 @@ async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: l
     Allocation failure (empty mapping) keeps the F047 shape untouched so the
     model still has a citable id.
     """
-    from bisheng.citation.domain.services.citation_handle_service import assign_handles
+    from bisheng.citation.domain.services.citation_handle_service import (
+        assign_handles,
+        rewrite_web_results_with_handles,
+    )
 
     handles = await assign_handles(scope, items)
-    if not handles or not isinstance(annotated, str):
-        return annotated
-    try:
-        results = json.loads(annotated)
-    except json.JSONDecodeError:
-        return annotated
-    if not isinstance(results, list):
-        return annotated
-    changed = False
-    for result in results:
-        if not isinstance(result, dict):
-            continue
-        handle = handles.get(str(result.get("citation_key") or ""))
-        if not handle:
-            continue
-        result["ref"] = handle
-        result.pop("citation_key", None)
-        result.pop("itemId", None)
-        changed = True
-    return json.dumps(results, ensure_ascii=False) if changed else annotated
+    return rewrite_web_results_with_handles(annotated, handles, getattr(scope, "entries", None))
 
 
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
@@ -1015,6 +1085,9 @@ async def create_linsight_agent(
 
     svid = svid or session_model.id
     tools = _bind_linsight_citation_scope(list(tools or []), citation_scope)
+    # F073: Open API runs are unattended — no ask_user, no clarify step.
+    unattended = is_unattended_run(session_model)
+    hitl_tools = [] if unattended else [ask_user]
     # F069 P1: the whole prompt side (rules text, deliverable line, tail,
     # researcher handoff) follows the session's citation contract in lockstep.
     citation_handles = bool(citation_scope is not None and getattr(citation_scope, "enabled", False))
@@ -1144,7 +1217,7 @@ async def create_linsight_agent(
     # It appends no system prompt, so the language tail above stays the tail.
     # ``tools`` = the exact list bound below, for the repaired-key sanity check.
     middlewares.append(
-        build_invalid_tool_call_repair_middleware(tools=[*tools, ask_user, *export_tools], is_subagent=False)
+        build_invalid_tool_call_repair_middleware(tools=[*tools, *hitl_tools, *export_tools], is_subagent=False)
     )
     # The researcher subagent is a separate subgraph: the main-graph middleware
     # above does NOT wrap its internal model calls, so it carries its OWN
@@ -1183,19 +1256,23 @@ async def create_linsight_agent(
     # prompt never points at an "Available Skills" section that does not exist.
     return create_deep_agent(
         model=model,
-        tools=[*tools, ask_user, *export_tools],
-        system_prompt=_with_citation_rules(
-            _build_linsight_system_prompt(
-                has_kb,
-                skills_present=skills_advertised,
-                # Gates the hard "no export_docx/export_pdf" rule: only meaningful
-                # when the skill's script route can actually run in this session.
-                has_code_interpreter=has_code_interpreter,
-                has_web_search=has_web,
-                citation_handles=citation_handles,
+        tools=[*tools, *hitl_tools, *export_tools],
+        system_prompt=_with_caller_instructions(
+            _with_citation_rules(
+                _build_linsight_system_prompt(
+                    has_kb,
+                    skills_present=skills_advertised,
+                    # Gates the hard "no export_docx/export_pdf" rule: only meaningful
+                    # when the skill's script route can actually run in this session.
+                    has_code_interpreter=has_code_interpreter,
+                    has_web_search=has_web,
+                    citation_handles=citation_handles,
+                    unattended=unattended,
+                ),
+                has_kb or has_web,
+                handles=citation_handles,
             ),
-            has_kb or has_web,
-            handles=citation_handles,
+            caller_instructions(session_model),
         ),
         middleware=middlewares,
         subagents=[researcher],

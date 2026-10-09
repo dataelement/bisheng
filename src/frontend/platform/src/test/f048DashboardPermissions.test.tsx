@@ -146,6 +146,13 @@ describe("F048 dashboard permission UI", () => {
     })
   })
 
+  it("renders server-visible rows while mutation permissions are unresolved", () => {
+    renderItem([])
+
+    expect(screen.getByText("Operations")).toBeInTheDocument()
+    expect(screen.queryByText("delete")).toBeNull()
+  })
+
   it("keeps share, default, and copy behind visibility without implying edit", () => {
     // Visible with no granted action at all — the case an action list can never
     // express, and the one that used to hide every dashboard.

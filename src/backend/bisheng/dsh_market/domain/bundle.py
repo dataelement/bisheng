@@ -8,7 +8,7 @@ import stat
 import zipfile
 from pathlib import PurePosixPath
 
-MAX_UPLOAD_BYTES = 256 * 1024 * 1024
+MAX_UPLOAD_BYTES = 512 * 1024 * 1024
 MAX_EXPANDED_BYTES = 1024 * 1024 * 1024
 MAX_FILES = 50000
 TARGETS = {f"{os}-{arch}" for os in ("darwin", "linux", "win32") for arch in ("arm64", "x64")}
@@ -79,7 +79,7 @@ def _validate_dependencies(files: dict[str, bytes], root: str):
 
 
 def validate_bundle(data: bytes) -> dict:
-    _require(len(data) <= MAX_UPLOAD_BYTES, "Upload exceeds 256 MiB")
+    _require(len(data) <= MAX_UPLOAD_BYTES, "Upload exceeds 512 MiB")
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
         with archive:

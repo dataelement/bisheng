@@ -69,7 +69,7 @@ export function UsageHeatmap({ summary, metric = 'tokens' }: UsageHeatmapProps) 
                 <div
                     className="grid w-max gap-y-2"
                     style={{
-                        gridTemplateColumns: hasRowLabels ? `max-content ${plotWidth}px` : `${plotWidth}px`,
+                        gridTemplateColumns: hasRowLabels ? `40px ${plotWidth}px` : `${plotWidth}px`,
                         columnGap: hasRowLabels ? 12 : undefined,
                     }}
                 >
@@ -105,11 +105,11 @@ export function UsageHeatmap({ summary, metric = 'tokens' }: UsageHeatmapProps) 
                     </div>
                     {hasRowLabels && (
                         <div
-                            className="grid text-xs leading-none text-muted-foreground"
-                            style={{ gridRow: 2, gridColumn: 1, gridTemplateRows: gridRows, gap: USAGE_TILE_GAP }}
+                            className="relative text-[10px] leading-none text-muted-foreground"
+                            style={{ gridRow: 2, gridColumn: 1 }}
                         >
                             {layout.rowLabels.map(({ label, row }) => (
-                                <span key={`${row}-${label}`} className="whitespace-nowrap" style={{ gridRow: row + 1 }}>
+                                <span key={`${row}-${label}`} className="absolute whitespace-nowrap" style={{ top: `${row / layout.rows * 100}%`, transform: `translateY(${row === 0 ? 0 : row === layout.rows ? -100 : -50}%)` }}>
                                     {label}
                                 </span>
                             ))}

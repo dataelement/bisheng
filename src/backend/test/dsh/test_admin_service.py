@@ -64,7 +64,7 @@ async def test_users_preserves_gateway_pagination_and_batches_current_page(opera
         )
     )
     service, profiles, _ = build(operation_scope, gateway)
-    result = await service.users(90, cursor="prior", limit=10)
+    result = await service.users(90, cursor="prior", limit=10, seat_state="ASSIGNED")
     assert result["next_cursor"] == "opaque" and result["has_more"] is True
     assert result["items"][0]["username"] == "Fresh"
     profiles.assert_awaited_once_with([20])
@@ -139,6 +139,7 @@ async def test_subject_policy_management_stays_in_authorized_tenant(operation_sc
         )
     )
     service, _, _ = build(operation_scope, gateway)
+    service.subject_grant = AsyncMock()
     service.subject_policy_view = AsyncMock(
         return_value={
             "tenant_id": 2,
@@ -158,7 +159,7 @@ async def test_subject_policy_management_stays_in_authorized_tenant(operation_sc
             "roles": [],
         }
     )
-    service.subject_policy_update = AsyncMock(
+    service.subject_grant = AsyncMock(
         return_value={
             "subject_type": "DEPARTMENT",
             "subject_id": 10,
@@ -174,13 +175,14 @@ async def test_subject_policy_management_stays_in_authorized_tenant(operation_sc
     request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
     result = await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
     assert result["version"] == 1
-    service.subject_policy_update.assert_awaited_once_with(
+    service.subject_grant.assert_awaited_once_with(
+        actor={"user_id": "90", "tenant_id": "2", "scope": "tenant"},
+        tenant=2,
         model_id=7,
         subject_type="DEPARTMENT",
         subject_id=10,
-        actor_user_id=90,
+        actor_id=90,
         request=request,
-        seat_limit=None,
     )
 
 
@@ -192,7 +194,7 @@ async def test_subject_policy_management_stays_in_authorized_tenant(operation_sc
         ("dsh_disabled", "DshDshDisabledError"),
     ],
 )
-async def test_quota_configuration_is_independent_of_commercial_capacity(
+async def test_positive_grant_requires_available_license(
     operation_scope,  # noqa: F811
     status,
     error_name,
@@ -223,9 +225,12 @@ async def test_quota_configuration_is_independent_of_commercial_capacity(
         }
     )
     request = SimpleNamespace(expected_version=0, enabled=True, monthly_token_limit=200)
-    await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
-    assert service.subject_policy_update.await_args.kwargs["seat_limit"] is None
-    gateway.request.assert_not_awaited()
+    from bisheng.common.errcode import dsh
+
+    service.subject_grant = AsyncMock(side_effect=getattr(dsh, error_name)())
+    with pytest.raises(getattr(dsh, error_name)):
+        await service.update_subject_policy(90, 7, "DEPARTMENT", 10, request, tenant_id=2)
+    service.subject_policy_update.assert_not_awaited()
 
 
 async def test_command_timeout_recovers_original_operation_without_new_intent(operation_scope):  # noqa: F811
@@ -401,3 +406,19 @@ async def test_terminal_lookup_does_not_override_unavailable_intent_confirmation
     result = await service.resume(operation_id)
     assert result["status"] == "PROCESSING"
     assert result["result_code"] == "authorization_unavailable"
+
+
+async def test_exact_user_seat_lookup_preserves_target_and_rejects_other_users():
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+    from test.dsh.test_department_access import seat
+
+    gateway = SimpleNamespace(
+        request=AsyncMock(return_value={"items": [seat(20, "REVOKED")], "next_cursor": None, "has_more": False})
+    )
+    service, _, _ = build(None, gateway)
+    result = await service.users(90, tenant_id=2, user_id=20, seat_state="REVOKED", limit=1)
+    assert result["items"][0]["user_id"] == "20"
+    assert gateway.request.await_args.args[1]["target"] == {"tenant_id": "2", "user_id": "20"}
+    gateway.request.return_value["items"] = [seat(21, "REVOKED")]
+    with pytest.raises(DshAuthorizationUnavailableError):
+        await service.users(90, tenant_id=2, user_id=20, seat_state="REVOKED", limit=1)

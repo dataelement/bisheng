@@ -3641,6 +3641,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(updated_file.knowledge_id)
         return updated_file
 
+    async def _rollback_uploaded_files(
+        self,
+        files: list[KnowledgeFile],
+        *,
+        parent_type: str,
+        parent_id: int,
+    ) -> None:
+        errors = []
+        for row in files:
+            try:
+                # Creation records do not require an existing permission mirror:
+                # the failed file and subsequent files may never have had one.
+                record = self._new_file_permission_record(
+                    row=row, resource_type="knowledge_file", parent_type=parent_type, parent_id=parent_id
+                )
+                adapter = await self._resource_adapter("knowledge_file")
+                await adapter.rollback_created(record=record, actor=await self._permission_actor())
+                if row.object_name:
+                    storage = get_minio_storage_sync()
+                    storage.remove_object_sync(bucket_name=storage.bucket, object_name=row.object_name)
+                expanded_ids = await self._cascade_version_links_on_delete([row.id])
+                await KnowledgeFileDao.adelete_batch(expanded_ids)
+            except Exception as exc:
+                # Keep this business row if compensation is uncertain, but do
+                # not let it prevent cleanup of the other files in the batch.
+                logger.exception("Failed to roll back uploaded knowledge file {}", row.id)
+                errors.append(exc)
+        if errors:
+            raise ExceptionGroup("Knowledge space upload compensation failed", errors)
+
     async def add_file(
         self,
         knowledge_id: int,
@@ -3719,21 +3749,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
 
-        async def cleanup_created_files() -> None:
-            created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
-            if not created_file_ids:
-                return
-            # Most rollback paths fire before the V1 doc/version rows are
-            # written, so the cascade is a defensive no-op here. Kept for the
-            # case where a partial create leaves stale chain rows.
-            expanded_ids = await self._cascade_version_links_on_delete(created_file_ids)
-            try:
-                await self._cleanup_resource_tuples(
-                    [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
-                )
-            finally:
-                await KnowledgeFileDao.adelete_batch(expanded_ids)
-
         try:
             for one in file_path:
                 db_file = KnowledgeService.process_one_file(
@@ -3749,12 +3764,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     skip_dedup=skip_dedup,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, "id", None):
+                        created_files.append(db_file)
                     resolved_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
                     if db_file.file_source != resolved_file_source:
                         db_file.file_source = resolved_file_source
                         db_file = KnowledgeFileDao.update(db_file)
                     if getattr(db_file, "id", None):
-                        created_files.append(db_file)
                         # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
                         # This is independent of the version-management switch (D3): the rows always
                         # exist so the file list can be document-driven even when the switch is off.
@@ -3816,9 +3832,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         except Exception:
             try:
-                await cleanup_created_files()
+                await self._rollback_uploaded_files(
+                    created_files, parent_type=parent_type, parent_id=parent_resource_id
+                )
             except Exception as cleanup_exc:
-                logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
+                logger.exception("Failed to cleanup files after knowledge space upload error: {}", cleanup_exc)
             raise
         from bisheng.worker.knowledge import scheduler as file_scheduler
 

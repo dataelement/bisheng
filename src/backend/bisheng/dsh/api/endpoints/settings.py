@@ -1,4 +1,4 @@
-"""Management remains accessible when the deployed DSH business gate is off."""
+"""Manage Desktop access addresses within the configured deployment boundary."""
 
 from fastapi import APIRouter, Depends, Response
 
@@ -33,7 +33,7 @@ async def browser_config(
 ):
     response.headers["Cache-Control"] = "no-store"
     if not config.enabled:
-        return resp_200(data={"management_enabled": False, **DshManagementSettings().model_dump()})
+        return resp_200(data={**DshManagementSettings().model_dump(), "management_enabled": False, "enabled": False})
     current = await service.read()
     return resp_200(data={"management_enabled": True, **current.model_dump()})
 

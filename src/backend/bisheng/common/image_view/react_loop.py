@@ -124,6 +124,21 @@ def _drop_contradicted_denial(text: str) -> str:
     return "\n".join(kept)
 
 
+def strip_picture_handles(text: str, question: str) -> str:
+    """Picture answers carry no [Sn] handles either (daily chat, F075).
+
+    The daily chat cites with short handles that its stream converter turns
+    into badges later, so a picture answer must lose them here. Only the daily
+    chat's vision runnable calls this; the knowledge-space / channel vision
+    stream keeps its text as is.
+    """
+    if not question_wants_pictures(question):
+        return text
+    from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
+
+    return strip_citation_handles(text)
+
+
 def _strip_picture_citations(text: str, question: str) -> str:
     """Picture answers should not carry retrieval footnotes."""
     if not question_wants_pictures(question):

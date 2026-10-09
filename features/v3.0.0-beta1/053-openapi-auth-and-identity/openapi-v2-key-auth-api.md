@@ -2,7 +2,7 @@
 
 > 可导入文件：[`openapi-v2-key-auth-api.json`](./openapi-v2-key-auth-api.json)  
 > OpenAPI：3.1.0  
-> HTTP 接口：42 条；WebSocket：2 条
+> HTTP 接口：46 条；WebSocket：2 条
 
 将 JSON 文件直接导入 Apifox 或 Postman。导入后把 `baseUrl` 改成实际服务地址，并在集合鉴权中填写 Bearer Token。
 
@@ -2734,6 +2734,8 @@ HTTP 状态：`200`。
 ```
 
 ## 日常会话
+
+> **任务模式**（`POST /api/v2/workstation/chat/completions` 传 `run_mode="task"`，以及 `GET /api/v2/workstation/config/knowledge`、`/api/v2/workstation/tasks/*`）的入参、状态、结果、错误码与完整示例见《[任务模式 API 接口文档](../073-openapi-task-mode/task-mode-api.md)》。本节以下各条只描述日常模式。
 
 ### `GET /api/v2/chat/info`
 

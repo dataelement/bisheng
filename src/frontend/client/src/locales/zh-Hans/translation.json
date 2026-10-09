@@ -1867,6 +1867,9 @@
     "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
     "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
   },
+  "com_tools": {
+    "image_view": "图片查看"
+  },
   "com_unified_permission": {
     "access_and_share": "访问与分享",
     "add_authorization": "新增授权",
@@ -2289,7 +2292,7 @@
   "com_approval_center_title": "审批中心",
   "com_citation.web": "网页",
   "com_citation.document": "文档",
-  "com_citation.untitled": "暂无标题",
+  "com_citation.untitled": "引用 {{index}}",
   "com_citation.loading_detail": "加载溯源详情...",
   "com_citation.load_detail_failed": "溯源详情加载失败",
   "com_citation.policy_document": "政策文件",
@@ -2298,11 +2301,11 @@
   "com_citation.close_references": "关闭参考资料",
   "com_citation.back_to_references": "返回参考资料列表",
   "com_citation.download_document": "下载文档",
-  "dsh_title": "DSH Desktop",
+  "dsh_title": "客户端",
   "dsh_intro": "登录后自动配置企业模型，无需填写密钥。",
   "dsh_local_models": "在本机使用企业模型",
-  "dsh_open": "打开 DSH Desktop",
-  "dsh_download": "下载 DSH Desktop",
+  "dsh_open": "打开客户端",
+  "dsh_download": "下载客户端",
   "dsh_download_help": "下载地址由管理员在系统配置里设置。",
   "dsh_sessions": "授权管理",
   "dsh_device": "接入端",
@@ -2337,8 +2340,8 @@
   "dsh_source_unavailable": "用量暂不可用",
   "dsh_unknown_usage": "有 {{count}} 次调用未获取到用量。",
   "dsh": {
-    "launchHelp": "若 DSH Desktop 未打开，请点击“下载 DSH Desktop”安装客户端；已安装时，请允许浏览器打开应用，或手动启动客户端。",
-    "launchHelpNoDownload": "若 DSH Desktop 未打开，已安装时请允许浏览器打开应用，或手动启动客户端；未安装时请联系管理员获取下载地址。",
+    "launchHelp": "若客户端未打开，请点击“下载客户端”安装客户端；已安装时，请允许浏览器打开应用，或手动启动客户端。",
+    "launchHelpNoDownload": "若客户端未打开，已安装时请允许浏览器打开应用，或手动启动客户端；未安装时请联系管理员获取下载地址。",
     "heatmapFuture": "未到时间",
     "heatmapMessageValue": "{{value}} 条消息",
     "heatmapOutside": "筛选范围外",
@@ -2358,5 +2361,17 @@
       "hundredMillion": "亿",
       "tenThousand": "万"
     }
-  }
+  },
+  "com_citation.preview_loading": "正在加载文件预览…",
+  "com_citation.preview_unavailable": "这份文件暂时无法预览",
+  "com_citation.close_document_preview": "关闭文档预览",
+  "com_citation.collapse_source": "收起来源（Esc）",
+  "com_citation.close_workspace": "关闭工作区",
+  "com_citation.occurrence": "第 {{index}} 处，共 {{total}} 处",
+  "com_citation.prev_occurrence": "上一处",
+  "com_citation.next_occurrence": "下一处",
+  "com_citation.tab_report": "报告",
+  "com_citation.tab_source": "来源",
+  "com_citation.back_to_report": "回到报告",
+  "com_citation.locate_missed": "没能自动找到被引段落，下面是引用的原文"
 }

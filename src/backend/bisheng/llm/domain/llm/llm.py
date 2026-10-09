@@ -182,6 +182,16 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     return params
 
 
+def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params = _get_openai_params(params, server_config, model_config)
+    extra_body = dict(params.pop("extra_body", {}) or {})
+    # Hunyuan's OpenAI-compatible endpoint names its search switch
+    # `enable_enhancement`; the model-level web search toggle drives it.
+    extra_body["enable_enhancement"] = model_config.get("enable_web_search", False)
+    params["extra_body"] = extra_body
+    return params
+
+
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     # Built-in web search toggle is consumed by ChatMinimax to inject the tool.
@@ -246,7 +256,7 @@ _llm_node_type: dict = {
     LLMServerType.ANTHROPIC.value: {"client": ChatAnthropic, "params_handler": _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {"client": CustomChatDeepSeek, "params_handler": _get_deepseek_params},
     LLMServerType.SPARK.value: {"client": ChatOpenAICompatible, "params_handler": _get_spark_params},
-    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_tencent_params},
     LLMServerType.MOONSHOT.value: {"client": ChatMoonshot, "params_handler": _get_moonshot_params},
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},

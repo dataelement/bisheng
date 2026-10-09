@@ -79,7 +79,7 @@ describe('time range and tile resolution', () => {
         expect(layout.tiles[5]).toMatchObject({ row: 5, column: 0 })
         expect(layout.tiles[6]).toMatchObject({ row: 0, column: 1 })
         expect(layout.tiles[41]).toMatchObject({ row: 5, column: 6 })
-        expect(layout.rowLabels).toHaveLength(6)
+        expect(layout.rowLabels).toEqual([{ label: '00:00', row: 0 }, { label: '12:00', row: 3 }, { label: '24:00', row: 6 }])
         expect(layout.columnLabels.at(-1)).toEqual({ label: '09-15', column: 6 })
     })
 

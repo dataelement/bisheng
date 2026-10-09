@@ -28,7 +28,7 @@ def seat(user_id, state="ASSIGNED", tenant=2):
     }
 
 
-@pytest.mark.parametrize("available,expected", [(1, "PENDING_LOGIN"), (0, "SEAT_LIMIT_REACHED")])
+@pytest.mark.parametrize("available,expected", [(1, "UNAUTHORIZED"), (0, "UNAUTHORIZED")])
 async def test_access_status_uses_seats_and_capacity(available, expected):
     async def request(_operation, payload):
         user_id = int(payload["target"]["user_id"])
@@ -101,8 +101,10 @@ async def test_license_state_preserves_quota_and_zero_quota_status(license_statu
     request.assert_not_awaited()
 
 
-@pytest.mark.parametrize("personal,expected", [(0, 100000), (6000, 100000), (1000000, 1000000)])
-def test_department_and_personal_quota_maximum(subject_store, personal, expected):  # noqa: F811
+@pytest.mark.parametrize(
+    "personal,enabled,expected", [(0, False, 100000), (0, True, 0), (6000, True, 6000), (1000000, True, 1000000)]
+)
+def test_personal_quota_override(subject_store, personal, enabled, expected):  # noqa: F811
     from sqlmodel import Session
 
     from bisheng.dsh.domain.models.user_policy import DshUserPolicy
@@ -116,7 +118,7 @@ def test_department_and_personal_quota_maximum(subject_store, personal, expected
                 user_id=20,
                 tenant_id=2,
                 model_id=7,
-                enabled=int(personal > 0),
+                enabled=int(enabled),
                 monthly_token_limit=personal,
                 version=1,
                 quota_epoch=1,
@@ -125,10 +127,29 @@ def test_department_and_personal_quota_maximum(subject_store, personal, expected
             )
         )
         session.flush()
+        assert repository.effective(20).rows[0].monthly_token_limit == expected
+        from bisheng.dsh.domain.schemas.admin import ModelUserPermission
+
+        permission = repository.user_permissions([(20, "admin")], model_id=7, limit=10)["items"][0]
+        ModelUserPermission.model_validate(permission)
         assert (
             repository.user_permissions([(20, "admin")], model_id=7, limit=10)["items"][0]["monthly_token_limit"]
             == expected
         )
+
+        if enabled:
+            from sqlmodel import select
+
+            direct = session.exec(select(DshUserPolicy).where(DshUserPolicy.user_id == 20)).one()
+            direct.enabled = 0
+            direct.monthly_token_limit = 0
+            direct.version += 1
+            session.flush()
+            assert repository.effective(20).rows[0].monthly_token_limit == 100000
+            restored = repository.user_permissions([(20, "admin")], model_id=7, limit=10)["items"][0]
+            assert restored["monthly_token_limit"] == 100000
+            assert restored["direct_enabled"] is False
+            ModelUserPermission.model_validate(restored)
 
 
 def test_unassigned_and_numeric_user_search(subject_store):  # noqa: F811

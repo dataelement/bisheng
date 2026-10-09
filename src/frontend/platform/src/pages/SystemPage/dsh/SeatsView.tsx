@@ -1,5 +1,6 @@
 import { Button } from '@/components/bs-ui/button'
 import { Input } from '@/components/bs-ui/input'
+import { message } from '@/components/bs-ui/toast/use-toast'
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import {
     Table,
@@ -14,6 +15,7 @@ import {
     getDshSeats,
     isDshRequestRejected,
 } from '@/controllers/API/dsh'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type {
     DshOperation,
     DshOperationRef,
@@ -21,7 +23,7 @@ import type {
     DshSeat,
     DshSeatQuery,
 } from '@/types/dsh'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createDshOperationId } from '@/util/dshOperationId'
 import { DshChoice, DshPager, dshTime } from './common'
@@ -38,22 +40,31 @@ export function SeatsView({
 }: SeatsViewProps) {
     const { t } = useTranslation()
     const [keyword, setKeyword] = useState('')
-    const [query, setQuery] = useState<DshSeatQuery>({ seat_state: 'ASSIGNED' })
+    const [query, setQuery] = useState<DshSeatQuery>({})
     const [cursors, setCursors] = useState<string[]>([''])
     const [data, setData] = useState<DshPage<DshSeat> | null>(null)
     const [error, setError] = useState(false)
     const [pending, setPending] = useState<Record<string, string>>({})
+    const commandFeedback = useRef(new Map<string, { name: string; errors: Set<string> }>())
+    const notifyCommandError = useCallback((operationId: string, errorKey: string) => {
+        const feedback = commandFeedback.current.get(operationId)
+        if (!feedback || feedback.errors.has(errorKey)) return
+        feedback.errors.add(errorKey)
+        message({ variant: 'error', description: `${feedback.name}: ${t(errorKey)}` })
+    }, [t])
     const commandLocks = useRef(new Set<string>())
     useEffect(() => {
         for (const [seatId, operationId] of Object.entries(pending)) {
-            if (
-                ['SUCCEEDED', 'FAILED'].includes(
-                    operations[operationId]?.status,
-                )
-            )
+            const operation = operations[operationId]
+            if (operation?.status === 'FAILED') {
+                notifyCommandError(operationId, getDshRequestErrorKey(operation) ?? 'dsh.FAILED')
+            }
+            if (['SUCCEEDED', 'FAILED'].includes(operation?.status)) {
                 commandLocks.current.delete(seatId)
+                commandFeedback.current.delete(operationId)
+            }
         }
-    }, [pending, operations])
+    }, [pending, operations, notifyCommandError])
     useEffect(() => {
         const normalizedKeyword = keyword.trim() || undefined
         if (normalizedKeyword === query.keyword) return
@@ -99,6 +110,10 @@ export function SeatsView({
                     return
                 }
                 const operationId = createDshOperationId()
+                commandFeedback.current.set(operationId, {
+                    name: item.display_name || item.username || item.user_id,
+                    errors: new Set(),
+                })
                 commandLocks.current.add(item.seat_id)
                 setPending((old) => ({ ...old, [item.seat_id]: operationId }))
                 const ref: DshOperationRef = {
@@ -118,9 +133,15 @@ export function SeatsView({
                             ),
                         )
                     } catch (failure) {
-                        if (isDshRequestRejected(failure)) {
+                        const rejected = isDshRequestRejected(failure)
+                        const errorKey = getDshRequestErrorKey(failure)
+                        if (errorKey || rejected) {
+                            notifyCommandError(operationId, errorKey ?? 'dsh.rejected')
+                        }
+                        if (rejected) {
                             onOperation({ ...ref, rejected: true })
                             commandLocks.current.delete(item.seat_id)
+                            commandFeedback.current.delete(operationId)
                             setPending((old) => {
                                 const nextPending = { ...old }
                                 delete nextPending[item.seat_id]
@@ -136,7 +157,7 @@ export function SeatsView({
         })
     }
     return (
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
             <div className="flex items-center justify-end gap-2">
                 <Input
                     boxClassName="w-56 shrink-0"
@@ -147,14 +168,14 @@ export function SeatsView({
                 />
                 <DshChoice
                     label={t('dsh.seatState')}
-                    value={query.seat_state!}
-                    options={['ASSIGNED', 'REVOKED'].map((value) => ({
+                    value={query.seat_state || 'ALL'}
+                    options={['ALL', 'ASSIGNED', 'REVOKED'].map((value) => ({
                         value,
-                        label: t(`dsh.${value}`),
+                        label: value === 'ALL' ? t('dsh.allSeats') : t(`dsh.${value}`),
                     }))}
                     onChange={(value) =>
                         handleFilter({
-                            seat_state: value as DshSeatQuery['seat_state'],
+                            seat_state: value === 'ALL' ? undefined : value as DshSeatQuery['seat_state'],
                         })
                     }
                 />

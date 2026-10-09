@@ -187,8 +187,8 @@ class DshSubjectPolicyRepository:
             if user_id in active_user_ids and enabled and monthly_token_limit > 0
         }
         active_subjects = {
-            (subject_type, subject_id)
-            for (subject_type, subject_id, _model_id), (enabled, monthly_token_limit) in subjects.items()
+            (subject_type, subject_id, model_id)
+            for (subject_type, subject_id, model_id), (enabled, monthly_token_limit) in subjects.items()
             if enabled and monthly_token_limit > 0
         }
         if active_subjects and active_user_ids:
@@ -202,9 +202,12 @@ class DshSubjectPolicyRepository:
             for user_id in active_user_ids - entitled:
                 ancestors = self._department_ancestor_ids_for(memberships[user_id], departments)
                 if any(
-                    (kind == "DEPARTMENT" and subject_id in ancestors)
-                    or (kind == "ROLE" and subject_id in roles[user_id])
-                    for kind, subject_id in active_subjects
+                    (
+                        (kind == "DEPARTMENT" and subject_id in ancestors)
+                        or (kind == "ROLE" and subject_id in roles[user_id])
+                    )
+                    and not direct.get((user_id, model_id), (False, 0))[0]
+                    for kind, subject_id, model_id in active_subjects
                 ):
                     entitled.add(user_id)
         return sorted(entitled)
@@ -482,6 +485,31 @@ class DshSubjectPolicyRepository:
             stack.extend(reversed(children.get(current, [])))
         return result
 
+    def selected_user_ids(self, subject_type: str, subject_id: int) -> list[int]:
+        """Resolve the current selection; history comes from Gateway seats."""
+        self._validate_subject(subject_type, subject_id)
+        query = (
+            select(User.user_id)
+            .join(UserTenant, UserTenant.user_id == User.user_id)
+            .where(
+                UserTenant.tenant_id == require_tenant(),
+                UserTenant.is_active == 1,
+                UserTenant.status == "active",
+                User.delete == 0,
+            )
+        )
+        if subject_type == "DEPARTMENT":
+            ids = self.department_scope_ids(subject_id, include_descendants=True)
+            query = query.join(UserDepartment, UserDepartment.user_id == User.user_id).where(
+                UserDepartment.department_id.in_(ids)
+            )
+        else:
+            query = query.join(UserRole, UserRole.user_id == User.user_id).where(
+                UserRole.tenant_id == require_tenant(), UserRole.role_id == subject_id
+            )
+        with strict_tenant_filter():
+            return sorted({int(value) for value in self.session.exec(query).all()})
+
     def _role_ids(self, user_id: int) -> set[int]:
         tenant = require_tenant()
         with strict_tenant_filter():
@@ -601,7 +629,7 @@ class DshSubjectPolicyRepository:
                     "inherited": False,
                 }
                 for row in direct_by_user[user_id]
-                if row.enabled and row.monthly_token_limit > 0
+                if row.enabled
             ]
             for row in matched:
                 if row.subject_type == "DEPARTMENT":
@@ -623,9 +651,11 @@ class DshSubjectPolicyRepository:
                         "inherited": inherited,
                     }
                 )
-            final_limit = max((source["monthly_token_limit"] for source in sources), default=0)
+            personal = bool(direct_policy and direct_policy.enabled)
+            candidates = [source for source in sources if source["subject_type"] == "USER"] if personal else sources
+            final_limit = max((source["monthly_token_limit"] for source in candidates), default=0)
             sources = [
-                {**source, "winning": source["monthly_token_limit"] == final_limit}
+                {**source, "winning": source in candidates and source["monthly_token_limit"] == final_limit}
                 for source in sorted(
                     sources,
                     key=lambda source: (
@@ -673,7 +703,9 @@ class DshSubjectPolicyRepository:
     def _effective_version(sources: list[tuple[str, int, int, int]]) -> int:
         if len(sources) == 1 and sources[0][0] == "USER":
             return sources[0][2]
-        payload = "|".join(f"{kind}:{subject_id}:{version}:{limit}" for kind, subject_id, version, limit in sources)
+        payload = "personal-priority-v1|" + "|".join(
+            f"{kind}:{subject_id}:{version}:{limit}" for kind, subject_id, version, limit in sources
+        )
         value = int.from_bytes(hashlib.sha256(payload.encode()).digest()[:8], "big") & 0x7FFFFFFFFFFFFFFF
         return value or 1
 
@@ -723,10 +755,12 @@ class DshSubjectPolicyRepository:
             raise ValueError("Direct policy rows disagree on the recovered usage epoch")
         epoch = next(iter(direct_epochs)) if direct_epochs else 1
         for model_id, sources in sorted(sources_by_model.items()):
-            enabled_sources = [item for item in sources if item[6] and item[3] > 0]
-            candidates = enabled_sources or sources
-            limit = max(item[3] for item in candidates)
-            winning = [item for item in candidates if item[3] == limit]
+            personal = [item for item in sources if item[0] == "USER" and item[6]]
+            inherited = [item for item in sources if item[0] != "USER" and item[6] and item[3] > 0]
+            candidates = personal or inherited or sources
+            enabled_sources = [item for item in (personal or inherited) if item[3] > 0]
+            limit = max(item[3] for item in (personal or inherited)) if personal or inherited else 0
+            winning = [item for item in candidates if item[3] == limit] if personal or inherited else sources
             ready = any(item[4] == "READY" for item in winning)
             version_sources = sorted((item[0], item[1], item[2], item[3]) for item in sources)
             states.append(

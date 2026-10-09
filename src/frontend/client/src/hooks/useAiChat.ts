@@ -663,6 +663,14 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     console.log('[AiChat] created:', newConvoId, mergedUser);
                     // Only update conversationId if we got a valid value
                     if (newConvoId && newConvoId !== "") {
+                        // A content-safety block (and any other turn that finishes
+                        // in the same tick the id is minted) lands here with
+                        // isStreaming already false. The history effect would then
+                        // treat it as a cold open and replace the live turn with
+                        // the blank loader. Skip that one refetch.
+                        if (newConvoId !== turn.cid) {
+                            skipLoadConvoRef.current = newConvoId;
+                        }
                         adoptConversationId(turn, newConvoId);
 
                         // Only add placeholder for brand-new conversations to avoid
@@ -1011,6 +1019,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         return msgs;
                     });
                     if (data.conversation?.conversationId) {
+                        if (data.conversation.conversationId !== turn.cid) {
+                            skipLoadConvoRef.current = data.conversation.conversationId;
+                        }
                         adoptConversationId(turn, data.conversation.conversationId);
                     }
                     // New conversation: fetch the AI-generated title. The gen_title

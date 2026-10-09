@@ -927,6 +927,7 @@ const Markdown = memo(({
   resolveArtifactLink,
   onArtifactPreview,
   compactImages = false,
+  onOpenSourcePreview,
 }: TContentProps & {
   webContent: any;
   /**
@@ -946,6 +947,11 @@ const Markdown = memo(({
   resolveArtifactLink?: ArtifactLinkResolver;
   /** Open the matched artifact in the Linsight preview panel. */
   onArtifactPreview?: (file: unknown) => void;
+  /**
+   * F074: hand a cited document to the host instead of the floating drawer —
+   * the task-mode workspace shows it beside the report, on every screen width.
+   */
+  onOpenSourcePreview?: (preview: CitationDocumentPreviewState) => void;
 }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
@@ -1163,6 +1169,11 @@ const Markdown = memo(({
       locateChunk,
     };
 
+    if (onOpenSourcePreview) {
+      onOpenSourcePreview(nextPreview);
+      return;
+    }
+
     if (!isMobileLayout && onOpenCitationPanel) {
       onOpenCitationPanel({
         messageId,
@@ -1180,7 +1191,7 @@ const Markdown = memo(({
       itemId,
       locateChunk,
     });
-  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, onOpenSourcePreview, webContent]);
 
   useEffect(() => {
     if (!documentPreview || isMobileLayout || !onOpenCitationPanel) {

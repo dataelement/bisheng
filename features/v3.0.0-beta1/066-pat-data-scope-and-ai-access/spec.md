@@ -1,6 +1,6 @@
 # Feature: PAT 数据范围收窄与「AI 助手接入」界面（F066）
 
-> 需求正文与验收标准的唯一真相是上游 PRD：`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` **v2.9**（2026-09-13，本 feature 对应其新增的 **D21 / D22** 与 **AC-P23～AC-P31**）。本 spec 只登记 beta1 范围裁定、版本契约增量与工程侧补充验收；技术实现见 [design.md](./design.md)。
+> 需求正文与验收标准的唯一真相是上游 PRD：`docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md` **v2.9**（2026-09-13，本 feature 对应其新增的 **D21 / D22** 与 **AC-P23～AC-P31**）。本 spec 只登记 beta1 范围裁定、版本契约增量与工程侧补充验收；技术实现见 [design.md](./design.md)。
 
 **所属版本**: v3.0.0-beta1
 **优先级**: P1
@@ -75,7 +75,7 @@
 
 ## 相关文档
 
-- 上游 PRD：`docs/product/3.0 开放 API 鉴权与身份传递 PRD.md` v2.9（§4.10.3 / §4.10.4 / §4.10.6 / §4.10.7 闸门一之二 / §4.10.8、D21 / D22、附录 C `26044`）
+- 上游 PRD：`docs/PRD/3.0-beta2/3.0 开放 API 鉴权与身份传递 PRD.md` v2.9（§4.10.3 / §4.10.4 / §4.10.6 / §4.10.7 闸门一之二 / §4.10.8、D21 / D22、附录 C `26044`）
 - 版本契约：[features/v3.0.0-beta1/release-contract.md](../release-contract.md)（本 feature 携带 §2 的三处增量）
 - 交互走查稿（十屏 + 决策记录）：<https://claude.ai/code/artifact/31ee870a-cf14-4983-84b0-3e861992709c>
 - 前序 feature：`053-openapi-auth-and-identity/`（含 `prd-deviation-review.md` 偏离清单）

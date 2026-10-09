@@ -135,10 +135,10 @@ describe("F064 document KB list file abnormal status", () => {
     expect(filterData).toHaveBeenCalledWith({ has_abnormal: true })
   })
 
-  it("opens an abnormal library with the inner-list prefilter", () => {
+  it("opens an abnormal library without prefiltering the file list", () => {
     renderPage(<KnowledgeFile />)
     fireEvent.click(screen.getByText("Policy KB"))
-    expect(navigate).toHaveBeenCalledWith("/filelib/41?fileStatus=abnormal")
+    expect(navigate).toHaveBeenCalledWith("/filelib/41")
   })
 
   it("opens a healthy library without the prefilter", () => {

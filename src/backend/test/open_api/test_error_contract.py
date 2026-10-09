@@ -45,6 +45,16 @@ PRD_ERRORS = [
     (open_api.PersonalTokenTtlExceededError(), 26042, 400),
     (open_api.PersonalTokenHolderInvalidError(), 26043, 401),
     (open_api.PersonalTokenDataScopeError(), 26044, 403),
+    # F073 (task-mode PRD §4.10)
+    (open_api.OpenApiTaskModeSyncUnsupportedError(), 26060, 400),
+    (open_api.OpenApiTaskConversationNotAcceptedError(), 26061, 400),
+    (open_api.OpenApiTaskSkillUnavailableError(unavailable=["x"]), 26062, 400),
+    (open_api.OpenApiTaskModeForbiddenError(), 26063, 403),
+    (open_api.OpenApiTaskAlreadyFinishedError(), 26064, 409),
+    (open_api.OpenApiContentBlockedError(auto_reply="blocked"), 26065, 400),
+    (open_api.OpenApiModelUnavailableError(), 26066, 400),
+    (open_api.OpenApiToolUnavailableError(), 26067, 400),
+    (open_api.OpenApiTaskQueueUnavailableError(), 26068, 503),
 ]
 
 
@@ -140,7 +150,10 @@ async def test_legacy_business_http_exception_keeps_business_code(contract_app, 
     "payload,code",
     [
         ({"task_mode": True}, 26017),
-        ({"run_mode": "task"}, 26017),
+        # F073: task is a valid run mode now; without execution=async it is 26060.
+        ({"run_mode": "task"}, 26060),
+        ({"run_mode": "task", "execution": "sync"}, 26060),
+        ({"run_mode": "task", "execution": "async"}, 400),
         ({"run_mode": "unknown"}, 26017),
         ({"execution": "async"}, 26015),
         ({"background": True}, 26015),

@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlmodel import Session
@@ -81,6 +82,7 @@ def service_factory(sql_store):  # noqa: F811 - Imported pytest fixture is injec
         service = DshAdminService(
             repository_scope=repository_scope,
             quota=quota,
+            allocate=AsyncMock(),
             authorize=authorize,
             validate_models=models,
             now=lambda: state["now"],
@@ -314,3 +316,29 @@ async def test_production_callback_exceptions_close_only_definitive_rejections(s
         assert result["status"] == "FAILED"
         assert result["result_code"] == ("permission_revoked" if denial == "permission" else "model_not_allowed")
         assert quota.reasons == {"STORAGE_UNCERTAIN:request-1"}
+
+
+async def test_seat_failure_keeps_personal_policy_uncommitted(service_factory):
+    from bisheng.common.errcode.dsh import DshSeatLimitReachedError
+
+    service, _state, quota = service_factory()
+    service.allocate = AsyncMock(side_effect=DshSeatLimitReachedError())
+    result = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
+    assert result["status"] == "FAILED"
+    assert result["result_code"] == "seat_limit_reached"
+    assert result["committed_at"] is None
+    assert quota.calls == ["block", "finish"]
+
+
+async def test_unknown_seat_outcome_retries_original_person_operation(service_factory):
+    from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError
+
+    service, state, _quota = service_factory()
+    service.allocate = AsyncMock(side_effect=[DshAuthorizationUnavailableError(), None])
+    pending = await service.update_policy(model_id=2, user_id=20, actor_user_id=90, request=request())
+    assert pending["status"] == "PROCESSING"
+    assert pending["committed_at"] is None
+    state["now"] += timedelta(seconds=31)
+    result = await service.resume("a")
+    assert result["status"] == "SUCCEEDED"
+    assert [call.args[0]["operation_id"] for call in service.allocate.await_args_list] == ["a", "a"]

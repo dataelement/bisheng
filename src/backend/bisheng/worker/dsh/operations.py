@@ -49,6 +49,9 @@ def register_operation_tasks(app, runtime_factory, tenant_ids, now):
             async with runtime_factory() as runtime:
                 for tenant_id in await tenant_ids():
                     with profile_scope(tenant_id):
+                        from bisheng.dsh.admin_runtime import recover_subject_grants
+
+                        await recover_subject_grants(runtime.gateway, tenant_id)
                         with runtime.repository_scope() as repository:
                             ids = [row.operation_id for row in repository.due(now=now(), limit=100)]
                         for operation_id in ids:

@@ -145,6 +145,19 @@ async def change(
     )
 
 
+@router.post("/admin/imports/preview")
+async def preview_bundle(
+    file: UploadFile = File(), actor: MarketActor = Depends(market_admin), service=Depends(get_market_service)
+):
+    try:
+        data = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise MarketBundleError(msg="Upload exceeds 512 MiB")
+        return resp_200(await call(service.preview_bundle, actor.tenant_id, data))
+    finally:
+        await file.close()
+
+
 @router.post("/admin/imports")
 async def import_bundle(
     file: UploadFile = File(), actor: MarketActor = Depends(market_admin), service=Depends(get_market_service)
@@ -152,7 +165,7 @@ async def import_bundle(
     try:
         data = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(data) > MAX_UPLOAD_BYTES:
-            raise MarketBundleError(msg="Upload exceeds 256 MiB")
+            raise MarketBundleError(msg="Upload exceeds 512 MiB")
         return resp_200(await call(service.import_bundle, actor.tenant_id, actor.user_id, data))
     finally:
         await file.close()

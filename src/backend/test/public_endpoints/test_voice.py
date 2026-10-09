@@ -176,7 +176,7 @@ async def test_published_voice_without_credentials_keeps_resource_tenant(client,
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-@pytest.mark.parametrize("failure,status,code", [("disabled", 403, 26103), ("offline", 404, 26102)])
+@pytest.mark.parametrize("failure,status,code", [("disabled", 403, 26403), ("offline", 404, 26402)])
 async def test_publication_denial_prevents_voice_model_access(client, publication, operation, failure, status, code):
     """AC-R9: Closed guest access and unpublished apps never reach a model.
 

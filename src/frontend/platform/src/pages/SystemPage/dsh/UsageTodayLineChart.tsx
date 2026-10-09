@@ -88,6 +88,7 @@ export function UsageTodayLineChart({
                         }
                     />
                     <Tooltip
+                        separator=""
                         isAnimationActive={false}
                         cursor={{ stroke: 'hsl(var(--border))' }}
                         contentStyle={{

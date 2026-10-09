@@ -106,24 +106,46 @@ def _item_location(item: Any) -> str:
     item_id = getattr(item, "itemId", None)
     for sub in getattr(payload, "items", None) or []:
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 
-def _location_label(page: Any, chunk_index: Any) -> str:
-    """``第 N 页`` when the parser produced a real page number, else ``第 N 段``.
+def _has_layout_boxes(bbox: Any) -> bool:
+    """Whether a chunk carries PDF layout boxes (``{"chunk_bboxes": [...]}``)."""
+    if not bbox:
+        return False
+    try:
+        parsed = json.loads(bbox) if isinstance(bbox, str) else bbox
+    except (TypeError, ValueError):
+        return False
+    boxes = parsed.get("chunk_bboxes") if isinstance(parsed, dict) else None
+    return isinstance(boxes, list) and len(boxes) > 0
 
-    docx / xlsx / md chunks carry ``page=0`` (no pagination), which must not
-    render as "page 0"; the chunk index is the meaningful locator there.
+
+def _location_label(page: Any, chunk_index: Any, bbox: Any = None) -> str:
+    """``第 N 页`` when the chunk has a real page number, else ``第 N 段``.
+
+    Two page conventions reach here. Chunks parsed with a layout (PDF, and
+    office files converted to PDF) carry bboxes, and their page is the
+    zero-based page index the bboxes use — the first page is ``0``. Chunks
+    without a layout carry a one-based page (slides) or ``0`` for "not
+    paginated" (docx / xlsx / md). The chunk index is zero-based too.
     """
     try:
-        if page is not None and int(page) > 0:
-            return f"第 {int(page)} 页"
+        page_no = int(page) if page is not None else None
     except (TypeError, ValueError):
-        pass
+        page_no = None
+    if page_no is not None:
+        if _has_layout_boxes(bbox):
+            if page_no >= 0:
+                return f"第 {page_no + 1} 页"
+        elif page_no > 0:
+            return f"第 {page_no} 页"
     try:
         if chunk_index is not None and int(chunk_index) >= 0:
-            return f"第 {int(chunk_index)} 段"
+            return f"第 {int(chunk_index) + 1} 段"
     except (TypeError, ValueError):
         pass
     return ""
@@ -135,10 +157,25 @@ def build_entry(item: Any, handle: str) -> dict:
     if type_name == "web":
         title = getattr(payload, "title", None) or getattr(payload, "url", None) or ""
         loc = getattr(payload, "source", None) or ""
+        url = str(getattr(payload, "url", None) or "").strip()
     else:
         title = getattr(payload, "documentName", None) or getattr(payload, "knowledgeName", None) or ""
         loc = _item_location(item)
-    return {"handle": handle, "key": _item_key(item), "type": type_name, "title": str(title)[:80], "loc": str(loc)[:40]}
+        url = ""
+    entry = {
+        "handle": handle,
+        "key": _item_key(item),
+        "type": type_name,
+        "title": str(title)[:80],
+        "loc": str(loc)[:40],
+    }
+    if url:
+        # Surface forms the model may paste (normalized registry URL, plus the
+        # provider URL recorded later). Used only to place a marker next to a
+        # URL the report already wrote — never to invent a citation.
+        entry["url"] = url
+        entry["urls"] = [url]
+    return entry
 
 
 def handle_redis_key(session_id: str) -> str:
@@ -153,8 +190,9 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
 
     Redis is the allocator; ``scope`` mirrors the table in-process
     (``scope.handles`` handle→key, ``scope.key_to_handle``, ``scope.entries``).
-    Any Redis failure returns an EMPTY mapping so the caller keeps the raw key
-    contract for this batch (AC-17) — never partial numbering.
+    Any Redis failure returns an EMPTY mapping — never partial numbering. The
+    task mode then keeps the raw-key contract for the batch (F069 AC-17); the
+    daily chat shows no source id at all (F075 AC-17).
     """
     if not items or not getattr(scope, "enabled", True):
         return {}
@@ -182,8 +220,11 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
                     handle = _decode(existing)
             if handle is None:
                 number = await redis_client.ahincrby(name, "next", 1)
-                if number == 1:
-                    # table just came into existence: pin the contract this session runs under
+                if number == 1 and getattr(scope, "pins_contract", True):
+                    # table just came into existence: pin the task-mode contract this
+                    # session runs under. The daily chat (F075) shares the table but has
+                    # no switch; it must not pin, or it would override the task-mode
+                    # kill switch for this conversation.
                     await redis_client.ahsetnx(name, "meta:enabled", "1" if scope.enabled else "0")
                 candidate = f"{HANDLE_PREFIX}{number}"
                 if identity:
@@ -232,6 +273,80 @@ async def load_handle_table(session_id: str) -> tuple[dict[str, dict], bool | No
         elif field_name == "meta:enabled":
             enabled = value == "1"
     return entries, enabled
+
+
+# --------------------------------------------------------------------------
+# tool-output rewriting (shared by the task mode and the daily chat)
+# --------------------------------------------------------------------------
+_CHUNK_ID_RE = re.compile(r"<chunk_id>(.*?)</chunk_id>", re.S)
+
+
+def swap_chunk_id_for_handle(chunk: str, handles: dict[str, str]) -> str:
+    """Show the model ``<ref>S3</ref>`` instead of ``<chunk_id>registry-key</chunk_id>``.
+
+    ``format_retrieved_chunk`` is shared platform-wide and stays untouched; the
+    swap happens on its output. Keys without a handle keep their tag.
+    """
+
+    def _repl(match: re.Match[str]) -> str:
+        handle = handles.get(match.group(1).strip())
+        return f"<ref>{handle}</ref>" if handle else match.group(0)
+
+    return _CHUNK_ID_RE.sub(_repl, chunk)
+
+
+def drop_chunk_ids(chunk: str) -> str:
+    """Remove the registry key from a formatted chunk (no handle available)."""
+    return _CHUNK_ID_RE.sub("", chunk)
+
+
+def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], entries: list[dict] | None = None) -> Any:
+    """Show the model ``"ref": "S7"`` instead of the registry key on web results.
+
+    ``annotated`` is the JSON string a web-search tool returns. Results without
+    a handle keep their shape. ``entries`` (the task-mode scope mirror) records
+    the URL the model saw, for the task mode's URL-marker pass.
+    """
+    if not handles or not isinstance(annotated, str):
+        return annotated
+    try:
+        results = json.loads(annotated)
+    except json.JSONDecodeError:
+        return annotated
+    if not isinstance(results, list):
+        return annotated
+    changed = False
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        key = str(result.get("citation_key") or "")
+        handle = handles.get(key)
+        if not handle:
+            continue
+        result["ref"] = handle
+        if entries is not None:
+            remember_web_surface_url(entries, key, str(result.get("url") or result.get("link") or ""))
+        result.pop("citation_key", None)
+        result.pop("itemId", None)
+        changed = True
+    return json.dumps(results, ensure_ascii=False) if changed else annotated
+
+
+def drop_web_citation_keys(annotated: Any) -> Any:
+    """Remove registry keys from web results (no handle available)."""
+    if not isinstance(annotated, str):
+        return annotated
+    try:
+        results = json.loads(annotated)
+    except json.JSONDecodeError:
+        return annotated
+    if not isinstance(results, list):
+        return annotated
+    for result in results:
+        if isinstance(result, dict):
+            result.pop("citation_key", None)
+            result.pop("itemId", None)
+    return json.dumps(results, ensure_ascii=False)
 
 
 # --------------------------------------------------------------------------
@@ -309,6 +424,95 @@ def convert_handles_to_markers(text: str, handles: dict[str, str] | None) -> Con
         out.append(_restore_definition_lines(segment, stash))
     result.text = "".join(out)
     return result
+
+
+_URL_CONTINUATION = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'*+,;=%")
+
+
+def remember_web_surface_url(entries: list[dict] | None, key: str, surface_url: str) -> None:
+    """Record a URL string the model actually saw for one web handle.
+
+    The registry stores a normalized URL; the tool result often shows a
+    slightly different one. Both have to match before a pasted link can
+    become a marker.
+    """
+    surface_url = (surface_url or "").strip()
+    if not entries or not key or len(surface_url) < 12:
+        return
+    for entry in entries:
+        if entry.get("key") != key:
+            continue
+        urls = entry.setdefault("urls", [])
+        normalized = str(entry.get("url") or "").strip()
+        if normalized and normalized not in urls:
+            urls.insert(0, normalized)
+        if surface_url not in urls:
+            urls.append(surface_url)
+        return
+
+
+def _find_bounded_url(segment: str, url: str) -> int:
+    """Index of ``url`` that is not a prefix of a longer URL."""
+    start = 0
+    while True:
+        idx = segment.find(url, start)
+        if idx < 0:
+            return -1
+        end = idx + len(url)
+        nxt = segment[end] if end < len(segment) else ""
+        if nxt and nxt in _URL_CONTINUATION:
+            start = idx + 1
+            continue
+        return idx
+
+
+def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
+    """Put a citation marker after a web URL the report already contains.
+
+    Only URLs registered for this run are marked, and only the first
+    occurrence of each source. A source whose marker is already in the text
+    is left alone. Code spans are not rewritten.
+    """
+    if not text or not entries:
+        return text or ""
+    candidates: list[tuple[str, str]] = []
+    for entry in entries:
+        if str(entry.get("type") or "") != "web":
+            continue
+        key = str(entry.get("key") or "")
+        if not key or key in text:
+            continue
+        urls: list[str] = []
+        for raw in [entry.get("url"), *(entry.get("urls") or [])]:
+            url = str(raw or "").strip()
+            if len(url) >= 12 and url not in urls:
+                urls.append(url)
+        for url in urls:
+            candidates.append((url, key))
+    if not candidates:
+        return text
+    candidates.sort(key=lambda item: len(item[0]), reverse=True)
+    used: set[str] = set()
+    out: list[str] = []
+    for is_code, segment in _split_code(text):
+        if is_code:
+            out.append(segment)
+            continue
+        for url, key in candidates:
+            if key in used or key in segment:
+                if key in segment:
+                    used.add(key)
+                continue
+            idx = _find_bounded_url(segment, url)
+            if idx < 0:
+                continue
+            end = idx + len(url)
+            if end < len(segment) and segment[end] == ")" and segment[idx - 2 : idx] == "](":
+                end += 1
+            segment = segment[:end] + _CITATION_START + key + _CITATION_END + segment[end:]
+            used.add(key)
+        out.append(segment)
+    return "".join(out)
 
 
 def strip_citation_handles(text: str) -> str:
@@ -414,7 +618,9 @@ def _export_identity(item: Any, item_id: str | None) -> str:
 def _export_location(item: Any, item_id: str | None) -> str:
     for sub in _payload_items(item):
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 
@@ -430,11 +636,17 @@ def _export_line(item: Any, item_id: str | None) -> str:
         parts = [getattr(payload, "title", None) or "", getattr(payload, "sourceUrl", None) or ""]
     else:
         name = getattr(payload, "documentName", None) or getattr(payload, "knowledgeName", None) or ""
-        parts = [f"《{name}》" if name else "", _export_location(item, item_id), getattr(payload, "knowledgeName", None) or ""]
+        parts = [
+            f"《{name}》" if name else "",
+            _export_location(item, item_id),
+            getattr(payload, "knowledgeName", None) or "",
+        ]
     return " · ".join(str(x).strip() for x in parts if x and str(x).strip())
 
 
-def render_citations_for_export(text: str, resolved_items: list[Any] | None, *, heading: str | None = None) -> ExportRenderResult:
+def render_citations_for_export(
+    text: str, resolved_items: list[Any] | None, *, heading: str | None = None
+) -> ExportRenderResult:
     """Bake hidden citation markers into visible ``[n]`` plus a references section.
 
     ``resolved_items`` are the registry items the EXPORTER may see (already run

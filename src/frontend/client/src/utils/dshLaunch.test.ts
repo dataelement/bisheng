@@ -1,8 +1,8 @@
 import { dshLaunchUrl, parseDshLaunchBase } from './dshLaunch';
 
-it('preserves the existing client protocol and adds exactly the platform origin', () => {
+it('uses the default BiSheng protocol and adds exactly the platform origin', () => {
   const url = new URL(dshLaunchUrl());
-  expect(url.protocol).toBe('dsh-desktop:');
+  expect(url.protocol).toBe('bisheng:');
   expect(url.hostname).toBe('login');
   expect([...url.searchParams.entries()]).toEqual([['server', window.location.origin]]);
 });

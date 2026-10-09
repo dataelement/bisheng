@@ -53,7 +53,8 @@ async def test_vision_wrapper_empty_registry_binds_only_base_tools():
     llm = _RecordingLLM()
     registry = ImageRegistry()
     wrapper = VisionToolBindWrapper(llm, registry, [_NamedTool("web_search")])
-    assert not isinstance(wrapper, Runnable)
+    assert isinstance(wrapper, Runnable)
+    assert wrapper.bind_tools([_NamedTool("web_search")]) is wrapper
     runnable = wrapper({}, None)
     result = await runnable.ainvoke([HumanMessage(content="hi")])
     assert result.content == "ok"
@@ -281,3 +282,20 @@ async def test_vision_wrapper_stops_forcing_view_image_when_candidates_exhausted
     assert "tool_choice" not in llm.bind_kwargs[0]
     assert result.content == "ok"
     assert not result.tool_calls
+
+
+async def test_create_react_agent_accepts_wrapper_and_binds_tools_per_turn():
+    from langchain_core.tools import tool
+    from langgraph.prebuilt import create_react_agent
+
+    @tool
+    def web_search(query: str) -> str:
+        """Search the web."""
+        return "none"
+
+    llm = _RecordingLLM()
+    wrapper = VisionToolBindWrapper(llm, ImageRegistry(), [web_search])
+    agent = create_react_agent(wrapper, [web_search], prompt="You are helpful.")
+    result = await agent.ainvoke({"messages": [HumanMessage(content="hi")]})
+    assert result["messages"][-1].content == "ok"
+    assert llm.bind_calls == [["web_search"]]

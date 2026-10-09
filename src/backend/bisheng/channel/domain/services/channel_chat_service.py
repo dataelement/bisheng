@@ -220,10 +220,14 @@ class ChannelChatService:
         Done on the content rather than the prompt template because the template
         is admin-configurable — decorating the content means the id survives
         whatever wording an admin chooses.
+
+        The id goes in FRONT of the text: the article is truncated to
+        ``max_chunk_size`` afterwards, and an id appended at the end is cut off
+        for every long article, leaving the model nothing to cite.
         """
         if not citation_key:
             return content
-        return f"{content}\n\ncitation_key: {citation_key}"
+        return f"citation_key: {citation_key}\n\n{content}"
 
     @classmethod
     def scrub_article_answer(

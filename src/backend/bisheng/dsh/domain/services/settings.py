@@ -1,4 +1,4 @@
-"""Read the business gate without a process-local or delayed configuration cache."""
+"""Read access addresses with business access enabled for deployed DSH."""
 
 from loguru import logger
 
@@ -14,7 +14,8 @@ class DshSettingsService:
     async def read(self) -> DshManagementSettings:
         try:
             raw = await self.repository.read()
-            return DshManagementSettings.model_validate_json(raw) if raw is not None else DshManagementSettings()
+            value = DshManagementSettings.model_validate_json(raw) if raw is not None else DshManagementSettings()
+            return value.model_copy(update={"enabled": True})
         except Exception:
             logger.exception("Cannot read DSH management settings")
             raise DshAuthorizationUnavailableError() from None
@@ -24,5 +25,6 @@ class DshSettingsService:
             raise DshDshDisabledError()
 
     async def save(self, value: DshManagementSettings) -> DshManagementSettings:
+        value = value.model_copy(update={"enabled": True})
         await self.repository.save(value.model_dump_json())
         return value

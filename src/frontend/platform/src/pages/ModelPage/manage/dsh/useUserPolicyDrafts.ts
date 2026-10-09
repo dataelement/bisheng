@@ -7,6 +7,7 @@ import {
 } from '@/controllers/API/dsh'
 import type { DshModelUserPermission, DshOperation } from '@/types/dsh'
 import { createDshOperationId } from '@/util/dshOperationId'
+import { getDshRequestErrorKey } from '@/utils/dshRequestError'
 import type { PolicyDraft } from './SubjectPolicyControls'
 
 type Entry = {
@@ -17,13 +18,14 @@ type Entry = {
 }
 type Entries = Record<number, Entry>
 export const userDraftOf = (item: DshModelUserPermission): PolicyDraft => ({
-    enabled: item.direct_enabled && item.direct_monthly_token_limit > 0,
+    enabled: item.direct_enabled,
     limit: String(item.direct_enabled ? item.direct_monthly_token_limit : 0),
 })
 export const validUserDraft = (draft: PolicyDraft) =>
     /^\d*$/.test(draft.limit) && Number.isSafeInteger(Number(draft.limit))
 const dirty = (entry: Entry) =>
-    !validUserDraft(entry.draft) || Number(entry.draft.limit) !== Number(userDraftOf(entry.saved).limit)
+    !validUserDraft(entry.draft) || entry.draft.enabled !== entry.saved.direct_enabled ||
+    Number(entry.draft.limit) !== Number(userDraftOf(entry.saved).limit)
 
 // Keep transport waits bounded while retaining the original operation identity.
 export async function withinSaveDeadline<T>(work: Promise<T>): Promise<T> {
@@ -40,7 +42,7 @@ export async function withinSaveDeadline<T>(work: Promise<T>): Promise<T> {
     }
 }
 
-async function resolveOperation(operationId: string, tenantId: number): Promise<DshOperation> {
+export async function resolveOperation(operationId: string, tenantId: number): Promise<DshOperation> {
     const abort = new AbortController()
     try {
         return await withinSaveDeadline(
@@ -116,7 +118,6 @@ export function useUserPolicyDrafts(
         }
         if (previous.operationId) return
         const draft = { ...previous.draft, ...patch }
-        draft.enabled = validUserDraft(draft) && Number(draft.limit) > 0
         update({
             ...entriesRef.current,
             [item.user_id]: { ...previous, draft },
@@ -152,7 +153,7 @@ export function useUserPolicyDrafts(
                         saveDshPolicy(String(entry.saved.user_id), modelId, String(tenantId), {
                             operation_id: entry.operationId!,
                             expected_version: entry.saved.direct_version,
-                            enabled: Number(entry.draft.limit) > 0,
+                            enabled: entry.draft.enabled,
                             monthly_token_limit: Number(entry.draft.limit),
                         }),
                     )
@@ -161,26 +162,29 @@ export function useUserPolicyDrafts(
                         setEntry({ ...entry, operationId: null })
                         throw failure
                     }
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             } else {
                 try {
                     result = await resolveOperation(entry.operationId, tenantId)
-                } catch {
+                } catch (failure) {
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             }
             if (result.status !== 'SUCCEEDED' && result.status !== 'FAILED') {
                 try {
                     result = await resolveOperation(entry.operationId!, tenantId)
-                } catch {
+                } catch (failure) {
+                    if (getDshRequestErrorKey(failure)) throw failure
                     return false
                 }
             }
             if (generation.current !== currentGeneration) return false
             if (result.status === 'FAILED') {
                 setEntry({ ...entry, operationId: null })
-                throw new Error('DSH policy save failed')
+                throw Object.assign(new Error('DSH policy save failed'), { code: result.result_code })
             }
             try {
                 const saved = await withinSaveDeadline(onReload(entry.saved))
@@ -192,7 +196,8 @@ export function useUserPolicyDrafts(
                     operationId: null,
                     operationVersion: saved.direct_version,
                 })
-            } catch {
+            } catch (failure) {
+                if (getDshRequestErrorKey(failure)) throw failure
                 return false
             }
             return true

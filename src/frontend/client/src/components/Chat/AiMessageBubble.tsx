@@ -6,8 +6,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
 } from "lucide-react";
-import { Outlined } from "bisheng-icons";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
@@ -28,7 +27,8 @@ import {
     ExportSelectionButton,
     MessageCheckbox,
 } from "~/components/Chat/MessageSelection";
-import { copyText, cn } from "~/utils";
+import { cn } from "~/utils";
+import { CopyButton } from "~/components/Chat/MessageCopyButton";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import { MediaAttachmentChip, isMediaChipFile } from "~/components/Chat/attachments/MediaAttachmentChip";
 import { ChatHistoryFileRow } from "~/components/Chat/attachments/ChatHistoryFileRow";
@@ -94,6 +94,10 @@ interface AiMessageBubbleProps {
         homepage/task chat opts in; the lightweight knowledge/file/article docks
         and the share view leave it off. */
     allowExport?: boolean;
+    /** F075: copying an answer also drops unresolved [Sn] citation handles.
+        Only the daily chat (and its share view) opts in; knowledge / channel
+        docks never produce handles and keep their copy text as is. */
+    stripCitationHandlesOnCopy?: boolean;
     /** Show the 点赞/点踩 feedback buttons under assistant answers. Default true;
         the read-only anonymous share view passes false. */
     allowFeedback?: boolean;
@@ -102,31 +106,6 @@ interface AiMessageBubbleProps {
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
         owns it) — a conversation doc link opens the file directly, no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
-}
-
-// --- Copy button with feedback ---
-function CopyButton({ text }: { text: string }) {
-    const localize = useLocalize();
-    const [copied, setCopied] = useState(false);
-    const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        event.stopPropagation();
-        copyText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    }, [text]);
-
-    return (
-        <button
-            type="button"
-            onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
-            title={localize('com_ui_copy')}
-            aria-label={localize('com_ui_copy')}
-        >
-            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
-        </button>
-    );
 }
 
 // --- Sibling Switch (prev / next paging) ---
@@ -296,6 +275,7 @@ const AiMessageBubble = memo(
         setSiblingIdx,
         knowledgeChatLayout,
         allowExport,
+        stripCitationHandlesOnCopy,
         allowFeedback = true,
         onOpenCitationPanel,
         activeCitationMessageId,
@@ -325,6 +305,7 @@ const AiMessageBubble = memo(
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
                 allowExport={allowExport}
+                stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                 allowFeedback={allowFeedback}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
@@ -452,6 +433,7 @@ function AssistantBubble({
     setSiblingIdx,
     knowledgeChatLayout,
     allowExport,
+    stripCitationHandlesOnCopy,
     allowFeedback = true,
     onOpenCitationPanel,
     activeCitationMessageId,
@@ -466,6 +448,7 @@ function AssistantBubble({
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
+    stripCitationHandlesOnCopy?: boolean;
     allowFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
@@ -764,7 +747,7 @@ function AssistantBubble({
                             onDesktopOpen={onOpenCitationPanel}
                             actionButtons={
                                 <>
-                                    <CopyButton text={regularContent} />
+                                    <CopyButton text={regularContent} stripHandles={stripCitationHandlesOnCopy} />
                                     {/* Export is only offered where the host opts in via allowExport
                                         (the full homepage/task chat). The lightweight knowledge/file/
                                         article docks and the share view leave it off. */}

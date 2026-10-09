@@ -142,23 +142,23 @@ describe('staged user authorization', () => {
         expect(input()).toHaveValue('200000000')
         expect(screen.queryByRole('switch')).toBeNull()
     })
-    it('closes personal authorization when saving zero quota', async () => {
+    it('saves zero as an explicit personal override', async () => {
         renderUser({ direct_enabled: true })
         fireEvent.change(input(), { target: { value: '0' } })
         save()
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledOnce())
         expect(vi.mocked(saveDshPolicy).mock.calls[0][3]).toMatchObject({
-            enabled: false,
+            enabled: true,
             monthly_token_limit: 0,
         })
     })
-    it('keeps final authorization granted by a department after personal quota becomes zero', async () => {
+    it('keeps confirmed authorization visible while saving a zero override', async () => {
         renderUser({ authorized: true, monthly_token_limit: 1000000 })
         fireEvent.change(input(), { target: { value: '0' } })
         save()
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledOnce())
         expect(vi.mocked(saveDshPolicy).mock.calls[0][3]).toMatchObject({
-            enabled: false,
+            enabled: true,
             monthly_token_limit: 0,
         })
         await waitFor(() => expect(input()).toBeEnabled())
@@ -173,7 +173,7 @@ describe('staged user authorization', () => {
         save()
         await waitFor(() => expect(saveDshPolicy).toHaveBeenCalledOnce())
         expect(vi.mocked(saveDshPolicy).mock.calls[0][3]).toMatchObject({
-            enabled: false,
+            enabled: true,
             monthly_token_limit: 0,
         })
         await waitFor(() => expect(input()).toBeEnabled())

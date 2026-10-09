@@ -137,8 +137,23 @@ class ModelUserPermission(DshContract):
     def consistent_effective_result(self):
         if self.authorized != (bool(self.sources) and self.monthly_token_limit > 0):
             raise ValueError("Authorization must match the effective sources")
-        if self.monthly_token_limit != max((source.monthly_token_limit for source in self.sources), default=0):
-            raise ValueError("Effective quota must equal the highest source quota")
+        candidates = (
+            [source for source in self.sources if source.subject_type == "USER"]
+            if self.direct_enabled
+            else self.sources
+        )
+        expected = (
+            self.direct_monthly_token_limit
+            if self.direct_enabled
+            else max((source.monthly_token_limit for source in candidates), default=0)
+        )
+        if self.monthly_token_limit != expected:
+            raise ValueError("Effective quota must follow personal override or inherited quota")
+        if any(
+            source.winning != (source in candidates and source.monthly_token_limit == expected)
+            for source in self.sources
+        ):
+            raise ValueError("Quota source must match personal precedence")
         if self.sources and not any(source.winning for source in self.sources):
             raise ValueError("An effective source must win the quota calculation")
         return self

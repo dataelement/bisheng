@@ -16,6 +16,7 @@ from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.open_api import (
     OpenApiAsyncUnsupportedError,
     OpenApiAuthError,
+    OpenApiTaskModeSyncUnsupportedError,
     OpenApiTaskModeUnsupportedError,
 )
 from bisheng.common.errcode.permission import (
@@ -168,9 +169,17 @@ async def open_api_validation_exception_handler(request: Request, exc: RequestVa
     # endpoints may use the same names inside their own business payloads.
     if request.url.path.rstrip("/") == "/api/v2/workstation/chat/completions":
         body = exc.body if isinstance(exc.body, dict) else {}
-        if body.get("task_mode") is True or ("run_mode" in body and body["run_mode"] != "daily"):
+        run_mode = body.get("run_mode")
+        # F073: "task" is a valid run mode now; 26017 only means an unknown one.
+        if body.get("task_mode") is True or ("run_mode" in body and run_mode not in ("daily", "task")):
             return await open_api_auth_exception_handler(request, OpenApiTaskModeUnsupportedError())
-        if body.get("execution") not in (None, "sync") or body.get("background") is True:
+        if run_mode == "task":
+            # Transport is checked before the body model (26060 / 26061 are
+            # raised by the endpoint); a task body failing validation here is a
+            # plain field error, never "async unsupported".
+            if body.get("execution") != "async":
+                return await open_api_auth_exception_handler(request, OpenApiTaskModeSyncUnsupportedError())
+        elif body.get("execution") not in (None, "sync") or body.get("background") is True:
             return await open_api_auth_exception_handler(request, OpenApiAsyncUnsupportedError())
     request.scope["open_api_error_code"] = 400
     return JSONResponse(

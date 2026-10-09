@@ -282,6 +282,44 @@ describe("useAiChat adopts a new conversation id", () => {
         expect(result.current.messages[result.current.messages.length - 1].text).toBe("working on it");
     });
 
+    it("does not blank a new chat when the reply finishes in the same tick the id is minted", async () => {
+        const { result } = renderChat("new");
+
+        act(() => result.current.sendMessage("blocked keyword"));
+        const turn = latestStream();
+        mockGetAgentMessages.mockClear();
+
+        act(() => {
+            turn.submission.onStart();
+            turn.submission.onCreated?.("c-real", {
+                messageId: "42",
+                parentMessageId: "",
+                conversationId: "c-real",
+                sender: "user",
+                text: "blocked keyword",
+            });
+            turn.submission.onAgentUpdate?.({
+                text: "cannot answer that",
+                category: "agent_answer",
+                finalised: true,
+                messageId: "43",
+            });
+            turn.submission.onFinal({
+                final: true,
+                conversation: { conversationId: "c-real" },
+                responseMessage: { messageId: "43", conversationId: "c-real" },
+            });
+            turn.submission.onEnd();
+        });
+
+        await waitFor(() => expect(result.current.conversationId).toBe("c-real"));
+        expect(result.current.isLoading).toBe(false);
+        expect(mockGetAgentMessages).not.toHaveBeenCalled();
+        expect(result.current.messages[result.current.messages.length - 1].text).toBe(
+            "cannot answer that",
+        );
+    });
+
     it("leaves nothing behind under the id the turn started with", async () => {
         const { result, rerender } = renderChat("new");
 

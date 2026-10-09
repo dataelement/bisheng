@@ -44,6 +44,10 @@ interface AiChatMessagesProps {
         it off. Independent of knowledgeChatLayout (which is a layout-width flag and is
         true for the homepage chat too). */
     allowExport?: boolean;
+    /** F075: copying an answer also drops unresolved [Sn] citation handles.
+        Only the daily chat (and its share view) opts in; knowledge / channel
+        docks never produce handles and keep their copy text as is. */
+    stripCitationHandlesOnCopy?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
     /** Overrides the empty-state illustration (defaults to the AI-home image).
@@ -83,6 +87,7 @@ function MessageTreeNode({
     onRegenerate,
     knowledgeChatLayout,
     allowExport,
+    stripCitationHandlesOnCopy,
     allowFeedback,
     onOpenCitationPanel,
     activeCitationMessageId,
@@ -96,6 +101,7 @@ function MessageTreeNode({
     onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     allowExport?: boolean;
+    stripCitationHandlesOnCopy?: boolean;
     allowFeedback?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
@@ -142,6 +148,7 @@ function MessageTreeNode({
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
                 allowExport={allowExport}
+                stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                 allowFeedback={allowFeedback}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
@@ -157,6 +164,7 @@ function MessageTreeNode({
                     onRegenerate={onRegenerate}
                     knowledgeChatLayout={knowledgeChatLayout}
                     allowExport={allowExport}
+                    stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                     allowFeedback={allowFeedback}
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
@@ -180,6 +188,7 @@ export default function AiChatMessages({
     flatMode = false,
     knowledgeChatLayout = false,
     allowExport = false,
+    stripCitationHandlesOnCopy,
     emptyStateHint,
     emptyStateIllustration,
     contentWidthClassName,
@@ -426,6 +435,7 @@ export default function AiChatMessages({
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     allowExport={allowExport}
+                                    stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                                     allowFeedback={allowFeedback}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
@@ -444,6 +454,7 @@ export default function AiChatMessages({
                                 onRegenerate={onRegenerate}
                                 knowledgeChatLayout={knowledgeChatLayout}
                                 allowExport={allowExport}
+                                stripCitationHandlesOnCopy={stripCitationHandlesOnCopy}
                                 allowFeedback={allowFeedback}
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}

@@ -1938,6 +1938,9 @@
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
   },
+  "com_tools": {
+    "image_view": "Image View"
+  },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
     "add_authorization": "Add permission",
@@ -2360,7 +2363,7 @@
   "com_approval_center_title": "Approval Center",
   "com_citation.web": "Web",
   "com_citation.document": "Document",
-  "com_citation.untitled": "Untitled",
+  "com_citation.untitled": "Citation {{index}}",
   "com_citation.loading_detail": "Loading source details...",
   "com_citation.load_detail_failed": "Failed to load source details",
   "com_citation.policy_document": "Policy document",
@@ -2369,11 +2372,11 @@
   "com_citation.close_references": "Close references",
   "com_citation.back_to_references": "Back to reference list",
   "com_citation.download_document": "Download document",
-  "dsh_title": "DSH Desktop",
+  "dsh_title": "Client",
   "dsh_intro": "Enterprise models are configured automatically after sign-in. No API key is needed.",
   "dsh_local_models": "Use enterprise models on this device",
-  "dsh_open": "Open DSH Desktop",
-  "dsh_download": "Download DSH Desktop",
+  "dsh_open": "Open Client",
+  "dsh_download": "Download Client",
   "dsh_download_help": "The download address is configured by your administrator.",
   "dsh_sessions": "Sign-in authorizations",
   "dsh_device": "Device",
@@ -2408,8 +2411,8 @@
   "dsh_source_unavailable": "Usage unavailable",
   "dsh_unknown_usage": "Usage was not received for {{count}} calls.",
   "dsh": {
-    "launchHelp": "If DSH Desktop did not open, click “Download DSH Desktop” to install it. If already installed, allow your browser to open the app or start it manually.",
-    "launchHelpNoDownload": "If DSH Desktop did not open and is already installed, allow your browser to open the app or start it manually. If not installed, contact your administrator for a download link.",
+    "launchHelp": "If Client did not open, click “Download Client” to install it. If already installed, allow your browser to open the app or start it manually.",
+    "launchHelpNoDownload": "If Client did not open and is already installed, allow your browser to open the app or start it manually. If not installed, contact your administrator for a download link.",
     "heatmapFuture": "Upcoming interval",
     "heatmapMessageValue": "{{value}} messages",
     "heatmapOutside": "Outside selected range",
@@ -2429,5 +2432,17 @@
       "hundredMillion": "100M",
       "tenThousand": "10K"
     }
-  }
+  },
+  "com_citation.preview_loading": "Loading preview…",
+  "com_citation.preview_unavailable": "This file can't be previewed",
+  "com_citation.close_document_preview": "Close document preview",
+  "com_citation.collapse_source": "Collapse source (Esc)",
+  "com_citation.close_workspace": "Close workspace",
+  "com_citation.occurrence": "{{index}} of {{total}}",
+  "com_citation.prev_occurrence": "Previous",
+  "com_citation.next_occurrence": "Next",
+  "com_citation.tab_report": "Report",
+  "com_citation.tab_source": "Source",
+  "com_citation.back_to_report": "Back to report",
+  "com_citation.locate_missed": "Couldn't find the cited passage automatically. Here is the quoted text:"
 }

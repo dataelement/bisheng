@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import HTTPException
 
 from bisheng.chat_session.domain.session_subject import SessionSubject
+from bisheng.common.errcode.open_api import OpenApiModelUnavailableError
 from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.schemas.workstation import OpenDailyChatCompletionReq
@@ -32,7 +33,8 @@ class OpenDailyChatService:
     def _validate_model_and_tools(request: OpenDailyChatCompletionReq, config: dict[str, list]) -> None:
         model_ids = {str(item.get("id")) for item in config.get("models", [])}
         if request.model not in model_ids:
-            raise HTTPException(status_code=400, detail="model is not available to this API subject")
+            # F073: a platform error code instead of a bare 400 (task-mode PRD §4.10).
+            raise OpenApiModelUnavailableError(model=request.model)
 
         available = {
             (int(child.get("id", 0) or 0), str(child.get("tool_key") or ""))
@@ -44,4 +46,3 @@ class OpenDailyChatService:
             requested = (int(tool.id or 0), str(tool.tool_key or ""))
             if requested not in available:
                 raise HTTPException(status_code=400, detail="tools contains an unavailable tool")
-

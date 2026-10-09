@@ -54,7 +54,7 @@ async def read_access_statuses(items, *, tenant, actor, snapshot, request):
                             raise ValueError("Seat identity mismatch")
                         result[user_id] = "AUTHORIZED" if state == "ASSIGNED" else "REVOKED"
                         return
-                result[user_id] = "PENDING_LOGIN" if license_snapshot["available"] > 0 else "SEAT_LIMIT_REACHED"
+                result[user_id] = "UNAUTHORIZED"
             except (DshAuthorizationUnavailableError, GatewayCommandRejected, ValueError, TimeoutError):
                 logger.warning("DSH seat snapshot unavailable for tenant {}, user {}", tenant, user_id)
 

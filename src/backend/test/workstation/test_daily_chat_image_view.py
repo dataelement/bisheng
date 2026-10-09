@@ -53,7 +53,8 @@ def test_dump_knowledge_chunks_annotates_after_format():
         page_content="see ![chart](/bisheng/knowledge/images/1/2/c.png)",
         metadata={"document_name": "f.md", "knowledge_id": "1"},
     )
-    text = _wrapper(registry)._dump_knowledge_chunks([doc, doc])
+    w = _wrapper(registry)
+    text = w._dump_knowledge_chunks(w._format_knowledge_chunks([doc, doc]))
     assert "![chart](/bisheng/knowledge/images/1/2/c.png)⟦img#1⟧" in text
     assert text.count("⟦img#1⟧") == 2
     assert "⟦img#2⟧" not in text
@@ -65,7 +66,8 @@ def test_dump_knowledge_chunks_skips_annotate_without_registry():
         page_content="see ![chart](/bisheng/knowledge/images/1/2/c.png)",
         metadata={"document_name": "f.md", "knowledge_id": "1"},
     )
-    text = _wrapper(None)._dump_knowledge_chunks([doc])
+    w = _wrapper(None)
+    text = w._dump_knowledge_chunks(w._format_knowledge_chunks([doc]))
     assert "⟦img#" not in text
     assert "![chart](/bisheng/knowledge/images/1/2/c.png)" in text
 
@@ -99,6 +101,26 @@ async def test_prepare_tools_does_not_include_view_image(monkeypatch):
     assert "view_image" not in names
     assert "web_search" in names
     assert "search_knowledge_bases" in names
+
+
+@pytest.mark.asyncio
+async def test_prepare_tools_skips_image_view_config_row(monkeypatch):
+    init = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.chat_service.ToolExecutor.init_by_tool_id",
+        init,
+    )
+
+    tools, failures = await _prepare_tools(
+        tool_payloads=[{"type": "tool", "tool_key": "image_view", "id": 39}],
+        login_user=MagicMock(),
+        ws_config=SimpleNamespace(maxTokens=1000),
+        citation_collector=CitationRegistryCollector(),
+    )
+
+    assert tools == []
+    assert failures == []
+    init.assert_not_called()
 
 
 class _NamedTool:

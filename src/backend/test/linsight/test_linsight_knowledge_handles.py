@@ -175,3 +175,38 @@ async def test_web_disabled_scope_keeps_citation_key(cache_web, monkeypatch):
 
     assert all("citation_key" in r for r in results)
     assert agent_factory is not None
+
+
+async def test_web_handles_map_to_snippet_keys_not_grouped_records(monkeypatch):
+    """The runtime cache groups items per page and its records carry no key.
+
+    Handles must be allocated from the snippet-level items, otherwise the
+    handle table stores a bare ``websearch_xxx`` that the marker parser
+    rejects and every web citation in the report is lost.
+    """
+    from bisheng.citation.domain.services.citation_prompt_helper import extract_citation_ids_from_text
+    from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
+
+    async def grouping_cache(items):
+        return CitationRegistryService._group_registry_items(items)
+
+    monkeypatch.setattr(
+        "bisheng.citation.domain.services.citation_prompt_helper.cache_citation_registry_items", grouping_cache
+    )
+    seen_keys: list = []
+
+    async def _assign(scope, items):
+        seen_keys.extend(item.key for item in items)
+        return {item.key: f"S{idx + 1}" for idx, item in enumerate(items)}
+
+    monkeypatch.setattr(handle_svc, "assign_handles", _assign)
+    scope = _Scope()
+    wrapped = _LinsightWebCitationWrapper.wrap(_FakeWeb(), scope=scope)
+
+    results = json.loads(await wrapped.ainvoke({"query": "q"}))
+
+    assert [r["ref"] for r in results] == ["S1", "S2"]
+    assert len(seen_keys) == 2 and all(key and key.startswith("websearch_") and ":" in key for key in seen_keys)
+    assert all(item.key for item in scope.seen)
+    marker = f"{seen_keys[0]}"
+    assert extract_citation_ids_from_text(marker) == {seen_keys[0].split(":", 1)[0]}

@@ -15,7 +15,7 @@ import { OperationStatus } from './OperationStatus'
 import { PolicyView } from './PolicyView'
 import { SeatsView } from './SeatsView'
 import { SettingsPanel } from './SettingsPanel'
-import { dshTime } from './common'
+import { licenseStatusKey } from './licensePresentation'
 
 interface DshManagementProps {
     section?: DshSection
@@ -97,7 +97,7 @@ function DshManagementContent({
                 if (!abort.signal.aborted) setLicenseError(true)
             })
         return () => abort.abort()
-    }, [config.enabled, revision])
+    }, [config.enabled, revision, activeSection])
 
     const handleOperation = useCallback(
         (ref: DshOperationRef, result?: DshOperation) => {
@@ -203,7 +203,7 @@ function LicensePanel({
                                     : 'text-amber-600'
                             }
                         >
-                            {t(`dsh.licenseStatus.${normalizedStatus === 'active' && license.source === 'builtin' ? 'free' : normalizedStatus}`, {
+                            {t(`dsh.licenseStatus.${licenseStatusKey(license)}`, {
                                 defaultValue: license.status,
                             })}
                         </Badge>
@@ -230,17 +230,6 @@ function LicensePanel({
                             limit: license.seat_limit,
                             available: license.available,
                         })}
-                    </p>
-                    <p className="text-muted-foreground">
-                        {t('dsh.expires')}: {dshTime(license.expires_at)}
-                    </p>
-                    {license.license_id && (
-                        <p className="text-muted-foreground">
-                            {t('dsh.licenseId')}: {license.license_id}
-                        </p>
-                    )}
-                    <p className="text-muted-foreground">
-                        {t('dsh.asOf')}: {dshTime(license.as_of)}
                     </p>
                 </div>
             )}

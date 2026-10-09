@@ -35,6 +35,8 @@ class LinsightCitationScope:
         # F047 verbatim-id contract (False). Pinned in the handle table on first
         # allocation so a resumed / follow-up run never switches mid-way.
         self.enabled = enabled
+        # Writes meta:enabled when this run creates the session handle table.
+        self.pins_contract = True
         self.seen_keys: set[str] = set()
         # in-process mirror of the session handle table (Redis is the truth)
         self.handles: dict[str, str] = {}  # handle -> registry key
