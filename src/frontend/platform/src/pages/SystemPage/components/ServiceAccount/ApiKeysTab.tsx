@@ -316,7 +316,7 @@ export function ApiKeysTab({
         }}
       />
       <KeyRevealDialog
-        plaintext={issuedKey?.plaintext || null}
+        issuedKey={issuedKey}
         onClose={() => setIssuedKey(null)}
       />
     </div>

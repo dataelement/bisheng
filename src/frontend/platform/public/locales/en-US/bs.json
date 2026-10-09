@@ -2403,6 +2403,9 @@
       "revealTitle": "Key generated",
       "once": "This is the only time the full key is shown. Copy and store it securely now.",
       "saved": "I have saved the key securely",
+      "verifyTitle": "Check that the key works",
+      "verifyHint": "Run this command in a terminal. If it returns the service account name, the key works.",
+      "verifyDelegateHint": "A delegated key must name the user it acts for; you can replace the user ID with anyone in the delegation scope.",
       "mask": "Key",
       "permissions": "Permissions",
       "noPermissions": "No permissions",
@@ -2419,8 +2422,8 @@
       "revokeAllConfirm": "All active keys for this service account will become invalid immediately. Continue?"
     },
     "scopeGroups": {
-      "workflow": "Workflow",
-      "assistant": "Assistant and chat",
+      "app": "Apps",
+      "workstation": "Workspace",
       "knowledge": "Knowledge",
       "delegation": "Identity delegation",
       "local_dev_toolkit": "Local development toolkit"

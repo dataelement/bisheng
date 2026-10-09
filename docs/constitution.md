@@ -126,6 +126,7 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 | 26x–27x | 260 open_api · 270 commercial_license |
 | 261 | DSH Desktop access (F062, registered 2026-09-09); 260 remains reserved for F053 |
 | 262 | Enterprise plugin marketplace |
+| 264 | Anonymous public v3 channel / guest share links (`public_endpoints`, moved from 261 on 2026-10-08 after colliding with DSH) |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
