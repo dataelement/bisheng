@@ -682,7 +682,9 @@ def update_qa(
         qa.answers = json.dumps(answer, ensure_ascii=False)
     QAKnoweldgeDao.update(qa)
 
-    if question:
+    # The index stores the answer in each question's metadata, so a new answer
+    # needs the same rebuild as a new question.
+    if question or answer:
         knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()

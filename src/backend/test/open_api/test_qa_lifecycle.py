@@ -110,3 +110,40 @@ def test_delete_one_of_several_questions_keeps_pair(monkeypatch, qa_writes):
     qa_writes.delete_batch.assert_not_called()
     qa_writes.delete_vector.assert_called_once_with(qa_writes.knowledge, file_ids=[11])
     qa_writes.save.assert_called_once_with(qa_writes.knowledge, qa)
+
+
+# --- update_qa ------------------------------------------------------------
+
+
+def test_update_answer_only_rebuilds_index(monkeypatch, qa_writes):
+    qa = SimpleNamespace(id=11, knowledge_id=23, questions=["q1", "q2"], answers='["old"]')
+    _grant(monkeypatch, qa_writes, qa)
+
+    filelib.update_qa(id=11, question=None, original_question=None, answer=["new"])
+
+    assert qa.questions == ["q1", "q2"]
+    assert qa.answers == '["new"]'
+    qa_writes.update.assert_called_once_with(qa)
+    qa_writes.delete_vector.assert_called_once_with(qa_writes.knowledge, file_ids=[11])
+    qa_writes.save.assert_called_once_with(qa_writes.knowledge, qa)
+
+
+def test_update_question_only_replaces_question_list(monkeypatch, qa_writes):
+    qa = SimpleNamespace(id=11, knowledge_id=23, questions=["q1", "q2"], answers='["a"]')
+    _grant(monkeypatch, qa_writes, qa)
+
+    filelib.update_qa(id=11, question="new", original_question=None, answer=None)
+
+    assert qa.questions == ["new"]
+    assert qa.answers == '["a"]'
+    qa_writes.save.assert_called_once_with(qa_writes.knowledge, qa)
+
+
+def test_update_without_changes_does_not_touch_index(monkeypatch, qa_writes):
+    qa = SimpleNamespace(id=11, knowledge_id=23, questions=["q1"], answers='["a"]')
+    _grant(monkeypatch, qa_writes, qa)
+
+    filelib.update_qa(id=11, question=None, original_question=None, answer=None)
+
+    qa_writes.delete_vector.assert_not_called()
+    qa_writes.save.assert_not_called()
