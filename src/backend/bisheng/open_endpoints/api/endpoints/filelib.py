@@ -636,8 +636,14 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     login_user = get_open_api_operator()
     qa, knowledge = _qa_with_knowledge_access(qa_id, login_user=login_user, action="edit")
 
+    # A QA pair cannot exist without a question: removing the last one deletes the whole pair.
+    keep_pair = False
     if question:
-        qa.questions = [q for q in qa.questions if q != question]
+        remaining_questions = [q for q in qa.questions if q != question]
+        keep_pair = bool(remaining_questions)
+
+    if keep_pair:
+        qa.questions = remaining_questions
         QAKnoweldgeDao.update(qa)
     else:
         QAKnoweldgeDao.delete_batch([qa_id])
@@ -647,7 +653,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
             trace_id=trace_id_var.get(),
         )
     knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
-    if question:
+    if keep_pair:
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()
 

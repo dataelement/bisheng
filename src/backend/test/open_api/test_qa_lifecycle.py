@@ -57,3 +57,56 @@ async def test_query_qa_short_time_range_is_http_400(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["status_code"] == 400
+
+
+# --- delete_qa_data -------------------------------------------------------
+
+
+@pytest.fixture
+def qa_writes(monkeypatch):
+    knowledge = SimpleNamespace(id=23, type=1)
+    writes = SimpleNamespace(
+        knowledge=knowledge,
+        update=Mock(),
+        delete_batch=Mock(),
+        delete_vector=Mock(),
+        save=Mock(),
+        telemetry=Mock(),
+    )
+    monkeypatch.setattr(filelib, "get_open_api_operator", Mock(return_value=USER))
+    monkeypatch.setattr(filelib.QAKnoweldgeDao, "update", writes.update)
+    monkeypatch.setattr(filelib.QAKnoweldgeDao, "delete_batch", writes.delete_batch)
+    monkeypatch.setattr(filelib.knowledge_imp, "delete_vector_data", writes.delete_vector)
+    monkeypatch.setattr(filelib.knowledge_imp, "QA_save_knowledge", writes.save)
+    monkeypatch.setattr(filelib.telemetry_service, "log_event_sync", writes.telemetry)
+    return writes
+
+
+def _grant(monkeypatch, writes, qa):
+    monkeypatch.setattr(filelib, "_qa_with_knowledge_access", Mock(return_value=(qa, writes.knowledge)))
+
+
+def test_delete_last_question_deletes_whole_pair(monkeypatch, qa_writes):
+    qa = SimpleNamespace(id=11, knowledge_id=23, questions=["only"], answers='["a"]')
+    _grant(monkeypatch, qa_writes, qa)
+
+    response = filelib.delete_qa_data(qa_id=11, question="only")
+
+    assert response.status_code == 200
+    qa_writes.delete_batch.assert_called_once_with([11])
+    qa_writes.delete_vector.assert_called_once_with(qa_writes.knowledge, file_ids=[11])
+    qa_writes.update.assert_not_called()
+    qa_writes.save.assert_not_called()
+
+
+def test_delete_one_of_several_questions_keeps_pair(monkeypatch, qa_writes):
+    qa = SimpleNamespace(id=11, knowledge_id=23, questions=["q1", "q2"], answers='["a"]')
+    _grant(monkeypatch, qa_writes, qa)
+
+    filelib.delete_qa_data(qa_id=11, question="q1")
+
+    assert qa.questions == ["q2"]
+    qa_writes.update.assert_called_once_with(qa)
+    qa_writes.delete_batch.assert_not_called()
+    qa_writes.delete_vector.assert_called_once_with(qa_writes.knowledge, file_ids=[11])
+    qa_writes.save.assert_called_once_with(qa_writes.knowledge, qa)
