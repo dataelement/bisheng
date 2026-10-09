@@ -3263,13 +3263,7 @@
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 8
-    },
-    "no-restricted-syntax": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 4
     }
   },
   "src/pages/ModelPage/manage/ScopeBar.tsx": {

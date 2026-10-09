@@ -2,7 +2,7 @@
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, LoadButton } from "@/components/bs-ui/button";
-import { Input, Textarea } from "@/components/bs-ui/input";
+import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Switch } from "@/components/bs-ui/switch";
@@ -15,359 +15,15 @@ import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
-import { ArrowLeft, Plus, Settings, Trash2Icon } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
-import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
+import { ModelItem } from "./ModelItem";
 import { hasDuplicateModelName, hasInvalidModelName, trimModelNames } from "./modelNameTrim";
-import { t } from "i18next";
-
-function ModelItem({ data, type, onDelete, onInput, onConfig }) {
-    const { t } = useTranslation()
-    const [model, setModel] = useState({
-        ...data,
-        voice: data.config?.voice || ''
-    })
-    const [error, setError] = useState('')
-    const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(data.config?.enable_web_search || false)
-    const [maxTokens, setMaxTokens] = useState(data.config?.max_tokens ?? '')
-    const [voiceError, setVoiceError] = useState('')
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [inputAdvancedParams, setInputAdvancedParams] = useState('');
-    const [savedInputParams, setSavedInputParams] = useState(data.config?.user_kwargs || '');
-    const [advancedParams, setAdvancedParams] = useState(() => {
-        const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding') || {};
-        return templateToJsonString(template)
-    });
-    const [originalAdvancedParams, setOriginalAdvancedParams] = useState(advancedParams);
-    const [jsonError, setJsonError] = useState(false);
-
-    const prevDepsRef = useRef({
-        type: type,
-        modelType: model.model_type,
-        dialogOpen: dialogOpen
-    });
-
-    useEffect(() => {
-        setModel({
-            ...data,
-            voice: data.config?.voice || ''
-        });
-        const userSavedParams = data.config?.user_kwargs || '';
-        setSavedInputParams(userSavedParams);
-
-        const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding') || {};
-        const newPlaceholder = templateToJsonString(template) || '{"temperature": 1, "top_p": 0.9}';
-        setAdvancedParams(newPlaceholder);
-        setOriginalAdvancedParams(newPlaceholder);
-
-        if (dialogOpen) {
-            setInputAdvancedParams(userSavedParams);
-            initTemplate();
-        }
-        setJsonError(false);
-    }, [data, dialogOpen, type, model.model_type]);
-
-    const initTemplate = () => {
-        if (!['llm', 'embedding'].includes(model.model_type)) return;
-
-        try {
-            const template = getAdvancedParamsTemplate(type, model.model_type as 'llm' | 'embedding');
-            const templateStr = templateToJsonString(template);
-
-            if (templateStr !== advancedParams) {
-                setAdvancedParams(templateStr);
-                setInputAdvancedParams(templateStr);
-                if (!originalAdvancedParams) {
-                    setOriginalAdvancedParams(templateStr);
-                }
-                onConfig({
-                    ...model.config,
-                    user_kwargs: templateStr
-                });
-            }
-        } catch (err) {
-            console.error('Failed to initialize template:', err);
-        }
-    };
-
-    useEffect(() => {
-        if (dialogOpen) {
-            const currentDeps = {
-                type: type,
-                modelType: model.model_type,
-                dialogOpen: dialogOpen
-            };
-
-            if (
-                currentDeps.type !== prevDepsRef.current.type ||
-                currentDeps.modelType !== prevDepsRef.current.modelType ||
-                currentDeps.dialogOpen !== prevDepsRef.current.dialogOpen
-            ) {
-                initTemplate();
-                prevDepsRef.current = currentDeps;
-            }
-        } else {
-            prevDepsRef.current.dialogOpen = false;
-        }
-    }, [dialogOpen, type, model.model_type]);
-
-    const handleInput = (e) => {
-        const value = e.target.value
-        const updatedModel = { ...model, model_name: value }
-        setModel(updatedModel)
-        const repeated = onInput(value, model.model_type)
-
-        setError('')
-        if (!value) setError(t('model.modelNameEmpty'))
-        if (value.length > 100) setError(t('model.modelNameLength'))
-        if (repeated) setError(t('model.modelNameDuplicate'))
-    }
-
-    const handleVoiceInput = (e) => {
-        const value = e.target.value
-        const updatedModel = { ...model, voice: value }
-        setModel(updatedModel)
-        onConfig({ ...model.config, voice: value })
-        setVoiceError('')
-    }
-
-    const handleSelectChange = (val) => {
-        const oldType = model.model_type;
-        const updatedModel = { ...model, model_type: val }
-        setModel(updatedModel)
-        onInput(model.model_name, val)
-
-        setIsWebSearchEnabled(false)
-        setMaxTokens('')
-
-        if (dialogOpen && oldType !== val) {
-            initTemplate();
-        }
-    }
-
-    const handleDelClick = () => {
-        bsConfirm({
-            desc: t('model.deleteModelConfirmation'),
-            onOk(next) {
-                onDelete()
-                next()
-            }
-        })
-    }
-
-    const handleSwitchChange = (checked) => {
-        setIsWebSearchEnabled(checked)
-        onConfig({
-            enable_web_search: checked,
-            max_tokens: maxTokens,
-            ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
-        })
-    }
-
-    const handleMaxTokensChange = (e) => {
-        const value = e.target.value
-        setMaxTokens(value)
-
-        if (value === '') {
-            onConfig({
-                enable_web_search: isWebSearchEnabled,
-                ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
-            })
-        } else {
-            onConfig({
-                enable_web_search: isWebSearchEnabled,
-                max_tokens: parseInt(value, 10),
-                ...(model.config?.user_kwargs && { user_kwargs: model.config.user_kwargs })
-            })
-        }
-    }
-
-    const handleSaveAdvancedParams = () => {
-        const currentInput = inputAdvancedParams.trim();
-        if (currentInput) {
-            try {
-                const parsed = JSON.parse(currentInput);
-                if (typeof parsed !== 'object' || parsed === null) {
-                    setJsonError(true);
-                    return;
-                }
-                setJsonError(false);
-            } catch (err) {
-                setJsonError(true);
-                return;
-            }
-        }
-
-        onConfig({
-            ...model.config,
-            user_kwargs: currentInput
-        });
-        setSavedInputParams(currentInput);
-        setInputAdvancedParams(currentInput);
-        setDialogOpen(false);
-        setJsonError(false);
-    };
-
-    const handleCloseDialog = () => {
-        setInputAdvancedParams(savedInputParams);
-        setJsonError(false);
-        setDialogOpen(false);
-    };
-
-    const refreshTemplate = () => {
-        if (dialogOpen) {
-            initTemplate();
-        }
-    };
-    const showAsrTtsTypes = ['azure_openai', 'openai', 'qwen', 'qianfan'];
-    return (
-        <div className="group w-full border rounded-sm p-4 mb-2">
-            <div className="flex items-center justify-between">
-                <span className="flex">{model.name.replace('model', t('model.model'))}
-
-                    {(model.model_type === 'llm' || model.model_type === 'embedding') && (
-                        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                            <DialogTrigger asChild>
-                                <div className="flex items-center cursor-pointer ml-2">
-                                    <Settings className=" text-blue-500" size={16} strokeWidth={2} />
-                                    <span className="ml-1 text-blue-500 text-xs">{t('model.advancedParamsConfig')}</span>
-                                </div>
-                            </DialogTrigger>
-
-                            <DialogContent className="sm:max-w-[625px]">
-                                <DialogHeader>
-                                    <DialogTitle>{t('model.advancedParamsConfig')}</DialogTitle>
-                                </DialogHeader>
-                                <div className="mt-4 text-gray-500">
-                                    <Label>{t('model.pasteAdvancedParamsHere')}</Label>
-                                    <Textarea
-                                        value={inputAdvancedParams}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            setInputAdvancedParams(value);
-
-                                            if (value.trim()) {
-                                                try {
-                                                    const parsed = JSON.parse(value.trim());
-                                                    if (typeof parsed !== 'object' || parsed === null) {
-                                                        setJsonError(true);
-                                                    } else {
-                                                        setJsonError(false);
-                                                    }
-                                                } catch (err) {
-                                                    setJsonError(true);
-                                                }
-                                            } else {
-                                                setJsonError(false);
-                                            }
-                                        }}
-                                        className={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                                        rows={10}
-                                        placeholder={advancedParams}
-                                    />
-                                    {jsonError && (
-                                        <span className="text-red-500 text-xs mt-1 inline-block">
-                                            {t('model.errorInvalidJsonFormat')}
-                                        </span>
-                                    )}
-                                </div>
-                                <DialogFooter className="mt-4">
-                                    <Button variant="outline" onClick={handleCloseDialog}>{t('model.cancel')}</Button>
-                                    <Button onClick={handleSaveAdvancedParams}>{t('model.save')}</Button>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                    )}
-                </span>
-
-                <Trash2Icon
-                    onClick={handleDelClick}
-                    className="w-[16px] h-[16px] opacity-0 group-hover:opacity-100 cursor-pointer text-gray-500"
-                />
-            </div>
-            <div className="space-y-2 mt-2">
-                <div>
-                    <Label className="bisheng-label">
-                        <span>{t('model.modelName')}</span>
-                        <QuestionTooltip
-                            className="relative top-0.5 ml-1"
-                            content={t('model.modelNameTooltip')}
-                        ><span /></QuestionTooltip>
-                    </Label>
-                    <Input value={model.model_name} onChange={handleInput} className="h-8"></Input>
-                    {error && <span className="text-red-500 text-xs">{error}</span>}
-                </div>
-                <div>
-                    <Label className="bisheng-label">{t('model.modelType')}</Label>
-                    <Select value={model.model_type} onValueChange={handleSelectChange}>
-                        <SelectTrigger className="h-8">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="llm">LLM</SelectItem>
-                                <SelectItem value="embedding">Embedding</SelectItem>
-                                <SelectItem value="rerank">Rerank</SelectItem>
-                                {showAsrTtsTypes.includes(type) && (
-                                    <>
-                                        <SelectItem value="asr">ASR</SelectItem>
-                                        <SelectItem value="tts">TTS</SelectItem>
-                                    </>
-                                )}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
-                {model.model_type === 'tts' && (
-                    <div>
-                        <Label className="bisheng-label">
-                            <span>{t('model.voiceType')}</span>
-                            <span className="text-red-500">*</span>
-                            <QuestionTooltip
-                                className="relative top-0.5 ml-1"
-                                content={t('model.voiceTypeTooltip')}
-                            ><span /></QuestionTooltip>
-                        </Label>
-                        <Input
-                            value={model.voice || ''}
-                            onChange={handleVoiceInput}
-                            className="h-8"
-                        ></Input>
-
-                        {voiceError && <span className="text-red-500 text-xs">{voiceError}</span>}
-                    </div>
-                )}
-                {model.model_type === 'llm' && (
-                    <>
-                        {['qwen', 'tencent', 'moonshot'].includes(type) && <div className="flex gap-2 items-center">
-                            <Label className="bisheng-label">
-                                {t('model.webSearch')}
-                            </Label>
-                            <Switch checked={isWebSearchEnabled} onCheckedChange={handleSwitchChange} />
-                        </div>}
-                        <div>
-                            <Label className="bisheng-label">
-                                {type === 'qianfan' ? 'max_output_tokens' : (type === 'ollama' ? 'num_ctx' : 'max_tokens')}
-                            </Label>
-                            <Input
-                                type="number"
-                                value={maxTokens}
-                                onChange={handleMaxTokensChange}
-                                className="h-8"
-                            />
-                        </div>
-                    </>
-                )}
-            </div>
-        </div>
-    )
-}
 
 export const modelProvider = [
     { "name": "OpenAI", "value": "openai" },
@@ -376,20 +32,23 @@ export const modelProvider = [
     { "name": "xinference", "value": "xinference" },
     { "name": "llamacpp", "value": "llamacpp" },
     { "name": "vllm", "value": "vllm" },
-    { "name": "阿里云百炼", "value": "qwen" },
+    { "name": "", "labelKey": "model.providerNames.qwen", "value": "qwen" },
     { "name": "DeepSeek", "value": "deepseek" },
-    { "name": "硅基流动", "value": "silicon" },
-    { "name": "火山引擎", "value": "volcengine" },
-    { "name": "智谱 AI", "value": "zhipu" },
-    { "name": "讯飞星火", "value": "spark" },
-    { "name": "腾讯云", "value": "tencent" },
-    { "name": "月之暗面", "value": "moonshot" },
-    { "name": "百度千帆", "value": "qianfan" },
+    { "name": "", "labelKey": "model.providerNames.silicon", "value": "silicon" },
+    { "name": "", "labelKey": "model.providerNames.volcengine", "value": "volcengine" },
+    { "name": "", "labelKey": "model.providerNames.zhipu", "value": "zhipu" },
+    { "name": "", "labelKey": "model.providerNames.spark", "value": "spark" },
+    { "name": "", "labelKey": "model.providerNames.tencent", "value": "tencent" },
+    { "name": "", "labelKey": "model.providerNames.moonshot", "value": "moonshot" },
+    { "name": "", "labelKey": "model.providerNames.qianfan", "value": "qianfan" },
     { "name": "Minimax", "value": "minimax" },
     { "name": "Anthropic", "value": "anthropic" },
     { "name": "MindIE", "value": "MindIE" },
 ]
 const bishengModelProvider = { "name": "bishengRT", "value": "bisheng_rt" }
+
+// Providers with a localized display name carry `labelKey`; the rest use `name` as-is.
+const providerLabel = (provider, translate) => provider?.labelKey ? translate(provider.labelKey) : (provider?.name || '')
 
 const defaultForm = {
     id: null as any,
@@ -415,7 +74,6 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const { appConfig } = useContext(locationContext);
 
     const [formData, setFormData] = useState({ ...defaultForm })
-    const [modelRefs, setModelRefs] = useState({});
 
     // Create mode reads the admin scope fresh instead of taking it from the
     // list page: the scope is a server-side lease that can expire while the
@@ -437,24 +95,14 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         if (id === -1) return
         getLLmServerDetail(id).then(res => {
             setFormData(res)
-            const refs = {};
-            res.models.forEach(model => {
-                refs[model.id] = null;
-            });
-            setModelRefs(refs);
         })
     }, [id])
 
     const getModelsByType = useSelectModel()
     const handleTypeChange = (val) => {
-        const name = onGetName(_modelProvider.find(el => el.value === val).name || '')
+        const name = onGetName(providerLabel(_modelProvider.find(el => el.value === val), t))
         const models = getModelsByType(val)
         setFormData({ ...formData, type: val, name, models })
-        const refs = {};
-        models.forEach(model => {
-            refs[model.id] = null;
-        });
-        setModelRefs(refs);
     }
 
     const handleAddModel = () => {
@@ -467,50 +115,25 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             model_type: 'llm',
             voice: ''
         }
-        const newModels = [...formData.models, model];
-        setFormData({ ...formData, models: newModels })
-        setModelRefs(prev => ({
-            ...prev,
-            [model.id]: null
-        }));
+        setFormData({ ...formData, models: [...formData.models, model] })
     }
 
     const handleDelete = (index) => {
         const models = formData.models.filter((el, i) => index !== i)
         setFormData({ ...formData, models })
-        const modelId = formData.models[index].id;
-        setModelRefs(prev => {
-            const newRefs = { ...prev };
-            delete newRefs[modelId];
-            return newRefs;
-        });
     }
 
     const handleModelChange = (name, type, index) => {
         const models = formData.models.map((el, i) => index === i ? {
             ...el,
-            config: type === 'llm' ? el.config : null,
+            // Type-specific settings do not carry over to another model type
+            config: type === el.model_type ? el.config : null,
             model_name: name,
             model_type: type,
             voice: type === 'tts' ? (el.voice || '') : ''
         } : el)
         setFormData({ ...formData, models })
-
-        setTimeout(() => {
-            if (modelRefs[models[index].id]?.refreshTemplate) {
-                modelRefs[models[index].id].refreshTemplate();
-            }
-        }, 0);
-
         return formData.models.find((el, i) => index !== i && el.model_name === name)
-    }
-
-    const handleVoiceChange = (voice, index) => {
-        const models = formData.models.map((el, i) => index === i ? {
-            ...el,
-            voice
-        } : el)
-        setFormData({ ...formData, models })
     }
 
     const handleModelConfig = (config, index) => {
@@ -643,7 +266,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{model.name}</SelectItem>))}
+                            {_modelProvider.map((model => <SelectItem key={model.value} value={model.value}>{providerLabel(model, t)}</SelectItem>))}
                         </SelectGroup>
                     </SelectContent>
                 </Select>
@@ -667,7 +290,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 showDefault={id === -1}
                 provider={formData.type}
                 formData={formData.config}
-                providerName={_modelProvider.find(el => el.value === formData.type)?.name}
+                providerName={providerLabel(_modelProvider.find(el => el.value === formData.type), t)}
                 apiKeySite={providerInfo?.apiKeyUrl}
             />
             <div className={formData.type ? 'visible' : 'invisible'}>
@@ -703,22 +326,20 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         {t('model.model')}
                         {providerInfo && <a href={providerInfo.modelUrl} target="_blank" rel="noreferrer" className="ml-1 text-primary/80">({t('model.visitOfficialWebsiteToViewAvailableModels')})</a>}
                     </Label>
-                    <div className="w-[92%]">
+                    <div className="mt-2 space-y-3">
                         {
                             formData.models.map((m, i) => (
                                 <ModelItem
                                     key={m.id}
-                                    ref={el => modelRefs[m.id] = el}
                                     data={m}
                                     type={formData.type}
                                     onInput={(name, type) => handleModelChange(name, type, i)}
-                                    onVoiceChange={(voice) => handleVoiceChange(voice, i)}
                                     onConfig={(config) => handleModelConfig(config, i)}
                                     onDelete={() => handleDelete(i)}
                                 />
                             ))
                         }
-                        <Button className="w-full mt-2 border-dashed border-border" variant="outline" onClick={handleAddModel}>
+                        <Button className="w-full border-dashed border-border" variant="outline" onClick={handleAddModel}>
                             <Plus className="size-5 text-primary mr-1" />
                             <span>{t('model.addModel')}</span>
                         </Button>
