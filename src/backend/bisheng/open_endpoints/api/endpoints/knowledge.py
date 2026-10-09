@@ -116,7 +116,7 @@ async def delete_metadata_fields(*,
 
 
 @router.get('/get_metadata_fields/{knowledge_id}', response_model=UnifiedResponseModel)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:read")
 async def list_metadata_fields(*,
                                default_user: UserPayload = Depends(get_open_api_operator_async),
                                knowledge_id: int,
@@ -218,7 +218,7 @@ async def delete_file_user_metadata(*,
 
 
 @router.post('/file/list_user_metadata', response_model=UnifiedResponseModel)
-@open_api_scope("knowledge:write")
+@open_api_scope("knowledge:read")
 async def list_file_user_metadata(*,
                                   default_user: UserPayload = Depends(get_open_api_operator_async),
                                   knowledge_id: int = Body(..., embed=True, description="Knowledge ID"),

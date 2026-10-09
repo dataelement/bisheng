@@ -2485,11 +2485,11 @@
       },
       "knowledge_read": {
         "label": "Read knowledge",
-        "desc": "List knowledge bases and files, retrieve content, and read Q&A and citations."
+        "desc": "List knowledge bases and files, retrieve content, and read Q&A, metadata, and citations."
       },
       "knowledge_write": {
         "label": "Write knowledge",
-        "desc": "Create, modify, or delete knowledge bases, files, chunks, Q&A, and metadata."
+        "desc": "Create, modify, or delete knowledge bases, files, chunks, Q&A, and metadata. Includes all permissions of Read knowledge."
       },
       "delegate": {
         "label": "Act on behalf of users",
