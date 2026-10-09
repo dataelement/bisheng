@@ -28,7 +28,6 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         (
             ("POST", f"{_V2}/workflow/invoke"),
             ("POST", f"{_V2}/workflow/stop"),
-            (WS, f"{_V2}/workflow/chat/{{workflow_id}}"),
         ),
         "app",
         "openApiManagement.scopes.workflow_invoke.label",

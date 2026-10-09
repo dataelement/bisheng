@@ -2465,7 +2465,7 @@
     "scopes": {
       "workflow_invoke": {
         "label": "Invoke workflows",
-        "desc": "Run and stop workflows, and open workflow chat connections."
+        "desc": "Run and stop workflows."
       },
       "workflow_read": {
         "label": "Read workflows",

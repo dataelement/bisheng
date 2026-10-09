@@ -79,6 +79,7 @@
   "10540": "Server thread limit reached. Please try again later",
   "10541": "Workflow execution failed: {{exception}}",
   "10542": "You can upload at most 5 files",
+  "10543": "Invalid user input for the waiting workflow",
   "10550": "The page cursor has expired. Please refresh the list and try again.",
   "10599": "No permission to view",
   "10600": "Incorrect username or password",
