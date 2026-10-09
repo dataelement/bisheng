@@ -13,7 +13,7 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Upload } from "lucide-react";
 import type { ChangeEvent } from "react";
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 type SensitiveForm = {
@@ -58,7 +58,7 @@ function toApiWordsType(wordsType: number[] = []): SensitiveWordType[] {
 
 function normalizeCustomWords(words: string) {
     return words
-        .split(/[\r\n,，、;；|\s]+/)
+        .split(/[\r\n,\uFF0C\u3001;\uFF1B|\s]+/)
         .map((word) => word.trim())
         .filter(Boolean)
         .join("\n");
@@ -84,7 +84,7 @@ function WorkbenchSensitivePolicy(_, ref) {
         });
     }, []);
 
-    const savePolicy = async (nextForm: SensitiveForm) => {
+    const savePolicy = useCallback(async (nextForm: SensitiveForm) => {
         const res = await captureAndAlertRequestErrorHoc(updateSensitiveWordPolicyApi({
             enabled: nextForm.isCheck,
             words_types: toApiWordsType(nextForm.wordsType),
@@ -96,9 +96,9 @@ function WorkbenchSensitivePolicy(_, ref) {
             setForm(nextForm);
         }
         return Boolean(res);
-    };
+    }, []);
 
-    const validateForm = (nextForm: SensitiveForm) => {
+    const validateForm = useCallback((nextForm: SensitiveForm) => {
         if (!nextForm.isCheck) {
             setFieldErrors(EMPTY_FIELD_ERRORS);
             return true;
@@ -115,7 +115,7 @@ function WorkbenchSensitivePolicy(_, ref) {
         }
         setFieldErrors(nextErrors);
         return !nextErrors.wordsType && !nextErrors.autoReply;
-    };
+    }, [t]);
 
     useImperativeHandle(ref, () => ({
         save: async () => {
@@ -123,7 +123,7 @@ function WorkbenchSensitivePolicy(_, ref) {
                 toast({
                     title: t("prompt"),
                     variant: "error",
-                    description: t("build.errors.sensitivePolicyLoading", "敏感词配置加载中，请稍后再试"),
+                    description: t("build.errors.sensitivePolicyLoading"),
                 });
                 return false;
             }
@@ -135,7 +135,7 @@ function WorkbenchSensitivePolicy(_, ref) {
             if (!validateForm(nextForm)) return false;
             return savePolicy(nextForm);
         },
-    }), [form, loaded, t, toast]);
+    }), [form, loaded, t, toast, validateForm, savePolicy]);
 
     const handleSwitchChange = (checked: boolean) => {
         setForm((prev) => ({ ...prev, isCheck: checked }));
@@ -174,7 +174,7 @@ function WorkbenchSensitivePolicy(_, ref) {
                     <div>
                         <div className="flex items-center gap-2">
                             <p className="text-lg font-bold">
-                                {t("build.contentSecurityReview", "内容安全审查")}
+                                {t("build.contentSecurityReview")}
                             </p>
                         </div>
                         <p className="mt-1 text-sm text-[#86909C]">

@@ -570,8 +570,8 @@ Redis 的 `unknown_usage` 集合仅统计缺失用量请求，不参与准入。
 | 分页主表 | Gateway 席位表；默认 ASSIGNED，可切 REVOKED。未分配用户走 BiSheng 既有用户选择器，不做全量用户跨库分页 |
 | 游标 | created_at DESC、seat_id DESC；limit 默认 50、最大 100，读取 limit+1 判断 has_more。签名 cursor 绑定租户/实例/筛选/排序；改变筛选重置游标 |
 | 检索 | user_id 精确、账号/显示名包含关键词匹配、席位状态；标准化输入、长度限制、转义通配符和 SQL 参数化。用户搜索支持任意位置的子串（如 `021` 匹配 `gzx021`），不区分英文大小写 |
-| 查询顺序 | Gateway SQL 内先检索和筛选有效会话，再 LIMIT；不在分页后过滤，不将上万 user_id 传给另一服务 |
-| 当前页补齐 | 一次 BiSheng 批量身份查询、一次会话聚合、一次 Redis 最近活跃批量读；无 N+1，无全量模型/用量查询 |
+| 查询顺序 | Gateway SQL 内先检索和筛选席位状态，再 LIMIT；不在分页后过滤，不将上万 user_id 传给另一服务 |
+| 当前页补齐 | 一次 BiSheng 批量身份查询、现有 Gateway 响应校验；无 N+1，无全量模型/用量查询 |
 | 计数 | 列表返回 next_cursor/has_more，不每页 COUNT；License 占用展示可缓存 10 秒并标 as_of，真实分配仍用事务内数量 |
 | 前端 | 搜索防抖 300ms、取消旧请求、防止过期响应覆盖；前后页游标栈，最多 100 行，不做深 OFFSET 跳页 |
 
@@ -581,13 +581,17 @@ gt_dsh_seat 只保存最小身份检索投影，不成为用户主数据。首�
 
 初始回填和周期版本巡检采用 user_id 游标，每批最多 100 条；失败重试，记录 profile_synced_at。检索短暂使用旧投影可标明同步延迟，当前页真实身份由 BiSheng 补齐。删除用户仍保留席位并显示“账号已删除”，不会因资料同步释放名额；鉴权始终读真实用户/租户状态，不读投影授权。
 
-排序键不可变，但筛选结果是实时集合而非快照；列表变更后刷新首屏，前端按 seat_id 去重。账号/显示名使用 `%关键词%` 包含检索，不能依赖名称 B-tree 索引进行前缀范围查找；保留租户、席位状态过滤和数据库游标分页，配合 EXISTS 会话过滤，避免先全量加载再筛选或逐用户 SQL。大规模数据下需实际执行计划验证。
+排序键不可变，但筛选结果是实时集合而非快照；列表变更后刷新首屏，前端按 seat_id 去重。账号/显示名使用 `%关键词%` 包含检索，不能依赖名称 B-tree 索引进行前缀范围查找；保留租户、席位状态过滤和数据库游标分页，避免先全量加载再筛选或逐用户 SQL。大规模数据下需实际执行计划验证。
 
-#### 4.8.2 登录状态展示
+#### 4.8.2 席位资格管理
 
-列为：用户/账号、席位状态、登录状态、有效会话数、最近登录、最近活跃、操作。登录状态为“有有效会话 / 无有效会话 / 不可用”，判定是 Session ACTIVE 且绝对有效期未到；不将它称为当前在线。最近活跃来自登录/刷新/模型验席，没有心跳不能推断客户端正在运行。
+2026-10-09 产品修订：企业管理员通过席位分配与撤销管理员工使用资格。页面列为用户/账号、主部门、席位状态、操作；检索条件为用户关键词和席位状态，继续使用有界游标分页。
 
-登录成功更新 last_login_at；模型验席对 Redis last_seen 按会话节流 60 秒，本期读取当前页的 Redis 观察值，尚未增加 SQL last_seen_at 定期 MAX 投影；SQL 字段保留作后续扩展。最近活跃过期只显示未知/未观察到，不改变席位和 Session 有效性。会话详情按 seat_id 独立游标分页，不在首屏加载所有历史设备；席位撤销保持原有管理员明确操作语义。
+登录状态、有效会话数、设备信息、最近登录和最近活动退出企业管理展示。会话查询和逐条吊销的毕昇管理端及本人接口已移除。使用统计继续展示模型调用、消息数、Token 与额度使用。
+
+Gateway 的 Session、RefreshToken 和凭据轮换继续支撑客户端认证、退出及失效。毕昇在内部边界校验 Gateway 的现有席位响应，再将身份、席位和资料字段投影给浏览器；Gateway 返回的登录会话摘要仅在内部校验。席位撤销继续使对应使用资格与凭据失效，重新分配后员工重新登录使用。
+
+完整范围、验收标准和验证证据见 [席位管理修订](./seat-management-revision.md)。
 
 ## 5. 已知坑与处理位置
 
@@ -670,7 +674,7 @@ DSH 仅配置 Nginx BASE，公开配置返回开关、client_id 与 contract_ver
 
 | 提供方 / 方法 / 路径 | 调用方 / 鉴权 | 关键入参 | 返回契约 | 关联数据 |
 |---|---|---|---|---|
-| BiSheng `GET /api/v1/dsh/admin/users` | 席位页；管理员 JWT | cursor, limit, keyword, seat_state, login_state | 身份/席位/登录 items, next_cursor, has_more, as_of | Gateway SQL 分页 + 当前页身份批量补齐，不查模型 |
+| BiSheng `GET /api/v1/dsh/admin/users` | 席位页；管理员 JWT | cursor, limit, keyword, seat_state | 身份/席位 items, next_cursor, has_more, as_of | Gateway SQL 分页 + 当前页身份批量补齐，不查模型 |
 | BiSheng `GET /api/v1/dsh/admin/license` | 管理页面；管理员 JWT | 无 | 授权状态, used, limit, valid_until | Gateway 当前有效 License + 席位统计 |
 | BiSheng `PUT /api/v1/dsh/admin/users/{id}/models/{model_id}/policy` | 管理页面；管理员 JWT | operation_id, enabled, monthly_token_limit, expected_version | operation_id, status；成功含 policy/version，处理中含 phase | user_policy + admin_operation；见 §4.5.5 |
 | BiSheng `POST /api/v1/dsh/admin/users/{id}/revoke` | 管理页面；管理员 JWT | operation_id, expected_grant_version | SUCCEEDED / PROCESSING + operation_id | admin_operation → Gateway |
@@ -722,13 +726,12 @@ DSH Token 的 JOSE header 固定 typ=bisheng-dsh-access+jwt、alg=HS256、kid=ds
 
 本轮接口细化不新增 HTTP 业务接口数量：补充 token 的可信身份显示/绝对会话期限、models 的 capabilities（streaming/tools/reasoning_content）、usage 的计费时区/重置时间/降级状态。正常 JSON 不因缺失 usage 失败；未知用量字段为 null；成功 SSE 正常发送 finish_reason 和 DONE，仅实际上游/存储错误使用 error 事件。DeepSeek reasoning_content 仅在适配验证通过且 capabilities 声明时支持。刷新同会话串行、响应丢失不重放旧 refresh；登出允许 access 或 refresh 二选一，关闭 DSH/License 过期仍允许验证后撤销当前会话。这些线协议细化见客户端契约 §5～9。
 
-补充 3 个接口（共 26 个）：
+补充接口：
 
 | 提供方 / 接口 | 鉴权 | 请求与返回 |
 |---|---|---|
 | Gateway `POST /api/internal/dsh/profiles/upsert` | BiSheng 服务 HMAC | 最多 100 条 user_id、username/display_name、profile_version；按版本幂等更新已有席位检索投影，不创建席位或改变授权 |
 | BiSheng `GET /api/v1/dsh/admin/users/{id}/policy` | 管理员 JWT、同租户 | 指定用户的模型策略、额度及 source/as_of 用量，供用户用量只读视图；保存后单行刷新使用新增模型策略 GET |
-| BiSheng `GET /api/v1/dsh/admin/users/{id}/sessions` | 管理员 JWT、同租户 | cursor/limit 的设备会话列表，内部复用 Gateway management/read |
 
 管理 `GET /api/v1/dsh/admin/users/{id}/policy` 的已实现补充字段：`tenant_id` 是后端授权解析的真实目标，单模型管理接口同样返回/使用该目标，不能从 simple 用户列表或管理员登录租户猜测。`available_models` 为 `{id:int,name:string,is_root_shared:boolean}[]`，其中 name 与 Desktop 目录共用展示规则：“提供方名称 / 管理员配置的模型展示名称”；模型展示名称 `name` 去除首尾空白后为空时使用调用名称 `model_name`，提供方名称为空时使用提供方类型；由目标租户原模型强读筛选在线 LLM 后逐模型强校验；`available_models_source=live|unavailable` 区分无候选与依赖失败。`last_call` 为最近 SQL 投影的 `{request_id,model_id,status,started_at,finished_at,total_tokens,projected_at}` 或 null，`last_call_source=persisted|unavailable` 区分无历史和读取失败；未知用量为 null，记录允许投影延迟。以上只补普通管理员接口，7 个 Desktop 客户端接口及 0.3.0 不变。
 
