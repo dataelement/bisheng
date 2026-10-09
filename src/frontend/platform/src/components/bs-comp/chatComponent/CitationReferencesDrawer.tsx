@@ -30,7 +30,7 @@ import {
 
 type CitationReferencesDrawerProps = {
   content: string;
-  webContent?: any;
+  webContent?: unknown[];
   citations?: ChatCitation[] | null;
   buttonClassName?: string;
   allowRemoteCitationResolve?: boolean;
@@ -323,8 +323,8 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error: any) => {
-        if (error?.citationForbidden || error?.citationExpired) {
+      .catch((error: unknown) => {
+        if (error && typeof error === "object" && (("citationForbidden" in error && error.citationForbidden) || ("citationExpired" in error && error.citationExpired))) {
           return null;
         }
         console.error("Failed to load citation detail:", error);
