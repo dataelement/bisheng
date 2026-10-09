@@ -919,7 +919,15 @@ class _LinsightWebCitationWrapper(BaseTool):
         return "not supported in sync mode, please use async version"
 
     async def _arun(self, config=None, **kwargs):
-        output = await self.tool.ainvoke(kwargs, config=config)
+        # ToolNode's default error handling re-raises anything but an argument
+        # validation error, so one search timeout or upstream 5xx would abort the
+        # whole run. Hand the failure to the model as the tool result instead; it
+        # can retry with another query or finish with what it already has.
+        try:
+            output = await self.tool.ainvoke(kwargs, config=config)
+        except Exception as e:
+            logger.warning(f"web_search failed, returning the error to the model: {e!r}")
+            return f"联网搜索失败：{e}"
         try:
             annotated, items = await _annotate_web_search_items(output)
             if self.scope is not None and items:

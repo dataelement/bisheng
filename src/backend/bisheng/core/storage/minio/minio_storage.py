@@ -248,6 +248,32 @@ def _build_async_minio_session(timeout_seconds: int, cert_check: bool) -> RetryC
     )
 
 
+# Whole tmp bucket. Empty prefix is "every object"; a "*" prefix matches only names that start with "*".
+_TMP_OBJECT_EXPIRE_DAYS = 7
+
+
+def tmp_object_lifecycle() -> LifecycleConfig:
+    return LifecycleConfig(
+        [
+            Rule(
+                "Enabled",
+                rule_filter=Filter(prefix=""),
+                rule_id="tmp-expire-7d",
+                expiration=Expiration(days=_TMP_OBJECT_EXPIRE_DAYS),
+            )
+        ]
+    )
+
+
+def tmp_lifecycle_matches(current: LifecycleConfig | None) -> bool:
+    if current is None or len(current.rules) != 1:
+        return False
+    rule = current.rules[0]
+    prefix = None if rule.rule_filter is None else rule.rule_filter.prefix
+    days = None if rule.expiration is None else rule.expiration.days
+    return rule.status == "Enabled" and prefix == "" and days == _TMP_OBJECT_EXPIRE_DAYS
+
+
 class MinioStorage(BaseStorage, ABC):
     """MinIO storage backend implementation."""
 
@@ -315,19 +341,22 @@ class MinioStorage(BaseStorage, ABC):
                 raise e
             self.minio_client_sync.set_bucket_policy(self.bucket, json.dumps(anonymous_read_policy))
 
-        # set tmp bucket lifecycle
-        if not self.minio_client_sync.get_bucket_lifecycle(self.tmp_bucket):
-            lifecycle_conf = LifecycleConfig(
-                [
-                    Rule(
-                        "Enabled",
-                        rule_filter=Filter(prefix="*"),
-                        rule_id="rule1",
-                        expiration=Expiration(days=3),
-                    ),
-                ],
-            )
-            self.minio_client_sync.set_bucket_lifecycle(self.tmp_bucket, lifecycle_conf)
+        # Temp objects expire 7 days after upload. An empty prefix matches every
+        # object name; "*" is a literal prefix and never matches real uploads.
+        # Replace a previously installed rule so an existing bucket is corrected.
+        self._ensure_tmp_bucket_lifecycle()
+
+    def _ensure_tmp_bucket_lifecycle(self) -> None:
+        try:
+            current = self.minio_client_sync.get_bucket_lifecycle(self.tmp_bucket)
+        except S3Error as exc:
+            if exc.code != "NoSuchLifecycleConfiguration":
+                raise
+            current = None
+        if tmp_lifecycle_matches(current):
+            return
+        logger.info("minio tmp bucket lifecycle set to expire all objects after {} days", _TMP_OBJECT_EXPIRE_DAYS)
+        self.minio_client_sync.set_bucket_lifecycle(self.tmp_bucket, tmp_object_lifecycle())
 
     async def create_bucket(self, bucket_name: str) -> None:
         return await asyncio.to_thread(self.create_bucket_sync, bucket_name=bucket_name)

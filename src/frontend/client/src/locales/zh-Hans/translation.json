@@ -1867,6 +1867,9 @@
     "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
     "channel_unavailable_or_no_permission": "该频道已失效或暂无查看权限"
   },
+  "com_tools": {
+    "image_view": "图片查看"
+  },
   "com_unified_permission": {
     "access_and_share": "访问与分享",
     "add_authorization": "新增授权",

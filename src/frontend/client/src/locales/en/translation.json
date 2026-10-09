@@ -1938,6 +1938,9 @@
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_unavailable_or_no_permission": "This channel is unavailable or you do not have permission to view it"
   },
+  "com_tools": {
+    "image_view": "Image View"
+  },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
     "add_authorization": "Add permission",

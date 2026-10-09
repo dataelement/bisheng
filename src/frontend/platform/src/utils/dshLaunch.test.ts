@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
 import { dshLaunchUrl, parseDshLaunchBase } from './dshLaunch';
 
-it('uses the default BISHENG Work protocol and adds exactly the platform origin', () => {
+it('uses the default BiSheng protocol and adds exactly the platform origin', () => {
   const url = new URL(dshLaunchUrl());
-  expect(url.protocol).toBe('bisheng-work:');
+  expect(url.protocol).toBe('bisheng:');
   expect(url.hostname).toBe('login');
   expect([...url.searchParams.entries()]).toEqual([['server', window.location.origin]]);
 });

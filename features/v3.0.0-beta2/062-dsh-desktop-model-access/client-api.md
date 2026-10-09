@@ -1,6 +1,8 @@
 # DSH Desktop 接入 BiSheng：客户端开发与联调接口契约
 
-> 2026-09-29 界面名称与地址默认值更新：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng-work://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。
+> 2026-10-08 唤起协议更新：默认唤起地址改为 `bisheng://login`，仍自动附加当前毕昇 origin 的 `server` 参数。已保存的地址不自动覆盖；已有环境需在“客户端 → 接入设置”保存新地址。
+
+> 2026-09-29 界面名称与地址默认值更新（唤起默认值已按 2026-10-08 修订）：毕昇网站的 DSH / DSH Desktop 文案统一显示为“客户端”（英文 Client，日文 クライアント），接口路径、字段和错误码不变。未保存配置或缺少相应字段时，`launch_url` 默认 `bisheng://login`，`download_url` 默认 `https://www.dshdesktop.com/zh/enterprise/`。已保存的自定义地址保持不变，显式空下载地址仍隐藏下载入口；已有环境如需使用新下载地址，应在“客户端 → 接入设置”中修改并保存。
 
 > **2026-09-20 会话版本修复（已批准）**：创建授权事务新增可选 `client_version`，取 DSH Desktop 应用实际版本，随后保存至登录会话。协议版本仍为 `0.5.0`；该字段不是协议版本，不参与登录资格判断。两端配套更新，不为测试阶段旧 Gateway 增加降级重试。详见 [会话版本修订](./client-version-revision.md)。
 
@@ -491,6 +493,8 @@ SSE 仅在 `stream_options.include_usage=true` 时返回最终 usage 块；未�
 
 ## 9. 错误码与客户端动作
 
+逐码原因、建议提示、SSE/关键字兼容和客户端验收见 [客户端错误原因适配清单](client-errors.md)（2026-10-08，按实现核对）。
+
 错误体统一为：
 
 ```json
@@ -505,6 +509,7 @@ error.message 为可展示的服务端说明，不解析其文案；error.code �
 | 400 | invalid_grant / pkce_verification_failed / authorization_expired | authentication_error | 清理当前授权事务，重新浏览器登录；不重用 ticket |
 | 401 | invalid_access_token | authentication_error | 仅按 §5.1 刷新一次；仍失败重新登录 |
 | 401 | invalid_refresh_token / refresh_token_reused / session_expired / session_revoked | authentication_error | 清理凭证与 provider，要求重新登录 |
+| 403 | seat_not_assigned | permission_error | 尚未分配席位，联系管理员授权后重新登录；登录不会自动分配席位 |
 | 403 | seat_limit_reached | permission_error | 席位已满，联系管理员，不循环登录抢席 |
 | 403 | seat_revoked | permission_error | 停止新请求；提示管理员重新分配后必须重新登录，旧凭证不会复活 |
 | 403 | license_invalid / license_expired / dsh_disabled | permission_error | 显示对应不可用原因，联系管理员；不切换到普通登录凭证 |
