@@ -19,7 +19,6 @@ from bisheng.dsh.domain.schemas.admin import (
     LicenseSnapshot,
     ModelUserPermissionPage,
     SeatItem,
-    SessionItem,
     SubjectPolicyInventory,
     SubjectPolicyUpdateResult,
     UsageOverviewPage,
@@ -230,7 +229,6 @@ class DshManagementService:
         keyword=None,
         seat_state=None,
         user_id=None,
-        login_state=None,
     ):
         from bisheng.dsh.domain.services.seat_pages import read_seat_page
 
@@ -247,11 +245,15 @@ class DshManagementService:
                 limit=limit,
                 keyword=keyword,
                 seat_state=seat_state,
-                login_state=login_state,
             )
         )
         try:
-            result["items"] = [SeatItem.model_validate(row).model_dump() for row in result["items"]]
+            result["items"] = [
+                SeatItem.model_validate(row).model_dump(
+                    exclude={"login_state", "active_session_count", "last_login_at", "last_seen_at"}
+                )
+                for row in result["items"]
+            ]
             if target_tenant is not None and any(int(row["tenant_id"]) != target_tenant for row in result["items"]):
                 raise ValueError("Foreign tenant in management page")
             if user_id is not None and any(int(row["user_id"]) != user_id for row in result["items"]):
@@ -394,46 +396,6 @@ class DshManagementService:
                 request=request,
                 seat_limit=None,
             )
-
-    async def sessions(self, actor_id, user_id, *, tenant_id=None, cursor=None, limit=50):
-        actor, tenant = await self.authorize(actor_id, tenant_id, user_id)
-        target = {"tenant_id": str(tenant), "user_id": str(user_id)}
-        for state in ("ASSIGNED", "REVOKED"):
-            page = self._page(
-                await self._request(
-                    "management",
-                    {
-                        "resource": "seats",
-                        "actor": actor,
-                        "target": target,
-                        "limit": 1,
-                        "cursor": None,
-                        "seat_state": state,
-                    },
-                )
-            )
-            if page["items"]:
-                seat = page["items"][0]
-                if str(seat["user_id"]) != str(user_id) or str(seat["tenant_id"]) != str(tenant):
-                    raise DshAuthorizationUnavailableError()
-                target["seat_id"] = seat["seat_id"]
-                break
-        if "seat_id" not in target:
-            return {"items": [], "next_cursor": None, "has_more": False}
-        result = self._page(
-            await self._request(
-                "management",
-                {"resource": "sessions", "actor": actor, "target": target, "limit": limit, "cursor": cursor},
-            )
-        )
-
-        try:
-            result["items"] = [SessionItem.model_validate(row).model_dump() for row in result["items"]]
-            if len(result["items"]) > limit or any(row["seat_id"] != target["seat_id"] for row in result["items"]):
-                raise ValueError("Foreign seat in session page")
-        except ValueError:
-            raise DshAuthorizationUnavailableError() from None
-        return result
 
     def _read(self, operation_id):
         with self.repository_scope() as repository:

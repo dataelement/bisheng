@@ -67,6 +67,8 @@ async def test_users_preserves_gateway_pagination_and_batches_current_page(opera
     result = await service.users(90, cursor="prior", limit=10, seat_state="ASSIGNED")
     assert result["next_cursor"] == "opaque" and result["has_more"] is True
     assert result["items"][0]["username"] == "Fresh"
+    assert set(result["items"][0]).isdisjoint({"login_state", "active_session_count", "last_login_at", "last_seen_at"})
+    assert "login_state" not in gateway.request.await_args.args[1]
     profiles.assert_awaited_once_with([20])
     assert gateway.request.await_args.args[1]["cursor"] == "prior"
     with pytest.raises(PermissionError):

@@ -1,4 +1,4 @@
-"""Browser self-service scope, CSRF, disabled gate and display-only department coverage."""
+"""Browser usage identity, retired session routes and display-only department coverage."""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from sqlmodel import Session
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.dsh import DshDshDisabledError, DshUserDisabledError
+from bisheng.common.errcode.dsh import DshUserDisabledError
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.endpoints import self_service as api
 from bisheng.dsh.domain.repositories.identities import CurrentIdentityRecords
@@ -27,56 +27,24 @@ def runtime():
     )
 
 
-async def test_browser_identity_cannot_select_another_subject(monkeypatch):
+async def test_session_management_routes_are_removed():
+    from bisheng.dsh.api.endpoints import admin
+
     rt = runtime()
-    identity = AsyncMock(return_value=SimpleNamespace(active=True, tenant_active=True, natural_person=True))
-    monkeypatch.setattr(CurrentIdentityRecords, "get", identity)
-    rt.gateway.request.return_value = {"items": [], "next_cursor": None, "has_more": False}
     app = FastAPI()
     app.include_router(api.router, prefix="/api/v1")
+    app.include_router(admin.router, prefix="/api/v1")
     app.dependency_overrides[UserPayload.get_login_user] = lambda: USER
     app.dependency_overrides[get_runtime] = lambda: rt
+    assert all("/sessions" not in path for path in app.openapi()["paths"])
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/dsh/me/sessions?user_id=99&tenant_id=3")
-        assert response.status_code == 200
-        assert response.headers["cache-control"] == "no-store"
-        assert response.json()["data"]["items"] == []
-        identity.assert_awaited_with("2", "20")
-        assert rt.gateway.request.await_args.args[1]["user_id"] == "20"
-        assert rt.gateway.request.await_args.args[1]["tenant_id"] == "2"
-        assert (await client.get("/api/v1/dsh/me/sessions?limit=101")).status_code == 400
-        session_id = str(uuid4())
-        rt.gateway.request.reset_mock()
-        for origin in (None, "http://evil"):
-            headers = {"origin": origin} if origin else {}
-            assert (
-                await client.post(f"/api/v1/dsh/me/sessions/{session_id}/revoke", headers=headers, json={})
-            ).status_code == 403
-        rt.gateway.request.assert_not_awaited()
-        rt.gateway.request.return_value = {"session_id": session_id, "state": "REVOKED"}
-        response = await client.post(
-            f"/api/v1/dsh/me/sessions/{session_id}/revoke", headers={"origin": "http://test"}, json={"user_id": 99}
-        )
-        assert response.status_code == 200
-        assert rt.gateway.request.await_args.args == (
-            "self_revoke",
-            {"tenant_id": "2", "user_id": "20", "session_id": session_id},
-        )
-
-        async def disabled():
-            raise DshDshDisabledError()
-
-        app.dependency_overrides[get_runtime] = disabled
-        assert (await client.get("/api/v1/dsh/me/sessions")).status_code == 403
-
-        async def anonymous():
-            raise HTTPException(401)
-
-        app.dependency_overrides[UserPayload.get_login_user] = anonymous
-        assert (await client.get("/api/v1/dsh/me/sessions")).status_code == 401
+        assert (await client.get("/api/v1/dsh/me/sessions")).status_code == 404
+        assert (await client.post(f"/api/v1/dsh/me/sessions/{uuid4()}/revoke", json={})).status_code == 404
+        assert (await client.get("/api/v1/dsh/admin/users/20/sessions")).status_code == 404
+    rt.gateway.request.assert_not_awaited()
 
 
-async def test_moved_or_disabled_user_never_reaches_gateway(monkeypatch):
+async def test_moved_or_disabled_user_never_reads_usage(monkeypatch):
     rt = runtime()
     lookup = AsyncMock(return_value=None)
     monkeypatch.setattr(CurrentIdentityRecords, "get", lookup)
@@ -88,9 +56,7 @@ async def test_moved_or_disabled_user_never_reaches_gateway(monkeypatch):
     ):
         lookup.return_value = result
         with pytest.raises(DshUserDisabledError):
-            await service.sessions(USER)
-        with pytest.raises(DshUserDisabledError):
-            await service.revoke(USER, str(uuid4()))
+            await service.usage_summary(USER)
     rt.gateway.request.assert_not_awaited()
 
 

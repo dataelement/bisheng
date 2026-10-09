@@ -26,7 +26,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createDshOperationId } from '@/util/dshOperationId'
-import { DshChoice, DshPager, dshTime } from './common'
+import { DshChoice, DshPager } from './common'
 
 interface SeatsViewProps {
     onOperation: (operation: DshOperationRef, result?: DshOperation) => void
@@ -179,21 +179,6 @@ export function SeatsView({
                         })
                     }
                 />
-                <DshChoice
-                    label={t('dsh.loginState')}
-                    value={query.login_state || 'ALL'}
-                    options={['ALL', 'HAS_SESSIONS', 'NO_SESSIONS'].map(
-                        (value) => ({ value, label: t(`dsh.${value}`) }),
-                    )}
-                    onChange={(value) =>
-                        handleFilter({
-                            login_state:
-                                value === 'ALL'
-                                    ? undefined
-                                    : (value as DshSeatQuery['login_state']),
-                        })
-                    }
-                />
             </div>
             {!data ? (
                 <p role="status">
@@ -208,9 +193,6 @@ export function SeatsView({
                                     'user',
                                     'department',
                                     'seatState',
-                                    'loginState',
-                                    'lastLogin',
-                                    'lastSeen',
                                     'actions',
                                 ].map((key) => (
                                     <TableHead key={key}>
@@ -244,16 +226,6 @@ export function SeatsView({
                                         <TableCell>{item.department_name || t('dsh.noDepartment')}</TableCell>
                                         <TableCell>
                                             {t(`dsh.${item.state}`)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {t(`dsh.${item.login_state}`)}{' '}
-                                            {item.login_state === 'HAS_SESSIONS' ? item.active_session_count : ''}
-                                        </TableCell>
-                                        <TableCell>
-                                            {dshTime(item.last_login_at)}
-                                        </TableCell>
-                                        <TableCell>
-                                            {dshTime(item.last_seen_at)}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex gap-2">
