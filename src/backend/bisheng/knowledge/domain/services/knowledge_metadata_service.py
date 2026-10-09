@@ -211,12 +211,18 @@ class KnowledgeMetadataService:
             await es_client.client.update_by_query(index=knowledge_model.index_name, body=request_body)
 
         for knowledge_file in knowledge_model_files:
+            # A file without user metadata has nothing to change; skip it so one such file
+            # does not stop the task for the remaining files.
+            if not knowledge_file.user_metadata:
+                continue
             search_result = await vector_client.aclient.query(
                 collection_name=knowledge_model.collection_name,
                 filter=f"document_id == {knowledge_file.id}",
                 limit=10000,
             )
             for item in search_result:
+                if not item.get("user_metadata"):
+                    continue
                 for old_field_name, new_field_name in field_name_map.items():
                     if old_field_name in item["user_metadata"]:
                         item["user_metadata"][new_field_name] = item["user_metadata"].pop(old_field_name)
@@ -243,7 +249,7 @@ class KnowledgeMetadataService:
                 user_metadata = user_metadata_dict.pop(old_field_name, None)
                 if user_metadata is not None:
                     user_metadata["updated_at"] = int(datetime.now().timestamp())
-                    user_metadata[new_field_name] = user_metadata
+                    user_metadata_dict[new_field_name] = user_metadata
             knowledge_file.user_metadata = user_metadata_dict
             await self.knowledge_file_repository.update(knowledge_file)
 
@@ -274,12 +280,18 @@ class KnowledgeMetadataService:
             await es_client.client.update_by_query(index=knowledge_model.index_name, body=request_body)
 
         for knowledge_file in knowledge_model_files:
+            # A file without user metadata has nothing to change; skip it so one such file
+            # does not stop the task for the remaining files.
+            if not knowledge_file.user_metadata:
+                continue
             search_result = await vector_client.aclient.query(
                 collection_name=knowledge_model.collection_name,
                 filter=f"document_id == {knowledge_file.id}",
                 limit=10000,
             )
             for item in search_result:
+                if not item.get("user_metadata"):
+                    continue
                 for field_name in field_names:
                     if field_name in item["user_metadata"]:
                         del item["user_metadata"][field_name]
