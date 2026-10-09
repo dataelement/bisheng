@@ -1,18 +1,21 @@
 /**
- * F071: keep the compare open/close animation off the layout hot path.
+ * F071: keep the report ↔ source compare view off the layout hot path.
  *
- * Entering or leaving the report ↔ source compare view animates the docked
- * workspace's width (docked clamp() ↔ the whole row). Left alone, every frame of
- * that 300ms transition re-wraps three text-heavy trees: the chat column (flex-1,
- * shrinking or growing), the report pane (a % of the panel) and the source pane
- * (flex-1) — plus the source document starts rendering on top. That is the jank.
+ * Opening a cited source animates the docked workspace's width (docked clamp() →
+ * the whole row) while the chat column, a flex-1 sibling, is squeezed to zero and
+ * faded out. Left alone that costs twice:
+ * - every frame of the 300ms transition re-wraps the chat column and the report
+ *   pane (a % of the panel) at an in-between width;
+ * - worst of all, the chat column ends at ~0px wide, and laying every message
+ *   out one character per line freezes the page for close to a second (measured
+ *   on test: a single ~900ms task right after the panel arrives).
  *
- * While the transition runs this hook pins both boxes to their END widths, so the
- * animating wrapper only clips them (overflow-hidden) instead of re-laying them
- * out: the report slides over and the source is uncovered, the chat column fades
- * at a fixed width. The pins drop once the transition is over — by then the live
- * layout resolves to the same widths, so nothing moves. `entering` also tells the
- * caller to hold the source document's render until the panel has settled.
+ * So the chat column's children keep the width they had before compare opened
+ * for as long as compare stays open — the column is invisible then, it only
+ * clips them — and get the width they are growing back to while compare closes.
+ * The panel card is pinned to its end width for the length of each transition,
+ * so the animating wrapper uncovers the report and source instead of re-laying
+ * them out. Every pin drops once the layout it stands in for is the real one.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
 
@@ -27,11 +30,10 @@ function dockedWidth(rowWidth: number): number {
 }
 
 interface CompareFreeze {
-    /** Fixed width for the chat column's children (it fades while the panel moves). */
+    /** Fixed width for the chat column's children. */
     chat: number;
-    /** Fixed width for the docked panel's inner card. */
-    panel: number;
-    entering: boolean;
+    /** Fixed width for the docked panel's inner card; null once settled. */
+    panel: number | null;
 }
 
 export function useCompareTransitionFreeze(
@@ -64,14 +66,16 @@ export function useCompareTransitionFreeze(
         }
         const target = !openRef.current ? 0 : comparing ? row : dockedWidth(row);
         setFreeze({
-            // Entering: hold the chat at the width it has now while it fades out.
-            // Leaving: lay it out once at the width it is growing back to.
+            // Entering: the width the chat has now. Leaving: the width it grows back to.
             chat: comparing ? chatRef.current?.getBoundingClientRect().width ?? row - target : row - target,
             // Collapsing to nothing: keep the card as it is and just clip it.
             panel: target > 0 ? target - WRAPPER_PADDING_X : panelRef.current?.getBoundingClientRect().width ?? 0,
-            entering: comparing,
         });
-        const timer = setTimeout(() => setFreeze(null), COMPARE_SETTLE_MS);
+        const timer = setTimeout(() => {
+            // While compare stays open the chat pin stays: releasing it would lay
+            // the hidden messages out at ~0px. After closing, the live width is the pin.
+            setFreeze((current) => (comparing && current ? { chat: current.chat, panel: null } : null));
+        }, COMPARE_SETTLE_MS);
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps -- panelRef is a stable ref object
     }, [comparing]);
@@ -81,8 +85,6 @@ export function useCompareTransitionFreeze(
         chatRef,
         /** Style for the chat column: pins its children through a CSS variable. */
         chatStyle: freeze ? ({ '--compare-freeze-w': `${freeze.chat}px` } as React.CSSProperties) : undefined,
-        panelStyle: freeze ? { minWidth: freeze.panel, width: freeze.panel } : undefined,
-        /** True while the panel is still opening into the compare view. */
-        entering: !!freeze?.entering,
+        panelStyle: freeze?.panel != null ? { minWidth: freeze.panel, width: freeze.panel } : undefined,
     };
 }

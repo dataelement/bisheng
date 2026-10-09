@@ -45,9 +45,6 @@ interface WorkspacePanelProps {
     /** F071: 'split' puts the source beside the report; 'tabs' (narrow screens)
      *  switches between them because two columns would each be too narrow. */
     compareLayout?: 'split' | 'tabs';
-    /** Hold the source document's render while the panel is still animating open
-     *  into the compare view — parsing a docx mid-transition drops frames. */
-    deferSourceBody?: boolean;
     onOpenSource?: (preview: SourcePreview) => void;
     onCloseSource?: () => void;
     onPreview: (file: ArtifactFile) => void;
@@ -71,7 +68,6 @@ export function WorkspacePanel({
     hideFullscreenToggle,
     sourcePreview = null,
     compareLayout = 'split',
-    deferSourceBody = false,
     onOpenSource,
     onCloseSource,
     onPreview,
@@ -261,7 +257,6 @@ export function WorkspacePanel({
                             <SourcePane
                                 preview={sourcePreview}
                                 occurrence={occurrences.occurrence}
-                                deferBody={deferSourceBody}
                                 onStep={occurrences.step}
                                 onClose={() => onCloseSource?.()}
                                 onBackToReport={tabsLayout ? () => handleTabChange('report') : undefined}

@@ -34,8 +34,6 @@ interface SourcePaneProps {
     onClose: () => void;
     /** Tabs layout (< 1024px): link back to the report instead of the collapse button. */
     onBackToReport?: () => void;
-    /** Render the toolbar only; the document mounts once this turns false. */
-    deferBody?: boolean;
 }
 
 function IconButton({ label, onClick, disabled, children }: {
@@ -56,7 +54,7 @@ function IconButton({ label, onClick, disabled, children }: {
     );
 }
 
-export function SourcePane({ preview, occurrence, onStep, onClose, onBackToReport, deferBody = false }: SourcePaneProps) {
+export function SourcePane({ preview, occurrence, onStep, onClose, onBackToReport }: SourcePaneProps) {
     const localize = useLocalize();
     const [downloadUrl, setDownloadUrl] = useState('');
     const { detail } = preview;
@@ -136,7 +134,7 @@ export function SourcePane({ preview, occurrence, onStep, onClose, onBackToRepor
             )}
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {!deferBody && <CitationDocumentPreviewContent key={documentKey} preview={preview} compactMode />}
+                <CitationDocumentPreviewContent key={documentKey} preview={preview} compactMode />
             </div>
         </div>
     );

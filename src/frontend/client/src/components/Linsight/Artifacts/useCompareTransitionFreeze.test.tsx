@@ -41,7 +41,6 @@ describe('useCompareTransitionFreeze', () => {
         mount(false);
         expect(latest.panelStyle).toBeUndefined();
         expect(latest.chatStyle).toBeUndefined();
-        expect(latest.entering).toBe(false);
     });
 
     it('pins the panel to the full row and the chat to its current width while entering', () => {
@@ -49,14 +48,14 @@ describe('useCompareTransitionFreeze', () => {
         rerender(<Harness comparing />);
         expect(latest.panelStyle).toEqual({ minWidth: ROW - 8, width: ROW - 8 });
         expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${CHAT}px` });
-        expect(latest.entering).toBe(true);
 
+        // Settled: the panel is free, the hidden chat keeps its width so it is
+        // never laid out at ~0px while compare stays open.
         act(() => {
             jest.advanceTimersByTime(COMPARE_SETTLE_MS);
         });
         expect(latest.panelStyle).toBeUndefined();
-        expect(latest.chatStyle).toBeUndefined();
-        expect(latest.entering).toBe(false);
+        expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${CHAT}px` });
     });
 
     it('pins both to the docked layout while leaving compare', () => {
@@ -66,7 +65,13 @@ describe('useCompareTransitionFreeze', () => {
         const docked = ROW * 0.46;
         expect(latest.panelStyle).toEqual({ minWidth: docked - 8, width: docked - 8 });
         expect(latest.chatStyle).toEqual({ '--compare-freeze-w': `${ROW - docked}px` });
-        expect(latest.entering).toBe(false);
+
+        // Settled after closing: every pin is released.
+        act(() => {
+            jest.advanceTimersByTime(COMPARE_SETTLE_MS);
+        });
+        expect(latest.panelStyle).toBeUndefined();
+        expect(latest.chatStyle).toBeUndefined();
     });
 
     it('keeps the card as it is when the whole workspace closes', () => {
@@ -80,6 +85,6 @@ describe('useCompareTransitionFreeze', () => {
         const { rerender } = mount(false, { enabled: false });
         rerender(<Harness comparing enabled={false} />);
         expect(latest.panelStyle).toBeUndefined();
-        expect(latest.entering).toBe(false);
+        expect(latest.chatStyle).toBeUndefined();
     });
 });
