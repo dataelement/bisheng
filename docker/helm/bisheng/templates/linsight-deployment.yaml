@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bisheng.fullname" . }}-linsight
+  labels:
+    {{- include "bisheng.labels" . | nindent 4 }}
+    app.kubernetes.io/component: linsight
+spec:
+  replicas: {{ .Values.linsight.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bisheng.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: linsight
+  template:
+    metadata:
+      labels:
+        {{- include "bisheng.labels" . | nindent 8 }}
+        app.kubernetes.io/component: linsight
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: linsight
+          image: "{{ .Values.linsight.image.repository }}:{{ .Values.linsight.image.tag }}"
+          imagePullPolicy: {{ .Values.linsight.image.pullPolicy }}
+          command: ["sh", "entrypoint.sh", "linsight"]
+          env:
+            {{- include "bisheng.commonEnv" . | nindent 12 }}
+            {{- include "bisheng.sandboxEnv" . | nindent 12 }}
+            {{- with .Values.linsight.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/bisheng/config.yaml
+              subPath: config.yaml
+            - name: data
+              mountPath: /app/data
+          resources:
+            {{- toYaml .Values.linsight.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ default (printf "%s-config" (include "bisheng.fullname" .)) .Values.config.existingConfigMap }}
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "bisheng.fullname" . }}-linsight-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

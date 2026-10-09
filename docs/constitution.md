@@ -109,7 +109,7 @@ await require_business_action(
 
 - 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
 
-**Module registry** (35 in use as of 2026-09-14). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
+**Module registry** (36 in use as of 2026-09-20). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
 
 ```bash
 grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
@@ -126,11 +126,13 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 | 26x–27x | 260 open_api · 270 commercial_license |
 | 261 | DSH Desktop access (F062, registered 2026-09-09) |
 | 262 | Enterprise plugin marketplace |
+| 28x | 280 sandbox |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
 - **260 is assigned** to Open API authentication and identity (`/api/v2`). Do not reuse it.
 - **270 is assigned** to commercial license status aggregation and reporting (`commercial_license`). Do not reuse it. Do not treat Gateway business code 11001 as a BISHENG module number.
+- **280 is assigned** to isolation-environment (sandbox) execution (`sandbox`). Do not reuse it.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

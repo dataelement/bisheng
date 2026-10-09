@@ -39,12 +39,13 @@ replace-decoded mojibake with ``encoding="utf-8"`` silently fed U+FFFD to the
 model and let ``edit`` corrupt originals.
 
 **Storage growth (known trade-off).** ``seed_workspace_from_previous`` copies
-``uploads/`` forward on every follow-up turn, so an original is duplicated once
-per turn (server-side copy — no app-side bytes, but real stored bytes). Skipping
-originals is NOT an option: the code interpreter's cross-turn access depends on
-them. Reclaim belongs to ops — a MinIO lifecycle rule on the ``workspace/``
-prefix — not to this module; the seed logs its byte volume so the growth is
-visible rather than silent.
+``uploads/`` and ``large_tool_results/`` forward on every follow-up turn, so
+those objects are duplicated once per turn (server-side copy — no app-side
+bytes, but real stored bytes). Skipping them is NOT an option: the code
+interpreter's cross-turn access depends on them, and the prompt forbids
+re-running the call that produced an offloaded dump. Reclaim belongs to ops
+— a MinIO lifecycle rule on the ``workspace/`` prefix — not to this module;
+the seed logs its byte volume so the growth is visible rather than silent.
 """
 
 from __future__ import annotations
@@ -110,6 +111,11 @@ WORKSPACE_PREFIX = "workspace"
 UPLOADS_DIR = "uploads"
 OUTPUT_DIR = "output"
 SCRATCH_DIR = "scratch"
+# FilesystemMiddleware offloads oversized tool payloads here. The file tools
+# advertise `/large_tool_results/<call_id>` and the prompt forbids re-running
+# the producing call — so a follow-up turn (and the code interpreter) must
+# still see the same objects.
+LARGE_TOOL_RESULTS_DIR = "large_tool_results"
 MANIFEST_NAME = "manifest.json"
 # Where the platform copies this run's skill bundles at task start (canonical
 # name: ``skill_provisioning.WORKSPACE_SKILLS_DIR``, duplicated here as a literal
@@ -420,12 +426,13 @@ async def seed_workspace_from_previous(
     minio,
     src_svid: str,
     dst_svid: str,
-    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR),
+    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR, LARGE_TOOL_RESULTS_DIR),
 ) -> int:
     """Cross-turn continuity: server-side copy a prior session-version's
-    deliverables (``output/``) and sources (``uploads/``) into a new version's
-    workspace, so a follow-up turn (e.g. "convert the report to HTML") can read
-    and build on the previous turn's output.
+    deliverables (``output/``), sources (``uploads/``), and offloaded tool
+    dumps (``large_tool_results/``) into a new version's workspace, so a
+    follow-up turn (e.g. "convert the report to HTML") can read and build on
+    the previous turn's output.
 
     Each version's workspace is cumulative (a turn seeds from its immediate
     predecessor, which already inherited *its* predecessor), so copying just the

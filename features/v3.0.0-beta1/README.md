@@ -26,7 +26,7 @@
 | F064 | [kb-list-file-abnormal](./064-kb-list-file-abnormal/) | P1 | Spec / Design / Tasks 已出，实现完成 | F027, F048, F051 |
 | F065 | [model-name-trim](./065-model-name-trim/) | P1 | Spec / Design 已确认；实现完成 | 既有模型管理页、`POST/PUT /api/v1/llm` |
 | F070 | [commercial-license-expiry-reminder](./070-commercial-license-expiry-reminder/) | P1 | 已实现（21 / 21）；Banner 改聚合，错误码 270，11001 点名 Gateway | v2.6.0 F037、ETL4LM 2.1.0-beta1、商业看板写表 |
-| F068 | [code-execution-sandbox](./068-code-execution-sandbox/) | P0 | Spec + Design 已出，待 ★ 确认；tasks 未写。讨论用 [沙箱架构设计说明书](./068-code-execution-sandbox/沙箱架构设计说明书.md)。错误码模块 280 | 无（与 3.0 应用工场 F103 sandbox-core 并行，不依赖其交付） |
+| F068 | [code-execution-sandbox](./068-code-execution-sandbox/) | P0 | Spec + Design 已出，待 ★ 确认；tasks 未写。讨论用 [沙箱架构设计说明书](./068-code-execution-sandbox/沙箱架构设计说明书.md)；运维与页面用法见 [沙箱配置与使用说明](./068-code-execution-sandbox/沙箱配置与使用说明.md)。错误码模块 280 | 无（与 3.0 应用工场 F103 sandbox-core 并行，不依赖其交付） |
 | F069 | [linsight-citation-handles](./069-linsight-citation-handles/) | P1 | Spec + Design 已出（PRD 2026-09-20 评审通过），待 ★ 确认；tasks 未写 | F047, F054, F029 |
 | F067 | [unified-remote-mcp-service](./067-unified-remote-mcp-service/) | P1 | Discovery、Spec、Design 已确认，Tasks 未生成 | F053, F066 |
 | F071 | [knowledge-space-chat-history-retention](./071-knowledge-space-chat-history-retention/) | P1 | Discovery、Spec、修订 Design 已确认，Tasks 未生成 | v2.6.0 F034, F048, 既有知识空间问答 |

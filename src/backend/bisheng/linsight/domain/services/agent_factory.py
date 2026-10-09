@@ -142,18 +142,14 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
 # 如何填写 ask_user（仅第 0 步触发时）
 
 - reason：一句话说明为何需要先确认，使用与用户输入一致的语言。
-- questions：1-3 个（**不能为空数组**），按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。每个形如：{"question": "完整问题文本", "options": [...], "multiple": false}
+- questions：1-3 个（**不能为空数组**），按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。questions 是一个对象数组，每个对象有三个字段：question（字符串，完整问题文本）、options（字符串数组，预设选项）、multiple（布尔值，true 为多选）。
   - 每个问题**必须给 2-4 个具体预设选项**（options），每项是一个简短的选项文案（纯字符串），优先让用户点选；只有该信息天然无法预设选项（如“请输入你的身高”）时，才把该问题的 options 留空走开放输入——但问题本身仍要写出来，不能整个 questions 留空。
   - 多选问题（multiple=true，如输出格式）：用户可勾选多项。
   - 收集“输出格式”用一个多选问题，选项含 markdown / html / docx / pdf。
   - reason / question / options 文本里**不要出现英文双引号 `"`**（它会破坏工具调用的 JSON 参数，整次澄清会直接失效）；需要引用词语时用中文引号「」或“”。每个键只写一次（例如 multiple 不要重复）。
 - 一次性把所有要问的问完。不要罗列工具或能力限制，也不要预先解释工作流。
-- 【正确示例】questions 必须是这样的 JSON 数组（照此结构直接填——切勿把问题写进 reason，也切勿把数组序列化成字符串）：
-  questions=[
-    {"question": "你想构建哪一类 agent？", "options": ["对话/工具调用型（LLM Agent）", "自动化流程/任务编排型", "检索增强问答型（RAG）"], "multiple": false},
-    {"question": "主要落地场景或用途是？", "options": ["客服答疑", "数据分析与报告", "内容创作", "研发/代码辅助"], "multiple": false},
-    {"question": "希望的交付格式？", "options": ["markdown", "html", "docx", "pdf"], "multiple": true}
-  ]
+- questions 作为 ask_user 的参数值传入：不要把数组序列化成字符串，也不要把问题写进 reason。
+- 【示例】用户只说「帮我做一个 agent」时，可以问 3 个问题：agent 类型（单选：对话/工具调用型、自动化流程/任务编排型、检索增强问答型）；主要落地场景（单选：客服答疑、数据分析与报告、内容创作、研发/代码辅助）；交付格式（多选：markdown、html、docx、pdf）。
 
 # 默认假设（无需追问，缺失时直接采用）
 - 输出格式：默认仅 markdown；仅当用户明确选择才追加 html / docx / pdf，不要擅自猜测。

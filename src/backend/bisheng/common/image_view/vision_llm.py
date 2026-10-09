@@ -1,4 +1,7 @@
-"""Dynamic LLM factory for ReAct: bind view_image only when the registry is filled.
+"""Dynamic LLM factory for daily-chat ReAct.
+
+When an Image View model is passed in, pixels go to that model after retrieval.
+view_image is bound only when no Image View model is provided.
 
 Must not be a Runnable — create_react_agent treats a non-Runnable callable as a
 per-turn model factory and will not compile-time bind ToolNode tools.
@@ -37,12 +40,36 @@ RETRIEVE_BEFORE_VIEW_RULES = (
     "不要用代码执行器查找或抽取这些 PDF。"
     "检索返回的 markdown 图会带 ⟦img#N⟧，然后再调用 view_image。"
 )
+# Daily chat uses the Image View builtin model after retrieval, so the chat
+# model must not be told to call view_image.
+CONFIGURED_RETRIEVE_RULES = (
+    "知识库文件不在代码执行器工作目录。"
+    "用户问知识库中的截图 / 界面 / 图片时，必须先调用 search_knowledge_bases，"
+    "不要用代码执行器查找或抽取这些 PDF。"
+    "检索返回的 markdown 图会带 ⟦img#N⟧，看图由图片查看模型完成。"
+)
 _SYNTHETIC_RETRIEVE_ID = "search_kb_forced"
 
 
-def viewed_images_human_message(viewed: list[tuple[str, str]]) -> HumanMessage:
-    blocks: list[dict] = [{"type": "text", "text": "Viewed images: " + ", ".join(image_id for image_id, _ in viewed)}]
-    for _, data_uri in viewed:
+def viewed_images_human_message(
+    viewed: list[tuple[str, str]],
+    registry: ImageRegistry | None = None,
+) -> HumanMessage:
+    """Pair each pixel block with the markdown line the answer may copy."""
+    # One caption immediately before its pixels. A single text block followed by
+    # every image makes the model count "第N张" against the wrong picture.
+    blocks: list[dict] = [{"type": "text", "text": "Viewed images:"}]
+    for image_id, data_uri in viewed:
+        entry = registry.get(image_id) if registry else None
+        url = (entry or {}).get("url") or ""
+        if url:
+            caption = (
+                f"{image_id}: the next image. Include ![]({url}) only when these pixels "
+                "answer the question; omit this picture when they do not."
+            )
+        else:
+            caption = f"{image_id}: the next image."
+        blocks.append({"type": "text", "text": caption})
         blocks.append({"type": "image_url", "image_url": {"url": data_uri}})
     return HumanMessage(content=blocks)
 
@@ -121,6 +148,18 @@ def maybe_inject_view_image(ai: AIMessage, messages: list[BaseMessage], registry
         return AIMessage(content=ai.content if isinstance(ai.content, str) else "")
     if view_calls:
         return _ai_message_for_second_round(ai, view_calls)
+    # Caption ranking is a preference. A question like "文档里有哪些图片" often
+    # shares no heading with the images; skipping the tool then answers from text.
+    if needs_pixels:
+        failed = failed_image_ids(messages)
+        fallback = [image_id for image_id in registry.ids() if image_id not in failed]
+        injected = _synthetic_view_calls(fallback, registry)
+        if injected:
+            logger.info(
+                "image_view injecting view_image ids={} source=registry",
+                injected[0]["args"]["image_ids"],
+            )
+            return _ai_message_for_second_round(ai, injected)
     return ai
 
 
@@ -135,6 +174,7 @@ class _VisionCallRunnable(Runnable):
         hold_for_inject: bool,
         retrieve_tool_name: str | None = None,
         retrieve_hint: bool = False,
+        vision_llm: Any | None = None,
     ):
         self._bound = bound
         self._extra_rules = extra_rules
@@ -142,18 +182,51 @@ class _VisionCallRunnable(Runnable):
         self._hold_for_inject = hold_for_inject
         self._retrieve_tool_name = retrieve_tool_name
         self._retrieve_hint = retrieve_hint
+        self._vision_llm = vision_llm
 
     def _prepare(self, inp: Any) -> list[BaseMessage]:
         messages = messages_from_model_input(inp)
         viewed = self._registry.pop_viewed()
         if viewed:
-            messages = [*messages, viewed_images_human_message(viewed)]
+            messages = [*messages, viewed_images_human_message(viewed, self._registry)]
         messages = relocate_images_to_human(messages)
         if self._extra_rules:
             messages = prepare_vision_messages(messages)
         elif self._retrieve_hint:
-            messages = [SystemMessage(content=RETRIEVE_BEFORE_VIEW_RULES), *messages]
+            rules = CONFIGURED_RETRIEVE_RULES if self._vision_llm is not None else RETRIEVE_BEFORE_VIEW_RULES
+            messages = [SystemMessage(content=rules), *messages]
         return messages
+
+    def _should_use_configured_vision(self, messages: list[BaseMessage]) -> bool:
+        """Pixels go to the Image View model once retrieval has filled the registry."""
+        if self._vision_llm is None or len(self._registry) == 0:
+            return False
+        if pixels_were_viewed(messages):
+            return False
+        return question_needs_pixels(_last_user_question(messages))
+
+    async def _configured_vision_answer(self, messages: list[BaseMessage]) -> AIMessage:
+        from bisheng.common.image_view.annotate import missing_viewed_markdown
+        from bisheng.common.image_view.react_loop import (
+            _attach_viewed_pixels,
+            _strip_picture_citations,
+            cited_ids_on_shown_lines,
+            strip_view_narration,
+        )
+
+        prepared = await _attach_viewed_pixels(messages, self._registry)
+        parts: list[str] = []
+        async for chunk in self._vision_llm.astream(prepared):
+            content = getattr(chunk, "content", "") or ""
+            if isinstance(content, str) and content:
+                parts.append(content)
+        raw = "".join(parts)
+        question = _last_user_question(messages)
+        cited_ids = cited_ids_on_shown_lines(raw)
+        cleaned = _strip_picture_citations(strip_view_narration(raw), question)
+        visible = cleaned or ""
+        extra = missing_viewed_markdown(visible, self._registry, question=question, only_ids=cited_ids)
+        return AIMessage(content=(visible + extra).strip())
 
     def _after_model(self, result: Any, messages: list[BaseMessage]) -> Any:
         if not isinstance(result, AIMessage):
@@ -180,6 +253,9 @@ class _VisionCallRunnable(Runnable):
         return self._after_model(result, messages)
 
     async def ainvoke(self, inp: Any, config=None, **kwargs: Any):
+        messages = messages_from_model_input(inp)
+        if self._should_use_configured_vision(messages):
+            return await self._configured_vision_answer(messages)
         messages = self._prepare(inp)
         call_config = self._bound_config(config)
         if hasattr(self._bound, "ainvoke"):
@@ -194,6 +270,10 @@ class _VisionCallRunnable(Runnable):
         return self._after_model(result, messages)
 
     async def astream(self, inp: Any, config=None, **kwargs: Any):
+        messages = messages_from_model_input(inp)
+        if self._should_use_configured_vision(messages):
+            yield await self._configured_vision_answer(messages)
+            return
         messages = self._prepare(inp)
         call_config = self._bound_config(config)
         if not self._hold_for_inject:
@@ -213,7 +293,12 @@ class _VisionCallRunnable(Runnable):
 
 
 class VisionToolBindWrapper:
-    """Per-turn model factory: bind view_image only after the registry is filled."""
+    """Per-turn model factory.
+
+    With ``vision_llm`` (the Image View builtin model), pixels are sent to that
+    model after retrieval. ``view_image`` is bound only when no vision model is
+    provided.
+    """
 
     def __init__(
         self,
@@ -222,12 +307,14 @@ class VisionToolBindWrapper:
         base_tools: list[BaseTool],
         *,
         retrieve_tool_name: str | None = None,
+        vision_llm: Any | None = None,
     ):
         self._llm = llm
         self._registry = registry
         self._base_tools = list(base_tools)
         self._view_tool = build_view_image_tool(registry)
         self._retrieve_tool_name = retrieve_tool_name
+        self._vision_llm = vision_llm
 
     def __call__(self, state, runtime):
         messages = _messages_from_state(state)
@@ -235,7 +322,11 @@ class VisionToolBindWrapper:
         viewed = _already_viewed(messages)
         bind_kwargs: dict[str, Any] = {}
         retrieve_hint = False
-        if len(self._registry) > 0:
+        configured_vision = self._vision_llm is not None and len(self._registry) > 0
+        if configured_vision:
+            tools = list(self._base_tools)
+            extra_rules = False
+        elif len(self._registry) > 0:
             tools = [*self._base_tools, self._view_tool]
             extra_rules = True
             remaining = _suggested_ids_for(messages) if needs_pixels else []
@@ -254,11 +345,16 @@ class VisionToolBindWrapper:
             )
             if retrieve_ready:
                 retrieve_hint = True
-                bind_kwargs["tool_choice"] = {
-                    "type": "function",
-                    "function": {"name": self._retrieve_tool_name},
-                }
-                logger.info("image_view forcing retrieve tool={}", self._retrieve_tool_name)
+                # Reasoning models (qwq-plus) reject a forced tool_choice. The
+                # Image View path still injects the search call after the reply.
+                if self._vision_llm is None:
+                    bind_kwargs["tool_choice"] = {
+                        "type": "function",
+                        "function": {"name": self._retrieve_tool_name},
+                    }
+                    logger.info("image_view forcing retrieve tool={}", self._retrieve_tool_name)
+                else:
+                    logger.info("image_view hint retrieve tool={}", self._retrieve_tool_name)
             else:
                 logger.info(
                     "image_view skip view_image registry_size=0 tools={} needs_pixels={}",
@@ -266,7 +362,10 @@ class VisionToolBindWrapper:
                     needs_pixels,
                 )
         bound = self._llm.bind_tools(tools, **bind_kwargs) if tools else self._llm
-        hold_for_inject = (extra_rules and needs_pixels and not viewed) or retrieve_hint
+        if configured_vision:
+            hold_for_inject = False
+        else:
+            hold_for_inject = (extra_rules and needs_pixels and not viewed) or retrieve_hint
         return _VisionCallRunnable(
             bound,
             extra_rules=extra_rules,
@@ -274,4 +373,5 @@ class VisionToolBindWrapper:
             hold_for_inject=hold_for_inject,
             retrieve_tool_name=self._retrieve_tool_name,
             retrieve_hint=retrieve_hint,
+            vision_llm=self._vision_llm,
         )

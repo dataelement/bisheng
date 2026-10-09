@@ -1,5 +1,4 @@
 import asyncio
-import json
 import mimetypes
 import os
 import time
@@ -2155,12 +2154,25 @@ class LinsightWorkbenchImpl:
             return tools
         # Individual initialization code interpreter tool
         selected_tool_ids.remove(bisheng_code_tool.id)
-        code_config = json.loads(bisheng_code_tool.extra) if bisheng_code_tool.extra else {}
+        # Same extra source as ToolExecutor.parse_preset_tool_params: tool row, then
+        # category. Built-in-tool UI writes type.extra and NULLs the row.
+        tool_type = None
+        type_id = getattr(bisheng_code_tool, "type", None)
+        if not bisheng_code_tool.extra and type_id:
+            tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id=type_id)
+        code_config = ToolExecutor.parse_preset_extra(bisheng_code_tool, tool_type)
+        executor_type = code_config.get("type") or "local"
         if "config" not in code_config:
             code_config["config"] = {}
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
         code_config["config"]["local"]["local_sync_path"] = file_dir
+        if "container" not in code_config["config"]:
+            code_config["config"]["container"] = {}
+        code_config["config"]["container"]["local_sync_path"] = file_dir
+        # Sticky replica + work dir across tool_calls in one Linsight task (AC-06).
+        code_config["config"]["container"]["keep_session"] = True
+        code_config["config"]["container"]["timeout"] = 3600
         if session_version_id:
             from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
@@ -2168,7 +2180,9 @@ class LinsightWorkbenchImpl:
             # Without it the local working dir is the ONLY copy, so the file tools
             # cannot see a code-generated deliverable and the next turn's
             # seed-from-previous finds an empty ``output/``.
-            code_config["config"]["local"]["workspace_prefix"] = f"{WORKSPACE_PREFIX}/{session_version_id}"
+            workspace_prefix = f"{WORKSPACE_PREFIX}/{session_version_id}"
+            code_config["config"]["local"]["workspace_prefix"] = workspace_prefix
+            code_config["config"]["container"]["workspace_prefix"] = workspace_prefix
         if "e2b" not in code_config["config"]:
             code_config["config"]["e2b"] = {}
         code_config["config"]["e2b"]["local_sync_path"] = file_dir
@@ -2182,31 +2196,33 @@ class LinsightWorkbenchImpl:
         # originals up to _RAW_KEEP_MAX_BYTES (50MB), which LocalExecutor serves for
         # free through local_sync_path. Filter here so the E2B ceiling is honoured
         # without shrinking what the local executor can reach.
-        file_list = []
-        oversized: list[str] = []
-        for root, dirs, files in os.walk(file_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                try:
-                    if os.path.getsize(file_path) > SIZE_AUTOPUSH:
-                        oversized.append(file_path)
-                        continue
-                except OSError:
-                    # Unstattable file: let it through rather than silently dropping
-                    # it — the push itself will surface any real problem.
-                    pass
-                file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
-        if oversized:
-            # Never let a bounded copy-in look complete: the model is told these
-            # paths exist, so a silent drop reads as "the tool is broken".
-            logger.warning(
-                "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
-                "pushed into the sandbox: {}",
-                len(oversized),
-                SIZE_AUTOPUSH,
-                ", ".join(os.path.basename(p) for p in oversized),
-            )
-        code_config["config"]["e2b"]["file_list"] = file_list
+        # Container mode copy-in happens at run() (AC-11); do not pre-scan.
+        if executor_type != "container":
+            file_list = []
+            oversized: list[str] = []
+            for root, dirs, files in os.walk(file_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                            oversized.append(file_path)
+                            continue
+                    except OSError:
+                        # Unstattable file: let it through rather than silently dropping
+                        # it — the push itself will surface any real problem.
+                        pass
+                    file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+            if oversized:
+                # Never let a bounded copy-in look complete: the model is told these
+                # paths exist, so a silent drop reads as "the tool is broken".
+                logger.warning(
+                    "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+                    "pushed into the sandbox: {}",
+                    len(oversized),
+                    SIZE_AUTOPUSH,
+                    ", ".join(os.path.basename(p) for p in oversized),
+                )
+            code_config["config"]["e2b"]["file_list"] = file_list
 
         bisheng_code_tool.extra = code_config
 

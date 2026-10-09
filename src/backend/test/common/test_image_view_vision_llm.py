@@ -10,6 +10,7 @@ from langchain_core.runnables import Runnable
 
 from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, annotate
 from bisheng.common.image_view.vision_llm import (
+    CONFIGURED_RETRIEVE_RULES,
     RETRIEVE_BEFORE_VIEW_RULES,
     VisionToolBindWrapper,
     maybe_inject_view_image,
@@ -86,6 +87,10 @@ async def test_vision_wrapper_pop_viewed_appends_human_image_blocks():
     assert not any(isinstance(m, ToolMessage) and isinstance(m.content, list) for m in messages)
     humans = [m for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, list)]
     assert humans
+    texts = [block["text"] for block in humans[-1].content if isinstance(block, dict) and block.get("type") == "text"]
+    assert any("![](/bisheng/knowledge/images/1/2/c.png)" in text for text in texts)
+    types = [block.get("type") for block in humans[-1].content if isinstance(block, dict)]
+    assert types.index("image_url") == types.index("text") + 1 or "image_url" in types[1:]
     blocks = [block for block in humans[-1].content if isinstance(block, dict) and block.get("type") == "image_url"]
     assert blocks
     assert blocks[0]["image_url"]["url"] == _DATA_URI
@@ -111,6 +116,25 @@ async def test_vision_wrapper_pixel_question_forces_retrieve_before_view_image()
     joined = "".join(str(m.content) for m in llm.stream_messages[0])
     assert RETRIEVE_BEFORE_VIEW_RULES in joined
     assert IMAGE_VIEW_PROMPT_RULES not in joined
+
+
+async def test_configured_vision_does_not_force_tool_choice_on_chat_model():
+    llm = _RecordingLLM()
+    registry = ImageRegistry()
+    wrapper = VisionToolBindWrapper(
+        llm,
+        registry,
+        [_NamedTool("web_search"), _NamedTool("search_knowledge_bases")],
+        retrieve_tool_name="search_knowledge_bases",
+        vision_llm=object(),
+    )
+    question = HumanMessage(content="有美女的图片吗？")
+    runnable = wrapper({"messages": [question]}, None)
+    result = await runnable.ainvoke([question])
+    assert "tool_choice" not in llm.bind_kwargs[0]
+    assert result.tool_calls[0]["name"] == "search_knowledge_bases"
+    joined = "".join(str(m.content) for m in llm.stream_messages[0])
+    assert CONFIGURED_RETRIEVE_RULES in joined
 
 
 async def test_vision_wrapper_does_not_reforce_retrieve_after_search():
@@ -191,6 +215,17 @@ async def test_failed_view_image_still_injects_suggested_ids():
     assert out.tool_calls
     assert out.tool_calls[0]["name"] == "view_image"
     assert "img#1" in out.tool_calls[0]["args"]["image_ids"]
+
+
+async def test_inject_views_registry_when_caption_score_is_empty():
+    registry = ImageRegistry()
+    annotate("笑话\n![a](/a.png)\n冰箱门\n![b](/b.jpeg)", registry)
+    messages = [
+        HumanMessage(content="笑话\n![a](/a.png)⟦img#1⟧\n冰箱门\n![b](/b.jpeg)⟦img#2⟧\n这篇文档中有哪些美女图片？")
+    ]
+    out = maybe_inject_view_image(AIMessage(content="文中没有提到美女。"), messages, registry)
+    assert out.tool_calls
+    assert out.tool_calls[0]["args"]["image_ids"] == ["img#1", "img#2"]
 
 
 async def test_inject_skips_retry_when_suggested_ids_already_failed():

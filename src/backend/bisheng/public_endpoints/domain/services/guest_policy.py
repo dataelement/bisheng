@@ -24,6 +24,7 @@ from bisheng.core.context.tenant import (
 )
 from bisheng.database.models.assistant import AssistantDao, AssistantStatus
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
+from bisheng.database.models.session import MessageSessionDao
 from bisheng.database.models.tenant import TenantDao, UserTenantDao
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
 from bisheng.permission.application.identity import (
@@ -34,9 +35,11 @@ from bisheng.permission.application.identity import (
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.public_endpoints.domain.context import (
     PublicApiPrincipal,
+    get_current_public_api_principal,
     reset_current_public_api_principal,
     set_current_public_api_principal,
 )
+from bisheng.public_endpoints.domain.services.guest_link import GuestResourceType, load_app_guest_link
 from bisheng.user.domain.models.user import UserDao
 
 # What a lookup found. "missing" and "offline" are deliberately distinct: a
@@ -122,16 +125,55 @@ async def public_application_execution(resource_id: str) -> AsyncIterator[Public
         yield execution
 
 
-async def _load_default_operator(tenant_id: int) -> UserPayload:
+async def _ensure_global_guest_access() -> dict:
     config = await settings.aget_from_db("default_operator") or {}
     if not bool(config.get("enable_guest_access")):
-        logger.warning("public_api.reject reason=guest_disabled tenant_id={}", tenant_id)
+        logger.warning("public_api.reject reason=guest_disabled")
         raise PublicGuestAccessDisabledError()
-    operator_id = config.get("user")
-    if not isinstance(operator_id, int) or operator_id <= 0:
-        logger.warning("public_api.reject reason=operator_missing tenant_id={}", tenant_id)
+    return config
+
+
+async def ensure_guest_link_enabled(resource_type: GuestResourceType, resource_id: str) -> None:
+    """Re-read the per-app switch from the DB. Global enable_guest_access stays cached."""
+
+    await _ensure_global_guest_access()
+    try:
+        app = await load_app_guest_link(resource_type, resource_id, strict=True)
+    except (ValueError, TypeError):
+        logger.warning("public_api.reject reason=guest_link_corrupt type={} id={}", resource_type, resource_id)
+        raise PublicGuestAccessDisabledError()
+    if not app.enabled:
+        logger.warning("public_api.reject reason=app_guest_disabled type={} id={}", resource_type, resource_id)
         raise PublicGuestAccessDisabledError()
 
+
+def is_public_published_resource(resource_id: str, resource_type: str | None = None) -> bool:
+    """True only when this request is a guest call against the published resource itself."""
+
+    principal = get_current_public_api_principal()
+    if principal is None:
+        return False
+    if str(principal.resource_id) != str(resource_id):
+        return False
+    if resource_type is not None and principal.resource_type != resource_type:
+        return False
+    return True
+
+
+def should_skip_public_workflow_use(*, channel: str | None, chat_id: str | None, workflow_id: str) -> bool:
+    """Celery may skip `use` only when the session is this published workflow. Fail closed."""
+
+    if channel != "public_v3":
+        return False
+    if not chat_id:
+        return False
+    session = MessageSessionDao.get_one(chat_id)
+    if session is None:
+        return False
+    return str(session.flow_id) == str(workflow_id)
+
+
+async def _load_operator_payload(tenant_id: int, operator_id: int) -> UserPayload:
     with bypass_tenant_filter():
         user = await UserDao.aget_user(operator_id)
         membership = await UserTenantDao.aget_user_tenant(operator_id, tenant_id)
@@ -144,7 +186,7 @@ async def _load_default_operator(tenant_id: int) -> UserPayload:
         or tenant is None
         or tenant.status != "active"
     ):
-        logger.warning("public_api.reject reason=operator_inactive tenant_id={}", tenant_id)
+        logger.warning("public_api.reject reason=operator_inactive tenant_id={} operator_id={}", tenant_id, operator_id)
         raise PublicGuestAccessDisabledError()
 
     # Guests execute as the configured operator, with that account's real roles
@@ -161,6 +203,29 @@ async def _load_default_operator(tenant_id: int) -> UserPayload:
         user_name=user.user_name,
         tenant_id=tenant_id,
     )
+
+
+async def _load_default_operator(
+    tenant_id: int,
+    resource_type: GuestResourceType | None = None,
+    resource_id: str | None = None,
+) -> UserPayload:
+    config = await _ensure_global_guest_access()
+    operator_id = None
+    if resource_type and resource_id:
+        await ensure_guest_link_enabled(resource_type, resource_id)
+        try:
+            app = await load_app_guest_link(resource_type, resource_id, strict=True)
+        except (ValueError, TypeError):
+            logger.warning("public_api.reject reason=guest_link_corrupt type={} id={}", resource_type, resource_id)
+            raise PublicGuestAccessDisabledError()
+        operator_id = app.user_id
+    if operator_id is None:
+        operator_id = config.get("user")
+    if not isinstance(operator_id, int) or operator_id <= 0:
+        logger.warning("public_api.reject reason=operator_missing tenant_id={}", tenant_id)
+        raise PublicGuestAccessDisabledError()
+    return await _load_operator_payload(tenant_id, operator_id)
 
 
 async def _resolve_guest_actor(operator: UserPayload) -> PermissionActor:
@@ -200,7 +265,7 @@ async def public_execution(
     actor_token = None
     public_token = None
     try:
-        operator = await _load_default_operator(tenant_id)
+        operator = await _load_default_operator(tenant_id, resource_type, resource_id)
         actor = await _resolve_guest_actor(operator)
         principal = PublicApiPrincipal(
             tenant_id=tenant_id,
@@ -252,6 +317,9 @@ __all__ = [
     "PublicAccessError",
     "PublicExecution",
     "PublicationOutcome",
+    "ensure_guest_link_enabled",
+    "is_public_published_resource",
     "public_application_execution",
     "public_execution",
+    "should_skip_public_workflow_use",
 ]

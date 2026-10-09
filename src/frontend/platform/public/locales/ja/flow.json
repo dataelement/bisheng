@@ -582,7 +582,8 @@
       },
       "code_output": {
         "label": "出力パラメータ"
-      }
+      },
+      "disabledHint": "コードノードは現在無効です。ワークフローがこのノードに到達すると失敗します。管理者がシステム設定で workflow.code_node_enabled を有効にしてください。"
     },
     "condition": {
       "name": "条件分岐",

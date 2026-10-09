@@ -321,3 +321,5 @@ src/backend/migration_reports
 .impeccable.md
 # Local tooling
 .cursor/
+config-106120.yaml
+values-106120.yaml

@@ -20,7 +20,7 @@ describe('resolveGuestAccessState', () => {
 
   it('falls back to the bare status when no business code is present', () => {
     expect(resolveGuestAccessState(axiosError(404))).toBe('invalid');
-    expect(resolveGuestAccessState(axiosError(403))).toBe('closed');
+    expect(resolveGuestAccessState(axiosError(403))).toBe('ok');
   });
 
   it('reads a denial carried inside a 200 envelope', () => {

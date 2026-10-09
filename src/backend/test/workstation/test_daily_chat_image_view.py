@@ -15,6 +15,7 @@ from langchain_core.tools import tool as lc_tool
 
 from bisheng.citation.domain.services.citation_prompt_helper import CitationRegistryCollector
 from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, VisionToolBindWrapper, annotate
+from bisheng.common.image_view.fetch import FetchEncodeResult
 from bisheng.workstation.domain.services.chat_service import (
     DailyChatCitationToolWrapper,
     _prepare_tools,
@@ -175,3 +176,39 @@ async def test_vision_wrapper_relocates_tool_images_to_human():
     humans = [m for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, list)]
     assert humans
     assert any(isinstance(block, dict) and block.get("type") == "image_url" for block in humans[-1].content)
+
+
+class _VisionAnswer:
+    def __init__(self):
+        self.seen: list[list] = []
+
+    async def astream(self, messages, config=None, **kwargs):
+        del config, kwargs
+        self.seen.append(list(messages))
+        yield AIMessage(content="是的，有这张图。\n![](/bisheng/knowledge/images/1/2/c.png)")
+
+
+@pytest.mark.asyncio
+async def test_configured_vision_model_reads_pixels_without_view_image(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.common.image_view.react_loop.fetch_and_encode",
+        AsyncMock(return_value=FetchEncodeResult(ok=True, data_uri="data:image/png;base64,aaa")),
+    )
+    chat = _RecordingLLM()
+    vision = _VisionAnswer()
+    registry = ImageRegistry()
+    annotate("![chart](/bisheng/knowledge/images/1/2/c.png)", registry)
+    wrapper = VisionToolBindWrapper(
+        chat,
+        registry,
+        [_NamedTool("web_search")],
+        vision_llm=vision,
+    )
+    runnable = wrapper({}, None)
+    result = await runnable.ainvoke([HumanMessage(content="文档里有哪些图片")])
+    assert chat.bind_calls == [["web_search"]]
+    assert "view_image" not in chat.bind_calls[0]
+    assert vision.seen
+    joined = "".join(str(m.content) for m in vision.seen[0])
+    assert "data:image/png;base64,aaa" in joined
+    assert "/bisheng/knowledge/images/1/2/c.png" in result.content

@@ -23,7 +23,7 @@ from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
 from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SkillStore
+from bisheng.linsight.domain.services.skill_store import SkillStore
 from test.linsight.test_skill_service import FakeSkillDao
 
 BASE = "/api/v1/linsight/skill"
@@ -201,8 +201,10 @@ class TestErrorCodes:
         assert data["display_name"] == "Presentations"
         assert data["normalized_from"] == "Presentations"
 
-    def test_oversize_11052(self, client):
-        big = b"x" * (MAX_BUNDLE_SIZE + 1)
+    def test_oversize_11052(self, client, monkeypatch):
+        # A small configured cap keeps the payload small; the endpoint reads it per request.
+        monkeypatch.setattr(skill_endpoints, "resolve_skill_upload_limit", AsyncMock(return_value=1024 * 1024))
+        big = b"x" * (1024 * 1024 + 1)
         resp = client.post(BASE, files={"file": ("big.md", big, "text/markdown")})
         assert resp.json()["status_code"] == 11052
 

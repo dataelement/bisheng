@@ -166,4 +166,4 @@ class SkillGitHubRateLimitError(BaseErrorCode):
 # Numbered after the GitHub block to keep this file in ascending code order.
 class SkillBundleTooLargeError(BaseErrorCode):
     Code: int = 11059
-    Msg: str = "Skill bundle contents exceed the 100MB unpacked size limit"
+    Msg: str = "Skill bundle contents exceed the unpacked size limit"

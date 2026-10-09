@@ -33,6 +33,30 @@ column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
 
+### `verify_mcp_stdio_blocked.py`
+
+Remote check that STDIO MCP is fail-closed after the 15025 freeze. Hits
+`POST /api/v1/tool/mcp/test` (must return business code 15025), optionally
+`POST /api/v1/tool/mcp/schema`, then `POST /api/v1/tool/mcp/refresh`. The probe
+payload uses a non-existent command name and does not create tools.
+
+```bash
+cd src/backend
+bash scripts/verify_mcp_stdio_blocked.sh --base-url http://HOST:7860 \
+  --username admin --password '***'
+
+BISHENG_PASSWORD='***' bash scripts/verify_mcp_stdio_blocked.sh \
+  --base-url http://HOST:7860 --username admin
+```
+
+Hosts with `use_captcha` (login error “验证码错误” / `Kode verifikasi salah`)
+write `mcp-stdio-login-captcha.png` and prompt, or take `--captcha AB12`.
+Alternatively copy `access_token_cookie` from the browser and pass `--token`.
+
+Exit `0` = required checks passed. `1` = login/network. `2` = `/mcp/test`
+(or `/mcp/schema`) did not return 15025. `3` = refresh still reconnected a
+saved STDIO tool.
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`

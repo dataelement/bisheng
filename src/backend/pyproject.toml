@@ -60,7 +60,7 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pyjwt>=2.13.0,<2.14",
     "pymongo>=4.15.3",
-    "pymupdf>=1.26.7,<1.27",
+    "pymupdf==1.27.2.3",
     "pymysql>=1.1.2",
     # DaMeng database drivers — available on PyPI (Linux x86_64/aarch64, Windows).
     # dmPython bundles the dmssl package which includes the required native .so
