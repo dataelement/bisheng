@@ -41,6 +41,7 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.llm.domain.services.llm import LLMService
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
@@ -145,6 +146,11 @@ async def create(
         # force defaults so they have no effect on knowledge bases.
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
+        if knowledge.model is None or not str(knowledge.model).strip():
+            # Same default as the platform create dialog (GET /api/v1/llm/knowledge).
+            # When the tenant has no default either, acreate_knowledge raises 10901.
+            knowledge_llm = await LLMService.aget_knowledge_llm(tenant_id=login_user.tenant_id)
+            knowledge.model = str(knowledge_llm.embedding_model_id) if knowledge_llm.embedding_model_id else None
         db_knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge)
         # Enrich to the unified KnowledgeRead (user_name + concrete actions), matching
         # the list/update output. The creator owns the KB → full permission ids.
