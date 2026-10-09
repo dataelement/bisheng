@@ -9,6 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
@@ -33,6 +34,23 @@ from bisheng.utils import get_request_ip
 router = APIRouter(prefix="/assistant", tags=["OpenAPI", "Assistant"])
 
 
+def _assistant_id_from_model(model: str) -> str:
+    """`model` carries the assistant ID; a malformed ID is a 400 field error."""
+    try:
+        return UUID(model).hex
+    except (TypeError, ValueError, AttributeError):
+        raise RequestValidationError(
+            [
+                {
+                    "type": "uuid_parsing",
+                    "loc": ("body", "model"),
+                    "msg": "Input should be a valid UUID (the assistant ID)",
+                    "input": model,
+                }
+            ]
+        ) from None
+
+
 async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[str]:
     """Follow the OpenAI streaming error convention when the stream fails midway:
     send one `data: {"error": {...}}` event, then `data: [DONE]`."""
@@ -48,7 +66,7 @@ async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[
 @router.post("/chat/completions")
 @open_api_scope("assistant:invoke", session=True)
 async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompletionReq):
-    assistant_id = UUID(req_data.model).hex
+    assistant_id = _assistant_id_from_model(req_data.model)
     logger.info(
         "act=assistant_chat_completions assistant_id={} stream={} ip={}",
         req_data.model,

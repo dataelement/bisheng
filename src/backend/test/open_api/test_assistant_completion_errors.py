@@ -44,6 +44,20 @@ def _sse_payloads(text: str) -> list[str]:
     return [line.removeprefix("data: ") for line in text.split("\n\n") if line.startswith("data: ")]
 
 
+@pytest.mark.parametrize("model", ["not-a-uuid", "", "1234"])
+async def test_invalid_assistant_id_is_a_400_parameter_error(authorized, monkeypatch, model):
+    complete = AsyncMock()
+    monkeypatch.setattr("bisheng.open_endpoints.api.endpoints.assistant.PublishedAssistantService.complete", complete)
+
+    response = await _post({"model": model, "messages": [{"role": "user", "content": "hi"}]})
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["status_code"] == 400
+    assert body["status_message"][0]["loc"] == ["body", "model"]
+    complete.assert_not_awaited()
+
+
 def _failing_stream(error: Exception):
     async def stream():
         chunk = {"object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"content": "par"}}]}
