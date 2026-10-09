@@ -71,6 +71,13 @@ def _qa_with_knowledge_access(qa_id: int, *, login_user, action: str):
     return qa, knowledge
 
 
+def _ensure_qa_knowledge(knowledge) -> None:
+    """QA pairs can only be written into a QA knowledge base."""
+
+    if knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise KnowledgeTypeNotSupportedError.http_exception()
+
+
 def _normalize_qa_knowledge_id(value: object) -> int | None:
     """Normalize legacy QA foreign keys without mapping malformed values to a resource."""
 
@@ -594,6 +601,7 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
     login_user = get_open_api_operator()
     knowledge = KnowledgeService.judge_knowledge_access(login_user, knowledge_id, "edit")
+    _ensure_qa_knowledge(knowledge)
     logger.info("add_qa_data knowledge_id={} size={}", knowledge_id, len(data))
     res = []
     for item in data:
@@ -619,6 +627,7 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
     qa_db, knowledge = _qa_with_knowledge_access(data.id, login_user=login_user, action="edit")
     if qa_db.knowledge_id != knowledge_id:
         raise NotFoundError.http_exception()
+    _ensure_qa_knowledge(knowledge)
 
     t = qa_db.dict()
     t["answers"] = json.loads(t["answers"])

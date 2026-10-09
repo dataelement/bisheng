@@ -5,14 +5,14 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 
 from bisheng.open_api.api import dependencies as open_api_dependencies
-from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+from bisheng.open_api.api.exception_handlers import open_api_http_status, register_open_api_exception_handlers
 from bisheng.open_endpoints.api.endpoints import filelib
-from bisheng.open_endpoints.domain.schemas.filelib import QueryQAParam
+from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
 
 USER = SimpleNamespace(user_id=7)
 
@@ -147,3 +147,40 @@ def test_update_without_changes_does_not_touch_index(monkeypatch, qa_writes):
 
     qa_writes.delete_vector.assert_not_called()
     qa_writes.save.assert_not_called()
+
+
+# --- add_qa / add_relative_qa ---------------------------------------------
+
+
+def _assert_type_not_supported(raised):
+    assert raised.value.status_code == 10962
+    assert open_api_http_status(raised.value) == 400
+
+
+def test_add_qa_rejects_document_knowledge(monkeypatch):
+    add = Mock()
+    monkeypatch.setattr(filelib, "get_open_api_operator", Mock(return_value=USER))
+    monkeypatch.setattr(
+        filelib.KnowledgeService, "judge_knowledge_access", Mock(return_value=SimpleNamespace(id=23, type=0))
+    )
+    monkeypatch.setattr(filelib.knowledge_imp, "add_qa", add)
+
+    with pytest.raises(HTTPException) as raised:
+        filelib.add_qa(knowledge_id=23, data=[APIAddQAParam(question="q", answer=["a"])])
+
+    _assert_type_not_supported(raised)
+    add.assert_not_called()
+
+
+def test_add_relative_qa_rejects_document_knowledge(monkeypatch):
+    add = Mock()
+    qa = SimpleNamespace(id=11, knowledge_id=23)
+    monkeypatch.setattr(filelib, "get_open_api_operator", Mock(return_value=USER))
+    monkeypatch.setattr(filelib, "_qa_with_knowledge_access", Mock(return_value=(qa, SimpleNamespace(id=23, type=0))))
+    monkeypatch.setattr(filelib.knowledge_imp, "add_qa", add)
+
+    with pytest.raises(HTTPException) as raised:
+        filelib.append_qa(knowledge_id=23, data=APIAppendQAParam(id="11", relative_questions=["q2"]))
+
+    _assert_type_not_supported(raised)
+    add.assert_not_called()
