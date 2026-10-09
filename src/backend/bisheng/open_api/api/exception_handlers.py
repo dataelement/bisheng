@@ -11,8 +11,6 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from bisheng.common.errcode.base import BaseErrorCode
-from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.common.errcode.open_api import (
     OpenApiAsyncUnsupportedError,
     OpenApiAuthError,
@@ -20,16 +18,10 @@ from bisheng.common.errcode.open_api import (
     OpenApiTaskModeUnsupportedError,
 )
 from bisheng.common.errcode.permission import (
-    AuthorizationModelMismatchError,
-    PermissionCheckFailedError,
-    PermissionDeniedError,
-    PermissionEnumerationIncompleteError,
-    PermissionInvalidResourceError,
-    PermissionProjectionFailedError,
-    PermissionPublishNotReadyError,
     PermissionServiceUnavailableError,
 )
 from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
+from bisheng.open_api.domain.http_status import open_api_http_status
 
 OPEN_API_PATH_PREFIX = "/api/v2"
 
@@ -41,41 +33,6 @@ def _is_open_api_path(conn) -> bool:
 
 def _response(exc: BaseErrorCode, status_code: int) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=jsonable_encoder(exc.to_dict()))
-
-
-def open_api_http_status(exc: BaseErrorCode | StarletteHTTPException) -> int:
-    """Map a v2 business error to its transport status without changing its code."""
-
-    if isinstance(exc, StarletteHTTPException):
-        error_type = getattr(exc, "error_code_class", type(exc))
-        code = exc.status_code
-    else:
-        error_type = type(exc)
-        code = exc.code
-    if issubclass(error_type, OpenApiAuthError):
-        return getattr(exc, "http_status", error_type.http_status)
-    if issubclass(
-        error_type,
-        (
-            PermissionServiceUnavailableError,
-            PermissionBackendUnavailableError,
-            PermissionCheckFailedError,
-            PermissionEnumerationIncompleteError,
-            PermissionProjectionFailedError,
-            PermissionPublishNotReadyError,
-            AuthorizationModelMismatchError,
-        ),
-    ):
-        return 503
-    if issubclass(error_type, (UnAuthorizedError, PermissionDeniedError, SpacePermissionDeniedError)):
-        return 403
-    if issubclass(error_type, (NotFoundError, PermissionInvalidResourceError)):
-        return 404
-    if error_type.__name__.endswith("NotFoundError") or "NotExist" in error_type.__name__:
-        return 404
-    if 400 <= code <= 599:
-        return int(code)
-    return 400
 
 
 def mark_open_api_error(conn, exc: BaseErrorCode) -> None:

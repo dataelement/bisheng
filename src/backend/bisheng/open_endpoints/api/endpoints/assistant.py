@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
@@ -21,6 +23,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveE
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
 from bisheng.open_api.domain.context import get_current_open_api_principal
+from bisheng.open_api.domain.http_status import openai_stream_error
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.credential_watcher import watch_websocket_credential
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
@@ -28,6 +31,18 @@ from bisheng.open_endpoints.domain.utils import get_open_api_operator
 from bisheng.utils import get_request_ip
 
 router = APIRouter(prefix="/assistant", tags=["OpenAPI", "Assistant"])
+
+
+async def _stream_with_error_event(stream: AsyncIterator[str]) -> AsyncIterator[str]:
+    """Follow the OpenAI streaming error convention when the stream fails midway:
+    send one `data: {"error": {...}}` event, then `data: [DONE]`."""
+    try:
+        async for item in stream:
+            yield item
+    except Exception as exc:
+        logger.opt(exception=True).error("assistant streaming failed")
+        yield f"data: {json.dumps(openai_stream_error(exc), ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
 
 
 @router.post("/chat/completions")
@@ -52,7 +67,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
             operator=operator,
         )
         if completion.stream is not None:
-            return StreamingResponse(completion.stream, media_type="text/event-stream")
+            return StreamingResponse(_stream_with_error_event(completion.stream), media_type="text/event-stream")
         return completion.payload
     except Exception:
         logger.opt(exception=True).error("assistant completion failed")
