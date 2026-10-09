@@ -1089,13 +1089,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return result.all()
 
     @classmethod
-    def query_by_condition_v1(cls, source: list[int], create_start: str, create_end: str):
+    def query_by_condition_v1(cls, create_start: str, create_end: str, source: list[int] | None = None):
+        """Return QA rows created in the time range; ``source=None`` means every source."""
         with get_sync_db_session() as session:
-            sql = (
-                select(QAKnowledge)
-                .where(QAKnowledge.source.in_(source))
-                .where(QAKnowledge.create_time.between(create_start, create_end))
-            )
+            sql = select(QAKnowledge).where(QAKnowledge.create_time.between(create_start, create_end))
+            if source is not None:
+                sql = sql.where(QAKnowledge.source.in_(source))
 
             return session.exec(sql).all()
 

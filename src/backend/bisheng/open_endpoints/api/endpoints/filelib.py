@@ -72,6 +72,13 @@ def _qa_with_knowledge_access(qa_id: int, *, login_user, action: str):
     return qa, knowledge
 
 
+def _ensure_qa_knowledge(knowledge) -> None:
+    """QA pairs can only be written into a QA knowledge base."""
+
+    if knowledge.type != KnowledgeTypeEnum.QA.value:
+        raise KnowledgeTypeNotSupportedError.http_exception()
+
+
 def _normalize_qa_knowledge_id(value: object) -> int | None:
     """Normalize legacy QA foreign keys without mapping malformed values to a resource."""
 
@@ -611,6 +618,7 @@ def add_qa(*, knowledge_id: int = Body(embed=True), data: list[APIAddQAParam] = 
     # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
     login_user = get_open_api_operator()
     knowledge = KnowledgeService.judge_knowledge_access(login_user, knowledge_id, "edit")
+    _ensure_qa_knowledge(knowledge)
     logger.info("add_qa_data knowledge_id={} size={}", knowledge_id, len(data))
     res = []
     for item in data:
@@ -636,6 +644,7 @@ def append_qa(*, knowledge_id: int = Body(embed=True), data: APIAppendQAParam = 
     qa_db, knowledge = _qa_with_knowledge_access(data.id, login_user=login_user, action="edit")
     if qa_db.knowledge_id != knowledge_id:
         raise NotFoundError.http_exception()
+    _ensure_qa_knowledge(knowledge)
 
     t = qa_db.dict()
     t["answers"] = json.loads(t["answers"])
@@ -653,8 +662,14 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
     login_user = get_open_api_operator()
     qa, knowledge = _qa_with_knowledge_access(qa_id, login_user=login_user, action="edit")
 
+    # A QA pair cannot exist without a question: removing the last one deletes the whole pair.
+    keep_pair = False
     if question:
-        qa.questions = [q for q in qa.questions if q != question]
+        remaining_questions = [q for q in qa.questions if q != question]
+        keep_pair = bool(remaining_questions)
+
+    if keep_pair:
+        qa.questions = remaining_questions
         QAKnoweldgeDao.update(qa)
     else:
         QAKnoweldgeDao.delete_batch([qa_id])
@@ -664,7 +679,7 @@ def delete_qa_data(*, qa_id: int, question: str | None = None):
             trace_id=trace_id_var.get(),
         )
     knowledge_imp.delete_vector_data(knowledge, file_ids=[qa_id])
-    if question:
+    if keep_pair:
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()
 
@@ -693,7 +708,9 @@ def update_qa(
         qa.answers = json.dumps(answer, ensure_ascii=False)
     QAKnoweldgeDao.update(qa)
 
-    if question:
+    # The index stores the answer in each question's metadata, so a new answer
+    # needs the same rebuild as a new question.
+    if question or answer:
         knowledge_imp.delete_vector_data(knowledge, file_ids=[id])
         knowledge_imp.QA_save_knowledge(knowledge, qa)
     return resp_200()
@@ -767,9 +784,9 @@ def query_qa(QueryQAParam: QueryQAParam):
 
     # Seed the tenant ContextVar before the tenant-aware read.
     login_user = get_open_api_operator()
-    sources = [1, 2]  # 3 Yes apiInverted
+    # Every QA source is returned (0 unknown, 1 manual, 2 audit, 3 API, 4 batch import).
     qa_list = QAKnoweldgeDao.query_by_condition_v1(
-        source=sources, create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
+        create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
     )
     candidates = []
     invalid_resource_count = 0
