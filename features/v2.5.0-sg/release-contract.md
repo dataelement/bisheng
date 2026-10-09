@@ -19,7 +19,7 @@
 | PortalRecommendationFileProjection | F056-home-personalized-recommendation | 文件业务域、空间、推荐资格、权限范围和投影版本的在线推荐投影 |
 | PortalRecommendationPoolState | F056-home-personalized-recommendation | Redis 中租户级业务域池、通用兜底池、热门轮换状态及 active pool version |
 | PortalUserRecommendationState | F056-home-personalized-recommendation | Redis 中用户兴趣 Top 50、近 90 天浏览状态、行为版本和短期 Top N |
-| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 对齐远端 `domains[].department_ids`，并增加推荐数量、算法、影子模式和灰度参数；F061 移除分类卡片的知识空间绑定语义，导航统计不再消费业务域/分类卡片的空间绑定 |
+| ShougangPortalAdminConfig（扩展） | F056-home-personalized-recommendation | 对齐远端 `domains[].department_ids`，并增加推荐数量、算法、影子模式和灰度参数；F061 移除分类卡片的知识空间绑定语义，导航统计不再消费业务域/分类卡片的空间绑定；F071 通过既有配置服务扩展有序 `manual_items`，不变更配置 Owner |
 | PortalTelemetryEvent（扩展） | F056-home-personalized-recommendation | 新增 `portal_search`；阅读事件增加推荐场景和入口来源 |
 
 ### 复用对象（Owner 不变）
@@ -55,14 +55,14 @@
 | INV-SG-1 | 用户业务域只从当前租户聚合配置 `domains[].department_ids` 精确匹配唯一主部门；不读取次要部门，不向父部门或子部门继承 | ShougangPortalAdminConfig, UserDepartment | F056 |
 | INV-SG-2 | 业务域匹配只参与推荐打分，不授予 `view_space` 或 `view_file`，也不改变 `visible_space_ids` | ShougangPortalAdminConfig, PermissionTuple | F056 |
 | INV-SG-3 | 已读文章不从候选中排除，只根据最近浏览时间施加可配置算法中定义的固定四档扣分 | PortalUserRecommendationState | F056 |
-| INV-SG-4 | 个性化推荐必须继续使用 F056 既有投影、来源池、召回、打分和排序；只在已有候选进入最终权限处理后，文件所属空间开启 `portal_discovery_enabled` 时可直接通过展示筛选，其他非公共空间仍执行完整 `view_file` 校验 | PortalRecommendationFileProjection, PermissionTuple, KnowledgeSpaceScope | F056, F061 |
+| INV-SG-4 | 个性化推荐必须继续使用 F056 既有投影、来源池、召回、打分和排序；自动部分只在已有候选进入最终权限处理后，文件所属空间开启 `portal_discovery_enabled` 时可直接通过展示筛选，其他非公共空间仍执行完整 `view_file` 校验；F071 显式人工引用独立验证安全展示资格，不写入自动投影或共享池 | PortalRecommendationFileProjection, PermissionTuple, KnowledgeSpaceScope | F056, F061 |
 | INV-SG-5 | `portal_discovery_enabled` 只授予首页统计、带门户发现标记的搜索列表，以及已有推荐候选最终校验阶段的元数据展示资格，不授予文件预览、下载、问答、分享、编辑或审批权限；上述访问动作必须继续执行原权限与审批规则 | KnowledgeFile, PermissionTuple, KnowledgeSpaceScope | F056, F061 |
 | INV-SG-6 | 除明确进入门户发现范围的统计、搜索列表和推荐展示外，无权文件的 ID、标题、摘要、标签和路径不得出现在响应或普通日志中；权限异常默认失败关闭 | KnowledgeFile, PortalRecommendationFileProjection, KnowledgeSpaceScope | F056, F061 |
 | INV-SG-7 | 第一阶段 custom ACL 文件仍不得进入共享推荐池；若投影滞后导致候选进入最终筛选，仅所属空间实时开启 `portal_discovery_enabled` 时可按发现规则展示，否则仍由最终权限校验阻止返回 | PortalRecommendationFileProjection, KnowledgeSpaceScope | F056, F061 |
 | INV-SG-8 | 搜索原文和浏览原始事件以 ES 为事实源；Redis 只保存近 90 天浏览时间、派生兴趣、版本和短期结果，不持久化原始搜索词 | PortalTelemetryEvent, PortalUserRecommendationState | F056 |
 | INV-SG-9 | 所有推荐 Redis key 必须包含租户前缀；Celery 任务必须恢复租户上下文并沿用租户 fan-out | PortalRecommendationPoolState, PortalUserRecommendationState | F056 |
 | INV-SG-10 | 首钢门户配置只通过既有 `/api/v1/shougang-portal/config` 聚合接口同步；配置按当前租户持久化，版本由 BiSheng 服务端在租户内单调递增；`domains[].department_ids` 是唯一部门业务域事实源，不复制到独立字段或表 | ShougangPortalAdminConfig | F056 |
-| INV-SG-11 | 匿名首页保持现有公共推荐与公共缓存；登录用户失败降级必须携带当前用户 token，禁止使用系统账号代取 | ShougangPortalAdminConfig, KnowledgeFile | F056 |
+| INV-SG-11 | 空人工配置时匿名首页保持现有公共推荐与公共缓存；F071 人工配置非空时，按实时库/文件事实复核显式引用并跳过整页内容缓存；登录用户失败降级必须携带当前用户 token，禁止使用系统账号代取 | ShougangPortalAdminConfig, KnowledgeFile | F056 |
 | INV-SG-12 | 热度参数变更必须使用双版本池重算并原子切换 active pool version；重算完成前继续使用上一有效版本 | PortalRecommendationPoolState, ShougangPortalAdminConfig | F056 |
 | INV-SG-13 | 公共知识空间只作为重复文档见证，任何预览、执行、失败恢复和重试路径都不得删除或修改公共文件及其版本链 | Knowledge, KnowledgeFile | F057 |
 | INV-SG-14 | 重复判定只比较公共与部门当前成功文件的非空 MD5 精确值；公共历史版本不得作为见证，部门命中后以完整逻辑文档为删除单元 | KnowledgeFile | F057 |
@@ -83,7 +83,8 @@
 | INV-SG-29 | 首页跳转必须携带可刷新恢复的门户发现标记；搜索列表、筛选项、标签、分页和总数均使用同一发现范围，任何一条子请求不得回退到用户权限范围造成数量与结果口径漂移 | KnowledgeSpaceScope, KnowledgeFile | F061 |
 | INV-SG-30 | 门户发现展示不得返回或缓存“可下载/可预览”的授权结论；预览与下载入口必须在动作发生时重新按当前用户、文件实时 ACL 和审批状态校验，关闭开关后新请求立即退出发现范围 | KnowledgeFile, PermissionTuple, KnowledgeSpaceScope | F061 |
 | INV-SG-31 | 分类卡片不再持有知识空间绑定关系；旧配置中的 `category_cards[].space_ids` 只允许兼容读取并在下一次保存时清理，不得再影响导航、搜索、推荐、发布或其他业务逻辑 | ShougangPortalAdminConfig | F061 |
-| INV-SG-32 | `portal_discovery_enabled` 不得把空间或文件加入推荐投影、共享池、业务域池、兴趣池或兜底池，也不得改变推荐资格与评分；未被既有推荐链路召回的文件不能仅因开关开启而出现在推荐中 | PortalRecommendationFileProjection, PortalRecommendationPoolState, KnowledgeSpaceScope | F061 |
+| INV-SG-32 | `portal_discovery_enabled` 不得把空间或文件加入推荐投影、共享池、业务域池、兴趣池或兜底池，也不得改变推荐资格与评分；未被既有推荐链路召回的文件不能仅因开关开启而出现在自动推荐中；F071 管理员显式选择属于独立人工引用路径，不变更自动池资格 | PortalRecommendationFileProjection, PortalRecommendationPoolState, KnowledgeSpaceScope | F061 |
+| INV-SG-33 | F071 人工推荐只来自当前租户公共库或有效公开库的合法当前知识入口；管理员保存有序引用，所有用户使用相同人工前缀并占用原名额，按规范知识去重。人工引用允许绕过评分、已读和轮换，但不授予正文权限，不把旧客户端缺失字段解释为清空 | ShougangPortalAdminConfig, KnowledgeFile, KnowledgeDocument, KnowledgeSpaceScope | F071 |
 
 INV-SG-1 的“不继承”只约束推荐业务域特征，不修改基线 INV-12 中部门管理员的权限继承语义。
 

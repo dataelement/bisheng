@@ -230,7 +230,9 @@ def test_unauthorized_portal_item_serializes_only_safe_allowlist():
 
     payload = item.model_dump(mode="json")
     assert payload["summary"] == "SECRET"
+    assert payload["canonical_document_id"] == 91
     assert set(payload) == {
+        "canonical_document_id",
         "id",
         "space_id",
         "title",

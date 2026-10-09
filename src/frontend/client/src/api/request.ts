@@ -156,6 +156,14 @@ const handleRateLimitResponse = (data: any): void => {
 
 customAxios.interceptors.response.use(
   (response) => {
+    // 部分调用方直接展示 status_message，先翻译默认权限提示，保留具体业务原因。
+    if (
+      response.data?.status_code === 18040
+      && response.data.status_message === 'Permission denied: only the creator or admin can perform this operation'
+    ) {
+      response.data.status_message = translateApiErrorMessage(response.data);
+    }
+
     if (isServerBusyCode(response.data?.status_code)) {
       handleRateLimitResponse(response.data);
       const error: any = new Error(formatApiErrorMessage(response.data));

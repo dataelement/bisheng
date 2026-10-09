@@ -775,6 +775,7 @@ class ShougangPortalFileItemResp(BaseModel):
         if self.content_access == "allowed":
             return data
         safe_fields = {
+            "canonical_document_id",
             "id",
             "space_id",
             "title",

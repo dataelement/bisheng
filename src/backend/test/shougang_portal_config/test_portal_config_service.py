@@ -191,3 +191,44 @@ async def test_disabled_or_invalid_domains_do_not_create_user_domain_mapping(
     assert portal_config_session_factory.post_commit_calls == [
         {"tenant_id": 1, "department_ids": [], "rebuild_pools": True},
     ]
+
+
+async def test_invalid_manual_reference_does_not_commit_config_or_version(portal_config_session_factory, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.common.errcode.knowledge_space import PortalManualRecommendationInvalidError
+    from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import ManualRecommendationRef
+    monkeypatch.setattr(
+        'bisheng.knowledge.domain.repositories.implementations.portal_manual_recommendation_repository_impl.'
+        'PortalManualRecommendationRepositoryImpl.find_references', AsyncMock(return_value=[]),
+    )
+    token = set_current_tenant_id(1)
+    try:
+        first = await ShougangPortalConfigService.save_config(_payload(), tenant_id=1)
+        changed = first.model_copy(deep=True)
+        changed.portal.recommendation.manual_items = [ManualRecommendationRef(space_id=10, file_id=90)]
+        with pytest.raises(PortalManualRecommendationInvalidError):
+            await ShougangPortalConfigService.save_config(changed, tenant_id=1)
+        stored = await ShougangPortalConfigService.get_config(tenant_id=1)
+        assert stored.version == first.version
+        assert stored.portal.recommendation.manual_items == []
+    finally:
+        current_tenant_id.reset(token)
+
+
+async def test_older_client_omitting_manual_field_preserves_saved_list(portal_config_session_factory,monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import ManualRecommendationRef
+    from test.knowledge.test_portal_manual_recommendation import record
+    monkeypatch.setattr('bisheng.knowledge.domain.repositories.implementations.portal_manual_recommendation_repository_impl.'
+                        'PortalManualRecommendationRepositoryImpl.find_references',AsyncMock(return_value=[record()]))
+    token=set_current_tenant_id(1)
+    try:
+        first=_payload()
+        first.portal.recommendation.manual_items=[ManualRecommendationRef(space_id=10,file_id=1)]
+        await ShougangPortalConfigService.save_config(first,tenant_id=1)
+        saved=await ShougangPortalConfigService.save_config(_payload(),tenant_id=1)
+        assert saved.portal.recommendation.manual_items[0].file_id==1
+    finally:
+        current_tenant_id.reset(token)

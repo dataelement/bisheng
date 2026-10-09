@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -52,3 +52,42 @@ async def save_shougang_portal_config(
         create_user=admin_user.user_id,
     )
     return resp_200(redact_portal_admin_config(saved))
+
+
+async def _manual_service():
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.portal_manual_recommendation_repository_impl import (
+        PortalManualRecommendationRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.portal_manual_recommendation_service import PortalManualRecommendationService
+
+    async with get_async_db_session() as session:
+        yield PortalManualRecommendationService(PortalManualRecommendationRepositoryImpl(session))
+
+
+@router.get('/recommendation/spaces')
+async def manual_recommendation_spaces(
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+    service=Depends(_manual_service),
+):
+    return resp_200(await service.list_spaces())
+
+
+@router.get('/recommendation/files')
+async def manual_recommendation_files(
+    space_id: int = Query(gt=0), q: str = Query(default='', max_length=200),
+    page: int = Query(default=1, ge=1), page_size: int = Query(default=10, ge=1, le=100),
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+    service=Depends(_manual_service),
+):
+    return resp_200(await service.list_files(space_id, q.strip(), page, page_size))
+
+
+@router.get('/recommendation/selected')
+async def manual_recommendation_selected(
+    admin_user: UserPayload = Depends(UserPayload.get_admin_user),
+    service=Depends(_manual_service),
+):
+    config = await ShougangPortalConfigService.get_config(tenant_id=_current_admin_tenant_id(admin_user))
+    refs = [item.model_dump() for item in config.portal.recommendation.manual_items] if config else []
+    return resp_200(await service.selected_items(refs))
