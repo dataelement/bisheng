@@ -150,7 +150,7 @@ print(authorization_model_checksum(build_authorization_model_f048()))"
 
 ## 3. 合并后检查清单
 
-按顺序执行,每一项都不能省。
+按顺序执行；前端本地验证按第③步的用户约定交给镜像构建阶段，其余项不能省。
 
 **⓪ 查被静默删掉的中粮定制(§2.3)**:这一步要放在跑测试之前,因为测试发现不了。
 
@@ -181,8 +181,8 @@ cd src/backend && uv run alembic heads                            # 只能有一
 uv run pytest -q test/cofco test/celery test/database/test_alembic_single_head.py
 ```
 
-**③ 前端:必须真跑一次构建**。带 `@ts-strict-ignore` 的文件会被 tsc 跳过,
-所以 lint 和 typecheck 都抓不到重复声明,只有 vite build 能报出来。
+**③ 前端:默认交给镜像构建阶段验证（用户于2026-10-09明确）**。本地开发与合并不重复跑前端测试和构建；只有用户明确要求才执行下面的本地命令。CI质量门禁不变，未执行不能记为通过。带 `@ts-strict-ignore` 的文件会被 tsc 跳过,
+所以 lint 和 typecheck 都抓不到重复声明,镜像构建阶段仍须验证 vite build。
 
 ```bash
 cd src/frontend && pnpm lint

@@ -44,6 +44,8 @@ Middleware (MySQL / Redis / Milvus / ES / MinIO / OpenFGA): integration tests ru
 
 ## 4. Frontend Rules (P0)
 
+**本地验证约定（用户于 2026-10-09 明确）**：开发与合并阶段默认不重复执行前端测试和构建，交给镜像构建阶段验证；用户明确要求本地验证时再执行。CI 的既有质量门禁不变，后端验证不受此约定影响。未执行的前端检查不得宣称通过。
+
 Two React apps that **must not be mixed**. Per-app rules auto-load from each sub-project's `AGENTS.md`:
 - `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, react-query v3, bs-ui, `@/`)
 - `src/frontend/client/AGENTS.md` — End-user chat UI (Recoil, react-query v4, shadcn, `~/`)
@@ -119,4 +121,3 @@ Backend runtime pitfalls (tenant-filter SELECT-only gap, ruff hook import trap, 
 - **Skills**: `/sdd-review`, `/task-review`, `/code-review`, `/e2e-test`, `/i18n-localizer`, `/react-component-refactor`
 
 **Instruction files (AGENTS.md map).** Root = this file, loaded every session. Auto-loaded on top when editing the matching directory: `src/backend/`, `src/frontend/platform/`, `src/frontend/client/`, `src/frontend/packages/ui/` (shared component library + design-token SSOT), plus deep-dir specials `src/backend/bisheng/core/database/alembic/` (migrations) and `src/backend/scripts/` (one-off scripts). Every `CLAUDE.md` is a symlink to its sibling `AGENTS.md` — edit `AGENTS.md` only. Put a new rule in the deepest file covering its scope (cross-app / cross-module → this file; app- or dir-specific → the nearest file); never duplicate a rule across levels — it *will* drift.
-
