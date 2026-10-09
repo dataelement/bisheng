@@ -8,7 +8,6 @@ from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge_imp import text_knowledge
 from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import NotFoundError
@@ -563,7 +562,15 @@ async def post_chunks(
 @router.post("/chunks_string")
 @open_api_scope("knowledge:write")
 async def post_string_chunks(request: Request, document: ChunkInput):
-    """Get knowledge base file information."""
+    """Write caller-prepared text into a document knowledge base as one file."""
+
+    db_knowledge = await KnowledgeDao.aquery_by_id(document.knowledge_id)
+    if not db_knowledge:
+        raise NotFoundError.http_exception()
+    # The chunks use the document knowledge base schema; QA libraries and
+    # knowledge spaces store files differently.
+    if db_knowledge.type != KnowledgeTypeEnum.NORMAL.value:
+        raise KnowledgeTypeNotSupportedError.http_exception()
 
     # String saved to file
     content = "\n\n".join([doc.page_content for doc in document.documents])
@@ -578,7 +585,6 @@ async def post_string_chunks(request: Request, document: ChunkInput):
         separator=["\n\n"],
         separator_rule=["after"],
         file_list=[KnowledgeFileOne(file_path=file_path)],
-        extra=json.dumps(document.documents[0].metadata, ensure_ascii=False),
     )
 
     upload_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
@@ -588,9 +594,10 @@ async def post_string_chunks(request: Request, document: ChunkInput):
         upload_limit_bytes=upload_limit_bytes,
     )
     if failed_files:
+        # Duplicate file (same name or content): HTTP 200, status=3, remark has new/old names.
         return resp_200(data=failed_files[0])
 
-    res = await run_in_threadpool(text_knowledge, knowledge, process_files[0], document.documents)
+    res = await KnowledgeService.aingest_text_chunks(login_user, knowledge, process_files[0], document.documents)
 
     return resp_200(data=res)
 

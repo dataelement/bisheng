@@ -6,7 +6,6 @@ from typing import Any
 import aiofiles
 import requests
 from langchain_classic.schema.document import Document
-from langchain_classic.text_splitter import CharacterTextSplitter
 from loguru import logger
 from sqlalchemy import func, or_
 from sqlmodel import select
@@ -26,7 +25,6 @@ from bisheng.common.schemas.telemetry.event_data_schema import FileParseEventDat
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage, get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -44,6 +42,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMetadata
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.rag.knowledge_chunks_pipeline import KnowledgeChunksPipeline
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from bisheng.llm.domain.services import LLMService
 from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
@@ -414,71 +413,42 @@ def parse_document_title(title: str) -> str:
     return title
 
 
-def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: list[Document]):
-    """Usetext Importknowledge"""
-    vectore_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        invoke_user_id=db_file.user_id, knowledge=db_knowledge
+def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: list[Document]) -> dict:
+    """Write caller-provided text chunks into a document knowledge base.
+
+    Used by the open API ``POST /api/v2/filelib/chunks_string``. The chunks get the
+    metadata of the file upload pipeline (see ``KnowledgeChunksPipeline``), and the
+    stores are initialized like ``addEmbedding`` does. Any failure is raised; the
+    caller removes the unfinished file record.
+    """
+    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        db_file.user_id, knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
     )
-    logger.info("vector_init_conn_done milvus={}", db_knowledge.collection_name)
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=db_knowledge)
+    vector_client = KnowledgeUtils.ensure_milvus_schema_ready(
+        invoke_user_id=db_file.user_id,
+        knowledge=db_knowledge,
+        vector_client=vector_client,
+    )
+    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+        knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+    )
+    logger.info(f"vector_init_conn_done col={db_knowledge.collection_name} index={db_knowledge.index_name}")
 
-    separator = "\n\n"
-    chunk_size = 1000
-    chunk_overlap = 100
-
-    text_splitter = CharacterTextSplitter(
-        separator=separator,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        add_start_index=True,
+    pipeline = KnowledgeChunksPipeline(
+        invoke_user_id=db_file.user_id,
+        db_file=db_file,
+        documents=documents,
+        vector_store=[vector_client, es_client],
+    )
+    pipeline_result = pipeline.run()
+    logger.info(
+        f"text_chunks_ingested knowledge_id={db_knowledge.id} file_id={db_file.id} "
+        f"chunks={len(pipeline_result.documents)}"
     )
 
-    texts = text_splitter.split_documents(documents)
-
-    logger.info(f"chunk_split knowledge_id={db_knowledge.id} size={len(texts)}")
-
-    # Storage mysql
-    file_name = documents[0].metadata.get("source")
-    db_file.file_name = file_name
-    with get_sync_db_session() as session:
-        session.add(db_file)
-        session.commit()
-        session.refresh(db_file)
-    result = db_file.model_dump()
-    try:
-        metadata = [
-            {
-                "file_id": db_file.id,
-                "knowledge_id": f"{db_knowledge.id}",
-                "page": doc.metadata.pop("page", 1),
-                "source": doc.metadata.pop("source", ""),
-                "bbox": doc.metadata.pop("bbox", ""),
-                "extra": json.dumps(doc.metadata, ensure_ascii=False),
-                "title": "",
-                "chunk_index": index,
-            }
-            for index, doc in enumerate(documents)
-        ]
-        vectore_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
-
-        # Storagees
-        if es_client:
-            es_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
-        db_file.status = 2
-        result["status"] = 2
-        with get_sync_db_session() as session:
-            session.add(db_file)
-            session.commit()
-    except Exception as e:
-        logger.error(e)
-        db_file.status = 3
-        db_file.remark = str(e)[:500]
-        with get_sync_db_session() as session:
-            session.add(db_file)
-            session.commit()
-        result["status"] = 3
-        result["remark"] = str(e)[:500]
-    return result
+    db_file.status = KnowledgeFileStatus.SUCCESS.value
+    db_file = KnowledgeFileDao.update(db_file)
+    return db_file.model_dump()
 
 
 def QA_save_knowledge(db_knowledge: Knowledge, QA: QAKnowledge):
