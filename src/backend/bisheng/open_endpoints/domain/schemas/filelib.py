@@ -15,7 +15,8 @@ class APIAppendQAParam(BaseModel):
 
 
 class QueryQAParam(BaseModel):
-    timeRange: list[str]
+    # [start, end] of the QA create time; elements after the second are ignored.
+    timeRange: list[str] = Field(..., min_length=2)
 
 
 class KnowledgeBaseFilter(BaseModel):

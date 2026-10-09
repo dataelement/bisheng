@@ -750,7 +750,8 @@ def query_qa(QueryQAParam: QueryQAParam):
 
     # Seed the tenant ContextVar before the tenant-aware read.
     login_user = get_open_api_operator()
-    sources = [1, 2]  # 3 Yes apiInverted
+    # QA source: 1 manual, 2 audit, 3 written by add_qa / add_relative_qa of this API.
+    sources = [1, 2, 3]
     qa_list = QAKnoweldgeDao.query_by_condition_v1(
         source=sources, create_start=QueryQAParam.timeRange[0], create_end=QueryQAParam.timeRange[1]
     )
