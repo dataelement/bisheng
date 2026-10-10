@@ -28,6 +28,24 @@ SIZE_INLINE = 1 * 1024 * 1024  # 1 MB
 _SANDBOX_ROOT = "/home/user/"
 
 
+def _log_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return "".join(str(part) for part in value)
+    return str(value)
+
+
+def _error_text(error) -> str:
+    if not error:
+        return ""
+    if isinstance(error, dict):
+        parts = (error.get("name"), error.get("value"), error.get("traceback"))
+    else:
+        parts = (getattr(error, "name", None), getattr(error, "value", None), getattr(error, "traceback", None))
+    return "\n".join(str(part) for part in parts if part)
+
+
 def _clip_log_lines(lines):
     """Cap an E2B ``logs.stdout`` / ``logs.stderr`` list, preserving its type.
 
@@ -115,6 +133,41 @@ class E2bCodeExecutor(BaseExecutor):
                 files_info = self.sandbox.files.list("./")
                 for file in files_info:
                     self.sandbox_file_cache[file.path] = file
+
+    def execute_code(
+        self,
+        code: str | None = None,
+        timeout: int | None = None,
+        filename: str | None = None,
+        work_dir: str | None = None,
+        lang: str | None = "python",
+    ) -> tuple[int, str, str]:
+        """Run ``code`` only. No workspace copy-in and no file harvest.
+
+        ``work_dir`` is ignored: the code node has no workspace to mirror.
+        """
+        del filename, work_dir, lang
+        if code is None:
+            raise AssertionError("code must be provided.")
+        if self.sandbox is None:
+            self.init_sandbox()
+        try:
+            if timeout is None:
+                execution = self.sandbox.run_code(code)
+            else:
+                execution = self.sandbox.run_code(code, timeout=timeout)
+        finally:
+            if not self.keep_sandbox:
+                self.close()
+        stdout = _log_text(getattr(getattr(execution, "logs", None), "stdout", None))
+        stderr = _log_text(getattr(getattr(execution, "logs", None), "stderr", None))
+        error_text = _error_text(getattr(execution, "error", None))
+        if error_text:
+            logs = stderr
+            if error_text not in logs:
+                logs = f"{logs}\n{error_text}" if logs else error_text
+            return 1, logs, stderr
+        return 0, stdout, stderr
 
     def run(self, code: str, required_files: list[str] = None):
         """

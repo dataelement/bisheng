@@ -16,14 +16,11 @@ from langchain_core.language_models import BaseLanguageModel
 from langchain_core.tools import BaseTool, Tool
 from mypy_extensions import Arg, KwArg
 
-from bisheng.common.services.config_service import settings
 from bisheng_langchain.gpts.tools.api_tools import ALL_API_TOOLS
 from bisheng_langchain.gpts.tools.bing_search.self_arxiv import ArxivAPIWrapperSelf
 from bisheng_langchain.gpts.tools.bing_search.tool import BingSearchResults
 from bisheng_langchain.gpts.tools.calculator.tool import calculator
-from bisheng_langchain.gpts.tools.code_interpreter.container_executor import ContainerExecutor
-from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import E2bCodeExecutor
-from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.factory import build_code_executor
 from bisheng_langchain.gpts.tools.code_interpreter.tool import CodeInterpreterTool
 
 # from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
@@ -100,47 +97,10 @@ def _get_bearly_code_interpreter(**kwargs: Any) -> Tool:
     return BearlyInterpreterTool(**kwargs).as_tool()
 
 
-# Isolation-environment access knobs live on Settings.sandbox_conf, never extra
-# (AC-22 / pitfall 7). Runner-only keys are stripped so leftover tool config
-# cannot override session TTL / slots / uid isolation.
-_CONTAINER_POOL_KEYS = (
-    "endpoints",
-    "token",
-    "discover_host_pattern",
-    "discover_index_start",
-    "discover_max",
-    "discover_ttl_s",
-    "discover_port",
-    "pool_lease_ttl_s",
-    "max_sessions_per_replica",
-    "enable_uid_isolation",
-    "pool_acquire_timeout_s",
-    "max_copy_in_bytes",
-    "code_node_enabled",
-    "sandbox_conf",
-)
-
-
 def _get_native_code_interpreter(**kwargs: Any) -> BaseTool:
-    executor_type = kwargs.pop("type", None) or "local"
-    config = kwargs.pop("config", None) or {}
-    backend_config = dict(config.get(executor_type) or {})
-    # Pitfall 7: frontend stores config.e2b.type as private/official. That must
-    # not become an executor constructor argument; domain empty/non-empty is the
-    # real private vs official switch.
-    backend_config.pop("type", None)
-    if executor_type == "container":
-        for key in _CONTAINER_POOL_KEYS:
-            backend_config.pop(key, None)
-    kwargs.update(backend_config)
-    if executor_type == "local":
-        executor = LocalExecutor(**kwargs)
-    elif executor_type == "container":
-        executor = ContainerExecutor(sandbox_conf=settings.sandbox_conf, **kwargs)
-    elif executor_type == "e2b":
-        executor = E2bCodeExecutor(**kwargs)
-    else:
-        raise ValueError(f"Unknown code interpreter type: {executor_type!r}")
+    """Read the tool's kind, then build the executor. ``run`` stays on the tool."""
+    kind = kwargs.pop("type", None) or "local"
+    executor = build_code_executor(kind, **kwargs)
     return CodeInterpreterTool(executor=executor, description=executor.description)
 
 

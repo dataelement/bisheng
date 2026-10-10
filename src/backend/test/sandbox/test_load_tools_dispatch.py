@@ -58,7 +58,10 @@ def test_e2b_config_type_is_not_an_executor_kwarg(monkeypatch: pytest.MonkeyPatc
         def __init__(self, **kwargs):
             captured.update(kwargs)
 
-    monkeypatch.setattr("bisheng_langchain.gpts.load_tools.E2bCodeExecutor", _Spy)
+    monkeypatch.setattr(
+        "bisheng_langchain.gpts.tools.code_interpreter.factory.E2bCodeExecutor",
+        _Spy,
+    )
     _get_native_code_interpreter(
         minio={},
         type="e2b",
@@ -69,10 +72,10 @@ def test_e2b_config_type_is_not_an_executor_kwarg(monkeypatch: pytest.MonkeyPatc
 
 
 def test_container_pool_params_come_from_sandbox_conf_not_extra(monkeypatch: pytest.MonkeyPatch):
-    import bisheng_langchain.gpts.load_tools as load_tools_mod
+    import bisheng_langchain.gpts.tools.code_interpreter.factory as factory_mod
 
     conf = SandboxConf(endpoints=["http://pool:8080"], token="pool-token")
-    monkeypatch.setattr(load_tools_mod, "settings", type("S", (), {"sandbox_conf": conf})())
+    monkeypatch.setattr(factory_mod, "settings", type("S", (), {"sandbox_conf": conf})())
     tool = _get_native_code_interpreter(
         minio={},
         type="container",
