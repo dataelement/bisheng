@@ -197,11 +197,6 @@ class PaddleOcrLoader(BaseBishengLoader):
         except httpx.TimeoutException as e:
             logger.error(f"PaddleOCR API request timed out: {e}")
             raise EtlException("PaddleOCR API timeout")
-        except Exception as e:
-            if "Timeout" in str(e):
-                logger.error(f"PaddleOCR API request timed out: {e}")
-                raise EtlException("PaddleOCR API timeout")
-            raise
 
         raise AssertionError("unreachable")
 

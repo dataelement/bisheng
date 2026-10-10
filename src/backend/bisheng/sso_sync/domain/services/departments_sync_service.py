@@ -61,8 +61,8 @@ class DepartmentsSyncService:
         Gateway normally emits a depth-first tree, but a flat source may put a
         child before its parent.  Applying that input verbatim makes the child
         fail with ``SsoDeptParentMissingError`` even though its parent is in
-        the same request.  Stable passes keep unrelated items in their input
-        order and leave cycles/missing parents to the existing per-item error
+        the same request. A FIFO queue keeps ready items in discovery order;
+        cycles/missing parents remain subject to the existing per-item error
         handling.
         """
         external_ids = {item.external_id for item in items}

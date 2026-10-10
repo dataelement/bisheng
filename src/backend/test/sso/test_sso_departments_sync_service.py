@@ -70,6 +70,33 @@ def _dept(
 # =========================================================================
 
 
+@pytest.mark.parametrize(
+    ("relationships", "expected_order"),
+    [
+        ([], []),
+        ([("LEAF", "CHILD"), ("CHILD", "ROOT"), ("ROOT", None)], ["ROOT", "CHILD", "LEAF"]),
+        ([("B", None), ("A", None)], ["B", "A"]),
+        ([("CHILD", "MISSING"), ("ROOT", None)], ["CHILD", "ROOT"]),
+        ([("A", "B"), ("B", "A"), ("ROOT", None)], ["ROOT", "A", "B"]),
+        ([("SELF", "SELF")], ["SELF"]),
+    ],
+)
+def test_parent_first_order_retains_unresolvable_items(relationships, expected_order):
+    """Ordering must keep malformed items for the existing per-item error handler."""
+    from bisheng.sso_sync.domain.services.departments_sync_service import (
+        DepartmentsSyncService,
+    )
+
+    items = [
+        DepartmentUpsertItem(external_id=external_id, name=external_id, parent_external_id=parent_id)
+        for external_id, parent_id in relationships
+    ]
+    ordered = DepartmentsSyncService._parent_first_upserts(items)
+
+    assert [item.external_id for item in ordered] == expected_order
+    assert [item.external_id for item in items] == [external_id for external_id, _ in relationships]
+
+
 @pytest.mark.asyncio
 class TestUpsertBatch:
     async def test_child_before_parent_is_applied_in_parent_first_order(self):

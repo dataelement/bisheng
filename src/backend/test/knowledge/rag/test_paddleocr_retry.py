@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
@@ -87,3 +88,71 @@ async def test_async_retries_rate_limit_business_code_then_succeeds() -> None:
     assert result == {"layoutParsingResults": []}
     assert client.post.await_count == 2
     sleep.assert_awaited_once_with(0.25)
+
+
+@pytest.mark.parametrize(
+    ("status_code", "payload", "response_text", "expected_error"),
+    [
+        (400, {"errorCode": 40001}, "Timeout in provider parser", "status=400"),
+        (200, {"errorCode": 40001, "errorMsg": "Timeout in provider parser"}, "response", "API error: Timeout"),
+    ],
+)
+async def test_async_preserves_provider_errors_containing_timeout(
+    status_code,
+    payload,
+    response_text,
+    expected_error,
+) -> None:
+    client = MagicMock()
+    client.post = AsyncMock(return_value=_response(status_code, payload, text=response_text))
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.httpx.AsyncClient", return_value=client_context):
+        with pytest.raises(EtlException, match=expected_error):
+            await _loader()._call_api_async("encoded")
+
+    client.post.assert_awaited_once()
+
+
+async def test_async_preserves_client_timeout_handling() -> None:
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=httpx.ReadTimeout("request timed out"))
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.httpx.AsyncClient", return_value=client_context):
+        with pytest.raises(EtlException, match="PaddleOCR API timeout"):
+            await _loader()._call_api_async("encoded")
+
+    client.post.assert_awaited_once()
+
+
+def test_sync_zero_retries_keeps_single_attempt() -> None:
+    response = _response(503, {"errorCode": 10010, "errorMsg": "queue full"})
+    with (
+        patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.requests.post", return_value=response) as post,
+        patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.time.sleep") as sleep,
+        pytest.raises(EtlException, match="status=503"),
+    ):
+        _loader(max_retries=0)._call_api_sync("encoded")
+    post.assert_called_once()
+    sleep.assert_not_called()
+
+
+async def test_async_stops_after_retries_with_exponential_backoff() -> None:
+    client = MagicMock()
+    client.post = AsyncMock(return_value=_response(200, {"errorCode": 12002, "errorMsg": "rate limited"}))
+    client_context = MagicMock()
+    client_context.__aenter__ = AsyncMock(return_value=client)
+    client_context.__aexit__ = AsyncMock(return_value=None)
+    with (
+        patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.httpx.AsyncClient", return_value=client_context),
+        patch("bisheng.knowledge.rag.pipeline.loader.paddle_ocr.asyncio.sleep", new_callable=AsyncMock) as sleep,
+        pytest.raises(EtlException, match="rate limited"),
+    ):
+        await _loader(max_retries=3)._call_api_async("encoded")
+    assert client.post.await_count == 4
+    assert [call.args[0] for call in sleep.await_args_list] == [0.25, 0.5, 1.0]
