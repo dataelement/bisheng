@@ -188,6 +188,24 @@ async def test_the_two_platform_prefixes_do_not_cross_match(tmp_path):
     assert by_file == {("sak.py", "bs_sak"), ("pat.py", "bs_pat")}
 
 
+async def test_openai_scoped_keys_are_caught_outside_an_assignment(tmp_path):
+    """``sk-proj-`` / ``sk-svcacct-`` / ``sk-admin-`` keys carry ``-`` and ``_`` in
+    the body; the generic assignment rule only catches them next to an
+    ``api_key = "..."``. A bearer header is the case that slipped through."""
+    body = "abcDEF0123456789_ghiJKL-mnoPQR0123456789stu"
+    result = _scan(
+        tmp_path,
+        {
+            "proj.py": f'HEADERS = {{"Authorization": "Bearer sk-proj-{body}"}}\n',
+            "svc.py": f'HEADERS = {{"Authorization": "Bearer sk-svcacct-{body}"}}\n',
+            "admin.py": f'HEADERS = {{"Authorization": "Bearer sk-admin-{body}"}}\n',
+            "prose.py": "# see the sk-learn docs and the sk-proj-setup guide\n",
+        },
+    )
+    files = {hit["file"] for hit in result.hits if hit["rule_id"] == "openai_sk"}
+    assert files == {"proj.py", "svc.py", "admin.py"}
+
+
 async def test_db_conn_string_requires_user_and_password(tmp_path):
     """Host-only DSNs are normal configuration; only credentials embedded in the URL are a finding."""
     result = _scan(

@@ -106,7 +106,12 @@ SECRET_SCAN_RULES: tuple[SecretRule, ...] = (
         rule_id="openai_sk",
         name_i18n_key="app_publish.secret_rule.openai_sk.name",
         description_i18n_key="app_publish.secret_rule.openai_sk.desc",
-        pattern=re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
+        # Classic ``sk-<alnum>`` keys, plus the scoped formats OpenAI issues by
+        # default today (``sk-proj-`` / ``sk-svcacct-`` / ``sk-admin-``), whose
+        # bodies also contain ``-`` and ``_``. Without the second branch a project
+        # key outside an ``api_key = "..."`` assignment passed the scan (found on
+        # 114, 2026-10-10).
+        pattern=re.compile(r"\bsk-(?:(?:proj|svcacct|admin)-[A-Za-z0-9_\-]{20,}|[A-Za-z0-9]{20,}\b)"),
     ),
     SecretRule(
         rule_id="private_key_pem",
