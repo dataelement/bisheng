@@ -105,9 +105,9 @@ bisheng-milvus-standalone
 | `system_login_method` | `SystemLoginMethod` | 登录方式（商业版标识、多端登录） |
 | `mcp` | `McpConf` | MCP 协议配置 |
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
-| `open_api` | `OpenApiConf` | 开放 API：个人密钥开关、员工接入入口显示开关、`public_base_url`（对外地址，见下节） |
+| `open_api` | `OpenApiConf` | 开放 API：个人密钥部署开关、`public_base_url`（对外地址，见下节） |
 
-`config.yaml` 的 `open_api.ai_access_ui_enabled` 默认为 `false`：隐藏个人设置中的「AI 助手接入」菜单和知识空间列表下方的「连接 AI 助手」卡片。配置为 `true` 并重启后端、刷新页面后，入口仍遵循原有个人密钥部署开关与租户权限；此项只控制员工入口，不停用开放 API、已有密钥或后台管理入口。配置项缺失时同样隐藏。
+后台「系统配置」中的 `open_api.ai_access_ui_enabled` 默认为 `false`：隐藏个人设置中的「AI 助手接入」菜单和知识空间列表下方的「连接 AI 助手」卡片。配置为 `true`、保存后刷新页面即可生效，无需重启后端。入口仍遵循原有个人密钥部署开关与租户权限；此项只控制员工入口，不停用开放 API、已有密钥或后台管理入口。配置项缺失或不是布尔值时同样隐藏；服务器 `config.yaml` 的同名项不再控制此入口。启动时按现有系统配置补齐机制添加缺失项，不覆盖管理员已有值。
 
 ```yaml
 open_api:

@@ -231,8 +231,7 @@ class ConfigService(Settings):
         if source_indent == target_indent:
             return block
         return [
-            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line
-            for line in block
+            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line for line in block
         ]
 
     @staticmethod
@@ -478,6 +477,11 @@ class ConfigService(Settings):
         # Get all of them firstkey
         all_config = self.get_all_config()
         return all_config.get(key, {})
+
+    def get_ai_access_ui_enabled(self) -> bool:
+        """Read the employee AI-access UI gate from hot-reloadable system config."""
+        block = self.get_from_db("open_api")
+        return isinstance(block, dict) and block.get("ai_access_ui_enabled") is True
 
     def get_cofco_forwarding_conf(self) -> CofcoForwardingConf:
         """Hot-reload E+ forwarding config from DB; fall back to YAML boot value.
