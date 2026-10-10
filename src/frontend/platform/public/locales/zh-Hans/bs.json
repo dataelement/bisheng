@@ -2883,7 +2883,24 @@
         "dropColumn": "删除列",
         "modifyColumn": "修改列",
         "unknown": "变更"
-      }
+      },
+      "previewTitle": "预览待审版本",
+      "previewHint": "拉起一个临时实例，查看这个版本在平台上的实际效果。实例只有你能进入，审批结束后自动回收。",
+      "previewStart": "拉起预览",
+      "previewStartAgain": "重新拉起",
+      "previewStarting": "正在拉起预览，可能需要一两分钟。",
+      "previewOpen": "打开预览",
+      "previewReclaim": "手动回收",
+      "previewRunningHint": "预览已就绪，可以打开了。",
+      "previewExpiresAt": "预览已就绪，{{time}} 之后自动回收。",
+      "previewReclaimedManual": "预览已回收，需要的话可以重新拉起。",
+      "previewReclaimedApproval": "审批已结束，预览已回收。",
+      "previewReclaimedExpired": "预览已超时回收，需要的话可以重新拉起。",
+      "previewReclaimedStartFailed": "上次没能拉起来，可以再试一次。",
+      "previewBlockedNoImage": "这个版本还没构建完成，暂时不能预览。",
+      "previewBlockedSettled": "这个版本的审批已经结束，不能再预览。",
+      "previewBlockedUnknown": "这个版本暂时不能预览。",
+      "previewActionFailed": "操作没有成功，请稍后重试。"
     },
     "versionList": {
       "title": "版本记录",

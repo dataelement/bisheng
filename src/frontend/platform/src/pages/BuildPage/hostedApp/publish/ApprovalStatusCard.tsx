@@ -40,6 +40,7 @@ import {
   pendingReasonI18nKey,
 } from "../types"
 import { CapabilityListCard } from "./CapabilityListCard"
+import { OwnerPreviewCard } from "./OwnerPreviewCard"
 import { SchemaChangeNotice } from "./SchemaChangeNotice"
 
 interface ApprovalStatusCardProps {
@@ -84,6 +85,10 @@ export function ApprovalStatusCard({
   // application when the read model itself could not be loaded.
   const parked = (status?.app_state ?? app.state) === "pending_capacity"
   const canWithdraw = !!status?.can?.withdraw && !!approval?.instance_id
+  // RT-03 AC 11 — the server decides (owner, request pending); the card only
+  // needs the version under review to point the preview at.
+  const previewVersionId =
+    status?.can?.preview && approval?.version_id ? approval.version_id : null
 
   const runWithdraw = async (instanceId: number) => {
     setWithdrawing(true)
@@ -231,6 +236,12 @@ export function ApprovalStatusCard({
                     {approval.reject_reason}
                   </p>
                 </div>
+              )}
+              {!!previewVersionId && (
+                <OwnerPreviewCard
+                  appId={app.app_id}
+                  versionId={previewVersionId}
+                />
               )}
             </div>
           ) : (

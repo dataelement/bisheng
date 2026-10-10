@@ -108,6 +108,10 @@ class PublishStatusService:
                 # which enforces "applicant only" itself; this flag only decides
                 # whether the button is drawn.
                 "withdraw": bool(is_owner and withdrawable and not deleted),
+                # PRD-1 RT-03 AC 11: the owner previews the version under review
+                # while the request is pending — the same window the preview
+                # service itself accepts (``ReviewAccess``, settled → refused).
+                "preview": bool(is_owner and withdrawable and not deleted),
                 "manual_publish": bool(is_owner and not deleted and app.state == _APP_STATE_PENDING_CAPACITY),
                 # AC-06: an application that arrived through the CLI has no
                 # draft workspace on the platform, so there is nothing for a
@@ -295,9 +299,14 @@ class PublishStatusService:
             name = await _user_name(task.approver_user_id)
             if name and name not in names:
                 names.append(name)
+        snapshot = instance.payload_snapshot if isinstance(instance.payload_snapshot, dict) else {}
         return {
             "instance_id": instance.id,
             "status": instance.status,
+            # The version under review. ``pending_version`` above stays null
+            # until approval (``stage_version``), so this is the only way the
+            # publish face can name the version an owner previews (RT-03 AC 11).
+            "version_id": snapshot.get("version_id"),
             "submitted_at": instance.create_time,
             "decided_at": decided_at,
             # Never truncated: a rejection an owner cannot read in full is a

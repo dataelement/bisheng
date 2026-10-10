@@ -2883,7 +2883,24 @@
         "dropColumn": "列削除",
         "modifyColumn": "列変更",
         "unknown": "変更"
-      }
+      },
+      "previewTitle": "審査中のバージョンをプレビュー",
+      "previewHint": "一時インスタンスを起動して、このバージョンがプラットフォーム上でどう動くかを確認します。開けるのはあなただけで、審査が終わると自動で回収されます。",
+      "previewStart": "プレビューを起動",
+      "previewStartAgain": "もう一度起動",
+      "previewStarting": "プレビューを起動しています。1〜2 分かかることがあります。",
+      "previewOpen": "プレビューを開く",
+      "previewReclaim": "回収",
+      "previewRunningHint": "プレビューの準備ができました。",
+      "previewExpiresAt": "プレビューの準備ができました。{{time}} を過ぎると自動で回収されます。",
+      "previewReclaimedManual": "プレビューを回収しました。必要ならもう一度起動できます。",
+      "previewReclaimedApproval": "審査が終了したため、プレビューを回収しました。",
+      "previewReclaimedExpired": "プレビューがタイムアウトで回収されました。必要ならもう一度起動できます。",
+      "previewReclaimedStartFailed": "前回は起動できませんでした。もう一度お試しください。",
+      "previewBlockedNoImage": "このバージョンはビルドが完了していないため、プレビューできません。",
+      "previewBlockedSettled": "このバージョンの審査は終了しているため、プレビューできません。",
+      "previewBlockedUnknown": "このバージョンは現在プレビューできません。",
+      "previewActionFailed": "操作に失敗しました。しばらくしてからもう一度お試しください。"
     },
     "versionList": {
       "title": "バージョン記録",

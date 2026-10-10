@@ -119,7 +119,7 @@ async def test_status_shape_matches_contract(publish_db, app_factory, tier_seed)
         "schema_change",
         "can",
     }
-    assert set(status["can"]) == {"withdraw", "manual_publish", "submit"}
+    assert set(status["can"]) == {"withdraw", "manual_publish", "submit", "preview"}
     assert status["capabilities"] == []
     assert status["schema_change"] is None
 
@@ -275,7 +275,7 @@ async def test_deleted_app_status_reports_independently(publish_db, app_factory,
     status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
 
     assert status["app_state"] == "deleted"
-    assert status["can"] == {"withdraw": False, "manual_publish": False, "submit": False}
+    assert status["can"] == {"withdraw": False, "manual_publish": False, "submit": False, "preview": False}
 
 
 async def test_missing_app_is_a_business_code_not_a_404(publish_db):
@@ -357,6 +357,10 @@ async def test_can_flags_reflect_role_and_state(
     status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
 
     assert status["can"]["withdraw"] is True
+    # RT-03 AC 11: the owner may preview the version under review, and the
+    # approval block names that version even before approval stages it.
+    assert status["can"]["preview"] is True
+    assert status["approval"]["version_id"] == version.id
     assert status["can"]["manual_publish"] is False
     # AC-06: a CLI-imported application has no draft workspace to submit.
     assert status["can"]["submit"] is False
@@ -394,6 +398,7 @@ async def test_withdraw_is_offered_only_where_the_approval_centre_accepts_it(
     status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
 
     assert status["can"]["withdraw"] is False
+    assert status["can"]["preview"] is False
 
 
 async def test_manual_publish_flag_true_only_when_parked(publish_db, app_factory, deployment_factory, tier_seed):

@@ -292,6 +292,11 @@ export type HostedAppApprovalStatus =
 export interface HostedAppApproval {
   instance_id: number
   status: HostedAppApprovalStatus | string
+  /**
+   * The version under review. `pending_version` stays null until approval, so
+   * this is the only handle the owner's preview has on it (RT-03 AC 11).
+   */
+  version_id: string | null
   submitted_at: string | null
   decided_at: string | null
   /** Sent in full by the backend, and rendered in full here (AC-33). */
@@ -369,6 +374,8 @@ export interface HostedAppPublishStatus {
   schema_change: HostedAppSchemaChange | null
   can: {
     withdraw: boolean
+    /** RT-03 AC 11 — owner only, and only while the request is pending. */
+    preview: boolean
     manual_publish: boolean
     /** AC-06 — always false while every application arrives through the CLI. */
     submit: boolean
