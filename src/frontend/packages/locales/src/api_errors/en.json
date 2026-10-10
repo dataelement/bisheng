@@ -459,6 +459,7 @@
   "26066": "The selected model is not available",
   "26067": "The selected tool is not available",
   "26068": "The task queue is temporarily unavailable; submit again later",
+  "26070": "This name is already in use, including by deleted service accounts. Choose a different name.",
   "26401": "This link is invalid or has expired",
   "26402": "This app has been taken offline and is unavailable",
   "26403": "Link sharing is turned off. Contact whoever shared the link.",
