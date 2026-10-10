@@ -155,6 +155,10 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "平台上找不到这个应用",
         "确认 --app-id 是否写错，或该应用是否已被删除；必要时删掉 .bisheng/app.json 里的过期标识重新首发。",
     ),
+    16103: (
+        "应用标识（slug）已被占用",
+        "在 bisheng-app.yaml 里换一个 slug 再部署。已删除的应用同样占用它原来的标识，不能复用。",
+    ),
     16121: (
         "编排器不可用（容器守护进程或 runtime-manager 不可达），可重试",
         "稍后重试；持续不恢复请联系运维检查 runtime-manager 与 dockerd。注意这不代表应用实例不存在。",
@@ -277,6 +281,7 @@ ERROR_EXIT_CODES: dict[int, int] = {
     16201: EXIT_LOCAL_INVALID,
     16202: EXIT_LOCAL_INVALID,
     16203: EXIT_LOCAL_INVALID,
+    16103: EXIT_PUBLISH_CONFLICT,
     16205: EXIT_PUBLISH_CONFLICT,
     16207: EXIT_NOT_ENABLED,
     16221: EXIT_PRECHECK_FAILED,
