@@ -485,6 +485,7 @@ export default function Knowledge() {
 
     // Open space settings drawer — fetch detail first, then open
     const handleSpaceSettings = async (space: KnowledgeSpace) => {
+        if (space.spaceLevel === SpaceLevel.PERSONAL) return;
         try {
             const detail = await getSpaceInfoApi(space.id);
             setEditingSpace({ ...space, ...detail, id: space.id });
