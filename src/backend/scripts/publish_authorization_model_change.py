@@ -82,7 +82,9 @@ from bisheng.permission.migration.f048_runtime_storage import (  # noqa: E402
 )
 from scripts.reconcile_f048_visible_projection import (  # noqa: E402
     VisibleReconcileBlockedError,
+    ensure_service_account_catalog_markers,
     ensure_service_account_resource_markers,
+    load_service_account_catalog_markers,
     load_service_account_resource_markers,
 )
 
@@ -439,6 +441,11 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
         if current.model_checksum == target_checksum:
             # A matching model checksum says nothing about historical tuples.
             await ensure_service_account_resource_markers(source_client, resource_markers)
+            # Nor about the Catalog's model-release markers: a Catalog released
+            # before service accounts joined the model has only user:* ones, and
+            # an unchanged model never re-publishes the Catalog that would add them.
+            catalog_markers = await load_service_account_catalog_markers()
+            await ensure_service_account_catalog_markers(source_client, catalog_markers)
             print(
                 json.dumps(
                     {
@@ -448,6 +455,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
                         "model_id": current.model_id,
                         "model_checksum": current.model_checksum,
                         "service_account_marker_tuples_verified": len(resource_markers),
+                        "service_account_catalog_marker_tuples_verified": len(catalog_markers),
                     },
                     ensure_ascii=False,
                     sort_keys=True,
