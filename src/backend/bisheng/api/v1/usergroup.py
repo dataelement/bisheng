@@ -15,6 +15,7 @@ from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.role.domain.services.role_service import RoleService
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 
 router = APIRouter(prefix='/group', tags=['User'], dependencies=[Depends(UserPayload.get_login_user)])
 logger = logging.getLogger(__name__)
@@ -61,7 +62,8 @@ async def get_all_group(login_user: UserPayload = Depends(UserPayload.get_login_
     """
     from bisheng.department.domain.services.department_service import _is_tenant_admin
 
-    if login_user.is_admin() or await _is_tenant_admin(login_user):
+    # 审计页用户组筛选复用本接口. 运营岗看全部组, 与管理员读范围相同; 创建/修改组仍走管理员接口.
+    if login_user.is_admin() or has_platform_operator_role(login_user) or await _is_tenant_admin(login_user):
         groups_res = RoleGroupService().get_group_list([])
     else:
         groups, _ = await GroupDao.aget_visible_groups(login_user.user_id, 1, 5000, '')

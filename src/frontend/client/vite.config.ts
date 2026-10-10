@@ -385,11 +385,27 @@ export default defineConfig(({ command, mode }) => {
     },
     chunkSizeWarningLimit: 1500,
   },
+  optimizeDeps: {
+    esbuildOptions: {
+      plugins: [
+        {
+          name: 'node-fs-promises-file-alias',
+          setup(build) {
+            const target = path.resolve(__dirname, 'src/shims/empty-fs-promises.ts')
+            build.onResolve({ filter: /^(node:)?fs\/promises$/ }, () => ({ path: target }))
+          },
+        },
+      ],
+    },
+  },
   resolve: {
     alias: {
       '~': path.join(__dirname, 'src/'),
       '@': path.join(__dirname, 'src/'),
       $fonts: path.resolve(__dirname, 'public/fonts'),
+      // 必须写在 node:fs 之前, 否则 esbuild 会去读 empty.js/promises
+      'node:fs/promises': path.resolve(__dirname, 'src/shims/empty-fs-promises.ts'),
+      'fs/promises': path.resolve(__dirname, 'src/shims/empty-fs-promises.ts'),
     },
   },
 };

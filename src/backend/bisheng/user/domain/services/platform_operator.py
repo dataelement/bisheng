@@ -35,6 +35,7 @@ def has_platform_operator_role(user: Any) -> bool:
 _PORTAL_ADMIN_ROLE_NAMES = frozenset({"管理员", "系统管理员", "admin"})
 
 # 与 Platform userContext.adminMenuKeys 对齐, 另含 sys; 运营岗 WEB_MENU 必须丢掉这些.
+# log 仍丢掉: 审计读权限在接口侧按角色名放行, 不能靠菜单 key 进入有壳管理端.
 PLATFORM_OPERATOR_ADMIN_MENU_KEYS = frozenset(
     {
         "admin",
