@@ -2367,5 +2367,8 @@
   "com_citation.tab_report": "レポート",
   "com_citation.tab_source": "出典",
   "com_citation.back_to_report": "レポートに戻る",
-  "com_citation.locate_missed": "引用箇所を自動で特定できませんでした。引用された原文は次のとおりです:"
+  "com_citation.locate_missed": "引用箇所を自動で特定できませんでした。引用された原文は次のとおりです:",
+  "com_ui": {
+    "scroll_to_bottom": "最下部へ移動"
+  }
 }

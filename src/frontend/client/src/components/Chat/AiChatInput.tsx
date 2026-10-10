@@ -476,7 +476,7 @@ const AiChatInput = memo(
                             onClick={onScrollToBottom}
                         >
                             <ArrowDown className="size-4" />
-                            <span className="text-sm">回到底部</span>
+                            <span className="text-sm">{localize('com_ui.scroll_to_bottom')}</span>
                         </Button>
                     </div>
                 </div>}
