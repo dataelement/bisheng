@@ -1,3 +1,5 @@
+> **❌ 已取消（2026-10-09）**：用途已由发版线 beta2 上线的 `/api/v2/workstation/chat/completions` 覆盖，本 spec 存档，不再实现。
+
 # Feature: 日常模式会话开放（业务语义契约 · 日常模式 + 同步 · `chat:invoke` + 会话附件上传）
 
 > **本文档定位 — 纯 What（需求口径，不随代码漂移）**

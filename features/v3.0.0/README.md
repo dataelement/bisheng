@@ -18,16 +18,16 @@
 | # | Feature | 批次 | 状态 | 依赖 | 覆盖 |
 |---|---------|------|------|------|------|
 | F049 | openapi-auth-baseline | A | 🗄️ spec / design / tasks 存档 · **实现由 `feat/3.0.0-beta2` F053 承接**（2026-09-10，见 [beta2-openapi-base-migration.md](./beta2-openapi-base-migration.md)）；tasks 33/76 为归档时状态，余项不再在本目录推进 | — | 伴生 P0：凭据底座 / 服务账号（含资源归属人）/ 全端点接入 / 管理界面 / 零迁移升级；三扩展位登记 |
-| F050 | identity-modes | A | 📝 仅 Spec（48 AC，独立审查 15 条待修订）· 无 design / tasks / 实现。`delegate` 位与委托范围已由发版线 beta2 F053 交付；两种身份模式、受限委托准入、审计双归属、裸 `user_id` 收口未做 | F049（+F052） | 伴生 P1：两种身份模式 / 受限委托 / 审计双归属 / 裸 `user_id` 收口 / `delegate` 位与互斥 |
+| F050 | identity-modes | A | 🗄️ 不单独实现 · spec 存档。主体能力已由发版线 beta2 F053 交付，2026-10-09 代码核对：两种身份模式与 `X-On-Behalf-Of`、委托准入（26006 / 26007 / 26010 / 26016）、审计双归属（`actor` + `on_behalf_of_user_id`）、开放端点不再收裸 `user_id`。48 条 AC 未逐条对照 | F049（+F052） | 伴生 P1：两种身份模式 / 受限委托 / 审计双归属 / 裸 `user_id` 收口 / `delegate` 位与互斥 |
 | F051 | model-protocol-gateway | A | ✅ 实现完成 27/30 · 余 T025 托管应用端到端、T027 本地引擎手动验证、T028 审计与账本核对（均需 114） | F049 | DEV-02 模型协议面 `/api/v2/model/v1`（仅 OpenAI 兼容）+ 模型调用逐条审计 |
 | F052 | mcp-server-face | A | ✅ 实现完成 33/35 · 余 T104 集合相等 + fail-closed 存储层断言、T302 真 MCP 客户端端到端（均需 CI 中间件） | F049 | DEV-02 MCP 六类工具 `/api/v2/mcp` + 统一检索门面（文件级 fail-closed） |
 | F053 | dev-cli-skills | A 尾 / B | ✅ 实现完成 52/53 · 余 T033 114 部署与手动验证清单 | F049, F051, F052 | DEV-03 两包 / DEV-04 CLI 四命令 / DEV-05 本地身份注入 / DEV-01 接入信息区 |
-| F057 | bisheng-sdk | A 尾 / B | ✅ 实现完成 42/45（新包 `src/bisheng-sdk`）· 余 T032 / T042 114 验证、T040 评测跑分（达标线 5/5 还是 6/6 待拍板） | F052, F053（storage 依赖 F054） | DEV-07 三件套 + 开发者指南 |
-| F058 | openapi-responses | A | 📝 仅 Spec（36 AC 定稿）· 无 design / tasks / 实现 | F050 | 伴生 P1 日常模式会话开放（不在 PRD-1） |
+| F057 | bisheng-sdk | A 尾 / B | ✅ 实现完成 42/45（新包 `src/bisheng-sdk`）· 余 T032 / T042 114 验证、T040 评测跑分（达标线 2026-10-09 定为 6/6） | F052, F053（storage 依赖 F054） | DEV-07 三件套 + 开发者指南 |
+| F058 | openapi-responses | A | ❌ 已取消（2026-10-09）· 用途已由 beta2 上线的 `/api/v2/workstation/chat/completions` 覆盖，spec 存档不实现 | F050 | 伴生 P1 日常模式会话开放（不在 PRD-1） |
 | F054 | app-domain-runtime | B | ✅ 实现完成 102/104 · 余 T074 compose 形态从未真机起过（配置面已交付并有机器守卫）、T096 E2E + 页面手动清单 | F049 | 托管应用领域模型 / compose 运行时 / app-proxy / RT-01 / RT-07 / RT-08 / GOV-01 类型注册 / 详情页壳 WB-13 · WB-06 / GOV-10 层开关 |
 | F055 | app-publish-pipeline | B | ✅ 实现完成 71/72 · 余 T049 114 部署与手动验证清单 | F054, F049, F051, F052 | RT-03 / RT-04 / RT-05 / deploy 管线 / GOV-02 预置审批流 / GOV-03 档位 / GOV-05 能力总线 / WB-14 · WB-15 |
-| F056 | app-square-governance | B | 🟡 实现 32/33 · 余 T021 114 闭环手动验证；**GOV-04 三类记录无查询入口，待拍板**（见下文「未结事项」） | F054, F055 | RT-02 广场 / GOV-01 授权交互 / GOV-04 审计 / GOV-07 权限控制 / 事件触达 |
-| F059 | k8s-runtime-backend | B | 📝 仅 Spec（42 有效 AC 定稿）· 无 design / tasks / 实现；MVP-核心登记为全部顺延（[mvp-114-path.md §6](./mvp-114-path.md)） | F054 | GOV-10 k8s 形态 + 镜像构建与分发（方案 F113，不可裁剪） |
+| F056 | app-square-governance | B | 🟡 实现 32/33 · 余 T021 114 闭环手动验证；**GOV-04「应用运行记录」tab 待开发**（2026-10-09 定方案 A） | F054, F055 | RT-02 广场 / GOV-01 授权交互 / GOV-04 审计 / GOV-07 权限控制 / 事件触达 |
+| F059 | k8s-runtime-backend | B | 📝 仅 Spec（42 有效 AC 定稿）· 无 design / tasks / 实现。**2026-10-09 定为本版交付、不顺延**，须补 design 与 tasks | F054 | GOV-10 k8s 形态 + 镜像构建与分发（方案 F113，不可裁剪） |
 
 批次 A = 开放能力层（可独立于工场运行时交付，GOV-10）；批次 B = 工场运行时层。建议顺序：A：F049 → F052 → F051 → F053 → F050 →（F058）→ F057；B：F054 → F055 → F056，F059 与 F055 并行。
 
@@ -41,8 +41,25 @@
 
 ### 未结事项
 
+2026-10-09 PRD-1 评审把开放问题全部拍板（见 PRD-1 §6），未结事项按此重排。
+
 | 类别 | 事项 | 位置 |
 |---|---|---|
+| 待开发 | GOV-10 k8s 形态：本版交付、不顺延，F059 补 design 与 tasks 后实现 | F059 |
+| 待开发 | GOV-04「应用运行记录」tab：审计页新增 tab，模型调用、应用能力调用、应用访问三类记录各一个子视图；运行期凭据审计行 `metadata` 顺带补 `app_id` | [056 tasks.md](./056-app-square-governance/tasks.md) 末节 |
+| 待开发 | GOV-05 应用密钥最小版：发布 tab 掩码录入、加密存储、注入同名环境变量；预检由「拒绝密钥引用」改为「缺值警告」；PRD-1 GOV-05 验收 8–10 | [055 tasks.md](./055-app-publish-pipeline/tasks.md) 末节 |
+| 合入前修 · 安全 | 出站白名单开启后，systemd 形态下托管应用容器仍可经网关 IP 直连宿主上监听 0.0.0.0 的服务（114 实测可达 MySQL 3306、backend 7860、MinIO 9000、SSH 22）：`--internal` 只断默认路由，访问网关地址走 INPUT 链、不经 `DOCKER-USER`。补宿主 INPUT 规则，并核对 compose 形态 | [054 tasks.md](./054-app-domain-runtime/tasks.md) 末节 |
+| 合入前修 · 安全 | `app_runtime.obo_secret` 缺失或等于 `jwt_secret` 时入口照常放行（OBO 已有消费方，08-17 定的翻转条件已满足）：改为拒绝进入并在启动日志报错 | [054 tasks.md](./054-app-domain-runtime/tasks.md) 末节 |
+| 114 验收 | F051 T025 / T027 / T028、F053 T033、F055 T049、F056 T021、F057 T032 / T040（达标线 6/6，须由未读过技能包的新会话跑）/ T042。114 上 37 个发布审批单全部 `executed`：驳回、撤回、删除致取消、审批期预览、托管应用检索这几条路径从未真跑过 | 各 tasks.md |
+| CI 中间件 | F052 T104 / T302 | [052 tasks.md](./052-mcp-server-face/tasks.md) |
+| 部署形态 | F054 T074 compose 形态真机启动 | [054 tasks.md](./054-app-domain-runtime/tasks.md) |
+| E2E | F054 T096 `/e2e-test` + 页面手动清单 | [054 tasks.md](./054-app-domain-runtime/tasks.md) |
+| 合入发版线 | 应用工场合入发版线；116 / 105 停服执行 `publish_authorization_model_change.py` 发布含 `app` 的 FGA 模型 | [beta2-openapi-base-migration.md §6](./beta2-openapi-base-migration.md) |
+| 环境遗留 | 114 上 form-survey 被 2026-08-18 一张 `execute_failed` 审批实例挡住迭代发布（16251） | — |
+
+已确认维持现状：入口判定中「租户已禁用」检查在 Redis 不可达时放行，与 `CustomMiddleware` 一致（理由见 [054 tasks.md](./054-app-domain-runtime/tasks.md) 偏差记录 T033）。
+
+---|---|---|
 | 待拍板 · 真缺口 | GOV-04：`model_call_record` / `AppCapabilityCallRecord` / `app_access_log` 只写不读，PRD-1 GOV-04 验收要点 1、3 不可达。三个方案：A 审计页加独立查询 tab（推荐）、B 只补端点、C 本版不做并同步改 PRD。选 A 或 B 时，运行期凭据审计行的 `metadata` 顺带补 `app_id` | [056 tasks.md](./056-app-square-governance/tasks.md) 末节 |
 | 待拍板 · PRD 与实现不一致 | RT-04 / GOV-05 密钥引用：F055 spec 按 Discovery N4 划归 PRD-2，本册不做；PRD-1 正文仍把它列入 RT-04 定义与验收要点 | [055 spec.md](./055-app-publish-pipeline/spec.md) |
 | 待拍板 · PRD 与实现不一致 | GOV-03 轻量档：PRD 写 1C/2G，实现为 0.5C/1G（F055 spec 决议-10 于 2026-09-09 下调，PRD 未同步） | [055 spec.md](./055-app-publish-pipeline/spec.md) |
@@ -85,3 +102,4 @@
 | 2026-09-16 | PRD-1 剩余功能一轮实现完毕并合入 `3.0-vibe`（`59607c4f4`）：F051 模型协议面、F052 检索门面 + MCP 面、F057 `bisheng-sdk` 由 spec 补 design + tasks 后实现；F053–F056 收尾。未勾任务只剩需 114 / CI 中间件 / 拍板的验收项。 |
 | 2026-09-18 | PRD-1 二十一项逐项验收：17 项完整、3 项 PRD 与实现不一致、1 项真缺口（GOV-04 只写不读）；修复免审配置绕过 INV-34、运行期凭据不计审计、v2 filelib 18 条断言失效三项（至 `a0770eb67`）。 |
 | 2026-10-08 | 本索引状态列按各 tasks.md 勾选重核；新增「当前状态」与「未结事项」两节。 |
+| 2026-10-09 | PRD-1 评审拍板：k8s 形态本版交付（F059 恢复）、应用密钥最小版本版交付、GOV-04 方案 A、轻量档 0.5C/1G、维持三档、F057 达标线 6/6、「应用工场」定名；F050 标为已由 beta2 交付、F058 取消；两项安全缺口定为合入前修。`docs/PRD/3.0-release/` 收敛为 PRD-1 / PRD-2 / 技术架构方案三篇。 |

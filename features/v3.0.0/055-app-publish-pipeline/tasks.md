@@ -902,3 +902,13 @@ T001–T007（Wave 1，可并行）
 **影响面**：只收紧 `app_publish_request`。菜单权限 / 频道订阅 / 知识空间加入三个场景的 pass 分支照常可配可用——它们一直允许免审，跟着收紧等于给存量租户一个无声的行为变更。114 实测存量 `approval_route_rule` 三行全是 `flow`，本次修复不影响任何现存配置。
 
 **测试**：`test/approval/test_mandatory_approval_scenario.py`（6 例）——create/update 两侧拒绝、同场景 flow 不受影响、**其它场景仍可配 pass**、**其它场景的 pass 仍正常放行到 APPROVED+outbox**、必审场景的 pass 落 EXCEPTION 且不建 outbox。`test/approval` 相对 HEAD 基线零新增失败（21 → 21）。`.claude/skills/approval-module/SKILL.md` 已按其维护契约同步（§2 主流程图 + 新增小节、§5 表、§7 错误码）。
+
+## 2026-10-09 · PRD-1 评审改判：应用密钥最小版本版交付（待展开）
+
+Spec Discovery N4 原定「密钥引用随 PRD-2」，2026-10-09 PRD-1 评审改判为本版交付最小版。需求见 PRD-1 v3.0 RT-04、GOV-05「应用密钥」段与验收 8–10。实施前须先补 spec AC 与 design，再展开任务。范围要点：
+
+- 发布 tab 新增「应用密钥」区：引用名、掩码、状态（已录入 / 缺少值）、最近修改时间；仅 owner 可录入、修改、删除，租户管理员只见引用名与状态。
+- 值加密存储（沿用平台 Fernet），任何接口不回显明文、不写日志；录入、修改、删除计审计（不记值）。
+- `bisheng-app.yaml` 能力声明恢复 `secrets` 字段；预检由「出现即拒绝」改为「缺值警告、不阻断」，审批单标注「缺少值」。
+- 能力总线在应用启动时注入同名环境变量（注入通道已预留引用名位）；修改值不经审批，保存后重启应用实例生效；新增或删除引用名随发布审批。
+

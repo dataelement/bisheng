@@ -1043,3 +1043,17 @@
 | 请求方 | 请求内容 | 状态 | 交付物 |
 |---|---|---|---|
 | **F052**（MCP 工具面 T209，2026-09-16） | `AppDataService` 补 `insert_row` / `delete_row`，对应 manager RPC `POST /v1/apps/{id}/db/tables/{t}/rows` 与 `DELETE …/rows/{key}`。**原因**：F052 spec 决议-8 与伴生 PRD §4.2.4 都把 `app:manage` 写成「表结构与数据**读写**」，读写含行级增删改；今天 manager 侧只有 `PATCH …/rows/{key}`，所以 MCP 面只交付了读与改。护栏沿用现有的：owner-only 内建、每次写记 `app.data_row_edit` 审计（带 before / after）、不含 DDL | 🔲 未交付 | 落地后 F052 在 `open_api/mcp/registry.py` 补 `bisheng_app_db_row_insert` / `_row_delete` 两个工具（当前**未占位**——`available()` 恒假的空壳不如没有），并解除 spec AC-15 中「增 / 删」两项的待验状态 |
+
+## 2026-10-09 · PRD-1 评审定为「合入发版线前修复」的两项安全缺口
+
+- [ ] **T098**: 出站白名单 systemd 形态缺口——补宿主 INPUT 规则
+  **现象**：开启出站白名单后，systemd 形态下托管应用容器仍可经 `bisheng-apps` 网关 IP 直连宿主上监听 `0.0.0.0` 的服务，114 实测可达 MySQL 3306、backend 7860、MinIO 9000、SSH 22。
+  **原因**：`--internal` 只断默认路由；访问网关地址的包走宿主 INPUT 链，L3 规则以 `-s <应用网段>` 挂在 `DOCKER-USER`（FORWARD 路径）上，碰不到这些包。
+  **修法**：在宿主 INPUT 链对应用网段只放行 egress-proxy 与附件端口，其余 DROP；随 systemd 部署脚本落地并幂等。同时在 compose 形态核对：容器经网关 IP 访问宿主发布端口（3306 / 7860 / 9100 等）是否被拦截。
+  **验收**：114 上从托管应用容器探测上述四个端口全部不可达，egress-proxy 与附件端口可达。
+
+- [ ] **T099**: `obo_secret` 缺失或等于 `jwt_secret` 时入口改为拒绝进入
+  **背景**：2026-08-17 裁决「OBO 无消费方时放行，出现第一个消费方时在同一次改动里改为 fail-closed」（本文偏差记录 T033 ④、`entry_authz_service.py` docstring）。SDK 与能力总线现已消费 OBO 令牌，翻转条件已满足但未执行。
+  **修法**：入口判定在不签 OBO 时返回不可用判定，app-proxy 渲染「本环境配置不完整，请联系平台管理员」页；backend 启动时对工场运行时层开启但 `obo_secret` 缺失或等于 `jwt_secret` 打 error 日志。
+  **验收**：配置缺失或相同时访问任一托管应用得到配置不完整页，不进入应用；配置正确时行为不变。
+

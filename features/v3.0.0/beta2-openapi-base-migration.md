@@ -20,7 +20,7 @@
 | M7 | `app:manage` 从 beta2 的 `issuable=False` 改为**随 `open_platform.enabled` 可签发**；`model:invoke` / `identity:read` 保持不可签发（F051 / F052 顺延）；三扩展位与 `delegate` 互斥硬阻断（**INV-31**，beta2 未做；签发期 `26050`/400、调用期 `26051`/403、签发表单同批加硬阻断）；PAT 永不可获三扩展位（已有 `knowledge:read` 白名单） | PRD-1 GOV-07：CLI 通道由密钥 `app:manage` 位把关；伴生 PRD §4.2.4 互斥；beta2 之所以没做互斥是因三位当时都不可签发，点亮即成漏洞（审计三、次要缺陷第 3 条） |
 | M8 | `/api/v2/apps/*`（F055 deploy 管线）改接 beta2 固定管线：端点打 `open_api_scope("app:manage")` marker，鉴权走 `verify_open_api_access`（K14 单一管线，不再自建 `open_api_subject`）；主体读 `get_current_open_api_principal()`；删除 vibe 的 `LoginUser.open_api_principal` 字段 | K14「任一 v2 端点漏标记均 fail-closed；端点体不得另行解析身份」 |
 | M9 | 归属人规则不变：deploy 的应用 owner = `principal.resource_owner_user_id`，为空即拒（服务账号必填归属人，伴生 PRD §4.5 定义 6） | 2026-08-17 跨 Feature 裁定 |
-| M10 | 托管应用运行期凭据主体 `hosted_app`（F055 T055）**本轮不做**；届时新增迁移放宽 `ck_api_credential_subject_kind` 并注册解析器；vibe 的 `SUBJECT_KIND_HOSTED_APP` / `SUBJECT_KIND_SHARE_LINK` 随 vibe 模型作废 | MVP-核心顺延项；不改 highway 的迁移文件 |
+| M10 | 托管应用运行期凭据主体 `hosted_app`（F055 T055）~~本轮不做~~ **已实现**（2026-10-09 核对：`bs-app-` 凭据 + `hosted_app_subject` 代理 id 表，见《3.0 应用工场 技术架构方案》§5.7）；原计划：届时新增迁移放宽 `ck_api_credential_subject_kind` 并注册解析器；vibe 的 `SUBJECT_KIND_HOSTED_APP` / `SUBJECT_KIND_SHARE_LINK` 随 vibe 模型作废 | MVP-核心顺延项；不改 highway 的迁移文件 |
 | M11 | 密钥泄漏扫描新增 `bs_pat` 规则（`PERSONAL_TOKEN_PREFIX`），正负样本各一 | 伴生 PRD §4.2.6「两个前缀都要注册」；beta 线没有扫描器，此项只能在应用工场侧做 |
 | M12 | 错误码：`common/errcode/open_api.py` 取 beta2；vibe 独有 26012 / 26028 若合并后仍有消费者，按 beta2 段内空号补回；26029 语义按 beta2（不能当归属人）；前端 `api_errors` SSOT 冲突块取 beta2、vibe 独有 16xxx / 26xxx 文案保留、六份产物一律重跑 `build.mjs` | `project_beta1_to_vibe_sync_playbook`：`git checkout --theirs` 会丢 65 条文案 |
 | M13 | OpenFGA 模型取并集（beta2 `service_account` 主体类型 + vibe `app` 资源类型），`MODEL_VERSION` 升 `f048-v5`；**2026-09-15 二次同步后改为 `f048-v6`；2026-09-16 起改名 `f048-v5-app`**——本分支不再占用发版线编号，命名 = 所基于的发版线版本号 + `-app`（checksum 不变，114 登记名仍是 `f048-v6`，无需重新发布） | 两侧都把各自的形状叫 `f048-v3`，并集是第三个形状；版本串只为可读，不能一名二物。**v6 的由来**：本分支 9-10 把「beta1 v4 + `app`」命名为 v5，同期 beta2 也把「v4 + contextual 部门成员（`subtree_member` 改 `_this()`、按请求注入）」命名为 v5，二次合并后又是第三个形状。**不能用 `f048-v4`**：beta1 tip f6bf9f51f 已把 D17 / D19 修订后的形状命名为 `f048-v4` 并于 2026-09-09 在 116 发布（`features/v3.0.0-beta1/053-openapi-auth-and-identity/release-and-deployment.md`），并集只能顺延为 v5 |
@@ -103,7 +103,7 @@
 
 ## 5. 顺延与不做
 
-- `hosted_app` 运行期凭据主体（F055 T055）、`model:invoke` / `identity:read` 可签发（F051 / F052）。
+- ~~`hosted_app` 运行期凭据主体（F055 T055）、`model:invoke` / `identity:read` 可签发（F051 / F052）~~ — 已随 2026-09-16 一轮实现交付（2026-10-09 订正）。
 - beta2 与 PRD 的 4 处产品裁定项（D4 独立表、头名 `X-On-Behalf-Of`、日常模式砍功能 + `/chat/list`、v3 匿名面）**按 beta2 现状接受**，裁定权在产品，清单拟落 `features/v3.0.0-beta1/053-openapi-auth-and-identity/prd-deviation-review.md`（2026-09-10 核实：该文件在 beta2 与 vibe 两侧都尚未写，随 §7 回流 beta2 时补）。
 - vibe F049 tasks.md 的 43 条未完成任务不再逐条推进：T034–T046（端点接入 / 缺陷修复 / 配置移除）已由 beta2 实现；T047–T056（share-token）beta2 明确不采纳；T057–T071（资源归属人 / 主体侧授权 / 对账豁免 / 管理接口矩阵）已由 beta2 `ResourceGrantsTab` + `owner_repository` 承接；T072–T075 随 beta2 F053 发布验收。
 
