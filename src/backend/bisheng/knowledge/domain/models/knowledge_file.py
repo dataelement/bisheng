@@ -683,6 +683,40 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return (await session.exec(statement)).all()
 
     @classmethod
+    async def aget_file_by_filters_keyset(
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        *,
+        after_id: int | None = None,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        """Keyset-paginated file filter query ordered by ``id DESC``.
+
+        ``id`` is unique and never changes, so successive pages neither skip
+        nor repeat rows, even while parsing updates ``update_time`` or several
+        files share the same timestamp. ``after_id`` is the id of the last row
+        of the previous page (``None`` for the first page); the predicate is a
+        strict ``id < after_id``.
+        """
+        statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name,
+            status,
+            file_ids,
+            extra_file_ids=extra_file_ids,
+        )
+        if after_id is not None:
+            statement = statement.where(col(KnowledgeFile.id) < after_id)
+        statement = statement.order_by(col(KnowledgeFile.id).desc()).limit(limit)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def acount_file_by_filters(
         cls,
         knowledge_id: int,
@@ -1055,13 +1089,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return result.all()
 
     @classmethod
-    def query_by_condition_v1(cls, source: list[int], create_start: str, create_end: str):
+    def query_by_condition_v1(cls, create_start: str, create_end: str, source: list[int] | None = None):
+        """Return QA rows created in the time range; ``source=None`` means every source."""
         with get_sync_db_session() as session:
-            sql = (
-                select(QAKnowledge)
-                .where(QAKnowledge.source.in_(source))
-                .where(QAKnowledge.create_time.between(create_start, create_end))
-            )
+            sql = select(QAKnowledge).where(QAKnowledge.create_time.between(create_start, create_end))
+            if source is not None:
+                sql = sql.where(QAKnowledge.source.in_(source))
 
             return session.exec(sql).all()
 

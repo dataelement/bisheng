@@ -14,7 +14,7 @@ def test_daily_schema_is_internal_schema_minus_exactly_two_fields():
     assert OpenDailyChatCompletionReq.model_fields["clientTimestamp"].is_required()
 
 
-@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "execution", "run_mode", "turn_id"])
+@pytest.mark.parametrize("field", ["task_mode", "use_knowledge_base", "execution", "turn_id"])
 def test_daily_schema_forbids_removed_and_unknown_fields(field):
     payload = {"clientTimestamp": "1", "model": "m", field: False}
     with pytest.raises(ValidationError):
@@ -22,9 +22,64 @@ def test_daily_schema_forbids_removed_and_unknown_fields(field):
 
 
 def test_conversion_forces_daily_mode_and_preserves_files():
-    files = [{"file_path": "https://example.test/tmp-dir/a"}]
+    files = [{"filepath": "https://example.test/tmp-dir/a", "name": "a.txt"}]
     request = OpenDailyChatCompletionReq(clientTimestamp="1", model="m", files=files)
     internal = request.to_internal()
     assert internal.task_mode is False
     assert internal.use_knowledge_base is None
     assert internal.files == files
+
+
+def test_file_path_is_an_alias_of_filepath():
+    # Task mode and the upload response use file_path; the model reads filepath.
+    request = OpenDailyChatCompletionReq(
+        clientTimestamp="1", model="m", files=[{"file_path": "https://example.test/tmp-dir/a", "name": "a.txt"}]
+    )
+    expected = [{"filepath": "https://example.test/tmp-dir/a", "name": "a.txt"}]
+    assert request.files == expected
+    assert request.to_internal().files == expected
+
+
+@pytest.mark.parametrize("filepath", [None, ""])
+def test_file_path_fills_an_empty_filepath(filepath):
+    request = OpenDailyChatCompletionReq(
+        clientTimestamp="1", model="m", files=[{"filepath": filepath, "file_path": "https://example.test/tmp-dir/a"}]
+    )
+    assert request.files == [{"filepath": "https://example.test/tmp-dir/a"}]
+
+
+def test_equal_filepath_and_file_path_are_accepted():
+    url = "https://example.test/tmp-dir/a"
+    request = OpenDailyChatCompletionReq(clientTimestamp="1", model="m", files=[{"filepath": url, "file_path": url}])
+    assert request.files == [{"filepath": url}]
+
+
+def test_different_filepath_and_file_path_are_rejected():
+    with pytest.raises(ValidationError, match="file_path"):
+        OpenDailyChatCompletionReq(
+            clientTimestamp="1",
+            model="m",
+            files=[{"filepath": "https://example.test/tmp-dir/a", "file_path": "https://example.test/tmp-dir/b"}],
+        )
+
+
+def test_object_name_references_are_untouched():
+    files = [{"object_name": "chat/u1/a.txt"}]
+    assert OpenDailyChatCompletionReq(clientTimestamp="1", model="m", files=files).files == files
+
+
+def test_daily_schema_accepts_explicit_daily_run_mode():
+    request = OpenDailyChatCompletionReq.model_validate({"clientTimestamp": "1", "model": "m", "run_mode": "daily"})
+    assert request.run_mode == "daily"
+    # run_mode only selects the branch; the internal request does not carry it.
+    assert request.to_internal().task_mode is False
+
+
+def test_daily_schema_defaults_run_mode_to_daily():
+    assert OpenDailyChatCompletionReq(clientTimestamp="1", model="m").run_mode == "daily"
+
+
+@pytest.mark.parametrize("value", ["task", "research", None, False])
+def test_daily_schema_rejects_other_run_modes(value):
+    with pytest.raises(ValidationError):
+        OpenDailyChatCompletionReq.model_validate({"clientTimestamp": "1", "model": "m", "run_mode": value})

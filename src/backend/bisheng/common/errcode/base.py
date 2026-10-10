@@ -1,10 +1,14 @@
 import json
+import re
 from typing import Any
 
 from fastapi import WebSocket
 from fastapi.exceptions import HTTPException
 
 from bisheng.common.schemas.api import UnifiedResponseModel
+
+# Matches a bare named placeholder such as "{field_name}" in a class Msg.
+_MSG_PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
 class BaseErrorCode(Exception):
@@ -14,10 +18,30 @@ class BaseErrorCode(Exception):
 
     def __init__(self, exception: Exception | None = None, msg: str | None = None, code: int | None = None, **kwargs):
         self.exception = exception
-        self.message = msg or self.Msg
+        self.message = msg or self._format_msg(self.Msg, exception, kwargs)
         self.code = code or self.Code
         self.kwargs = kwargs
         super().__init__(exception)
+
+    @staticmethod
+    def _format_msg(template: str, exception: Exception | None, kwargs: dict) -> str:
+        """Fill the named placeholders of the class Msg from kwargs and exception.
+
+        A placeholder without a value stays as literal text, so a template that
+        shows a pattern (for example a URL shape) is never broken. An explicit
+        ``msg`` argument is used as given and does not come through here.
+        """
+        if not template or "{" not in template:
+            return template
+        values = {key: value for key, value in kwargs.items() if value is not None}
+        if exception is not None:
+            values.setdefault("exception", exception)
+
+        def _replace(match: re.Match) -> str:
+            key = match.group(1)
+            return str(values[key]) if key in values else match.group(0)
+
+        return _MSG_PLACEHOLDER.sub(_replace, template)
 
     def __str__(self):
         return str(self.exception) if self.exception else self.message

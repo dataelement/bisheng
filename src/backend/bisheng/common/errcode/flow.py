@@ -73,6 +73,12 @@ class WorkflowMediaFileCountLimitError(BaseErrorCode):
     Msg: str = "Upload file count cannot exceed 5"
 
 
+# The v2 multi-turn input does not match the message that waits for input
+class WorkFlowInvalidUserInputError(BaseErrorCode):
+    Code: int = 10543
+    Msg: str = "Invalid user input for the waiting workflow"
+
+
 class AppWriteAuthError(BaseErrorCode):
     Code: int = 10599
     Msg: str = "No Apply Write Permission"
