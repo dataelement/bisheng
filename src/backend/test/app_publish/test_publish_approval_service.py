@@ -474,3 +474,38 @@ async def test_cancel_routes_through_the_approval_module(monkeypatch):
     await _service().cancel(4242, reason="version record insert failed")
 
     assert seen == [{"instance_id": 4242, "reason": "version record insert failed"}]
+
+
+async def test_a_resubmission_before_the_first_time_live_is_still_initial(
+    publish_db, app_factory, deployment_factory, approval_env, audit_sink, approval_notifications, super_admin_user
+):
+    """A draft whose first release was rejected has a version but was never live.
+
+    Its next request is still the first time it goes live, so the approver sees
+    "首发" (decided 2026-10-10); only the version number keeps counting.
+    """
+    from bisheng.app_publish.domain.models.app_deployment import STAGE_PRECHECK_PROBE, STATUS_RUNNING
+    from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+    from bisheng.core.database import get_async_db_session
+    from bisheng.database.models.app import AppDao
+
+    app, _ = await app_factory(with_version=True, state="draft", terminal_state="rejected")
+    async with get_async_db_session() as session:
+        await AppDao.aupdate_state_cas(
+            session, app.id, from_states=("draft",), to_state="draft", current_version_id=None
+        )
+        await session.commit()
+    deployment = await deployment_factory(
+        app_id=app.id,
+        stage=STAGE_PRECHECK_PROBE,
+        status=STATUS_RUNNING,
+        version_id="ver-2",
+        tier_code="light",
+        manifest={"name": app.name, "runtime": "python3.11", "port": 8080},
+    )
+
+    result = await _service().submit(deployment)
+
+    detail = (await ApprovalInstanceRepository.get_instance(result.instance_id)).detail_snapshot
+    assert detail["release_kind"] == "initial"
+    assert detail["version_no"] == 2

@@ -189,7 +189,11 @@ async def submit(deployment, **kwargs: Any) -> ApprovalGateResult:
         owner_user_id=owner_user_id,
         owner_user_name=owner_name,
         version_no=previous_version_no + 1,
-        release_kind=RELEASE_KIND_INITIAL if previous_version_no == 0 else RELEASE_KIND_ITERATION,
+        # "首发" until the app has gone online once: a draft whose first release
+        # was rejected or withdrawn is still waiting for its first time live,
+        # and the approver should read it that way (decided 2026-10-10). The
+        # version number keeps counting either way.
+        release_kind=RELEASE_KIND_INITIAL if not app.current_version_id else RELEASE_KIND_ITERATION,
         has_department=department_id is not None,
         schema_change=schema_change,
     )
