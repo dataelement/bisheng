@@ -119,6 +119,24 @@ class TestPlatformCreatesDeclaredTables:
         assert [item["op"] for item in result["applied"]] == ["create_table"]
         assert _shape(db_path, "orders") == [("id", "INTEGER", 0), ("buyer", "TEXT", 1)]
 
+    def test_the_created_database_belongs_to_the_app_user(self, service, db_path, monkeypatch):
+        """The container runs as uid/gid 10001; a root-owned app.db is read-only to it.
+
+        Found on 114 (2026-10-10): the first write of a freshly published app
+        failed with "attempt to write a readonly database".
+        """
+        from runtime_manager import appdb as appdb_module
+
+        chowned: list[tuple[str, int, int]] = []
+        monkeypatch.setattr(appdb_module.os, "chown", lambda p, uid, gid: chowned.append((str(p), uid, gid)))
+
+        service.migrate(
+            APP_ID,
+            [{"op": "create_table", "table": "notes", "columns": [_column("id", "INTEGER", primary_key=True)]}],
+        )
+
+        assert (str(db_path), 10001, 10001) in chowned
+
     def test_adding_a_column_migrates_without_asking(self, service, live_db, fake_object_store):
         """AC-42 first half: additive, automatic, and no snapshot — nothing is at risk."""
         result = service.migrate(
