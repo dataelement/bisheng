@@ -14,6 +14,7 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/bs-ui/table";
 import { toast } from "@/components/bs-ui/toast/use-toast";
+import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ChevronRight, Plus, Sparkles, Upload } from "lucide-react";
@@ -85,6 +86,17 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                 toast({ variant: 'success', description: enabled ? t('skillManage.enabledToast') : t('skillManage.disabledToast') });
             } else {
                 setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, enabled: !enabled } : s));
+            }
+        });
+    };
+
+    const handleDefaultCheckedToggle = (skill: SkillBrief, defaultChecked: boolean) => {
+        setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, default_checked: defaultChecked } : s));
+        captureAndAlertRequestErrorHoc(skillApi.setSkillDefaultChecked(skill.name, defaultChecked)).then(res => {
+            if (res) {
+                toast({ variant: 'success', description: defaultChecked ? t('skillManage.defaultCheckedOnToast') : t('skillManage.defaultCheckedOffToast') });
+            } else {
+                setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, default_checked: !defaultChecked } : s));
             }
         });
     };
@@ -173,6 +185,12 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                             <TableHead className="w-56">{t('skillManage.columns.displayName')}</TableHead>
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
+                            <TableHead className="w-28">
+                                <div className="flex items-center gap-1">
+                                    {t('skillManage.columns.defaultChecked')}
+                                    <QuestionTooltip content={t('skillManage.defaultCheckedTip')} />
+                                </div>
+                            </TableHead>
                             <TableHead className="w-40">{t('skillManage.columns.updateTime')}</TableHead>
                             <TableHead className="w-8" />
                         </TableRow>
@@ -180,7 +198,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                     <TableBody>
                         {skills.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
                             </TableRow>
                         )}
                         {skills.map(skill => (
@@ -201,6 +219,14 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                                 {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
+                                </TableCell>
+                                {/* A disabled skill is never offered, so its preselect is frozen (value kept) */}
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                    <Switch
+                                        checked={skill.default_checked}
+                                        disabled={!skill.enabled}
+                                        onCheckedChange={(checked) => handleDefaultCheckedToggle(skill, checked)}
+                                    />
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-xs">
                                     {(skill.update_time ?? skill.create_time)?.replace('T', ' ').slice(0, 16) ?? '--'}

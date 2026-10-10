@@ -2262,6 +2262,7 @@
       "displayName": "Display Name",
       "description": "Description",
       "status": "Status",
+      "defaultChecked": "Preselected",
       "updateTime": "Modified",
       "actions": "Actions"
     },
@@ -2273,6 +2274,9 @@
     "deleteConfirm": "End users will no longer be able to select this skill and it cannot be recovered. Delete \"{{name}}\"?",
     "enabledToast": "Enabled — immediately visible in the end-user picker",
     "disabledToast": "Disabled — removed from the end-user picker",
+    "defaultCheckedTip": "When on, this skill is already selected in every new conversation, and users can remove it. It has no effect while the skill is disabled.",
+    "defaultCheckedOnToast": "Preselected — applies to new conversations",
+    "defaultCheckedOffToast": "No longer preselected",
     "deleted": "Deleted",
     "saved": "Saved",
     "count": "{{count}} total",

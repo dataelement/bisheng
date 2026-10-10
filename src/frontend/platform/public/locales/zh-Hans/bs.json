@@ -2207,6 +2207,7 @@
       "displayName": "展示名称",
       "description": "描述",
       "status": "状态",
+      "defaultChecked": "默认勾选",
       "updateTime": "修改时间",
       "actions": "操作"
     },
@@ -2218,6 +2219,9 @@
     "deleteConfirm": "删除后终端用户将无法再选用该技能，且不可恢复。确认删除「{{name}}」？",
     "enabledToast": "已启用，终端用户输入区即时可见",
     "disabledToast": "已停用，已从终端用户输入区移除",
+    "defaultCheckedTip": "开启后，用户每次新建对话时，这个技能已经勾选好，用户可以自己取消。技能停用期间不生效。",
+    "defaultCheckedOnToast": "已设为默认勾选，新建对话时生效",
+    "defaultCheckedOffToast": "已取消默认勾选",
     "deleted": "已删除",
     "saved": "保存成功",
     "count": "共 {{count}} 条",

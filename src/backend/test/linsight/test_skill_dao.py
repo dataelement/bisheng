@@ -81,6 +81,13 @@ class TestSkillDao:
         assert await dao.list_enabled() == []
         assert await dao.set_enabled("nope", True) is False
 
+    async def test_set_default_checked(self, dao):
+        await dao.create(_skill("biao-shu", "标书撰写"))
+        assert (await dao.get_by_name("biao-shu")).default_checked in (False, 0)
+        assert await dao.set_default_checked("biao-shu", True) is True
+        assert bool((await dao.get_by_name("biao-shu")).default_checked) is True
+        assert await dao.set_default_checked("nope", True) is False
+
     async def test_update_and_delete(self, dao):
         row = await dao.create(_skill("biao-shu", "标书撰写"))
         row.description = "new desc"
