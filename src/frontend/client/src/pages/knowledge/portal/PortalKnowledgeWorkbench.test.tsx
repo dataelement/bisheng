@@ -47,6 +47,7 @@ import {
     getMineSpacesApi,
     getSpacesByLevelApi,
     getSpaceChildrenApi,
+    getSpaceFileCountApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
@@ -459,6 +460,7 @@ jest.mock("~/api/knowledge", () => ({
     getSpaceChildrenApi: jest.fn(),
     getFolderParentPathApi: jest.fn(),
     getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
+    getSpaceFileCountApi: jest.fn(),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
@@ -723,6 +725,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getFolderParentPathApi).mockImplementation(() => { throw new Error("未配置父目录查询"); });
         jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
+        jest.mocked(getSpaceFileCountApi).mockResolvedValue(0);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
