@@ -36,9 +36,15 @@ openfga:
   enabled: true
   api_url: "http://openfga:8080"
 
-# 网关 HMAC 推送验签（与 bisheng-gateway 的 bisheng.gateway-hmac-secret 一致）
+# 网关 HMAC 推送验签，仅商业版 Java 网关的 SSO 登录/组织同步链路使用。
+# 留空即关闭：/internal/sso/login-sync、/internal/sso/gateway-wecom-org-sync、
+# /departments/sync、/internal/departments/relink* 会拒绝所有请求（fail-closed）。
+# 开源单体部署不走这条链路，保持留空即可。
+# 部署商业版网关时必须填一个足够长的随机串，并与网关的
+# bisheng.gateway-hmac-secret 配成同一个值——这把密钥等同于「可以替任何人
+# 签发登录态」的权限，绝不能沿用示例值或在多个环境间复用。
 sso_sync:
-  gateway_hmac_secret: "bisheng-local-hmac-20260422"
+  gateway_hmac_secret: ""
   signature_header: "X-Signature"
 
 # 集群模式或者哨兵模式（只能选其一）:
@@ -278,7 +284,29 @@ logger_conf:
   # 审核人临时预览实例的存活天数，最小 1（能力后置，先占位）
 #   preview_ttl_days: 7
 
+# Isolation-environment (sandbox) access. Keep this whole block commented in the
+# shipped file: older images refuse unknown top-level keys at boot.
+# Override any field with BS_SANDBOX_CONF__<FIELD>, e.g. BS_SANDBOX_CONF__TOKEN.
+# Do not add deploy_mode / orchestrator — discovery is the hostname pattern only.
+# sandbox_conf:
+#   discover_host_pattern: "code-runner-{n}"          # K8s: "code-runner-{n}.code-runner"
+#   discover_index_start: 1                           # K8s: 0
+#   discover_ttl_s: 60                            # background refresh interval, not list expiry
+#   token: "..."
+#   code_node_enabled: false                      # workflow code node → sandbox
+#   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery
+
 # Linsight (task mode) runtime knobs. Commented out on purpose: an older image
 # rejects unknown top-level keys, so enable per deployment or via 系统配置.
 # linsight:
 #   citation_handles_enabled: true   # F069 short citation handles [Sn]; false = F047 verbatim-id contract
+
+# MCP transport security. DNS rebinding protection is disabled by default so
+# multi-hop proxies that rewrite Host work without per-environment configuration.
+# Enable it only together with exact transport Host/Origin allowlists.
+# open_mcp:
+#   enable_dns_rebinding_protection: false
+#   transport_allowed_hosts:
+#     - mcp.example.com
+#   transport_allowed_origins:
+#     - https://mcp.example.com

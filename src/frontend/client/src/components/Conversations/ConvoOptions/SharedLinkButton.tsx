@@ -37,7 +37,7 @@ export default function SharedLinkButton({
     onError: () => {
       showToast({
         message: localize('com_ui_share_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
         showIcon: true,
       });
     },
@@ -47,7 +47,7 @@ export default function SharedLinkButton({
     onError: () => {
       showToast({
         message: localize('com_ui_share_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
         showIcon: true,
       });
     },
@@ -62,7 +62,7 @@ export default function SharedLinkButton({
       console.error('Delete error:', error);
       showToast({
         message: localize('com_ui_share_delete_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
   });
@@ -101,7 +101,7 @@ export default function SharedLinkButton({
       console.error('Failed to delete shared link:', error);
       showToast({
         message: localize('com_ui_share_delete_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     }
   };

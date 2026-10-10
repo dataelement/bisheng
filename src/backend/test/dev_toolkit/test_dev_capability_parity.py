@@ -24,23 +24,29 @@ from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.app_publish import AppPublishRuntimeLayerDisabledError
-from bisheng.common.errcode.mcp_face import McpToolScopeMissingError, RetrievalIdentityMissingError
+from bisheng.common.errcode.mcp_face import RetrievalIdentityMissingError
 from bisheng.knowledge.domain.services.retrieval_facade_service import RetrievalFacadeService
+from bisheng.open_api.api import dependencies as v2_dependencies
 from bisheng.open_api.api.endpoints.model_gateway import router as model_gateway_router
+from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.scopes import get_open_api_scope_marker
-from bisheng.open_api.mcp import gate as mcp_gate
-from bisheng.open_api.mcp.registry import installed_tools, require_tool, visible_tools
+from bisheng.open_mcp import auth as mcp_auth
+from bisheng.open_mcp.registry import TOOL_DEFINITIONS, list_tools_for
 
 
-class _Principal:
-    """The shape `require_tool` / `visible_tools` read — scopes and nothing else."""
-
-    def __init__(self, *scopes: str) -> None:
-        self._scopes = frozenset(scopes)
-
-    def has_scope(self, scope: str) -> bool:
-        return scope in self._scopes
+def _principal(*scopes: str) -> OpenApiPrincipal:
+    return OpenApiPrincipal(
+        credential_id=7,
+        actor_kind="service_account",
+        actor_id=31,
+        actor_name="indexer",
+        tenant_id=9,
+        resource_owner_user_id=12,
+        scopes=frozenset(scopes),
+        authorization_subject_type="service_account",
+        authorization_subject_id=31,
+        effective_user_id=None,
+    )
 
 
 # ---- F051: the model face -----------------------------------------------------
@@ -82,43 +88,36 @@ def test_the_model_face_has_no_notion_of_where_the_caller_runs():
 # ---- F052: the MCP face and the retrieval facade ------------------------------
 
 
-def test_the_mcp_gate_reuses_the_v2_admission_functions():
-    """Not a second copy of authentication — the same two functions `/api/v2` runs.
+def test_the_mcp_transport_reuses_the_v2_admission_context():
+    """Not a second copy of authentication — the same context manager `/api/v2` runs.
 
     This is what makes "a revoked key stops working within five seconds" and
     "editing the key's scopes takes effect on the next call" true for a local
     developer without anybody re-implementing them.
     """
-    source = inspect.getsource(mcp_gate)
-    assert "admit_open_api_principal" in source
-    assert "open_api_execution_scope" in source
-    assert "from bisheng.open_api.api.dependencies import" in source
+    shared = "from bisheng.open_api.domain.services.access_context import"
+    assert shared in inspect.getsource(mcp_auth)
+    assert shared in inspect.getsource(v2_dependencies)
 
 
-@pytest.mark.parametrize("spec", installed_tools(), ids=lambda spec: spec.name)
-def test_every_mcp_tool_refuses_a_credential_without_its_scope(spec):
-    """The granted scope decides, for every tool, with no exception list.
-
-    Only tools whose server-side dependency is installed are parametrised: an
-    absent one answers "no such tool", which is a different (and also correct)
-    refusal — the point here is that none of them answers "go ahead".
-    """
-    with pytest.raises(McpToolScopeMissingError):
-        require_tool(_Principal(), spec.name)
+@pytest.mark.parametrize("definition", TOOL_DEFINITIONS, ids=lambda definition: definition.name)
+def test_every_mcp_tool_refuses_a_credential_without_its_scope(definition):
+    """The granted scope decides, for every tool, with no exception list."""
+    assert not definition.visible_to(_principal())
 
 
-def test_a_credential_sees_only_the_tools_its_scopes_cover():
-    """`visible_tools` and `require_tool` agree — listing is not a wider door."""
-    principal = _Principal("knowledge:read")
-    visible = {spec.name for spec in visible_tools(principal)}
-    assert visible, "knowledge:read should still admit the retrieval tools"
-    for spec in installed_tools():
-        if spec.name in visible:
-            continue
-        # Either the scope is missing, or the tool belongs to a layer this
-        # deployment does not run — never a call that goes through.
-        with pytest.raises((McpToolScopeMissingError, AppPublishRuntimeLayerDisabledError)):
-            require_tool(principal, spec.name)
+def test_a_credential_sees_only_the_tools_its_scopes_cover(monkeypatch):
+    """`tools/list` and the call-time check agree — listing is not a wider door."""
+    from bisheng.open_mcp import registry
+
+    monkeypatch.setattr(registry.settings.app_runtime, "enabled", True)
+    principal = _principal("knowledge:read")
+    listed = {tool.name for tool in list_tools_for(principal)}
+    assert listed, "knowledge:read should still admit the retrieval tools"
+    for definition in TOOL_DEFINITIONS:
+        assert (definition.name in listed) == definition.visible_to(principal)
+        if definition.name in listed:
+            assert definition.scope == "knowledge:read"
 
 
 async def test_the_retrieval_facade_refuses_rather_than_falling_back_to_everything():

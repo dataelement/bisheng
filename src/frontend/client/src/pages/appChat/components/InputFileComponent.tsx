@@ -83,7 +83,7 @@ export default function InputFileComponent({
         {
             const errorMsg = checkFileSize(file)
             if (errorMsg) {
-                showToast({ message: errorMsg, status: 'error' });
+                showToast({ message: errorMsg, status: 'warning' });
 
                 return setLoading(false);
             }
@@ -93,7 +93,7 @@ export default function InputFileComponent({
             isSSO ? uploadFileWithProgress(file, (progress) => { }).then(res => {
                 setLoading(false);
                 
-                if (typeof res === 'string') return showToast({ message: res, status: 'error' });
+                if (typeof res === 'string') return showToast({ message: res, status: 'warning' });
                 const { file_path } = res;
                 setMyValue(file.name);
                 onChange(file.name);
@@ -144,7 +144,7 @@ export default function InputFileComponent({
                 }
 
                 if (errorMsgs.length) {
-                    showToast({ message: errorMsgs.join('\n'), status: 'error' });
+                    showToast({ message: errorMsgs.join('\n'), status: 'warning' });
 
 
                     // 文件都不符合要求 结束上传
@@ -162,7 +162,7 @@ export default function InputFileComponent({
                             .then(res => {
                                 if (typeof res === 'string') {
                                     // setErrorData({ title: "Error", list: [res] });
-                                    showToast({ message: res, status: 'error' });
+                                    showToast({ message: res, status: 'warning' });
 
                                     setLoading(false);
                                     throw new Error(res); // Exit the upload if error occurs
@@ -190,7 +190,7 @@ export default function InputFileComponent({
                         setLoading(false); // Hide loading state if an error occurs
                     });
             } else {
-                showToast({ message: t('com_inputfile_no_file_selected'), status: 'error' });
+                showToast({ message: t('com_inputfile_no_file_selected'), status: 'warning' });
 
                 setLoading(false); // Hide loading state if no files were selected
             }

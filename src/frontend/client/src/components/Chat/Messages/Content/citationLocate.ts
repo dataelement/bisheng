@@ -1,5 +1,5 @@
 /**
- * F071: locate a cited chunk inside a rendered non-PDF source (docx / md / txt).
+ * F074: locate a cited chunk inside a rendered non-PDF source (docx / md / txt).
  *
  * The chunk text and the rendered preview come from the same file but through
  * different converters: knowledge ingestion turns a docx into markdown with

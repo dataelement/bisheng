@@ -90,7 +90,7 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
         if (errorCode !== API_KEY_LIMIT_CODE) return;
         showToastRef.current?.({
             message: localizeRef.current(crawlErrorMessageKey(API_KEY_LIMIT_CODE)),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
         });
     }, []);
 

@@ -42,7 +42,7 @@ export default function ActionsPanel({
       showToast({
         message:
           (error as Error | undefined)?.message ?? localize('com_assistants_delete_actions_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });
@@ -134,7 +134,7 @@ export default function ActionsPanel({
                       if (!currentId) {
                         return showToast({
                           message: 'No assistant_id found, is the assistant created?',
-                          status: 'error',
+                          status: 'warning',
                         });
                       }
                       deleteAction.mutate({

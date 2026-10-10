@@ -91,7 +91,7 @@
   },
   "src/api/linsight.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 13
     },
     "no-console": {
       "count": 1
@@ -268,9 +268,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 3
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
     "no-misleading-character-class": {
       "count": 1
     }
@@ -354,7 +351,7 @@
   },
   "src/components/Chat/Input/ChatKnowledge.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 10
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4

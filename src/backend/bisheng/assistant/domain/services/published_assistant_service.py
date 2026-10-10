@@ -138,42 +138,15 @@ class PublishedAssistantService:
             return AssistantCompletion(payload=None, stream=pseudo_stream()), assistant_info
 
         async def streaming_events() -> AsyncIterator[str]:
-            try:
-                async for message_chunk in agent.astream(question, history):
-                    if not message_chunk:
-                        continue
-                    latest = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
-                    if not isinstance(latest, AIMessageChunk):
-                        continue
-                    chunk = {
-                        "id": response_id,
-                        "object": "chat.completion.chunk",
-                        "created": int(time.time()),
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {
-                                    "content": latest.content,
-                                    "reasoning_content": extract_reasoning_content(latest),
-                                },
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield f"data: {json.dumps(chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
-                end_chunk = {
-                    "id": response_id,
-                    "object": "chat.completion.chunk",
-                    "created": int(time.time()),
-                    "model": model,
-                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                }
-                yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
-                yield "data: [DONE]\n\n"
-            except Exception as exc:
-                logger.opt(exception=True).error("assistant streaming failed")
-                error_chunk = {
+            # Errors propagate to the transport adapter, which owns the error
+            # event format. Never write an error into the answer content.
+            async for message_chunk in agent.astream(question, history):
+                if not message_chunk:
+                    continue
+                latest = message_chunk[-1] if isinstance(message_chunk, list) else message_chunk
+                if not isinstance(latest, AIMessageChunk):
+                    continue
+                chunk = {
                     "id": response_id,
                     "object": "chat.completion.chunk",
                     "created": int(time.time()),
@@ -181,13 +154,24 @@ class PublishedAssistantService:
                     "choices": [
                         {
                             "index": 0,
-                            "delta": {"content": f"Error-free: {exc!s}"},
-                            "finish_reason": "stop",
+                            "delta": {
+                                "content": latest.content,
+                                "reasoning_content": extract_reasoning_content(latest),
+                            },
+                            "finish_reason": None,
                         }
                     ],
                 }
-                yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
-                yield "data: [DONE]\n\n"
+                yield f"data: {json.dumps(chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+            end_chunk = {
+                "id": response_id,
+                "object": "chat.completion.chunk",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            }
+            yield f"data: {json.dumps(end_chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
 
         return AssistantCompletion(payload=None, stream=streaming_events()), assistant_info
 

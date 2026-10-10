@@ -97,7 +97,7 @@ export default function ArticlePage() {
         } catch {
             showToast({
                 message: localize("com_subscription.copy_failed_retry"),
-                status: "error",
+                status: "warning",
             });
         }
     };

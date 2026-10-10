@@ -11,8 +11,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
+from loguru import logger
+
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
+    PermissionInvalidResourceError,
     PermissionVersionConflictError,
 )
 from bisheng.permission.application.resource_authorization import (
@@ -209,7 +212,16 @@ class F048ResourcePermissionApi:
         *,
         tenant_id: int,
         service_account_id: int,
+        include_absent_resources: bool = False,
     ) -> list[dict]:
+        """List the account's active grants.
+
+        Resource deletion only closes the permission gate and keeps the grant
+        roster, so a grant can point at a resource that no longer exists. Those
+        rows grant nothing and cannot be edited, so the list hides them.
+        Account deletion passes ``include_absent_resources`` to revoke them too.
+        """
+
         rows = await GrantRepository().alist_active_subject_grants(
             tenant_id=tenant_id,
             subject_type="service_account",
@@ -217,6 +229,11 @@ class F048ResourcePermissionApi:
         )
         resources = tuple(dict.fromkeys((grant.resource_type, grant.resource_id) for _assignee, grant in rows))
         names = await self._subjects.resource_display_names(resources) if resources else {}
+        if not include_absent_resources:
+            absent = await self._absent_resources(resource for resource in resources if resource not in names)
+            rows = [
+                (assignee, grant) for assignee, grant in rows if (grant.resource_type, grant.resource_id) not in absent
+            ]
         catalog = await self._runtime.current_catalog()
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
         return [
@@ -248,18 +265,38 @@ class F048ResourcePermissionApi:
         grants = await self.list_service_account_grants(
             tenant_id=tenant_id,
             service_account_id=service_account_id,
+            include_absent_resources=True,
         )
         grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
         for grant in grants:
             grouped[(grant["resource_type"], grant["resource_id"])].append(grant)
         for (resource_type, resource_id), resource_grants in grouped.items():
             for offset in range(0, len(resource_grants), 50):
-                context = await self.get_context(
-                    resource_type=resource_type,
-                    resource_id=resource_id,
-                    actor=actor,
-                )
                 batch = resource_grants[offset : offset + 50]
+                try:
+                    context = await self.get_context(
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        actor=actor,
+                    )
+                except PermissionInvalidResourceError:
+                    # 19003 also covers cross-tenant and unauthorizable states.
+                    # Only a business-confirmed absence may skip the resource
+                    # check; every other case keeps the deletion blocked.
+                    if not await self._resources.confirm_absent(
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                    ):
+                        raise
+                    await self._runtime.remove_absent_resource_sources(
+                        actor=actor,
+                        tenant_id=tenant_id,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        assignees=tuple((int(grant["assignee_id"]), int(grant["assignee_version"])) for grant in batch),
+                        idempotency_key=f"sa-delete-{service_account_id}-{uuid4().hex}",
+                    )
+                    continue
                 await self.mutate_grants(
                     resource_type=resource_type,
                     resource_id=resource_id,
@@ -279,6 +316,31 @@ class F048ResourcePermissionApi:
                     ),
                 )
         return grants
+
+    async def _absent_resources(
+        self,
+        resources,
+    ) -> set[tuple[str, str]]:
+        """Return the resources whose business Service confirms they are gone.
+
+        This only filters a display list, so a probe error keeps the row.
+        """
+
+        absent: set[tuple[str, str]] = set()
+        for resource_type, resource_id in resources:
+            try:
+                if await self._resources.confirm_absent(
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                ):
+                    absent.add((resource_type, resource_id))
+            except Exception:  # display-only probe; keep the row
+                logger.warning(
+                    "Could not confirm resource absence for grant list resource={}:{}",
+                    resource_type,
+                    resource_id,
+                )
+        return absent
 
     async def list_grantable_resources(
         self,

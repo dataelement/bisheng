@@ -75,7 +75,9 @@ from bisheng.tenant.api.router import router as tenant_router
 from bisheng.user_group.api.router import router as user_group_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(
+    prefix="/api/v1",
+)
 router.include_router(dsh_market_router)
 router.include_router(dsh_router)
 router.include_router(chat_router)

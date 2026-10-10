@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any, Self, Union
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.language_models import BaseChatModel, LangSmithParams, LanguageModelInput
 from langchain_core.language_models.chat_models import agenerate_from_stream, generate_from_stream
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
@@ -53,6 +53,38 @@ def _get_user_kwargs(model_config: dict) -> dict:
     if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
     return dict(user_kwargs) if user_kwargs else {}
+
+
+def _assert_ascii_http_header_values(params: dict) -> None:
+    """httpx encodes request headers as ASCII. A non-ASCII api_key becomes
+    ``Authorization: Bearer <key>`` and crashes at request time with
+    UnicodeEncodeError at position 7-N (``Bearer `` is 7 characters).
+    Fail at client init so the agent does not surface a raw codec error.
+    """
+    suspects: list[tuple[str, Any]] = [
+        ("api_key", params.get("api_key") or params.get("openai_api_key")),
+        ("organization", params.get("organization") or params.get("openai_organization")),
+    ]
+    for header_key in ("default_headers", "extra_headers"):
+        headers = params.get(header_key)
+        if isinstance(headers, dict):
+            for name, value in headers.items():
+                suspects.append((f"{header_key}.{name}", value))
+
+    for field, value in suspects:
+        if value is None:
+            continue
+        text = value if isinstance(value, str) else str(value)
+        if not text:
+            continue
+        try:
+            text.encode("ascii")
+        except UnicodeEncodeError as exc:
+            raise ValueError(
+                f"LLM HTTP header field {field} contains non-ASCII characters "
+                "(httpx requires ASCII; Authorization is 'Bearer ' + api_key). "
+                "Fix the model provider API key or default_headers in model management."
+            ) from exc
 
 
 # Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
@@ -136,6 +168,8 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     params["base_url"] = params.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # Copy: the popped dict can be the stored model config itself, and writing
+    # the derived flags into it would mutate the ORM row (DSH fix).
     extra_body = dict(params.pop("extra_body", {}) or params.pop("model_kwargs", {}))
 
     extra_body["enable_search"] = model_config.get("enable_web_search", False)
@@ -237,6 +271,7 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     streaming: bool | None = Field(default=None, description="Whether to use streaming output", alias="stream")
     temperature: float | None = Field(default=None, description="Model Generated Temperature")
+    # DSH: overrides retries for this client only, never the stored provider config.
     max_retries: int | None = Field(default=None, ge=0, description="Per-instance client retry override")
 
     llm: BaseChatModel | None = Field(default=None)
@@ -302,6 +337,13 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         params_handler = _llm_node_type[server_info.type]["params_handler"]
         params = params_handler(default_params, server_config, model_config)
+        try:
+            _assert_ascii_http_header_values(params)
+        except ValueError as exc:
+            raise ValueError(
+                f"{exc} provider={server_info.name!r} type={server_info.type} "
+                f"model_id={model_info.id} model={model_info.model_name}"
+            ) from exc
         return params
 
     def _get_default_params(self, server_config: dict, model_config: dict) -> dict:
@@ -366,6 +408,15 @@ class BishengLLM(BishengBase, BaseChatModel):
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
         return normalize_reasoning_content(ret)
+
+    def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
+        # Report the wrapped client's provider. The default derives "bishengllm" from
+        # the class name, which never equals the "model_provider" the client stamps on
+        # its messages (e.g. "openai"), so langchain's summarization ignored the
+        # provider-reported token usage and its trigger never fired on CJK content.
+        if self.llm is None:
+            return super()._get_ls_params(stop=stop, **kwargs)
+        return self.llm._get_ls_params(stop=stop, **kwargs)
 
     def bind_tools(
         self,

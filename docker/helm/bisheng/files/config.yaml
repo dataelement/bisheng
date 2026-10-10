@@ -1,0 +1,177 @@
+# 数据库配置， 当前加密串的密码是1234，
+# 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
+database_url:
+  "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
+  # "dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG"
+# 数据库连接池配置（可选，省略则用下方默认值）。
+# 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
+# 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
+database_pool:
+  pool_size: 50      # 每进程常驻连接数
+  max_overflow: 20    # 高峰允许超出 pool_size 的临时连接数
+  pool_timeout: 30    # 等待空闲连接的超时秒数
+  pool_recycle: 3600  # 连接最大存活秒数，超过则回收重建
+  pool_pre_ping: true # 取连接前先 ping 检测有效性
+  # MySQL TLS 默认关闭。使用私有 CA 时配置 ca_file；双向 TLS 再同时配置 cert_file 与 key_file。
+  ssl:
+    enabled: false
+    # ca_file: /etc/bisheng/certs/mysql-ca.pem
+    # cert_file: /etc/bisheng/certs/mysql-client-cert.pem
+    # key_file: /etc/bisheng/certs/mysql-client-key.pem
+    # verify_hostname: true
+
+# 登录态 JWT 签名密钥（可选）。
+# 不配置时，首次启动会自动生成一个随机密钥写入系统配置表（config.jwt_secret），所有 api / worker 进程共用。
+# 配置后以这里为准；历史版本代码里自带的默认值已作废，即使写在这里也会被忽略并改用自动生成的密钥。
+# 轮换：改这里的值或删掉配置表中的记录后重启，全员需重新登录。
+# jwt_secret: "replace-with-a-long-random-string"
+
+# 缓存配置  redis://[[username]:[password]]@localhost:6379/0
+# 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0
+# 普通模式:
+redis_url: "redis://redis:6379/1"
+
+# 与 docker-compose 中 openfga 服务对应（容器内网络）
+openfga:
+  enabled: true
+  api_url: "http://openfga:8080"
+
+# 网关 HMAC 推送验签（与 bisheng-gateway 的 bisheng.gateway-hmac-secret 一致）
+sso_sync:
+  gateway_hmac_secret: "bisheng-local-hmac-20260422"
+  signature_header: "X-Signature"
+
+# 集群模式或者哨兵模式（只能选其一）:
+# redis_url: 
+#   mode: "cluster"
+#   startup_nodes: 
+#     - {"host": "192.168.106.115", "port": 6002}
+#   password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+#   #sentinel
+#   mode: "sentinel"
+#   sentinel_hosts: [("redis", 6379)]
+#   sentinel_master: "mymaster"
+#   sentinel_password: encrypt(gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==)
+#   db: 1
+
+# Celery broker Redis 配置
+# 单点模式（兼容现有写法）:
+celery_redis_url: "redis://redis:6379/2"
+# 哨兵模式:
+# celery_redis_url:
+#   mode: "sentinel"
+#   sentinel_hosts:
+#     - {"host": "redis-sentinel-1", "port": 26379}
+#     - {"host": "redis-sentinel-2", "port": 26379}
+#     - {"host": "redis-sentinel-3", "port": 26379}
+#   sentinel_master: "mymaster"
+#   sentinel_password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+#   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
+#   db: 10
+
+# 知识库文件解析调度策略
+knowledge_file_worker:
+  # 是否开启单独的ocr解析队列，防止ocr文件解析阻塞普通的文件解析
+  ocr_queue_enabled: false
+  # ocr解析队列celery对应的queue名称，只有在ocr_queue_enabled=true时生效。必须启动worker并指定-Q ocr_celery 才能处理ocr相关的任务，否则ocr相关的任务会一直积压在队列里无法被处理
+  ocr_queue: "ocr_celery"
+
+  # 是否开启公平调度
+  fair_scheduler_enabled: false
+  # 公平调度的配置项，只有在fair_scheduler_enabled=true时生效
+  fair_scheduler:
+    # 调度任务的分布式锁的超时时间，不能大于调度任务的执行间隔时间，否则可能出现锁还没过期但调度任务已经开始执行了，导致多个调度任务同时执行，无法达到公平调度的效果。建议设置为调度任务执行间隔时间的0.8倍以下
+    dispatch_lock_ttl_seconds: 24
+    # 每个队列的全局并发上限 = 文件解析的最大并发数，是唯一的硬上限。应与监听该队列的所有worker进程的 -c(--concurrency) 之和保持一致。配置过大会导致任务在broker中堆积，配置过小则worker空转。
+    queue_concurrency:
+      knowledge_celery: 20
+      ocr_celery: 5
+    # 用户公平权重(不是在飞上限)。调度时优先把空位分配给"当前在飞数/权重"最小的用户，权重越大稳态在飞份额越高。默认1表示所有用户等额竞争。
+    per_user_pick_size: 1
+    # 单独给某些用户配置更大的权重，key是用户id，value是权重。如 {"1": 3} 表示用户1维持约3倍于普通用户的在飞份额。没有单独配置的用户按照per_user_pick_size。
+    user_overrides: {"1": 3}
+    # 已经进入队列但还没有被worker执行的文件在队列里的最长时间，超过这个时间后会被认为是异常文件，调度任务会重新调度这个文件。建议设置为worker执行一个文件的最长时间的1.5倍以上
+    inflight_ttl_seconds: 7200
+
+
+celery_task:
+  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行必须在workflow_celery开头的进程里！！！
+  task_routers:
+    bisheng.worker.knowledge.*: # 知识库文件处理相关任务
+      queue: knowledge_celery
+
+
+# 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
+vector_stores:
+  milvus:
+    connection_args: !env ${BS_MILVUS_CONNECTION_ARGS}
+    is_partition: !env ${BS_MILVUS_IS_PARTITION}
+    partition_suffix: !env ${BS_MILVUS_PARTITION_SUFFIX}
+  elasticsearch:
+    url: !env ${BS_ELASTICSEARCH_URL}
+    ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
+
+
+# 对象存储， 目前只支持minio
+object_storage:
+  type: minio
+  minio:
+    schema: !env ${BS_MINIO_SCHEMA}
+    cert_check: !env ${BS_MINIO_CERT_CHECK}
+    endpoint: !env ${BS_MINIO_ENDPOINT}
+    sharepoint: !env ${BS_MINIO_SHAREPOINT}
+    access_key: !env ${BS_MINIO_ACCESS_KEY}
+    secret_key: !env ${BS_MINIO_SECRET_KEY}
+    public_bucket: 'bisheng'  # 公共bucket，存储平台上一些需要持久化的文件。会设置为可公开访问
+    tmp_bucket: 'tmp-dir'  # 临时bucket，会对传到此bucket内的文件设置有效期
+
+environment:
+  env: dev
+  uns_support: ['png','jpg','jpeg','bmp','doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'tiff']
+
+# 可根据loguru的文档配置不同 handlers
+logger_conf:
+  # 默认输出到sys.stdout的日志级别, 大于等于此级别都会输出
+  level: DEBUG
+  # 默认输出格式
+  format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+  # 参考loguru.add()中的参数可以配置多个handler
+  handlers:
+      # 文件路径，支持插入一些系统环境变量，若环境变量不存在则置空。例如 HOSTNAME: 主机名。后端会处理环境变量的替换
+    - sink: "/app/data/bisheng.log"
+      # 日志级别
+      level: INFO
+      # 日志格式化函数，extra内支持trace_id
+      format: '<level>[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}] [{level.name} process-{process.id}-{thread.id} {name}:{line}]</level> - <level>trace={extra[trace_id]} {message}</level>'
+      # 每天的几点进行切割
+      rotation: "00:00"
+      retention: "3 Days"
+      enqueue: ture
+    - sink: "/app/data/statistic.log"
+      level: INFO
+      # 和原生不一样，后端会将配置使用eval()执行转为函数用来过滤特定日志级别。推荐lambda
+      filter: "lambda record: record['level'].name == 'INFO' and record['message'].startswith('k=s')"
+      format: "[{time:YYYY-MM-DD HH:mm:ss.SSSSSS}]|{level}|BISHENG|{extra[trace_id]}||{process.id}|{thread.id}|||#EX_ERR:POS={name},line {line},ERR=500,EMSG={message}"
+      rotation: "00:00"
+      retention: "3 Days"
+      enqueue: ture
+
+# Open API (personal tokens / skill packs). Uncomment only on images that already
+# know this section (3.0.0-beta1 and later): older images refuse unknown keys at boot.
+# open_api:
+#   # Browser-facing address of this platform, baked into downloaded skill packs.
+#   # Set it when the backend sits behind the commercial gateway, a path prefix,
+#   # or any proxy that does not forward X-Forwarded-Proto / X-Forwarded-Host.
+#   public_base_url: https://kb.example.com
+
+# Isolation-environment (sandbox) access. Keep this whole block commented in the
+# shipped file: older images refuse unknown top-level keys at boot.
+# Override any field with BS_SANDBOX_CONF__<FIELD>, e.g. BS_SANDBOX_CONF__TOKEN.
+# Do not add deploy_mode / orchestrator — discovery is the hostname pattern only.
+# sandbox_conf:
+#   discover_host_pattern: "code-runner-{n}"          # K8s: "code-runner-{n}.code-runner"
+#   discover_index_start: 1                           # K8s: 0
+#   discover_ttl_s: 60                            # background refresh interval, not list expiry
+#   token: "..."
+#   code_node_enabled: false                      # workflow code node → sandbox
+#   # endpoints: ["http://code-runner-1:8080"]  # non-empty skips DNS discovery

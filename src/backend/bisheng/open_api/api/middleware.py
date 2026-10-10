@@ -13,23 +13,7 @@ from bisheng.open_api.domain.scopes import get_open_api_scope_marker
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 
 OPEN_API_V2_PREFIX = "/api/v2"
-
-#: F052's MCP face audits itself, one row per ``tools/call`` with the tool name
-#: and its target. This middleware could only ever write ``POST /api/v2/mcp`` —
-#: true, and useless — so it steps aside rather than doubling every call with a
-#: row that says nothing.
-MCP_FACE_PATH = "/api/v2/mcp"
-
-
-def _is_mcp_face(path: str) -> bool:
-    """Exactly that path (or something under it), never a neighbour that shares its spelling.
-
-    A bare ``startswith`` would also silence a future ``/api/v2/mcp-registry``
-    — and an endpoint that quietly writes no audit row is the kind of hole
-    nobody finds by looking at it.
-    """
-
-    return path == MCP_FACE_PATH or path.startswith(MCP_FACE_PATH + "/")
+OPEN_MCP_PATH = "/api/v2/mcp"
 
 
 class OpenApiAuditMiddleware:
@@ -41,7 +25,7 @@ class OpenApiAuditMiddleware:
         if (
             scope.get("type") not in {"http", "websocket"}
             or not path.startswith(OPEN_API_V2_PREFIX)
-            or _is_mcp_face(path)
+            or path.rstrip("/") == OPEN_MCP_PATH
         ):
             await self.app(scope, receive, send)
             return
@@ -167,4 +151,4 @@ class OpenApiAuditMiddleware:
         )
 
 
-__all__ = ["MCP_FACE_PATH", "OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]
+__all__ = ["OPEN_API_V2_PREFIX", "OPEN_MCP_PATH", "OpenApiAuditMiddleware"]

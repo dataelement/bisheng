@@ -1,4 +1,4 @@
-"""F072 — what the daily chat's retrieval tools show the model.
+"""F075 — what the daily chat's retrieval tools show the model.
 
 AC-01: knowledge chunks carry ``<ref>S3</ref>`` and web results ``"ref": "S7"``;
 the registry key never appears.

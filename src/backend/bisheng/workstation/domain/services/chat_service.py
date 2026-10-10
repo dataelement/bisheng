@@ -260,7 +260,7 @@ class DailyChatCitationToolWrapper(BaseTool):
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
     kb_name_by_id: dict[str, str] = PydanticField(default_factory=dict, exclude=True)
     image_registry: Any = PydanticField(default=None, exclude=True)
-    # F072: session handle table mirror; results show [Sn] handles, not registry keys
+    # F075: session handle table mirror; results show [Sn] handles, not registry keys
     citation_scope: Any = PydanticField(default=None, exclude=True)
 
     @classmethod
@@ -1011,7 +1011,7 @@ async def _build_knowledge_search_tool(
         citation_items = collect_rag_citation_registry_items(docs)
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
-        # F072: the model sees <ref>S3</ref>, never the registry key.
+        # F075: the model sees <ref>S3</ref>, never the registry key.
         chunks = await handles_for_chunks(citation_scope, citation_items, [_format_chunk(doc) for doc in docs])
         results = [_annotate_retrieved_chunk(chunk, image_registry) for chunk in chunks]
 
@@ -1606,7 +1606,7 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         citation_collector = CitationRegistryCollector()
-        # F072: the model cites with [Sn] handles from the session table shared
+        # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
         citation_scope = DailyCitationScope(conversation_id)
         stream_converter = HandleStreamConverter(citation_scope.handles)
@@ -1915,7 +1915,7 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # F072: the saved prompt may still teach the verbatim-id format
+            # F075: the saved prompt may still teach the verbatim-id format
             # (tenants saved the old default); swap that section for the handle
             # rules at run time, or append them when the prompt has none.
             sys_prompt = replace_legacy_citation_rules(sys_prompt)
@@ -2349,7 +2349,7 @@ async def _agent_stream_chat_completion(
                 return
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        # F072: every marker in the text was produced by the handle converter
+        # F075: every marker in the text was produced by the handle converter
         # from the session table (model-written ids were dropped while
         # streaming), so none is invented. Bind exactly the sources the answer
         # cites, earlier turns included; none when it cites none. A cited

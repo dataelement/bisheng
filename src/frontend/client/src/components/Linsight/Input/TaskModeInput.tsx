@@ -167,7 +167,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 message: localize('com_file_parse_failed_auto_removed', {
                                     0: file.filename || file.file_name || file.name,
                                 }),
-                                severity: NotificationSeverity.ERROR,
+                                severity: NotificationSeverity.WARNING,
                             });
                         } else if (
                             nextStatus !== file.parsing_status

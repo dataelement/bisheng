@@ -214,12 +214,12 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         });
 
         if (existingMediaCount + incomingMediaCount > MAX_MEDIA_FILES) {
-            showToast({ message: t('com_chat.media_file_too_many'), status: 'error' });
+            showToast({ message: t('com_chat.media_file_too_many'), status: 'warning' });
             return;
         }
 
         if (invalidTypeFiles.length > 0) {
-            showToast({ message: t('com_ui_upload_file_type_error'), status: 'error' }); // 请确保你有对应多语言key或直接写死中文测试
+            showToast({ message: t('com_ui_upload_file_type_error'), status: 'warning' }); // 请确保你有对应多语言key或直接写死中文测试
         }
         // Notify about skipped duplicates
         if (duplicateFiles.length > 0) {
@@ -424,7 +424,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 }
                 logUploadStage(file.name, 'failed', uploadStartedAt, { error: String(e) });
                 console.log('e :>> ', e);
-                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'error' })
+                showToast({ message: t('com_inputfiles_upload_failed', { 0: file.name }), status: 'warning' })
                 handleFileRemove(id);
                 remainingUploadsRef.current -= 1; // Decrease the remaining uploads count
                 notifyUploadedFiles(getUploadedFileIds, onChange);
@@ -469,7 +469,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         const skipped = visible.length - supported.length;
 
         if (!supported.length) {
-            showToast({ message: t('com_ui_upload_file_type_error'), status: 'error' });
+            showToast({ message: t('com_ui_upload_file_type_error'), status: 'warning' });
             return;
         }
         if (skipped > 0) {
@@ -483,7 +483,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 : rejection === 'size'
                     ? t('com_folder_upload_too_large')
                     : t('com_folder_upload_too_deep', { 0: TASK_MODE_MAX_FOLDER_DEPTH });
-            showToast({ message, status: 'error' });
+            showToast({ message, status: 'warning' });
             return;
         }
         handleFileChange(supported);

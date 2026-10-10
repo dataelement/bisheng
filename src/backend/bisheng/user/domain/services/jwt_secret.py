@@ -1,4 +1,4 @@
-"""JWT signing secret resolution (NVDB security fix, F068).
+"""JWT signing secret resolution (NVDB security fix, F072).
 
 Historically ``Settings.jwt_secret`` shipped a hard-coded default that lived in
 the open-source tree, so any deployment that never overrode it signed its login

@@ -70,7 +70,7 @@ export default function ChannelItem({
         if (getFullWidthLength(newName) > 50) {
             return showToast({
                 message: localize("com_subscription.max_10_characters"),
-                severity: NotificationSeverity.ERROR
+                severity: NotificationSeverity.WARNING
             });
         }
         if (newName && newName !== channel.name) {

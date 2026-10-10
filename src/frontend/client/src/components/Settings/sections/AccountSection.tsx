@@ -69,7 +69,7 @@ export function AccountSection({ username, avatarUrl, onAvatarUpdated }: Account
             console.error("upload avatar error", error);
             showToast({
                 message: localize("com_account_info_toast_avatar_upload_failed"),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
         }
         // Update global user cache immediately (AuthContext uses QueryKeys.user).

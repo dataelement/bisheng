@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bisheng.backendService" . }}
+  labels:
+    {{- include "bisheng.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  selector:
+    {{- include "bisheng.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+  ports:
+    - name: http
+      port: {{ .Values.backend.service.port }}
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bisheng.frontendService" . }}
+  labels:
+    {{- include "bisheng.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    {{- include "bisheng.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+  ports:
+    - name: http
+      port: {{ .Values.frontend.service.port }}
+      targetPort: http
+      {{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.nodePort }}
+      nodePort: {{ .Values.frontend.service.nodePort }}
+      {{- end }}
+    {{- if .Values.frontend.service.clientPort }}
+    - name: client
+      port: {{ .Values.frontend.service.clientPort }}
+      targetPort: client
+      {{- if and (eq .Values.frontend.service.type "NodePort") .Values.frontend.service.clientNodePort }}
+      nodePort: {{ .Values.frontend.service.clientNodePort }}
+      {{- end }}
+    {{- end }}

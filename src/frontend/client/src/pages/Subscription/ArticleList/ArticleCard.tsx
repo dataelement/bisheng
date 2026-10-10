@@ -281,7 +281,7 @@ export function ArticleCard({
                                                     const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
                                                     copyText(shareText)
                                                         .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
-                                                        .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
+                                                        .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.WARNING }));
                                                 }}
                                                 className={cardActionBtnClassName}
                                             >

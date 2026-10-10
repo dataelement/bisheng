@@ -125,7 +125,7 @@ def _drop_contradicted_denial(text: str) -> str:
 
 
 def strip_picture_handles(text: str, question: str) -> str:
-    """Picture answers carry no [Sn] handles either (daily chat, F072).
+    """Picture answers carry no [Sn] handles either (daily chat, F075).
 
     The daily chat cites with short handles that its stream converter turns
     into badges later, so a picture answer must lose them here. Only the daily

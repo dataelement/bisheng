@@ -114,9 +114,10 @@ async def test_the_two_open_doors_hand_the_facade_the_very_same_call(monkeypatch
         reset_current_open_api_principal,
         set_current_open_api_principal,
     )
-    from bisheng.open_api.mcp.tools import knowledge as mcp_knowledge
     from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
     from bisheng.open_endpoints.domain.schemas.filelib import RetrieveReq
+    from bisheng.open_mcp import application as mcp_application
+    from bisheng.open_mcp.contracts import KnowledgeRetrieveInput
 
     calls: list[tuple] = []
 
@@ -136,8 +137,12 @@ async def test_the_two_open_doors_hand_the_facade_the_very_same_call(monkeypatch
 
     token = set_current_open_api_principal(principal)
     try:
-        await mcp_knowledge.bisheng_knowledge_search(
-            query="how do I deploy", knowledge_ids=[8], top_k=10, max_content=15000
+        await mcp_application.retrieve_knowledge(
+            request=MagicMock(),
+            command=KnowledgeRetrieveInput(
+                query="how do I deploy", knowledge_base_ids=[8], top_k=10, max_content=15000
+            ),
+            version_repo=MagicMock(),
         )
     finally:
         reset_current_open_api_principal(token)
@@ -441,11 +446,16 @@ async def _mcp_door(knowledge_ids, monkeypatch):
         reset_current_open_api_principal,
         set_current_open_api_principal,
     )
-    from bisheng.open_api.mcp.tools import knowledge as mcp_knowledge
+    from bisheng.open_mcp import application as mcp_application
+    from bisheng.open_mcp.contracts import KnowledgeRetrieveInput
 
     token = set_current_open_api_principal(_principal())
     try:
-        return await mcp_knowledge.bisheng_knowledge_search(query="q", knowledge_ids=knowledge_ids)
+        return await mcp_application.retrieve_knowledge(
+            request=MagicMock(),
+            command=KnowledgeRetrieveInput(query="q", knowledge_base_ids=knowledge_ids),
+            version_repo=MagicMock(),
+        )
     finally:
         reset_current_open_api_principal(token)
 

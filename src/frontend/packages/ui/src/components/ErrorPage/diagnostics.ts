@@ -119,6 +119,27 @@ export function pickTopFrame(stack?: string): string | undefined {
     : (appFrame ?? frames[0]).replace(/https?:\/\/[^/]+\//g, '').slice(0, 120);
 }
 
+/**
+ * Error time as `YYYY-MM-DD HH:mm:ss` in UTC+8, 24-hour, to the second.
+ *
+ * Fixed to UTC+8 rather than the browser's zone: the reader matches it against
+ * server logs, and the product spec states every error time in UTC+8 (an ISO
+ * `Z` string read 8 hours off). See formatErrorTime for the displayed form.
+ */
+export function formatUtc8Timestamp(at: Date): string {
+  const shifted = new Date(at.getTime() + 8 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ` +
+    `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())}`
+  );
+}
+
+/** The error time as every error screen prints it: `2026-09-18 16:11:19 (UTC+8)`. */
+export function formatErrorTime(at: Date): string {
+  return `${formatUtc8Timestamp(at)} (UTC+8)`;
+}
+
 export function collectDiagnostics({ error, version, user, now }: CollectDiagnosticsInput): ErrorDiagnostics {
   const at = now ?? new Date();
   const statusPrefix =
@@ -129,7 +150,7 @@ export function collectDiagnostics({ error, version, user, now }: CollectDiagnos
   return {
     traceId: newTraceId(),
     errorCode: deriveErrorCode(message, topFrame),
-    timestamp: at.toISOString(),
+    timestamp: formatErrorTime(at),
     version,
     route: `${window.location.pathname}${window.location.search}`,
     user,
@@ -148,7 +169,7 @@ export function collectDiagnostics({ error, version, user, now }: CollectDiagnos
 /**
  * How much text the QR may carry.
  *
- * The code is printed at 80px. Past roughly this much the modules get too small
+ * The code is printed at 120px. Past roughly this much the modules get too small
  * to survive being screenshotted and re-photographed, which is exactly the path
  * this payload travels — so the full stack and the environment go in the
  * downloaded file instead, and this stays a pointer plus a signature.

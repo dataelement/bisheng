@@ -140,7 +140,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                     message:
                         translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
                         || localize("workstation.messageExport.renderFailed"),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
             }
         },

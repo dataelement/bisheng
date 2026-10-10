@@ -77,7 +77,7 @@ def _locale_prompts():
             continue
         chat_config = json.loads(path.read_text(encoding="utf-8-sig")).get("chatConfig", {})
         # Knowledge-space / channel default. The daily chat default
-        # (systemPrompt2) teaches [Sn] handles since F072 and is pinned in
+        # (systemPrompt2) teaches [Sn] handles since F075 and is pinned in
         # test/citation/test_daily_handle_rules.py.
         yield pytest.param(chat_config.get("aiPrompt", ""), id=f"{lang}:aiPrompt")
 

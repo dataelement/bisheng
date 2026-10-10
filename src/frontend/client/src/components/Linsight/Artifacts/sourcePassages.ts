@@ -1,5 +1,5 @@
 /**
- * F071: group the report's citation badges by the source passage they cite.
+ * F074: group the report's citation badges by the source passage they cite.
  *
  * The source pane's previous / next steps through passages of one file, not
  * through badges: a report often cites the same chunk many times (31 badges,
