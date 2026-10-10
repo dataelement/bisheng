@@ -20,7 +20,6 @@ from bisheng.citation.domain.services import linsight_citation_scope as scope_mo
 from bisheng.citation.domain.services.citation_handle_service import (
     assign_handles,
     attach_web_url_markers,
-    collected_web_sources,
     convert_handles_to_markers,
     count_handle_runs,
     remember_web_surface_url,
@@ -480,11 +479,9 @@ def test_attach_web_url_markers_skips_code_and_already_cited():
     assert attach_web_url_markers(already, entries) == already
 
 
-def test_remember_surface_url_and_collect_web_sources():
+def test_remember_surface_url_marks_pasted_link():
     entries = [{"type": "web", "key": WEB_KEY, "url": PAGE, "urls": [PAGE], "title": "报道", "loc": "news.example.com"}]
     remember_web_surface_url(entries, WEB_KEY, "https://news.example.com/a/report?utm=1")
 
     marked = attach_web_url_markers("原文 https://news.example.com/a/report?utm=1 结束", entries)
     assert f"{S}{WEB_KEY}{E}" in marked
-    assert collected_web_sources(entries) == [{"title": "报道", "url": PAGE, "source": "news.example.com"}]
-    assert collected_web_sources([{"type": "rag", "url": PAGE, "title": "内部文档"}]) == []

@@ -513,36 +513,6 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
     return "".join(out)
 
 
-def collected_web_sources(entries: list[dict] | None) -> list[dict]:
-    """Web pages this run retrieved, for the result page source list.
-
-    Titles and URLs come from the handle table the model already saw. Knowledge
-    documents are omitted: those names stay behind the citation resolve check.
-    """
-    rows: list[dict] = []
-    seen: set[str] = set()
-    for entry in entries or []:
-        if str(entry.get("type") or "") != "web":
-            continue
-        url = str(entry.get("url") or "").strip()
-        if not url:
-            for raw in entry.get("urls") or []:
-                url = str(raw or "").strip()
-                if url:
-                    break
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        rows.append(
-            {
-                "title": str(entry.get("title") or url)[:200],
-                "url": url,
-                "source": str(entry.get("loc") or "")[:80],
-            }
-        )
-    return rows
-
-
 def strip_citation_handles(text: str) -> str:
     """Drop every ``[Sn]`` run (exports must not leak unresolved handles)."""
     if not text or "[" not in text:

@@ -278,3 +278,49 @@ async def test_read_file_directory_carries_zone_and_mtime(tmp_path):
     assert details[0]["file_mtime"] > 0
     # and that detail flows straight into selection as an output/ deliverable
     assert _names(select_deliverables(details)) == [os.path.join("output", "报告.md")]
+
+
+# ---------------------------------------------------------------------------
+# a draft and its rendering: the rendering is the deliverable
+# ---------------------------------------------------------------------------
+def test_rendered_docx_outranks_its_newer_markdown_draft():
+    """The office skills write 报告.md, then build 报告.docx from it. The draft is
+    often the newer file, but the user asked for Word."""
+    details = [
+        _detail("output/报告.docx", mtime=100.0),
+        _detail("output/报告.md", mtime=200.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/报告.docx", "output/报告.md"]
+
+
+def test_draft_follows_its_rendering_even_across_type_ranks():
+    details = [
+        _detail("output/汇报.md", mtime=300.0),
+        _detail("output/汇报.pptx", mtime=100.0),
+        _detail("output/chart.png", mtime=400.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/汇报.pptx", "output/汇报.md", "output/chart.png"]
+
+
+def test_markdown_without_a_rendered_sibling_keeps_its_rank():
+    details = [
+        _detail("output/分析.md", mtime=200.0),
+        _detail("output/附录.docx", mtime=100.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/分析.md", "output/附录.docx"]
+
+
+def test_an_image_with_the_same_stem_does_not_demote_the_report():
+    details = [
+        _detail("output/趋势.md", mtime=100.0),
+        _detail("output/趋势.png", mtime=200.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/趋势.md", "output/趋势.png"]
+
+
+def test_same_stem_in_another_directory_is_not_a_sibling():
+    details = [
+        _detail("output/报告.md", mtime=200.0),
+        _detail("output/draft/报告.docx", mtime=100.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/报告.md", "output/draft/报告.docx"]

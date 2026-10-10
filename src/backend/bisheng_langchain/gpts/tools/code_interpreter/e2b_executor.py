@@ -9,6 +9,7 @@ from e2b_code_interpreter import Result, Sandbox
 from loguru import logger
 
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
+    EXECUTION_BOUNDARY_RULES,
     MAX_SUCCESS_LOG_CHARS,
     BaseExecutor,
     clip_middle,
@@ -103,6 +104,7 @@ class E2bCodeExecutor(BaseExecutor):
             # include_skills=False: the sandbox copy-in snapshots the working dir
             # before skills are materialised, so `skills/` is genuinely absent here.
             + path_namespace_rules(include_skills=False)
+            + EXECUTION_BOUNDARY_RULES
         )
 
     def init_sandbox(self):
