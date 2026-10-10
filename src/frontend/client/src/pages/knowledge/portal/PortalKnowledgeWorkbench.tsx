@@ -96,7 +96,6 @@ import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { isFavoriteSpace } from "./favoriteView";
 import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
-import { PortalScopeFileCount } from "./components/PortalScopeFileCount";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
@@ -115,7 +114,6 @@ import {
 } from "./uploadMetadata";
 import { usePortalFilePageHistory, loadPortalFilePage } from "./hooks/usePortalFilePageHistory";
 import { portalFileQueryKey, type PortalFilePageQuery } from "./hooks/portalFilePageHistory";
-import { PortalFilePagination } from "./components/PortalFilePagination";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
@@ -3079,12 +3077,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onPageChange={handleNativePageChange}
                                                     searchState={{ keyword: searchText, tagIds: searchTagIds }}
                                                     paginationKey={identity + ":" + pageEpoch + ":" + activePageKey + ":" + currentFileListPage}
-                                                    paginationFooter={<PortalFilePagination currentPage={currentFileListPage}
-                                                        maxVisitedPage={isCurrentPage ? pageSnapshot.maxVisitedPage : 0}
-                                                        hasMore={currentFileListHasMore} loading={currentFileListLoading}
-                                                        terminalKnown={!pageSnapshot.error}
-                                                        total={searchMode && isCurrentPage ? pageSnapshot.total : undefined}
-                                                        onPageChange={handleNativePageChange} />}
+                                                    directoryFileCount={(searchMode && searchError) || (!searchMode && currentFolderNode?.loadError) ? undefined : displayedScopeFileCount}
                                                     loading={currentFileListLoading}
                                                     listError={searchMode && searchError ? (
                                                         <>
@@ -3443,9 +3436,6 @@ export default function PortalKnowledgeWorkbench() {
                     </form>
                 </DialogContent>
             </Dialog>
-            {scopeFileCount ? (
-                <PortalScopeFileCount scope={scopeFileCount} count={displayedScopeFileCount} />
-            ) : null}
         </div>
     );
 }

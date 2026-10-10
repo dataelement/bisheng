@@ -6053,7 +6053,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
             expect(await screen.findByText("第一页.md")).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
+            await intersectionObserver.trigger();
 
             expect(await screen.findByText("第二页.md")).toBeInTheDocument();
             await waitFor(() => {
@@ -6097,7 +6097,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         if (empty) {
             expect(await within(workspace).findByAltText("empty")).toBeInTheDocument();
-            expect(within(workspace).queryByText("共计 0 文件")).not.toBeInTheDocument();
+            expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("共计 0 文件");
         } else {
             expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
             expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
@@ -6161,7 +6161,7 @@ describe("PortalKnowledgeWorkbench", () => {
             fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
             expect(await screen.findByText("目录第一页.md")).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
+            await intersectionObserver.trigger();
 
             expect(await screen.findByText("目录第二页.md")).toBeInTheDocument();
             await waitFor(() => {

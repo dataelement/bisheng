@@ -3107,22 +3107,6 @@
   line-height: 20px;
 }
 
-.scopeFileCount {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 30;
-  padding: 8px 14px;
-  border: 1px solid #d6e4ff;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 8px 24px rgba(39, 49, 66, 0.12);
-  color: #1d2129;
-  font-size: 13px;
-  line-height: 20px;
-  pointer-events: none;
-}
-
 .infoEditModalOverlay {
   position: absolute;
   inset: 0;
