@@ -22,7 +22,6 @@ import {
     getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
-    getSpaceFileCountApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     importWebLinkApi,
@@ -89,7 +88,6 @@ import {
     toStatusNumbers,
     updateTreeNode,
 } from "./utils";
-import { resolvePortalScopeFileCount } from "./scopeFileCount";
 import { KnowledgeSpaceContent, type ExternalFileActionPermissions } from "../SpaceDetail";
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
@@ -2693,7 +2691,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         const workspace = document.querySelector('[data-testid="portal-file-workspace"]');
-        workspace?.querySelectorAll("[data-radix-scroll-area-viewport]").forEach(element => { element.scrollTop = 0; });
+        workspace?.querySelectorAll("[data-radix-scroll-area-viewport], [data-file-list-scroller]").forEach(element => { element.scrollTop = 0; });
         const request = searchMode
             ? loadSearchPage(searchText.trim(), searchTagIds, page)
             : loadBrowsePage(activeSpace.id, currentFolderId, page);
@@ -2950,31 +2948,6 @@ export default function PortalKnowledgeWorkbench() {
 
 
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
-    const scopeFileCount = resolvePortalScopeFileCount({
-        space: activeSpace ? { id: String(activeSpace.id), name: activeSpace.name } : null,
-        folder: currentFolderId
-            ? {
-                id: currentFolderId,
-                name: currentFolderNode?.file.name || "文件夹",
-                fileNum: currentFolderNode?.file.fileNum,
-            }
-            : null,
-        file: selectedFile && !isFolder(selectedFile) ? { name: selectedFile.name } : null,
-    });
-    const scopeSpaceId = scopeFileCount?.kind === "space" || scopeFileCount?.kind === "folder"
-        ? String(activeSpace?.id || "")
-        : "";
-    const directFileCountQuery = useQuery({
-        queryKey: ["portalDirectFileCount", scopeSpaceId, currentFolderId ?? ""],
-        enabled: Boolean(scopeSpaceId),
-        queryFn: async () => Number(await getSpaceFileCountApi(scopeSpaceId, currentFolderId) || 0),
-        staleTime: 30_000,
-    });
-    const displayedScopeFileCount = scopeFileCount?.kind === "file"
-        ? 0
-        : scopeFileCount
-            ? (directFileCountQuery.data ?? null)
-            : null;
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
     }, []);
@@ -3064,7 +3037,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onPageChange={handleNativePageChange}
                                                     searchState={{ keyword: searchText, tagIds: searchTagIds }}
                                                     paginationKey={identity + ":" + pageEpoch + ":" + activePageKey + ":" + currentFileListPage}
-                                                    directoryFileCount={(searchMode && searchError) || (!searchMode && currentFolderNode?.loadError) ? undefined : displayedScopeFileCount}
+                                                    directoryPaging
                                                     loading={currentFileListLoading}
                                                     listError={searchMode && searchError ? (
                                                         <>
