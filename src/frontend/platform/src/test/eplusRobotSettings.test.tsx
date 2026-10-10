@@ -6,12 +6,15 @@ import {
 } from "@/controllers/API/eplus";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { EPlusRobotSettings } from "@/pages/BuildPage/assistant/editAssistant/EPlusRobotSettings";
+import { getRobotDebugStatus } from "@/controllers/API/eplusDebug";
 import { fireEvent, render, screen, waitFor } from "@/test/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
+
+vi.mock("@/controllers/API/eplusDebug", () => ({ getRobotDebugStatus: vi.fn().mockResolvedValue(false) }));
 
 vi.mock("@/controllers/API/eplus", () => ({
   deleteEPlusBotConfigApi: vi.fn(),
@@ -80,6 +83,22 @@ describe("EPlusRobotSettings", () => {
       space_ids: [10, 20],
     });
     vi.mocked(deleteEPlusBotConfigApi).mockResolvedValue(true);
+    vi.mocked(getRobotDebugStatus).mockResolvedValue(false);
+  });
+
+  it("hides the debug entry when authorization or deployment is unavailable", async () => {
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+    await screen.findByDisplayValue("bot-1");
+    expect(screen.queryByRole("button", { name: "build.robotDebug.open" })).not.toBeInTheDocument();
+  });
+
+  it("opens the same-origin debug page with this assistant and no credentials", async () => {
+    vi.mocked(getRobotDebugStatus).mockResolvedValue(true);
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "build.robotDebug.open" }));
+    expect(open).toHaveBeenCalledWith(expect.stringContaining("/robot-debug?assistantId=assistant-1"), "_blank", "noopener,noreferrer");
+    open.mockRestore();
   });
 
   it("hides CA controls and preserves an existing certificate when saving spaces", async () => {
