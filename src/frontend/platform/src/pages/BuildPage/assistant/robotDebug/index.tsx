@@ -1,6 +1,5 @@
 import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Textarea } from "@/components/bs-ui/textarea";
+import { Input, Textarea } from "@/components/bs-ui/input";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
