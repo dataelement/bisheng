@@ -84,7 +84,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v3.0.0-beta2
+    image: dataelement/bisheng-backend:v3.0.0-beta3
     ports:
       - "7860:7860"
     environment:
@@ -126,7 +126,7 @@ services:
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v3.0.0-beta2
+    image: dataelement/bisheng-backend:v3.0.0-beta3
     environment:
       TZ: Asia/Shanghai
       BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
@@ -159,7 +159,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v3.0.0-beta2
+    image: dataelement/bisheng-frontend:v3.0.0-beta3
     ports:
       - "3001:3001"
     environment:
@@ -205,7 +205,7 @@ services:
 
   minio:
     container_name: bisheng-milvus-minio
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    image: cr.dataelem.com/minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
