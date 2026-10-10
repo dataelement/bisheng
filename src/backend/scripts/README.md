@@ -278,6 +278,15 @@ boundaries, existing parent edges, and per-account Grants. This also runs before
 the `already_current` result; `service_account_marker_tuples_verified` records
 successful verification. A write or verification failure exits nonzero.
 
+On the `already_current` path it also ensures the CURRENT Catalog's own
+`service_account:*` markers (`active`, and `enabled_marker` / `<action>_marker` /
+`grant_level_<n>_marker` on every model release), compiled with the same rule a
+publish uses; `service_account_catalog_marker_tuples_verified` records them. A
+Catalog released before service accounts joined the model (2026-09-09) carries
+only `user:*` markers there, so every action a service account receives through
+a model (edit, use, manage_permission ...) was denied until this ran. The user
+half of the Catalog is never touched.
+
 When the model changes, it publishes or reuses the immutable model in the same
 Store and its `authorization_model_release`. It verifies the markers against
 that target model before publishing a no-op Permission Catalog release bound
