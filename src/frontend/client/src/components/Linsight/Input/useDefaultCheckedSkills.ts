@@ -1,8 +1,11 @@
 /**
- * Admin-preselected skills ("默认勾选" in 技能管理): each time the user enters
- * task mode, skills flagged default_checked are merged into the selection as
- * ordinary chips the user can remove. Seeding is frontend-only on purpose — the
- * backend still mounts exactly the skills the request names.
+ * Admin-preselected skills ("默认勾选" in 技能管理): skills flagged
+ * default_checked are merged into the 'new' selection as soon as the 添加技能
+ * entry is available, so the picker shows them checked in daily mode too, and
+ * they become ordinary chips the user can remove once task mode is on. Daily
+ * turns never send skills, so the daily-mode checkmark mounts nothing. Seeding
+ * is frontend-only on purpose — the backend still mounts exactly the skills the
+ * request names.
  */
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
@@ -21,11 +24,11 @@ export function mergeDefaultCheckedSkills(
     return added.length ? [...selected, ...added] : selected;
 }
 
-// Whether the current task-mode entry was already seeded. Module scope (not a
+// Whether the current selection was already seeded. Module scope (not a
 // ref) because the input remounts when the welcome layout swaps to the
 // conversation layout; a ref would re-add a chip the user just removed. Recoil
 // is frozen for new atoms, and this flag needs no re-render anyway.
-let seededForEntry = false;
+let seeded = false;
 
 interface UseDefaultCheckedSkillsOptions {
     taskMode: boolean;
@@ -36,7 +39,7 @@ interface UseDefaultCheckedSkillsOptions {
 
 export function useDefaultCheckedSkills({ taskMode, skillEntryEnabled, setSkills }: UseDefaultCheckedSkillsOptions) {
     const prevTaskModeRef = useRef(taskMode);
-    const active = taskMode && skillEntryEnabled;
+    const active = skillEntryEnabled;
     // Same query key as SkillSelector, so the picker and the seed share one cache.
     const { data, isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
@@ -46,17 +49,18 @@ export function useDefaultCheckedSkills({ taskMode, skillEntryEnabled, setSkills
         refetchOnReconnect: false,
     });
 
-    // Leaving task mode clears the selection (AiChatInput), so the next entry
-    // starts over from the admin defaults.
+    // Leaving task mode clears the selection (AiChatInput's effect, which runs
+    // before this hook's), so put the admin defaults back right away.
     useEffect(() => {
-        if (prevTaskModeRef.current && !taskMode) seededForEntry = false;
+        if (prevTaskModeRef.current && !taskMode) seeded = false;
         prevTaskModeRef.current = taskMode;
     }, [taskMode]);
 
     useEffect(() => {
         // Wait for the fetch to settle so a stale cache cannot seed outdated defaults.
-        if (!active || seededForEntry || !data || isFetching) return;
-        seededForEntry = true;
+        if (!active || seeded || !data || isFetching) return;
+        seeded = true;
         setSkills((prev) => mergeDefaultCheckedSkills(prev, data));
-    }, [active, data, isFetching, setSkills]);
+        // taskMode re-runs this after the reset above; the flag is module state.
+    }, [active, taskMode, data, isFetching, setSkills]);
 }
