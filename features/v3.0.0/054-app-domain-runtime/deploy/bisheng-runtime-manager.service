@@ -60,6 +60,11 @@ Environment=RTM_PORT=8091
 #       iptables 规则会「下发成功」却从不被查阅。
 #   RTM_PLATFORM_BASE_URL=<平台地址>       构建期唯一放行的平台分发端点（装
 #       bisheng-sdk 用，AC-16）。
+#   RTM_BUILD_EXTRA_INDEX_URL=<平台地址>/api/v1/dev-toolkit/simple/
+#   RTM_BUILD_EXTRA_TRUSTED_HOST=<平台主机名>   bisheng-sdk 只在平台自己的包索引上。
+#       漏配 = 所有依赖 bisheng-sdk 的应用构建失败（16227, No matching distribution
+#       found for bisheng-sdk），症状像网络问题。地址必须在 RTM_PLATFORM_BASE_URL
+#       之下，出站代理才会放行；而且要从构建容器够得到（写宿主机地址，不写 localhost）。
 #
 # 前置资源随之增加两条（原有的 `docker network create bisheng-apps` 要改写法）：
 #   docker network create --internal bisheng-apps

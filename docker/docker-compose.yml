@@ -346,6 +346,12 @@ services:
       RTM_FIREWALL_BACKEND: ${BISHENG_RTM_FIREWALL_BACKEND:-}
       # 构建期能访问的平台自身分发端点（装 bisheng-sdk 用，AC-16）。
       RTM_PLATFORM_BASE_URL: 'http://backend:7860'
+      # bisheng-sdk 只在平台自己的包索引上，构建时作为第二索引追加在镜像源之后。
+      # 漏配 = 所有 requirements 里写了 bisheng-sdk 的应用构建失败（16227,
+      # "No matching distribution found for bisheng-sdk"），看着像网络问题。
+      # 地址要在 RTM_PLATFORM_BASE_URL 之下，出站代理才会放行。
+      RTM_BUILD_EXTRA_INDEX_URL: 'http://backend:7860/api/v1/dev-toolkit/simple/'
+      RTM_BUILD_EXTRA_TRUSTED_HOST: backend
       RTM_EGRESS_ALLOW: ${BISHENG_RTM_EGRESS_ALLOW:-}
       RTM_EGRESS_BUILD_ALLOW: ${BISHENG_RTM_EGRESS_BUILD_ALLOW:-}
       RTM_EGRESS_LISTEN: '0.0.0.0:3128'
