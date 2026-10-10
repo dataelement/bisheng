@@ -13,3 +13,8 @@ export function usePersonalTokenEnabled(): boolean {
   const conf = useRecoilValue(bishengConfState);
   return conf?.personal_token_enabled ?? false;
 }
+
+export function useAiAccessUiEnabled(): boolean {
+  const conf = useRecoilValue(bishengConfState);
+  return conf?.ai_access_ui_enabled === true;
+}

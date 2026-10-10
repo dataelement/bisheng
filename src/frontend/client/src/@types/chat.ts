@@ -125,6 +125,8 @@ export type BishengConfig = {
   enable_etl4lm: boolean;
   /** Whether employees may manage a personal access token in account settings. */
   personal_token_enabled?: boolean;
+  /** Deployment UI gate for employee AI-access entries; absent means hidden. */
+  ai_access_ui_enabled?: boolean;
   /** Knowledge space feature flags */
   knowledges?: {
     version_management?: {

@@ -10,6 +10,13 @@ class OpenPlatformConf(BaseModel):
 
 
 class OpenApiConf(BaseModel):
+    ai_access_ui_enabled: bool = Field(
+        default=False,
+        description=(
+            "Show the employee AI assistant access settings entry and knowledge-space "
+            "connection card. UI only; does not disable APIs, tokens, or admin management."
+        ),
+    )
     credential_cache_ttl_seconds: int = Field(default=3, ge=0)
     service_account_idle_days: int = Field(default=90, ge=1)
     pat_enabled: bool = Field(

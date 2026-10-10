@@ -12,7 +12,7 @@ import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
-import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { useAiAccessUiEnabled, usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
 import { getPersonalTokenStatusApi } from "~/api/personalToken";
 import { PersonalTokenDialog } from "~/components/PersonalTokenDialog";
 import { shouldShowPersonalTokenEntry } from "~/pages/settings/sections/personalTokenEntry";
@@ -73,19 +73,21 @@ export function KnowledgeSpaceSidebar({
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
     // F066 primary entry: the key sits next to the knowledge it unlocks.
-    // Both gates must be on — the settings section is the stable home while
+    // All three gates must be on — the settings section is the stable home while
     // the tenant switch is off.
     const { user: authUser } = useAuthContext();
     const aiAccessDeploymentEnabled = usePersonalTokenEnabled();
+    const aiAccessUiEnabled = useAiAccessUiEnabled();
     const { data: aiAccessStatus } = useQuery({
         queryKey: ["personal-token-status", authUser?.id],
         queryFn: getPersonalTokenStatusApi,
-        enabled: aiAccessDeploymentEnabled && !!authUser?.id,
+        enabled: aiAccessUiEnabled && aiAccessDeploymentEnabled && !!authUser?.id,
         retry: false,
     });
     const aiAccessEntryVisible = shouldShowPersonalTokenEntry(
         aiAccessDeploymentEnabled,
         aiAccessStatus?.enabled,
+        aiAccessUiEnabled,
     );
     const [aiAccessDialogOpen, setAiAccessDialogOpen] = useState(false);
     // 模块标题跟随后台配置的菜单显示名称

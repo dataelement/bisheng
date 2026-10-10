@@ -93,6 +93,7 @@ def get_env():
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
     env["personal_token_enabled"] = bool(bisheng_settings.open_api.pat_enabled)
+    env["ai_access_ui_enabled"] = bool(bisheng_settings.open_api.ai_access_ui_enabled)
     env["open_api_management_enabled"] = bool(bisheng_settings.open_api.management_ui_enabled)
     try:
         workflow_auto_rerun_on_open = bisheng_settings.get_workflow_conf().auto_rerun_on_open

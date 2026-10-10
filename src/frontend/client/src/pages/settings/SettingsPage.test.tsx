@@ -3,6 +3,16 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import SettingsPage from "./SettingsPage";
 
 const mockRefreshCount = jest.fn().mockResolvedValue(undefined);
+let mockAiAccessUiEnabled = false;
+
+jest.mock("~/hooks/useVersionManagementEnabled", () => ({
+  usePersonalTokenEnabled: () => true,
+  useAiAccessUiEnabled: () => mockAiAccessUiEnabled,
+}));
+
+jest.mock("./sections/AiAccessPane", () => ({
+  AiAccessPane: () => <div>ai-access-pane</div>,
+}));
 
 jest.mock("recoil", () => ({
   ...jest.requireActual("recoil"),
@@ -44,6 +54,24 @@ function LocationProbe() {
 }
 
 describe("SettingsPage history", () => {
+  beforeEach(() => {
+    mockAiAccessUiEnabled = false;
+  });
+
+  it.each([false, true])("shows AI-access navigation only when UI enabled=%s", (enabled) => {
+    mockAiAccessUiEnabled = enabled;
+    render(
+      <MemoryRouter initialEntries={["/settings/account"]}>
+        <Routes>
+          <Route path="settings/:section?" element={<SettingsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "com_ai_access.title" }) !== null).toBe(enabled);
+    expect(screen.getByText("account-pane")).not.toBeNull();
+  });
+
   it("returns to the entry page after settings sidebar navigation", () => {
     render(
       <MemoryRouter

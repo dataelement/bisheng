@@ -82,19 +82,12 @@ describe("EPlusRobotSettings", () => {
     vi.mocked(deleteEPlusBotConfigApi).mockResolvedValue(true);
   });
 
-  it("loads safe values and saves CA text and multiple tenant spaces without media hosts", async () => {
-    class MockFileReader {
-      result: string | ArrayBuffer | null = null;
-      onload: null | (() => void) = null;
-      onerror: null | (() => void) = null;
-
-      readAsText() {
-        this.result = "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----";
-        this.onload?.();
-      }
-    }
-    vi.stubGlobal("FileReader", MockFileReader);
-
+  it("hides CA controls and preserves an existing certificate when saving spaces", async () => {
+    vi.mocked(getEPlusBotConfigApi).mockResolvedValue({
+      ...existingConfig,
+      ca_configured: true,
+      ca_sha256: "existing-certificate-hash",
+    });
     render(<EPlusRobotSettings assistantId="assistant-1" />);
 
     expect(await screen.findByDisplayValue("bot-1")).toBeInTheDocument();
@@ -103,11 +96,9 @@ describe("EPlusRobotSettings", () => {
     expect(screen.getByText("build.eplusStatusError")).toBeInTheDocument();
     expect(screen.getByText("build.eplusScopeNotice")).toBeInTheDocument();
     expect(screen.queryByLabelText("build.eplusMediaHosts")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("build.eplusCaCertificate"), {
-      target: { files: [new File(["certificate"], "customer-ca.pem")] },
-    });
-    await screen.findByText("build.eplusCaReady");
+    expect(screen.queryByLabelText("build.eplusCaCertificate")).not.toBeInTheDocument();
+    expect(screen.queryByText("build.eplusCaConfigured")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "build.eplusRemoveCa" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "select-spaces" }));
     fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
 
@@ -117,24 +108,78 @@ describe("EPlusRobotSettings", () => {
       expect.objectContaining({
         bot_id: "bot-1",
         secret: undefined,
-        ca_pem: expect.stringContaining("BEGIN CERTIFICATE"),
+        remove_ca: false,
         media_hosts: [],
         space_ids: [10, 20],
         enabled: true,
       }),
     );
+    expect(vi.mocked(saveEPlusBotConfigApi).mock.calls[0][1].ca_pem).toBeUndefined();
   });
 
-  it("blocks enabling an incomplete new configuration", async () => {
+  it("keeps the connected status badge on one line without shrinking", async () => {
+    vi.mocked(getEPlusBotConfigApi).mockResolvedValue({
+      ...existingConfig,
+      connection_status: "AUTHENTICATED",
+    });
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    expect(await screen.findByText("build.eplusStatusAuthenticated")).toHaveClass(
+      "whitespace-nowrap",
+      "shrink-0",
+    );
+  });
+
+  it("blocks saving an incomplete new configuration", async () => {
     vi.mocked(getEPlusBotConfigApi).mockResolvedValue(null);
     render(<EPlusRobotSettings assistantId="assistant-1" />);
 
     await screen.findByText("build.eplusNotConfigured");
-    fireEvent.click(screen.getByRole("switch", { name: "build.eplusEnabled" }));
+    expect(screen.queryByRole("switch", { name: "build.eplusEnabled" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
 
     expect(await screen.findByText("build.eplusRequiredWhenEnabled")).toBeInTheDocument();
     expect(saveEPlusBotConfigApi).not.toHaveBeenCalled();
+  });
+
+  it("enables robot access when saving a complete new configuration", async () => {
+    vi.mocked(getEPlusBotConfigApi).mockResolvedValue(null);
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    await screen.findByText("build.eplusNotConfigured");
+    fireEvent.change(screen.getByLabelText("build.eplusBotId"), {
+      target: { value: "bot-1" },
+    });
+    fireEvent.change(screen.getByLabelText("build.eplusConnectionUrl"), {
+      target: { value: "wss://eplus.example.test/im_openws?bizid=1" },
+    });
+    fireEvent.change(screen.getByLabelText("build.eplusSecret"), {
+      target: { value: "test-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
+
+    await waitFor(() => expect(saveEPlusBotConfigApi).toHaveBeenCalledWith(
+      "assistant-1",
+      expect.objectContaining({ enabled: true }),
+    ));
+  });
+
+  it("re-enables a previously disabled robot binding when saving", async () => {
+    vi.mocked(getEPlusBotConfigApi).mockResolvedValue({
+      ...existingConfig,
+      enabled: false,
+      connection_status: "DISABLED",
+    });
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    await screen.findByDisplayValue("bot-1");
+    expect(screen.queryByRole("switch", { name: "build.eplusEnabled" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
+
+    await waitFor(() => expect(saveEPlusBotConfigApi).toHaveBeenCalledWith(
+      "assistant-1",
+      expect.objectContaining({ enabled: true }),
+    ));
   });
 
   it("disconnects and removes an existing robot binding after confirmation", async () => {

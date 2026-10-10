@@ -3,7 +3,6 @@ import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { Input, PasswordInput } from "@/components/bs-ui/input";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { Switch } from "@/components/bs-ui/switch";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
   deleteEPlusBotConfigApi,
@@ -29,19 +28,14 @@ interface RobotFormState {
   botId: string;
   connectionUrl: string;
   secret: string;
-  caPem?: string;
-  removeCa: boolean;
   spaceIds: string[];
-  enabled: boolean;
 }
 
 const emptyForm: RobotFormState = {
   botId: "",
   connectionUrl: "",
   secret: "",
-  removeCa: false,
   spaceIds: [],
-  enabled: false,
 };
 
 function formFromConfig(config: EPlusBotConfig | null): RobotFormState {
@@ -50,9 +44,7 @@ function formFromConfig(config: EPlusBotConfig | null): RobotFormState {
     botId: config.bot_id,
     connectionUrl: config.connection_url,
     secret: "",
-    removeCa: false,
     spaceIds: config.space_ids.map(String),
-    enabled: config.enabled,
   };
 }
 
@@ -74,15 +66,6 @@ function statusVariant(status?: EPlusConnectionStatus) {
   if (status === "ERROR" || status === "TAKEN_OVER") return "destructive" as const;
   if (status === "DISABLED" || !status) return "outline" as const;
   return "secondary" as const;
-}
-
-function readTextFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
 }
 
 export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
@@ -148,11 +131,10 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
       bot_id: form.botId.trim(),
       connection_url: form.connectionUrl.trim(),
       secret: form.secret.trim() || undefined,
-      ca_pem: form.caPem,
-      remove_ca: form.removeCa,
+      remove_ca: false,
       media_hosts: [],
       space_ids: form.spaceIds.map(Number),
-      enabled: form.enabled,
+      enabled: true,
     };
     setSaving(true);
     const saved = await captureAndAlertRequestErrorHoc(
@@ -168,17 +150,6 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
       description: t("build.eplusSaved"),
       variant: "success",
     });
-  };
-
-  const handleCertificate = async (file?: File) => {
-    if (!file) return;
-    try {
-      const pem = await readTextFile(file);
-      updateForm("caPem", pem);
-      updateForm("removeCa", false);
-    } catch {
-      setFormError("build.eplusCaReadFailed");
-    }
   };
 
   const handleDisconnect = () => {
@@ -212,7 +183,7 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
           <p className="text-sm font-medium">{t("build.eplusRobot")}</p>
           <p className="mt-1 text-xs text-muted-foreground">{t("build.eplusScopeNotice")}</p>
         </div>
-        <Badge variant={statusVariant(config?.connection_status)}>
+        <Badge className="shrink-0 whitespace-nowrap" variant={statusVariant(config?.connection_status)}>
           {t(connectionStatusKey(config?.connection_status))}
         </Badge>
       </div>
@@ -263,30 +234,6 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
       </div>
 
       <div>
-        <label htmlFor="eplus-ca" className="bisheng-label">
-          {t("build.eplusCaCertificate")}
-        </label>
-        <input
-          id="eplus-ca"
-          type="file"
-          accept=".pem,application/x-pem-file"
-          className="mt-2 block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium"
-          onChange={(event) => void handleCertificate(event.target.files?.[0])}
-        />
-        {form.caPem && (
-          <p className="mt-1 text-xs text-success-foreground">{t("build.eplusCaReady")}</p>
-        )}
-        {config?.ca_configured && !form.caPem && !form.removeCa && (
-          <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{t("build.eplusCaConfigured")}</span>
-            <Button variant="link" size="sm" onClick={() => updateForm("removeCa", true)}>
-              {t("build.eplusRemoveCa")}
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <div>
         <label className="bisheng-label">{t("build.eplusKnowledgeSpaces")}</label>
         <MultiSelect
           multiple
@@ -296,21 +243,6 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
           placeholder={t("build.eplusKnowledgeSpacesPlaceholder")}
           searchPlaceholder={t("build.searchBaseName")}
           onChange={(values) => updateForm("spaceIds", values)}
-        />
-      </div>
-
-      <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-        <div>
-          <label htmlFor="eplus-enabled" className="bisheng-label">
-            {t("build.eplusEnabled")}
-          </label>
-          <p className="mt-1 text-xs text-muted-foreground">{t("build.eplusEnabledTip")}</p>
-        </div>
-        <Switch
-          id="eplus-enabled"
-          aria-label={t("build.eplusEnabled")}
-          checked={form.enabled}
-          onCheckedChange={(checked) => updateForm("enabled", checked)}
         />
       </div>
 

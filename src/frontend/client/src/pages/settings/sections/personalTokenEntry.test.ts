@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { shouldShowPersonalTokenEntry } from "./personalTokenEntry";
+import { shouldShowAiAccessSection, shouldShowPersonalTokenEntry } from "./personalTokenEntry";
 
 describe("personal-token entry visibility", () => {
   it.each([
@@ -13,15 +13,21 @@ describe("personal-token entry visibility", () => {
   ])(
     "uses deployment=%s and effective=%s to return %s",
     (deploymentEnabled, effectiveEnabled, expected) => {
-      expect(shouldShowPersonalTokenEntry(deploymentEnabled, effectiveEnabled)).toBe(expected);
+      expect(shouldShowPersonalTokenEntry(deploymentEnabled, effectiveEnabled, true)).toBe(expected);
     },
   );
 });
 
+describe("AI-access UI gate", () => {
+  it.each([undefined, false])("hides both entries when the UI switch is %s", (uiEnabled) => {
+    expect(shouldShowPersonalTokenEntry(true, true, uiEnabled)).toBe(false);
+    expect(shouldShowAiAccessSection(true, uiEnabled)).toBe(false);
+  });
+});
+
 describe("ai-access settings section visibility", () => {
-  it("follows the deployment gate only — tenant off keeps the section for its explanation", async () => {
-    const { shouldShowAiAccessSection } = await import("./personalTokenEntry");
-    expect(shouldShowAiAccessSection(true)).toBe(true);
-    expect(shouldShowAiAccessSection(false)).toBe(false);
+  it("requires the UI and deployment gates — tenant off keeps the explanation", () => {
+    expect(shouldShowAiAccessSection(true, true)).toBe(true);
+    expect(shouldShowAiAccessSection(false, true)).toBe(false);
   });
 });

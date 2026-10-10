@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import { AccountPane } from "./sections/AccountPane";
 import { AiAccessPane } from "./sections/AiAccessPane";
 import { shouldShowAiAccessSection } from "./sections/personalTokenEntry";
-import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { useAiAccessUiEnabled, usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
 import { GeneralSection } from "~/components/Settings/sections/GeneralSection";
 import {
   readSettingsRouteState,
@@ -48,12 +48,13 @@ import {
  */
 export default function SettingsPage() {
   const aiAccessDeploymentEnabled = usePersonalTokenEnabled();
-  // The ai-access section exists only when the deployment offers personal
+  const aiAccessUiEnabled = useAiAccessUiEnabled();
+  // The ai-access section exists only when the UI gate is on and the deployment offers personal
   // tokens; tenant-level off keeps it (the pane explains the pause, AC-P30).
   const navGroups = SETTINGS_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.filter(
-      (item) => item.key !== "ai-access" || shouldShowAiAccessSection(aiAccessDeploymentEnabled),
+      (item) => item.key !== "ai-access" || shouldShowAiAccessSection(aiAccessDeploymentEnabled, aiAccessUiEnabled),
     ),
   }));
   const localize = useLocalize();

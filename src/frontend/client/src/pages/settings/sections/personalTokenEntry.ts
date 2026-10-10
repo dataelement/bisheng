@@ -1,15 +1,16 @@
-/** Knowledge-page entry: both gates must be on (tenant off hides it). */
+/** Knowledge-page entry: UI, deployment and tenant gates must all be on. */
 export function shouldShowPersonalTokenEntry(
   deploymentEnabled: boolean,
   effectiveEnabled: boolean | undefined,
+  uiEnabled: boolean = false,
 ): boolean {
-  return deploymentEnabled && effectiveEnabled === true;
+  return uiEnabled && deploymentEnabled && effectiveEnabled === true;
 }
 
 /**
- * Settings section: deployment gate only — while the tenant switch is off the
+ * Settings section: UI and deployment gates — while the tenant switch is off the
  * section stays and explains the pause instead of vanishing (AC-P30).
  */
-export function shouldShowAiAccessSection(deploymentEnabled: boolean): boolean {
-  return deploymentEnabled;
+export function shouldShowAiAccessSection(deploymentEnabled: boolean, uiEnabled: boolean = false): boolean {
+  return uiEnabled && deploymentEnabled;
 }

@@ -5,7 +5,8 @@ import { getPersonalTokenStatusApi } from "~/api/personalToken";
 import { PersonalTokenDialog } from "~/components/PersonalTokenDialog";
 import { Button } from "~/components/ui/Button";
 import { useAuthContext, useLocalize } from "~/hooks";
-import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { useAiAccessUiEnabled, usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { shouldShowAiAccessSection } from "./personalTokenEntry";
 
 /**
  * "AI assistant access" settings section — the stable home for the personal
@@ -17,19 +18,21 @@ export function AiAccessPane() {
   const localize = useLocalize();
   const { user } = useAuthContext();
   const deploymentEnabled = usePersonalTokenEnabled();
+  const uiEnabled = useAiAccessUiEnabled();
+  const entryVisible = shouldShowAiAccessSection(deploymentEnabled, uiEnabled);
   const [searchParams, setSearchParams] = useSearchParams();
   const [dialogOpen, setDialogOpen] = useState(false);
   const { data: status } = useQuery({
     queryKey: ["personal-token-status", user?.id],
     queryFn: getPersonalTokenStatusApi,
-    enabled: deploymentEnabled && !!user?.id,
+    enabled: entryVisible && !!user?.id,
     retry: false,
   });
   const tenantEnabled = status?.enabled === true;
   const connectRequested = searchParams.get("connect") === "1";
 
   useEffect(() => {
-    if (connectRequested && tenantEnabled) {
+    if (entryVisible && connectRequested && tenantEnabled) {
       setDialogOpen(true);
       setSearchParams((previous) => {
         const next = new URLSearchParams(previous);
@@ -37,9 +40,9 @@ export function AiAccessPane() {
         return next;
       }, { replace: true });
     }
-  }, [connectRequested, tenantEnabled, setSearchParams]);
+  }, [entryVisible, connectRequested, tenantEnabled, setSearchParams]);
 
-  if (!deploymentEnabled) return null;
+  if (!entryVisible) return null;
 
   const token = status?.token ?? null;
   const statusText = !token
