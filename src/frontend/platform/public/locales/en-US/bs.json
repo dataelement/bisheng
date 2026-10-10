@@ -757,7 +757,7 @@
     "modelNameTooltip": "The specific name of the model in this service provider",
     "modelNameDuplicate": "Model name already exists",
     "modelNameValidation": "Model name cannot be empty and must not exceed 100 characters",
-    "modelStatusChecking": "Model Status Checking",
+    "modelStatusChecking": "Checking",
     "notBeEmpty": "cannot be empty",
     "pasteAdvancedParamsHere": "Please paste or enter your advanced parameter configuration in the text box below",
     "rerank": "Rerank",

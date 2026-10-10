@@ -601,7 +601,7 @@
     "modelNameTooltip": "模型在该服务提供商中的具体名称",
     "modelNameDuplicate": "模型名称已存在",
     "modelNameValidation": "模型名称不可为空且最多100个字符",
-    "modelStatusChecking": "模型状态检测中",
+    "modelStatusChecking": "检测中",
     "notBeEmpty": "不能为空",
     "pasteAdvancedParamsHere": "请在下方的文本框中粘贴或输入你的高级参数配置",
     "rerank": "重排(Rerank)",

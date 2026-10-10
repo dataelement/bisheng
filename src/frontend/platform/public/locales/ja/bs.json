@@ -596,7 +596,7 @@
     "modelNameTooltip": "このサービスプロバイダでの具体的なモデル名",
     "modelNameDuplicate": "モデル名はすでに存在します",
     "modelNameValidation": "モデル名は必須で、100文字以内にしてください",
-    "modelStatusChecking": "モデルステータスを確認中",
+    "modelStatusChecking": "確認中",
     "notBeEmpty": "空欄にはできません",
     "pasteAdvancedParamsHere": "下のテキストボックスに高度なパラメータ設定を貼り付けまたは入力してください",
     "rerank": "リランキング(Rerank)",

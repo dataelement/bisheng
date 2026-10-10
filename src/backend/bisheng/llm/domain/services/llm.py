@@ -46,7 +46,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
-from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.const import LLMModelStatus, LLMModelType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.schemas import (
@@ -74,6 +74,12 @@ from ..llm.rerank import BishengRerank
 # A probe sends a couple of tokens; anything slower than this is unusable in a
 # real request anyway, and without a cap one dead endpoint hangs the caller.
 MODEL_TEST_TIMEOUT = 30
+# Probes started by a save run concurrently, but a provider with many models
+# should not get them all at once.
+MODEL_TEST_CONCURRENCY = 4
+# A save returns before its probes finish, so the tasks outlive the request.
+# Keep a strong reference: the event loop holds pending tasks only weakly.
+_background_probes: set[asyncio.Task] = set()
 
 
 def _resolve_tenant_id(tenant_id: int | None) -> int:
@@ -787,8 +793,6 @@ class LLMService:
 
         handle_types = []
         for one in server.models:
-            # test model status
-            await cls.test_model_status(one, login_user)
             if one.model_type in handle_types:
                 continue
             handle_types.append(one.model_type)
@@ -796,7 +800,41 @@ class LLMService:
             # Determine if this is the firstllmorembeddingModels
             if model_info.id == one.id:
                 await cls.set_default_model(model_info)
+        await cls.probe_models_in_background(server.models, login_user)
         return True
+
+    @classmethod
+    async def probe_models_in_background(cls, models: list[LLMModel | LLMModelInfo], login_user: UserPayload) -> None:
+        """Mark the models as unknown now and probe them after the request returns.
+
+        A probe is a real call to the provider and can take up to
+        MODEL_TEST_TIMEOUT. Saving a provider must not wait for it: one slow
+        response used to hold the save button for the whole timeout. The status
+        is reset first, so the list never shows a verdict about a model that the
+        save has just changed. If the process stops before a probe finishes, the
+        model stays unknown and the admin can check it again from the list.
+        """
+        if not models:
+            return
+        for one in models:
+            await LLMDao.aupdate_model_status(one.id, LLMModelStatus.UNKNOWN.value, "")
+        semaphore = asyncio.Semaphore(MODEL_TEST_CONCURRENCY)
+
+        async def _probe(model: LLMModel | LLMModelInfo) -> None:
+            async with semaphore:
+                await cls.test_model_status(model, login_user)
+
+        async def _probe_all() -> None:
+            # test_model_status records every failure on the model itself, so
+            # nothing is expected to reach here; log it if something does.
+            results = await asyncio.gather(*(_probe(one) for one in models), return_exceptions=True)
+            for model, result in zip(models, results, strict=True):
+                if isinstance(result, BaseException):
+                    logger.opt(exception=result).error("background model probe failed: {}", model.id)
+
+        task = asyncio.create_task(_probe_all())
+        _background_probes.add(task)
+        task.add_done_callback(_background_probes.discard)
 
     @classmethod
     async def test_model_status(cls, model: LLMModel | LLMModelInfo, login_user: UserPayload):
@@ -998,6 +1036,7 @@ class LLMService:
             invalidate_llm_info_cache(model_id=one.id)
 
         # Determine if the model status needs to be re-determined
+        to_probe = []
         for one in new_server_info.models:
             if one.id not in old_model_dict:
                 await cls.set_default_model(one)
@@ -1007,7 +1046,10 @@ class LLMService:
                 or old_model_dict[one.id].model_name != one.model_name
                 or old_model_dict[one.id].model_type != one.model_type
             ):
-                await cls.test_model_status(one, login_user)
+                one.status = LLMModelStatus.UNKNOWN.value
+                one.remark = ""
+                to_probe.append(one)
+        await cls.probe_models_in_background(to_probe, login_user)
         return new_server_info
 
     @classmethod
