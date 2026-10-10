@@ -595,51 +595,6 @@ function renderWorkbench(initialEntry = "/knowledge-portal", currentUser?: Recor
     return { ...view, queryClient };
 }
 
-function installIntersectionObserverMock() {
-    const originalIntersectionObserver = global.IntersectionObserver;
-    let intersectionCallback: IntersectionObserverCallback | undefined;
-    class MockIntersectionObserver {
-        readonly root = null;
-        readonly rootMargin = "";
-        readonly thresholds = [];
-        observe = jest.fn();
-        unobserve = jest.fn();
-        disconnect = jest.fn();
-        takeRecords = jest.fn(() => []);
-        constructor(callback: IntersectionObserverCallback) {
-            intersectionCallback = callback;
-        }
-    }
-    Object.defineProperty(window, "IntersectionObserver", {
-        configurable: true,
-        writable: true,
-        value: MockIntersectionObserver,
-    });
-    Object.defineProperty(global, "IntersectionObserver", {
-        configurable: true,
-        writable: true,
-        value: MockIntersectionObserver,
-    });
-    return {
-        trigger: async () => {
-            await act(async () => {
-                intersectionCallback?.([
-                    { isIntersecting: true } as IntersectionObserverEntry,
-                ], {} as IntersectionObserver);
-            });
-        },
-        restore: () => {
-            if (originalIntersectionObserver) {
-                global.IntersectionObserver = originalIntersectionObserver;
-                window.IntersectionObserver = originalIntersectionObserver;
-            } else {
-                delete (global as any).IntersectionObserver;
-                delete (window as any).IntersectionObserver;
-            }
-        },
-    };
-}
-
 function openMyUploadsFromPortalShell() {
     act(() => {
         window.dispatchEvent(new MessageEvent("message", {
@@ -6029,8 +5984,6 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("loads the next root file batch with the returned cursor", async () => {
-        const intersectionObserver = installIntersectionObserverMock();
-
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -6048,25 +6001,28 @@ describe("PortalKnowledgeWorkbench", () => {
                 : { data: [firstFile], page_size: 20, has_more: true, next_cursor: "root-cursor-2" },
         ) as any);
 
-        try {
-            renderWorkbench();
+        renderWorkbench();
 
-            expect(await screen.findByText("第一页.md")).toBeInTheDocument();
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        expect(await within(workspace).findByText("第一页.md")).toBeInTheDocument();
+        expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("当前页共 1 个文件");
+        fireEvent.click(within(workspace).getByRole("button", { name: "下一页" }));
 
-            await intersectionObserver.trigger();
+        expect(await within(workspace).findByText("第二页.md")).toBeInTheDocument();
+        expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("当前页共 1 个文件");
+        expect(within(workspace).queryByText("第一页.md")).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                cursor: "root-cursor-2",
+                page_size: 20,
+            }));
+        });
+        expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.page === 2)).toBe(false);
 
-            expect(await screen.findByText("第二页.md")).toBeInTheDocument();
-            await waitFor(() => {
-                expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
-                    space_id: "personal-1",
-                    cursor: "root-cursor-2",
-                    page_size: 20,
-                }));
-            });
-            expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.page === 2)).toBe(false);
-        } finally {
-            intersectionObserver.restore();
-        }
+        fireEvent.click(within(workspace).getByRole("button", { name: "上一页" }));
+        expect(await within(workspace).findByText("第一页.md")).toBeInTheDocument();
+        expect(within(workspace).queryByText("第二页.md")).not.toBeInTheDocument();
     });
 
     test.each([false, true])("目录等待路径和文件接口期间不闪空态，成功空结果=%s", async (empty) => {
@@ -6088,7 +6044,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => expect(getFolderParentPathApi).toHaveBeenCalled());
         expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
         expect(within(workspace).getByText(/com_knowledge.loading|Loading/)).toBeInTheDocument();
-        expect(within(workspace).queryByText("共计 0 文件")).not.toBeInTheDocument();
+        expect(within(workspace).queryByText("当前页共 0 个文件")).not.toBeInTheDocument();
         await act(async () => { resolvePath([{ id: "301", name: "天气" }]); });
         expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
         expect(within(workspace).getByText(/com_knowledge.loading|Loading/)).toBeInTheDocument();
@@ -6097,7 +6053,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         if (empty) {
             expect(await within(workspace).findByAltText("empty")).toBeInTheDocument();
-            expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("共计 0 文件");
+            expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("当前页共 0 个文件");
         } else {
             expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
             expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
@@ -6130,8 +6086,6 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("loads the next folder file batch with the folder cursor", async () => {
-        const intersectionObserver = installIntersectionObserverMock();
-
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -6154,28 +6108,31 @@ describe("PortalKnowledgeWorkbench", () => {
             return Promise.resolve({ data: [folder], page_size: 20, has_more: false, next_cursor: null }) as any;
         });
 
-        try {
-            renderWorkbench();
+        renderWorkbench();
 
-            const workspace = await screen.findByTestId("portal-file-workspace");
-            fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
-            expect(await screen.findByText("目录第一页.md")).toBeInTheDocument();
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
+        expect(await within(workspace).findByText("目录第一页.md")).toBeInTheDocument();
+        expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("当前页共 1 个文件");
 
-            await intersectionObserver.trigger();
+        fireEvent.click(within(workspace).getByRole("button", { name: "下一页" }));
 
-            expect(await screen.findByText("目录第二页.md")).toBeInTheDocument();
-            await waitFor(() => {
-                expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
-                    space_id: "personal-1",
-                    parent_id: "301",
-                    cursor: "folder-cursor-2",
-                    page_size: 20,
-                }));
-            });
-            expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.parent_id === "301" && params?.page === 2)).toBe(false);
-        } finally {
-            intersectionObserver.restore();
-        }
+        expect(await within(workspace).findByText("目录第二页.md")).toBeInTheDocument();
+        expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("当前页共 1 个文件");
+        expect(within(workspace).queryByText("目录第一页.md")).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                space_id: "personal-1",
+                parent_id: "301",
+                cursor: "folder-cursor-2",
+                page_size: 20,
+            }));
+        });
+        expect(jest.mocked(getSpaceChildrenApi).mock.calls.some(([params]) => params?.parent_id === "301" && params?.page === 2)).toBe(false);
+
+        fireEvent.click(within(workspace).getByRole("button", { name: "上一页" }));
+        expect(await within(workspace).findByText("目录第一页.md")).toBeInTheDocument();
+        expect(within(workspace).queryByText("目录第二页.md")).not.toBeInTheDocument();
     });
 
     test("search requests include selected status filters", async () => {
@@ -6310,7 +6267,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.keyDown(input, { key: "Enter" });
         expect(await screen.findByRole("alert")).toHaveTextContent("搜索失败，请重试");
         expect(screen.queryByAltText("empty")).not.toBeInTheDocument();
-        expect(screen.queryByText(/共计 0 文件/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/当前页共 0 个文件/)).not.toBeInTheDocument();
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         fireEvent.click(screen.getByRole("button", { name: "重试搜索" }));
         await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());

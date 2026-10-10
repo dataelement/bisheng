@@ -105,7 +105,8 @@ describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
 
   it("renders <LoadMore> sentinel guarded by hasMore in both card and list views", () => {
     // Two occurrences — one in card-grid container, one in list-table container.
-    const matches = src.match(/\{hasMore\s*&&\s*\(\s*<LoadMore/g) || [];
+    // 门户目录翻页打开时不挂滚动哨兵.
+    const matches = src.match(/\{hasMore && !paginationFooter && !directoryPaging && \(\s*<LoadMore/g) || [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 

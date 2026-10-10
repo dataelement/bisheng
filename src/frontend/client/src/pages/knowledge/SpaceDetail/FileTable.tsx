@@ -974,6 +974,7 @@ export function FileTable({ spaceLevel, files, selectedFiles, handleSelectAll, h
             {/* 表格自己的滚动条保持隐藏. scrollbar-on-scroll 会在滚动时把它重新画出来, 和底部这根叠成两根. */}
             <div
                 ref={scrollRef}
+                data-file-list-scroller
                 className="max-w-full flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <table

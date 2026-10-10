@@ -49,6 +49,7 @@ import { FileShareDialog } from "./FileShareDialog";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
+import { DirectoryFilePager } from "./DirectoryFilePager";
 import { LoadMore } from "./LoadMore";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { VersionManagementDialog } from "./VersionManagementDialog";
@@ -90,8 +91,8 @@ interface KnowledgeSpaceContentProps {
     loading: boolean;
     listError?: ReactNode;
     paginationFooter?: ReactNode;
-    /** 门户当前目录文件数. 传入后顶栏不再重复显示共计, 数字放在列表右下角. */
-    directoryFileCount?: number | null;
+    /** 门户文件列表用底栏翻页. 为 true 时不再挂滚动加载, 右下角只数当前页文件. */
+    directoryPaging?: boolean;
     paginationKey?: string;
     searchState?: { keyword: string; tagIds: number[] };
     onSearch: (params: SearchParams) => void;
@@ -172,7 +173,7 @@ export function KnowledgeSpaceContent({
     loading,
     listError,
     paginationFooter,
-    directoryFileCount,
+    directoryPaging = false,
     paginationKey,
     searchState,
     onSearch,
@@ -252,7 +253,12 @@ export function KnowledgeSpaceContent({
         ...files.filter((file) => isCurrentSpaceFile(file) && !uploadingNames.has(file.name)),
     ];
 
-    // 当前页文件总数：文件夹按状态列展示的总文件数(fileNum)累加，普通文件按 1 个累加
+    // 门户底栏只数当前这一页的文件. 文件夹和正在新建的占位行不算.
+    const currentPageFileCount = useMemo(
+        () => displayFiles.filter((file) => file.type !== FileType.FOLDER && !file.isCreating).length,
+        [displayFiles],
+    );
+    // 顶栏「共计」仍按文件夹内文件数累加, 门户翻页时不使用这个数.
     const totalFileCount = useMemo(() => {
         return displayFiles.reduce((sum, file) => {
             if (file.type === FileType.FOLDER) {
@@ -1747,7 +1753,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
-                totalFileCount={paginationFooter || directoryFileCount !== undefined || listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
+                totalFileCount={paginationFooter || directoryPaging || listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
             />
             </div>
 
@@ -1803,7 +1809,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
+                        <div ref={fileListScrollRevealRef} data-file-list-scroller className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -1901,7 +1907,7 @@ export function KnowledgeSpaceContent({
                                     </div>
                                 ))}
                             </div>
-                            {!paginationFooter && hasMore && (
+                            {hasMore && !paginationFooter && !directoryPaging && (
                                 <LoadMore
                                     onLoad={() => onPageChange(currentPage + 1)}
                                     loading={loading}
@@ -1961,7 +1967,7 @@ export function KnowledgeSpaceContent({
                                     businessDomainOptions={businessDomainOptions}
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={handleFileEncodingUpdated}
-                                    loadMore={!paginationFooter && hasMore && (
+                                    loadMore={hasMore && !paginationFooter && !directoryPaging && (
                                         <LoadMore
                                             onLoad={() => onPageChange(currentPage + 1)}
                                             loading={loading}
@@ -2003,10 +2009,20 @@ export function KnowledgeSpaceContent({
                     )}
 
                     {paginationFooter}
-                    {directoryFileCount !== undefined && directoryFileCount !== null && !listError ? (
-                        <span className="ml-auto px-4 text-sm text-[#86909c]" data-testid="portal-directory-file-count">
-                            共计 {directoryFileCount} 文件
-                        </span>
+                    {(directoryPaging && !listError && !(loading && displayFiles.length === 0)) || (directoryPaging && !listError && (currentPage > 1 || hasMore)) ? (
+                        <div className="ml-auto flex items-center gap-3 px-4 text-sm text-[#86909c]">
+                            {directoryPaging && !listError && !(loading && displayFiles.length === 0) ? (
+                                <span data-testid="portal-directory-file-count">当前页共 {currentPageFileCount} 个文件</span>
+                            ) : null}
+                            {directoryPaging ? (
+                                <DirectoryFilePager
+                                    currentPage={currentPage}
+                                    hasMore={hasMore}
+                                    loading={loading}
+                                    onPageChange={onPageChange}
+                                />
+                            ) : null}
+                        </div>
                     ) : null}
                 </div>
             </div>
