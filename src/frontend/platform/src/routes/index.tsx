@@ -16,6 +16,7 @@ import SharePage from "@/pages/Dashboard/share";
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
+const RobotDebugPage = lazy(() => import("@/pages/BuildPage/assistant/robotDebug").then(module => ({ default: module.RobotDebugPage })));
 const WorkBenchPage = lazy(() => import("@/pages/BuildPage/bench/DialogueWork"));
 const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
 const SkillToolsPage = lazy(() => import("@/pages/BuildPage/tools"));
@@ -68,6 +69,7 @@ const RedirectToClient = () => {
 };
 
 const privateRouter = [
+  { path: "/robot-debug", element: <RobotDebugPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/", element: <RedirectToExternalLink /> },
   {
     path: "/",

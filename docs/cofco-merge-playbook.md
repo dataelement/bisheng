@@ -98,6 +98,7 @@
 | F045 部门空间显示管理员而非创建者 | `grep -c "never surfaces on a" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
 | F045 无管理员时拦住申请加入 | `grep -c "ensure_space_not_pending_admin(space.id)" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
 | F074 知识空间问答开放入口 | `grep -c "include_router(knowledge_answer_router_rpc)" src/backend/bisheng/api/router.py`；并运行 `test/open_api/test_knowledge_answer_auth.py` 的生产路由/scope登记守卫，避免同时丢掉路由和权限登记时旧矩阵静默通过 |
+| F075 机器人调试入口与独立进程 | `rg -c 'robot-debug' src/frontend/platform/src/routes/index.tsx`；保留 `bisheng/eplus/debug_app.py` 和前后端显式启用开关；运行 `test/eplus/test_eplus_debug_app.py` 验证默认关闭、独立进程仅挂载调试路由、权限发现禁止 bootstrap，不能为了合并方便注册进正式 API |
 
 守卫测试:`src/backend/test/cofco/test_cofco_department_space_admin.py`(这两处调用)、
 `src/backend/test/cofco/test_cofco_config_customizations.py`(配置)。

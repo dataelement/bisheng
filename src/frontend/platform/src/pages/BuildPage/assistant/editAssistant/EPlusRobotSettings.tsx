@@ -11,6 +11,7 @@ import {
   saveEPlusBotConfigApi,
 } from "@/controllers/API/eplus";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { getRobotDebugStatus } from "@/controllers/API/eplusDebug";
 import type {
   EPlusBindableSpace,
   EPlusBotConfig,
@@ -76,6 +77,13 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [debugAvailable, setDebugAvailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getRobotDebugStatus().then(available => { if (active) setDebugAvailable(available); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -249,6 +257,11 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
       {formError && <p className="text-xs text-destructive">{t(formError)}</p>}
 
       <div className="flex justify-end gap-2">
+        {debugAvailable && config && (
+          <Button variant="link" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/robot-debug?assistantId=${encodeURIComponent(assistantId)}`, "_blank", "noopener,noreferrer")}>
+            {t("build.robotDebug.open")}
+          </Button>
+        )}
         {config && (
           <Button variant="outline" disabled={saving} onClick={handleDisconnect}>
             {t("build.eplusDisconnect")}
