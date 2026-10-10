@@ -4,6 +4,7 @@ import asyncio
 import json
 from contextlib import suppress
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -82,9 +83,16 @@ def create_debug_router(service_provider, runtime, admission_gate) -> APIRouter:
                     if event["type"] in {"completed", "failed"}:
                         break
             finally:
-                producer.cancel()
-                with suppress(asyncio.CancelledError):
-                    await producer
+                # Starlette cancels the surrounding AnyIO scope on disconnect.
+                # Shield the wait so a second cancellation cannot interrupt Redis release.
+                with anyio.move_on_after(5, shield=True) as cleanup:
+                    producer.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await producer
+                if cleanup.cancel_called:
+                    logger.bind(robot_debug_safe=True).warning(
+                        "robot debug cleanup timed out run_id={}; slot expires via TTL", trace.run_id
+                    )
 
         return StreamingResponse(
             events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"}

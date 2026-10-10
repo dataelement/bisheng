@@ -5,10 +5,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ context: vi.fn(), run: vi.fn() }));
 vi.mock("@/controllers/API/eplusDebug", () => ({ getRobotDebugContext: mocks.context, runRobotDebug: mocks.run }));
 beforeEach(() => {
-  mocks.context.mockResolvedValue({ assistant_id: "a", test_user_id: 2 });
+  mocks.context.mockReset().mockResolvedValue({ assistant_id: "a", test_user_id: 2 });
   mocks.run.mockReset();
 });
 describe("robot debug history isolation", () => {
+  it("clears loading when the pending context request is canceled", async () => {
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.context.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { result } = renderHook(() => useRobotDebug("a"));
+    expect(result.current.loading).toBe(true);
+    act(() => result.current.clear());
+    expect(result.current.loading).toBe(false);
+    expect(mocks.context.mock.calls[0][2].aborted).toBe(true);
+    await act(async () => { finish?.({ assistant_id: "a", test_user_id: 2 }); });
+    expect(result.current.context).toBeNull();
+    await act(() => result.current.loadContext(3));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.context?.test_user_id).toBe(2);
+  });
   it("stores completed answers only and clears on identity change", async () => {
     mocks.run.mockImplementation(async (_input, onEvent) => {
       onEvent({ type: "answer_delta", data: { text: "answer" } });

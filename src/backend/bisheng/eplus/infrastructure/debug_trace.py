@@ -91,7 +91,8 @@ class ObservedRobotTool(AssistantCitationToolWrapper):
             return result
         except Exception as exc:
             self.trace.emit("tool_error", {"call_id": call["call_id"], "error_type": type(exc).__name__}, terminal=True)
-            raise
+            # ReAct turns tool exceptions into model observations. Never expose provider bodies.
+            raise RuntimeError(f"robot knowledge tool failed ({type(exc).__name__})") from None
         finally:
             self._call.reset(token)
 
@@ -103,7 +104,7 @@ class ObservedRobotTool(AssistantCitationToolWrapper):
             return result
         except Exception as exc:
             self.trace.emit("tool_error", {"call_id": call["call_id"], "error_type": type(exc).__name__}, terminal=True)
-            raise
+            raise RuntimeError(f"robot knowledge tool failed ({type(exc).__name__})") from None
         finally:
             self._call.reset(token)
 

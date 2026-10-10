@@ -1,6 +1,7 @@
 """Explicitly started diagnostic process; no production startup side effects."""
 
 import asyncio
+import logging
 import os
 import sys
 from contextlib import asynccontextmanager, suppress
@@ -28,6 +29,19 @@ from bisheng.utils.http_middleware import CustomMiddleware, _extract_http_access
 def register_permission_context():
     if not settings.openfga.enabled:
         return
+    from bisheng.core.openfga.manager import FGAManager
+
+    # Default development discovery may create a Store/model. Replace the lazy
+    # manager before first access with the existing fail-closed production policy.
+    app_context.unregister_context("openfga")
+    app_context.register_context(
+        FGAManager(
+            settings.openfga.model_copy(update={"force_write_model": False}),
+            environment="production",
+            instance_role="robot-debug",
+        ),
+        lazy=True,
+    )
     from bisheng.api.services.f048_permission_runtime import initialize_f048_api_runtime
     from bisheng.common.permission_identity import configure_tenant_admin_checker
     from bisheng.department.domain.services.department_projection_scope import (
@@ -81,6 +95,9 @@ def debug_auth_jwt(req: Request, res: Response):
 
 def configure_debug_logging():
     # Only request-local, sanitized diagnostics may reach this process's sinks.
+    # Uvicorn and provider libraries have independent stdlib sinks; suppress them
+    # in this standalone process rather than leaking raw exception bodies.
+    logging.disable(logging.CRITICAL)
     logger.remove()
     logger.add(
         sys.stderr,
@@ -133,11 +150,16 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app):
-        await initialize_app_context(settings)
+        # Apply safe sinks before infrastructure initialization can log failures.
+        configure_debug_logging()
         try:
-            # Production/model libraries can log bodies or provider exceptions.
-            # This isolated process emits only explicitly safe diagnostic records.
-            configure_debug_logging()
+            await initialize_app_context(settings)
+        except Exception as exc:
+            logger.bind(robot_debug_safe=True).opt(
+                exception=(RuntimeError, RuntimeError(type(exc).__name__), exc.__traceback__)
+            ).error("robot debug initialization failed error_type={}", type(exc).__name__)
+            raise RuntimeError("robot debug initialization failed") from None
+        try:
             register_permission_context()
             yield
         finally:

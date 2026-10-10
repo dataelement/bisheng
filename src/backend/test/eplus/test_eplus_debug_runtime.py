@@ -123,9 +123,20 @@ async def test_actual_assistant_executor_observes_tool_then_returns_answer(mode,
 async def test_real_react_reports_tool_failure_even_when_final_answer_succeeds():
     from dataclasses import replace
 
+    from pydantic import Field
+
+    class CapturingModel(ToolModel):
+        inputs: list = Field(default_factory=list)
+
+        def _generate(self, messages, *args, **kwargs):
+            self.inputs.append([m.content for m in messages])
+            return super()._generate(messages, *args, **kwargs)
+
+    models = []
+
     class ActualAgent(AssistantAgent):
         async def init_llm(self):
-            self.llm = ToolModel(
+            self.llm = CapturingModel(
                 responses=[
                     AIMessage(
                         content='Action:\n```json\n{"action":"eplus_robot_knowledge","action_input":{"query":"fail"}}\n```'
@@ -133,6 +144,7 @@ async def test_real_react_reports_tool_failure_even_when_final_answer_succeeds()
                     AIMessage(content='Action:\n```json\n{"action":"Final Answer","action_input":"tool failed"}\n```'),
                 ]
             )
+            models.append(self.llm)
             self.llm_agent_executor = "ReAct"
 
         async def init_tools(self, context):
@@ -151,4 +163,6 @@ async def test_real_react_reports_tool_failure_even_when_final_answer_succeeds()
         ]
     )
     assert output == "tool failed"
+    assert len(models[0].inputs) == 2
+    assert "sensitive provider response" not in str(models[0].inputs[1])
     assert [e["type"] for e in trace.events] == ["context", "tool_start", "tool_error"]

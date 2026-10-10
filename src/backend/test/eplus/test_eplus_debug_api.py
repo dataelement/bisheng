@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.eplus.api.debug_router import create_debug_router
 from bisheng.eplus.domain.services.debug_admission import DebugAdmissionService
+from bisheng.eplus.infrastructure.debug_gate import RedisDebugGate
 from test.eplus.test_eplus_debug_admission import Authorization, Reader, snapshot
 
 
@@ -68,17 +69,20 @@ async def test_disconnect_cancels_producer_and_releases_gate():
             finally:
                 stopped.set()
 
-    class CancelGate:
-        @asynccontextmanager
-        async def acquire(self):
-            try:
-                yield
-            finally:
-                released.set()
+    class Redis:
+        async def set(self, *args, **kwargs):
+            return True
+
+        async def eval(self, *args):
+            # A real network release yields, unlike a synchronous finally block.
+            await asyncio.sleep(0.01)
+            released.set()
 
     app = FastAPI()
     app.include_router(
-        create_debug_router(lambda: DebugAdmissionService(Authorization(), Reader(snapshot())), Slow(), CancelGate())
+        create_debug_router(
+            lambda: DebugAdmissionService(Authorization(), Reader(snapshot())), Slow(), RedisDebugGate(Redis())
+        )
     )
     app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(
         user_id=1, tenant_id=7, admin=True, edit=True

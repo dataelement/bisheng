@@ -17,6 +17,7 @@ export function useRobotDebug(assistantId: string) {
   const [error, setError] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const generation = useRef(0);
+  const turnSequence = useRef(0);
   const history = useRef<DebugHistoryTurn[]>([]);
 
   const clear = useCallback(() => {
@@ -26,6 +27,7 @@ export function useRobotDebug(assistantId: string) {
     history.current = [];
     setTurns([]);
     setBusy(false);
+    setLoading(false);
     setError(false);
   }, []);
 
@@ -56,7 +58,8 @@ export function useRobotDebug(assistantId: string) {
     const next = new AbortController();
     controller.current = next;
     const epoch = generation.current;
-    const turn: DebugTurn = { id: crypto.randomUUID(), question: query.trim(), answer: "", events: [], state: "running" };
+    // Intranet HTTP pages do not expose secure-context crypto.randomUUID.
+    const turn: DebugTurn = { id: `${epoch}-${++turnSequence.current}`, question: query.trim(), answer: "", events: [], state: "running" };
     setBusy(true);
     setError(false);
     setTurns(current => [...current, { ...turn }].slice(-20));

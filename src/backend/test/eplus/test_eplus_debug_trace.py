@@ -68,8 +68,9 @@ async def test_observation_preserves_schema_result_and_separate_metadata():
 async def test_failed_tool_is_visible_without_exception_payload():
     trace = DebugTrace()
     observed = observe_robot_tool(wrapper(), trace)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as failure:
         await observed.ainvoke({"query": "fail"})
+    assert "sensitive" not in str(failure.value)
     assert trace.events[-1]["type"] == "tool_error"
     assert trace.events[-1]["data"]["error_type"] == "RuntimeError"
     assert "sensitive" not in json.dumps(trace.events)
