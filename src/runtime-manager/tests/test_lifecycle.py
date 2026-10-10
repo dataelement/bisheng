@@ -121,6 +121,29 @@ def test_readonly_rootfs_and_tmpfs(rtm_config, fake_docker):
     assert rtm_config.app_data_dir("app-1").is_dir()
 
 
+def test_deploy_hands_an_existing_database_to_the_app_user(rtm_config, fake_docker, monkeypatch):
+    """A release with an unchanged schema runs no migration, so deploy itself
+    must repair an ``app.db`` an earlier build left owned by root (found on
+    114, 2026-10-10: the app's first write failed as a read-only database)."""
+    from runtime_manager import appdb as appdb_module
+    from runtime_manager import lifecycle as lifecycle_module
+
+    data_dir = rtm_config.app_data_dir("app-1")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "app.db").write_bytes(b"")
+    chowned: list[tuple[str, int, int]] = []
+
+    def record(path, uid, gid):
+        chowned.append((str(path), uid, gid))
+
+    monkeypatch.setattr(appdb_module.os, "chown", record)
+    monkeypatch.setattr(lifecycle_module.os, "chown", record)
+
+    _service(rtm_config, fake_docker).deploy(_request())
+
+    assert (str(data_dir / "app.db"), 10001, 10001) in chowned
+
+
 def test_bind_source_is_the_host_path_when_the_manager_is_containerised(rtm_config, fake_docker):
     """The compose-shape trap: ``Binds`` is resolved by the *host* daemon.
 

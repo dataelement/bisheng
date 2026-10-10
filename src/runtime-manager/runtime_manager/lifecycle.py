@@ -42,6 +42,7 @@ from typing import Any, Protocol
 
 from runtime_manager.admission import AdmissionService, Tier
 from runtime_manager.api.schemas import DeployRequest
+from runtime_manager.appdb import DB_FILENAME, hand_db_to_app_user
 from runtime_manager.builder import DEFAULT_APP_GID, DEFAULT_APP_UID
 from runtime_manager.config import (
     CONTAINER_NAME_PREFIX,
@@ -341,6 +342,10 @@ class LifecycleService:
             os.chown(data_dir, DEFAULT_APP_UID, DEFAULT_APP_GID)
         except (PermissionError, OSError) as exc:
             logger.warning("could not chown %s to the app user: %s", data_dir, exc)
+        # The platform-created database lives in the same dir and is created
+        # by this process, so it needs the same hand-over (an unchanged schema
+        # runs no migration, and earlier builds left root-owned files behind).
+        hand_db_to_app_user(data_dir / DB_FILENAME)
 
         # Before the environment, because the credential goes *into* it. The
         # policy file is written here and not at container-create time so that a

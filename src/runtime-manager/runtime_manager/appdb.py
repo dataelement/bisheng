@@ -106,6 +106,28 @@ def _check_identifier(name: str, *, what: str) -> str:
     return name
 
 
+def hand_db_to_app_user(path: Path) -> None:
+    """Give an app database and its sidecar files to the app user.
+
+    runtime-manager creates ``app.db`` (``rwc``) before the container starts,
+    so the file is born owned by whoever runs this process — root on a systemd
+    host. The app runs as uid/gid 10001 and then fails its first write with
+    "attempt to write a readonly database". Called after every migration and
+    on every deploy, so a file created by an earlier build is repaired too.
+    Best-effort like the data dir: a userns-remapped daemon may already map
+    ownership, so a refusal is logged, not raised.
+    """
+    from runtime_manager.builder import DEFAULT_APP_GID, DEFAULT_APP_UID
+
+    for candidate in (path, *(path.with_name(path.name + suffix) for suffix in ("-wal", "-shm", "-journal"))):
+        if not candidate.exists():
+            continue
+        try:
+            os.chown(candidate, DEFAULT_APP_UID, DEFAULT_APP_GID)
+        except (PermissionError, OSError) as exc:
+            logger.warning("could not chown %s to the app user: %s", candidate, exc)
+
+
 @dataclass(slots=True)
 class ColumnInfo:
     name: str
@@ -598,7 +620,7 @@ class AppDbSchemaService:
             applied, skipped = self._apply(conn, items)
         finally:
             conn.close()
-            self._hand_to_app_user(path)
+            hand_db_to_app_user(path)
         logger.info(
             "app_db migrate app_id=%s applied=%s skipped=%s snapshot=%s",
             app_id,
@@ -612,27 +634,6 @@ class AppDbSchemaService:
         if not _APP_ID.match(app_id or ""):
             raise DataInvalidError(f"app_id {app_id!r} is not a valid identifier")
         return self._config.app_data_dir(app_id) / DB_FILENAME
-
-    @staticmethod
-    def _hand_to_app_user(path: Path) -> None:
-        """Give the database files to the app user the container runs as.
-
-        This process creates ``app.db`` (``rwc``) before the container starts,
-        so the file is born owned by whoever runs runtime-manager — root on a
-        systemd host. The app runs as uid/gid 10001 and then gets "attempt to
-        write a readonly database" on its first write. Same best-effort rule as
-        the data dir in ``lifecycle.deploy``: a userns-remapped daemon may
-        already map ownership, so a refusal is logged, not raised.
-        """
-        from runtime_manager.builder import DEFAULT_APP_GID, DEFAULT_APP_UID
-
-        for candidate in (path, *(path.with_name(path.name + suffix) for suffix in ("-wal", "-shm", "-journal"))):
-            if not candidate.exists():
-                continue
-            try:
-                os.chown(candidate, DEFAULT_APP_UID, DEFAULT_APP_GID)
-            except (PermissionError, OSError) as exc:
-                logger.warning("could not chown %s to the app user: %s", candidate, exc)
 
     # ------------------------------------------------------------------
     # validation — everything refusable without touching the file
