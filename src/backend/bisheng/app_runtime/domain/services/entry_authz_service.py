@@ -227,14 +227,15 @@ async def authorize_preview_entry(
     * **Step 3 is the preview session, not the slug.** Unknown, reclaimed and
       expired are one answer — ``not_found`` — because the difference would
       tell a stranger that a session id was once real.
-    * **Step 4 is "is this *that* approver", not the visible scope.** A preview
-      belongs to the person it was raised for and to nobody else: not the
-      owner, not another approver on the same request, not a tenant
-      administrator. AC-27 says the instance carries the approver's own
-      identity, so a second person entering it would be acting as the first.
-      (The owner's own way in is the application's real entry; the approval
-      exception in NFR-1.2 / INV-36 widens what the *capabilities* inside the
-      preview may do, not who may open it.)
+    * **Step 4 is "is this the person who raised it", not the visible scope.**
+      A preview belongs to the person it was raised for and to nobody else.
+      That is an approver, or the owner previewing their own pending version
+      (PRD-1 RT-03 AC 11, ``ReviewAccess`` lets the owner raise one). The
+      instance carries its raiser's identity, so a second person entering it
+      would be acting as the first — the owner cannot enter an approver's
+      preview, nor an approver the owner's. The approval exception in NFR-1.2 /
+      INV-36 widens what the *capabilities* inside the preview may do, not who
+      may open it.
     * **There is no ``stopped`` branch.** A preview has two states, running and
       gone, and "gone" is ``not_found``.
 

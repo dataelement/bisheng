@@ -7,9 +7,10 @@ raised for" has to end in a page that says nothing.
 
 Four things are pinned here and nowhere else:
 
-* Only the approver **the session belongs to** gets in. The owner does not, the
-  other approver on the same request does not, a tenant administrator does not
-  — every one of them is answered ``not_found``, the same page a fabricated
+* Only the person **the session belongs to** — the approver, or the owner when
+  the owner raised it (PRD-1 RT-03 AC 11) — gets in. Anyone else, including the
+  owner of an approver's session and the approver of an owner's session, is
+  answered ``not_found``, the same page a fabricated
   session id gets, so nobody can use the difference to discover that an
   unpublished application exists (AC-30).
 * An expired or reclaimed session is ``not_found`` too, on the spot — the
@@ -138,6 +139,22 @@ async def test_the_application_owner_is_not_allowed_into_someone_elses_preview(
 
     assert verdict["decision"] == "not_found"
     assert "headers" not in verdict
+
+
+async def test_the_owner_enters_a_preview_they_raised_themselves(preview_session, session_token, app_owner):
+    """PRD-1 RT-03 AC 11: the owner may raise a preview of the version under review.
+
+    The session's raiser is the owner, so the owner gets in and is the
+    identity injected — and the approver, for the same reason as above, does
+    not get into it.
+    """
+    app, _version, row = await preview_session(approver_user_id=app_owner.user_id)
+
+    verdict = await _authorize(row.id, session_token(app_owner.user_id))
+    assert verdict["decision"] == "allow" and verdict["app_id"] == app.id
+    assert verdict["headers"]["X-BiSheng-User-Id"] == str(app_owner.user_id)
+
+    assert (await _authorize(row.id, session_token(APPROVER_USER_ID)))["decision"] == "not_found"
 
 
 async def test_another_user_of_the_same_tenant_is_not_allowed(preview_session, session_token):
