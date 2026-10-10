@@ -46,7 +46,7 @@ import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -762,7 +762,6 @@ export function FileTable({ spaceLevel, files, selectedFiles, handleSelectAll, h
     });
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const stickyScrollRef = useRef<HTMLDivElement>(null);
-    const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
 
     // Sync the sticky scrollbar with the actual table scroll container
@@ -972,13 +971,11 @@ export function FileTable({ spaceLevel, files, selectedFiles, handleSelectAll, h
 
     return (
         <div className="relative flex min-w-0 max-w-full flex-1 flex-col overflow-hidden px-2" data-testid="portal-file-table">
-            {/* 表格主体区域：同时负责水平和垂直滚动；原生滚动条隐藏，由下方 sticky 滚动条代替 */}
+            {/* 表格自己的滚动条保持隐藏. scrollbar-on-scroll 会在滚动时把它重新画出来, 和底部这根叠成两根. */}
             <div
-                ref={(el) => {
-                    scrollRef.current = el;
-                    hScrollRevealRef(el);
-                }}
-                className="max-w-full flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scrollbar-on-scroll"
+                ref={scrollRef}
+                data-file-list-scroller
+                className="max-w-full flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
                 <table
                     className="w-full caption-bottom border-separate border-spacing-0 text-sm"

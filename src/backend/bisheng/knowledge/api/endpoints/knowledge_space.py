@@ -591,6 +591,21 @@ async def list_space_children(
     return resp_200(result)
 
 
+@router.get("/{space_id}/file-count")
+async def get_space_file_count(
+    space_id: int,
+    parent_id: int | None = Query(default=None),
+    direct: bool = Query(default=False),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """direct 为真时只数当前目录这一层、当前用户可见的文件."""
+    if direct:
+        result = await svc.count_direct_directory_files(space_id, parent_id)
+    else:
+        result = await svc.count_space_files(space_id)
+    return resp_200(result)
+
+
 @router.post("/{space_id}/folder-stats")
 async def get_space_folder_stats(
     space_id: int,
@@ -1327,13 +1342,14 @@ async def get_file_stats(
     file_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> Any:
-    """Return view count for a specific file. Downloads are not tracked, always 0."""
+    """当前文件的浏览、下载、收藏成功次数. 取消收藏不回减收藏次数."""
     import asyncio
 
     from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
 
-    views, downloads = await asyncio.gather(
+    views, downloads, favorites = await asyncio.gather(
         PortalTelemetryEventService.count_file_views(file_id),
         PortalTelemetryEventService.count_file_downloads(file_id),
+        PortalTelemetryEventService.count_file_favorites(file_id),
     )
-    return resp_200({"views": views, "downloads": downloads})
+    return resp_200({"views": views, "downloads": downloads, "favorites": favorites})

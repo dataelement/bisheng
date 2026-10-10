@@ -28,6 +28,7 @@ from bisheng.telemetry_search.domain.services.dashboard import DashboardService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.user.domain.models.user import User, UserDao
 from bisheng.user.domain.models.user_role import UserRoleDao
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 from bisheng.user.domain.services.user import UserService
 from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler, TupleOperation
 from bisheng.utils import get_request_ip
@@ -475,7 +476,8 @@ class RoleGroupService():
     async def get_manage_resources(self, login_user: UserPayload, keyword: str, page: int, page_size: int) -> (list, int):
         """ Get a list of apps under a user group managed by a user Contains skills, assistants, workflows"""
         groups = []
-        if not login_user.is_admin():
+        # 审计页应用筛选只打这个接口. 运营岗与管理员一样看当前租户全部应用, 不限所管用户组.
+        if not login_user.is_admin() and not has_platform_operator_role(login_user):
             groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
             if not groups:
                 return [], 0

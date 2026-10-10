@@ -406,16 +406,15 @@ async def test_fixed_dynamic_matrix_resolves_independent_dimensions(
 
 
 @pytest.mark.asyncio
-async def test_dynamic_space_ambiguity_falls_back_to_token_user_personal_space() -> None:
+async def test_dynamic_space_ambiguity_rejects_instead_of_token_user_personal_space() -> None:
+    """同一个部门绑了多个库时, 动态选库失败, 不写入令牌用户个人库."""
     personal_space = Knowledge(id=99, name="admin的知识库", type=3)
-    fallback_folder = KnowledgeFile(id=5001, knowledge_id=99, file_name="leaf", file_type=0)
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
     knowledge_space_service = SimpleNamespace(
         ensure_personal_default_space=AsyncMock(return_value=personal_space),
-        find_or_create_folder_path_for_file_sync=AsyncMock(return_value=fallback_folder),
+        find_or_create_folder_path_for_file_sync=AsyncMock(),
     )
     service = _service(_rule("fixed", "dynamic", "department_id"), repository, knowledge_space_service)
-    service.token_name = "联调Token"
     identity = SimpleNamespace(
         target_space_department=_department(20, "动态部门", "/1/20/"),
         business_domain_department=None,
@@ -427,17 +426,11 @@ async def test_dynamic_space_ambiguity_falls_back_to_token_user_personal_space()
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(side_effect=DepartmentKnowledgeSpaceAmbiguousError()),
     ):
-        target = await service._resolve_target_space(identity)
+        with pytest.raises(FilelibSyncConflictError, match="multiple target"):
+            await service._resolve_target_space(identity)
 
-    assert target.used_personal_fallback is True
-    assert target.space.id == 99
-    assert target.folder_id == 5001
     repository.find_knowledge_by_id.assert_not_awaited()
-    knowledge_space_service.ensure_personal_default_space.assert_awaited_once()
-    knowledge_space_service.find_or_create_folder_path_for_file_sync.assert_awaited_once_with(
-        99,
-        "业务接口未分配/联调Token",
-    )
+    knowledge_space_service.ensure_personal_default_space.assert_not_awaited()
 
 
 @pytest.mark.asyncio

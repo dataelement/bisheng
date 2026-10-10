@@ -151,34 +151,52 @@ class FilelibSyncService:
         target_folder_id_override: int | None = None,
         extra_user_metadata: dict[str, Any] | None = None,
     ) -> FilelibSyncResponseData:
+        """把已经落在本地的接口文件写入知识库并入队解析.
+
+        调用方传入解析好的参数和本地文件路径. 本方法决定目标库和目录, 写入文件,
+        把归属改成责任人, 补元数据, 编码和标签, 再入队解析. 失败时写审计;
+        文件记录尚未落库时删掉半成品.
+        """
+        # 文件名只能是基名, 扩展名必须在知识库允许的上传范围内.
         self._validate_file_name(params.file_name)
+        # 令牌若按部门或责任人动态选库/业务域, 请求里必须带上对应 id.
         self._require_dynamic_source_id(params)
+        # 失败清理用: 文件记录是否已经 update 落库, 以及为保留展示名复制出的临时路径.
         created_file: KnowledgeFile | None = None
         file_persisted = False
         staged_upload_path = local_file_path
         extra_cleanup_paths: list[str] = []
+        # 成功和失败都要写审计, 这些值可能中途才解析出来, 失败时允许仍是 None.
         identity: ResolvedIdentity | None = None
         target: ResolvedFileSyncTarget | None = None
         business_domain_code: str | None = None
         replaced_file_id: int | None = None
         try:
+            # 解析责任人, 调用人主部门, 以及规则要用的目标部门.
             identity = await self._resolve_identity(params)
+            # 读取门户分类和业务域配置, 确认令牌上的一二级分类仍然存在且唯一.
             portal_config = await self._get_portal_config()
             self._resolve_document_type(portal_config)
+            # 按令牌规则选目标库. 固定库缺失才进令牌用户个人库; 动态规则找不到科室库或绑了多个库会失败.
             target = await self._resolve_target_space(
                 identity,
                 allow_personal_fallback=allow_personal_fallback,
             )
+            # 目标是责任人个人库时, 建目录和上传要换成该用户, 令牌用户没有对方个人库权限.
             with self._impersonate_for_target_write(target, identity):
+                # 令牌用户个人库兜底的目录已在选库时建好, 这里只给其余目标补目录.
                 if not target.used_personal_fallback:
                     if target_folder_id_override is not None:
+                        # 调用方直接指定目录 id, 不再按令牌规则拼路径.
                         folder_id = int(target_folder_id_override)
                     elif target_folder_path_override is not None:
+                        # 调用方指定目录路径, 缺少的层级会创建.
                         folder_id = await self._resolve_folder_path_override(
                             int(target.space.id),
                             target_folder_path_override,
                         )
                     else:
+                        # 按令牌目录规则: 不建目录, 固定路径, 或父路径加上动态部门名.
                         folder_id = await self._resolve_target_folder(int(target.space.id), identity)
                     target = ResolvedFileSyncTarget(
                         space=target.space,
@@ -187,8 +205,10 @@ class FilelibSyncService:
                         used_responsible_person_personal=target.used_responsible_person_personal,
                     )
                 try:
+                    # 确认当前身份对目标库或目录有上传权限.
                     await self._require_upload_permission(target)
                 except FilelibSyncNotFoundError:
+                    # 目标库或目录已经不存在. 已经在兜底, 或不允许兜底, 就直接失败.
                     if target.used_personal_fallback or not allow_personal_fallback:
                         raise
                     logger.warning(
@@ -196,14 +216,17 @@ class FilelibSyncService:
                         self.token_id,
                         target.space.id,
                     )
+                    # 改写入令牌用户个人库, 目录为 "业务接口未分配/{令牌名}/...".
                     target = await self._resolve_personal_fallback_target(identity)
                     await self._require_upload_permission(target)
 
+                # 按规则解析业务域. 动态候选对不上目标库时得到 None, 文件仍继续上传.
                 domain = self._resolve_business_domain(
                     portal_config,
                     identity.business_domain_department,
                     target_space=target.space,
                 )
+                # 仅动态业务域且文件进了部门/科室库时核对绑定. 对不上只打日志, 不中断.
                 if (
                     domain is not None
                     and self.file_sync_rule.business_domain.mode == "dynamic"
@@ -212,6 +235,7 @@ class FilelibSyncService:
                 ):
                     self._ensure_domain_bound(target.space, domain)
 
+                # 清掉目标目录里的同名旧文件, 记下最新一份被替换文件的 id.
                 replaced_file_id = await self._cleanup_duplicate_files_before_sync(
                     knowledge_id=int(target.space.id),
                     folder_id=target.folder_id,
@@ -219,6 +243,7 @@ class FilelibSyncService:
                     external_file_id=params.external_file_id,
                 )
 
+                # 本地临时路径可能没有展示文件名, 复制到对象存储后再拿带原名的地址入库.
                 staged_upload_path = await self._ensure_upload_path_preserves_display_name(
                     local_file_path=local_file_path,
                     file_name=params.file_name,
@@ -226,12 +251,15 @@ class FilelibSyncService:
                 if staged_upload_path != local_file_path:
                     extra_cleanup_paths.append(staged_upload_path)
 
+                # 预览缓存键必须在入库前取得, 后面解析任务靠它找到刚才的预览.
                 preview_cache_key = self.knowledge_space_service.get_preview_cache_key(
                     int(target.space.id),
                     staged_upload_path,
                 )
                 business_domain_code = domain.code if domain is not None else None
-                # 接口同步不计分: 只跳过挂钩, 页面直传仍走 add_file 默认 award_points=True.
+                # 先写文件记录: 跳过审批; 解析等归属改完再入队; 同名同内容放行, 因为旧文件刚刚已清掉.
+                # 接口同步不计分; 页面直传仍走 add_file 默认 award_points=True.
+                # 固定业务域, 没解析出业务域, 或进了责任人个人库时, 不再用空间业务域白名单拦截.
                 upload_results = await self.knowledge_space_service.add_file(
                     knowledge_id=int(target.space.id),
                     file_path=[staged_upload_path],
@@ -250,9 +278,11 @@ class FilelibSyncService:
                     ),
                     award_points=False,
                 )
+            # add_file 应只交出这一份新文件. 条数不对或状态失败, 当成重名或重复内容冲突.
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")
 
+            # 取出刚写入的文件. add_file 有时不直接返回模型, 再按 id 查一次.
             upload_result = upload_results[0]
             file_id = int(upload_result.id)
             created_file = upload_result if isinstance(upload_result, KnowledgeFile) else None
@@ -262,13 +292,13 @@ class FilelibSyncService:
                 raise FilelibSyncNotFoundError(msg="created knowledge file does not exist")
             owner_user_id = int(identity.responsible_user_id)
             owner_user_name = str(identity.responsible_user_name or "")
-            # File owner follows params.responsible_person_id/responsible_person when provided;
-            # otherwise defaults to the token-bound user via _resolve_responsible_user().
+            # 归属改成责任人. 请求没带责任人时, 责任人就是令牌绑定用户, 页面上传人因此不是调用方令牌用户.
             created_file.user_id = owner_user_id
             created_file.user_name = owner_user_name
             created_file.updater_id = owner_user_id
             created_file.updater_name = owner_user_name
             created_file.original_uploader_id = owner_user_id
+            # 元数据记下外部文件号, 解析出的部门, 责任人, 入口和令牌. department 无论是否兜底都会写.
             user_metadata = {
                 **(created_file.user_metadata or {}),
                 "external_file_id": params.external_file_id,
@@ -280,10 +310,13 @@ class FilelibSyncService:
                 FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY: self.token_id,
                 FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY: self._developer_token_display_name(),
             }
+            # 定时或补跑调用方传入的触发方式.
             if trigger_type is not None:
                 user_metadata["filelib_sync_trigger"] = trigger_type
+            # 调用方附加字段后写, 同名键会覆盖上面的值.
             if extra_user_metadata:
                 user_metadata.update(extra_user_metadata)
+            # 进了令牌用户个人库, 或进了责任人个人库, 打上对应兜底标记.
             if target.used_personal_fallback:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
@@ -293,6 +326,7 @@ class FilelibSyncService:
                     FILELIB_SYNC_RESPONSIBLE_PERSON_PERSONAL_METADATA_VALUE
                 )
             created_file.user_metadata = user_metadata
+            # 有业务域才生成固定文件编码; 没有业务域则编码留空.
             if domain is not None:
                 await FileEncodingTransformer.generate_fixed_encoding(
                     invoke_user_id=identity.responsible_user_id,
@@ -300,9 +334,11 @@ class FilelibSyncService:
                     document_type_code=self.file_sync_rule.category.code,
                     business_domain_code=domain.code,
                 )
+            # 归属, 元数据和编码一起落库. 这之后失败不再删除文件记录.
             created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
             file_persisted = True
 
+            # 按请求里的标签名补标签, 再把实际打上的标签写回元数据.
             applied_tags = await self._apply_sync_tags(
                 space_id=int(target.space.id),
                 file_id=int(created_file.id),
@@ -315,6 +351,7 @@ class FilelibSyncService:
                 }
                 created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
 
+            # 归属已改完, 再入队标题抽取和正文解析.
             await self.knowledge_space_service.enqueue_file_title_extraction(
                 [created_file],
                 [preview_cache_key],
@@ -335,6 +372,7 @@ class FilelibSyncService:
                 endpoint_tag,
                 trigger_type,
             )
+            # 组装成功响应: 新文件 id, 所在库, 编码, 被替换的旧文件 id, 实际标签.
             response = FilelibSyncResponseData(
                 external_file_id=params.external_file_id,
                 file_id=int(created_file.id),
@@ -346,6 +384,7 @@ class FilelibSyncService:
                 replaced_file_id=replaced_file_id,
                 tags=applied_tags,
             )
+            # 审计里要展示最终目录名, 个人库兜底和正常目标的算法不同.
             folder_display_name = await self._resolve_folder_display_label(
                 identity=identity,
                 target=target,
@@ -371,6 +410,7 @@ class FilelibSyncService:
             )
             return response
         except FilelibSyncError as exc:
+            # 业务错误: 写失败审计. 记录还没落库时删半成品和临时副本, 已落库的保留给后续排查.
             folder_display_name = await self._resolve_folder_display_label(
                 identity=identity,
                 target=target,
@@ -400,6 +440,7 @@ class FilelibSyncService:
                     await self._cleanup_failed_sync(None, extra_path)
             raise
         except Exception as exc:
+            # 未预期错误同样记失败审计并清理未落库文件, 然后原样抛出.
             folder_display_name = await self._resolve_folder_display_label(
                 identity=identity,
                 target=target,
@@ -807,10 +848,24 @@ class FilelibSyncService:
         *,
         allow_personal_fallback: bool = True,
     ) -> ResolvedFileSyncTarget:
+        """按令牌规则选择目标库.
+
+        Args:
+            identity: 已解析的责任人和部门.
+            allow_personal_fallback: 为 True 时, 仅固定目标库不存在才改入令牌用户个人库.
+
+        Returns:
+            选中的知识库. 动态规则没有部门库时会改用同一条组织链上的科室库.
+
+        Raises:
+            FilelibSyncNotFoundError: 动态目标没有部门库也没有科室库, 或固定库不存在且不允许兜底.
+            FilelibSyncConflictError: 同一个部门或科室绑了多个库. 本次同步失败, 不进兜底库.
+        """
         try:
             return await self._resolve_configured_target_space(identity)
-        except (FilelibSyncNotFoundError, FilelibSyncConflictError) as exc:
-            if not allow_personal_fallback:
+        except FilelibSyncNotFoundError as exc:
+            # 上传人能解析出部门时, 动态选库失败不能再当成成功写进兜底库.
+            if not allow_personal_fallback or self.file_sync_rule.target_space.mode != "fixed":
                 raise
             logger.warning(
                 "filelib sync configured target space unavailable, fallback to token user personal space: {}",
@@ -1037,17 +1092,50 @@ class FilelibSyncService:
         dynamic_source: str = "department_id",
         identity: ResolvedIdentity | None = None,
     ) -> Knowledge:
+        """按部门库选目标, 没有部门库时改用同一条组织链上的科室库.
+
+        Args:
+            department: 选库起点. 组织链取自它的 path, 从自己走到根.
+            dynamic_source: department_id 先找部门库再找科室库; responsible_person_id 只走责任人科室库.
+            identity: 责任人身份. 仅 responsible_person_id 在没有科室库时用来进入其个人库.
+
+        Returns:
+            命中的部门库或科室库.
+
+        Raises:
+            FilelibSyncNotFoundError: 部门库和科室库都不存在.
+            FilelibSyncConflictError: 部门库或沿用的科室库绑了多个.
+        """
         if dynamic_source == "responsible_person_id":
             space, _used_personal = await self._find_responsible_person_target_space(
                 department,
                 identity,
             )
             return space
-        return await self._resolve_bound_space(
-            department,
-            department_ids=self._department_chain(department),
-            kind=DepartmentSpaceTargetKind.DEPARTMENT,
-        )
+        department_ids = self._department_chain(department)
+        try:
+            return await self._resolve_bound_space(
+                department,
+                department_ids=department_ids,
+                kind=DepartmentSpaceTargetKind.DEPARTMENT,
+            )
+        except FilelibSyncNotFoundError:
+            # 智新这类只建了科室库的组织, 部门库规则匹配不到, 科室库仍应接住文件.
+            clinic_space = await self._resolve_bound_space(
+                department,
+                department_ids=department_ids,
+                kind=DepartmentSpaceTargetKind.CLINIC,
+                missing_is_error=False,
+                ambiguous_picks_first=False,
+            )
+            if clinic_space is None:
+                raise
+            logger.info(
+                "filelib sync department space missing, using clinic space department_id={} space_id={}",
+                int(department.id),
+                clinic_space.id,
+            )
+            return clinic_space
 
     async def _find_responsible_person_target_space(
         self,

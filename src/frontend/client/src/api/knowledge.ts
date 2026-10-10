@@ -2630,6 +2630,17 @@ export async function getPublicSpaceFilePermissionsApi(params: {
         .filter((item) => item.fileId);
 }
 
+export async function getSpaceFileCountApi(spaceId: string, parentId?: string): Promise<number> {
+    if (!spaceId) return 0;
+    const query = new URLSearchParams({ direct: "true" });
+    if (parentId) query.set("parent_id", parentId);
+    const res = await request.get(
+        `/api/v1/knowledge/space/${spaceId}/file-count?${query.toString()}`,
+    ) as ApiResponse<{ file_num?: number; fileNum?: number }>;
+    const payload: { file_num?: number; fileNum?: number } = res?.data ?? {};
+    return Number(payload.file_num ?? payload.fileNum ?? 0);
+}
+
 export async function getSpaceFolderStatsApi(params: {
     space_id: string;
     folder_ids: Array<string | number>;
@@ -3957,6 +3968,7 @@ export async function checkSensitiveWordsApi(
 export interface FileUsageStats {
     views: number;
     downloads: number;
+    favorites: number;
 }
 
 export async function getFileStatsApi(
@@ -3966,7 +3978,7 @@ export async function getFileStatsApi(
     const res = await request.get<ApiResponse<FileUsageStats>>(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/stats`,
     );
-    return res?.data ?? { views: 0, downloads: 0 };
+    return res?.data ?? { views: 0, downloads: 0, favorites: 0 };
 }
 
 export async function recordPortalDownloadEventApi(

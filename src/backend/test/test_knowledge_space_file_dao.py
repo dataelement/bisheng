@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.dialects import sqlite
@@ -56,6 +56,46 @@ async def test_async_list_children_treats_null_root_path_as_root_level():
     sql = _compile_sql(session.statement)
     assert "file_level_path = ''" in sql
     assert "file_level_path IS NULL" in sql
+
+
+@pytest.mark.asyncio
+async def test_async_count_direct_files_counts_only_root_files():
+    session = _FakeAsyncSession()
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_count_direct_files(knowledge_id=123, parent_id=None)
+
+    sql = _compile_sql(session.statement)
+    assert "file_type = 1" in sql
+    assert "file_level_path = ''" in sql
+    assert "file_level_path IS NULL" in sql
+    assert "LIKE" not in sql.upper()
+
+
+@pytest.mark.asyncio
+async def test_async_count_direct_files_uses_exact_child_path():
+    session = _FakeAsyncSession()
+    parent = SimpleNamespace(id=10, knowledge_id=123, file_level_path="/9")
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+            return_value=session,
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.KnowledgeFileDao.query_by_id",
+            new=AsyncMock(return_value=parent),
+        ),
+    ):
+        await SpaceFileDao.async_count_direct_files(knowledge_id=123, parent_id=10)
+
+    sql = _compile_sql(session.statement)
+    assert "file_level_path = '/9/10'" in sql
+    assert "file_type = 1" in sql
+    assert "LIKE" not in sql.upper()
 
 
 @pytest.mark.asyncio

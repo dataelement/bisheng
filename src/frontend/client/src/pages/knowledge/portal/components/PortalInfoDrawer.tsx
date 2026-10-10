@@ -128,7 +128,7 @@ export function PortalInfoDrawer({
     const localize = useLocalize();
     const [encodingDraft, setEncodingDraft] = useState<EncodingDraft>({});
     const [savingEncoding, setSavingEncoding] = useState(false);
-    const [fileStats, setFileStats] = useState<{ views: number; downloads: number } | null>(null);
+    const [fileStats, setFileStats] = useState<{ views: number; downloads: number; favorites: number } | null>(null);
 
     useEffect(() => {
         setEncodingDraft({});
@@ -139,7 +139,7 @@ export function PortalInfoDrawer({
         setFileStats(null);
         getFileStatsApi(activeSpace.id, selectedFile.id)
             .then((stats) => setFileStats(stats))
-            .catch(() => setFileStats({ views: 0, downloads: 0 }));
+            .catch(() => setFileStats({ views: 0, downloads: 0, favorites: 0 }));
     }, [activePanel, selectedFile?.id, activeSpace?.id]);
 
     if (!activePanel) return null;
@@ -413,6 +413,7 @@ export function PortalInfoDrawer({
                     >
                         {renderDetailItem("下载次数", fileStats ? fileStats.downloads : "-")}
                         {renderDetailItem("浏览次数", fileStats ? fileStats.views : "-")}
+                        {renderDetailItem("收藏次数", fileStats ? (fileStats.favorites ?? 0) : "-")}
                     </div>
                 ) : null}
 

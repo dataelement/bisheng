@@ -16,11 +16,14 @@ const userContextSource = readFileSync(
 )
 
 describe("isPlatformOperatorStandalonePath", () => {
-    it("allows the three iframe standalone pages and dashboard editor subpath", () => {
+    it("allows iframe standalone pages, dashboard editor, and audit chat detail", () => {
         expect(isPlatformOperatorStandalonePath("/standalone/dashboard")).toBe(true)
         expect(isPlatformOperatorStandalonePath("/standalone/dashboard/abc")).toBe(true)
         expect(isPlatformOperatorStandalonePath("/standalone/knowledge-tag-library")).toBe(true)
         expect(isPlatformOperatorStandalonePath("/standalone/content-security")).toBe(true)
+        expect(isPlatformOperatorStandalonePath("/standalone/log")).toBe(true)
+        expect(isPlatformOperatorStandalonePath("/standalone/log/chatlog/1/2/3")).toBe(true)
+        expect(isPlatformOperatorStandalonePath("/platform/standalone/log", "/platform")).toBe(true)
         expect(
             isPlatformOperatorStandalonePath("/platform/standalone/dashboard", "/platform"),
         ).toBe(true)
@@ -30,8 +33,7 @@ describe("isPlatformOperatorStandalonePath", () => {
     it("rejects approval/sys/log standalone, shelled admin pages, and substring traps", () => {
         expect(isPlatformOperatorStandalonePath("/standalone/approval")).toBe(false)
         expect(isPlatformOperatorStandalonePath("/standalone/sys")).toBe(false)
-        expect(isPlatformOperatorStandalonePath("/standalone/log")).toBe(false)
-        expect(isPlatformOperatorStandalonePath("/standalone/log/chatlog/1/2/3")).toBe(false)
+        expect(isPlatformOperatorStandalonePath("/standalone/log-evil")).toBe(false)
         expect(isPlatformOperatorStandalonePath("/sys")).toBe(false)
         expect(isPlatformOperatorStandalonePath("/dashboard")).toBe(false)
         expect(isPlatformOperatorStandalonePath("/log")).toBe(false)
@@ -47,6 +49,8 @@ describe("resolveNoAdminConsoleAction", () => {
     it("stays on whitelist standalone, 403s other standalone, kicks shelled admin", () => {
         expect(resolveNoAdminConsoleAction("/standalone/dashboard")).toBe("allow-standalone")
         expect(resolveNoAdminConsoleAction("/standalone/content-security")).toBe("allow-standalone")
+        expect(resolveNoAdminConsoleAction("/standalone/log")).toBe("allow-standalone")
+        expect(resolveNoAdminConsoleAction("/standalone/log/chatlog/1/2/3")).toBe("allow-standalone")
         expect(resolveNoAdminConsoleAction("/standalone/approval")).toBe("standalone-403")
         expect(resolveNoAdminConsoleAction("/standalone/sys")).toBe("standalone-403")
         expect(resolveNoAdminConsoleAction("/dashboard")).toBe("kick")

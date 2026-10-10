@@ -112,7 +112,6 @@ import {
 } from "./uploadMetadata";
 import { usePortalFilePageHistory, loadPortalFilePage } from "./hooks/usePortalFilePageHistory";
 import { portalFileQueryKey, type PortalFilePageQuery } from "./hooks/portalFilePageHistory";
-import { PortalFilePagination } from "./components/PortalFilePagination";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
 const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
@@ -548,6 +547,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [selectableSpaces]);
 
     const handleOpenSpaceSettings = useCallback(async (space: KnowledgeSpace) => {
+        if (space.spaceLevel === SpaceLevel.PERSONAL) return;
         try {
             const detail = await getSpaceInfoApi(space.id);
             setEditingSpace({ ...space, ...detail, id: space.id });
@@ -2691,7 +2691,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFileIds(new Set());
         setSelectedFolderIds(new Set());
         const workspace = document.querySelector('[data-testid="portal-file-workspace"]');
-        workspace?.querySelectorAll("[data-radix-scroll-area-viewport]").forEach(element => { element.scrollTop = 0; });
+        workspace?.querySelectorAll("[data-radix-scroll-area-viewport], [data-file-list-scroller]").forEach(element => { element.scrollTop = 0; });
         const request = searchMode
             ? loadSearchPage(searchText.trim(), searchTagIds, page)
             : loadBrowsePage(activeSpace.id, currentFolderId, page);
@@ -3037,12 +3037,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     onPageChange={handleNativePageChange}
                                                     searchState={{ keyword: searchText, tagIds: searchTagIds }}
                                                     paginationKey={identity + ":" + pageEpoch + ":" + activePageKey + ":" + currentFileListPage}
-                                                    paginationFooter={<PortalFilePagination currentPage={currentFileListPage}
-                                                        maxVisitedPage={isCurrentPage ? pageSnapshot.maxVisitedPage : 0}
-                                                        hasMore={currentFileListHasMore} loading={currentFileListLoading}
-                                                        terminalKnown={!pageSnapshot.error}
-                                                        total={searchMode && isCurrentPage ? pageSnapshot.total : undefined}
-                                                        onPageChange={handleNativePageChange} />}
+                                                    directoryPaging
                                                     loading={currentFileListLoading}
                                                     listError={searchMode && searchError ? (
                                                         <>

@@ -39,6 +39,7 @@ from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 from bisheng.database.models.department import DepartmentDao
 from bisheng.user.domain.models.user import UserDao, User
 from bisheng.user.domain.services.auth import LoginUser
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 
 
 # todo change to async or submit thread pool
@@ -55,6 +56,17 @@ class AuditLogService:
             db_user, is_department_admin=is_department_admin
         )
         return 'log' in set(web_menu)
+
+    @classmethod
+    async def _can_read_tenant_audit(cls, user: UserPayload) -> bool:
+        """当前租户审计读权限: 审计菜单, 或角色名精确为「平台管理员」.
+
+        运营岗不把 log 写入 WEB_MENU, 否则会进入毕昇有壳管理端.
+        数据范围与持有审计菜单的人相同, 调用方再套租户范围.
+        """
+        if await cls._user_has_log_web_menu(user):
+            return True
+        return has_platform_operator_role(user)
 
     @classmethod
     def _get_audit_tenant_scope(cls, user: UserPayload) -> Optional[int]:
@@ -80,7 +92,7 @@ class AuditLogService:
                             responsible_user_ids=None) -> Any:
         groups = group_ids
         if not login_user.is_admin():
-            if await cls._user_has_log_web_menu(login_user):
+            if await cls._can_read_tenant_audit(login_user):
                 groups = group_ids
             else:
                 groups = [str(one.group_id) for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
@@ -130,7 +142,7 @@ class AuditLogService:
     async def get_all_responsible_persons(cls, login_user: UserPayload) -> List[Dict]:
         groups: List[int] = []
         if not login_user.is_admin():
-            if not await cls._user_has_log_web_menu(login_user):
+            if not await cls._can_read_tenant_audit(login_user):
                 groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
                 if not groups:
                     raise UnAuthorizedError()
@@ -150,7 +162,7 @@ class AuditLogService:
     async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
         groups: List[int] = []
         if not login_user.is_admin():
-            if not await cls._user_has_log_web_menu(login_user):
+            if not await cls._can_read_tenant_audit(login_user):
                 groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
                 if not groups:
                     raise UnAuthorizedError()
@@ -760,7 +772,7 @@ class AuditLogService:
         flow_ids = [one for one in flow_ids]
         group_admins = []
         if not user.is_admin():
-            if not await cls._user_has_log_web_menu(user):
+            if not await cls._can_read_tenant_audit(user):
                 user_groups = await UserGroupDao.aget_user_admin_group(user.user_id)
                 # Not a user group administrator, no permissions
                 if not user_groups:
@@ -806,7 +818,7 @@ class AuditLogService:
                                feedback: str, sensitive_status: int, page: int, page_size: int) -> Tuple[
         List[AppChatList], int]:
 
-        if user.is_admin() or await cls._user_has_log_web_menu(user):
+        if user.is_admin() or await cls._can_read_tenant_audit(user):
             # Administrator, or 角色中开启「审计」菜单：与超管同级的会话列表范围（可筛选用户组，不传则不过滤组）
             search_group_ids = group_ids or []
         else:

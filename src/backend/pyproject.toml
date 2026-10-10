@@ -156,6 +156,11 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["bisheng", "bisheng_langchain"]
 
+# Google docstring (Args/Returns). D 规则不进上面的 select, 只在新建文件上手动跑:
+# ruff check --preview --select D102,D103,D417,DOC102,DOC201 <file>
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
 [tool.ruff.lint.per-file-ignores]
 # F048 portal hot-search: prompts, fallbacks and tests legitimately embed
 # full-width Chinese punctuation (？。，：（）) that would otherwise trip the

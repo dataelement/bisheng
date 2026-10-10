@@ -9,11 +9,12 @@ import { useLocation } from "react-router-dom"
  */
 export const STANDALONE_PREFIX = "/standalone"
 
-/** 运营岗 iframe 允许的 standalone 前缀; 不含 approval/sys/log. */
+/** 运营岗 iframe 允许的 standalone 前缀; 含审计 /log 及其会话详情. 不含 approval/sys. */
 const PLATFORM_OPERATOR_STANDALONE_PREFIXES = [
     "/standalone/dashboard",
     "/standalone/knowledge-tag-library",
     "/standalone/content-security",
+    "/standalone/log",
 ] as const
 
 export type NoAdminConsoleAction = "allow-standalone" | "standalone-403" | "kick"
@@ -43,8 +44,9 @@ export function normalizePlatformPathname(pathname: string, baseUrl = ""): strin
 }
 
 /**
- * 是否运营岗可留在当前 standalone 页 (门户 iframe 三条).
- * 精确前缀匹配, 允许 /standalone/dashboard/:id; 不含 approval/sys/log 与有壳 /dashboard.
+ * 是否运营岗可留在当前 standalone 页 (门户 iframe).
+ * 精确前缀匹配, 允许 /standalone/dashboard/:id 与 /standalone/log/chatlog/...;
+ * 不含 approval/sys 与有壳 /dashboard, /log.
  */
 export function isPlatformOperatorStandalonePath(pathname: string, baseUrl = ""): boolean {
     const path = normalizePlatformPathname(pathname, baseUrl)

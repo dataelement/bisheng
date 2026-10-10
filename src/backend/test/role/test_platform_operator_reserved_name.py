@@ -46,10 +46,11 @@ def _make_role(role_id, role_name=PLATFORM_OPERATOR_ROLE_NAME, role_type="global
 def test_strip_admin_menus_drops_board_and_sys_for_operator() -> None:
     kept = strip_platform_operator_admin_menus(
         PLATFORM_OPERATOR_ROLE_NAME,
-        ["board", "sys", "workstation", "board", "frontend"],
+        ["board", "sys", "log", "workstation", "board", "frontend"],
     )
     assert "board" not in kept
     assert "sys" not in kept
+    assert "log" not in kept
     assert "workstation" in kept
     assert "frontend" in kept
 

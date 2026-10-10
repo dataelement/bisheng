@@ -468,6 +468,29 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
+    async def async_count_direct_files(cls, knowledge_id: int, parent_id: int | None) -> int:
+        """当前目录下的文件数. 只算这一层的文件, 不含子文件夹里的文件, 文件夹本身也不算."""
+        if parent_id is None:
+            path_filter = cls._root_path_filter()
+        else:
+            parent = await KnowledgeFileDao.query_by_id(parent_id)
+            if parent is None or int(parent.knowledge_id) != int(knowledge_id):
+                return 0
+            exact_path = (
+                f"{parent.file_level_path}/{parent_id}" if parent.file_level_path else f"/{parent_id}"
+            )
+            path_filter = KnowledgeFile.file_level_path == exact_path
+        statement = select(func.count(KnowledgeFile.id)).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            path_filter,
+            KnowledgeFileDao.active_inventory_predicate(),
+        )
+        async with get_async_db_session() as session:
+            total = await session.scalar(statement)
+        return int(total or 0)
+
+    @classmethod
     async def get_user_total_file_size(cls, user_id: int) -> int:
         """Get total file size for all files in the knowledge space (excluding folders)"""
         statement = select(func.sum(KnowledgeFile.file_size)).where(

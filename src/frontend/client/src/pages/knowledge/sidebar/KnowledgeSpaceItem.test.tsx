@@ -103,13 +103,13 @@ function renderItem(
 }
 
 describe("KnowledgeSpaceItem 收藏库操作门控", () => {
-    it("普通个人空间显示设置/删除，但不显示置顶", async () => {
+    it("普通个人空间不显示设置和置顶，但仍可删除", async () => {
         const user = userEvent.setup();
         const { container } = renderItem({ isFavorite: false });
         const trigger = container.querySelector("button");
         expect(trigger).not.toBeNull();
         await user.click(trigger as HTMLButtonElement);
-        expect(await screen.findByText("空间设置")).toBeInTheDocument();
+        expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
         expect(screen.queryByText("置顶空间")).not.toBeInTheDocument();
         expect(screen.queryByText("取消置顶")).not.toBeInTheDocument();
         expect(screen.getByText("删除空间")).toBeInTheDocument();
