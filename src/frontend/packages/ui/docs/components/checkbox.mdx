@@ -1,0 +1,130 @@
+---
+status: done
+component: Checkbox
+---
+
+# 复选框 Checkbox
+
+一组选项里**选多个**,或单独一个表示「勾选 / 同意」;结果**随表单提交才生效**——拨完立即生效的独立设置是开关的活。组件库 `@bisheng/ui` 导出 **`Checkbox`**(基础款)、**`CheckboxGroup`**(排布壳)与 **`CheckboxCard`**(卡片式)。规范全文见「文档 → 组件规范 → 复选框 Checkbox」。
+
+**壳把规范写死的部分**:方块 14 / 16 / 18 三档、圆角固定 4px、方块与文字间距 8px;未选灰描边 → 悬停加深 → 选中品牌色底 + 白勾(随蓝⇄绿主题);禁用 = 浅灰填充底 + 行文字变灰 + 「禁止」光标三信号;聚焦环只在键盘 Tab 时出现;触屏整行热区 ≥44px。这些没有 prop。
+
+## 基础用法
+
+`label` 就是热区的一部分——点字即点框。选项文案写名词或短语,不写疑问句。
+
+```tsx
+import { Checkbox, CheckboxGroup } from '@bisheng/ui';
+
+export default () => (
+  <CheckboxGroup direction="vertical">
+    <Checkbox label="接收邮件通知" defaultChecked />
+    <Checkbox label="接收短信通知" />
+  </CheckboxGroup>
+);
+```
+
+## 三档尺寸
+
+方块跟控件三档走(14 / 16 / 18,文字 14 / 14 / 16),与同档按钮、输入框同排天然对齐;medium 是默认。
+
+```tsx
+import { Checkbox, CheckboxGroup } from '@bisheng/ui';
+
+export default () => (
+  <CheckboxGroup direction="vertical">
+    <Checkbox size="small" label="small · 表格行内、紧凑列表" defaultChecked />
+    <Checkbox size="medium" label="medium · 默认,绝大多数表单" defaultChecked />
+    <Checkbox size="large" label="large · 登录页、大表单" defaultChecked />
+  </CheckboxGroup>
+);
+```
+
+## 复选框组与次要说明
+
+横排项间距 16px、竖排 8px;选项多或文案长就竖排,别让横排折行(窄屏下横排自动转竖排)。说明是一行次要文字,从文字位起排。
+
+```tsx
+import { Checkbox, CheckboxGroup } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <CheckboxGroup>
+      <Checkbox label="按天" />
+      <Checkbox label="按周" defaultChecked />
+      <Checkbox label="按月" />
+    </CheckboxGroup>
+    <CheckboxGroup direction="vertical">
+      <Checkbox label="站内信" description="登录后在消息中心查看" defaultChecked />
+      <Checkbox label="邮件" description="发送到账号绑定的邮箱" />
+    </CheckboxGroup>
+  </div>
+);
+```
+
+## 全选与半选
+
+半选**只给全选框用**:子项部分勾选时全选框显示半选。它只是样式(`aria-checked="mixed"`),点击行为仍是「全不选 → 全选」。
+
+```tsx
+import React from 'react';
+import { Checkbox, CheckboxGroup } from '@bisheng/ui';
+
+const OPTIONS = ['知识库 A', '知识库 B', '知识库 C'];
+
+export default () => {
+  const [selected, setSelected] = React.useState(['知识库 A']);
+  const all = selected.length === OPTIONS.length;
+  const some = selected.length > 0 && !all;
+  return (
+    <CheckboxGroup direction="vertical">
+      <Checkbox
+        label="全选"
+        checked={some ? 'indeterminate' : all}
+        onCheckedChange={() => setSelected(all ? [] : OPTIONS)}
+      />
+      {OPTIONS.map((name) => (
+        <Checkbox
+          key={name}
+          label={name}
+          checked={selected.includes(name)}
+          onCheckedChange={(next) =>
+            setSelected(next === true ? [...selected, name] : selected.filter((n) => n !== name))
+          }
+        />
+      ))}
+    </CheckboxGroup>
+  );
+};
+```
+
+## 卡片式
+
+选项带标题 + 描述、点击区域要大的场景(套餐 / 方案选择):基础款外面套一层卡壳,整卡可点。选中 = 控件品牌色 + 整卡统一选中浅底 + 淡品牌色描边(品牌 100 档)——只提到淡档不用主档,成组卡片挨排时边线不抢。
+
+```tsx
+import { CheckboxCard } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, maxWidth: 560 }}>
+    <CheckboxCard label="文档解析" description="PDF / Word / Excel 抽取" defaultChecked />
+    <CheckboxCard label="网页抓取" description="按 URL 定时抓取入库" />
+  </div>
+);
+```
+
+## 状态
+
+禁用靠三个信号一起说话:方块换浅灰填充底、文字变灰、光标变「禁止」——只把方块降不透明度不算禁用。要让人看得出禁用原因时配 Tooltip。组校验错误提示放组下方、用危险色,由调用方渲染(同输入框)。
+
+```tsx
+import { Checkbox, CheckboxGroup } from '@bisheng/ui';
+
+export default () => (
+  <CheckboxGroup direction="vertical">
+    <Checkbox label="禁用未选" disabled />
+    <Checkbox label="禁用已选" disabled defaultChecked />
+    <Checkbox label="正常已选,对比用" defaultChecked />
+  </CheckboxGroup>
+);
+```

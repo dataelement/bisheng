@@ -264,7 +264,7 @@ export default function KnowledgeSyncSection({
                     </span>
                 </div>
                 <Switch
-                    variant="tool"
+                    size="small"
                     checked={mainEnabled}
                     onCheckedChange={setMainEnabled}
                     className="shrink-0"
@@ -331,7 +331,7 @@ export default function KnowledgeSyncSection({
                                 className="shrink-0"
                             >
                                 <Switch
-                                    variant="tool"
+                                    size="small"
                                     checked={!noSubChannels && subModeActive}
                                     disabled={noSubChannels}
                                     onCheckedChange={setSubMode}
@@ -339,7 +339,7 @@ export default function KnowledgeSyncSection({
                             </TooltipAnchor>
                         ) : (
                             <Switch
-                                variant="tool"
+                                size="small"
                                 checked={!noSubChannels && subModeActive}
                                 disabled={noSubChannels}
                                 onCheckedChange={setSubMode}

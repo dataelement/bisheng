@@ -43,16 +43,32 @@ class KnowledgeRag:
             user_name=user_name,
         )
         rows = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
+        usable_ids = await cls.afilter_usable_knowledge_ids(login_user, [int(row.id) for row in rows])
+        return [row for row in rows if int(row.id) in usable_ids]
+
+    @classmethod
+    async def afilter_usable_knowledge_ids(
+        cls,
+        login_user,
+        knowledge_ids: Sequence[int],
+    ) -> set[int]:
+        """Which of ``knowledge_ids`` may ``login_user`` actually use?
+
+        The one rule behind 用户知识库权限校验 for ordinary knowledge bases, shared
+        by the workflow retrieval node and the assistant. The assistant had no
+        rule here at all: it built a retriever straight off each bound knowledge
+        id, so a user granted only the assistant still searched knowledge bases
+        they had no access to. An absent identity resolves to nothing usable.
+        """
+        normalized = [int(knowledge_id) for knowledge_id in knowledge_ids]
+        if not normalized or login_user is None:
+            return set()
         action_map = await KnowledgePermissionService.get_knowledge_action_map_async(
             login_user,
-            [int(row.id) for row in rows],
+            normalized,
             ["use"],
         )
-        return [
-            row
-            for row in rows
-            if "use" in action_map.get(int(row.id), set())
-        ]
+        return {knowledge_id for knowledge_id in normalized if "use" in action_map.get(knowledge_id, set())}
 
     @classmethod
     def _get_usable_knowledge(

@@ -1,17 +1,27 @@
 from collections.abc import Sequence
+from typing import Literal, get_args
 
 from sqlalchemy import case, func, or_, text, update
 from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge_file import (
+    PORTAL_USER_UPLOAD_FILE_SOURCES,
     FileSource,
     FileType,
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
-    PORTAL_USER_UPLOAD_FILE_SOURCES,
 )
+
+# F068: ``order_field_text`` lands in ``ORDER BY`` as raw SQL text. The space
+# children/search endpoints type their query params with these aliases (FastAPI
+# answers 422 for anything else) and the DAO re-checks below so no other caller
+# can smuggle an expression such as ``if(1=1,sleep(5),1)`` in.
+SpaceFileOrderField = Literal["file_type", "file_name", "file_size", "update_time", "create_time"]
+SpaceFileOrderSort = Literal["asc", "desc", "ASC", "DESC"]
+_ORDER_FIELDS = frozenset(get_args(SpaceFileOrderField))
+_ORDER_SORTS = frozenset(s.upper() for s in get_args(SpaceFileOrderSort))
 
 # F027 AD-14: file extension priority for "file_type" sort order.
 # Same 16-WHEN ranking used by `SpaceFileDao.order_field_text`'s SQL CASE.
@@ -209,8 +219,10 @@ class SpaceFileDao(KnowledgeFileDao):
 
         statement = select(KnowledgeFile).where(*filters)
 
-        # F027: cursor-based keyset takes precedence over OFFSET.
-        if cursor is not None and order_field == "file_type":
+        # F027: page=0 identifies the cursor scan, including its first page
+        # where no cursor key exists yet. Keep that first fetch bounded and use
+        # exactly the same stable order as subsequent keyset batches.
+        if page == 0 and order_field == "file_type":
             from bisheng.database.utils.keyset import build_keyset_where
 
             order_dir_asc = (order_sort or "asc").lower() == "asc"
@@ -228,7 +240,8 @@ class SpaceFileDao(KnowledgeFileDao):
                 True,
                 True,
             )
-            statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
+            if cursor is not None:
+                statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
             if page_size:
                 statement = statement.limit(page_size)
             statement = statement.order_by(text(f"{cls.order_field_text(order_field, order_sort)}, id desc"))
@@ -244,6 +257,8 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @staticmethod
     def order_field_text(order_field: str, order_sort: str) -> str:
+        if order_field not in _ORDER_FIELDS or (order_sort or "").upper() not in _ORDER_SORTS:
+            raise ValueError(f"unsupported order_field/order_sort: {order_field!r}/{order_sort!r}")
         order_sort = order_sort.upper()
         order_text = ""
 

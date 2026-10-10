@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { useGetOrgToolList } from "~/hooks/queries/data-provider";
+import { useGetOrgToolPages } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
 import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
@@ -117,9 +117,6 @@ export const ChatKnowledge = ({
   // search page
   const [orgKeyword, setOrgKeyword] = useState("");
   const debouncedOrgKeyword = useDebounce(orgKeyword, 500);
-  const [orgPage, setOrgPage] = useState(1);
-  const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
-  const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
   // --- Knowledge space data (load all groups at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
@@ -153,29 +150,22 @@ export const ChatKnowledge = ({
   }, [config]);
 
   // Org KB data fetching (paginated via react-query)
-  const { data: orgData, isFetching: orgFetching } = useGetOrgToolList({
-    page: orgPage,
+  const { data: orgData, isFetching: orgFetching, hasNextPage: hasMoreOrg, fetchNextPage } = useGetOrgToolPages({
     page_size: PAGE_SIZE,
     name: debouncedOrgKeyword,
     sort_by: 'name',
     preferred_ids: preferredIds,
+    action: 'visible',
   });
 
-  useEffect(() => {
-    setOrgPage(1);
-    setAllOrgKbs([]);
-  }, [debouncedOrgKeyword, preferredIds]);
-
-  useEffect(() => {
-    if (orgData) {
-      setAllOrgKbs((prev) => (orgPage === 1 ? [...orgData] : [...prev, ...orgData]));
-      setHasMoreOrg(orgData.length === PAGE_SIZE);
-    }
-  }, [orgData, orgPage]);
+  const allOrgKbs = useMemo(
+    () => orgData?.pages.flatMap((page) => page.data) ?? [],
+    [orgData?.pages],
+  );
 
   // Sort: admin-configured org KBs (in sort_order) first, then any other KBs
-  // the user can access. Filtering by use-permission is enforced server-side
-  // in useGetOrgToolList — we only reshuffle display order here.
+  // visible to the user. Visibility filtering is enforced server-side
+  // in useGetOrgToolPages — we only reshuffle display order here.
   const sortedOrgKbs = useMemo(() => {
     const configured = (config as any)?.orgKbs || [];
     if (!configured.length) return allOrgKbs;
@@ -507,8 +497,8 @@ export const ChatKnowledge = ({
                 selectedItems={selectedOrgKbs}
                 onToggle={(item) => handleToggle(item, 'org')}
                 isFetching={orgFetching}
-                hasMore={hasMoreOrg}
-                onLoadMore={() => setOrgPage((p) => p + 1)}
+                hasMore={!!hasMoreOrg}
+                onLoadMore={() => { void fetchNextPage(); }}
                 emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
               />
             </DropdownMenuSubContent>
@@ -566,8 +556,8 @@ export const ChatKnowledge = ({
               selectedItems={selectedOrgKbs}
               onToggle={(item) => handleToggle(item, 'org')}
               isFetching={orgFetching}
-              hasMore={hasMoreOrg}
-              onLoadMore={() => setOrgPage((p) => p + 1)}
+              hasMore={!!hasMoreOrg}
+              onLoadMore={() => { void fetchNextPage(); }}
               emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
             />
           </div>

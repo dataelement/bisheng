@@ -15,7 +15,10 @@ from starlette.concurrency import run_in_threadpool
 from bisheng.api.services.knowledge_imp import (
     KnowledgeUtils,
     delete_knowledge_file_vectors,
+    delete_minio_files,
+    delete_vector_files,
     process_file_task,
+    text_knowledge,
 )
 from bisheng.api.v1.schema.knowledge import KnowledgeFileResp
 from bisheng.api.v1.schemas import (
@@ -30,10 +33,12 @@ from bisheng.api.v1.schemas import (
 from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
+    KnowledgeFileFailedError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotQAError,
@@ -42,7 +47,9 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeTenantMismatchError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.schemas.api import PageInfiniteCursorData
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.core.cache.utils import async_file_download, file_download
@@ -83,7 +90,6 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
-from bisheng.common.services.metric_log import emit_metric
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.permission.application.access import (
     get_f048_resource_adapter,
@@ -93,8 +99,8 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.application.identity import resolve_permission_actor
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -443,6 +449,7 @@ class KnowledgeService(KnowledgeUtils):
         page_size: int = 10,
         action: str = "use",
         preferred_ids: list[int] | None = None,
+        has_abnormal: bool | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
         """List knowledge libraries with cursor-based pagination (F027).
 
@@ -492,9 +499,24 @@ class KnowledgeService(KnowledgeUtils):
         page_size = max(int(page_size or 1), 1)
         fetch_limit = page_size + 1
 
+        # F064: QA libraries do not carry parse-status files. A "only abnormal"
+        # filter on type=QA is defined as an empty page, not a file-table scan.
+        if has_abnormal and knowledge_type is not KnowledgeTypeEnum.NORMAL:
+            return PageInfiniteCursorData(
+                data=[],
+                page_size=page_size,
+                has_more=False,
+                next_cursor=None,
+            )
+
         # ---- 2. Decide strategy: admin bypass vs visible-first ----
         actor = await resolve_permission_actor(login_user)
         is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        if actor.data_scope != DATA_SCOPE_ALL:
+            # F066: a narrowed token must not take the admin bypass — the
+            # visible-first enumeration intersects with the holder-created set
+            # and the per-page action checks stay on.
+            is_admin = False
 
         visible_ids: list[int] | None
         fga_elapsed_ms = 0.0
@@ -546,7 +568,7 @@ class KnowledgeService(KnowledgeUtils):
         # bypass skips this because every action is granted.
         needs_action_check = (not is_admin) and action != "visible"
 
-        empty_visible_set = (visible_ids is not None and not visible_ids)
+        empty_visible_set = visible_ids is not None and not visible_ids
         if empty_visible_set:
             # No visible resources → short-circuit to empty page without hitting
             # the DB. Keyset cursor is also meaningless in this branch.
@@ -565,6 +587,7 @@ class KnowledgeService(KnowledgeUtils):
                     limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
                     preferred_ids=preferred_ids,
                     id_in=visible_ids,
+                    has_abnormal=has_abnormal,
                 )
                 if not batch:
                     break
@@ -574,9 +597,7 @@ class KnowledgeService(KnowledgeUtils):
                         [int(one.id) for one in batch],
                         [action],
                     )
-                    authorized.extend(
-                        one for one in batch if action in batch_action_map.get(int(one.id), set())
-                    )
+                    authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
                 else:
                     authorized.extend(batch)
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
@@ -594,6 +615,7 @@ class KnowledgeService(KnowledgeUtils):
                     preferred_ids=preferred_ids,
                     cursor=candidate_cursor,
                     id_in=visible_ids,
+                    has_abnormal=has_abnormal,
                 )
                 if not batch:
                     break
@@ -684,11 +706,7 @@ class KnowledgeService(KnowledgeUtils):
                 fga_elapsed_ms=fga_elapsed_ms,
                 total_elapsed_ms=(perf_counter() - total_start) * 1000,
                 returned_count=len(result_data),
-                alert=(
-                    "capacity_80_percent"
-                    if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8
-                    else None
-                ),
+                alert=("capacity_80_percent" if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8 else None),
             )
 
         logger.info(
@@ -730,6 +748,8 @@ class KnowledgeService(KnowledgeUtils):
                 [int(one.id) for one in knowledge_list],
                 _KNOWLEDGE_LIST_ACTIONS,
             )
+        document_ids = [int(one.id) for one in knowledge_list if one.type == KnowledgeTypeEnum.NORMAL.value]
+        abnormal_ids = await KnowledgeFileDao.async_exists_abnormal_files_batch(document_ids)
 
         def _row(one: Knowledge) -> KnowledgeRead:
             actions = sorted(action_map.get(int(one.id), set()))
@@ -739,6 +759,7 @@ class KnowledgeService(KnowledgeUtils):
                 user_name=db_user_dict.get(one.user_id, str(one.user_id)),
                 copiable=copiable,
                 actions=actions,
+                has_abnormal_files=int(one.id) in abnormal_ids,
             )
 
         return [_row(one) for one in knowledge_list]
@@ -864,6 +885,12 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
+        # The permission mirror is what makes the resource reachable, so it is
+        # built before any external store and the row is removed again if it
+        # cannot be built. See `_project_created_or_undo`.
+        if not skip_hook:
+            cls._project_created_or_undo_sync(login_user, db_knowledge)
+
         # qa knowledge builds its index lazily on first Q&A add (different schema)
         cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
 
@@ -871,6 +898,28 @@ class KnowledgeService(KnowledgeUtils):
         if not skip_hook:
             cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
+
+    @classmethod
+    def _project_created_or_undo_sync(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
+        """Build the permission mirror, or take the knowledge row back out.
+
+        The business row and the permission mirror are written to different
+        places and cannot share a transaction, so the row used to survive a
+        failed mirror. What that leaves behind is a knowledge base that exists
+        in the list and answers every permission question with "projection is
+        not current" — it cannot be opened, and it cannot be deleted either,
+        because deleting also asks the permission layer first.
+
+        A live tenant collected seven of these in one afternoon while the
+        permission runtime was refusing to start after an authorization-model
+        change. Creating them looked like it failed; the rows stayed.
+        """
+        try:
+            run_async_safe(cls._project_library_created(login_user, knowledge), timeout=60)
+        except Exception:
+            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
+            KnowledgeDao.delete_knowledge(int(knowledge.id))
+            raise
 
     @classmethod
     def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
@@ -914,6 +963,11 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
 
+        # Same ordering as the sync path: the mirror decides whether the row
+        # survives, so it runs before any external store is touched.
+        if not skip_hook:
+            await cls._aproject_created_or_undo(login_user, db_knowledge)
+
         if db_knowledge.type != KnowledgeTypeEnum.QA.value:
             try:
                 vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(
@@ -936,7 +990,6 @@ class KnowledgeService(KnowledgeUtils):
                 logger.exception("create knowledge index name error")
 
         if not skip_hook:
-            await cls._project_library_created(login_user, db_knowledge)
             await run_in_threadpool(
                 cls.audit_telemetry_service.audit_create_knowledge,
                 login_user,
@@ -951,12 +1004,21 @@ class KnowledgeService(KnowledgeUtils):
         return db_knowledge
 
     @classmethod
-    def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
-        run_async_safe(
-            cls._project_library_created(login_user, knowledge),
-            timeout=60,
-        )
+    async def _aproject_created_or_undo(cls, login_user: UserPayload, knowledge: Knowledge) -> None:
+        """Async twin of `_project_created_or_undo_sync`; same contract."""
 
+        try:
+            await cls._project_library_created(login_user, knowledge)
+        except Exception:
+            logger.exception("knowledge permission projection failed, undoing knowledge_id={}", knowledge.id)
+            await KnowledgeDao.async_delete_knowledge(int(knowledge.id))
+            raise
+
+    @classmethod
+    def create_knowledge_hook(cls, request: Request, login_user: UserPayload, knowledge: Knowledge):
+        # The permission mirror is no longer built here: it now runs right after
+        # the insert, so a failure can still take the row back out. What is left
+        # is the reporting, which must not decide whether the resource exists.
         cls.audit_telemetry_service.audit_create_knowledge(login_user, request, knowledge)
         cls.audit_telemetry_service.telemetry_new_knowledge(login_user, knowledge)
 
@@ -1425,6 +1487,53 @@ class KnowledgeService(KnowledgeUtils):
                     logger.warning(f"Failed to cleanup files after upload quota error: {cleanup_exc}")
             raise
         return knowledge, failed_files, process_files, preview_cache_keys
+
+    @classmethod
+    async def aingest_text_chunks(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        db_file: KnowledgeFile,
+        documents: list,
+    ) -> dict:
+        """Write caller-provided text chunks for a new file record (open API chunks_string).
+
+        On failure the file record is removed with its vectors, objects and
+        permission tuples, and a business error is raised: the caller must not see
+        a success response or keep a half-written file.
+        """
+        try:
+            return await run_in_threadpool(text_knowledge, knowledge, db_file, documents)
+        except Exception as exc:
+            logger.exception(f"text_chunks_ingest_failed knowledge_id={knowledge.id} file_id={db_file.id}")
+            await cls._adiscard_unfinished_file(login_user, knowledge, db_file)
+            if isinstance(exc, BaseErrorCode):
+                raise
+            raise KnowledgeFileFailedError(exception=exc) from exc
+
+    @classmethod
+    async def _adiscard_unfinished_file(cls, login_user: UserPayload, knowledge: Knowledge, db_file: KnowledgeFile):
+        """Remove a file whose synchronous ingestion failed. Each step is best effort."""
+        file_id = int(db_file.id)
+        try:
+            # A partial write can leave chunks in one store (e.g. Milvus succeeded, ES failed).
+            await run_in_threadpool(delete_vector_files, [file_id], knowledge)
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file vectors file_id={file_id}")
+        try:
+            await run_in_threadpool(delete_minio_files, db_file)
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file minio file_id={file_id}")
+        try:
+            # Needs the DB row, so it runs before the row is deleted.
+            await cls._project_file_ids_deletion(login_user, [file_id])
+        except Exception:
+            logger.opt(exception=True).warning(f"discard_unfinished_file permission file_id={file_id}")
+        try:
+            await KnowledgeFileDao.adelete_batch([file_id])
+        except Exception:
+            # Keep the ingestion error as the response; this failure is only logged.
+            logger.opt(exception=True).warning(f"discard_unfinished_file record file_id={file_id}")
 
     @classmethod
     def process_knowledge_file(
@@ -1909,18 +2018,24 @@ class KnowledgeService(KnowledgeUtils):
     ) -> tuple[PageInfiniteCursorData[KnowledgeFileResp], bool]:
         """Cursor-paginated knowledge-base file list (F030 AD-13, INV-6).
 
-        Pseudo-cursor over the existing offset query (mirrors F027 AD-15 name-sort):
-        cursor key = ``[page_num]``; fetch ``page_size + 1`` rows to probe
-        ``has_more``; **no total count** (INV-6: never scan all batches for total).
-        The underlying ``aget_file_by_filters`` offset path is unchanged.
+        Keyset cursor over ``id DESC``: cursor key = ``[last_id]`` of the
+        previous page; the next page reads rows with ``id < last_id``. Fetch
+        ``page_size + 1`` rows to probe ``has_more``; **no total count**
+        (INV-6: never scan all batches for total).
+
+        The former pseudo-cursor stored a page number and computed the offset
+        from ``page_size + 1``, so each page boundary skipped one row, and the
+        query had no ORDER BY. The context signature changed with the key
+        meaning, so an old page-number cursor fails with 10991 instead of
+        being read as an id.
         """
-        context = "filelib_file|kb"
+        context = "filelib_file|kb|id_desc"
         try:
             decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
         except CursorDecodeError as exc:
             raise KnowledgeInvalidCursorError(exception=exc)
-        page_num = decoded[0] if decoded else 1
-        if not isinstance(page_num, int) or page_num < 1:
+        after_id = decoded[0] if decoded else None
+        if after_id is not None and (isinstance(after_id, bool) or not isinstance(after_id, int) or after_id < 1):
             raise KnowledgeInvalidCursorError()
 
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
@@ -1948,21 +2063,21 @@ class KnowledgeService(KnowledgeUtils):
                 extra_file_ids = [int(one.resource_id) for one in extra_resources]
 
         # "fetch one extra" probe for has_more; no count query (INV-6).
-        res = await KnowledgeFileDao.aget_file_by_filters(
+        res = await KnowledgeFileDao.aget_file_by_filters_keyset(
             knowledge_id,
             file_name,
             status,
-            page=page_num,
-            page_size=page_size + 1,
             file_ids=file_ids,
             extra_file_ids=extra_file_ids,
+            after_id=after_id,
+            limit=page_size + 1,
         )
         has_more = len(res) > page_size
         if has_more:
             res = res[:page_size]
 
         finally_res = await cls._adecorate_knowledge_files(db_knowledge, res)
-        next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
+        next_cursor = encode_cursor((res[-1].id,), context=context) if has_more else None
 
         writeable = await cls.permission_service.check_action_async(
             login_user=login_user,

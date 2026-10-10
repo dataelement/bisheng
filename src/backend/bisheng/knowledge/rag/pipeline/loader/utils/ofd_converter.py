@@ -114,9 +114,51 @@ def _ensure_cjk_fonts_registered() -> None:
             logger.opt(exception=True).warning("failed to register CJK font {!r} from {}", name, font_path)
 
 
+class _TolerantAnnoTypes(dict):
+    """easyofd's annotation-type lookup table, made to fail soft.
+
+    ``AnnotationFileParser`` resolves an annotation's ``@Type`` through this
+    table and falls back to the *string* ``"unknown"`` for anything it does not
+    recognise::
+
+        "AnnoType": self.AnnoType.get(i.get("@Type"), "unknown")
+
+    but its drawing code then treats the result as a mapping::
+
+        if annotation.get("AnnoType").get("type") in ["Watermark", "Stamp"]:
+
+    so one unrecognised annotation raises ``AttributeError``. That escapes
+    ``draw_annotation`` into ``DrawPDF.__call__``, which catches it, throws away
+    the ENTIRE rendered document and emits a one-page placeholder whose only
+    content is the text "ofd 格式错误,不支持解析" — which is what the user ends up
+    previewing. The table only knows Watermark / Link / Path / Highlight / Stamp,
+    so any real-world type outside that list (e.g. Suwell's ``PreSeal`` seal)
+    loses the whole file.
+
+    Returning a correctly-shaped dict instead keeps the type name intact. It
+    won't match ["Watermark", "Stamp"], so the unknown annotation is skipped —
+    the document still renders, minus that one overlay.
+    """
+
+    # ``default`` is accepted for signature compatibility and deliberately
+    # ignored: the one caller passes the bare string "unknown", which is exactly
+    # the value that breaks the drawing code.
+    def get(self, key, default=None):
+        known = super().get(key)
+        if known is not None:
+            return known
+        name = str(key) if key else "unknown"
+        return {"name": name, "type": name}
+
+
 def _ensure_easyofd_patched() -> None:
-    """Patch easyofd's FileRead once so it writes scratch files into the
-    thread-local ``_ofd_workdir.path`` instead of ``os.getcwd()``."""
+    """Apply the easyofd patches once.
+
+    1. ``FileRead`` writes scratch files into the thread-local
+       ``_ofd_workdir.path`` instead of ``os.getcwd()``.
+    2. ``AnnotationFileParser.AnnoType`` fails soft on unknown annotation types
+       (see ``_TolerantAnnoTypes``).
+    """
     global _patched
     if _patched:
         return
@@ -136,6 +178,12 @@ def _ensure_easyofd_patched() -> None:
                 self.zip_path = os.path.join(workdir, self.name)
 
         file_deal.FileRead.__init__ = _init
+
+        from easyofd.parser_ofd import file_annotation_parser
+
+        parser_cls = file_annotation_parser.AnnotationFileParser
+        parser_cls.AnnoType = _TolerantAnnoTypes(parser_cls.AnnoType)
+
         _patched = True
 
 

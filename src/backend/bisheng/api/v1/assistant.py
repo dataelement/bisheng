@@ -87,7 +87,7 @@ async def delete_assistant(
 @router.post("")
 @require_quota(QuotaResourceType.ASSISTANT)
 async def create_assistant(
-    *, request: Request, req: AssistantCreateReq, login_user: UserPayload = Depends(UserPayload.get_login_user)
+    *, request: Request, req: AssistantCreateReq, login_user: UserPayload = Depends(UserPayload.get_app_creator_user)
 ):
     # get login user
     req_data = req.model_dump()

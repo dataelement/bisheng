@@ -1,13 +1,16 @@
 // F035: import a skill from a local file (.md or .zip/.skill bundle, archive root
 // must contain SKILL.md) or from a public GitHub directory URL. The size check here
-// covers the uploaded bytes only (<= 10MB); the backend separately caps the unpacked
-// contents at 100MB and reports that as its own error code — do not merge the two.
+// covers the uploaded bytes only; the cap comes from 系统配置
+// (linsight.skill_upload_max_size_mb) via /skill/upload-limit, so the copy and the
+// server agree on the number. The backend separately caps the unpacked contents
+// (linsight.skill_unpacked_max_size_mb, reported by the same endpoint) and reports that
+// as its own error code — do not merge the two.
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import { skillApi } from "@/controllers/API/linsight";
+import { skillApi, type SkillUploadLimit } from "@/controllers/API/linsight";
 import { Check, FileArchive, FileText, FileUp, Loader2, X } from "lucide-react";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
@@ -15,7 +18,13 @@ import { useTranslation } from "react-i18next";
 import { getSkillErrorMessage } from "./skillErrors";
 
 const ACCEPTED_SUFFIXES = ['.md', '.zip', '.skill'];
-const MAX_BUNDLE_SIZE = 10 * 1024 * 1024;
+// Fallback only — mirrors the backend default; the live value is fetched when the dialog opens.
+const DEFAULT_UPLOAD_LIMIT: SkillUploadLimit = {
+    max_size_bytes: 200 * 1024 * 1024,
+    max_size_mb: 200,
+    max_unpacked_bytes: 500 * 1024 * 1024,
+    max_unpacked_mb: 500,
+};
 const GITHUB_URL_PREFIX = 'https://github.com/';
 
 // Human-readable size so a 10MB bundle doesn't render as an unwieldy "10240.0 KB".
@@ -45,12 +54,17 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
     const [uploading, setUploading] = useState(false);
     const [githubUrl, setGithubUrl] = useState('');
     const [importing, setImporting] = useState(false);
+    const [limit, setLimit] = useState<SkillUploadLimit>(DEFAULT_UPLOAD_LIMIT);
 
     useEffect(() => {
         if (open) {
             setMode('file');
             setFile(null);
             setGithubUrl('');
+            // Refresh the cap on every open: an admin may have just raised it in 系统配置.
+            skillApi.getUploadLimit()
+                .then((res) => { if (res && typeof res.max_size_bytes === 'number') setLimit(res); })
+                .catch(() => { /* keep the fallback; the server still enforces its own cap */ });
         }
     }, [open]);
 
@@ -62,12 +76,12 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             toast({ variant: 'error', description: t('skillManage.uploadDialog.unsupported') });
             return;
         }
-        if (picked.size > MAX_BUNDLE_SIZE) {
-            toast({ variant: 'error', description: t('skillManage.errors.tooLarge') });
+        if (picked.size > limit.max_size_bytes) {
+            toast({ variant: 'error', description: t('skillManage.errors.tooLarge', { size: limit.max_size_mb }) });
             return;
         }
         setFile(picked);
-    }, [t]);
+    }, [t, limit]);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop: handleDrop, multiple: false });
 
@@ -98,7 +112,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            toast({ variant: 'error', description: getSkillErrorMessage(err, t) });
+            toast({ variant: 'error', description: getSkillErrorMessage(err, t, limit) });
         } finally {
             setUploading(false);
         }
@@ -116,7 +130,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
             onOpenChange(false);
             onUploaded();
         } catch (err) {
-            toast({ variant: 'error', description: getSkillErrorMessage(err, t) });
+            toast({ variant: 'error', description: getSkillErrorMessage(err, t, limit) });
         } finally {
             setImporting(false);
         }
@@ -189,7 +203,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                             <ul className="list-disc pl-4 space-y-0.5">
                                 <li>{t('skillManage.uploadDialog.reqMd')}</li>
                                 <li>{t('skillManage.uploadDialog.reqZip')}</li>
-                                <li>{t('skillManage.uploadDialog.reqSize')}</li>
+                                <li>{t('skillManage.uploadDialog.reqSize', { size: limit.max_size_mb, unpacked: limit.max_unpacked_mb })}</li>
                             </ul>
                         </div>
                     </TabsContent>
@@ -209,7 +223,7 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                             <ul className="list-disc pl-4 space-y-0.5">
                                 <li>{t('skillManage.uploadDialog.githubReqHost')}</li>
                                 <li>{t('skillManage.uploadDialog.githubReqDir')}</li>
-                                <li>{t('skillManage.uploadDialog.reqSize')}</li>
+                                <li>{t('skillManage.uploadDialog.reqSize', { size: limit.max_size_mb, unpacked: limit.max_unpacked_mb })}</li>
                             </ul>
                         </div>
                     </TabsContent>

@@ -398,7 +398,18 @@
 }
 
 .bs-mkdown :where(table):not(:where([class~="not-prose"], [class~="not-prose"] *)) {
-    width: 100%;
+    /* A table wider than the message must never be silently cut off. Making the table itself the
+       horizontal scroll container works regardless of what any ancestor does with overflow (the
+       chat bubble sets overflow-hidden), and covers every surface that renders `.bs-mkdown`.
+       - display:block turns the bordered frame into the scroll viewport; the grid is re-wrapped
+         in an anonymous table box inside it.
+       - fit-content, not 100%: with a block box a 100% width would leave the frame wider than the
+         grid it draws around. fit-content keeps frame and grid aligned at every width.
+       - max-width caps it to the message width, so the page itself never shifts sideways. */
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
     table-layout: auto;
     text-align: left;
     margin-top: 2em;
@@ -424,6 +435,9 @@
     color: var(--tw-prose-headings);
     font-weight: 600;
     vertical-align: bottom;
+    /* Kept: header text stays on one line so columns keep a readable width. Letting headers wrap
+       instead was measured on a 9-column table and squeezed it to ~59px per column — everything
+       "visible" but unreadable. A too-wide table scrolls (see the table rule) rather than squeeze. */
     white-space: nowrap;
     background-color: rgb(var(--fill-3));
     padding-top: 0.5714286em;

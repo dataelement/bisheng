@@ -3,7 +3,9 @@ import os
 import tempfile
 import uuid
 from abc import ABC, abstractmethod
-from typing import Optional, Union, BinaryIO, Sequence
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import BinaryIO, Union
 
 import aiofiles
 from langchain_core.callbacks import Callbacks
@@ -15,11 +17,7 @@ class BaseASRClient(ABC):
     """ASR (Automatic Speech Recognition) Base Interface Class"""
 
     async def transcribe(
-            self,
-            audio: Union[str, bytes, BinaryIO],
-            language: Optional[str] = None,
-            model: Optional[str] = None,
-            **kwargs
+        self, audio: Union[str, bytes, BinaryIO], language: str | None = None, model: str | None = None, **kwargs
     ) -> str:
         """
         Convert Audio to Text
@@ -36,34 +34,33 @@ class BaseASRClient(ABC):
             raise ValueError("Audio input is required")
 
         if isinstance(audio, str):
-            with open(audio, 'rb') as audio_file:
+            with open(audio, "rb") as audio_file:
                 audio_bytes = audio_file.read()
         elif isinstance(audio, bytes):
             audio_bytes = audio
-        elif hasattr(audio, 'read'):
+        elif hasattr(audio, "read"):
             audio_bytes = audio.read()
         else:
             raise ValueError("Invalid audio input type")
         tmp_dir = tempfile.gettempdir()
 
-        tmp_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '.wav')
+        tmp_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + ".wav")
         # ffmpeg Convert To16kSampling Rate MonowavDoc.
-        converted_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + '_16k_mono.wav')
+        converted_file_path = os.path.join(tmp_dir, uuid.uuid4().hex + "_16k_mono.wav")
 
         try:
-            async with aiofiles.open(tmp_file_path, 'wb') as f:
+            async with aiofiles.open(tmp_file_path, "wb") as f:
                 await f.write(audio_bytes)
 
             command = f'ffmpeg -y -i "{tmp_file_path}" -ar 16000 -ac 1 "{converted_file_path}"'
             process = await asyncio.create_subprocess_shell(
-                command,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
 
             await process.communicate()
 
-            return await self._transcribe(converted_file_path, language=language, model=model, **kwargs)
+            result = await self.transcribe_file(converted_file_path, language=language, model=model)
+            return result.text
         finally:
             if os.path.exists(tmp_file_path):
                 os.remove(tmp_file_path)
@@ -71,20 +68,55 @@ class BaseASRClient(ABC):
                 os.remove(converted_file_path)
 
     @abstractmethod
-    async def _transcribe(self, audio: str, language: Optional[str] = None, model: Optional[str] = None,
-                          **kwargs) -> str:
+    async def transcribe_file(
+        self,
+        wav_path: str,
+        language: str | None = None,
+        model: str | None = None,
+    ) -> "ASRTranscript":
         """
-        Internal Method: Convert Audio to Text
+        Transcribe a local 16k mono wav file.
+
+        The single provider entry point shared by workbench voice input (reads
+        ``text``) and knowledge media transcription (reads ``segments``).
 
         Args:
-            audio: Audio File Host, Files are automatically deleted when processing is complete
-            language: Language code, e.g. 'zh', 'en'
-            model: Used Model Name
-
-        Returns:
-            Transcribed text content
+            wav_path: 16k mono wav file; the caller owns and deletes it
+            language: Language code, e.g. 'zh', 'en'; None lets the provider detect
+            model: Overrides the model name bound to the client
         """
         raise NotImplementedError
+
+    async def aclose(self) -> None:
+        """Release network resources held by the client."""
+
+
+@dataclass
+class ASRSegment:
+    text: str
+    # Milliseconds when the provider reports timing; None otherwise.
+    begin_ms: float | None = None
+    end_ms: float | None = None
+
+
+@dataclass
+class ASRTranscript:
+    text: str
+    # Empty when the provider only returns plain text.
+    segments: list[ASRSegment] = field(default_factory=list)
+
+
+def join_sentence_texts(texts: Sequence[str]) -> str:
+    """Join recognized sentences, inserting a space only between Latin-script words."""
+    joined = ""
+    for text in texts:
+        text = text.strip()
+        if not text:
+            continue
+        if joined and joined[-1].isascii() and not joined[-1].isspace() and text[0].isascii() and text[0].isalnum():
+            joined += " "
+        joined += text
+    return joined
 
 
 class BaseTTSClient(ABC):
@@ -92,11 +124,7 @@ class BaseTTSClient(ABC):
 
     @abstractmethod
     async def synthesize(
-            self,
-            text: str,
-            voice: Optional[str] = None,
-            language: Optional[str] = None,
-            format: str = "mp3"
+        self, text: str, voice: str | None = None, language: str | None = None, format: str = "mp3"
     ) -> bytes:
         """
         Synthesize text into speech
@@ -115,14 +143,15 @@ class BaseTTSClient(ABC):
 
 class BaseRerank(BaseDocumentCompressor):
     """Rerank base interface class"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @abstractmethod
     def compress_documents(
-            self,
-            documents: Sequence[Document],
-            query: str,
-            callbacks: Optional[Callbacks] = None,
+        self,
+        documents: Sequence[Document],
+        query: str,
+        callbacks: Callbacks | None = None,
     ) -> Sequence[Document]:
         """Compress retrieved documents given the query context.
 

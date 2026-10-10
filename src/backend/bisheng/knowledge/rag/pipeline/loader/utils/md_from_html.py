@@ -112,6 +112,24 @@ class HTML2MarkdownConverter:
         logger.debug("HTML cleaning (refined logic) finished.")
         return str(soup)
 
+    def _is_local_media_allowed(self, candidate: Path) -> bool:
+        """Only files under the source HTML's own directory may be copied in.
+
+        The HTML is user-supplied and ``base_url`` is that directory as a
+        ``file://`` URI, so both ``<img src="file:///etc/passwd">`` and a
+        relative ``../../etc/passwd`` resolve to a local path here. Anything
+        outside the extraction directory is an arbitrary-file read (NVDB F068).
+        Symlinks are resolved before the containment check.
+        """
+        source = getattr(self, "source_html_filepath", None)
+        if not source:
+            return False
+        try:
+            root = Path(source).resolve().parent
+            return candidate.resolve().is_relative_to(root)
+        except OSError:
+            return False
+
     def _download_media_file(
             self,
             media_url,
@@ -222,6 +240,13 @@ class HTML2MarkdownConverter:
                         local_file_path_str = local_file_path_str[1:]
 
                 local_file_to_copy = Path(local_file_path_str)
+
+                if not self._is_local_media_allowed(local_file_to_copy):
+                    logger.warning(
+                        f"Refusing local media '{local_file_to_copy}' referenced by '{actual_media_url_str}': "
+                        "outside the source HTML directory"
+                    )
+                    return None, media_url
 
                 if local_file_to_copy.exists() and local_file_to_copy.is_file():
                     if not ext:

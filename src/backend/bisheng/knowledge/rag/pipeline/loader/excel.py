@@ -93,58 +93,52 @@ class ExcelLoader(BaseBishengLoader):
         metadata["page"] = 0
         return Document(page_content=content, metadata=metadata)
 
-    def _emit_image_documents(self, images: list[ExcelImage], start_chunk_index: int) -> list[Document]:
-        """Stage embedded pictures and turn them into their own markdown chunks.
+    def _read_table_chunk(self, md_dir: str, file_name: str) -> str:
+        with open(os.path.join(md_dir, file_name), encoding="utf-8") as f:
+            content = f.read()
+        # Defensive: the char budget in the renderer should have prevented this. If
+        # it ever fires, the budget math has drifted from the renderer.
+        if len(content) > self.max_chunk_limit:
+            raise KnowledgeExcelChunkMaxError()
+        return content
+
+    def _image_chunks(self, sheet_name: str, images: list[ExcelImage]) -> list[str]:
+        """Stage one sheet's pictures and return the markdown block(s) that reference them.
 
         Pictures live outside the cell grid and cannot be folded into the table
-        markdown: a sheet holding nothing but a drawing (report exporters do
-        this) produces no markdown at all, and the renderer's sheet numbering
-        skips empty sheets, so there is no chunk to attach them to. Each sheet's
-        pictures therefore become their own chunk, captioned with the sheet name
-        so the segment still carries some retrievable context.
+        markdown: a sheet holding nothing but a drawing (report exporters do this)
+        produces no table markdown at all. Each sheet's pictures therefore become
+        their own chunk, captioned with the sheet name so the segment still carries
+        some retrievable context.
 
-        Only the bytes are staged on local disk here; ImageUploadTransformer
-        performs the MinIO upload, per the image contract in BaseBishengLoader.
+        Only the bytes are staged on local disk here; ImageUploadTransformer performs
+        the MinIO upload, per the image contract in BaseBishengLoader.
         """
-        if not images:
-            return []
-
         image_dir = self.ensure_local_image_dir()
-        by_sheet: dict[str, list[ExcelImage]] = {}
+        heading = f"## {sheet_name}"
+        refs: list[str] = []
         for image in images:
-            by_sheet.setdefault(image.sheet_name, []).append(image)
+            filename = _safe_media_name(image.media_name)
+            # The same media part may be anchored on several sheets; stage once.
+            staged_path = os.path.join(image_dir, filename)
+            if not os.path.exists(staged_path):
+                with open(staged_path, "wb") as f:
+                    f.write(image.content)
+            refs.append(f"![{filename}]({self.build_image_url(filename)})")
 
-        staged: set[str] = set()
-        documents: list[Document] = []
-        chunk_index = start_chunk_index
-
-        for sheet_name, sheet_images in by_sheet.items():
-            heading = f"## {sheet_name}"
-            refs: list[str] = []
-            for image in sheet_images:
-                filename = _safe_media_name(image.media_name)
-                # The same media part may be anchored on several sheets; stage once.
-                if filename not in staged:
-                    with open(os.path.join(image_dir, filename), "wb") as f:
-                        f.write(image.content)
-                    staged.add(filename)
-                refs.append(f"![{filename}]({self.build_image_url(filename)})")
-
-            block = heading
-            for ref in refs:
-                candidate = f"{block}\n\n{ref}"
-                # Keep the heading on every chunk when a sheet has enough pictures
-                # to overflow one segment.
-                if len(candidate) > self.max_chunk_limit and block != heading:
-                    documents.append(self._build_document(block, chunk_index))
-                    chunk_index += 1
-                    block = f"{heading}\n\n{ref}"
-                else:
-                    block = candidate
-            documents.append(self._build_document(block, chunk_index))
-            chunk_index += 1
-
-        return documents
+        chunks: list[str] = []
+        block = heading
+        for ref in refs:
+            candidate = f"{block}\n\n{ref}"
+            # Keep the heading on every chunk when a sheet has enough pictures to
+            # overflow one segment.
+            if len(candidate) > self.max_chunk_limit and block != heading:
+                chunks.append(block)
+                block = f"{heading}\n\n{ref}"
+            else:
+                block = candidate
+        chunks.append(block)
+        return chunks
 
     def load(self) -> list[Document]:
         if os.path.exists(self.file_path):
@@ -153,7 +147,7 @@ class ExcelLoader(BaseBishengLoader):
         md_file_path = os.path.join(self.tmp_dir, "chunk_md")
 
         try:
-            convert_file_to_markdown(
+            sheet_order = convert_file_to_markdown(
                 input_file_path=self.file_path,
                 num_header_rows=self.header_rows,
                 rows_per_markdown=self.data_rows,
@@ -168,20 +162,36 @@ class ExcelLoader(BaseBishengLoader):
 
         files = sorted([f for f in os.listdir(md_file_path) if f.endswith(".md")])
 
-        # A file corresponds to only one complete Document Objects, texts It is only after cuttingchunkContents
-        documents = []
-
-        for chunk_index, file_name in enumerate(files):
-            full_file_name = f"{md_file_path}/{file_name}"
-            with open(full_file_name, encoding="utf-8") as f:
-                content = f.read()
-                # Defensive: the char budget above should have prevented this. If it
-                # ever fires, the budget math has drifted from the renderer.
-                if len(content) > self.max_chunk_limit:
-                    raise KnowledgeExcelChunkMaxError()
-                documents.append(self._build_document(content, chunk_index))
-
+        images_by_sheet: dict[str, list[ExcelImage]] = {}
         if self.file_extension.lower().lstrip(".") in IMAGE_CAPABLE_EXTENSIONS:
-            documents.extend(self._emit_image_documents(extract_excel_images(self.file_path), len(documents)))
+            for image in extract_excel_images(self.file_path):
+                images_by_sheet.setdefault(image.sheet_name, []).append(image)
 
-        return documents
+        # Chunks follow the workbook: sheet by sheet, each sheet's table chunks first
+        # and its pictures right after. A picture-only sheet has no table chunks and
+        # still yields its picture chunk in its own place, so a report whose first
+        # sheet is a screenshot and whose second sheet is the data comes out as
+        # [picture, table], not [table, picture].
+        contents: list[str] = []
+        consumed: set[str] = set()
+        for sheet_name, sheet_prefix in sheet_order or []:
+            if sheet_prefix is not None:
+                # Must track the renderer's file naming: "{sheet:03d}_{chunk:06d}.md".
+                prefix = f"{sheet_prefix:03d}_"
+                for file_name in files:
+                    if file_name.startswith(prefix) and file_name not in consumed:
+                        contents.append(self._read_table_chunk(md_file_path, file_name))
+                        consumed.add(file_name)
+            sheet_images = images_by_sheet.pop(sheet_name, None)
+            if sheet_images:
+                contents.extend(self._image_chunks(sheet_name, sheet_images))
+
+        # Anything the sheet map did not account for (csv has no sheets; a picture on
+        # a sheet the converter never saw) keeps the old file order at the end.
+        for file_name in files:
+            if file_name not in consumed:
+                contents.append(self._read_table_chunk(md_file_path, file_name))
+        for sheet_name, sheet_images in images_by_sheet.items():
+            contents.extend(self._image_chunks(sheet_name, sheet_images))
+
+        return [self._build_document(content, index) for index, content in enumerate(contents)]

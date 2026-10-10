@@ -36,6 +36,7 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from bisheng.citation.domain.services.citation_export_service import bake_citations_for_export
 from bisheng.utils import util
 
 
@@ -89,6 +90,10 @@ class _ExportToolBase(BaseTool):
     # instance without arbitrary_types_allowed; deliberately NOT in args_schema,
     # so the LLM never sees or fills it.
     backend: Any = None
+    # F069 P2: the exporter identity (task owner) used to permission-filter the
+    # sources baked into the deliverable's references section. None -> anonymous
+    # (only public web sources survive). Not in args_schema either.
+    export_user: Any = None
     args_schema: type[BaseModel] = _ExportInput
 
     def _run(self, *args, **kwargs) -> str:
@@ -128,6 +133,10 @@ class ExportDocxTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
+            # F069 P2: hidden citation spans become visible [n] plus a references
+            # section, filtered by the exporter's permissions; anything that cannot
+            # be resolved is stripped as before (no marker / id / [S99] leaks).
+            md = await bake_citations_for_export(md, self.export_user)
             docx_bytes = await util.sync_func_to_async(_md_to_docx_bytes)(md)
         except Exception as e:
             logger.exception("export_docx convert failed")
@@ -151,6 +160,8 @@ class ExportPdfTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
+            # Same as export_docx: bake resolvable citations, strip the rest.
+            md = await bake_citations_for_export(md, self.export_user)
             pdf_bytes = await util.sync_func_to_async(_md_to_pdf_bytes_via_libreoffice)(md)
         except Exception as e:
             logger.exception("export_pdf convert failed")
@@ -159,8 +170,9 @@ class ExportPdfTool(_ExportToolBase):
         return f"已生成 PDF 文档: {path}"
 
 
-def init_linsight_export_tools(backend) -> list[BaseTool]:
-    """Closure-inject the session WorkspaceBackend into the export tools.
+def init_linsight_export_tools(backend, export_user: Any = None) -> list[BaseTool]:
+    """Closure-inject the session WorkspaceBackend (and the exporter identity)
+    into the export tools.
 
     Returns ``[]`` when no writable backend is supplied (e.g. the test-only
     FakeWorkspaceBackend has no ``awrite``), so the tools never surface to the
@@ -168,4 +180,7 @@ def init_linsight_export_tools(backend) -> list[BaseTool]:
     """
     if backend is None or not hasattr(backend, "awrite"):
         return []
-    return [ExportDocxTool(backend=backend), ExportPdfTool(backend=backend)]
+    return [
+        ExportDocxTool(backend=backend, export_user=export_user),
+        ExportPdfTool(backend=backend, export_user=export_user),
+    ]

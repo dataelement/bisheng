@@ -1,8 +1,8 @@
 import json
-from abc import abstractmethod, ABC
-from typing import Dict, Callable
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 
-from fastapi import WebSocket, Request
+from fastapi import Request, WebSocket
 from loguru import logger
 
 from bisheng.api.v1.schemas import ChatMessage, ChatResponse
@@ -43,7 +43,7 @@ class BaseClient(ABC):
             return
         await self.websocket.send_json(message.model_dump())
 
-    async def handle_message(self, message: Dict[any, any]):
+    async def handle_message(self, message: dict[any, any]):
         """ Handling messages from clients, Submit to Thread Pool for Execution """
         trace_id = trace_id_var.get()
         logger.info(f'client_id={self.client_key} trace_id={trace_id} message={message}')
@@ -59,7 +59,7 @@ class BaseClient(ABC):
                            trace_id=trace_id)
 
     @abstractmethod
-    async def _handle_message(self, message: Dict[any, any]):
+    async def _handle_message(self, message: dict[any, any]):
         raise Exception('handle_message must be implemented')
 
     async def wrapper_task(self, task_id: str, fn: Callable, *args, **kwargs):
@@ -69,7 +69,7 @@ class BaseClient(ABC):
         try:
             # Execute Handling Functions
             await fn(*args, **kwargs)
-        except Exception as e:
+        except Exception:
             logger.exception("handle message error")
         finally:
             # When the execution is complete, the task will beidRemove from list
@@ -118,7 +118,7 @@ class BaseClient(ABC):
             citation_registry_items=citation_registry_items or citations,
         ))
 
-    async def stop_handle_message(self, message: Dict[any, any]):
+    async def stop_handle_message(self, message: dict[any, any]):
         # Abort message processing logic
         logger.info(f'need stop agent, client_key: {self.client_key}, task_ids: {self.task_ids}')
 

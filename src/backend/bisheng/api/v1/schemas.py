@@ -23,7 +23,16 @@ class CaptchaInput(BaseModel):
 
 class ChunkInput(BaseModel):
     knowledge_id: int
-    documents: list[Document]
+    documents: list[Document] = Field(..., min_length=1)
+
+    @field_validator("documents")
+    @classmethod
+    def first_document_names_the_file(cls, documents: list[Document]) -> list[Document]:
+        # documents[0].metadata.source becomes the stored file name.
+        source = (documents[0].metadata or {}).get("source")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("documents[0].metadata.source is required and must be a non-empty file name")
+        return documents
 
 
 class BuildStatus(Enum):
@@ -228,6 +237,9 @@ class UploadFileResponse(BaseModel):
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
     repeat_update_time: datetime | None = None  # Returns the update time of a duplicate file if it is a duplicate
+    # Poster frame for a video upload, so the chat bubble that shows the
+    # attachment has a thumbnail instead of a bare extension card.
+    cover_filepath: str | None = None
 
 
 class StreamData(BaseModel):

@@ -4,23 +4,26 @@
  * Width: 100% — the parent controls sizing.
  * AI assistant and split-pane logic live in the parent (FilePreviewPage).
  */
-import * as pdfjsLib from "pdfjs-dist";
-import { useCallback, useEffect, useState } from "react";
+import type * as pdfjsLib from "pdfjs-dist";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { getViewerType, supportsPagination, supportsSidebar, supportsZoom } from "./viewers";
 import { MediaPlayer } from "./MediaPlayer";
 import { MediaTranscriptTabs } from "./RichKnowledgePreview";
 import { cn } from "~/utils";
-import { DocxViewer } from "./viewers/DocxViewer";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { ImageViewer } from "./viewers/ImageViewer";
 import { MarkdownViewer } from "./viewers/MarkdownViewer";
 import { PdfViewer } from "./viewers/PdfViewer";
 import { TextViewer } from "./viewers/TextViewer";
-import { XlsxViewer } from "./viewers/XlsxViewer";
 import { useLocalize } from "~/hooks";
 import type { CitationPdfBBox } from "~/components/Chat/Messages/Content/citationUtils";
+
+// pdfjs / mammoth / xlsx weigh ~2 MB together. FilePreview is reachable from the chat
+// page (Linsight workspace panel), so load them only when a file of that type is opened.
+const DocxViewer = lazy(() => import("./viewers/DocxViewer").then((m) => ({ default: m.DocxViewer })));
+const XlsxViewer = lazy(() => import("./viewers/XlsxViewer").then((m) => ({ default: m.XlsxViewer })));
 
 export interface FilePreviewProps {
     /** File display name (with extension) */
@@ -100,26 +103,33 @@ export default function FilePreview({
     useEffect(() => {
         if (viewerType !== "pdf" || !fileUrl) return;
 
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-            __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
-
-        pdfjsLib
-            .getDocument({
-                url: fileUrl,
-                // CMaps are required for CID-keyed PDFs with non-embedded CJK
-                // fonts (e.g. GBK-EUC-H government docs) — without them the
-                // text layer renders blank. Shipped to /cmaps/ by viteStaticCopy.
-                cMapUrl: __APP_ENV__.BASE_URL + "/cmaps/",
-                cMapPacked: true,
+        let cancelled = false;
+        import("pdfjs-dist")
+            .then((pdfjs) => {
+                pdfjs.GlobalWorkerOptions.workerSrc =
+                    __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
+                return pdfjs.getDocument({
+                    url: fileUrl,
+                    // CMaps are required for CID-keyed PDFs with non-embedded CJK
+                    // fonts (e.g. GBK-EUC-H government docs) — without them the
+                    // text layer renders blank. Shipped to /cmaps/ by viteStaticCopy.
+                    cMapUrl: __APP_ENV__.BASE_URL + "/cmaps/",
+                    cMapPacked: true,
+                }).promise;
             })
-            .promise.then((doc) => {
+            .then((doc) => {
+                if (cancelled) return;
                 setPdfDoc(doc);
                 setTotalPages(doc.numPages);
             })
             .catch((e) => {
+                if (cancelled) return;
                 console.error("Failed to load PDF:", e);
                 setError(localize("com_knowledge.load_pdf_failed"));
             });
+        return () => {
+            cancelled = true;
+        };
     }, [fileUrl, viewerType]);
 
     // Update document title
@@ -312,7 +322,7 @@ export default function FilePreview({
                         onPageClick={handleSidebarPageClick}
                     />
                 )}
-                {renderViewer()}
+                <Suspense fallback={null}>{renderViewer()}</Suspense>
             </div>
         </div>
     );

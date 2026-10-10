@@ -63,6 +63,21 @@ def test_write_caches_and_writes_through(fake_minio, file_dir):
     assert cached.read_bytes() == b"hello world"
 
 
+def test_write_markdown_unescapes_citation_markers(fake_minio, file_dir):
+    """write_file JSON often stores \\ue200; preview only clicks real U+E200."""
+    be = make_backend("sv1", fake_minio, file_dir)
+    be.write("/output/report.md", "结论。\\ue200knowledgesearch_aaa:1\\ue202")
+
+    key = f"{WORKSPACE_PREFIX}/sv1/output/report.md"
+    stored = fake_minio.store[(fake_minio.bucket, key)]
+    assert "\ue200knowledgesearch_aaa:1\ue202".encode() in stored
+    assert b"\\ue200" not in stored
+
+    be.write("/scratch/notes.txt", "结论。\\ue200knowledgesearch_aaa:1\\ue202")
+    txt_key = f"{WORKSPACE_PREFIX}/sv1/scratch/notes.txt"
+    assert fake_minio.store[(fake_minio.bucket, txt_key)] == "结论。\\ue200knowledgesearch_aaa:1\\ue202".encode()
+
+
 # ---------------------------------------------------------------------------
 # 1b. binary writes: memoryview / bytearray must land as real bytes
 # ---------------------------------------------------------------------------

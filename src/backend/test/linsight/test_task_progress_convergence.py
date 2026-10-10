@@ -27,6 +27,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import (
     ExecuteTaskTypeEnum,
     LinsightExecuteTask,
 )
+from bisheng.linsight.domain.services.state_message_manager import MessageEventType
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 from bisheng_langchain.linsight.event import GenerateSubTask, TaskEnd, TaskStart
@@ -207,7 +208,10 @@ def _sweepable_task() -> LinsightWorkflowTask:
             _row("never", ExecuteTaskStatusEnum.NOT_STARTED),
         ]
     )
-    sm.update_execution_task_status = AsyncMock(return_value={})
+    sm.update_execution_task_status = AsyncMock(
+        side_effect=lambda task_id, status, **kwargs: {"id": task_id, "status": status.value}
+    )
+    sm.push_message = AsyncMock()
     task._state_manager = sm
     return task
 
@@ -227,6 +231,12 @@ async def test_completion_sweep_converges_unfinished_rows():
     assert swept == {"running": ExecuteTaskStatusEnum.TERMINATED, "never": ExecuteTaskStatusEnum.TERMINATED}
     assert "done" not in swept  # a delivered row is never downgraded
 
+    # Live panel only hears about the sweep via TASK_END. Without this the
+    # session goes COMPLETED while the client still shows in_progress ("0/8").
+    pushed = [call.args[0] for call in task._state_manager.push_message.await_args_list]
+    assert {message.data["id"] for message in pushed} == {"running", "never"}
+    assert all(message.event_type is MessageEventType.TASK_END for message in pushed)
+
 
 async def test_sweep_is_idempotent():
     task = LinsightWorkflowTask()
@@ -240,10 +250,12 @@ async def test_sweep_is_idempotent():
         ]
     )
     sm.update_execution_task_status = AsyncMock(return_value={})
+    sm.push_message = AsyncMock()
     task._state_manager = sm
 
     await task._converge_task_rows_on_completion()
     assert sm.update_execution_task_status.await_count == 0
+    assert sm.push_message.await_count == 0
 
 
 async def test_sweep_runs_after_the_pseudo_task_is_finalized():
@@ -261,6 +273,7 @@ async def test_sweep_runs_after_the_pseudo_task_is_finalized():
         return {}
 
     sm.update_execution_task_status = AsyncMock(side_effect=_update)
+    sm.push_message = AsyncMock()
     sm.get_execution_tasks = AsyncMock(
         return_value=[
             _row("svid", ExecuteTaskStatusEnum.SUCCESS, pseudo=True),

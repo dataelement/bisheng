@@ -678,7 +678,12 @@ async def test_catalog_publish_stages_complete_release_and_switches_once(
                     "user": "user:*",
                     "relation": "active",
                     "object": (f"permission_catalog_release:{result['release_key']}"),
-                }
+                },
+                {
+                    "user": "service_account:*",
+                    "relation": "active",
+                    "object": (f"permission_catalog_release:{result['release_key']}"),
+                },
             ],
             [
                 {

@@ -44,7 +44,8 @@ import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { resolveUploadSizeLimits } from "./knowledgeUtils";
+import { canOpenSharedSpace, resolveUploadSizeLimits, shouldNavigateOnSpaceSelect } from "./knowledgeUtils";
+import { resolveSpaceInfoFailure } from "./spaceInfoError";
 export default function Knowledge() {
     const localize = useLocalize();
     // 模块标题跟随后台配置的菜单显示名称
@@ -275,14 +276,25 @@ export default function Knowledge() {
             try {
                 const detail = await getSpaceInfoApi(detailSpaceId);
                 if (cancelled) return;
+                // No membership redirect here, deliberately. The space page is itself the
+                // non-member landing (header with 加入, and the server refuses the file
+                // list), and the desktop sidebar auto-selects the first department space
+                // whenever nothing is active. Diverting a non-follower to the share
+                // preview therefore looped: close the preview -> /knowledge -> auto-select
+                // the same department space -> redirect -> preview again, with no way out.
                 setActiveSpace({ ...detail, id: detailSpaceId });
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Only a space the server says is absent or closed to this caller
+                // sends the user away; anything else stays put (see spaceInfoError).
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {
@@ -384,7 +396,14 @@ export default function Knowledge() {
                 const info = await getSpaceInfoApi(previewSpaceId);
                 if (cancelled) return;
 
-                if (info.role === SpaceRole.CREATOR) {
+                // Anyone who can already read the space goes straight into it —
+                // a share link is a way in, not an application form. Only the
+                // creator short-circuited here, so a member or a granted user
+                // landed on the intro-and-apply drawer for a space that was
+                // already sitting in their own sidebar. `visible` is the same
+                // decision the space's own pages enforce; `role` cannot answer it,
+                // because an absent role maps to MEMBER exactly like a real one.
+                if (canOpenSharedSpace(info)) {
                     navigateRef.current(`/knowledge/space/${previewSpaceId}`, { replace: true });
                     return;
                 }
@@ -430,14 +449,19 @@ export default function Knowledge() {
                 }
 
                 setPreviewDrawerOpen(true);
-            } catch {
+            } catch (error) {
                 if (cancelled) return;
+                // Same rule as the detail load: a share link only sends the user to
+                // the square when the server says the space is gone or closed.
+                const failure = resolveSpaceInfoFailure(error);
                 showToastRef.current({
-                    message: localizeRef.current("com_knowledge.space_invalid_or_deleted"),
+                    message: failure.message || localizeRef.current(failure.messageKey),
                     severity: NotificationSeverity.WARNING,
                 });
-                setPreviewDrawerOpen(false);
-                navigateRef.current("/knowledge?square=1", { replace: true });
+                if (failure.leaveSpace) {
+                    setPreviewDrawerOpen(false);
+                    navigateRef.current("/knowledge?square=1", { replace: true });
+                }
             }
         })();
         return () => {
@@ -455,7 +479,13 @@ export default function Knowledge() {
         // Without this, clicking a space while the URL is on /folder/<id> leaves the
         // file list stuck on the folder's contents and the tree's folder highlight
         // pointing at the wrong space (Bug A + Bug B).
-        if (urlFolderId || spaceId !== space.id) {
+        // Never on a share route — see shouldNavigateOnSpaceSelect.
+        if (shouldNavigateOnSpaceSelect({
+            isShareRoute,
+            urlFolderId,
+            urlSpaceId: spaceId,
+            targetSpaceId: space.id,
+        })) {
             navigate(`/knowledge/space/${space.id}`);
         }
         // Set list-level data immediately for fast UI switch
@@ -662,6 +692,10 @@ export default function Knowledge() {
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
+                        // The URL names a space on both of these routes, so the
+                        // default-pick has nothing to decide and must not race
+                        // the route effect for the address bar.
+                        suppressAutoSelect={!!detailSpaceId || isShareRoute}
                         hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
                     />
                 </div>
@@ -758,6 +792,8 @@ export default function Knowledge() {
                             onLoadMore={fileManager.loadMore}
                             hasMore={fileManager.hasMore}
                             loading={fileManager.loading}
+                            loadError={fileManager.loadError}
+                            loadMoreError={fileManager.loadMoreError}
                             onSearch={fileManager.handleSearch}
                             onFilterStatus={fileManager.setStatusFilter}
                             onSort={(sortBy, direction) => {

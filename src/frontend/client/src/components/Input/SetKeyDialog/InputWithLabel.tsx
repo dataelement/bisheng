@@ -36,7 +36,7 @@ const InputWithLabel: FC<InputWithLabelProps> = forwardRef((props, ref) => {
         onChange={onChange}
         ref={ref}
         placeholder={`${localize('com_endpoint_config_value')} ${label}`}
-        className={cn('flex h-10 max-h-10 w-full resize-none px-3 py-2')}
+        className="w-full"
       />
     </>
   );

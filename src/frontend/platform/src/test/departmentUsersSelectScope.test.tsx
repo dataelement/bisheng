@@ -58,6 +58,7 @@ import {
   searchGlobalMembersApi,
 } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 
 const mockedChildren = vi.mocked(getDepartmentChildrenApi)
 const mockedPathTree = vi.mocked(getDepartmentPathTreeApi)
@@ -276,5 +277,52 @@ describe("DepartmentUsersSelect — rootDeptId scope", () => {
     )
     // The label comes from the user-list payload — no per-department path-tree call.
     expect(mockedPathTree).not.toHaveBeenCalled()
+  })
+})
+
+describe("DepartmentUsersSelect candidate eligibility", () => {
+  it("filters department members before rendering selectable users", async () => {
+    const filterUserIds = vi.fn(async () => [5])
+    mockedMembers.mockResolvedValue({
+      data: [
+        { user_id: 5, user_name: "Active", person_id: "5" },
+        { user_id: 6, user_name: "Disabled", person_id: "6" },
+      ],
+      total: 2,
+    } as Awaited<ReturnType<typeof getDepartmentMembersApi>>)
+    const onChange = vi.fn()
+    render(<DepartmentUsersSelect value={[]} onChange={onChange} rootDeptId={21} filterUserIds={filterUserIds} />)
+    openPicker()
+
+    fireEvent.click(await screen.findByText("Active"))
+    expect(filterUserIds).toHaveBeenCalledWith([5, 6])
+    expect(screen.queryByText("Disabled")).not.toBeInTheDocument()
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ value: 5 })])
+  })
+
+  it("applies eligibility to name search as well as browsing", async () => {
+    mockedUsers.mockResolvedValue({
+      data: [{ user_id: 5, user_name: "Active" }, { user_id: 6, user_name: "Disabled" }],
+      total: 2,
+    } as Awaited<ReturnType<typeof getUsersApi>>)
+    const filterUserIds = vi.fn(async () => [5])
+    render(<DepartmentUsersSelect value={[]} onChange={vi.fn()} filterUserIds={filterUserIds} />)
+    openPicker()
+    fireEvent.change(screen.getByPlaceholderText("system.searchUser"), { target: { value: "user" } })
+
+    await screen.findByText("Active")
+    expect(filterUserIds).toHaveBeenCalledWith([5, 6], expect.any(AbortSignal))
+    expect(screen.queryByText("Disabled")).not.toBeInTheDocument()
+  })
+
+  it("keeps unvalidated candidates hidden when filtering fails", async () => {
+    vi.mocked(captureAndAlertRequestErrorHoc).mockImplementation((promise) => promise.catch(() => false))
+    const filterUserIds = vi.fn(async () => { throw new Error("Filter unavailable") })
+    render(<DepartmentUsersSelect value={[]} onChange={vi.fn()} rootDeptId={21} filterUserIds={filterUserIds} />)
+    openPicker()
+
+    await waitFor(() => expect(filterUserIds).toHaveBeenCalledWith([5]))
+    await waitFor(() => expect(screen.getByText("system.treeDepartmentSelectEmpty")).toBeInTheDocument())
+    expect(screen.queryByText("Leaf User")).not.toBeInTheDocument()
   })
 })

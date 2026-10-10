@@ -232,7 +232,7 @@ export default function VectorStoreSidePanel() {
               onChange={() => {
                 console.log('changed');
               }}
-              className="max-w-sm border-border-light placeholder:text-text-secondary"
+              className="max-w-sm"
             />
           </div>
           <div className="w-1/3">

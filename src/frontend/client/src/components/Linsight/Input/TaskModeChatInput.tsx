@@ -22,11 +22,18 @@
  * children), so we wire the user's actual selection straight into the linsight
  * submission (see handleSend) instead of the seeded `context.tools`.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import { useLocalize } from '~/hooks';
+import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
+import {
+    readAdminDefaultModelId,
+    useChatModelResolution,
+    type ChatModelOption,
+} from '~/hooks/useChatModelResolution';
 import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import store from '~/store';
 import {
@@ -47,7 +54,41 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
     const sessionKey = conversationId || 'new';
     const [context, setContext] = useRecoilState(taskModeContextState(sessionKey));
     const [skills] = useRecoilState(taskModeSkillsState(sessionKey));
-    const [model, setModel] = useState('');
+    const [chatModel, setChatModel] = useRecoilState(store.chatModel);
+    const model = String(chatModel.id || '');
+
+    // Task-mode model resolution, same chain as ChatView (per-conversation
+    // record → user-level task record → admin linsight_default_model_id → first
+    // option). There is no server value to consult here: this page only ever
+    // renders a conversation that has not run a turn yet.
+    const { user } = useAuthContext();
+    const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+    const adminDefaultModelId = useMemo(
+        () => readAdminDefaultModelId(workbenchCfg, 'task'),
+        [workbenchCfg],
+    );
+
+    const handleModelResolved = useCallback(
+        (target: ChatModelOption, deliberate: boolean) => {
+            setChatModel({
+                id: Number(target.id),
+                name: target.displayName || target.name || '',
+                manual: deliberate,
+                mode: 'task',
+            });
+        },
+        [setChatModel],
+    );
+
+    const { persistPick: persistModelPick } = useChatModelResolution({
+        userId: user?.id,
+        conversationId: sessionKey,
+        mode: 'task',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: adminDefaultModelId,
+        ready: !!bsConfig?.models?.length && !!user?.id,
+        onResolved: handleModelResolved,
+    });
 
     // Daily tools picker selection — same shared atom AgentToolSelector writes to.
     const selectedAgentTools = useRecoilValue(store.selectedAgentTools);
@@ -167,8 +208,28 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
             }}
             onScrollToBottom={() => { }}
             modelOptions={bsConfig?.models}
-            modelValue={model}
-            onModelChange={setModel}
+            modelValue={chatModel.id}
+            onModelChange={(val) => {
+                const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                // Records this conversation's pick AND the user-level task
+                // default the next new task inherits.
+                persistModelPick(val);
+                setChatModel({
+                    id: Number(val),
+                    name: picked?.displayName || '',
+                    manual: true,
+                    mode: 'task',
+                });
+            }}
+            onModelAutoChange={(val) => {
+                const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                setChatModel((prev) => ({
+                    id: Number(val),
+                    name: picked?.displayName || prev.name || '',
+                    manual: prev.manual ?? false,
+                    mode: prev.mode,
+                }));
+            }}
             onSend={handleSend}
             onStop={() => { }}
             bsConfig={bsConfig}

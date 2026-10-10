@@ -26,6 +26,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     SessionVersionStatusEnum,
 )
+from bisheng.linsight.domain.services import state_message_manager, workbench_impl
 
 
 def _session(*, status=SessionVersionStatusEnum.NOT_STARTED):
@@ -50,7 +51,8 @@ def patched_endpoint(monkeypatch):
         AsyncMock(return_value=_session()),
     )
     monkeypatch.setattr(endpoint.MessageSessionDao, "touch_session", AsyncMock())
-    monkeypatch.setattr(endpoint, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
+    # F073: the termination body moved into LinsightWorkbenchImpl.terminate.
+    monkeypatch.setattr(workbench_impl, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
 
     # LinsightQueue is imported function-locally from bisheng.linsight.worker;
     # inject a stub module so the heavy worker import chain is never loaded.
@@ -59,7 +61,7 @@ def patched_endpoint(monkeypatch):
     monkeypatch.setitem(sys.modules, "bisheng.linsight.worker", fake_worker)
 
     monkeypatch.setattr(
-        endpoint,
+        state_message_manager,
         "LinsightStateMessageManager",
         lambda **k: SimpleNamespace(set_session_version_info=AsyncMock(), push_message=AsyncMock()),
     )

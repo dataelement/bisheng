@@ -1,21 +1,23 @@
 import os
 
 from langchain_core.documents import Document
+from loguru import logger
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
+from bisheng.knowledge.rag.pipeline.loader.utils.md_from_pdf import align_pdf_elements
 from bisheng.knowledge.rag.pipeline.loader.utils.md_from_pdf import handler as pdf_handler
 from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_processing
+from bisheng.knowledge.rag.pipeline.types import TextBbox
 
 
 class LocalPdfLoader(BaseBishengLoader):
-
     def __init__(self, retain_images: bool = True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
 
     def load(self) -> list[Document]:
 
-        md_file_name, local_image_dir, doc_id = pdf_handler(self.tmp_dir, self.file_path)
+        md_file_name, local_image_dir, _doc_id, elements = pdf_handler(self.tmp_dir, self.file_path)
 
         if not os.path.exists(md_file_name):
             raise Exception("failed to convert pdf to md, please check server log")
@@ -28,4 +30,26 @@ class LocalPdfLoader(BaseBishengLoader):
         with open(md_file_name, encoding="utf-8") as f:
             content = f.read()
         content = self.rewrite_local_image_refs(content)
-        return [Document(page_content=content, metadata=self.file_metadata.copy())]
+
+        metadata = self.file_metadata.copy()
+        layout = align_pdf_elements(content, elements, retain_images=self.retain_images)
+        if layout["bboxes"]:
+            metadata.update(layout)
+            self.bbox_list = [
+                TextBbox(
+                    text=(el.get("content") or "")[:200],
+                    type=el.get("type") or "text",
+                    part_id=str(index),
+                    bbox=el["bbox"],
+                    page=int(el.get("page", 0)),
+                )
+                for index, el in enumerate(elements)
+                if el.get("bbox") and len(el.get("bbox") or []) >= 4
+            ]
+        elif elements:
+            logger.warning(
+                "LocalPdfLoader aligned 0/{} layout elements for {}",
+                len(elements),
+                self.file_name,
+            )
+        return [Document(page_content=content, metadata=metadata)]

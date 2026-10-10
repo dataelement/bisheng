@@ -90,13 +90,17 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
     // per variant. Changing this single component restyles all confirm() callers.
     //  • destructive → red trash icon + red title + red confirm ("暂不 / 确认删除")
     //  • default     → amber warning icon + neutral title + primary confirm ("取消 / 确认")
-    const titleColor = isDestructive ? "text-[#f53f3f]" : "text-text-1"
+    // Unprefixed colors are enough: AlertDialog's own defaults carry no dark:
+    // color classes, so nothing outranks these in dark mode (see AlertDialog.tsx).
+    const titleColor = isDestructive ? "text-danger" : "text-text-1"
     const confirmColor = isDestructive
-        ? "bg-[#f53f3f] hover:bg-[#f53f3f]/90"
-        : "btn-brand-primary bg-primary hover:bg-primary/90"
+        ? "bg-danger hover:bg-danger-hover"
+        // bg-blue-500 = brand token (NOT shadcn's bg-primary, whose hsl var
+        // flips to near-white in dark mode) — same classes as <Button> primary solid.
+        : "btn-brand-primary bg-blue-500 hover:bg-blue-400"
     const accentIcon = options.icon ?? (isDestructive
-        ? <Outlined.Delete className="size-5 shrink-0 text-[#f53f3f]" />
-        : <Outlined.Attention className="size-5 shrink-0 text-[#ff7d00]" />)
+        ? <Outlined.Delete className="size-5 shrink-0 text-danger" />
+        : <Outlined.Attention className="size-5 shrink-0 text-warning" />)
     const defaultTitle = isDestructive
         ? localize("com_knowledge.confirm_delete_title")
         : localize("com_knowledge.prompt")
@@ -131,7 +135,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
                         {!options.hideCancel && <AlertDialogCancel
                             onClick={handleCancel}
-                            className="mt-0 h-8 flex-1 rounded-md border-border-base bg-white/50 px-4 text-sm font-normal text-[#070038] hover:bg-fill-1 focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
+                            className="mt-0 h-8 flex-1 rounded-md border-border-base bg-transparent px-4 text-sm font-normal text-text-1 hover:bg-fill-1 focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
                         >
                             {options.cancelText || defaultCancel}
                         </AlertDialogCancel>}

@@ -1,0 +1,118 @@
+---
+status: done
+component: Breadcrumb
+---
+
+# 面包屑 Breadcrumb
+
+页面在结构里的位置——从根级一路到当前页，回答「我在哪一层、怎么往上走」。组件库 `@bisheng/ui` 导出名 **`Breadcrumb`**，实现取自 client 知识空间的下级文件夹页（原 `KnowledgeBreadcrumb`），规则按规范抽成通用件。规范全文见「文档 → 组件规范 → 面包屑 Breadcrumb」。
+
+**业务页只传完整层级数组**，根级在前、当前页在末。截断、折叠、窄屏阈值、`nav` / `aria-current` 全在组件里，页面一句都不用重写：
+
+- 名称超过 96px 截断，悬停出完整名称——**只在真的截断时才挂 Tooltip**（比对 `scrollWidth`），短名称一个浮层都不建。
+- 超过 4 级折叠成 `根级 · … · 上一级 · 当前页`，`…` 固定在第 2 位。
+- 只有一级时**整个组件不渲染**（`return null`）——空面包屑占一行却不给信息，页面该整体上移。
+- 当前页不可点、无 hover，颜色深一档标明「你在这」。
+
+## 默认状态
+
+四级及以内全部展开。父级第三档文字色、hover 转品牌色，分隔符是 bisheng-icons 的右向箭头（不是文本 `>`），当前页深一档且不可点。
+
+```tsx
+import { Breadcrumb } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ padding: '12px 0' }}>
+    <Breadcrumb
+      expandLabel={(n) => `点击展开省略的 ${n} 层`}
+      items={[
+        { key: 'space', title: '产品知识库', onClick: () => alert('打开：产品知识库') },
+        { key: 'a', title: '研发中心', onClick: () => alert('打开：研发中心') },
+        { key: 'b', title: '接口文档' },
+      ]}
+    />
+  </div>
+);
+```
+
+## 名称过长
+
+父级名称最大 96px（12px 字号下约 8 个中文字、16 个英文字符）——**按宽度卡而不是按字数卡**，中英混排不用换算。当前页不受这条限制，只受页面宽度限制；两者超宽都是截断 + 悬停出完整名称。
+
+把鼠标停在被截断的那两级上看 Tooltip。
+
+```tsx
+import { Breadcrumb } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ padding: '12px 0', maxWidth: 420 }}>
+    <Breadcrumb
+      expandLabel={(n) => `点击展开省略的 ${n} 层`}
+      items={[
+        { key: 'space', title: '集团法务合规知识库', onClick: () => {} },
+        { key: 'a', title: '2026 年度合同模板归档', onClick: () => {} },
+        { key: 'b', title: '境外子公司采购框架协议（中英文对照版）' },
+      ]}
+    />
+  </div>
+);
+```
+
+## 层级过多
+
+超过 4 级折叠：保留**根级 + 末两级**，中间各级收进 `…`，折叠后可见项恒为 4 个。`…` 常态是裸的，hover 才出 24×24 的浅灰容器，菜单打开期间容器保持同色——常驻底色会破坏面包屑行的轻量感。
+
+点 `…` 打开单列纵向菜单：一行一级，从上到下＝从上级到下级，整行可点，菜单里给**完整名称**（只受菜单 240px 上限约束）。点菜单外或按 Esc 关闭，方向键可在行间移动。
+
+```tsx
+import { Breadcrumb } from '@bisheng/ui';
+
+const chain = [
+  '产品知识库', '研发中心', '平台组', '前端', '组件库', '设计规范', '面包屑',
+].map((title, i) => ({
+  key: String(i),
+  title,
+  onClick: () => alert(`打开：${title}`),
+}));
+
+export default () => (
+  <div style={{ padding: '12px 0' }}>
+    <Breadcrumb expandLabel={(n) => `点击展开省略的 ${n} 层`} items={chain} />
+  </div>
+);
+```
+
+## 窄屏
+
+窄屏（小于 576px）折叠阈值降到**超过 3 级即折叠**，可见项为 `根级 · … · 当前页`；`…` 与各层级的触达热区扩到 44×44，视觉尺寸不变。触屏没有 hover，看完整名称一律走 `…` 菜单。
+
+把浏览器窗口拉窄到 576px 以内，上面「层级过多」的 demo 会自动少留一级——组件内部用的是与《多端适配原则》同一套断点，业务页不用自己判断。
+
+## 规格
+
+| 项 | 值 |
+|---|---|
+| 字号 / 行高 | `text-caption`（12px）/ 24px |
+| 项与分隔符的间距 | 左右各 2px（`gap-0.5`） |
+| 分隔符 | `Outlined.Right` 16px，`text-text-4`，`aria-hidden`、不可点 |
+| 父级 | 常态 `text-text-3`，hover 转品牌色，最大宽度 96px |
+| 当前页 | `text-text-1`，无 hover，`aria-current="page"`，不渲染成链接 |
+| `…` 触发器 | 24×24、圆角 4px，hover / 菜单打开时底色 `fill-2`；触屏热区 44×44 |
+| 菜单 | 居中对齐、下方 4px；宽 120–240px，最大高 320px 内滚动；行高 32px、左右 12px、整行可点 |
+
+## API
+
+| 属性 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `items` | `BreadcrumbItem[]` | — | 完整层级，根级在前、当前页在末；少于 2 项不渲染 |
+| `maxItems` | `number` | `4` | 超过这个级数才折叠 |
+| `itemsAfterCollapse` | `number` | `2` | 折叠后末尾保留几级（含当前页） |
+| `expandLabel` | `(hiddenCount: number) => string` | — | `…` 的 Tooltip 与 `aria-label`，参数是被折叠的层级数 |
+| `ariaLabel` | `string` | `'breadcrumb'` | 外层 `nav` 的 `aria-label` |
+| `className` | `string` | — | 外层 `nav` 的附加类名 |
+
+`BreadcrumbItem`：`{ key?: string; title: string; onClick?: () => void; href?: string }`。给了 `href` 就渲染成真链接（可中键、可「在新标签页打开」），否则渲染成按钮。
+
+`expandLabel` 是函数而不是字符串，因为**层级数只有组件自己知道，文案只有业务方知道**——组件库不持有任何 i18n key，所有文案一律由调用方传入。
+
+> **依赖说明**：`…` 菜单基于 Radix Dropdown Menu；截断补全与 `…` 的提示用的是组件库的 [`Tooltip`](/components/tooltip)（`disabled={!截断}`，只在真的截断时才挂浮层；长相与别处的 tooltip 完全一致，箭头照带）。

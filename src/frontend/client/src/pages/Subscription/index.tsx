@@ -21,6 +21,7 @@ import { ChannelLayout } from "./ChannelLayout";
 import { ChannelDiscoveryHome } from "./ChannelDiscoveryHome";
 import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
+import { canReadChannelContent } from "./channelContentAccess";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
 import { Outlined } from "bisheng-icons";
@@ -249,6 +250,36 @@ export default function Subscription() {
             try {
                 const detail: any = await getChannelDetailApi(detailChannelId);
                 if (cancelled) return;
+                // Membership is decided here, at open time — not by whoever sent the link.
+                // A former member following an old notification, or anyone with the id,
+                // gets the same intro-and-apply preview the square shows; only an active
+                // subscriber, or someone the F048 catalog makes the channel `visible` to,
+                // enters the channel itself. `visible` is the very decision the article
+                // endpoint re-checks, so the page and the API agree.
+                //
+                // This read `permission_ids` for a `view_channel` id, which F048 retired
+                // along with the field: the list was always empty, so everyone holding a
+                // Grant instead of a subscription — a department grant, say — was bounced
+                // to the preview of a channel they were entitled to open.
+                const subscribed = String(detail?.subscription_status ?? "").toLowerCase() === "subscribed";
+                if (!canReadChannelContent({ actions: detail?.actions, isSubscribed: subscribed })) {
+                    // Nothing to show and nowhere to apply: the channel was never published to
+                    // the square, so there is no intro page for a stranger to land on. Say so and
+                    // leave them on the square, the way an invalid knowledge-space link behaves.
+                    if (!detail?.is_released) {
+                        showToast({
+                            message: localize("com_subscription.channel_unavailable_or_no_permission"),
+                            severity: NotificationSeverity.WARNING,
+                        });
+                        navigate("/channel?square=1", { replace: true });
+                        return;
+                    }
+                    // Published: the share route shows the intro-and-apply preview. Deliberately
+                    // without ?square=1 — that flag means "arrived from the square" and would both
+                    // render the square behind the preview and send the user there on close.
+                    navigate(`/channel/share/${detailChannelId}`, { replace: true });
+                    return;
+                }
                 const name = String(detail?.name ?? "");
                 setActiveChannel({
                     id: String(detailChannelId),
@@ -275,6 +306,10 @@ export default function Subscription() {
         return () => {
             cancelled = true;
         };
+        // localize / showToast are only read inside the failure branch and are re-created on
+        // every render (see AGENTS.md), so listing them would re-run this detail fetch — and its
+        // redirect — on every render. The effect is keyed on the channel it is resolving.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [detailChannelId, channelPluginGate, navigate]);
 
     // If navigation requests the channel square (e.g. via share-link error), open it.
@@ -444,7 +479,7 @@ export default function Subscription() {
                 覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
                 加载中（channelsResolving 且非广场）暂不显示。 */}
             {!isH5 && (showChannelSquare || !channelsResolving) ? (
-                <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
+                <div className="absolute top-5 z-20 flex h-10 items-center" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
                         onChannelClick={handleSquareBack}

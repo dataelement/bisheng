@@ -1,3 +1,4 @@
+import i18next from 'i18next';
 import type { ChatCitation } from '~/api/chatApi';
 import { getFilePathApi } from '~/api/chat/data-service';
 
@@ -23,6 +24,8 @@ export type CitationPreview = {
 export type CitationReferenceItem = {
   key: string;
   data: CitationDisplayData;
+  /** All cited chunk ids for this document. A file-level click highlights them all. */
+  itemIds?: string[];
   detail?: ChatCitation | null;
   legacyPreview?: CitationPreview | null;
 };
@@ -67,6 +70,209 @@ export function stripCitationMarkers(content: string) {
     .replace(/\\u[eE]200[\s\S]*?\\u[eE]202/g, '')
     // Drop any orphan markers (e.g. a streaming-truncated group).
     .replace(/[]/g, '');
+}
+
+// Short citation handles the task-mode model writes as `[S3]` (F069). The
+// grammar mirrors the backend's citation_handle_service (_RUN_RE / _DEF_LINE_RE
+// / _CODE_RE) so that what the writer leaves literal and what an export drops
+// agree: one handle is `S` + 1-4 digits; a group is one or more handles in
+// brackets separated by `,` / U+FF0C / U+3001; a run is one or more adjacent
+// groups. A run is never the label of a markdown link (`[S3](url)`), never
+// glued to an ASCII identifier character or another `[`, and never inside
+// code. The lookbehind is ASCII-only on purpose (mirrors the backend
+// `_RUN_RE`): a handle glued to a CJK word is the common case, not an
+// identifier.
+const CITATION_HANDLE = 'S\\d{1,4}';
+const CITATION_HANDLE_GROUP = `\\[\\s*${CITATION_HANDLE}(?:\\s*[,\uff0c\u3001]\\s*${CITATION_HANDLE})*\\s*\\]`;
+const CITATION_HANDLE_RUN_RE = new RegExp(
+  `(?<![A-Za-z0-9_\\[])${CITATION_HANDLE_GROUP}(?:\\s*${CITATION_HANDLE_GROUP})*(?!\\s*\\()`,
+  'gu',
+);
+// `[S3]: some source` - a definition line the model wrote on its own; kept as is.
+const CITATION_HANDLE_DEF_LINE_RE = new RegExp(`^[ \\t]*${CITATION_HANDLE_GROUP}[ \\t]*[:\uff1a]`, 'gmu');
+// Fenced blocks and inline code spans are never rewritten.
+const CITATION_CODE_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
+const defLinePlaceholder = (index: number) => `\u0000DEF${index}\u0000`;
+
+function stripHandleRunsOutsideDefinitions(segment: string) {
+  const stash: string[] = [];
+  const protectedSegment = segment.replace(CITATION_HANDLE_DEF_LINE_RE, (line) => {
+    stash.push(line);
+    return defLinePlaceholder(stash.length - 1);
+  });
+  let stripped = protectedSegment.replace(CITATION_HANDLE_RUN_RE, '');
+  stash.forEach((line, index) => {
+    stripped = stripped.replace(defLinePlaceholder(index), line);
+  });
+  return stripped;
+}
+
+/**
+ * Remove every unresolved short-handle run (`[S3]`, `[S3][S7]`, `[S3, S7]`)
+ * from a string. Used on the save-as-markdown path (download / knowledge-space
+ * save) after stripCitationMarkers: a handle the backend could not resolve
+ * stays literal in the file the model wrote, and a saved file must not leak
+ * it. Code spans, fenced blocks, link labels and `[Sn]:` definition lines are
+ * left untouched, exactly as the backend's strip_citation_handles does.
+ */
+export function stripCitationHandles(content: string) {
+  if (!content || !content.includes('[')) return content;
+  const out: string[] = [];
+  let last = 0;
+  for (const match of content.matchAll(CITATION_CODE_RE)) {
+    const start = match.index ?? 0;
+    if (start > last) out.push(stripHandleRunsOutsideDefinitions(content.slice(last, start)));
+    out.push(match[0]);
+    last = start + match[0].length;
+  }
+  if (last < content.length) out.push(stripHandleRunsOutsideDefinitions(content.slice(last)));
+  return out.join('');
+}
+
+// ---------------------------------------------------------------------------
+// F069 P2: export baking (design decision 8, spec AC-20 / AC-22 / AC-24).
+//
+// A saved / downloaded markdown must not carry the private-use citation spans
+// the preview turns into badges (they wrap bare internal ids), but the reader
+// still deserves the sources. So the export bakes each span into a visible
+// `[n]` numbered by first appearance and appends a reference list. Numbering
+// follows the badge rule in transformPrivateCitations (one number per
+// `${type}_${groupKey}_${itemId}`) so the file agrees with what the preview
+// showed. A ref whose detail the caller could not obtain is dropped rather
+// than numbered: a number without a list entry would be a dangling pointer,
+// and a raw id must never reach the file (AC-24). Unresolved short handles
+// (`[S99]`) go the way stripCitationHandles sends them (AC-19).
+// ---------------------------------------------------------------------------
+
+const CITATION_SPAN_RE = new RegExp(`${CITATION_START}([^${CITATION_START}${CITATION_END}]*)${CITATION_END}`, 'g');
+const CITATION_STRAY_MARKER_RE = new RegExp(`[${CITATION_START}${CITATION_SEPARATOR}${CITATION_END}]`, 'g');
+const EXPORT_PART_SEPARATOR = ' · ';
+
+type BakedCitationEntry = {
+  label: number;
+  detail: ChatCitation;
+  itemId: string;
+};
+
+function joinExportParts(parts: Array<string | undefined | null>) {
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const part of parts) {
+    const value = String(part ?? '').trim();
+    // Empty parts are omitted; an exact repeat (a web title that fell back to
+    // the url) would print the same text twice on one line.
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    cleaned.push(value);
+  }
+  return cleaned.join(EXPORT_PART_SEPARATOR);
+}
+
+/**
+ * Where a cited chunk sits in its file: "第 N 页" when it has a real page,
+ * else "第 N 段". Two page conventions reach here. Chunks parsed with a layout
+ * (PDF, and office files converted to PDF) carry bboxes, and their page is the
+ * zero-based index the bboxes use — the first page is 0 (PdfViewer adds 1 the
+ * same way). Chunks without a layout carry a one-based page (slides) or 0 for
+ * "not paginated" (docx / xlsx / md). The chunk index is zero-based too.
+ * Mirrors the backend export (citation_handle_service._location_label).
+ */
+export function formatCitationLocation(detail: ChatCitation | null, itemId?: string) {
+  const payload = detail?.sourcePayload;
+  const item = getCitationItem(detail, itemId);
+  const page = Number(item?.page ?? payload?.page);
+  if (Number.isFinite(page)) {
+    if (parseCitationBBoxes(item?.bbox).length) {
+      if (page >= 0) return i18next.t('com_linsight_export_page', { 0: page + 1 });
+    } else if (page > 0) {
+      return i18next.t('com_linsight_export_page', { 0: page });
+    }
+  }
+  const chunkIndex = Number(item?.chunkIndex);
+  if (item?.chunkIndex != null && Number.isFinite(chunkIndex) && chunkIndex >= 0) {
+    return i18next.t('com_linsight_export_chunk', { 0: chunkIndex + 1 });
+  }
+  return '';
+}
+
+/** One reference-list line. Same shape the backend export renders. */
+function formatCitationExportLine(entry: BakedCitationEntry) {
+  const { detail, itemId } = entry;
+  const payload = detail.sourcePayload;
+  const type = normalizeCitationType(detail.type);
+  if (type === 'web') {
+    const item = getCitationItem(detail, itemId);
+    const url = payload?.url || payload?.sourceUrl || '';
+    return joinExportParts([item?.title || payload?.title || url, payload?.source, url]);
+  }
+  if (type === 'article') {
+    return joinExportParts([payload?.title, payload?.sourceUrl]);
+  }
+  return joinExportParts([
+    `《${getCitationDocumentName(detail)}》`,
+    formatCitationLocation(detail, itemId),
+    payload?.knowledgeName,
+  ]);
+}
+
+/**
+ * Bake private-use citation spans into visible `[n]` markers and append a
+ * reference list under `heading`.
+ *
+ * Pure: `details` is everything the caller managed to resolve (the run's
+ * `output_result.citations` seed plus whatever the preview already fetched);
+ * this function neither fetches nor caches. A span whose refs all lack a
+ * detail is removed entirely; a span that mixes resolved and unresolved refs
+ * keeps only the resolved numbers. Code fences and inline code are left as
+ * they are. Running it on already-baked text is a no-op apart from the
+ * unresolved-handle stripping, so a double export cannot double the list.
+ */
+export function bakeCitationsForExport(
+  text: string,
+  details: Record<string, ChatCitation>,
+  heading: string,
+): string {
+  if (!text) return text;
+  const normalized = normalizeCitationMarkers(text);
+  const labelByGroup: Record<string, number> = {};
+  const entries: BakedCitationEntry[] = [];
+
+  const bakeSpan = (_match: string, body: string) => {
+    const labels: number[] = [];
+    for (const rawRef of body.split(CITATION_SEPARATOR)) {
+      const data = buildCitationDisplayData(rawRef.trim());
+      if (!data) continue;
+      const detail = details[data.citationId];
+      if (!detail) continue;
+      const groupId = `${data.type}_${data.groupKey}_${data.itemId}`;
+      if (!labelByGroup[groupId]) {
+        labelByGroup[groupId] = entries.length + 1;
+        entries.push({ label: entries.length + 1, detail, itemId: data.itemId });
+      }
+      const label = labelByGroup[groupId];
+      if (!labels.includes(label)) labels.push(label);
+    }
+    return labels.map((label) => `[${label}]`).join('');
+  };
+
+  const bakeSegment = (segment: string) =>
+    segment.replace(CITATION_SPAN_RE, bakeSpan).replace(CITATION_STRAY_MARKER_RE, '');
+
+  const out: string[] = [];
+  let last = 0;
+  for (const match of normalized.matchAll(CITATION_CODE_RE)) {
+    const start = match.index ?? 0;
+    if (start > last) out.push(bakeSegment(normalized.slice(last, start)));
+    out.push(match[0]);
+    last = start + match[0].length;
+  }
+  if (last < normalized.length) out.push(bakeSegment(normalized.slice(last)));
+
+  const body = stripCitationHandles(out.join(''));
+  if (!entries.length) return body;
+
+  const lines = entries.map((entry) => `${entry.label}. ${formatCitationExportLine(entry)}`);
+  return `${body.replace(/\s+$/, '')}\n\n## ${heading}\n\n${lines.join('\n')}\n`;
 }
 
 function padTimeUnit(value: number) {
@@ -207,22 +413,21 @@ export function transformPrivateCitations(content: string) {
   return { transformedContent, citationMap };
 }
 
-export function getCitationClassName(type?: string) {
-  switch (type?.toLowerCase()) {
-    case 'web':
-    case 'websearch':
-      return 'bg-[#F7F3FF] text-[#7224D9] transition-colors duration-150 hover:bg-[#EDE4FF] data-[state=open]:bg-[#EDE4FF]';
-    case 'knowledgesearch':
-      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
-    default:
-      return 'bg-blue-50 text-blue-600 transition-colors duration-150 hover:bg-blue-100 data-[state=open]:bg-blue-100';
-  }
-}
-
 export function normalizeCitationType(type?: string) {
   const normalizedType = type?.toLowerCase();
   if (normalizedType === 'web' || normalizedType === 'websearch') {
     return 'web';
+  }
+  // F054: a channel article. Without this branch the fall-through below would
+  // call it a knowledge-base source, and clicking the badge would open the file
+  // preview drawer onto a file that does not exist.
+  if (normalizedType === 'article' || normalizedType === 'articlesearch') {
+    return 'article';
+  }
+  // F062: workflow temporary knowledge base. Must not fall through to rag —
+  // rag clicks go to /knowledge/file_share, which these files do not have.
+  if (normalizedType === 'temp' || normalizedType === 'tempsearch') {
+    return 'temp';
   }
   return 'rag';
 }
@@ -231,8 +436,34 @@ export function isRagCitation(detail?: ChatCitation | null, type?: string) {
   return normalizeCitationType(detail?.type || type) === 'rag';
 }
 
-export function getCitationSourceLabel(type?: string) {
-  return normalizeCitationType(type) === 'web' ? '网页' : '文档';
+export function isTempCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === 'temp';
+}
+
+export function isArticleCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === 'article';
+}
+
+export function isFilePreviewCitation(detail?: ChatCitation | null, type?: string) {
+  const normalizedType = normalizeCitationType(detail?.type || type);
+  return normalizedType === 'rag' || normalizedType === 'temp';
+}
+
+/** Where an article badge sends the reader: the original post, in a new tab.
+ *  The reader is already on the article page inside the app, so the value of
+ *  the badge is saying "this sentence came from the article", not the jump. */
+export function getCitationArticleUrl(detail?: ChatCitation | null) {
+  return detail?.sourcePayload?.sourceUrl || '';
+}
+
+/** i18n key for the source kind, resolved by the caller (this module has no
+ *  translation runtime of its own). */
+export function getCitationSourceLabelKey(type?: string) {
+  const normalizedType = normalizeCitationType(type);
+  if (normalizedType === 'web') return 'com_citation.source_web';
+  if (normalizedType === 'article') return 'com_citation.source_article';
+  if (normalizedType === 'temp') return 'com_citation.source_temp_kb';
+  return 'com_citation.source_document';
 }
 
 export function getCitationItem(detail: ChatCitation | null, itemId?: string) {
@@ -267,7 +498,7 @@ export function getCitationDocumentName(detail?: ChatCitation | null) {
     // Avoid using chat-session titles as document names.
     .filter((item) => !/^(new chat|新对话)$/i.test(item));
 
-  return normalized[0] || '文档预览';
+  return normalized[0] || i18next.t('com_message.document_preview');
 }
 
 export function getCitationDocumentFileType(detail?: ChatCitation | null) {
@@ -278,7 +509,11 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
 
 export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.downloadUrl || '';
+  const signedUrl = payload?.previewUrl || payload?.downloadUrl || '';
+  if (signedUrl) {
+    return signedUrl;
+  }
+  return isTempCitation(detail) ? payload?.sourceUrl || '' : '';
 }
 
 function getCitationKnowledgeFileId(detail?: ChatCitation | null): number | null {
@@ -312,6 +547,12 @@ export type CitationDocumentUrls = { originalUrl: string; previewUrl: string };
 const inflightFileShareCache: Record<string, Promise<CitationDocumentUrls>> = {};
 
 export async function resolveCitationDocumentUrls(detail?: ChatCitation | null): Promise<CitationDocumentUrls> {
+  // Temp citations are conversation uploads, not knowledge_file rows.
+  // Never call /knowledge/file_share for them (F062 AC-05).
+  if (isTempCitation(detail)) {
+    const signedUrl = getCitationDocumentPreviewUrl(detail);
+    return { originalUrl: signedUrl, previewUrl: signedUrl };
+  }
   const fileId = getCitationKnowledgeFileId(detail);
   if (fileId != null) {
     const cacheKey = String(fileId);
@@ -404,9 +645,35 @@ export function parseCitationBBoxes(rawBBox?: string | null): CitationPdfBBox[] 
   }
 }
 
-export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string) {
-  const item = getCitationItem(detail, itemId);
-  return parseCitationBBoxes(item?.bbox);
+export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string | string[]) {
+  const items = detail?.sourcePayload?.items;
+  if (!items?.length) {
+    return [];
+  }
+
+  const requestedIds = (Array.isArray(itemId) ? itemId : itemId ? [itemId] : [])
+    .map((id) => String(id))
+    .filter(Boolean);
+  const matched = requestedIds.length
+    ? items.filter(
+        (item) => requestedIds.includes(String(item.itemId)) || requestedIds.includes(String(item.chunkId)),
+      )
+    : [];
+  const selected = matched.length ? matched : [items[0]];
+
+  const seen = new Set<string>();
+  const bboxes: CitationPdfBBox[] = [];
+  for (const item of selected) {
+    for (const box of parseCitationBBoxes(item?.bbox)) {
+      const key = `${box.page}:${box.bbox.map((value) => value.toFixed(2)).join(',')}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      bboxes.push(box);
+    }
+  }
+  return bboxes;
 }
 
 export function getLegacyCitationPreview(webContent: any, label?: number): CitationPreview | null {
@@ -420,9 +687,9 @@ export function getLegacyCitationPreview(webContent: any, label?: number): Citat
   }
 
   return {
-    title: item.title || item.url || `引用 ${label}`,
+    title: item.title || item.url || i18next.t('com_citation.untitled', { index: label }),
     snippet: item.snippet || item.content || '',
-    sourceName: item.source || item.url || '网页',
+    sourceName: item.source || item.url || i18next.t('com_message.source_name_fallback_web'),
     sourceMeta: formatCitationWebDate(item.datePublished || item.date || ''),
     link: item.url,
     type: 'web',
@@ -455,22 +722,44 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
   const item = getCitationItem(detail, data.itemId);
   const type = normalizeCitationType(detail.type || data.type);
 
+  if (type === 'article') {
+    return {
+      title: payload.title || `${data.label ?? ''}`,
+      snippet: item?.snippet || payload.snippet || '',
+      sourceName: payload.title || payload.sourceUrl || '',
+      sourceMeta: '',
+      link: payload.sourceUrl,
+      type,
+    };
+  }
+
   if (type === 'web') {
     return {
-      title: item?.title || payload.title || payload.url || `引用 ${data.label ?? ''}`,
+      title: item?.title || payload.title || payload.url || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: extractWebSnippetContent(item?.snippet || payload.snippet),
-      sourceName: payload.source || payload.url || '网页',
+      sourceName: payload.source || payload.url || i18next.t('com_message.source_name_fallback_web'),
       sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
     };
   }
 
+  if (type === 'temp') {
+    return {
+      title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
+      snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
+      sourceName: i18next.t('com_citation.source_temp_kb'),
+      sourceMeta: formatCitationLocation(detail, data.itemId),
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
+      type,
+    };
+  }
+
   return {
-    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+    title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
-    sourceName: payload.knowledgeName || payload.fileType || '政策文件',
-    sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : '',
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t('com_message.source_name_fallback_document'),
+    sourceMeta: formatCitationLocation(detail, data.itemId),
     link: payload.downloadUrl,
     type,
   };
@@ -484,21 +773,43 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
   const payload = detail.sourcePayload;
   const type = normalizeCitationType(detail.type || data.type);
 
+  if (type === 'article') {
+    return {
+      title: payload.title || `${data.label ?? ''}`,
+      snippet: payload.snippet || '',
+      sourceName: payload.title || payload.sourceUrl || '',
+      sourceMeta: '',
+      link: payload.sourceUrl,
+      type,
+    };
+  }
+
   if (type === 'web') {
     return {
-      title: payload.title || payload.url || `引用 ${data.label ?? ''}`,
+      title: payload.title || payload.url || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
       snippet: '',
-      sourceName: payload.source || payload.url || '网页',
+      sourceName: payload.source || payload.url || i18next.t('com_message.source_name_fallback_web'),
       sourceMeta: formatCitationWebDate(payload.datePublished || ''),
       link: payload.url || payload.sourceUrl,
       type,
     };
   }
 
+  if (type === 'temp') {
+    return {
+      title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
+      snippet: '',
+      sourceName: i18next.t('com_citation.source_temp_kb'),
+      sourceMeta: payload.fileType || '',
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
+      type,
+    };
+  }
+
   return {
-    title: getCitationDocumentName(detail) || `引用 ${data.label ?? ''}`,
+    title: getCitationDocumentName(detail) || i18next.t('com_citation.untitled', { index: data.label ?? '' }),
     snippet: '',
-    sourceName: payload.knowledgeName || payload.fileType || '政策文件',
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t('com_message.source_name_fallback_document'),
     sourceMeta: payload.fileType || '',
     link: payload.downloadUrl,
     type,
@@ -547,19 +858,26 @@ export function buildCitationReferenceItems({
   const { transformedContent, citationMap } = transformPrivateCitations(content || '');
   const items: CitationReferenceItem[] = [];
   const seen = new Set<string>();
+  const grouped = new Map<string, CitationReferenceItem>();
 
   Object.values(citationMap).forEach((data) => {
     const key = `private:${data.citationId}`;
-    if (seen.has(key)) {
+    const existing = grouped.get(key);
+    if (existing) {
+      if (data.itemId && !existing.itemIds?.includes(data.itemId)) {
+        existing.itemIds = [...(existing.itemIds || []), data.itemId];
+      }
       return;
     }
-    seen.add(key);
-    items.push({
+    grouped.set(key, {
       key,
       data,
+      itemIds: data.itemId ? [data.itemId] : [],
       detail: detailMap[data.citationId] ?? null,
     });
   });
+  items.push(...grouped.values());
+  grouped.forEach((item) => seen.add(item.key));
 
   for (const match of transformedContent.matchAll(/\[citation:(\d+)\]/g)) {
     const label = Number(match[1]);

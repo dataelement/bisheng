@@ -23,6 +23,7 @@ STRANGER_ID = 99
 def _user(user_id):
     user = MagicMock()
     user.user_id = user_id
+    user.tenant_id = 1
     return user
 
 
@@ -41,7 +42,13 @@ def storage():
 @pytest.fixture
 def conversation():
     """A conversation owned by OWNER_ID holding one attachment."""
-    session = SimpleNamespace(chat_id="c1", user_id=OWNER_ID, is_delete=False)
+    session = SimpleNamespace(
+        chat_id="c1",
+        user_id=OWNER_ID,
+        tenant_id=1,
+        api_subject_type=None,
+        is_delete=False,
+    )
     files = [{"file_id": "f1", "filename": "a.png", "object_name": "chat/7/abc.png"}]
     with (
         patch(
@@ -80,7 +87,13 @@ class TestResolveAttachmentUrl:
     async def test_attachment_without_object_name_is_refused(self, storage):
         # Messages written before this feature carry no object name; they must
         # read as "gone", not fall back to guessing at some other object.
-        session = SimpleNamespace(chat_id="c1", user_id=OWNER_ID, is_delete=False)
+        session = SimpleNamespace(
+            chat_id="c1",
+            user_id=OWNER_ID,
+            tenant_id=1,
+            api_subject_type=None,
+            is_delete=False,
+        )
         legacy = [{"file_id": "f1", "filename": "a.png", "filepath": "/bisheng-tmp/a.png"}]
         with (
             patch(

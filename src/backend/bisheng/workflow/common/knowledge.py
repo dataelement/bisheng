@@ -209,6 +209,7 @@ class RagUtils(BaseNode):
         self._retriever_kwargs = {"k": 100, "param": {"ef": 110}}
         self._rerank_model = None
         self._knowledge_retriever_tool = None
+        self._temp_source_by_document_id: dict[str, str] = {}
 
     def _run(self, unique_id: str) -> dict[str, Any]:
         raise NotImplementedError()
@@ -220,6 +221,54 @@ class RagUtils(BaseNode):
         except Exception as e:
             logger.error(f"Error formatting timestamp {timestamp}: {e}")
             return str(timestamp)
+
+    @staticmethod
+    def collect_temp_document_ids(metadata_lists: list) -> list[str]:
+        """Collect every document_id from one or more input-node metadata lists."""
+        file_ids: list[str] = []
+        for file_metadata in metadata_lists:
+            if not file_metadata:
+                continue
+            rows = file_metadata if isinstance(file_metadata, list) else [file_metadata]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                document_id = row.get("document_id")
+                if document_id:
+                    file_ids.append(document_id)
+        return file_ids
+
+    @staticmethod
+    def backfill_temp_source_paths(docs: list[Document], id_to_path: dict[str, str]) -> list[Document]:
+        """Stamp the original upload URL onto retrieved temp-kb chunks."""
+        if not docs or not id_to_path:
+            return docs
+        for doc in docs:
+            metadata = dict(doc.metadata or {})
+            document_id = metadata.get("document_id") or metadata.get("file_id")
+            source_url = None
+            if document_id is not None:
+                source_url = id_to_path.get(document_id) or id_to_path.get(str(document_id))
+            if source_url:
+                metadata["source_url"] = source_url
+                doc.metadata = metadata
+        return docs
+
+    def _temp_source_map_from_metadata(self) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for one in self._knowledge_value:
+            file_metadata = self.get_other_node_variable(one)
+            if not file_metadata:
+                continue
+            rows = file_metadata if isinstance(file_metadata, list) else [file_metadata]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                document_id = row.get("document_id")
+                source_url = row.get("source_url") or row.get("file_path")
+                if document_id and source_url:
+                    mapping[str(document_id)] = source_url
+        return mapping
 
     def retrieve_question(self, question: str) -> list[Document]:
         # F041: knowledge spaces go through the F029 view_file-filtered path.
@@ -238,6 +287,8 @@ class RagUtils(BaseNode):
         # Direct call: this retriever is an internal step of the node, not a tool
         # call of its own, and `invoke` would surface it as one in the run log.
         finally_docs = knowledge_retriever_tool._run(question)
+        if self._knowledge_type not in ("knowledge", "space"):
+            self.backfill_temp_source_paths(finally_docs, self._temp_source_by_document_id)
         all_file_id = set([one.metadata.get("document_id") for one in finally_docs])
         file_map = {}
         if finally_docs:
@@ -259,8 +310,7 @@ class RagUtils(BaseNode):
 
     def init_user_question(self) -> list[str]:
         return [
-            normalize_retrieval_question(self.get_other_node_variable(one))
-            for one in self.node_params["user_question"]
+            normalize_retrieval_question(self.get_other_node_variable(one)) for one in self.node_params["user_question"]
         ]
 
     def init_rerank_model(self):
@@ -447,13 +497,8 @@ class RagUtils(BaseNode):
 
     def init_file_retriever(self):
         """retriever from file user upload"""
-        file_ids = []
-        for one in self._knowledge_value:
-            file_metadata = self.get_other_node_variable(one)
-            if not file_metadata:
-                # No corresponding temporary file data found, User did not upload file
-                continue
-            file_ids.append(file_metadata[0]["document_id"])
+        file_ids = self.collect_temp_document_ids([self.get_other_node_variable(one) for one in self._knowledge_value])
+        self._temp_source_by_document_id = self._temp_source_map_from_metadata()
         if not file_ids:
             self._multi_es_retriever = None
             self._multi_milvus_retriever = None

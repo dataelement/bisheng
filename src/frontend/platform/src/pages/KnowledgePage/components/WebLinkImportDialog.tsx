@@ -74,6 +74,7 @@ export default function WebLinkImportDialog({
             ?? (normalizedStatusMessage.startsWith("web link request failed")
                 ? "webLinkRequestFailed"
                 : normalizedStatusMessage.startsWith("knowledge media transcription only supports aliyun/qwen asr")
+                    || normalizedStatusMessage.startsWith("knowledge media transcription does not support asr provider")
                     ? "mediaAsrProviderUnsupported"
                     : normalizedStatusMessage.startsWith("asr request failed")
                         ? "mediaAsrRequestFailed"

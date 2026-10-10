@@ -62,3 +62,21 @@ export function isMediaFileName(name: string): boolean {
 }
 
 export const MAX_MEDIA_FILES = 5;
+
+/**
+ * Accept both shapes callers use for a file field's allowed extensions.
+ *
+ * The skill form reads an array straight off a node template; the workflow form
+ * passes the joined string this module's `fileAcceptToInputAccept` produces.
+ * A consumer that assumes one shape throws on the other — `suffixes.join(',')`
+ * against the string form is what left the workflow upload field inert.
+ */
+export function normalizeSuffixList(suffixes: string[] | string | undefined | null): string[] {
+    if (Array.isArray(suffixes)) {
+        return suffixes.filter((part) => typeof part === 'string' && part.trim() !== '');
+    }
+    return String(suffixes ?? '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+}

@@ -13,7 +13,7 @@ LibreOffice evaluates them via a StarBasic macro installed into a throwaway
 profile, rewrites the file in place, and this script then re-reads it and names
 every cell that came back as an Excel error literal.
 
-BiSheng specifics:
+Platform specifics:
 
 * **Always exits 0.** The executor keeps stdout only on a zero exit; exiting
   non-zero on "errors found" would delete the very report that names them.

@@ -2,7 +2,7 @@
 """Read a .pptx back and report what is actually in it.
 
 Replaces two tools the official Anthropic pptx skill relies on but that do not
-exist in the BiSheng code interpreter: ``markitdown`` (content dump) and
+exist in the platform code interpreter: ``markitdown`` (content dump) and
 ``office/validate.py`` (which needs ``defusedxml``).
 
 Two sections are printed:

@@ -12,6 +12,7 @@ from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
+from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
@@ -112,9 +113,7 @@ async def list_creation_grant_users(
     page_size: int = Query(50, ge=1, le=200),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(
-        await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size)
-    )
+    return resp_200(await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size))
 
 
 @router.get("/creation-grant-subjects/user-groups")
@@ -124,9 +123,7 @@ async def list_creation_grant_user_groups(
     page_size: int = Query(50, ge=1, le=200),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(
-        await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size)
-    )
+    return resp_200(await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size))
 
 
 @router.get("/creation-grant-subjects/departments/children")
@@ -342,10 +339,10 @@ async def list_space_children(
     space_id: int,
     parent_id: int | None = None,
     file_ids: list[int] = Query(default=None, description="精确文件ID列表"),
-    order_field: str = "file_type",
-    order_sort: str = "asc",
+    order_field: SpaceFileOrderField = "file_type",
+    order_sort: SpaceFileOrderSort = "asc",
     file_status: list[int] = Query(default=None, description="文件状态列表"),
-    page_size: int = 20,
+    page_size: int = 40,
     cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
@@ -379,8 +376,8 @@ async def search_space_children(
     parent_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
-    order_field: str = "file_type",
-    order_sort: str = "asc",
+    order_field: SpaceFileOrderField = "file_type",
+    order_sort: SpaceFileOrderSort = "asc",
     tag_ids: list[int] = Query(default=None, description="标签ID列表"),
     file_status: list[int] = Query(default=None, description="文件状态列表"),
     keyword: str | None = None,

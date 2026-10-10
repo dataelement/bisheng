@@ -128,7 +128,9 @@
 ## 8. 给实现窗口
 
 1. 组件落 `packages/ui/src/components/Breadcrumb/`，对外 API：`items`（含 `title` / `href` / `onClick`）、`maxItems`（默认 4）、`itemsAfterCollapse`（默认 2）。折叠逻辑写在组件内，业务页只传完整层级数组。
+   另有 `expandLabel(hiddenCount)`：`…` 的 Tooltip 与 `aria-label` 文案由调用方给（层级数只有组件知道，文案只有业务方知道；组件库不持有 i18n key），以及 `ariaLabel`（默认 `'breadcrumb'`）。单级链条组件内 `return null`（§1），不劳业务页判断。
 2. `…` 菜单复用现有 Dropdown 基座（Dropdown 组件期定基准前先直接用 popup 档样式），**不新写一个浮层**。
+   落地实况：组件库尚无 Dropdown 组件，菜单直接建在 Radix Dropdown Menu 上、取 popup 档样式；Tooltip 走组件库的 `<Tooltip>`（2026-08-24 同期落地），`disabled={!截断}`；箭头照带——tooltip 只有一种长相。
 3. 截断走 CSS：`max-width: 96px` + `overflow: hidden` + `text-overflow: ellipsis` + `white-space: nowrap`，**不在 JS 里数字符**——数字符必然要为中英文各写一套换算，而且拿不到真实字宽。Tooltip 只在实际发生截断时挂（比对 `scrollWidth > clientWidth`）。
 4. 分隔符用 bisheng-icons 的右向箭头，16px；小尺寸档的 `strokeWidth` 补偿由图标组件统一处理（图标规范 §2.2.1），业务页不自调。
 5. 窄屏阈值切换用 `useMediaQuery`(576px)，与适配原则同一套断点，不自造。
@@ -196,3 +198,4 @@
 | 2026-08-05 | **折叠阈值 5 级 → 超过 4 级即折叠**（5 级路径此前全展开，现折叠为 `根级 · … · 上一级 · 当前页`）：§5.1、§8.1（`maxItems` 默认 4）、附录 A 差异点同步 | 本文件 | 待 committer 窗口提交 |
 | 2026-08-05 | `…` 触发器菜单打开态底色 `#e5e6eb` → **与 hover 同色 `#f2f3f5`**（加深一档视觉过重，§5.2 同步） | 本文件 | 待 committer 窗口提交 |
 | 2026-08-05 | 菜单对齐方式：左边缘对齐 `…` → **与 `…` 水平居中对齐**（§5.3 及推荐表同步） | 本文件 | 待 committer 窗口提交 |
+| 2026-08-24 | **组件抽出落库**：cofco 知识空间的 `KnowledgeBreadcrumb` 抽成通用 `@bisheng/ui` 的 `Breadcrumb`（`packages/ui/src/components/Breadcrumb/`），i18n 文案改由 `expandLabel` 传入、单级 `return null` 收进组件、窄屏阈值内建 `useMediaQuery(576px)`；新增 demo 页 `docs/components/breadcrumb.mdx` + 侧栏「导航 Navigation」分组；§8 回写落地实况（Radix Dropdown Menu 基座 + 内部临时 Tooltip） | 本文件、`packages/ui/src/components/Breadcrumb/*`、`packages/ui/src/index.ts`、`docs/components/{breadcrumb.mdx,index.md}`、`client/rspress.config.ts` | 待 committer 窗口提交 |

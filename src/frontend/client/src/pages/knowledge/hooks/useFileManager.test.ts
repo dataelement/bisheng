@@ -26,14 +26,23 @@ function read(rel: string): string {
 describe("useFileManager — F027 infinite-scroll guards", () => {
   const src = read("src/pages/knowledge/hooks/useFileManager.ts");
 
+  it("uses the shared 40-item children page default", () => {
+    const apiSrc = read("src/api/knowledge.ts");
+    expect(apiSrc).toMatch(/SPACE_CHILDREN_DEFAULT_PAGE_SIZE\s*=\s*40/);
+    expect(src).toMatch(/useState\(SPACE_CHILDREN_DEFAULT_PAGE_SIZE\)/);
+  });
+
   it("declares nextSearchPage state to stitch search-path append batches", () => {
     expect(src).toMatch(/const\s+\[nextSearchPage,\s*setNextSearchPage\]\s*=\s*useState\(0\)/);
   });
 
   it("branches loadFiles by page number: page=1 replaces, page>1 appends", () => {
-    // isAppending = page > 1 is the trigger; append uses functional setFiles(prev => [...prev, ...])
+    // isAppending = page > 1 is the trigger; append merges unique rows into the loaded snapshot.
     expect(src).toMatch(/const\s+isAppending\s*=\s*page\s*>\s*1/);
-    expect(src).toMatch(/setFiles\(prev\s*=>\s*\[\.\.\.prev,\s*\.\.\.filteredData\]\)/);
+    expect(src).toMatch(
+      /const\s+nextFiles\s*=\s*isAppending\s*\?\s*mergeFilesById\(previous,\s*filteredData\)\s*:\s*filteredData/,
+    );
+    expect(src).toMatch(/setFiles\(nextFiles\)/);
   });
 
   it("default path uses nextCursor on append, null on fresh load", () => {
@@ -116,6 +125,21 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
   });
 });
 
+describe("Knowledge retry status guards", () => {
+  const utilsSrc = read("src/pages/knowledge/knowledgeUtils.ts");
+
+  it("treats failed, timeout and violation files as retryable", () => {
+    const startIdx = utilsSrc.indexOf("export function isKnowledgeItemRetryable");
+    const endIdx = utilsSrc.indexOf("// ─── File upload constants", startIdx);
+    const body = utilsSrc.slice(startIdx, endIdx);
+
+    expect(body).toContain("FileStatus.FAILED");
+    expect(body).toContain("FileStatus.TIMEOUT");
+    expect(body).toContain("FileStatus.VIOLATION");
+    expect(body).toMatch(/file\.hasFailedFiles\s*===\s*true/);
+  });
+});
+
 describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
   const src = read("src/pages/knowledge/SpaceDetail/index.tsx");
 
@@ -131,15 +155,14 @@ describe("SpaceDetail UI — F027 infinite-scroll guards", () => {
     expect(src).toMatch(/hasMore:\s*boolean/);
   });
 
-  it("loads more only when scroll nears the bottom", () => {
-    expect(src).toMatch(/if\s*\(!hasMore\s*\|\|\s*loading\)\s*return/);
-    expect(src).toMatch(/scrollHeight\s*-\s*el\.scrollTop\s*-\s*el\.clientHeight\s*<=\s*240/);
-    expect(src).toMatch(/onLoadMore\(\)/);
+  it("renders the <LoadMore> sentinel through a shared bottom status", () => {
+    expect(src).toMatch(/const\s+listBottomStatus[\s\S]{0,800}?<LoadMore/);
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
+    expect(src).toMatch(/footer=\{listBottomStatus\}/);
   });
 
-  it("wires the scroll loader to both card and list views", () => {
-    expect(src).toMatch(/onScroll=\{handleListScroll\}/);
-    expect(src).toMatch(/<FileTable[\s\S]{0,400}?onScroll=\{handleListScroll\}/);
+  it("LoadMore calls the KnowledgeSpaceContent onLoadMore prop", () => {
+    expect(src).toMatch(/onLoad=\{onLoadMore\}/);
   });
 });
 

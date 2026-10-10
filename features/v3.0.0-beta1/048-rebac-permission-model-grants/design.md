@@ -1067,6 +1067,22 @@ DELETE，不重放已满足的 visible/action tuple；完整 AFTER verify 后才
 `FINALIZED + CURRENT(target_version)` 收口。超过 90 个 terminal correction、外部业务 scope、
 scope/version/operation 不匹配继续转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
 
+#### 知识空间上传失败补偿
+
+新文件的根目录 parent 是 `knowledge_space:<id>`，资源身份由类型和 ID 共同确定；
+`knowledge_space:348 → knowledge_file:348` 合法。文件/目录 adapter 的鉴权与生命周期
+校验仅在 parent 类型和 ID 均等于资源自身时拒绝自关联，目录祖先环路校验保持不变。
+
+批量上传异常按文件独立补偿，不能先加载整批权限镜像：失败项及后续项可能从未创建权限。
+`rollback_created` 使用原 `RESOURCE_CREATE` 的幂等键查找冻结 ledger；不存在即无需撤权，
+存在则在相同 Store/model 下先收敛原操作，再投影其完整逆操作 `RESOURCE_CREATE_ROLLBACK`。
+补偿仅接受初始版本（0→1）的文件/目录，保留版本、parent 和 operation fence；已被修改或
+处于 FAILED_CLOSED 的资源继续阻断，不盲目删除。逆操作必须 FINALIZED 后才删除该租户资源
+的 Grant/assignee/visible source/mode 镜像；operation/tuple ledger 保留用于审计和幂等重试。
+随后清理原文件对象、文档版本与业务文件记录。单项补偿失败保留其业务记录并记录异常，
+继续处理其他文件；返回原上传异常。基础设施故障或 FAILED_CLOSED 仍需恢复后重试补偿，
+不承诺在外部服务不可用时完成跨存储原子回滚。
+
 #### Mode switch
 
 - 只有 folder / knowledge_file 开放 mode draft/apply；knowledge_space 与 knowledge_library
@@ -1151,6 +1167,10 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 
 ## 5. 已知坑 / 反直觉事实
 
+- 不同资源表的数字 ID 可以相同；只比较 parent_id/resource_id 会把合法根目录上传误判为自关联。
+- 上传失败项可能没有权限镜像。整批先加载镜像再删除会令一个缺失项阻断所有已创建权限的清理；
+  上传补偿须逐文件基于创建 ledger 撤销，且不能在权限撤销失败的 finally 中硬删业务记录。
+
 | # | 事实 | 不知道会怎样 | 处理位置 |
 |---|---|---|---|
 | 1 | tuple 不属于某个 model ID；Read/Delete 是 Store-scoped，只有新 tuple Write/目标查询固定新 model | 误以为切 model 会自动迁数据，或为删除旧 tuple 额外维护旧 client；遗留无效 tuple 虽被新模型忽略，仍可能拖慢读取 | `scripts/migrate_f048_permission_data.py:migrate_and_retire_legacy_tuples` + D4 legacy-count gate |
@@ -1184,6 +1204,8 @@ domain 对业务 model/repository 的 import 必须由架构测试禁止。正�
 | 29 | 模型 active 被误当成运行时撤权开关会制造资源规模 fan-out | 停用一个广泛使用的模型时产生不必要的大批 tuple 清理和复杂原子切换 | active 只在 Grant command 中控制可分配性；已有 Grant 不变，删除前逐绑定清零并由引用门禁阻断最终删除 |
 | 30 | 管理员管理范围与个人内容可见范围不是同一业务语义 | super_admin 身份把“我加入的”扩成平台全量 | visible 专用 facade 禁止 identity shortcut；具体 action 保持 C4 顺序 |
 | 31 | 列表路径成本取决于候选规模、可见率、业务过滤和继承比例 | 把 joined 的 ID-first 或文件的 candidate-first 机械推广到所有列表 | §3 决策14入口登记 + BENCH-01 业务链路阶段 |
+| 32 | 文件夹本级授权不意味着整个知识空间可见；读取指定文件夹时只要求该容器可见，子项仍逐项执行包含继承的最终判断 | 先校验空间 visible 会使只有某层文件夹权限的账号无法列出或搜索其下级；直接放行全部子项又会越过 CUSTOM 边界 | `KnowledgeSpaceService._require_container_read_permission`，由普通列表与搜索共用；根目录仍校验空间 visible |
+| 33 | 服务账号继承需要每层资源的 `service_account:*` mode/permission_enabled 技术标记；这些标记不授予任何账号资源权限 | 旧数据只有 `user:*` 时会出现空间 visible 成功而子项不可见、上传失败；新增 Grant 不会补齐存量后代的技术标记 | 创建与迁移编译器写入两类主体标记；模型发布脚本 `publish_authorization_model_change.py` 和完整对账脚本 `reconcile_f048_visible_projection.py` 在维护窗口按 CURRENT 模式补齐，保留 CUSTOM 边界；模型已一致也必须补齐并校验后才返回成功 |
 
 ---
 
@@ -1949,6 +1971,8 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-08 | 父子资源按类型与 ID 判定自关联；上传失败逐文件按创建 ledger 撤权并清理镜像、存储对象及业务记录，保留补偿审计和失败恢复边界 | beta3 根目录上传 ID 碰撞及整批权限清理中断 |
+| 2026-09-14 | 修正指定文件夹列表/搜索的容器鉴权，补充服务账号多级继承、编辑者/所有者动作、CUSTOM 隔断、撤权与历史标记修复回归 | v2 服务账号访问知识空间与独立授权文件夹的排查 |
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
 | 2026-08-13 | 将模型 `active` 收窄为“是否可用于新增/变更授权”：停用不影响已有 Grant；删除必须先撤销或替换全部绑定，并在引用/source projection/live tuple 清零后完成。可见执行关系改为单槽浅层 `visible`，移除 A/B 槽、switch、双写和 Catalog 4-tuple 切换；保留来源引用计数、ledger、reconcile 与旧系统单次迁移 | 用户确认界面语义“关闭后不能再用它授权，已有授权不受影响；删除必须先清理绑定关系” |
 | 2026-08-20 | 将资源权限投影状态从普通鉴权停服条件中解耦：非 CURRENT 期间继续执行 higher-consistency OpenFGA action/visible 决策，只冻结同资源新的权限配置写；`my-permissions` 降级为 OpenFGA 逐动作结果且不展示 staged SQL 来源 | 用户确认增加查看者等权限修改不得影响已有授权的正常鉴权 |

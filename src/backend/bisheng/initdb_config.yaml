@@ -33,9 +33,12 @@ llm_request:
   max_retries: 1
 
 default_operator:
-  # 使用免登录链接的方式需要配置，因为免登录链接相当于不知道用户信息，我们系统会自动把这些行为记录到某个用户头上，这里用来配置该用户的id
+  # 免登录链接的执行身份。访客没有账号，平台以这里配置的用户身份执行他们的请求。
+  # 重要：这个账号的权限范围 = 访客能触达的范围。它是超级管理员，访客就拥有超级管理员的视野。
+  # 请配置一个只被授予了「这些应用确实该用到的资源」的普通账号。
   user: 1
-  enable_guest_access: true # 免登录链接是否可访问
+  # 全平台免登录链接总开关。关闭后所有免登录链接立即不可访问。
+  enable_guest_access: true
 
 # 密码安全相关配置
 password_conf:
@@ -74,8 +77,8 @@ env:
   uploaded_files_maximum_size: 50
   # 知识库/知识空间音视频上传最大限制，单位MB（其余文件仍用 uploaded_files_maximum_size）
   uploaded_media_maximum_size: 1024
-  # 是否开启音视频上传（工作流 / 工作台 / 知识库统一开关，默认关闭）
-  enable_media_upload: false
+  # 是否开启音视频上传（工作流 / 工作台 / 知识库统一开关，默认开启）
+  enable_media_upload: true
   # 工作台「无菜单权限」占位页（/menu-unavailable）展示的纯文案，可在系统配置中修改；不配置则使用前端默认文案
   workbench_menu_unavailable_message: "暂无使用过的应用，可以前往应用广场探索更多应用"
 
@@ -86,6 +89,18 @@ workflow:
   timeout: 5
   # 首次打开已结束的独立工作流会话时是否自动重新运行（全局开关，默认关闭）
   auto_rerun_on_open: false
+  # 是否允许工作流运行「代码节点」。默认关闭，不配置也视为关闭。
+  #
+  # 代码节点按设计会执行用户填写的 Python 代码。当前版本尚未提供执行沙箱，
+  # 代码以后端进程的权限直接运行，可以读取服务器文件、环境变量（含数据库与
+  # 对象存储凭证）以及访问内网。
+  #
+  # 因此开启后：所有能创建或编辑工作流的用户，都等同于拥有这台服务器的命令
+  # 执行权限。这与他们在毕昇里的角色无关，也与是否部署在内网无关。
+  # 仅在「所有能创建应用的人都可信」的环境下开启。
+  #
+  # 执行沙箱正在开发中，届时本开关将不再是唯一防线。
+  code_node_enabled: false
 
 # 日常聊天（Agent 模式）相关配置
 daily_chat:
@@ -132,6 +147,11 @@ linsight:
   retry_num: 3
   # 灵思任务执行过程中模型调用重试间隔时间（秒）
   retry_sleep: 5
+  # 技能文件（.md / .zip / .skill）上传体积上限，单位 MB。改这里即可，前后端都读它。
+  skill_upload_max_size_mb: 200
+  # 技能包解压后全部文件的总大小上限，单位 MB。实际生效值不低于上面的上传上限，
+  # 也不超过 1024（每个选用该技能的任务启动时都会把整包拷进任务工作区，调大会拖慢任务启动）。
+  skill_unpacked_max_size_mb: 500
   # 生成SOP时，prompt里放的用户上传文件信息的数量
   max_file_num: 5
   # 生成SOP时，prompt里放的组织知识库的最大数量
@@ -150,9 +170,14 @@ information_conf:
   api_key: ""
   kwargs: # 发送给情报订阅服务额外参数
     timeout: 3600  # 请求情报订阅服务的超时时间，单位秒
+  information_initial_article_limit: 20
+  information_sync_jitter_seconds: 600
+  information_subscription_auto_unsubscribe_enabled: true
+  information_knowledge_delivery_enabled: true
+  information_business_timezone: Asia/Shanghai
 
 mcp:
-  enable_stdio: true
+  enable_stdio: false
 
 knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）

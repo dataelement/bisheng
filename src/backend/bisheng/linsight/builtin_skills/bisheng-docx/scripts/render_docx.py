@@ -8,7 +8,7 @@
 Flags: ``--dpi 110``, ``--timeout 180``, ``--outdir``.
 
 The official skill does this with ``soffice`` + ``pdftoppm``. Poppler is not in
-the BiSheng image, so the PDF is rasterised with PyMuPDF instead — same result,
+the runtime image, so the PDF is rasterised with PyMuPDF instead — same result,
 one fewer missing binary, and it keeps the ``page-01.png`` zero-padded naming
 the rest of the workflow expects.
 

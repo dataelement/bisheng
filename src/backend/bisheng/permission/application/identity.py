@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar, Token
 from typing import Protocol
 
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
@@ -16,10 +17,29 @@ class LoginPermissionIdentity(Protocol):
     is_global_super: bool
 
 
+current_permission_actor: ContextVar[PermissionActor | None] = ContextVar("current_permission_actor", default=None)
+
+
+def get_current_permission_actor() -> PermissionActor | None:
+    return current_permission_actor.get()
+
+
+def set_current_permission_actor(actor: PermissionActor | None) -> Token:
+    return current_permission_actor.set(actor)
+
+
+def reset_current_permission_actor(token: Token) -> None:
+    current_permission_actor.reset(token)
+
+
 async def resolve_permission_actor(
     login_user: LoginPermissionIdentity,
 ) -> PermissionActor:
     """Resolve only identity roles; resource facts remain business-owned."""
+
+    contextual_actor = get_current_permission_actor()
+    if contextual_actor is not None:
+        return contextual_actor
 
     tenant_id = int(login_user.tenant_id)
     is_global_super = bool(getattr(login_user, "is_global_super", False))
@@ -31,8 +51,9 @@ async def resolve_permission_actor(
             tenant_admin_tenant_ids = frozenset({tenant_id})
 
     return PermissionActor(
-        user_id=login_user.user_id,
-        current_tenant_id=tenant_id,
+        subject_type="user",
+        subject_id=login_user.user_id,
+        tenant_id=tenant_id,
         super_admin=is_global_super,
         tenant_admin_tenant_ids=tenant_admin_tenant_ids,
     )

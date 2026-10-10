@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
-import { useRecoilValue, useResetRecoilState } from "recoil";
+import { useResetRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../../selectionStore";
 import {
     Tooltip,
@@ -38,9 +38,15 @@ import useFolderChat from "~/hooks/useFolderChat";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { getSpaceTagsApi } from "~/api/knowledge";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import { useAuthContext } from "~/hooks/AuthContext";
+import {
+    readAdminDefaultModelId,
+    type ChatModelOption,
+} from "~/hooks/useChatModelResolution";
+import { useSurfaceModel } from "~/hooks/useSurfaceModel";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn } from "~/utils";
-import store from "~/store";
 
 interface KnowledgeAiBottomDockProps {
     /** Active knowledge space id. The dock unmounts when this is empty. */
@@ -62,7 +68,20 @@ export function KnowledgeAiBottomDock({
     const assistantTitle =
         bsConfig?.knowledge_space?.assistant_name?.trim() ||
         localize("com_knowledge.ai_assistant");
-    const chatModel = useRecoilValue(store.chatModel);
+    // Own model selection, isolated from /c: picking a model in the knowledge
+    // space used to change what the main chat showed (see useSurfaceModel).
+    const { user } = useAuthContext();
+    const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+    const {
+        model: surfaceModel,
+        selectModel,
+        repairModel,
+    } = useSurfaceModel({
+        userId: user?.id,
+        surfaceKey: 'knowledgeAi',
+        models: (bsConfig?.models || []) as ChatModelOption[],
+        adminDefaultId: readAdminDefaultModelId(workbenchCfg, 'daily'),
+    });
 
     const [open, setOpen] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
@@ -145,7 +164,7 @@ export function KnowledgeAiBottomDock({
         deleteSession,
         renameSession,
         regenerate,
-    } = useFolderChat(spaceId, folderId);
+    } = useFolderChat(spaceId, folderId, surfaceModel);
 
     // Empty-state hint depends on whether the panel is opened at space root or in a folder.
     const folderQaHint = folderId
@@ -291,7 +310,9 @@ export function KnowledgeAiBottomDock({
                         key={spaceId}
                         availableTags={availableTags}
                         modelOptions={bsConfig?.models}
-                        modelValue={chatModel.id}
+                        modelValue={surfaceModel.id}
+                        onModelChange={selectModel}
+                        onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
                         disabled={!bsConfig?.models?.length}
                         onSend={handleSend}
@@ -372,7 +393,7 @@ export function KnowledgeAiBottomDock({
                                         type="button"
                                         onClick={handleExpand}
                                         aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
+                                        className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-text-3 drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-text-2"
                                     >
                                         <Outlined.DoubleDown className="size-4 rotate-180" />
                                     </button>
@@ -488,7 +509,9 @@ export function KnowledgeAiBottomDock({
                         key={spaceId}
                         availableTags={availableTags}
                         modelOptions={bsConfig?.models}
-                        modelValue={chatModel.id}
+                        modelValue={surfaceModel.id}
+                        onModelChange={selectModel}
+                        onModelAutoChange={repairModel}
                         isStreaming={isStreaming}
                         disabled={!bsConfig?.models?.length}
                         onSend={handleSend}

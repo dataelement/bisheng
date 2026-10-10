@@ -13,7 +13,7 @@ from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_
 
 
 def combine_multiple_md_files_to_raw_texts(
-        path,
+    path,
 ) -> tuple[list[Document], list[Document]]:
     """
     combine multiple md file to raw texts including meta-data list.
@@ -32,7 +32,7 @@ def combine_multiple_md_files_to_raw_texts(
 
     for file_name in files:
         full_file_name = f"{path}/{file_name}"
-        with open(full_file_name, "r", encoding="utf-8") as f:
+        with open(full_file_name, encoding="utf-8") as f:
             content = f.read()
             raw_texts.append(Document(page_content=content, metadata={}))
             documents[0].page_content += content
@@ -40,13 +40,13 @@ def combine_multiple_md_files_to_raw_texts(
 
 
 def convert_file_to_md(
-        file_name,
-        input_file_name,
-        header_rows=[0, 1],
-        data_rows=10,
-        append_header=True,
-        knowledge_id=None,
-        retain_images=True,
+    file_name,
+    input_file_name,
+    header_rows=[0, 1],
+    data_rows=10,
+    append_header=True,
+    knowledge_id=None,
+    retain_images=True,
 ):
     """
     The main function that handles file conversions.
@@ -68,21 +68,13 @@ def convert_file_to_md(
     elif file_name.endswith(".pptx") or file_name.endswith(".ppt"):
         md_file_name, local_image_dir, doc_id = pptx_handler(CACHE_DIR, input_file_name)
         include_cache_dir = False
-    elif (
-            file_name.endswith(".xlsx")
-            or file_name.endswith(".xls")
-            or file_name.endswith(".csv")
-    ):
+    elif file_name.endswith(".xlsx") or file_name.endswith(".xls") or file_name.endswith(".csv"):
         md_file_name, local_image_dir, doc_id = excel_handler(
             CACHE_DIR, input_file_name, header_rows, data_rows, append_header
         )
         local_image_dir = None
         return md_file_name, local_image_dir, doc_id
-    elif (
-            file_name.endswith(".html")
-            or file_name.endswith(".htm")
-            or file_name.endswith(".mhtml")
-    ):
+    elif file_name.endswith(".html") or file_name.endswith(".htm") or file_name.endswith(".mhtml"):
         (
             md_file_name,
             local_image_dir,
@@ -90,7 +82,7 @@ def convert_file_to_md(
         ) = html_handler(CACHE_DIR, input_file_name)
         include_cache_dir = False
     elif file_name.endswith("pdf"):
-        md_file_name, local_image_dir, doc_id = pdf_handler(CACHE_DIR, input_file_name)
+        md_file_name, local_image_dir, doc_id, _elements = pdf_handler(CACHE_DIR, input_file_name)
         include_cache_dir = True
     else:
         raise ValueError(f"unsupported file type {file_name} for conversion to markdown.")
@@ -106,12 +98,12 @@ def convert_file_to_md(
 
 
 def replace_image_url(
-        md_file_name,
-        local_image_dir,
-        doc_id,
-        include_cache_dir,
-        knowledge_id=None,
-        retain_images=True,
+    md_file_name,
+    local_image_dir,
+    doc_id,
+    include_cache_dir,
+    knowledge_id=None,
+    retain_images=True,
 ):
     """
     Usage:
@@ -126,13 +118,15 @@ def replace_image_url(
     """
     from bisheng.api.services.knowledge_imp import KnowledgeUtils
 
-    minio_image_path = f"/{get_minio_storage_sync().bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
+    minio_image_path = (
+        f"/{get_minio_storage_sync().bucket}/{KnowledgeUtils.get_knowledge_file_image_dir(doc_id, knowledge_id)}"
+    )
     url_for_replacement = local_image_dir
     if not include_cache_dir:
         url_for_replacement = doc_id
 
     if md_file_name and local_image_dir and doc_id:
-        with open(md_file_name, "r", encoding="utf-8") as f:
+        with open(md_file_name, encoding="utf-8") as f:
             content = f.read()
         content = content.replace(url_for_replacement, minio_image_path)
 

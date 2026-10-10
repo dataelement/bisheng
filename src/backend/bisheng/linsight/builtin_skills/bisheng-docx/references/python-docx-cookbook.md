@@ -1,4 +1,4 @@
-# python-docx 速查（BiSheng 适配）
+# python-docx 速查
 
 可直接抄的片段。代码假定写在**构建脚本**里（`scratch/build_doc.py`），由代码执行器用
 `subprocess.run([sys.executable, "scratch/build_doc.py"])` 跑。

@@ -1,0 +1,276 @@
+"""Open API authentication and identity errors (module 260)."""
+
+from bisheng.common.errcode.base import BaseErrorCode
+
+
+class OpenApiAuthError(BaseErrorCode):
+    """Base error carrying the real status used by the v2 exception handler."""
+
+    http_status: int = 401
+
+    def __init__(
+        self,
+        exception: Exception | None = None,
+        msg: str | None = None,
+        code: int | None = None,
+        http_status: int | None = None,
+        **kwargs,
+    ):
+        super().__init__(exception=exception, msg=msg, code=code, **kwargs)
+        if http_status is not None:
+            self.http_status = http_status
+
+
+class OpenApiCredentialMissingError(OpenApiAuthError):
+    Code = 26001
+    Msg = "Missing or malformed API credential"
+    http_status = 401
+
+
+class OpenApiCredentialInvalidError(OpenApiAuthError):
+    Code = 26002
+    Msg = "Invalid, revoked, or expired API credential"
+    http_status = 401
+
+
+class OpenApiScopeMissingError(OpenApiAuthError):
+    Code = 26003
+    Msg = "API credential lacks the required scope"
+    http_status = 403
+
+    def __init__(self, required: str, **kwargs):
+        super().__init__(required=required, **kwargs)
+
+
+class OpenApiDelegationNotAllowedError(OpenApiAuthError):
+    Code = 26004
+    Msg = "Delegation is not enabled or the target is outside the allowed scope"
+    http_status = 403
+
+
+class OpenApiDelegationTargetInvalidError(OpenApiAuthError):
+    Code = 26005
+    Msg = "Delegation target is invalid"
+    http_status = 403
+
+
+class OpenApiDelegationModeUnsupportedError(OpenApiAuthError):
+    Code = 26006
+    Msg = "This endpoint does not support delegated identity"
+    http_status = 403
+
+
+class OpenApiPrivilegedTargetError(OpenApiAuthError):
+    Code = 26007
+    Msg = "Privileged users cannot be delegation targets"
+    http_status = 403
+
+
+class OpenApiIdentityHeaderConflictError(OpenApiAuthError):
+    Code = 26010
+    Msg = "X-On-Behalf-Of and X-End-User cannot be used together"
+    http_status = 400
+
+
+class OpenApiAsyncUnsupportedError(OpenApiAuthError):
+    Code = 26015
+    Msg = "Asynchronous execution is not available on this endpoint"
+    http_status = 400
+
+
+class OpenApiDelegationHeaderRequiredError(OpenApiAuthError):
+    Code = 26016
+    Msg = "X-On-Behalf-Of is required for a delegated credential"
+    http_status = 400
+
+
+class OpenApiTaskModeUnsupportedError(OpenApiAuthError):
+    # F073: task mode is open now; the code only means an unknown run mode.
+    Code = 26017
+    Msg = "Invalid run mode; only daily or task is supported"
+    http_status = 400
+
+
+class OpenApiEndUserInvalidError(OpenApiAuthError):
+    Code = 26018
+    Msg = "X-End-User must contain at most 128 printable ASCII bytes"
+    http_status = 400
+
+
+class OpenApiRemovedIdentityInputError(OpenApiAuthError):
+    Code = 26019
+    Msg = "Use X-On-Behalf-Of instead of removed identity inputs"
+    http_status = 400
+
+
+class ServiceAccountNotFoundError(OpenApiAuthError):
+    Code = 26020
+    Msg = "Service account not found"
+    http_status = 404
+
+
+class ServiceAccountOwnerInvalidError(OpenApiAuthError):
+    Code = 26021
+    Msg = "Resource owner or delegation target is invalid"
+    http_status = 400
+
+
+class ServiceAccountOperationForbiddenError(OpenApiAuthError):
+    Code = 26022
+    Msg = "This operation is not allowed for a service account"
+    http_status = 403
+
+
+class OpenApiExtensionScopeNotDeployedError(OpenApiAuthError):
+    Code = 26023
+    Msg = "The requested extension scope is not deployed"
+    http_status = 400
+
+
+class OpenApiDelegateConfigurationInvalidError(OpenApiAuthError):
+    Code = 26024
+    Msg = "Delegation configuration is invalid"
+    http_status = 400
+
+
+class OpenApiUnknownScopeError(OpenApiAuthError):
+    Code = 26025
+    Msg = "Unknown API scope"
+    http_status = 400
+
+
+class ApiCredentialNotFoundError(OpenApiAuthError):
+    Code = 26026
+    Msg = "API credential not found"
+    http_status = 404
+
+
+class ServiceAccountInactiveError(OpenApiAuthError):
+    Code = 26027
+    Msg = "Service account is disabled or deleted"
+    http_status = 401
+
+
+class ServiceAccountOwnerForbiddenError(OpenApiAuthError):
+    Code = 26029
+    Msg = "A service account cannot be a resource owner"
+    http_status = 403
+
+
+class OpenApiAuthDependencyUnavailableError(OpenApiAuthError):
+    Code = 26030
+    Msg = "Credential validation service unavailable"
+    http_status = 503
+
+
+class OpenApiEndpointUnregisteredError(OpenApiAuthError):
+    Code = 26031
+    Msg = "Endpoint has no registered API scope"
+    http_status = 500
+
+
+class PersonalTokenDisabledError(OpenApiAuthError):
+    Code = 26040
+    Msg = "Personal access tokens are not enabled"
+    http_status = 403
+
+
+class PersonalTokenScopeInvalidError(OpenApiAuthError):
+    Code = 26041
+    Msg = "Personal access token scope is not allowed"
+    http_status = 400
+
+
+class PersonalTokenTtlExceededError(OpenApiAuthError):
+    Code = 26042
+    Msg = "Personal access token expiry exceeds the allowed maximum"
+    http_status = 400
+
+
+class PersonalTokenHolderInvalidError(OpenApiAuthError):
+    Code = 26043
+    Msg = "Personal access token holder is no longer active in this tenant"
+    http_status = 401
+
+
+class PersonalTokenDataScopeError(OpenApiAuthError):
+    """F066: the tenant narrowed personal tokens to holder-created knowledge.
+
+    Deliberately separate from 26003 (missing scope): 26003 means "ask an
+    admin for the scope", 26044 means "tenant policy — retrying or adding
+    scopes will not help".  The payload never names the denied resource
+    (anti-enumeration).
+    """
+
+    Code = 26044
+    Msg = "Personal access token data scope is restricted to holder-created knowledge"
+    http_status = 403
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("scope", "personal_only")
+        super().__init__(**kwargs)
+
+
+# F073 task-mode Open API. Numbered from 26060: 26045-26049 are reserved by
+# F053, and 26050-26052 are already taken on 3.0-vibe (hosted apps), which will
+# merge this release line later.
+
+
+class OpenApiTaskModeSyncUnsupportedError(OpenApiAuthError):
+    Code = 26060
+    Msg = "Task mode only runs asynchronously; set execution to async"
+    http_status = 400
+
+
+class OpenApiTaskConversationNotAcceptedError(OpenApiAuthError):
+    Code = 26061
+    Msg = "Task mode starts a new conversation and does not accept a conversation ID"
+    http_status = 400
+
+
+class OpenApiTaskSkillUnavailableError(OpenApiAuthError):
+    """``unavailable`` lists every rejected skill name (surfaces in ``data``)."""
+
+    Code = 26062
+    Msg = "Some selected skills do not exist or are not enabled"
+    http_status = 400
+
+
+class OpenApiTaskModeForbiddenError(OpenApiAuthError):
+    Code = 26063
+    Msg = "The user being acted for has no permission to use task mode"
+    http_status = 403
+
+
+class OpenApiTaskAlreadyFinishedError(OpenApiAuthError):
+    Code = 26064
+    Msg = "The task has already finished and cannot be stopped"
+    http_status = 409
+
+
+class OpenApiContentBlockedError(OpenApiAuthError):
+    """``auto_reply`` carries the tenant's configured reply (surfaces in ``data``)."""
+
+    Code = 26065
+    Msg = "The content did not pass the safety review"
+    http_status = 400
+
+
+class OpenApiModelUnavailableError(OpenApiAuthError):
+    Code = 26066
+    Msg = "The selected model is not available"
+    http_status = 400
+
+
+class OpenApiToolUnavailableError(OpenApiAuthError):
+    Code = 26067
+    Msg = "The selected tool is not available"
+    http_status = 400
+
+
+class OpenApiTaskQueueUnavailableError(OpenApiAuthError):
+    """The task was not queued; the version is marked failed and no id is returned."""
+
+    Code = 26068
+    Msg = "The task queue is temporarily unavailable; submit again later"
+    http_status = 503

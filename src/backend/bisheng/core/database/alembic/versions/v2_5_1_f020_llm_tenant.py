@@ -34,39 +34,37 @@ Merge revision:
   step operators have to apply.
 """
 
-from typing import List, Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 import sqlalchemy as sa
 from alembic import op
 
 from bisheng.core.database.dialect_helpers import index_exists
 
-revision: str = 'f020_llm_tenant'
+revision: str = "f020_llm_tenant"
 down_revision: Union[str, Sequence[str], None] = (
-    'f015_reconcile_log_fields',
-    'f017_llm_token_log',
+    "f015_reconcile_log_fields",
+    "f017_llm_token_log",
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-_OLD_UNIQUE_INDEX_NAME = 'name'   # SQLAlchemy default when unique=True is on the column
-_NEW_UNIQUE_INDEX_NAME = 'uk_llm_server_tenant_name'
-_TABLE = 'llm_server'
+_OLD_UNIQUE_INDEX_NAME = "name"  # SQLAlchemy default when unique=True is on the column
+_NEW_UNIQUE_INDEX_NAME = "uk_llm_server_tenant_name"
+_TABLE = "llm_server"
 
 
-def _find_duplicates(conn) -> List[sa.engine.Row]:
+def _find_duplicates(conn) -> list[sa.engine.Row]:
     """Return rows violating the (tenant_id, name) uniqueness invariant.
 
     Separated out so tests can patch a connection whose ``execute``
     returns a canned fetchall.
     """
-    result = conn.execute(sa.text(
-        'SELECT tenant_id, name, COUNT(*) AS cnt '
-        f'FROM {_TABLE} '
-        'GROUP BY tenant_id, name '
-        'HAVING cnt > 1'
-    ))
+    result = conn.execute(
+        sa.text(f"SELECT tenant_id, name, COUNT(*) AS cnt FROM {_TABLE} GROUP BY tenant_id, name HAVING COUNT(*) > 1")
+    )
     return result.fetchall()
 
 
@@ -75,15 +73,11 @@ def upgrade() -> None:
 
     conflicts = _find_duplicates(conn)
     if conflicts:
-        lines = [
-            f'  tenant_id={row.tenant_id!r}, name={row.name!r}, count={row.cnt}'
-            for row in conflicts
-        ]
+        lines = [f"  tenant_id={row.tenant_id!r}, name={row.name!r}, count={row.cnt}" for row in conflicts]
         raise RuntimeError(
-            'llm_server has duplicate (tenant_id, name) pairs — cannot '
-            'create composite UNIQUE index. Please deduplicate manually '
-            '(e.g. suffix ``-dup-{id}``) and rerun `alembic upgrade head`.\n'
-            + '\n'.join(lines)
+            "llm_server has duplicate (tenant_id, name) pairs — cannot "
+            "create composite UNIQUE index. Please deduplicate manually "
+            "(e.g. suffix ``-dup-{id}``) and rerun `alembic upgrade head`.\n" + "\n".join(lines)
         )
 
     # Drop the old global UNIQUE(name). The index name SQLAlchemy gives a
@@ -97,7 +91,7 @@ def upgrade() -> None:
         op.create_index(
             _NEW_UNIQUE_INDEX_NAME,
             _TABLE,
-            ['tenant_id', 'name'],
+            ["tenant_id", "name"],
             unique=True,
         )
 
@@ -115,6 +109,6 @@ def downgrade() -> None:
         op.create_index(
             _OLD_UNIQUE_INDEX_NAME,
             _TABLE,
-            ['name'],
+            ["name"],
             unique=True,
         )

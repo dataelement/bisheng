@@ -19,6 +19,7 @@ SOURCE_TYPES = frozenset(
         "DEPARTMENT",
         "USER_GROUP",
         "CREATOR",
+        "CREATOR_GRANT",
         "SPACE_MEMBERSHIP",
         "CHANNEL_MEMBERSHIP",
         "SNAPSHOT_FROM_PARENT",
@@ -124,11 +125,11 @@ class GrantSourceService:
 
         relation: str | None
         projected_subject: str
-        if normalized_subject_type == "user":
+        if normalized_subject_type in {"user", "service_account"}:
             if userset_relation is not None or include_children:
-                raise ValueError("direct user sources cannot use userset options")
+                raise ValueError("direct subjects cannot use userset options")
             relation = None
-            projected_subject = f"user:{normalized_subject_id}"
+            projected_subject = f"{normalized_subject_type}:{normalized_subject_id}"
         elif normalized_subject_type == "department":
             expected_relation = "subtree_member" if include_children else "member"
             if userset_relation not in {None, expected_relation}:
@@ -180,10 +181,11 @@ class GrantSourceService:
         subject_type: str,
     ) -> None:
         expected_subjects = {
-            "DIRECT": {"user"},
+            "DIRECT": {"user", "service_account"},
             "DEPARTMENT": {"department"},
             "USER_GROUP": {"user_group"},
             "CREATOR": {"user"},
+            "CREATOR_GRANT": {"service_account"},
         }
         expected = expected_subjects.get(source_type)
         if expected is not None and subject_type not in expected:
@@ -213,6 +215,7 @@ class GrantSourceService:
             return f"user_group:{ref}", ref
         prefixes = {
             "CREATOR": "creator",
+            "CREATOR_GRANT": "creator_grant",
             "SPACE_MEMBERSHIP": "space_membership",
             "CHANNEL_MEMBERSHIP": "channel_membership",
             "SNAPSHOT_FROM_PARENT": "snapshot",

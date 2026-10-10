@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 # if TYPE_CHECKING:
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, Text, or_, text
+from sqlalchemy import Column, DateTime, Index, Integer, String, Text, or_, text
 from sqlmodel import Field, col, delete, func, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -32,6 +32,22 @@ class KnowledgeFileStatus(int, Enum):
     WAITING = 5  # In queue:
     TIMEOUT = 6  # Super24Hour not parsed, parsing timeout
     VIOLATION = 7  # Content safety violation
+
+    @classmethod
+    def abnormal_values(cls) -> frozenset[int]:
+        """Statuses that surface as an actionable file anomaly."""
+
+        return frozenset(
+            {
+                cls.FAILED.value,
+                cls.TIMEOUT.value,
+                cls.VIOLATION.value,
+            }
+        )
+
+    @classmethod
+    def is_abnormal(cls, status: int | None) -> bool:
+        return status in cls.abnormal_values()
 
 
 class QAStatus(Enum):
@@ -71,6 +87,18 @@ PORTAL_USER_UPLOAD_FILE_SOURCES = (
 class FileType(int, Enum):
     DIR = 0
     FILE = 1
+
+
+# Library-level "abnormal" for the document-KB outer list (F064) and the
+# knowledge-space folder rollup: parse failed, timed out, or content violation.
+# Queuing / processing / rebuilding are in-flight, not abnormal.
+ABNORMAL_FILE_STATUSES = frozenset(
+    {
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.TIMEOUT.value,
+        KnowledgeFileStatus.VIOLATION.value,
+    }
+)
 
 
 class KnowledgeFileBase(SQLModelSerializable):
@@ -178,6 +206,8 @@ class QAKnowledgeBase(SQLModelSerializable):
 
 
 class KnowledgeFile(KnowledgeFileBase, table=True):
+    __table_args__ = (Index("ix_knowledgefile_kb_status_type", "knowledge_id", "status", "file_type"),)
+
     id: int | None = Field(default=None, primary_key=True)
 
 
@@ -285,6 +315,32 @@ class KnowledgeFileDao(KnowledgeFileBase):
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
         return {row[0]: row[1] for row in rows}
+
+    @classmethod
+    async def async_exists_abnormal_files_batch(cls, knowledge_ids: list[int]) -> set[int]:
+        """Return knowledge_ids that have at least one abnormal FILE row.
+
+        Abnormal = status in FAILED / TIMEOUT / VIOLATION. Folders are ignored.
+        An empty input short-circuits without hitting the DB.
+        """
+        if not knowledge_ids:
+            return set()
+        statement = (
+            select(col(KnowledgeFile.knowledge_id))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status.in_(sorted(ABNORMAL_FILE_STATUSES)),
+            )
+            .distinct()
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        found: set[int] = set()
+        for row in rows:
+            value = row[0] if isinstance(row, (tuple, list)) else getattr(row, "knowledge_id", row)
+            found.add(int(value))
+        return found
 
     @classmethod
     async def async_count_root_files_batch(cls, knowledge_ids: list[int]) -> dict:
@@ -623,6 +679,40 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(col(KnowledgeFile.id).notin_(exclude_file_ids))
         if page and page_size:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def aget_file_by_filters_keyset(
+        cls,
+        knowledge_id: int,
+        file_name: str | None = None,
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        extra_file_ids: list[int] | None = None,
+        *,
+        after_id: int | None = None,
+        limit: int,
+    ) -> list[KnowledgeFile]:
+        """Keyset-paginated file filter query ordered by ``id DESC``.
+
+        ``id`` is unique and never changes, so successive pages neither skip
+        nor repeat rows, even while parsing updates ``update_time`` or several
+        files share the same timestamp. ``after_id`` is the id of the last row
+        of the previous page (``None`` for the first page); the predicate is a
+        strict ``id < after_id``.
+        """
+        statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name,
+            status,
+            file_ids,
+            extra_file_ids=extra_file_ids,
+        )
+        if after_id is not None:
+            statement = statement.where(col(KnowledgeFile.id) < after_id)
+        statement = statement.order_by(col(KnowledgeFile.id).desc()).limit(limit)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
 
@@ -999,13 +1089,12 @@ class QAKnoweldgeDao(QAKnowledgeBase):
             return result.all()
 
     @classmethod
-    def query_by_condition_v1(cls, source: list[int], create_start: str, create_end: str):
+    def query_by_condition_v1(cls, create_start: str, create_end: str, source: list[int] | None = None):
+        """Return QA rows created in the time range; ``source=None`` means every source."""
         with get_sync_db_session() as session:
-            sql = (
-                select(QAKnowledge)
-                .where(QAKnowledge.source.in_(source))
-                .where(QAKnowledge.create_time.between(create_start, create_end))
-            )
+            sql = select(QAKnowledge).where(QAKnowledge.create_time.between(create_start, create_end))
+            if source is not None:
+                sql = sql.where(QAKnowledge.source.in_(source))
 
             return session.exec(sql).all()
 

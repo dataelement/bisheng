@@ -18,9 +18,15 @@ ordered newest-first.
 
 from __future__ import annotations
 
+import hashlib
 import os
 
-from bisheng.linsight.domain.utils import read_file_directory, select_deliverables, snapshot_file_paths
+from bisheng.linsight.domain.utils import (
+    read_file_directory,
+    select_deliverables,
+    snapshot_file_fingerprints,
+    snapshot_file_paths,
+)
 
 
 def _detail(rel_path: str, *, mtime: float = 0.0, root: str = "/ws") -> dict:
@@ -209,6 +215,58 @@ def test_snapshot_file_paths_tolerates_missing_dir():
     assert snapshot_file_paths("") == set()
 
 
+def test_snapshot_file_fingerprints_maps_path_to_md5(tmp_path):
+    (tmp_path / "output").mkdir()
+    target = tmp_path / "output" / "b.md"
+    target.write_text("hello")
+
+    snap = snapshot_file_fingerprints(str(tmp_path))
+
+    assert list(snap) == [str(target)]
+    assert snap[str(target)] == hashlib.md5(b"hello").hexdigest()
+
+
+def test_snapshot_file_fingerprints_tolerates_missing_dir():
+    assert snapshot_file_fingerprints("/tmp/definitely-not-a-linsight-dir-xyz") == {}
+    assert snapshot_file_fingerprints("") == {}
+
+
+def test_unmodified_output_leftover_is_not_this_run_deliverable():
+    """Follow-up turn inherits output/report.md. Same md5 as start → not a write."""
+    leftover = _detail("output/milvus_status_report.md", mtime=10.0)
+    leftover["file_md5"] = "same-bytes"
+    baseline = {leftover["file_path"]: "same-bytes"}
+    assert select_deliverables([leftover], baseline_paths=baseline) == []
+
+
+def test_overwritten_output_file_is_still_a_deliverable():
+    """write_file on the same path changes md5 — that is this run's report."""
+    rewritten = _detail("output/milvus_status_report.md", mtime=20.0)
+    rewritten["file_md5"] = "new-bytes"
+    baseline = {rewritten["file_path"]: "old-bytes"}
+    assert _names(select_deliverables([rewritten], baseline_paths=baseline)) == ["output/milvus_status_report.md"]
+
+
+def test_leftover_output_kept_when_this_run_also_wrote_output():
+    """A new chart next to last turn's report: keep the zone, drop nothing."""
+    leftover = _detail("output/report.md", mtime=10.0)
+    leftover["file_md5"] = "old"
+    chart = _detail("output/chart.png", mtime=20.0)
+    chart["file_md5"] = "new"
+    baseline = {leftover["file_path"]: "old"}
+    assert _names(select_deliverables([leftover, chart], baseline_paths=baseline)) == [
+        "output/report.md",
+        "output/chart.png",
+    ]
+
+
+def test_path_only_baseline_still_keeps_output_zone():
+    """set[str] cannot tell overwrite from leftover; keep historical criterion 1."""
+    leftover = _detail("output/report.md", mtime=10.0)
+    leftover["file_md5"] = "same"
+    assert _names(select_deliverables([leftover], baseline_paths={leftover["file_path"]})) == ["output/report.md"]
+
+
 async def test_read_file_directory_carries_zone_and_mtime(tmp_path):
     (tmp_path / "output").mkdir()
     (tmp_path / "output" / "报告.md").write_text("hi")
@@ -220,3 +278,49 @@ async def test_read_file_directory_carries_zone_and_mtime(tmp_path):
     assert details[0]["file_mtime"] > 0
     # and that detail flows straight into selection as an output/ deliverable
     assert _names(select_deliverables(details)) == [os.path.join("output", "报告.md")]
+
+
+# ---------------------------------------------------------------------------
+# a draft and its rendering: the rendering is the deliverable
+# ---------------------------------------------------------------------------
+def test_rendered_docx_outranks_its_newer_markdown_draft():
+    """The office skills write 报告.md, then build 报告.docx from it. The draft is
+    often the newer file, but the user asked for Word."""
+    details = [
+        _detail("output/报告.docx", mtime=100.0),
+        _detail("output/报告.md", mtime=200.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/报告.docx", "output/报告.md"]
+
+
+def test_draft_follows_its_rendering_even_across_type_ranks():
+    details = [
+        _detail("output/汇报.md", mtime=300.0),
+        _detail("output/汇报.pptx", mtime=100.0),
+        _detail("output/chart.png", mtime=400.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/汇报.pptx", "output/汇报.md", "output/chart.png"]
+
+
+def test_markdown_without_a_rendered_sibling_keeps_its_rank():
+    details = [
+        _detail("output/分析.md", mtime=200.0),
+        _detail("output/附录.docx", mtime=100.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/分析.md", "output/附录.docx"]
+
+
+def test_an_image_with_the_same_stem_does_not_demote_the_report():
+    details = [
+        _detail("output/趋势.md", mtime=100.0),
+        _detail("output/趋势.png", mtime=200.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/趋势.md", "output/趋势.png"]
+
+
+def test_same_stem_in_another_directory_is_not_a_sibling():
+    details = [
+        _detail("output/报告.md", mtime=200.0),
+        _detail("output/draft/报告.docx", mtime=100.0),
+    ]
+    assert _names(select_deliverables(details)) == ["output/报告.md", "output/draft/报告.docx"]

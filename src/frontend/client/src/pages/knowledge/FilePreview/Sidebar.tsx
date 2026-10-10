@@ -1,4 +1,4 @@
-import * as pdfjsLib from "pdfjs-dist";
+import type * as pdfjsLib from "pdfjs-dist";
 import { useEffect, useRef, useCallback, useState } from "react";
 import { cn } from "~/utils";
 

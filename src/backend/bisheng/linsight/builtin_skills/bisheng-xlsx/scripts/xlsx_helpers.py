@@ -1,4 +1,4 @@
-"""openpyxl helpers for building .xlsx inside the BiSheng code interpreter.
+"""openpyxl helpers for building .xlsx inside the platform code interpreter.
 
 Use from a build script:
 
@@ -160,7 +160,7 @@ def mark_assumption(cell, note: str | None = None) -> None:
         add_note(cell, note)
 
 
-def add_note(cell, text: str, author: str = "BiSheng") -> None:
+def add_note(cell, text: str, author: str = "AI") -> None:
     """Attach a cell comment. This is where an assumption's source belongs."""
     comment = Comment(text, author)
     comment.width = 260

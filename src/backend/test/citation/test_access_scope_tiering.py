@@ -49,7 +49,10 @@ def test_filter_tiering():
     permitted = {3}  # only doc 3 has view_file
     kept = {i.citationId for i in svc._apply_tier_filter([per_user_no, shared_no, per_user_yes, web], permitted)}
     assert kept == {"b", "c", "w"}  # per_user doc1 dropped; shared doc2 kept; per_user doc3 kept; web kept
-    # Anonymous (permitted=None) → no gating, everything kept.
+    # Anonymous (permitted=None) → this helper still applies no gating. F054
+    # refuses anonymous callers before they reach it (see
+    # test_resolve_anonymous_and_reason.py), so the tiering keeps its meaning:
+    # it answers "which logged-in user may open this file".
     assert len(svc._apply_tier_filter([per_user_no], None)) == 1
 
 

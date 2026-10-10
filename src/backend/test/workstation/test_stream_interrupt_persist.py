@@ -70,6 +70,10 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
         AsyncMock(return_value=(ws_config, conversation, message, _LLM(), model_info, False)),
     )
     monkeypatch.setattr(chat_service, "_resolve_user_kb_selection", AsyncMock(return_value=[]))
+    # Image viewing reads its model config from the DB; off for these tests.
+    monkeypatch.setattr("bisheng.common.image_view.loop.image_view_configured", AsyncMock(return_value=False))
+    # The citation handle table lives in Redis; start each turn with an empty one.
+    monkeypatch.setattr(chat_service.DailyCitationScope, "load", AsyncMock(return_value=None))
     monkeypatch.setattr(chat_service, "_prepare_tools", AsyncMock(return_value=([], [])))
     monkeypatch.setattr(chat_service, "_process_agent_files", AsyncMock(return_value=("", [], [])))
     monkeypatch.setattr(chat_service, "_get_history_max_tokens", AsyncMock(return_value=4096))
@@ -94,6 +98,16 @@ def stream_env(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(chat_service.ChatMessageDao, "insert_one", MagicMock(side_effect=_record))
     monkeypatch.setattr(chat_service.ChatMessageDao, "ainsert_one", AsyncMock(side_effect=_record))
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService,
+        "evaluate_workbench_user_text",
+        staticmethod(lambda *_a, **_k: None),
+    )
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService,
+        "is_workbench_content_safety_active",
+        staticmethod(lambda *_a, **_k: False),
+    )
 
     return SimpleNamespace(inserted=inserted, state=state)
 

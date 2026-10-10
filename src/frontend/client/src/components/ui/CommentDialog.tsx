@@ -68,7 +68,7 @@ export function CommentDialog({
             ref={commentRef}
             maxLength={9999}
             placeholder={placeholder}
-            className="bg-white border-border-base shadow-none transition-[border-color,box-shadow] duration-200 focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9] placeholder:text-sm placeholder:text-text-3"
+            className="bg-white border-border-base shadow-none transition-[border-color,box-shadow] duration-200 focus:border-border-deep focus:shadow-focus placeholder:text-sm placeholder:text-text-3"
           />
         </div>
         <DialogFooter className="flex-row justify-end gap-3 space-x-0 sm:space-x-0 px-5 py-4">

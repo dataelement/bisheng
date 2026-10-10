@@ -15,6 +15,12 @@ from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
+from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
+from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
+from bisheng.open_api.api.openapi_schema import install_open_api_schema
+from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
+from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
+from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
 
@@ -81,6 +87,7 @@ def _register_permission_runtime_contexts() -> None:
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     _register_permission_runtime_contexts()
+    open_api_call_audit_service.start()
     try:
         await init_default_data()
         # F035 task-mode compatibility data remains unrelated to F048 resource
@@ -126,6 +133,7 @@ async def lifespan(app: FastAPI):
         # LangfuseInstance.update()
         yield
     finally:
+        await open_api_call_audit_service.stop()
         try:
             dsh_runtime = getattr(app.state, "dsh_runtime", None)
             if dsh_runtime is not None:
@@ -142,6 +150,9 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    register_open_api_exception_handlers(app)
+    install_open_api_schema(app)
+    register_public_exception_handlers(app)
 
     # Browsers reject ACAO=* when axios uses withCredentials=true.
     # Override with comma-separated BISHENG_CORS_ORIGINS when needed.
@@ -177,6 +188,7 @@ def create_app():
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
     app.add_middleware(AdminScopeMiddleware)
+    app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
 
@@ -186,6 +198,7 @@ def create_app():
 
     app.include_router(router)
     app.include_router(router_rpc)
+    app.include_router(router_public)
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

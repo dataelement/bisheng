@@ -11,7 +11,7 @@ import {
   getCitationDocumentDownloadUrl,
   getCitationDocumentFileType,
   getCitationDocumentName,
-  isRagCitation,
+  isFilePreviewCitation,
   isRagCitationMissingPreviewUrl,
   normalizeCitationType,
   toAbsolutePreviewUrl,
@@ -116,7 +116,7 @@ function CitationReferenceCard({
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === "web";
   const title = preview?.title || t("citation.untitled");
-  const canOpenDocument = !!detail && isRagCitation(detail, type);
+  const canOpenDocument = !!detail && isFilePreviewCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
   const nameRowTextClass = "text-[14px] font-normal leading-[22px] text-[#1D2129]";
@@ -323,7 +323,10 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error) => {
+      .catch((error: any) => {
+        if (error?.citationForbidden || error?.citationExpired) {
+          return null;
+        }
         console.error("Failed to load citation detail:", error);
         setErrorMap((current) => ({ ...current, [citationId]: true }));
         return null;
@@ -428,7 +431,8 @@ export default function CitationReferencesDrawer({
     setDocumentPreview({
       detail,
       itemId: item.data.itemId,
-      locateChunk: false,
+      itemIds: item.itemIds?.length ? item.itemIds : item.data.itemId ? [item.data.itemId] : undefined,
+      locateChunk: true,
     });
     setPanelView("document-preview");
   };

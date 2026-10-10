@@ -2,6 +2,37 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## Diagnostic Scripts
+
+### `diagnose_dm_column_reflection.py`
+
+Read-only comparison of DM8 catalog metadata, SQLAlchemy
+`Inspector.get_columns()`, and BiSheng's shared `column_exists()` helper. Use it
+when Alembic reports that a column already exists after the helper reported it
+missing.
+
+Run inside an API or worker container from `/app`; the default target is
+`knowledge.metadata_fields`:
+
+```bash
+cd /app
+/app/.venv/bin/python scripts/diagnose_dm_column_reflection.py
+```
+
+Specify another target or override the schema inferred from `database_url`:
+
+```bash
+/app/.venv/bin/python scripts/diagnose_dm_column_reflection.py \
+  --schema BISHENG \
+  --table knowledge \
+  --column metadata_fields
+```
+
+The script never writes to the database. Exit `0` means reflection found the
+column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
+column is absent from the DM catalog, and exit `4` means the diagnostic itself
+failed.
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`
@@ -31,12 +62,116 @@ Options:
 
 ## Permission Scripts
 
+For an existing F048 installation, run the model publisher below in the release
+maintenance window even when its dry-run says the model is already current.
+Model equality does not establish that historical service-account resource
+markers exist. This is an explicit deployment operation: container startup,
+`alembic upgrade head`, and `docker/deploy.sh update` do not run data repairs.
+
+For a first migration from legacy RBAC, use `migrate_f048_permission_data.py`;
+its resource projection already writes both `user:*` and `service_account:*`
+markers at every hierarchy level. Do not repeat the first migration to repair
+an existing F048 installation.
+
+### `cleanup_f048_user_group_admin_grants.py`
+
+Audit and revoke resource Grant sources assigned to one user group's
+administrator userset (`user_group:<id>#admin`). The command does not change
+group administrator membership, ordinary member Grants, protected creator
+sources, or unrelated assignments. It retires selected assignee rows through
+the normal F048 Grant projection service so the SQL control plane, durable
+projection ledger, flattened `visible` sources, and OpenFGA tuples remain
+consistent.
+
+Run a dry-run first from `src/backend/` with the live `config`. The default
+batch contains at most 100 resources:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2
+```
+
+The report identifies the exact Store/model/Catalog pin, selected assignees,
+resource/model/source breakdown, blockers, remaining resource count, resume
+cursor, and `plan_checksum`. The safest apply mode requires a maintenance
+window: stop ingress and all API/Worker/Linsight processes, wait for F048
+heartbeat TTLs to expire, then repeat the same selection arguments with all
+confirmation values from the immediately preceding dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2 \
+  --apply \
+  --operator-id <operator-user-id> \
+  --confirm-store-id <store-id> \
+  --confirm-model-id <model-id> \
+  --confirm-plan-checksum <plan-checksum>
+```
+
+If the service cannot be stopped, an online apply is available only when the
+operator has confirmed that no new matching `user_group:<id>#admin` Grants can
+be created during the run. It processes resources serially, defaults to a
+100-ms delay between resources, and stops if the per-resource version or exact
+source identity changes concurrently:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/cleanup_f048_user_group_admin_grants.py \
+  --tenant-id 1 \
+  --user-group-id 2 \
+  --apply \
+  --online \
+  --delay-ms 100 \
+  --operator-id <operator-user-id> \
+  --confirm-store-id <store-id> \
+  --confirm-model-id <model-id> \
+  --confirm-plan-checksum <plan-checksum>
+```
+
+Maintenance apply refuses active F048 runtime heartbeats and in-flight
+projection operations. Both modes refuse non-current Grant/resource
+projections, non-`CUSTOM` resources, protected sources, changed candidates, or
+a mismatched confirmation. Use repeatable `--resource-type` filters for a
+narrower rollout. When the report has more resources, review the next dry-run
+with `--after-assignee-id` set to the last successful
+`resume_after_assignee_id`; never advance the cursor past a failed resource.
+For an explicitly reviewed full-type cleanup, `--max-resources` accepts up to
+50,000 resources while remaining bound to one exact plan checksum. `--quiet`
+suppresses routine runtime logs but keeps JSON reports and failures visible.
+
+Deleted assistant/workflow rows can leave an active permission mirror that the
+business resolver intentionally rejects. Such an orphan is blocked by default.
+After verifying the resource is absent, repeat both dry-run and apply with
+`--allow-orphan-applications`; the apply path asks the owning business loader to
+confirm absence before constructing a target from the CURRENT permission mirror
+and still uses the normal Grant/projection mutation.
+
+Unpublished knowledge spaces/libraries are also rejected by the normal visible
+target resolver. After verifying that these lifecycle states should have their
+administrator Grants retired, repeat dry-run and apply with
+`--allow-unpublished-knowledge-containers`. The fallback accepts only a valid
+record from the owning knowledge loader, requires a non-`PUBLISHED` status and
+an exact tenant/identity/version match, then continues through the normal
+Grant/projection mutation.
+
+Deleted knowledge containers require the separate
+`--allow-orphan-knowledge-containers` flag. The owning loader must confirm that
+the record is absent, while the permission mirror must remain CUSTOM/CURRENT
+with one consistent version and parent scope; the script then uses the same
+normal Grant/projection mutation.
+
 ### `publish_authorization_model_change.py`
 
 Publish the OpenFGA Authorization Model generated by the current code and move
 the CURRENT Permission Catalog pin to it. Use this when the authorization-model
 DSL changed but the existing F048 control-plane actions/models and Grant data do
-not need a formal data migration.
+not need a formal data migration, or when historical service-account resource
+markers need repair under the current model.
 
 Run dry-run first from `src/backend/` with the live `config`:
 
@@ -47,7 +182,9 @@ PYTHONPATH=./ .venv/bin/python scripts/publish_authorization_model_change.py
 
 The report prints the current Store/model/Catalog pin, the latest OpenFGA model
 observed in the Store, the code-generated target model checksum, and whether a
-model publish or Catalog cutover is required. Apply requires an explicit Store
+model publish or Catalog cutover is required. `service_account_marker_tuple_count`
+is the expected marker count from CURRENT SQL resource modes, not the number of
+missing tuples. Apply requires an explicit Store
 and checksum confirmation copied from the immediately preceding dry-run:
 
 ```bash
@@ -60,11 +197,24 @@ PYTHONPATH=./ .venv/bin/python scripts/publish_authorization_model_change.py \
 
 Apply refuses active F048 runtime heartbeats, in-flight permission projection
 operations, a write-fenced CURRENT Catalog, or a confirmation mismatch. It
-publishes or reuses the immutable OpenFGA model in the same Store, records an
-`authorization_model_release`, publishes a no-op Permission Catalog release
-bound to that model, and retires older active model-release rows. It does not
+idempotently ensures `service_account:*` `permission_enabled` and the existing
+`custom_mode`/`inherit_mode` on every CURRENT resource, including nested folders
+and files, then verifies them with higher consistency. It preserves CUSTOM
+boundaries, existing parent edges, and per-account Grants. This also runs before
+the `already_current` result; `service_account_marker_tuples_verified` records
+successful verification. A write or verification failure exits nonzero.
+
+When the model changes, it publishes or reuses the immutable model in the same
+Store and its `authorization_model_release`. It verifies the markers against
+that target model before publishing a no-op Permission Catalog release bound
+to it and retiring older active model-release rows. It does not
 create or modify a formal `permission_migration_run`, does not rewrite Grants,
 and does not clean legacy tuples such as `public_reader`.
+Stop ingress and all API/Worker/Linsight processes before apply, wait for their
+runtime heartbeats to expire, and restart them only after success. Run the
+command from an independent maintenance process/container using the same live
+configuration. If canonical Grant visible projections also need rebuilding,
+use `reconcile_f048_visible_projection.py` instead.
 
 ### `cleanup_f048_public_reader_tuples.py`
 
@@ -97,9 +247,11 @@ exits without deleting if the Store ID or checksum does not match.
 ### `reconcile_f048_visible_projection.py`
 
 Audit and repair environments that already completed an older F048 data
-migration before the final flattened-visible design. The command is available
-in production as well as development/test; safety comes from the same
-maintenance and consistency gates, not from an environment-name allowlist.
+migration before the final flattened-visible and service-account marker design.
+The command also mirrors each CURRENT resource's `permission_enabled` and
+`custom_mode`/`inherit_mode` state to `service_account:*`. The command is
+available in production as well as development/test; safety comes from the
+same maintenance and consistency gates, not from an environment-name allowlist.
 
 Run dry-run first from `src/backend/` with the live `config`:
 
@@ -109,8 +261,9 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
 ```
 
 The JSON report includes canonical Grant/assignee source counts, persisted
-source differences, and the deduplicated expected tuple count/checksum. Add an
-explicit Store scan to report missing and orphan direct `visible` tuple keys:
+source differences, service-account resource marker counts, and the
+deduplicated expected tuple count/checksum. Add an explicit Store scan to
+report missing and orphan direct `visible` tuple keys:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
@@ -143,12 +296,12 @@ when Store confirmation differs, a runtime heartbeat or projection operation
 is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
 SQL data is incomplete, or stale source projections would require a classified
 revocation. It publishes/reuses the final immutable model in the same Store,
-ensures every Grant-derived direct `visible` tuple in batches of at most 90
-with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
-then activates the rebuilt Grant source rows and publishes a no-op Catalog
-release bound to the new Authorization Model release. It does not create or modify a formal
-`permission_migration_run`. Re-running after an interruption is forward-only
-and idempotent.
+ensures every Grant-derived direct `visible` tuple and service-account resource
+state marker in batches of at most 90 with OpenFGA duplicate-ignore semantics,
+verifies them with higher consistency, then activates the rebuilt Grant source
+rows and publishes a no-op Catalog release bound to the new Authorization Model
+release. It does not create or modify a formal `permission_migration_run`.
+Re-running after an interruption is forward-only and idempotent.
 
 To delete reviewed orphan tuple keys, keep the maintenance window in place and
 copy both `store_id` and `orphan_tuple_checksum` from the immediately preceding

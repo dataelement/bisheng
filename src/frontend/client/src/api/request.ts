@@ -131,6 +131,59 @@ export const translateApiErrorMessage = (data: any) => {
   );
 };
 
+const SESSION_KICKED_CODE = 10604
+const SESSION_KICK_ACK_KEY = "bs:session-kicked-ack"
+let sessionKickInProgress = false
+let sessionKickHandler: ((message: string) => void) | null = null
+
+export function setSessionKickHandler(handler: ((message: string) => void) | null) {
+  sessionKickHandler = handler
+}
+
+function hasSessionKickAck(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_KICK_ACK_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function markSessionKickAck() {
+  try {
+    sessionStorage.setItem(SESSION_KICK_ACK_KEY, "1")
+  } catch {
+    /* storage disabled */
+  }
+}
+
+function clearSessionKickAck() {
+  try {
+    sessionStorage.removeItem(SESSION_KICK_ACK_KEY)
+  } catch {
+    /* storage disabled */
+  }
+}
+
+function isSessionKickedEnvelope(envelope: unknown): boolean {
+  return Boolean(
+    envelope &&
+    typeof envelope === "object" &&
+    (envelope as { status_code?: number }).status_code === SESSION_KICKED_CODE
+  )
+}
+
+function beginSessionKick(envelope: unknown): boolean {
+  if (hasSessionKickAck()) {
+    sessionKickInProgress = true
+    return true
+  }
+  if (sessionKickInProgress) return true
+  if (!sessionKickHandler) return false
+  sessionKickInProgress = true
+  sessionKickHandler(translateApiErrorMessage(envelope))
+  return true
+}
+
 // License degradation (gateway returns 11001): throttle the toast so a burst of
 // failing business calls doesn't flood the user with duplicate notices.
 let lastLicenseExpiredToastAt = 0;
@@ -145,6 +198,16 @@ function shouldToastLicenseExpired(): boolean {
 
 customAxios.interceptors.response.use(
   (response) => {
+    const url = response.config?.url || ""
+    if (
+      response.status >= 200 &&
+      response.status < 300 &&
+      (response.data?.status_code === 200 || response.data?.status_code == null) &&
+      (url.includes("/user/login") || url.includes("/user/info") || url.includes("/api/user/me"))
+    ) {
+      clearSessionKickAck()
+    }
+
     // License expired (gateway degradation): always surface a clear toast and reject,
     // regardless of per-call error flags, so end users learn it's an authorization
     // issue rather than a transient glitch. See feature 037.
@@ -155,6 +218,14 @@ customAxios.interceptors.response.use(
       }
       const err: any = new Error(message || 'license expired (11001)');
       err.status_code = 11001;
+      err.status_message = response.data.status_message;
+      err.response = response;
+      return Promise.reject(err);
+    }
+
+    if (isSessionKickedEnvelope(response.data) && beginSessionKick(response.data)) {
+      const err: any = new Error(translateApiErrorMessage(response.data));
+      err.status_code = SESSION_KICKED_CODE;
       err.status_message = response.data.status_message;
       err.response = response;
       return Promise.reject(err);
@@ -221,6 +292,15 @@ customAxios.interceptors.response.use(
     }
     if (originalRequest.url?.includes('/api/auth/logout') === true) {
       return Promise.reject(error);
+    }
+
+    if (error.response.status === 401) {
+      if (sessionKickInProgress) {
+        return Promise.reject(error);
+      }
+      if (isSessionKickedEnvelope(error.response.data) && beginSessionKick(error.response.data)) {
+        return Promise.reject(error);
+      }
     }
 
     if (error.response.status === 401 && !originalRequest._retry) {

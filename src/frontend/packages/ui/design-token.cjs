@@ -88,6 +88,20 @@ const BRAND = {
   },
   blue:  { '50': '#E8F3FF', '100': '#BEDAFF', '200': '#94BFFF', '300': '#6AA1FF', '400': '#4080FF', '500': '#165DFF', '600': '#024DE3', '700': '#0239AB', '800': '#042B80', '900': '#051D52', muted: '#5773B4' },
   green: { '50': '#E4F1E7', '100': '#CCE4D2', '200': '#A3D2B0', '300': '#6FBA85', '400': '#3D9B5C', '500': '#169C47', '600': '#098B35', '700': '#076929', '800': '#074E20', '900': '#063216', muted: '#5C8A77' },
+  /* Dark-mode ramps — official @arco-design/color dark algorithm (the same
+   * `getPresetColors(seed).dark` Arco ships), seeded on each theme's FIXED
+   * primary. Index semantics hold (500 = main, 50 = tint bg) while the
+   * lightness DIRECTION inverts (50 darkest → 900 lightest, like the gray
+   * ramp), so tokens.css overrides same-rung and every `blue-*` class keeps
+   * meaning. The dark main lightens WITHOUT bleaching (#165DFF → #3C7EFF,
+   * 5.0:1 on #121212): the light ramp lightens by blending toward white, so
+   * picking a light 3xx step in dark bought brightness with chroma — measured
+   * 2026-08-26, 组件-Tabs标签页.md §5. The designer's veto of the algorithmic
+   * light green ramp (neon at v=100) doesn't apply here: the dark side never
+   * reaches full value. `muted` has no dark value yet — it stays fixed until
+   * a real dark use case tunes it. */
+  blueDark:  { '50': '#000D4D', '100': '#041B79', '200': '#0E32A6', '300': '#1D4DD2', '400': '#306FFF', '500': '#3C7EFF', '600': '#689FFF', '700': '#93BEFF', '800': '#BEDAFF', '900': '#EAF4FF' },
+  greenDark: { '50': '#004D26', '100': '#066031', '200': '#0F743B', '300': '#1B8847', '400': '#2A9C54', '500': '#3CB062', '600': '#60C47E', '700': '#8AD79F', '800': '#BAEBC5', '900': '#F0FFF3' },
 };
 
 /* ------------------------------------------------------------------ *
@@ -152,7 +166,10 @@ const GRAY = [
 // `hex` = light value; `darkHex` = same gray ref resolved on the dark ramp.
 const TEXT = [
   { name: 'strong',    legacy: '1', cssVar: '--text-1', ref: 'gray-10', hex: '#1D2129', darkHex: '#F6F6F6', usage: '主文字：标题、正文主体' },
-  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
+  // darkHex is gray-7 dark, NOT the same-rung gray-8 (#C5C5C5): the same-rung
+  // flip left secondary text almost as loud as primary in dark (ΔL* 17 vs the
+  // light mode 24) — tokens.css .dark re-points --text-2 accordingly (2026-08-26).
+  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#ABABAC', usage: '次要文字：次要说明、默认按钮文字' },
   { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#898F9C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
   { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#CACDD4', darkHex: '#5F5F60', usage: '禁用文字' },
 ];
@@ -178,26 +195,39 @@ const BG = [
 ];
 
 /* ------------------------------------------------------------------ *
- * Functional colors (§3) — fixed hex, never theme-switched.
+ * Functional colors (§3) — fixed hex, never brand-theme-switched (they DO
+ * flip light⇄dark). `dark` values come from the same @arco-design/color dark
+ * algorithm as the brand ramps, seeded on each light main; the four roles map
+ * to Arco ramp indices main=6 / hover=5 / active=7 / tint=1 (light picks the
+ * same slots, except danger's hand-darkened hover/active). In dark that means
+ * hover darkens and active lightens — the direction flip is Arco's own dark
+ * semantics, same as the fill ramp. Tints go deep-and-saturated (#004D1C …),
+ * so tinted surfaces read as color washes on #121212 instead of light chips.
  * ------------------------------------------------------------------ */
 
 const FUNCTIONAL = [
-  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA' },
-  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8' },
-  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8' },
+  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA',
+    dark: { main: '#27C346', hover: '#1DB440', active: '#50D266', tint: '#004D1C' } },
+  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8',
+    dark: { main: '#FF9626', hover: '#FF8D1F', active: '#FFB357', tint: '#4D1B00' } },
+  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8',
+    dark: { main: '#F76965', hover: '#F54E4E', active: '#F98D86', tint: '#4D000A' } },
 ];
 
 /* ------------------------------------------------------------------ *
  * Tag pairs (§4) — light bg + strong text. Purple / approving-blue are
- * intentional fixed exceptions (not tokenized, never theme-switched).
+ * intentional fixed exceptions: they have their own tokens (--tag-skill*,
+ * --tag-approving*, light + dark) precisely so they can be pinned — nothing
+ * in .theme-green touches them.
  * ------------------------------------------------------------------ */
 
 const TAG = [
-  { label: '技能（紫 · 未 token 化）', bg: '#F5E8FF', fg: '#722ED1', note: '固定例外色' },
+  { label: '技能（紫 · 固定例外）', bg: '#F5E8FF', fg: '#722ED1', note: '--tag-skill-tint / --tag-skill，不换肤' },
   { label: '助手（橙 = warning 同值）', bg: '#FFF7E8', fg: '#FF7D00', note: 'warning tint' },
   { label: '已完成',                   bg: '#E8FFEA', fg: '#00B42A', note: 'success tint' },
   { label: '已驳回',                   bg: '#FFECE8', fg: '#F53F3F', note: 'danger tint' },
-  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '固定蓝，不换肤' },
+  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '--tag-approving-tint / --tag-approving，不换肤' },
+  { label: '网页来源角标（例外：永远紫）', bg: '#F5E8FF', fg: '#722ED1', note: '--citation-web-tint / --citation-web，与技能紫同值' },
 ];
 
 /* ------------------------------------------------------------------ *

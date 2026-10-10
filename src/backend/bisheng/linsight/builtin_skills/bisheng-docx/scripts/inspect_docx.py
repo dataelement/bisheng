@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read out and health-check a .docx, for the BiSheng code interpreter.
+"""Read out and health-check a .docx, for the platform code interpreter.
 
     import subprocess, sys
     r = subprocess.run([sys.executable, "skills/bisheng-docx/scripts/inspect_docx.py",

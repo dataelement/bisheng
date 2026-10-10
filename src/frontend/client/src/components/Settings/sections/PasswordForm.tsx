@@ -1,0 +1,272 @@
+import { useRef, useState, type ReactNode } from "react";
+import { JSEncrypt } from "jsencrypt";
+import { getPublicKeyApi, updatePasswordApi } from "~/api/user";
+import { NotificationSeverity } from "~/common";
+import { Button } from "~/components/ui/Button";
+import { PasswordInput } from "@bisheng/ui";
+import { useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
+import { cn } from "~/utils";
+
+interface PasswordStrength {
+    minLength: boolean;
+    hasAllRequired: boolean;
+}
+
+function PasswordStrengthRow({ met, children }: { met: boolean; children: ReactNode }) {
+    return (
+        <div className="flex items-start gap-2 text-[12px] leading-5">
+            <span
+                className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", met ? "bg-[#25C298]" : "bg-[#c9cdd4]")}
+                aria-hidden
+            />
+            <span className={cn(met ? "text-[#25C298]" : "text-[#86909c]")}>{children}</span>
+        </div>
+    );
+}
+
+/* eslint-disable no-restricted-syntax -- matches backend error copy (both languages), not UI text */
+const WRONG_OLD_PASSWORD_PATTERNS = [
+    "原密码",
+    "当前密码",
+    "密码不正确",
+    "incorrect",
+    "Incorrect current password",
+    "current password",
+];
+/* eslint-enable no-restricted-syntax */
+
+interface PasswordFieldProps {
+    id: string;
+    label: string;
+    value: string;
+    placeholder: string;
+    onChange: (value: string) => void;
+}
+
+function PasswordField({ id, label, value, placeholder, onChange }: PasswordFieldProps) {
+    const localize = useLocalize();
+    return (
+        <div>
+            <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor={id}>
+                {label}
+            </label>
+            {/* Spec PasswordInput — the reveal toggle lives in the suffix and
+                OWNS the visibility state (the parent used to track three
+                show/hide flags purely to pass them down; gone with the shell). */}
+            <PasswordInput
+                id={id}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                revealLabel={localize("com_ui_show_password")}
+                hideLabel={localize("com_ui_hide_password")}
+            />
+        </div>
+    );
+}
+
+export interface PasswordFormProps {
+    onCancel: () => void;
+    onSuccess: () => void;
+}
+
+/** Change-password form (RSA-encrypted submit), extracted from the retired AccountInfoDialog. */
+export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
+    const localize = useLocalize();
+    const { showToast } = useToastContext();
+
+    const [oldPassword, setOldPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({
+        minLength: false,
+        hasAllRequired: false,
+    });
+
+    const handleNewPasswordChange = (value: string) => {
+        setNewPassword(value);
+        const hasLower = /[a-z]/.test(value);
+        const hasUpper = /[A-Z]/.test(value);
+        const hasNumber = /[0-9]/.test(value);
+        const hasSymbol = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value);
+        setPasswordStrength({
+            minLength: value.length >= 8,
+            hasAllRequired: hasLower && hasUpper && hasNumber && hasSymbol,
+        });
+    };
+
+    const isSubmitDisabled = () => {
+        if (!oldPassword || !newPassword || !confirmPassword) return true;
+        if (!passwordStrength.minLength || !passwordStrength.hasAllRequired) return true;
+        if (newPassword !== confirmPassword) return true;
+        return false;
+    };
+
+    const publicKeyRef = useRef<string | null>(null);
+
+    const encryptPassword = async (pwd: string) => {
+        if (!pwd) return "";
+        try {
+            if (!publicKeyRef.current) {
+                const { public_key } = await getPublicKeyApi();
+                publicKeyRef.current = public_key;
+            }
+            const encrypt = new JSEncrypt();
+            encrypt.setPublicKey(publicKeyRef.current!);
+            const encrypted = encrypt.encrypt(pwd);
+            return encrypted || "";
+        } catch {
+            return "";
+        }
+    };
+
+    // Submit the password change (mirror backend resetPwd flow: encrypt first, then submit)
+    const handleSubmit = async () => {
+        if (!oldPassword) {
+            showToast({
+                message: localize("com_account_info_toast_enter_old_password"),
+                severity: NotificationSeverity.INFO,
+            });
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            showToast({
+                message: localize("com_auth_password_not_match"),
+                severity: NotificationSeverity.INFO,
+            });
+            return;
+        }
+
+        try {
+            const encryptedOld = await encryptPassword(oldPassword);
+            const encryptedNew = await encryptPassword(newPassword);
+            if (!encryptedOld || !encryptedNew) {
+                showToast({
+                    message: localize("com_account_info_toast_encrypt_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+                return;
+            }
+            await updatePasswordApi({ oldPassword: encryptedOld, newPassword: encryptedNew });
+            showToast({
+                message: localize("com_account_info_toast_password_updated"),
+                severity: NotificationSeverity.SUCCESS,
+            });
+            onSuccess();
+        } catch (rawError) {
+            // Error shape varies by request layer (axios error vs rethrown body); narrow manually.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const error = rawError as any;
+            const codeRaw =
+                error?.statusCode ??
+                error?.response?.data?.status_code ??
+                error?.response?.data?.code;
+            const code = typeof codeRaw === "string" ? parseInt(codeRaw, 10) : Number(codeRaw);
+
+            // 10603: wrong current password (the API often replies HTTP 200 + body.status_code;
+            // it only lands here after the request layer rethrows it)
+            if (code === 10603) {
+                showToast({
+                    message: localize("com_account_info_toast_wrong_old_password"),
+                    severity: NotificationSeverity.INFO,
+                });
+                return;
+            }
+
+            // 10622: password strength rejected by the backend; localized copy
+            if (code === 10622) {
+                showToast({
+                    message: localize("api_errors.10622"),
+                    severity: NotificationSeverity.ERROR,
+                });
+                return;
+            }
+
+            const errorMessage =
+                error?.response?.data?.status_message ||
+                error?.response?.data?.message ||
+                error?.message ||
+                localize("com_account_info_toast_password_change_failed");
+            const msg = String(errorMessage);
+
+            if (WRONG_OLD_PASSWORD_PATTERNS.some((pattern) => msg.includes(pattern))) {
+                showToast({
+                    message: localize("com_account_info_toast_wrong_old_password"),
+                    severity: NotificationSeverity.INFO,
+                });
+            } else {
+                showToast({
+                    message: msg || localize("com_account_info_toast_password_change_failed"),
+                    severity: NotificationSeverity.INFO,
+                });
+            }
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-5">
+            <PasswordField
+                id="account-old-pwd"
+                label={localize("com_account_info_old_password")}
+                value={oldPassword}
+                placeholder={localize("com_account_info_placeholder_old_password")}
+                onChange={setOldPassword}
+            />
+
+            <div>
+                <PasswordField
+                    id="account-new-pwd"
+                    label={localize("com_account_info_new_password")}
+                    value={newPassword}
+                    placeholder={localize("com_account_info_placeholder_new_password")}
+                    onChange={handleNewPasswordChange}
+                />
+                <div className="mt-2 flex flex-col gap-1.5">
+                    <p className="text-[12px] text-[#86909c]">{localize("com_account_info_password_strength")}</p>
+                    <PasswordStrengthRow met={passwordStrength.minLength}>
+                        {localize("com_account_info_password_rule_min")}
+                    </PasswordStrengthRow>
+                    <PasswordStrengthRow met={passwordStrength.hasAllRequired}>
+                        {localize("com_account_info_password_rule_complex")}
+                    </PasswordStrengthRow>
+                </div>
+            </div>
+
+            <PasswordField
+                id="account-confirm-pwd"
+                label={localize("com_auth_password_confirm")}
+                value={confirmPassword}
+                placeholder={localize("com_account_info_placeholder_confirm_password")}
+                onChange={setConfirmPassword}
+            />
+
+            {/* Desktop: right-aligned compact actions; mobile: full-width pair.
+                Both stay medium (visual 32px) on touch — the Button's own hit
+                area covers the 44px target, per 组件-Button按钮.md §7. */}
+            <div className="mt-1 flex items-center justify-end gap-4 touch-mobile:gap-3">
+                <Button
+                    type="button"
+                    color="default"
+                    variant="outlined"
+                    size="medium"
+                    onClick={onCancel}
+                    className="touch-mobile:flex-1"
+                >
+                    {localize("cancel")}
+                </Button>
+                <Button
+                    type="button"
+                    color="primary"
+                    variant="solid"
+                    size="medium"
+                    onClick={handleSubmit}
+                    disabled={isSubmitDisabled()}
+                    className="touch-mobile:flex-1"
+                >
+                    {localize("com_account_info_confirm_change")}
+                </Button>
+            </div>
+        </div>
+    );
+}

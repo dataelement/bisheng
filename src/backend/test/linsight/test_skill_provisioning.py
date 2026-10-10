@@ -307,3 +307,35 @@ class TestProvisioningLog:
         assert "tenant=1" in summary
         assert "selected=['biao-shu-zhuan-xie']" in summary
         assert "materialized ['biao-shu-zhuan-xie']" in summary
+
+
+class TestStrictForUnattendedRuns:
+    """F073 (spec AC-19): an Open API run fails naming the skill instead of
+    running without it; the workbench (strict=False) keeps silently skipping."""
+
+    async def test_disabled_skill_fails_the_run(self, monkeypatch, store, backend):
+        _patch_enabled(monkeypatch, ENABLED, store)
+        with pytest.raises(skill_provisioning.SkillsUnavailableForRunError) as exc_info:
+            await materialize_session_skills(
+                backend, TENANT, ["biao-shu-zhuan-xie", "ting-yong-ji-neng", "nope"], store=store, strict=True
+            )
+        assert exc_info.value.names == ["ting-yong-ji-neng", "nope"]
+        assert "ting-yong-ji-neng" in str(exc_info.value)
+        assert backend.uploaded == []  # nothing copied before failing
+
+    async def test_workbench_still_skips_silently(self, monkeypatch, store, backend):
+        _patch_enabled(monkeypatch, ENABLED, store)
+        result = await materialize_session_skills(backend, TENANT, ["biao-shu-zhuan-xie", "nope"], store=store)
+        assert result.copied == ["biao-shu-zhuan-xie"]
+
+    async def test_copy_failure_also_fails_a_strict_run(self, monkeypatch, store, backend):
+        _patch_enabled(monkeypatch, ENABLED, store)
+        monkeypatch.setattr(skill_provisioning, "_collect_bundle_pairs", lambda *_a: [])
+        with pytest.raises(skill_provisioning.SkillsUnavailableForRunError) as exc_info:
+            await materialize_session_skills(backend, TENANT, ["he-tong-shen-yue"], store=store, strict=True)
+        assert exc_info.value.names == ["he-tong-shen-yue"]
+
+    async def test_no_selection_is_fine_when_strict(self, monkeypatch, store, backend):
+        _patch_enabled(monkeypatch, ENABLED, store)
+        result = await materialize_session_skills(backend, TENANT, None, store=store, strict=True)
+        assert result.copied == [] and result.failed == []

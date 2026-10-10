@@ -16,11 +16,14 @@ export function TaskPanel({
     tasks,
     completed,
     terminated = false,
+    running = false,
 }: {
     tasks: ExecTask[];
     completed: boolean;
     /** user manually stopped the run — flag a problem instead of spinning */
     terminated?: boolean;
+    /** the session is still executing (status Running) — gates `wrappingUp` */
+    running?: boolean;
 }) {
     const localize = useLocalize();
     // Default collapsed: the panel opens collapsed on every conversation switch
@@ -40,7 +43,17 @@ export function TaskPanel({
     if (!visible.length) return null;
 
     const doneCount = visible.filter((t) => isTaskDone(t.status)).length;
-    const allDone = completed || doneCount === visible.length;
+    const everyTaskDone = doneCount === visible.length;
+    // Wrap-up window: the model has ticked off its last todo, but the session is
+    // still Running while the backend synthesizes the deliverable (final result
+    // file / final answer). Every row reads `success` there, so the
+    // `everyTaskDone` fallback used to announce "任务已完成" minutes before the run
+    // actually ended — directly under the stream's still-spinning "正在执行任务"
+    // row, which reads the session status and was telling the truth. The two are
+    // not a race: in that window both conditions hold by construction. Only the
+    // session status may declare the run over.
+    const wrappingUp = running && !completed && everyTaskDone;
+    const allDone = !wrappingUp && (completed || everyTaskDone);
 
     // Collapsed header surfaces the currently-running task name inline (Figma
     // 12221-40080): `≣ 任务  <running task>  N/M  ⌃`. While expanded the list
@@ -62,13 +75,16 @@ export function TaskPanel({
                 {/* Header glyph:
                     - terminated → static task glyph (manual stop → no spinner)
                     - all done → DoubleCheck (both expanded & collapsed)
+                    - wrapping up → Accent spinner even when expanded: every row
+                      below is a finished check by then, so the list carries no
+                      activity cue of its own and the header must supply it
                     - in progress + expanded → the task (list) glyph
                     - in progress + collapsed → Accent spinner (live activity cue) */}
                 {terminated ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
                 ) : allDone ? (
                     <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
-                ) : open ? (
+                ) : open && !wrappingUp ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
                 ) : (
                     <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
@@ -78,7 +94,9 @@ export function TaskPanel({
                         ? localize('com_linsight_task_terminated')
                         : allDone
                             ? localize('com_linsight_task_panel_done')
-                            : localize('com_linsight_task_panel')}
+                            : wrappingUp
+                                ? localize('com_linsight_task_panel_wrapping_up')
+                                : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
                     <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">

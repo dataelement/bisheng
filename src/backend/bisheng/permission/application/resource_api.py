@@ -5,18 +5,29 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from uuid import uuid4
+
+from loguru import logger
 
 from bisheng.common.errcode.permission import (
     PermissionDeniedError,
+    PermissionInvalidResourceError,
     PermissionVersionConflictError,
 )
 from bisheng.permission.application.resource_authorization import (
     ResourceAuthorizationRegistry,
 )
 from bisheng.permission.application.runtime import F048PermissionRuntime
+from bisheng.permission.domain.repositories.grant_repository import (
+    GrantRepository,
+    ResourcePermissionModeRepository,
+)
 from bisheng.permission.domain.schemas import (
+    GrantMutationChange,
+    GrantMutationOperation,
     GrantMutationRequest,
     PermissionModeApplyRequest,
     PermissionModeDraftRequest,
@@ -135,6 +146,174 @@ class F048ResourcePermissionApi:
             }
             for model in models
         ]
+
+    async def list_service_account_grants(
+        self,
+        *,
+        tenant_id: int,
+        service_account_id: int,
+        include_absent_resources: bool = False,
+    ) -> list[dict]:
+        """List the account's active grants.
+
+        Resource deletion only closes the permission gate and keeps the grant
+        roster, so a grant can point at a resource that no longer exists. Those
+        rows grant nothing and cannot be edited, so the list hides them.
+        Account deletion passes ``include_absent_resources`` to revoke them too.
+        """
+
+        rows = await GrantRepository().alist_active_subject_grants(
+            tenant_id=tenant_id,
+            subject_type="service_account",
+            subject_id=str(service_account_id),
+        )
+        resources = tuple(dict.fromkeys((grant.resource_type, grant.resource_id) for _assignee, grant in rows))
+        names = await self._subjects.resource_display_names(resources) if resources else {}
+        if not include_absent_resources:
+            absent = await self._absent_resources(resource for resource in resources if resource not in names)
+            rows = [
+                (assignee, grant) for assignee, grant in rows if (grant.resource_type, grant.resource_id) not in absent
+            ]
+        catalog = await self._runtime.current_catalog()
+        model_names = {item.snapshot.model_key: item.name for item in catalog.models}
+        return [
+            {
+                "resource_type": grant.resource_type,
+                "resource_id": grant.resource_id,
+                "resource_name": names.get((grant.resource_type, grant.resource_id), grant.resource_id),
+                "model_key": grant.model_key,
+                "model_name": model_names.get(grant.model_key, grant.model_key),
+                "assignee_id": str(assignee.id),
+                "assignee_version": assignee.version,
+                "source_type": assignee.source_type,
+                "granted_at": assignee.create_time,
+                "protected": assignee.protected,
+                "editable": not assignee.protected,
+            }
+            for assignee, grant in rows
+        ]
+
+    async def revoke_service_account_grants(
+        self,
+        *,
+        tenant_id: int,
+        service_account_id: int,
+        actor: PermissionActor,
+    ) -> list[dict]:
+        """Remove every grant for a service account before its lifecycle deletion."""
+
+        grants = await self.list_service_account_grants(
+            tenant_id=tenant_id,
+            service_account_id=service_account_id,
+            include_absent_resources=True,
+        )
+        grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+        for grant in grants:
+            grouped[(grant["resource_type"], grant["resource_id"])].append(grant)
+        for (resource_type, resource_id), resource_grants in grouped.items():
+            for offset in range(0, len(resource_grants), 50):
+                batch = resource_grants[offset : offset + 50]
+                try:
+                    context = await self.get_context(
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        actor=actor,
+                    )
+                except PermissionInvalidResourceError:
+                    # 19003 also covers cross-tenant and unauthorizable states.
+                    # Only a business-confirmed absence may skip the resource
+                    # check; every other case keeps the deletion blocked.
+                    if not await self._resources.confirm_absent(
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                    ):
+                        raise
+                    await self._runtime.remove_absent_resource_sources(
+                        actor=actor,
+                        tenant_id=tenant_id,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        assignees=tuple((int(grant["assignee_id"]), int(grant["assignee_version"])) for grant in batch),
+                        idempotency_key=f"sa-delete-{service_account_id}-{uuid4().hex}",
+                    )
+                    continue
+                await self.mutate_grants(
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    actor=actor,
+                    request=GrantMutationRequest(
+                        idempotency_key=f"sa-delete-{service_account_id}-{uuid4().hex}",
+                        expected_resource_version=context["resource_version"],
+                        expected_catalog_release_id=context["catalog_release_id"],
+                        changes=tuple(
+                            GrantMutationChange(
+                                op=GrantMutationOperation.REMOVE,
+                                assignee_id=grant["assignee_id"],
+                                expected_assignee_version=grant["assignee_version"],
+                            )
+                            for grant in batch
+                        ),
+                    ),
+                )
+        return grants
+
+    async def _absent_resources(
+        self,
+        resources,
+    ) -> set[tuple[str, str]]:
+        """Return the resources whose business Service confirms they are gone.
+
+        This only filters a display list, so a probe error keeps the row.
+        """
+
+        absent: set[tuple[str, str]] = set()
+        for resource_type, resource_id in resources:
+            try:
+                if await self._resources.confirm_absent(
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                ):
+                    absent.add((resource_type, resource_id))
+            except Exception:  # display-only probe; keep the row
+                logger.warning(
+                    "Could not confirm resource absence for grant list resource={}:{}",
+                    resource_type,
+                    resource_id,
+                )
+        return absent
+
+    async def list_grantable_resources(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str | None,
+        keyword: str | None,
+    ) -> list[dict]:
+        rows = await ResourcePermissionModeRepository().alist_current_resources(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+        )
+        rows = [row for row in rows if row.resource_type not in {"folder", "knowledge_file"}]
+        resources = tuple((row.resource_type, row.resource_id) for row in rows)
+        names = await self._subjects.resource_display_names(resources) if resources else {}
+        normalized = (keyword or "").strip().casefold()
+        result = []
+        for row in rows:
+            name = names.get((row.resource_type, row.resource_id))
+            if name is None:
+                continue
+            if normalized and normalized not in name.casefold() and normalized not in row.resource_id.casefold():
+                continue
+            result.append(
+                {
+                    "resource_type": row.resource_type,
+                    "resource_id": row.resource_id,
+                    "resource_name": name,
+                    "mode": row.mode,
+                    "resource_version": row.version,
+                }
+            )
+        return result[:200]
 
     async def get_context(
         self,

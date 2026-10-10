@@ -201,6 +201,11 @@ def queue_env(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(linsight_execute_utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
     monkeypatch.setattr(linsight_execute_utils, "persist_task_turn_message", AsyncMock())
     monkeypatch.setattr(chat_service.LLMService, "get_bisheng_llm", AsyncMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        chat_service.SensitiveWordPolicyService,
+        "evaluate_workbench_user_text",
+        staticmethod(lambda *_a, **_k: None),
+    )
     return chat_service, put
 
 

@@ -4,7 +4,7 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
-import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import { useVoiceModels } from "~/hooks/useVoice";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
 import { bishengConfState, currentRunningState } from "./store/atoms";
@@ -21,7 +21,7 @@ export default function ChatInput({ readOnly, v }) {
     const [fileUploading, setFileUploading] = useState(false);
     const [audioOpening] = useRecordingAudioLoading();
     const localize = useLocalize();
-    const { data: modelData } = useGetWorkbenchModelsQuery();
+    const { data: modelData } = useVoiceModels();
     const showVoice = modelData?.asr_model?.id;
 
     const inputFilesRef = useRef(null);

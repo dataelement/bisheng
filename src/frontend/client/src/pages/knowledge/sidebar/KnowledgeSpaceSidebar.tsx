@@ -12,7 +12,11 @@ import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
-import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
+import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
+import { usePersonalTokenEnabled } from "~/hooks/useVersionManagementEnabled";
+import { getPersonalTokenStatusApi } from "~/api/personalToken";
+import { PersonalTokenDialog } from "~/components/PersonalTokenDialog";
+import { shouldShowPersonalTokenEntry } from "~/pages/settings/sections/personalTokenEntry";
 import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -43,6 +47,10 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
     /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
     mobilePageMode?: boolean;
+    /** The URL already names a space, so there is nothing to choose a default for.
+     *  Auto-select must stand down until the host's own route effect lands, or it
+     *  navigates to the first space in the list and takes the URL with it. */
+    suppressAutoSelect?: boolean;
     /** Fired when a tree row navigates the page (e.g. folder click in compactMode),
      *  so the host drawer can close itself. */
     onNavigateAway?: () => void;
@@ -61,9 +69,26 @@ export function KnowledgeSpaceSidebar({
     onDrawerClose,
     compactMode = false,
     mobilePageMode = false,
+    suppressAutoSelect = false,
     onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
+    // F066 primary entry: the key sits next to the knowledge it unlocks.
+    // Both gates must be on — the settings section is the stable home while
+    // the tenant switch is off.
+    const { user: authUser } = useAuthContext();
+    const aiAccessDeploymentEnabled = usePersonalTokenEnabled();
+    const { data: aiAccessStatus } = useQuery({
+        queryKey: ["personal-token-status", authUser?.id],
+        queryFn: getPersonalTokenStatusApi,
+        enabled: aiAccessDeploymentEnabled && !!authUser?.id,
+        retry: false,
+    });
+    const aiAccessEntryVisible = shouldShowPersonalTokenEntry(
+        aiAccessDeploymentEnabled,
+        aiAccessStatus?.enabled,
+    );
+    const [aiAccessDialogOpen, setAiAccessDialogOpen] = useState(false);
     // 模块标题跟随后台配置的菜单显示名称
     const menuNames = useWorkbenchMenuNames();
     // Drawer and full-page list both occupy the full parent width (no resize/toggle).
@@ -238,6 +263,12 @@ export function KnowledgeSpaceSidebar({
     // page; selecting a space is an explicit tap that navigates to the file page.
     useEffect(() => {
         if (mobilePageMode) return;
+        // A space named in the URL is already a choice. Auto-select used to fire
+        // anyway on the render after a route change — the page component is
+        // remounted when the route pattern changes, so nothing was active yet —
+        // and navigated to the first space in the list, which is how a share
+        // link for one space landed on a different one entirely.
+        if (suppressAutoSelect) return;
         if (!activeSpaceId) {
             if (isCreatedLoading || isJoinedLoading || isDepartmentLoading) return;
 
@@ -249,7 +280,7 @@ export function KnowledgeSpaceSidebar({
                 onSpaceSelect(filteredJoinedSpaces[0]);
             }
         }
-    }, [activeSpaceId, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
+    }, [activeSpaceId, suppressAutoSelect, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
 
     // Set a section's sort field to a specific value (chosen from the sort dropdown).
     const setSort = (type: "created" | "joined" | "department", value: SpaceSortType) => {
@@ -610,6 +641,24 @@ export function KnowledgeSpaceSidebar({
                         >
                             {localize("com_knowledge.create_knowledge_space")}
                         </Button>
+                    </div>
+                )}
+                {aiAccessEntryVisible && !collapsed && !mobileDrawerMode && !compactMode && !mobilePageMode && (
+                    <div className="shrink-0 border-t border-border-base px-3 py-3">
+                        <button
+                            type="button"
+                            onClick={() => setAiAccessDialogOpen(true)}
+                            className="w-full rounded-lg border border-border-base bg-white px-3 py-2 text-left hover:bg-fill-1"
+                        >
+                            <span className="flex items-center gap-1.5 text-sm font-medium text-blue-500">
+                                <Outlined.Send className="size-4 shrink-0" />
+                                {localize("com_ai_access.guide_title")}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-text-3">
+                                {localize("com_ai_access.entry_hint")}
+                            </span>
+                        </button>
+                        <PersonalTokenDialog open={aiAccessDialogOpen} onOpenChange={setAiAccessDialogOpen} />
                     </div>
                 )}
                 {mobileDrawerMode && !compactMode ? (

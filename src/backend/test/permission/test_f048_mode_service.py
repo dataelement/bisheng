@@ -407,9 +407,11 @@ def test_move_copy_create_and_delete_lifecycle_plans() -> None:
     )
     assert {(row.action, row.relation, row.user) for row in move.deltas} == {
         ("DELETE", "permission_enabled", "user:*"),
+        ("DELETE", "permission_enabled", "service_account:*"),
         ("DELETE", "parent", "knowledge_space:10"),
         ("WRITE", "parent", "folder:20"),
         ("WRITE", "permission_enabled", "user:*"),
+        ("WRITE", "permission_enabled", "service_account:*"),
     }
     assert service.copy_mode("INHERIT") == ("INHERIT", False)
     assert service.copy_mode("CUSTOM") == ("CUSTOM", True)
@@ -423,8 +425,9 @@ def test_move_copy_create_and_delete_lifecycle_plans() -> None:
         protected_deltas=(),
     )
     assert any(row.relation == "inherit_mode" for row in create_file.deltas)
-    assert create_file.deltas[-1].relation == "permission_enabled"
-    assert create_file.deltas[-1].phase == "COMMIT"
+    enabled = [row for row in create_file.deltas if row.relation == "permission_enabled"]
+    assert {row.user for row in enabled} == {"user:*", "service_account:*"}
+    assert {row.phase for row in enabled} == {"COMMIT"}
 
     copy_custom = service.create_plan(
         _target("knowledge_file", parent=("folder", "20")),
@@ -447,4 +450,7 @@ def test_move_copy_create_and_delete_lifecycle_plans() -> None:
         operator_id=100,
         idempotency_key="delete",
     )
-    assert [(row.action, row.relation) for row in delete.deltas] == [("DELETE", "permission_enabled")]
+    assert {(row.action, row.relation, row.user) for row in delete.deltas} == {
+        ("DELETE", "permission_enabled", "user:*"),
+        ("DELETE", "permission_enabled", "service_account:*"),
+    }

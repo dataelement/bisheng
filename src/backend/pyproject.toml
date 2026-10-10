@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "3.0.0-beta2"
+version = "3.0.0-beta3"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"
@@ -61,7 +61,7 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pyjwt>=2.10.1",
     "pymongo>=4.15.3",
-    "pymupdf>=1.26.5",
+    "pymupdf==1.27.2.3",
     "pymysql>=1.1.2",
     # DaMeng database drivers — available on PyPI (Linux x86_64/aarch64, Windows).
     # dmPython bundles the dmssl package which includes the required native .so

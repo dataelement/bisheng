@@ -59,6 +59,30 @@ async def test_async_list_children_treats_null_root_path_as_root_level():
 
 
 @pytest.mark.asyncio
+async def test_first_cursor_scan_is_bounded_and_stably_ordered():
+    session = _FakeAsyncSession()
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_list_children(
+            knowledge_id=123,
+            parent_id=None,
+            page=0,
+            page_size=40,
+            order_field="file_type",
+            order_sort="asc",
+        )
+
+    sql = _compile_sql(session.statement).lower()
+    assert "limit 40" in sql
+    assert "order by" in sql
+    assert "file_type asc" in sql
+    assert "id desc" in sql
+
+
+@pytest.mark.asyncio
 async def test_async_count_children_treats_null_root_path_as_root_level():
     session = _FakeAsyncSession()
 
@@ -120,12 +144,15 @@ async def test_async_list_children_status_filter_uses_nested_parent_path():
     session = _FakeAsyncSession()
     parent = SimpleNamespace(file_level_path="/10")
 
-    with patch(
-        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
-        return_value=session,
-    ), patch(
-        "bisheng.knowledge.domain.models.knowledge_space_file.KnowledgeFileDao.query_by_id",
-        return_value=parent,
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+            return_value=session,
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.KnowledgeFileDao.query_by_id",
+            return_value=parent,
+        ),
     ):
         await SpaceFileDao.async_list_children(
             knowledge_id=123,
@@ -137,17 +164,21 @@ async def test_async_list_children_status_filter_uses_nested_parent_path():
     assert "file_level_path = '/10/20'" in sql
     assert "concat('/10/20', '/', knowledgefile.id)" in sql
 
+
 @pytest.mark.asyncio
 async def test_async_count_children_status_filter_uses_nested_parent_path():
     session = _FakeAsyncSession()
     parent = SimpleNamespace(file_level_path="/10")
 
-    with patch(
-        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
-        return_value=session,
-    ), patch(
-        "bisheng.knowledge.domain.models.knowledge_space_file.KnowledgeFileDao.query_by_id",
-        return_value=parent,
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+            return_value=session,
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_file.KnowledgeFileDao.query_by_id",
+            return_value=parent,
+        ),
     ):
         await SpaceFileDao.async_count_children(
             knowledge_id=123,

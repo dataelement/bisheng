@@ -343,9 +343,15 @@ export function PermissionGrantTab({
           </div>
         </div>
 
-        <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
+        <div className="mt-4 flex shrink-0 items-center justify-between gap-3 border-t pt-4">
+          {/* The dropdown lists fewer templates than exist and never said why.
+              The footer had the room; the dropdown row did not. */}
+          <p className="min-w-0 text-xs leading-5 text-[#999999]">
+            {localize("f048_permission.grant.grantable_hint")}
+          </p>
           <Button
             type="button"
+            className="shrink-0"
             disabled={
               selectedAddChanges.length === 0 ||
               !selectedModelKey ||

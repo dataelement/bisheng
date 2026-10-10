@@ -4,6 +4,7 @@
  */
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
+import { getShareTokenFromPath } from "~/utils/shareToken";
 
 // --- Endpoints ---
 const API = {
@@ -342,27 +343,68 @@ export async function deleteConversation(
     await http.delete(API.deleteConversation(conversationId));
 }
 
+/** F054/F062: why a requested citation came back without a payload. */
+export type CitationUnresolvedReason = "forbidden" | "expired";
+
+const citationReasonCache: Record<string, CitationUnresolvedReason> = {};
+
+export function getCitationUnresolvedReason(citationId: string): CitationUnresolvedReason | undefined {
+    return citationReasonCache[citationId];
+}
+
+function citationReasonFromPayload(payload: any): CitationUnresolvedReason {
+    const reason = payload?.data?.reason ?? payload?.reason;
+    if (reason === "expired") {
+        return "expired";
+    }
+    return "forbidden";
+}
+
+function throwCitationResolveError(citationId: string, payload: any): never {
+    const reason = citationReasonFromPayload(payload);
+    citationReasonCache[citationId] = reason;
+    const err: any = new Error(reason === "expired" ? "citation expired" : "citation forbidden");
+    err.citationForbidden = reason !== "expired";
+    err.citationExpired = reason === "expired";
+    throw err;
+}
+
+function citationShareHeaders(): { headers: { "share-token": string } } | undefined {
+    // Share-page reads of a workflow conversation carry the token so a
+    // recipient can open that chat's temporary-knowledge-base sources.
+    const token = getShareTokenFromPath();
+    return token ? { headers: { "share-token": token } } : undefined;
+}
+
 export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
     if (canUseCachedCitationDetail(citationDetailMemoryCache[citationId])) {
         return citationDetailMemoryCache[citationId];
     }
 
-    const res = await http.get<any>(API.citationDetail(citationId));
-    // 404 = the citation is not found OR the viewer lacks view_file permission for
-    // the underlying RAG document (admins/owners see it, others don't). Surface it
-    // as a typed error so the marker shows "no permission" and stays un-clickable
-    // instead of the generic "no source detail".
-    if (res?.status_code === 404 || res?.data?.status_code === 404) {
-        const err: any = new Error('citation forbidden');
-        err.citationForbidden = true;
-        throw err;
+    try {
+        const res = await http.get<any>(API.citationDetail(citationId), citationShareHeaders());
+        // 404 = not found, no permission, or the temp object is gone. Read `reason`
+        // so expired and forbidden stay distinct (F054/F062).
+        if (res?.status_code === 404 || res?.data?.status_code === 404) {
+            throwCitationResolveError(citationId, res);
+        }
+        const detail = res?.data ?? res;
+        if (detail?.citationId) {
+            citationDetailMemoryCache[detail.citationId] = detail;
+            delete citationReasonCache[detail.citationId];
+        }
+        citationDetailMemoryCache[citationId] = detail;
+        return detail;
+    } catch (error: any) {
+        if (error?.citationForbidden || error?.citationExpired) {
+            throw error;
+        }
+        const status = error?.status_code || error?.response?.data?.status_code;
+        if (status === 404) {
+            throwCitationResolveError(citationId, error?.response?.data ?? error);
+        }
+        throw error;
     }
-    const detail = res?.data ?? res;
-    if (detail?.citationId) {
-        citationDetailMemoryCache[detail.citationId] = detail;
-    }
-    citationDetailMemoryCache[citationId] = detail;
-    return detail;
 }
 
 export async function resolveCitationDetails(citationIds: string[]): Promise<ChatCitation[]> {
@@ -378,9 +420,14 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
 
     const requestKey = uniqueCitationIds.slice().sort().join("|");
     if (!citationResolveRequestCache[requestKey]) {
-        citationResolveRequestCache[requestKey] = http.post(API.citationResolve(), {
-            citationIds: uniqueCitationIds,
-        }).then((res) => {
+        const shareHeaders = citationShareHeaders();
+        citationResolveRequestCache[requestKey] = http.post(
+            API.citationResolve(),
+            { citationIds: uniqueCitationIds },
+            shareHeaders
+                ? { headers: { "Content-Type": "application/json", ...shareHeaders.headers } }
+                : undefined,
+        ).then((res) => {
             const payload = res?.data ?? res;
             const items = Array.isArray(payload?.items)
                 ? payload.items
@@ -390,6 +437,13 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
             items.forEach((detail) => {
                 if (detail?.citationId) {
                     citationDetailMemoryCache[detail.citationId] = detail;
+                    delete citationReasonCache[detail.citationId];
+                }
+            });
+            const unresolved = Array.isArray(payload?.unresolved) ? payload.unresolved : [];
+            unresolved.forEach((entry) => {
+                if (entry?.citationId && entry?.reason) {
+                    citationReasonCache[entry.citationId] = entry.reason;
                 }
             });
             return items;

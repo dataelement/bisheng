@@ -147,6 +147,15 @@ async def test_seed_creates_single_current_catalog_on_fresh_install(session_fact
     assert await _count(session_factory, PermissionModel) == 4
     assert await _count(session_factory, PermissionModelAction) > 0
     assert ("user:*", "active", f"permission_catalog_release:{INITIAL_CATALOG_RELEASE_KEY}") in fga.tuples
+    assert (
+        "service_account:*",
+        "active",
+        f"permission_catalog_release:{INITIAL_CATALOG_RELEASE_KEY}",
+    ) in fga.tuples
+    assert any(
+        user == "service_account:*" and relation == "enabled_marker"
+        for user, relation, _ in fga.tuples
+    )
 
 
 @pytest.mark.asyncio

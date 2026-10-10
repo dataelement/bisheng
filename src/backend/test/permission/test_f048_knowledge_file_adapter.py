@@ -118,6 +118,33 @@ def _record(
     )
 
 
+@pytest.mark.parametrize("parent_type", ["knowledge_space", "knowledge_library"])
+@pytest.mark.parametrize("resource_type", ["knowledge_file", "folder"])
+async def test_equal_ids_across_resource_types_allow_creation_and_access(parent_type, resource_type):
+    record = _record(
+        resource_type=resource_type,
+        resource_id="348",
+        parent_type=parent_type,
+        parent_id="348",
+        ancestor_ids=(),
+    )
+    permission = _Permission()
+    adapter = F048KnowledgeFilePermissionAdapter(loader=_Loader((record,)), permission=permission)
+    await adapter.authorize_created(record=record, actor=_actor())
+    assert await adapter.check_action(resource_type=resource_type, resource_id="348", actor=_actor(), action="visible")
+    target = permission.calls[0][1]["target"]
+    assert (target.parent_type, target.parent_id) == (parent_type, "348")
+
+
+async def test_same_type_self_parent_is_still_rejected_without_ancestor_hint():
+    record = _record(resource_type="folder", resource_id="348", parent_id="348", ancestor_ids=())
+    adapter = F048KnowledgeFilePermissionAdapter(loader=_Loader((record,)), permission=_Permission())
+    with pytest.raises(PermissionInvalidResourceError):
+        await adapter.authorize_created(record=record, actor=_actor())
+    with pytest.raises(PermissionInvalidResourceError):
+        await adapter.check_action(resource_type="folder", resource_id="348", actor=_actor(), action="visible")
+
+
 @pytest.mark.asyncio
 async def test_file_loader_reads_version_and_mode_through_facade(
     monkeypatch,
@@ -230,9 +257,7 @@ async def test_batch_target_builder_reuses_business_rows_without_dao_reload(
         ("knowledge_space", "11"),
         ("folder", "10"),
     ]
-    assert version_port.snapshot_calls == [
-        ((5, "folder", "10"), (5, "knowledge_file", "12"))
-    ]
+    assert version_port.snapshot_calls == [((5, "folder", "10"), (5, "knowledge_file", "12"))]
     reload_file.assert_not_awaited()
     reload_knowledge.assert_not_awaited()
     assert metrics[0][0] == "permission"
@@ -263,6 +288,27 @@ async def test_file_target_is_verified_with_canonical_parent_and_action() -> Non
     target = permission.calls[0][1]["target"]
     assert (target.parent_type, target.parent_id) == ("folder", "2")
     assert permission.calls[0][1]["action"] == "download"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", tuple(status.name for status in KnowledgeFileStatus))
+async def test_file_processing_status_does_not_affect_permission_target(status: str) -> None:
+    record = _record(status=status)
+    permission = _Permission()
+    adapter = F048KnowledgeFilePermissionAdapter(
+        loader=_Loader((record,)),
+        permission=permission,
+    )
+
+    allowed = await adapter.check_action(
+        resource_type="knowledge_file",
+        resource_id="10",
+        actor=_actor(),
+        action="visible",
+    )
+
+    assert allowed is True
+    assert permission.calls[0][1]["action"] == "visible"
 
 
 @pytest.mark.asyncio
@@ -334,12 +380,11 @@ async def test_move_copy_and_delete_delegate_one_atomic_lifecycle_call(
     (
         None,
         _record(tenant_id=6),
-        _record(status="FAILED"),
-        _record(parent_id="10"),
+        _record(resource_type="folder", parent_id="10"),
         _record(ancestor_ids=("1", "10")),
     ),
 )
-async def test_missing_cross_tenant_invalid_status_and_cycles_fail_closed(
+async def test_missing_cross_tenant_and_cycles_fail_closed(
     record,
 ) -> None:
     permission = _Permission()

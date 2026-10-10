@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Body
+from sqlmodel import select
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
 from bisheng.database.models.flow import FlowDao, FlowStatus, FlowType
 from bisheng.database.models.message import ChatMessageDao
-from bisheng.database.models.session import MessageSessionDao
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.database.models.tag import TagDao
 from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.application.business_authorization import (
@@ -206,21 +208,22 @@ async def unpin_used_app(login_user=LoginUserDep, flow_id: str = Body(..., embed
 
 @router.get("/app/conversations", summary="Get conversations for a specific app", response_model=UnifiedResponseModel)
 async def get_app_conversations(flow_id: str, page: int = 1, limit: int = 10, login_user=LoginUserDep):
-    sessions = await MessageSessionDao.afilter_session(
-        flow_ids=[flow_id],
-        user_ids=[login_user.user_id],
-        page=page,
-        limit=limit,
-        include_delete=False,
+    # Filtering on user_id alone is not enough: anonymous share-link sessions
+    # are stamped with the configured default operator's user_id, so whoever
+    # holds that account would otherwise see every visitor's conversation in
+    # their own list. ``SessionSubject.natural_person`` adds the subject-kind
+    # condition (and handles the DaMeng-safe is_delete comparison).
+    subject = SessionSubject.natural_person(
+        tenant_id=login_user.tenant_id, user_id=login_user.user_id
     )
+    statement = subject.filter_statement(
+        select(MessageSession).where(MessageSession.flow_id == flow_id)
+    )
+    sessions = await MessageSessionDao.get_statement_results(statement, page=page, limit=limit)
     if not sessions:
         return resp_200(data={"list": [], "total": 0})
 
-    total = await MessageSessionDao.filter_session_count(
-        flow_ids=[flow_id],
-        user_ids=[login_user.user_id],
-        include_delete=False,
-    )
+    total = await MessageSessionDao.get_statement_count(statement)
     chat_ids = [one.chat_id for one in sessions]
     latest_messages = ChatMessageDao.get_latest_message_by_chat_ids(chat_ids)
     latest_messages = {one.chat_id: one for one in latest_messages}

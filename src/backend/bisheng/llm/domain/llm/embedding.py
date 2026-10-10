@@ -1,29 +1,34 @@
 import json
-from typing import Optional, Dict, List
+from typing import Self
 
 import numpy as np
 from langchain_core.embeddings import Embeddings
 from loguru import logger
 from pydantic import Field
-from typing_extensions import Self
 
-from bisheng.core.ai import OllamaEmbeddings, OpenAIEmbeddings, AzureOpenAIEmbeddings, DashScopeEmbeddings, \
-    VolcengineEmbeddings
-from bisheng.llm.domain.const import LLMServerType, LLMModelType
-from .base import BishengBase
+from bisheng.core.ai import (
+    AzureOpenAIEmbeddings,
+    DashScopeEmbeddings,
+    OllamaEmbeddings,
+    OpenAIEmbeddings,
+    VolcengineEmbeddings,
+)
+from bisheng.llm.domain.const import LLMModelType, LLMServerType
+
 from ..models import LLMModel, LLMServer
-from ..utils import wrapper_bisheng_model_limit_check
+from ..utils import usable_proxy_url, wrapper_bisheng_model_limit_check
+from .base import BishengBase
 
 
 def _get_user_kwargs(model_config: dict) -> dict:
-    user_kwargs = model_config.get('user_kwargs', {})
+    user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
     return user_kwargs if user_kwargs else {}
 
 
 def _get_ollama_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['base_url'] = server_config.get('base_url', '').rstrip('/')
+    params["base_url"] = server_config.get("base_url", "").rstrip("/")
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
@@ -32,13 +37,16 @@ def _get_ollama_params(params: dict, server_config: dict, model_config: dict) ->
 
 def _get_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
     if server_config:
-        params.update({
-            'api_key': server_config.get('openai_api_key') or server_config.get('api_key') or 'empty',
-            'base_url': server_config.get('openai_api_base', '') or server_config.get('base_url', ''),
-        })
-        params['base_url'] = params['base_url'].rstrip('/')
-    if server_config.get('openai_proxy'):
-        params['openai_proxy'] = server_config.get('openai_proxy')
+        params.update(
+            {
+                "api_key": server_config.get("openai_api_key") or server_config.get("api_key") or "empty",
+                "base_url": server_config.get("openai_api_base", "") or server_config.get("base_url", ""),
+            }
+        )
+        params["base_url"] = params["base_url"].rstrip("/")
+    proxy = usable_proxy_url(server_config.get("openai_proxy") if server_config else None)
+    if proxy:
+        params["openai_proxy"] = proxy
     params["check_embedding_ctx_length"] = False
 
     user_kwargs = _get_user_kwargs(model_config)
@@ -47,12 +55,14 @@ def _get_openai_params(params: dict, server_config: dict, model_config: dict) ->
 
 
 def _get_azure_openai_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params.update({
-        'azure_endpoint': server_config.get('azure_endpoint').rstrip('/'),
-        'openai_api_key': server_config.get('openai_api_key'),
-        'openai_api_version': server_config.get('openai_api_version'),
-        'azure_deployment': params.pop('model'),
-    })
+    params.update(
+        {
+            "azure_endpoint": server_config.get("azure_endpoint").rstrip("/"),
+            "openai_api_key": server_config.get("openai_api_key"),
+            "openai_api_version": server_config.get("openai_api_version"),
+            "azure_deployment": params.pop("model"),
+        }
+    )
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
@@ -60,20 +70,19 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 
 
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
-    params['dashscope_api_key'] = server_config.get('openai_api_key', '')
+    params["dashscope_api_key"] = server_config.get("openai_api_key", "")
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
     return user_kwargs
 
 
-_node_type: Dict = {
+_node_type: dict = {
     # Open source inference framework
     LLMServerType.OLLAMA.value: {"client": OllamaEmbeddings, "params_handler": _get_ollama_params},
     LLMServerType.XINFERENCE.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.LLAMACPP.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.VLLM.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
-
     # OfficalAPISERVICES
     LLMServerType.OPENAI.value: {"client": OpenAIEmbeddings, "params_handler": _get_openai_params},
     LLMServerType.AZURE_OPENAI.value: {"client": AzureOpenAIEmbeddings, "params_handler": _get_azure_openai_params},
@@ -88,14 +97,14 @@ _node_type: Dict = {
 
 
 class BishengEmbedding(BishengBase, Embeddings):
-    """ Use the embedding model that has been launched in model management """
+    """Use the embedding model that has been launched in model management"""
 
-    embedding_ctx_length: int = Field(default=8192, description='embeddingModel Context Length')
-    max_retries: int = Field(default=6, description='embeddingNumber of failed model call retries')
-    request_timeout: int = Field(default=200, description='embeddingModel Call Timeout')
-    model_kwargs: dict = Field(default={}, description='embeddingModel Call Parameters')
+    embedding_ctx_length: int = Field(default=8192, description="embeddingModel Context Length")
+    max_retries: int = Field(default=6, description="embeddingNumber of failed model call retries")
+    request_timeout: int = Field(default=200, description="embeddingModel Call Timeout")
+    model_kwargs: dict = Field(default={}, description="embeddingModel Call Parameters")
 
-    embeddings: Optional[Embeddings] = Field(default=None)
+    embeddings: Embeddings | None = Field(default=None)
 
     @classmethod
     async def get_bisheng_embedding(cls, **kwargs) -> Self:
@@ -103,28 +112,28 @@ class BishengEmbedding(BishengBase, Embeddings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.model_id = kwargs.get('model_id')
+        self.model_id = kwargs.get("model_id")
         if not self.model_id:
-            raise Exception('No bulkpost found in Trashembeddingmodel config')
+            raise Exception("No bulkpost found in Trashembeddingmodel config")
         if "model_info" in kwargs and "server_info" in kwargs:
-            self._init_client(model_info=kwargs.pop('model_info'), server_info=kwargs.pop('server_info'), **kwargs)
+            self._init_client(model_info=kwargs.pop("model_info"), server_info=kwargs.pop("server_info"), **kwargs)
         else:
             model_info, server_info = self.get_model_server_info_sync(self.model_id)
             self._init_client(model_info=model_info, server_info=server_info, **kwargs)
 
     def _init_client(self, model_info, server_info, **kwargs):
-        ignore_online = kwargs.get('ignore_online', False)
+        ignore_online = kwargs.get("ignore_online", False)
         if not model_info:
-            raise Exception('embeddingModel configuration has been deleted, please reconfigure the model')
+            raise Exception("embeddingModel configuration has been deleted, please reconfigure the model")
         if not server_info:
-            raise Exception('Service provider configuration has been deleted, please reconfigureembeddingModels')
+            raise Exception("Service provider configuration has been deleted, please reconfigureembeddingModels")
         if model_info.model_type != LLMModelType.EMBEDDING.value:
-            raise Exception(f'Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model')
+            raise Exception(f"Support onlyEmbeddingModel of type, not supported{model_info.model_type}Type of model")
         if not ignore_online and not model_info.online:
             raise Exception(
-                f'{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model')
-        logger.debug(
-            f'init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}')
+                f"{server_info.name}under{model_info.model_name}The model is offline, please contact the administrator to launch the corresponding model"
+            )
+        logger.debug(f"init_bisheng_embedding: server_id: {server_info.id}, model_id: {model_info.id}")
         self.model_info: LLMModel = model_info
         self.server_info: LLMServer = server_info
         self.model_name = model_info.model_name
@@ -134,16 +143,17 @@ class BishengEmbedding(BishengBase, Embeddings):
         try:
             self.embeddings = class_object(**params)
         except Exception as e:
-            logger.exception('init_bisheng_embedding error')
+            logger.exception("init_bisheng_embedding error")
             raise Exception(
-                f'Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}')
+                f"Inisialisasibisheng embeddingComponent failed, please check the configuration or contact the administrator.Error message:{e}"
+            )
 
     @staticmethod
     def _get_embedding_class(server_type: str) -> type[Embeddings]:
         node_type = _node_type.get(server_type)
         if not node_type:
-            raise Exception(f'{server_type}Type of service provider is not supportedembedding')
-        class_object = node_type.get('client')
+            raise Exception(f"{server_type}Type of service provider is not supportedembedding")
+        class_object = node_type.get("client")
         return class_object
 
     def _get_default_params(self, server_config: dict, model_config: dict, **kwargs) -> dict:
@@ -157,12 +167,12 @@ class BishengEmbedding(BishengBase, Embeddings):
         model_config = self.get_model_info_config()
         default_params = self._get_default_params(server_config, model_config, **kwargs)
 
-        params_handler = _node_type[server_info.type]['params_handler']
+        params_handler = _node_type[server_info.type]["params_handler"]
         params = params_handler(default_params, server_config, model_config)
         return params
 
     @wrapper_bisheng_model_limit_check
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """embedding"""
         ret = self.embeddings.embed_documents(texts)
         # Whether the disc single vector is normalized
@@ -173,7 +183,7 @@ class BishengEmbedding(BishengBase, Embeddings):
         return ret
 
     @wrapper_bisheng_model_limit_check
-    def embed_query(self, text: str) -> List[float]:
+    def embed_query(self, text: str) -> list[float]:
         """embedding"""
         ret = self.embeddings.embed_query(text)
         if np.linalg.norm(ret) != 1:

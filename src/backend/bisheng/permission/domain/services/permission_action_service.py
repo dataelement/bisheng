@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Protocol
+from typing import Literal, Protocol
 
 from loguru import logger
 
@@ -26,17 +26,79 @@ from bisheng.permission.domain.schemas import (
 from bisheng.permission.domain.services.catalog_policy import (
     REGISTERED_ACTION_CODES,
 )
+from bisheng.permission.domain.services.data_scope import (
+    DATA_SCOPE_ALL,
+    get_data_scope_resolver,
+)
 
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 MAX_BATCH_CHECKS = 100
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class PermissionActor:
-    user_id: int
-    current_tenant_id: int
+    subject_type: Literal["user", "service_account"]
+    subject_id: int
+    tenant_id: int
     super_admin: bool = False
     tenant_admin_tenant_ids: frozenset[int] = frozenset()
+    data_scope: str = DATA_SCOPE_ALL
+
+    def __init__(
+        self,
+        subject_type: Literal["user", "service_account"] = "user",
+        subject_id: int | None = None,
+        tenant_id: int | None = None,
+        *,
+        super_admin: bool = False,
+        tenant_admin_tenant_ids: frozenset[int] = frozenset(),
+        data_scope: str = DATA_SCOPE_ALL,
+        user_id: int | None = None,
+        current_tenant_id: int | None = None,
+    ) -> None:
+        """Build a typed actor while accepting legacy user-only keywords.
+
+        The aliases preserve existing callers during the F048 transition; all
+        authorization transport uses ``fga_subject`` and therefore never loses
+        the subject type.
+        """
+
+        if subject_type not in {"user", "service_account"}:
+            raise ValueError(f"unsupported permission subject type: {subject_type!r}")
+        resolved_subject_id = subject_id if subject_id is not None else user_id
+        resolved_tenant_id = tenant_id if tenant_id is not None else current_tenant_id
+        if resolved_subject_id is None or resolved_tenant_id is None:
+            raise TypeError("subject_id and tenant_id are required")
+        if subject_id is not None and user_id is not None and subject_id != user_id:
+            raise ValueError("subject_id and user_id disagree")
+        if tenant_id is not None and current_tenant_id is not None and tenant_id != current_tenant_id:
+            raise ValueError("tenant_id and current_tenant_id disagree")
+
+        object.__setattr__(self, "subject_type", subject_type)
+        object.__setattr__(self, "subject_id", int(resolved_subject_id))
+        object.__setattr__(self, "tenant_id", int(resolved_tenant_id))
+        if subject_type == "service_account":
+            super_admin = False
+            tenant_admin_tenant_ids = frozenset()
+            # Data-scope narrowing is defined for natural-person tokens only.
+            data_scope = DATA_SCOPE_ALL
+        object.__setattr__(self, "super_admin", bool(super_admin))
+        object.__setattr__(self, "tenant_admin_tenant_ids", frozenset(tenant_admin_tenant_ids))
+        object.__setattr__(self, "data_scope", str(data_scope))
+
+    @property
+    def fga_subject(self) -> str:
+        return f"{self.subject_type}:{self.subject_id}"
+
+    @property
+    def user_id(self) -> int:
+        """Legacy user-only alias; authorization code must use ``fga_subject``."""
+
+        return self.subject_id
+
+    @property
+    def current_tenant_id(self) -> int:
+        return self.tenant_id
 
 
 class PermissionCatalogDecisionPort(Protocol):
@@ -157,6 +219,9 @@ class F048PermissionService:
     ) -> bool:
         started = perf_counter()
         action = self._normalize_action(action)
+        # F066: the tenant data-scope narrowing is an export control and must
+        # win over every identity shortcut, so it is evaluated first.
+        await self._enforce_data_scope_single(actor, target, action=action, started=started)
         shortcut = await self._identity_shortcut(actor, target, action=action)
         if shortcut is not None:
             allowed, reason = shortcut
@@ -178,7 +243,7 @@ class F048PermissionService:
         )
         try:
             allowed = await self._fga.check(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation=f"can_{action}",
                 object=f"{target.resource_type}:{target.resource_id}",
                 consistency=consistency,
@@ -214,6 +279,7 @@ class F048PermissionService:
                 started,
             )
             return False
+        await self._enforce_data_scope_single(actor, target, action="visible", started=started)
         await self._catalog.ensure_runtime_ready()
         force_higher_consistency = bool(await self._scope_fence.ensure_readable(target))
         consistency = await self._consistency(
@@ -222,7 +288,7 @@ class F048PermissionService:
         )
         try:
             allowed = await self._fga.check(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation="visible",
                 object=f"{target.resource_type}:{target.resource_id}",
                 consistency=consistency,
@@ -259,7 +325,13 @@ class F048PermissionService:
         results: list[bool | None] = [None] * len(targets)
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
+        data_scope_denied = await self._data_scope_denied_map(actor, targets)
         for index, target in enumerate(targets):
+            if index in data_scope_denied:
+                # Batch checks carry filtering semantics: narrowed-out targets
+                # resolve to False instead of raising (design decision 2).
+                results[index] = False
+                continue
             shortcut = await self._identity_shortcut(
                 actor,
                 target,
@@ -285,7 +357,7 @@ class F048PermissionService:
         if unresolved:
             checks = [
                 {
-                    "user": f"user:{actor.user_id}",
+                    "user": actor.fga_subject,
                     "relation": f"can_{action}",
                     "object": f"{target.resource_type}:{target.resource_id}",
                 }
@@ -321,13 +393,18 @@ class F048PermissionService:
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
         tenant_targets = tuple(
-            (index, target)
-            for index, target in enumerate(targets)
-            if target.tenant_id == actor.current_tenant_id
+            (index, target) for index, target in enumerate(targets) if target.tenant_id == actor.current_tenant_id
         )
         for index, target in enumerate(targets):
             if target.tenant_id != actor.current_tenant_id:
                 results[index] = False
+        data_scope_denied = await self._data_scope_denied_map(actor, targets)
+        if data_scope_denied:
+            for denied_index in data_scope_denied:
+                results[denied_index] = False
+            tenant_targets = tuple(
+                (index, target) for index, target in tenant_targets if index not in data_scope_denied
+            )
 
         def emit_batch_metric(status: str, *, allowed_count: int = 0) -> None:
             emit_metric(
@@ -416,7 +493,7 @@ class F048PermissionService:
         if unresolved:
             checks = [
                 {
-                    "user": f"user:{actor.user_id}",
+                    "user": actor.fga_subject,
                     "relation": "visible",
                     "object": (f"{target.resource_type}:{target.resource_id}"),
                 }
@@ -460,7 +537,7 @@ class F048PermissionService:
         request = VisibleObjectEnumerationRequest(
             tenant_id=actor.current_tenant_id,
             resource_type=resource_type,
-            fga_user=f"user:{actor.user_id}",
+            fga_user=actor.fga_subject,
             max_results=max_results,
         )
         started = perf_counter()
@@ -503,6 +580,19 @@ class F048PermissionService:
                 msg="OpenFGA visible enumeration returned an unexpected object type",
             )
         object_ids = tuple(sorted({value[len(prefix) :] for value in objects}))
+        if actor.data_scope != DATA_SCOPE_ALL:
+            # List enumeration narrows silently (no 26044): the visible set is
+            # intersected with the holder-created set (design decision 2).
+            resolver = get_data_scope_resolver()
+            if resolver is None:
+                object_ids = ()
+            elif request.resource_type in resolver.governed_resource_types():
+                owned = await resolver.owned_ids(
+                    holder_user_id=actor.subject_id,
+                    tenant_id=request.tenant_id,
+                    resource_type=request.resource_type,
+                )
+                object_ids = tuple(value for value in object_ids if value in owned)
         if len(object_ids) > request.max_results:
             self._emit_visible_list_metric(
                 request=request,
@@ -582,7 +672,7 @@ class F048PermissionService:
         )
         try:
             objects = await self._fga.list_objects(
-                user=f"user:{actor.user_id}",
+                user=actor.fga_subject,
                 relation=f"can_{action}",
                 type=resource_type,
                 consistency=consistency,
@@ -629,6 +719,67 @@ class F048PermissionService:
             tenant_id=str(target.tenant_id),
             mismatch_kind="stale_parent_or_version",
         )
+
+    async def _enforce_data_scope_single(
+        self,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        *,
+        action: str,
+        started: float,
+    ) -> None:
+        """Raise 26044 when a narrowed actor touches a non-owned resource."""
+
+        if actor.data_scope == DATA_SCOPE_ALL:
+            return
+        denied = await self._data_scope_denied_map(actor, (target,))
+        if denied:
+            await self._emit_decision(
+                actor,
+                target,
+                action,
+                False,
+                "DATA_SCOPE",
+                None,
+                started,
+            )
+            from bisheng.common.errcode.open_api import PersonalTokenDataScopeError
+
+            raise PersonalTokenDataScopeError()
+
+    async def _data_scope_denied_map(
+        self,
+        actor: PermissionActor,
+        targets: tuple[VerifiedPermissionTarget, ...],
+    ) -> frozenset[int]:
+        """Indexes of ``targets`` denied by the actor's data scope.
+
+        Fail closed: a narrowed actor with no registered ownership resolver is
+        denied everything.  Resource types outside the resolver's governed set
+        are untouched — the narrowing is defined on the knowledge domain only.
+        """
+
+        if actor.data_scope == DATA_SCOPE_ALL or not targets:
+            return frozenset()
+        resolver = get_data_scope_resolver()
+        denied: set[int] = set()
+        by_type: dict[str, list[tuple[int, str]]] = {}
+        for index, target in enumerate(targets):
+            by_type.setdefault(target.resource_type, []).append((index, target.resource_id))
+        for resource_type, items in by_type.items():
+            if resolver is None:
+                denied.update(index for index, _ in items)
+                continue
+            if resource_type not in resolver.governed_resource_types():
+                continue
+            owned = await resolver.filter_owned(
+                holder_user_id=actor.subject_id,
+                tenant_id=actor.current_tenant_id,
+                resource_type=resource_type,
+                resource_ids=tuple(rid for _, rid in items),
+            )
+            denied.update(index for index, rid in items if rid not in owned)
+        return frozenset(denied)
 
     @staticmethod
     def _normalize_action(action: str) -> str:
@@ -747,6 +898,8 @@ class F048PermissionService:
                     "reason": reason,
                     "resource_type": target.resource_type,
                     "tenant_id": target.tenant_id,
+                    "subject_type": actor.subject_type,
+                    "subject_id": actor.subject_id,
                     "user_id": actor.user_id,
                 },
             )

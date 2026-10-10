@@ -217,9 +217,10 @@ describe("ActionLevelBoard", () => {
     expect(onReviewImpact).not.toHaveBeenCalled()
   })
 
-  it("shows resource scope on demand and the inactive marker on the card", async () => {
-    // The card carries only what the author scans for — name and on/off. The
-    // scope is one hover away rather than a row of chips on every card.
+  it("shows resource scope on the card and the inactive marker on the card", async () => {
+    // Scope used to be hover-only, which meant an admin who never hovered
+    // assumed every operation applied to every resource. It now sits on the
+    // card, in the row the level dropdown already occupies.
     render(
       <ActionLevelBoard
         actions={actions}
@@ -229,7 +230,8 @@ describe("ActionLevelBoard", () => {
     )
 
     const card = screen.getByTestId("permission-action-visible")
-    expect(card).not.toHaveTextContent("workflow")
+    expect(card).toHaveTextContent("resourceTypeName.workflow")
+    expect(card).toHaveTextContent("resourceTypeName.dashboard")
 
     await userEvent.hover(within(card).getByText("actionName.visible"))
     const tip = await screen.findByRole("tooltip")

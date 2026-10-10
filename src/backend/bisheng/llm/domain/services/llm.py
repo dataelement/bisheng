@@ -20,6 +20,7 @@ from bisheng.common.errcode.llm import (
     ServerAddAllError,
     ServerAddError,
     ServerExistError,
+    WorkbenchChatDefaultModelError,
     WorkbenchEmbeddingError,
 )
 from bisheng.common.errcode.llm_tenant import (
@@ -60,7 +61,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
-from bisheng.llm.domain.utils import invalidate_llm_info_cache
+from bisheng.llm.domain.utils import invalidate_llm_info_cache, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -122,6 +123,7 @@ def _workbench_model_ref_values(config: WorkbenchModelConfig) -> list[Any]:
     return [
         *(one.id for one in (config.models or [])),
         config.linsight_default_model_id,
+        config.chat_default_model_id,
         getattr(config.embedding_model, "id", None),
         getattr(config.asr_model, "id", None),
         getattr(config.tts_model, "id", None),
@@ -195,7 +197,11 @@ class LLMService:
             if isinstance(value, dict):
                 result[key] = cls.strip_config_whitespace(value)
             elif isinstance(value, str) and key.endswith(cls.STRIP_CONFIG_KEY_SUFFIXES):
-                result[key] = value.strip()
+                stripped = value.strip()
+                if key.endswith("_proxy"):
+                    result[key] = usable_proxy_url(stripped) or ""
+                else:
+                    result[key] = stripped
             else:
                 result[key] = value
         return result
@@ -260,6 +266,7 @@ class LLMService:
                 [
                     *(one.id for one in (workbench_cfg.models or [])),
                     workbench_cfg.linsight_default_model_id,
+                    workbench_cfg.chat_default_model_id,
                     getattr(workbench_cfg.embedding_model, "id", None),
                     getattr(workbench_cfg.asr_model, "id", None),
                     getattr(workbench_cfg.tts_model, "id", None),
@@ -380,6 +387,8 @@ class LLMService:
             config.models = [one for one in config.models if is_allowed(one.id)]
         if not is_allowed(config.linsight_default_model_id):
             config.linsight_default_model_id = None
+        if not is_allowed(config.chat_default_model_id):
+            config.chat_default_model_id = None
         for field_name in ("embedding_model", "asr_model", "tts_model", "chat_title_llm"):
             ws_model = getattr(config, field_name)
             if ws_model is not None and not is_allowed(ws_model.id):
@@ -1479,6 +1488,7 @@ class LLMService:
                 # linsight_default_model_id is already a model-id string (F035),
                 # not a WSModel; pass it directly alongside the WSModel ids.
                 config_obj.linsight_default_model_id,
+                config_obj.chat_default_model_id,
                 *(
                     (ws.id if ws else None)
                     for ws in (
@@ -1508,6 +1518,18 @@ class LLMService:
         # an explicit ``models: []`` still clears.)
         if config_obj.models is None:
             config_obj.models = config_old_obj.models
+
+        # chat_default_model_id must come from the configured (and, per the
+        # avalidate call above, accessible) daily-chat model list.
+        if config_obj.chat_default_model_id is not None:
+            chat_default_id = _coerce_model_id(config_obj.chat_default_model_id)
+            selectable_ids = {
+                model_id
+                for model_id in (_coerce_model_id(one.id) for one in (config_obj.models or []))
+                if model_id is not None
+            }
+            if chat_default_id is None or chat_default_id not in selectable_ids:
+                raise WorkbenchChatDefaultModelError()
 
         if config_obj.embedding_model:
             # Determine consistency

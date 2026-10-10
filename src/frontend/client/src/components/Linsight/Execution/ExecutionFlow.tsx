@@ -176,7 +176,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {/* user question bubble (active round) */}
                     {linsight?.question && (
                         <div className="mb-4 flex justify-end">
-                            <div className="max-w-[80%] whitespace-pre-wrap rounded-xl bg-[#F4F4F4] px-4 py-3 text-[14px] leading-relaxed text-[#212121]">
+                            <div className="max-w-[80%] whitespace-pre-wrap rounded-[12px] bg-[#F4F4F4] px-4 py-3 text-[14px] leading-relaxed text-text-1">
                                 {linsight.question}
                             </div>
                         </div>
@@ -261,6 +261,9 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}
                                 versionId={versionId}
+                                citations={linsight?.output_result?.citations}
+                                citationAudit={linsight?.output_result?.citation_audit}
+                                messageId={linsight?.message_id ?? undefined}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
                         </ResultPanel>
@@ -273,7 +276,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 {/* Design (Figma 12221-40080/40081): card inset 24px each side
                     relative to the input, 12px gap above it. */}
                 <div className="px-6 pb-3">
-                    <TaskPanel tasks={tasks} completed={completed} />
+                    <TaskPanel tasks={tasks} completed={completed} running={running} />
                 </div>
                 {/* Share pages AND historical sessions are read-only — no input.
                     Continuation now happens in the daily /c chat; the standalone
@@ -314,6 +317,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 files={workspaceFiles}
                 versionId={versionId}
                 onPreview={(file) => artifactsPanel.openPreview(file, true)}
+                citations={linsight?.output_result?.citations}
             />
             <FilePreviewPanel
                 open={!!artifactsPanel.previewFile}
@@ -321,6 +325,8 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 file={artifactsPanel.previewFile}
                 versionId={versionId}
                 fileList={workspaceFiles}
+                citations={linsight?.output_result?.citations}
+                messageId={linsight?.message_id ?? undefined}
                 onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
                 onArtifactPreview={(file) => artifactsPanel.openPreview(file, artifactsPanel.fromWorkspace)}
             />

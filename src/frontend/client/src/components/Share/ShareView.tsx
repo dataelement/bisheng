@@ -61,6 +61,7 @@ function SharedView() {
               hideHeaderTitle
               hideShare
               knowledgeChatLayout
+              stripCitationHandlesOnCopy
               contentWidthClassName="w-full max-w-[800px] mx-auto px-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3"
               onOpenCitationPanel={onOpenCitationPanel}
               activeCitationMessageId={activeCitationMessageId}

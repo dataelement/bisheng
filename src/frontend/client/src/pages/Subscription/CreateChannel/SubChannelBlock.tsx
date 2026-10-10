@@ -106,7 +106,7 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="h-[26px] min-w-0 flex-1 rounded border border-border-base bg-white px-2 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
+                        className="h-[26px] min-w-0 flex-1 rounded border border-border-base bg-white px-2 text-[14px] text-text-1 placeholder:text-text-3 focus:border-border-deep focus:outline-none focus:shadow-focus"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (

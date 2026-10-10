@@ -25,17 +25,16 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
 import httpx
 import pypandoc
+from fastapi import UploadFile
 from loguru import logger
 
-from io import BytesIO
-
-from fastapi import UploadFile
-
+from bisheng.citation.domain.services.citation_handle_service import strip_citation_handles
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileNameDuplicateError,
     SpaceFileSizeLimitError,
@@ -69,7 +68,6 @@ from bisheng.workstation.domain.schemas.conversation_export import (
     ImportMessagesToKnowledgeRequest,
     ImportMessagesToKnowledgeResponse,
 )
-
 
 # --- Constants -------------------------------------------------------------
 
@@ -325,7 +323,8 @@ class ConversationExportService:
                 sender_name = session.flow_name or ''
 
             answer_texts = [cls._extract_answer_text(a) for a in answer_msgs]
-            answer_texts = [cls._strip_citations(t) for t in answer_texts]
+            # Answers only: a user may type [S1] on purpose; unresolved model handles live in answers.
+            answer_texts = [strip_citation_handles(cls._strip_citations(t)) for t in answer_texts]
             # Drop fully-empty answer blocks (e.g. agent_tool_call / agent_thinking
             # categories sneak in via parent linkage; we don't render them).
             answer_texts = [t for t in answer_texts if t]

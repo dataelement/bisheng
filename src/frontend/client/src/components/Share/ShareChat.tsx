@@ -99,7 +99,8 @@ export default function ShareChat({
                         <Input
                             readOnly
                             value={shareUrl}
-                            className="flex-1 bg-muted/50 select-none"
+                            className="flex-1"
+                            inputClassName="select-none"
                             onMouseDown={(e) => {
                                 e.preventDefault();
                             }} />

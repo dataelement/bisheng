@@ -6,6 +6,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
 from typing import Any
 from urllib.parse import unquote
@@ -15,6 +16,7 @@ from fastapi import UploadFile
 from langchain_core.tools import BaseTool
 from loguru import logger
 
+from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
@@ -43,6 +45,7 @@ from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecute
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.schemas.linsight_schema import (
     DownloadFilesSchema,
@@ -231,6 +234,11 @@ class LinsightWorkbenchImpl:
         login_user: UserPayload,
         display_files: list[dict] | None = None,
         defer_ingest: bool = True,
+        *,
+        session_subject: SessionSubject | None = None,
+        api_meta: dict | None = None,
+        telemetry_source: str = "platform",
+        session_name: str = "New Chat",
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -249,6 +257,16 @@ class LinsightWorkbenchImpl:
                 minutes — so inline parsing put the whole batch inside one HTTP
                 request, which nginx cut at 300s. Set False only where the caller
                 genuinely needs the files materialized before it returns.
+            session_subject: F073 — the Open API caller identity. When given, a
+                new MessageSession is stamped through it (compatibility user id
+                + service-account marker, so self-identity runs stay out of the
+                resource owner's workbench list) and attachments are promoted
+                into its storage partition. ``None`` keeps the workbench path.
+            api_meta: F073 — persisted on the version; the worker switches to
+                unattended execution when ``channel == "open_api_v2"``.
+            telemetry_source: ``source`` on the NEW_MESSAGE_SESSION event
+                ("api" for Open API submissions).
+            session_name: Initial conversation name.
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -299,10 +317,12 @@ class LinsightWorkbenchImpl:
                 # session type, so flow_type=LINSIGHT(20) is no longer minted here.
                 message_session = MessageSession(
                     chat_id=chat_id,
-                    name="New Chat",
+                    name=session_name,
                     flow_type=FlowType.WORKSTATION.value,
                     user_id=login_user.user_id,
                 )
+                if session_subject is not None:
+                    message_session = session_subject.stamp(message_session)
 
                 message_session = await MessageSessionDao.async_insert_one(message_session)
 
@@ -314,7 +334,7 @@ class LinsightWorkbenchImpl:
                     event_data=NewMessageSessionEventData(
                         session_id=message_session.chat_id,
                         app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                        source="platform",
+                        source=telemetry_source,
                         app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                         app_type=ApplicationTypeEnum.DAILY_CHAT,
                     ),
@@ -335,6 +355,7 @@ class LinsightWorkbenchImpl:
                 pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
+                api_meta=api_meta,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
 
@@ -355,7 +376,11 @@ class LinsightWorkbenchImpl:
                 # failed state) is stamped on later by the worker, via the
                 # session_version_id pointer below.
                 files=await promote_chat_attachments(
-                    cls.annotate_display_files(display_files, processed_files), login_user.user_id
+                    cls.annotate_display_files(display_files, processed_files),
+                    login_user.user_id,
+                    # Only an Open API submit names its own partition; the
+                    # workbench call stays exactly what it was.
+                    **({"storage_partition": session_subject.storage_partition} if session_subject is not None else {}),
                 ),
                 session_version_id=svid,
             )
@@ -370,6 +395,63 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+
+    @classmethod
+    async def terminate(cls, session_version_model: LinsightSessionVersion) -> None:
+        """Stop a queued or running task (F073: shared by v1 and the Open API).
+
+        Drops it from the queue, flips the status to TERMINATED, lands the task
+        turn and pushes TASK_TERMINATED. Ownership and "is it still stoppable"
+        are the caller's checks — v1 and v2 answer them differently.
+        """
+        from bisheng.linsight.domain.services.state_message_manager import (
+            LinsightStateMessageManager,
+            MessageData,
+            MessageEventType,
+        )
+        from bisheng.linsight.worker import LinsightQueue
+
+        await MessageSessionDao.touch_session(session_version_model.session_id)
+
+        redis_client = await get_redis_client()
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+
+        try:
+            # Remove task from queue
+            await queue.remove(session_version_model.id)
+        except Exception as e:
+            logger.error(f"Failed to delete queue task: {e!s}")
+
+        # Update status is terminated
+        session_version_model.status = SessionVersionStatusEnum.TERMINATED
+
+        state_message_manager = LinsightStateMessageManager(session_version_id=session_version_model.id)
+
+        await state_message_manager.set_session_version_info(session_version_model)
+
+        # Persist the bot task turn so the terminated state survives a refresh. A task
+        # cancelled while still queued never reached _execute_workflow, so no
+        # category="task" row was written yet — without this, a refresh shows only the
+        # user question and the "task terminated" banner is lost. Upsert is idempotent:
+        # a task terminated mid-execution already has the placeholder row.
+        try:
+            await linsight_execute_utils.persist_task_turn_message(session_version_model)
+        except Exception:
+            # Best-effort: the termination itself (status flip + WS push) already
+            # succeeded; only the reload-time banner is affected if this fails.
+            logger.exception("Failed to persist terminated task turn message")
+
+        # Push termination message
+        await state_message_manager.push_message(
+            MessageData(
+                event_type=MessageEventType.TASK_TERMINATED,
+                data={
+                    "message": "Task has been actively stopped by the user",
+                    "session_id": session_version_model.id,
+                    "terminated_at": datetime.now().isoformat(),
+                },
+            )
+        )
 
     @staticmethod
     def annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:

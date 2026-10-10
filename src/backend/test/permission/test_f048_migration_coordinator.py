@@ -492,6 +492,53 @@ async def test_formal_migration_compiles_one_single_slot_visible_aggregate() -> 
     )
 
 
+async def test_formal_migration_maintains_both_subject_types_at_every_hierarchy_level():
+    base = _snapshot()
+    nodes = (
+        ("knowledge_space", "137", None, None, "custom_mode"),
+        ("folder", "742", "knowledge_space", "137", "inherit_mode"),
+        ("knowledge_file", "783", "folder", "742", "inherit_mode"),
+    )
+    snapshot = replace(
+        base,
+        resources=(
+            *base.resources,
+            *(
+                PermissionMigrationResourceDTO(
+                    tenant_id=7,
+                    resource_type=kind,
+                    resource_id=resource_id,
+                    status="ONLINE",
+                    owner_user_id=11,
+                    ownership_kind="USER",
+                    source_locator=f"{kind}:{resource_id}",
+                    parent_type=parent_type,
+                    parent_id=parent_id,
+                )
+                for kind, resource_id, parent_type, parent_id, _mode in nodes
+            ),
+        ),
+    )
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=FakeRunStore(),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(expected_store_id="store-live", lock_token="operator-1")
+
+    tuples = {(row["user"], row["relation"], row["object"]) for row in writer.written_tuples}
+    for kind, resource_id, parent_type, parent_id, mode in nodes:
+        key = f"{kind}:{resource_id}"
+        for subject in ("user:*", "service_account:*"):
+            assert (subject, mode, key) in tuples
+            assert (subject, "permission_enabled", key) in tuples
+        if parent_type:
+            assert (f"{parent_type}:{parent_id}", "parent", key) in tuples
+
+
 async def test_inactive_custom_binding_keeps_existing_visible_contribution() -> None:
     base = _snapshot()
     snapshot = replace(

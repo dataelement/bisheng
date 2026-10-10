@@ -239,8 +239,19 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         referenced: set[str] = set()
         for source_list in result.all():
             if source_list:
-                referenced.update(source_list)
+                referenced.update(str(source_id).strip() for source_id in source_list if str(source_id).strip())
         return referenced
+
+    async def find_channels_referencing_source(self, source_id: str) -> list[Channel]:
+        normalized = str(source_id).strip()
+        if not normalized:
+            return []
+        result = await self.session.exec(select(Channel))
+        return [
+            channel
+            for channel in result.all()
+            if normalized in {str(item).strip() for item in (channel.source_list or []) if str(item).strip()}
+        ]
 
     def update_channel_latest_article_update_time(self, channles: list[Channel]) -> list[Channel]:
         for channel in channles:

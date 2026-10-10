@@ -1,49 +1,9 @@
-import { SearchIcon } from "lucide-react";
-import * as React from "react";
-
-import { cn } from "~/utils";
-
-export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
-
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <input
-        className={cn(
-          "flex h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:text-muted-foreground read-only:cursor-default read-only:text-muted-foreground",
-          className ?? ""
-        )}
-        ref={ref}
-        {...props}
-      />
-    );
-  }
-);
-
-Input.displayName = "Input";
-
-const SearchInput = React.forwardRef<
-  HTMLInputElement,
-  InputProps & { inputClassName?: string; iconClassName?: string }
->(({ className, inputClassName, iconClassName, ...props }, ref) => {
-  return (
-    <div className={cn("relative", className)}>
-      <SearchIcon
-        className={cn(
-          "h-5 w-5 absolute left-2 top-2 text-gray-950 dark:text-gray-500 z-10",
-          iconClassName
-        )}
-      />
-      <Input
-        type="text"
-        ref={ref}
-        className={cn("pl-8 bg-search-input", inputClassName)}
-        {...props}
-      ></Input>
-    </div>
-  );
-});
-
-SearchInput.displayName = "SearchInput";
-
-export { Input, SearchInput };
+/**
+ * Input has moved to the shared component library (@bisheng/ui) — spec:
+ * 组件-Input输入框.md (32px medium default, gray focus chain, className lands on
+ * the SHELL, `inputClassName` on the <input>). This re-export keeps every
+ * existing `~/components/ui/Input` / barrel call site working unchanged.
+ * New code may import from '@bisheng/ui' directly.
+ */
+export { Input, SearchInput, PasswordInput } from '@bisheng/ui';
+export type { InputProps, SearchInputProps, PasswordInputProps } from '@bisheng/ui';

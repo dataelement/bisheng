@@ -1,149 +1,124 @@
-"""F031 — daily reconcile of information-source subscriptions (spec §7.2).
+from unittest.mock import AsyncMock, MagicMock
 
-`ChannelService.reconcile_information_subscriptions()` runs inside one tenant's context and
-converges three sides:
-  desired  = union of every channel.source_list
-  current  = channel_info_source rows
-  to_unsub = current - desired  → unsubscribe + delete row
-  to_sub   = desired - current  → subscribe + fetch metadata + insert row
-Per-source failures are isolated (logged, counted) and never abort the rest.
-"""
-
-from __future__ import annotations
-
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
-from bisheng.channel.domain.services.channel_service import ChannelService
-
-_CS = "bisheng.channel.domain.services.channel_service"
+from bisheng.channel.domain.services.information_subscription_reconcile_service import (
+    DesiredSubscriptionSnapshot,
+    InformationSubscriptionReconcileService,
+)
+from bisheng.core.config.settings import IntelligenceCenterConf
+from bisheng.core.external.bisheng_information_client.response_schema import InformationSubscriptionItem
 
 
-def _rows(ids):
-    return [SimpleNamespace(id=i) for i in ids]
-
-
-def _meta(sid):
-    return SimpleNamespace(id=sid, name=f"name-{sid}", icon=None, business_type="rss", description=None)
-
-
-def _service(*, desired, current_ids, info_client):
-    channel_repository = SimpleNamespace(
-        find_all_referenced_source_ids=AsyncMock(return_value=set(desired)),
+def _item(source_id: str) -> InformationSubscriptionItem:
+    return InformationSubscriptionItem(
+        id=source_id,
+        source_id=f"external-{source_id}",
+        business_type="website",
+        name=source_id,
     )
-    info_source_repository = SimpleNamespace(
-        find_all=AsyncMock(return_value=_rows(current_ids)),
-        batch_add=AsyncMock(),
-        delete_by_ids=AsyncMock(),
+
+
+async def test_incomplete_desired_snapshot_makes_no_remote_calls():
+    client = AsyncMock()
+    service = InformationSubscriptionReconcileService(client, AsyncMock())
+
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset({"A"}), complete=False, failed_tenants=(2,)),
+        AsyncMock(),
     )
-    service = ChannelService(
-        channel_repository=channel_repository,
-        space_channel_member_repository=SimpleNamespace(),
-        channel_info_source_repository=info_source_repository,
-        article_es_service=SimpleNamespace(count_articles=AsyncMock(return_value=0)),
+
+    assert result["result"] == "desired_incomplete"
+    client.list_all_subscriptions.assert_not_awaited()
+    client.subscribe_one.assert_not_awaited()
+    client.unsubscribe_one.assert_not_awaited()
+
+
+async def test_reconcile_converges_in_stable_single_source_calls_and_upserts_metadata():
+    client = AsyncMock()
+    client.conf = IntelligenceCenterConf(information_subscription_auto_unsubscribe_enabled=True)
+    client.list_all_subscriptions.side_effect = [
+        [_item("B"), _item("C")],
+        [_item("A"), _item("B"), _item("C")],
+        [_item("A"), _item("B")],
+    ]
+    metadata = AsyncMock()
+    reload_desired = AsyncMock(return_value=DesiredSubscriptionSnapshot(ids=frozenset({"A", "B"}), complete=True))
+    service = InformationSubscriptionReconcileService(client, metadata)
+
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset({"B", "A"}), complete=True),
+        reload_desired,
     )
-    return service, info_source_repository
+
+    client.subscribe_one.assert_awaited_once_with("A")
+    client.unsubscribe_one.assert_awaited_once_with("C")
+    metadata.upsert_metadata.assert_awaited_once()
+    assert [row.id for row in metadata.upsert_metadata.await_args.args[0]] == ["A", "B"]
+    assert result["remaining_missing"] == []
+    assert result["remaining_extra"] == []
+    assert result["result"] == "converged"
 
 
-@pytest.mark.asyncio
-async def test_reconcile_unsubscribes_and_deletes_orphan():
-    """X referenced by no channel → unsubscribe(['X']) + delete row; A untouched. (AC-09)"""
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        unsubscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[]),
+async def test_item_failure_is_isolated_and_reported_by_final_drift():
+    client = AsyncMock()
+    client.conf = IntelligenceCenterConf(information_subscription_auto_unsubscribe_enabled=False)
+    client.list_all_subscriptions.side_effect = [[], []]
+    client.subscribe_one.side_effect = [RuntimeError("A failed"), None]
+    service = InformationSubscriptionReconcileService(client, AsyncMock())
+
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset({"B", "A"}), complete=True),
+        AsyncMock(),
     )
-    service, repo = _service(desired={"A"}, current_ids=["A", "X"], info_client=info_client)
 
-    with patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)):
-        result = await service.reconcile_information_subscriptions()
-
-    info_client.unsubscribe_information_source.assert_awaited_once_with(["X"])
-    repo.delete_by_ids.assert_awaited_once_with(["X"])
-    info_client.subscribe_information_source.assert_not_awaited()
-    assert result["to_unsub"] == 1
+    assert [call.args[0] for call in client.subscribe_one.await_args_list] == ["A", "B"]
+    assert result["failed"] == ["subscribe:A"]
+    assert result["remaining_missing"] == ["A", "B"]
 
 
-@pytest.mark.asyncio
-async def test_reconcile_subscribes_and_inserts_missing():
-    """Y referenced but not in channel_info_source → subscribe + fetch meta + insert. (AC-10)"""
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        unsubscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[_meta("Y")]),
+async def test_second_snapshot_failure_never_unsubscribes():
+    client = AsyncMock()
+    client.conf = IntelligenceCenterConf(information_subscription_auto_unsubscribe_enabled=True)
+    client.list_all_subscriptions.side_effect = [[_item("X")], [_item("X")]]
+    service = InformationSubscriptionReconcileService(client, AsyncMock())
+
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset(), complete=True),
+        AsyncMock(return_value=DesiredSubscriptionSnapshot(ids=frozenset(), complete=False)),
     )
-    service, repo = _service(desired={"A", "Y"}, current_ids=["A"], info_client=info_client)
 
-    with patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)):
-        result = await service.reconcile_information_subscriptions()
-
-    info_client.subscribe_information_source.assert_awaited_once_with(["Y"])
-    info_client.get_information_source_by_ids.assert_awaited_once_with(["Y"])
-    repo.batch_add.assert_awaited_once()
-    info_client.unsubscribe_information_source.assert_not_awaited()
-    assert result["to_sub"] == 1
+    client.unsubscribe_one.assert_not_awaited()
+    assert result["result"] == "desired_reload_incomplete"
 
 
-@pytest.mark.asyncio
-async def test_reconcile_noop_when_equal():
-    """desired == current → no information-service calls, no row changes. (AC-11)"""
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        unsubscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[]),
+async def test_final_snapshot_failure_reports_unknown_not_converged():
+    client = AsyncMock()
+    client.conf = IntelligenceCenterConf(information_subscription_auto_unsubscribe_enabled=False)
+    client.list_all_subscriptions.side_effect = [[], RuntimeError("read failed")]
+    service = InformationSubscriptionReconcileService(client, AsyncMock())
+
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset(), complete=True),
+        AsyncMock(),
     )
-    service, repo = _service(desired={"A", "B"}, current_ids=["A", "B"], info_client=info_client)
 
-    with patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)):
-        result = await service.reconcile_information_subscriptions()
-
-    info_client.subscribe_information_source.assert_not_awaited()
-    info_client.unsubscribe_information_source.assert_not_awaited()
-    repo.batch_add.assert_not_awaited()
-    repo.delete_by_ids.assert_not_awaited()
-    assert result["to_sub"] == 0 and result["to_unsub"] == 0
+    assert result["result"] == "unknown"
+    assert result["remaining_missing"] is None
+    assert result["remaining_extra"] is None
 
 
-@pytest.mark.asyncio
-async def test_reconcile_isolates_per_source_failure():
-    """One source failing must not abort the rest; it is counted in `failed`. (AC-13)"""
+async def test_lock_loss_stops_before_the_next_remote_mutation():
+    client = AsyncMock()
+    client.conf = IntelligenceCenterConf(information_subscription_auto_unsubscribe_enabled=False)
+    client.list_all_subscriptions.return_value = []
+    lock = MagicMock(refresh=MagicMock(side_effect=[True, False]))
+    service = InformationSubscriptionReconcileService(client, AsyncMock())
 
-    async def _unsub(ids):
-        if ids == ["X1"]:
-            raise RuntimeError("boom")
-
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        unsubscribe_information_source=AsyncMock(side_effect=_unsub),
-        get_information_source_by_ids=AsyncMock(return_value=[]),
+    result = await service.reconcile(
+        DesiredSubscriptionSnapshot(ids=frozenset({"A"}), complete=True),
+        AsyncMock(),
+        lock_guard=lock,
     )
-    service, repo = _service(desired=set(), current_ids=["X1", "X2"], info_client=info_client)
 
-    with patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)):
-        result = await service.reconcile_information_subscriptions()
-
-    # Both attempted; X2 still removed despite X1 failing.
-    assert info_client.unsubscribe_information_source.await_count == 2
-    repo.delete_by_ids.assert_awaited_once_with(["X2"])
-    assert result["failed"] == 1
-
-
-@pytest.mark.asyncio
-async def test_reconcile_returns_counts():
-    """Returns a {to_sub, to_unsub, failed} stats dict for observability."""
-    info_client = SimpleNamespace(
-        subscribe_information_source=AsyncMock(),
-        unsubscribe_information_source=AsyncMock(),
-        get_information_source_by_ids=AsyncMock(return_value=[_meta("Y")]),
-    )
-    service, _repo = _service(desired={"Y"}, current_ids=["X"], info_client=info_client)
-
-    with patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)):
-        result = await service.reconcile_information_subscriptions()
-
-    assert set(result.keys()) == {"to_sub", "to_unsub", "failed"}
-    assert result["to_sub"] == 1
-    assert result["to_unsub"] == 1
-    assert result["failed"] == 0
+    assert result["result"] == "lock_lost"
+    client.list_all_subscriptions.assert_awaited_once()
+    client.subscribe_one.assert_not_awaited()

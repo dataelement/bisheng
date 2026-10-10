@@ -40,9 +40,9 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
     const [readOnly] = useState(shareToken);
     const setApiVersion = useRecoilState(chatApiVersionState)[1];
 
-    // Sync apiVersion into Recoil so useChatHelpers picks up v2 WS URLs
+    // Sync apiVersion so the chat helpers use the selected channel's WS URLs.
     useEffect(() => {
-        setApiVersion(effectiveApiVersion as 'v1' | 'v2');
+        setApiVersion(effectiveApiVersion as 'v1' | 'v2' | 'v3');
         return () => { setApiVersion('v1'); };
     }, [effectiveApiVersion, setApiVersion]);
     const [chats, setChats] = useRecoilState(chatsState)
@@ -69,7 +69,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     const hideShareForMobile = flow?.can_share !== true;
 
-    // flow 尚未写入 Recoil 时 ChatView 不会挂载，但 AppRoot 的 MobileNav 仍需要标题（与桌面 HeaderTitle 同源字段）
+    // MobileNav still needs the shared header title before the flow reaches Recoil and mounts ChatView.
     useEffect(() => {
         if (!cid || !fid || !type) return;
         setChatMobileHeader({
@@ -95,7 +95,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
     // console.log('[chatState] :>> ', chatState);
     // console.log('[runningState] :>> ', __);
-    // 切换会话
+    // Switch the active conversation.
     const init = async () => {
         if (!cid) return;
 
@@ -104,7 +104,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         const currentData = chats[cid]
         let error: { code: string; data: any } = { code: '', data: null }
 
-        setChatId(cid!) // 切换会话
+        setChatId(cid!) // Switch the active conversation.
 
         const numericType = Number(type);
         const ensureUseAppPermission = async (objectType: "workflow" | "assistant") => {
@@ -116,7 +116,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             })
                 .catch(() => ({ allowed: false }));
             if (permission?.allowed) return true;
-            showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
             navigate('/apps', { replace: true });
             return false;
         };
@@ -124,9 +124,9 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         if (numericType === FLOW_TYPES.WORK_FLOW && !(await ensureUseAppPermission("workflow"))) return;
         if (numericType === FLOW_TYPES.ASSISTANT && !(await ensureUseAppPermission("assistant"))) return;
 
-        if (currentData) { // 有缓存不重复加载
+        if (currentData) { // Do not reload a cached conversation.
             numericType === FLOW_TYPES.SKILL && setRunningState((prev) => {
-                // 技能重置输入框状态
+                // Reset the input state for a skill conversation.
                 return {
                     ...prev,
                     [cid]: {
@@ -152,7 +152,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 // Handle 403: no permission, redirect to app center
                 if (flowRes.status_code === 403) {
-                    showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
                     navigate('/apps', { replace: true });
                     return;
                 }
@@ -170,15 +170,6 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
                 messages = msgRes.reverse()
                 flowData = { ...flowRes.data, isNew: !messages.length }
 
-                // 插入分割线
-                // if (messages.length) {
-                //     messages.push({
-                //         ...baseMsgItem,
-                //         id: Math.random() * 1000000,
-                //         category: 'divider',
-                //         message: '以上为历史消息',
-                //     })
-                // }
                 if (numericType === FLOW_TYPES.SKILL) {
                     try {
                         await build(flowData, cid);
@@ -194,7 +185,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 // Handle 403: no permission, redirect to app center
                 if (assistantRes.status_code === 403) {
-                    showToast?.({ message: '无访问权限，请联系管理员', severity: NotificationSeverity.ERROR });
+                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
                     navigate('/apps', { replace: true });
                     return;
                 }
@@ -226,7 +217,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
         if (shareToken) {
             error = { code: '', data: null }
         }
-        // 更新状态
+        // Update the current conversation state.
         // !!flow.data?.nodes.find(node => ["VariableNode", "InputFileNode"].includes(node.data.type))
         setRunningState((prev) => {
             return {
@@ -257,15 +248,15 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
 /**
  * build flow
- * 校验每个节点，展示进度及结果；返回input_keys;end_of_stream断开链接
- * 主要校验节点并设置更新setTabsState的 formKeysData
+ * Validate each node, show its progress, and close the stream on end_of_stream.
+ * Persist input_keys into the flow tab's formKeysData state.
  */
 
 const useBuild = () => {
     const { showToast } = useToastContext();
     const [_, setTabsState] = useRecoilState(tabsState)
 
-    // SSE 服务端推送
+    // Consume the server-sent validation stream.
     async function streamNodeData(flow: any, chatId: string) {
         // Step 1: Make a POST request to send the flow data and receive a unique session ID
         const res = await postBuildInit({ flow, chatId });
@@ -285,7 +276,7 @@ const useBuild = () => {
             const parsedData = JSON.parse(event.data);
             // if the event is the end of the stream, close the connection
             if (parsedData.end_of_stream) {
-                eventSource.close(); // 结束关闭链接
+                eventSource.close(); // Close the completed stream.
                 buildEnd = true
                 return;
             } else if (parsedData.log) {
@@ -325,7 +316,7 @@ const useBuild = () => {
         return validationResults.every((result) => result);
     }
 
-    // 延时器
+    // Enforce the minimum loading duration.
     async function enforceMinimumLoadingTime(
         startTime: number,
         minimumLoadingTime: number
@@ -349,7 +340,7 @@ const useBuild = () => {
             const startTime = Date.now();
 
             await streamNodeData(flow, chatId);
-            await enforceMinimumLoadingTime(startTime, minimumLoadingTime); // 至少等200ms, 再继续(强制最小load时间)
+            await enforceMinimumLoadingTime(startTime, minimumLoadingTime);
         } catch (error) {
             console.error("Error:", error);
         } finally {

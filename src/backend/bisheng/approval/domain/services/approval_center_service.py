@@ -96,6 +96,11 @@ class ApprovalCenterService:
         return {"data": data, "total": len(data)}
 
     @classmethod
+    async def count_pending_tasks(cls, *, tenant_id: int, approver_user_id: int) -> int:
+        """Count the current approver's pending tasks (badge for 我的审批-待我处理)."""
+        return await ApprovalQueryRepository.count_pending_tasks_by_approver(tenant_id, approver_user_id)
+
+    @classmethod
     async def get_task_detail(cls, *, task_id: int, login_user):
         task = await ApprovalInstanceRepository.get_task(task_id)
         if task is None:

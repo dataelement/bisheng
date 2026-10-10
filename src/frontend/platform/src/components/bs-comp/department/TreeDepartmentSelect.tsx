@@ -16,7 +16,7 @@ import type { ReactNode } from "react"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LazyDepartmentTree } from "./LazyDepartmentTree"
-import { useLazyDepartmentTree } from "./useLazyDepartmentTree"
+import { useLazyDepartmentTree, type UseLazyDepartmentTreeOptions } from "./useLazyDepartmentTree"
 
 export type TreeDepartmentSelectValue = number | null
 
@@ -42,6 +42,8 @@ export interface TreeDepartmentSelectProps {
   modal?: boolean
   /** 物化路径前缀；隐藏该子树（移动部门时禁止选自身/后代作为新父级）。 */
   excludeSubtreePath?: string
+  /** Optional candidate source for pickers with additional eligibility rules. */
+  dataSource?: Pick<UseLazyDepartmentTreeOptions, "cacheKey" | "fetchChildren" | "fetchSearch" | "fetchPathTree">
 }
 
 /** 在树中按主键 id 查找节点（保留供仍持有整树的调用方使用）。 */
@@ -117,6 +119,7 @@ export function TreeDepartmentSelect({
   searchPlaceholder,
   modal = true,
   excludeSubtreePath,
+  dataSource,
 }: TreeDepartmentSelectProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -124,7 +127,7 @@ export function TreeDepartmentSelect({
   // Pickers never offer archived departments as new picks (the backend excludes
   // them from children/search); an archived current value can still be echoed
   // via path-tree (AC-18). Load only while the popover is open.
-  const tree = useLazyDepartmentTree({ includeArchived: false, autoLoad: open, excludeSubtreePath })
+  const tree = useLazyDepartmentTree({ ...dataSource, includeArchived: false, autoLoad: open, excludeSubtreePath })
 
   const ph = placeholder ?? t("system.treeDepartmentSelectPlaceholder")
   const searchPh = searchPlaceholder ?? t("bs:department.search")

@@ -105,22 +105,23 @@ const buttonStyles = cva(
         variant: 'outlined',
         // Outlined hover is a faint tint of the button's own palette, border/
         // text unchanged (§5.2) — same shape as default outlined's gray tint.
-        // Dark: the solid blue-50 tint would be a light chip on #121212, so
-        // switch to a brand-alpha tint (same technique as danger filled).
+        // No dark: patches: blue-* resolves through the dark brand ramp
+        // (tokens.css .dark), so blue-50/100 become deep navy washes and
+        // blue-500 the bright dark main on its own.
         class:
-          'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100 dark:hover:bg-blue-500/15 dark:coarse-pointer:active:bg-blue-500/25',
+          'border-blue-500 text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',
         variant: 'filled',
         class:
-          'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200 dark:bg-blue-500/15 dark:text-blue-400 dark:hover:bg-blue-500/25 dark:coarse-pointer:active:bg-blue-500/[0.35]',
+          'bg-blue-50 text-blue-600 hover:bg-blue-100 coarse-pointer:active:bg-blue-200',
       },
       {
         color: 'primary',
         variant: 'text',
         class:
-          'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100 dark:hover:bg-blue-500/15 dark:coarse-pointer:active:bg-blue-500/25',
+          'text-blue-500 hover:bg-blue-50 coarse-pointer:active:bg-blue-100',
       },
       {
         color: 'primary',

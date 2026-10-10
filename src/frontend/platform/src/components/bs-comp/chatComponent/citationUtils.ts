@@ -1,3 +1,4 @@
+import i18next from "i18next";
 import type { ChatCitation } from "@/controllers/API";
 
 declare const __APP_ENV__: any;
@@ -24,6 +25,8 @@ export type CitationPreview = {
 export type CitationReferenceItem = {
   key: string;
   data: CitationDisplayData;
+  /** All cited chunk ids for this document. A file-level click highlights them all. */
+  itemIds?: string[];
   detail?: ChatCitation | null;
   legacyPreview?: CitationPreview | null;
 };
@@ -203,6 +206,12 @@ export function normalizeCitationType(type?: string) {
   if (normalizedType === "web" || normalizedType === "websearch") {
     return "web";
   }
+  if (normalizedType === "article" || normalizedType === "articlesearch") {
+    return "article";
+  }
+  if (normalizedType === "temp" || normalizedType === "tempsearch") {
+    return "temp";
+  }
   return "rag";
 }
 
@@ -210,8 +219,24 @@ export function isRagCitation(detail?: ChatCitation | null, type?: string) {
   return normalizeCitationType(detail?.type || type) === "rag";
 }
 
+export function isTempCitation(detail?: ChatCitation | null, type?: string) {
+  return normalizeCitationType(detail?.type || type) === "temp";
+}
+
+export function isFilePreviewCitation(detail?: ChatCitation | null, type?: string) {
+  const normalizedType = normalizeCitationType(detail?.type || type);
+  return normalizedType === "rag" || normalizedType === "temp";
+}
+
 export function getCitationSourceLabel(type?: string) {
-  return normalizeCitationType(type) === "web" ? "网页" : "文档";
+  const normalizedType = normalizeCitationType(type);
+  if (normalizedType === "web") {
+    return i18next.t("citation.web");
+  }
+  if (normalizedType === "temp") {
+    return i18next.t("citation.tempKb");
+  }
+  return i18next.t("citation.document");
 }
 
 export function getCitationItem(detail: ChatCitation | null, itemId?: string) {
@@ -254,27 +279,37 @@ export function getCitationDocumentFileType(detail?: ChatCitation | null) {
   return String(fileType).toLowerCase();
 }
 
+function getTempSourceUrl(detail?: ChatCitation | null) {
+  if (!isTempCitation(detail)) {
+    return "";
+  }
+  return detail?.sourcePayload?.sourceUrl || "";
+}
+
 /** Renderable stand-in for the file: the transcript of a clip, the PDF a pptx
  *  was converted to, the parsed markdown of a web page. Falls back to the
  *  original for formats the backend renders as-is (pdf, images, docx). */
 export function getCitationDocumentPreviewUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.previewUrl || payload?.downloadUrl || "";
+  return payload?.previewUrl || payload?.downloadUrl || getTempSourceUrl(detail);
 }
 
 export function getCitationDocumentDownloadUrl(detail?: ChatCitation | null) {
   const payload = detail?.sourcePayload;
-  return payload?.downloadUrl || "";
+  return payload?.downloadUrl || getTempSourceUrl(detail);
 }
 
 export function isRagCitationMissingPreviewUrl(detail?: ChatCitation | null) {
   if (!detail?.citationId) {
     return false;
   }
-  if (!isRagCitation(detail)) {
+  if (!isFilePreviewCitation(detail)) {
     return false;
   }
-  return !getCitationDocumentPreviewUrl(detail);
+  const payload = detail.sourcePayload;
+  // sourceUrl is a debug/tmp fallback for display; resolve still needs a
+  // freshly signed preview/download URL on the main object.
+  return !(payload?.previewUrl || payload?.downloadUrl);
 }
 
 export function getCitationDocumentUrl(detail?: ChatCitation | null) {
@@ -334,9 +369,35 @@ export function parseCitationBBoxes(rawBBox?: string | null): CitationPdfBBox[] 
   }
 }
 
-export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string) {
-  const item = getCitationItem(detail, itemId);
-  return parseCitationBBoxes(item?.bbox);
+export function getCitationItemBBoxes(detail: ChatCitation | null, itemId?: string | string[]) {
+  const items = detail?.sourcePayload?.items;
+  if (!items?.length) {
+    return [];
+  }
+
+  const requestedIds = (Array.isArray(itemId) ? itemId : itemId ? [itemId] : [])
+    .map((id) => String(id))
+    .filter(Boolean);
+  const matched = requestedIds.length
+    ? items.filter(
+        (item) => requestedIds.includes(String(item.itemId)) || requestedIds.includes(String(item.chunkId)),
+      )
+    : [];
+  const selected = matched.length ? matched : [items[0]];
+
+  const seen = new Set<string>();
+  const bboxes: CitationPdfBBox[] = [];
+  for (const item of selected) {
+    for (const box of parseCitationBBoxes(item?.bbox)) {
+      const key = `${box.page}:${box.bbox.map((value) => value.toFixed(2)).join(",")}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      bboxes.push(box);
+    }
+  }
+  return bboxes;
 }
 
 export function getLegacyCitationPreview(webContent: any, label?: number): CitationPreview | null {
@@ -413,9 +474,20 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
     return {
       title: item?.title || payload.title || payload.url || `引用 ${data.label ?? ""}`,
       snippet: extractWebSnippetContent(item?.snippet || payload.snippet),
-      sourceName: payload.source || payload.url || "网页",
+      sourceName: payload.source || payload.url || i18next.t("citation.web"),
       sourceMeta: formatCitationWebDate(payload.datePublished || ""),
       link: payload.url || payload.sourceUrl,
+      type,
+    };
+  }
+
+  if (type === "temp") {
+    return {
+      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
+      snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
+      sourceName: getCitationSourceLabel("temp"),
+      sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : "",
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
       type,
     };
   }
@@ -423,7 +495,7 @@ export function buildCitationPreview(detail: ChatCitation | null, data: Partial<
   return {
     title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
     snippet: extractRagParagraphContent(item?.content || item?.snippet || payload.snippet),
-    sourceName: payload.knowledgeName || payload.fileType || "政策文件",
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t("citation.policyDocument"),
     sourceMeta: payload.page ? `第 ${payload.page} 页` : item?.page ? `第 ${item.page} 页` : "",
     link: payload.downloadUrl,
     type,
@@ -441,9 +513,20 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
     return {
       title: payload.title || payload.url || `引用 ${data.label ?? ""}`,
       snippet: "",
-      sourceName: payload.source || payload.url || "网页",
+      sourceName: payload.source || payload.url || i18next.t("citation.web"),
       sourceMeta: formatCitationWebDate(payload.datePublished || ""),
       link: payload.url || payload.sourceUrl,
+      type,
+    };
+  }
+
+  if (type === "temp") {
+    return {
+      title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
+      snippet: "",
+      sourceName: getCitationSourceLabel("temp"),
+      sourceMeta: payload.fileType || "",
+      link: payload.previewUrl || payload.downloadUrl || payload.sourceUrl,
       type,
     };
   }
@@ -451,7 +534,7 @@ export function buildCitationDocumentPreview(detail: ChatCitation | null, data: 
   return {
     title: getCitationDocumentName(detail) || `引用 ${data.label ?? ""}`,
     snippet: "",
-    sourceName: payload.knowledgeName || payload.fileType || "政策文件",
+    sourceName: payload.knowledgeName || payload.fileType || i18next.t("citation.policyDocument"),
     sourceMeta: payload.fileType || "",
     link: payload.downloadUrl,
     type,
@@ -510,19 +593,26 @@ export function buildCitationReferenceItems({
   const { transformedContent, citationMap } = transformPrivateCitations(content || "");
   const items: CitationReferenceItem[] = [];
   const seen = new Set<string>();
+  const grouped = new Map<string, CitationReferenceItem>();
 
   Object.values(citationMap).forEach((data) => {
     const key = `private:${data.citationId}`;
-    if (seen.has(key)) {
+    const existing = grouped.get(key);
+    if (existing) {
+      if (data.itemId && !existing.itemIds?.includes(data.itemId)) {
+        existing.itemIds = [...(existing.itemIds || []), data.itemId];
+      }
       return;
     }
-    seen.add(key);
-    items.push({
+    grouped.set(key, {
       key,
       data,
+      itemIds: data.itemId ? [data.itemId] : [],
       detail: detailMap[data.citationId] ?? null,
     });
   });
+  items.push(...grouped.values());
+  grouped.forEach((item) => seen.add(item.key));
 
   const legacyCitationPattern = /\[citation:(\d+)\]/g;
   let match: RegExpExecArray | null;

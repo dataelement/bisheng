@@ -10,6 +10,7 @@ from bisheng.database.models.department import (
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.open_api.domain.repositories.service_account_repository import ServiceAccountRepository
 from bisheng.permission.domain.services import grant_subject_service
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceRecord,
@@ -114,7 +115,9 @@ class TenantPermissionSubjectDirectory:
         self,
         actor: PermissionActor,
     ) -> frozenset[str]:
-        projected = {f"user:{actor.user_id}"}
+        if actor.subject_type == "service_account":
+            return frozenset({actor.fga_subject})
+        projected = {actor.fga_subject}
         memberships = await UserDepartmentDao.aget_user_departments(actor.user_id)
         departments = await DepartmentDao.aget_by_ids([row.department_id for row in memberships])
         for department in departments:
@@ -152,6 +155,10 @@ class TenantPermissionSubjectDirectory:
         if normalized_type == "user":
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
+            source_type = "DIRECT"
+        elif normalized_type == "service_account":
+            row = await ServiceAccountRepository.get(identifier)
+            valid = bool(row and row.is_enabled and row.tenant_id == tenant_id)
             source_type = "DIRECT"
         elif normalized_type == "department":
             row = await DepartmentDao.aget_by_id(identifier)
@@ -191,13 +198,20 @@ class TenantPermissionSubjectDirectory:
             for subject_type, subject_id in subjects
             if subject_type == "user_group" and subject_id.isdigit()
         ]
+        service_account_ids = [
+            int(subject_id)
+            for subject_type, subject_id in subjects
+            if subject_type == "service_account" and subject_id.isdigit()
+        ]
         users = await UserDao.aget_user_by_ids(user_ids) if user_ids else []
         departments = await DepartmentDao.aget_by_ids(department_ids) if department_ids else []
         groups = await GroupDao.aget_group_by_ids(group_ids) if group_ids else []
+        service_accounts = await ServiceAccountRepository.get_by_ids(service_account_ids)
         return {
             **{("user", str(row.user_id)): row.user_name for row in users or () if row.user_id is not None},
             **{("department", str(row.id)): row.name for row in departments if row.id is not None},
             **{("user_group", str(row.id)): row.group_name for row in groups if row.id is not None},
+            **{("service_account", str(row.id)): row.name for row in service_accounts if row.id is not None},
         }
 
     async def resource_display_names(
@@ -243,4 +257,81 @@ class TenantPermissionSubjectDirectory:
                 if resource_type == "folder" and resource_id.isdigit() and int(resource_id) in folder_by_id
             }
         )
+        labels.update(await self._application_resource_display_names(resources))
+        return labels
+
+    @staticmethod
+    async def _application_resource_display_names(
+        resources: tuple[tuple[str, str], ...],
+    ) -> dict[tuple[str, str], str]:
+        """Resolve labels for non-knowledge top-level resources in bounded queries."""
+
+        from sqlmodel import col, select
+
+        from bisheng.channel.domain.models.channel import Channel
+        from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.assistant import Assistant
+        from bisheng.database.models.flow import Flow
+        from bisheng.telemetry_search.domain.models.dashboard import Dashboard
+        from bisheng.tool.domain.models.gpts_tools import GptsToolsType
+
+        ids_by_type = {
+            resource_type: tuple(
+                resource_id
+                for item_type, resource_id in resources
+                if item_type == resource_type
+            )
+            for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
+        }
+        if not any(ids_by_type.values()):
+            return {}
+        labels: dict[tuple[str, str], str] = {}
+        async with get_async_db_session() as session:
+            if ids_by_type["workflow"]:
+                rows = (
+                    await session.exec(
+                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
+                    )
+                ).all()
+                labels.update({("workflow", str(row.id)): row.name for row in rows})
+            if ids_by_type["assistant"]:
+                rows = (
+                    await session.exec(
+                        select(Assistant).where(
+                            col(Assistant.id).in_(ids_by_type["assistant"]),
+                            Assistant.is_delete == 0,
+                        )
+                    )
+                ).all()
+                labels.update({("assistant", str(row.id)): row.name for row in rows})
+            if ids_by_type["channel"]:
+                rows = (
+                    await session.exec(
+                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
+                    )
+                ).all()
+                labels.update({("channel", str(row.id)): row.name for row in rows})
+
+            tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
+            if tool_ids:
+                rows = (
+                    await session.exec(
+                        select(GptsToolsType).where(
+                            col(GptsToolsType.id).in_(tool_ids),
+                            GptsToolsType.is_delete == 0,
+                        )
+                    )
+                ).all()
+                labels.update({("tool", str(row.id)): row.name for row in rows})
+
+            dashboard_ids = tuple(
+                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
+            )
+            if dashboard_ids:
+                rows = (
+                    await session.exec(
+                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
+                    )
+                ).all()
+                labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels

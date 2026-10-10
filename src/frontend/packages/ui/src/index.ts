@@ -23,3 +23,43 @@ export * from './components/Input';
 // State page shell — illustration + copy + buttons for an area with no normal
 // content (组件-State状态页.md). Every string comes from the caller.
 export * from './components/StateView';
+// Tooltip — one line of plain text explaining a control
+// (组件-Tooltip文字提示.md). The dark surface, the 100ms delay with its skip
+// window, the disabled-trigger hot zone and the top overlay tier are baked in;
+// the copy is a prop. `TooltipProvider` is optional (app root, shared skip).
+export * from './components/Tooltip';
+// Selection family — Checkbox (pick several, travels with the form), Radio
+// (pick one from a visible set) and Switch (standalone setting, applies
+// immediately) per 组件-Checkbox复选框.md §1's分工判定表. Sizes, the gray→brand
+// state chain, the card shells and the touch rules are baked in; every string
+// is a prop.
+export * from './components/Checkbox';
+export * from './components/Radio';
+export * from './components/Switch';
+// Tabs — peer content blocks in one area, switching changes WHERE you are
+// (组件-Tabs标签页.md). Line type only; the brand indicator slide, the
+// overflow fade + keep-visible scroll and the touch rules are baked in; every
+// label is a prop. Same content shown a different WAY is the Segmented below
+// (判别表 in 组件-Segmented分段控制器.md §1).
+export * from './components/Tabs';
+// Segmented — the same content shown a different way, applied immediately
+// (组件-Segmented分段控制器.md). The gray track + sliding thumb, equal-width
+// segments and the touch rules are baked in; every label is a prop.
+export * from './components/Segmented';
+// Badge — 「is there anything new」,「how many」and「which source」, in five
+// forms: the corner count, the corner dot, the standalone number after a
+// label, the unread dot in a list row's own column, and the 溯源角标 inside
+// running text (组件-Badge徽标.md). One 16px size, the semantic colors, the
+// no-99+ rule and「0 shows nothing」are baked in; only the citation form is
+// clickable — everywhere else the click belongs to the host. What says「what
+// this is」is the Tag below (判别表 in Badge §1).
+export * from './components/Badge';
+// Tag — one word stuck on an object: what it is, what state it is in
+// (组件-Tag标签.md). Light tint + dark text only, the five semantic colors plus
+// the two frozen exceptions (审批中 blue / 技能 purple), display / closable /
+// checkable; a display tag deliberately has no hover, since it is not a button.
+export * from './components/Tag';
+// Breadcrumb — where the current page sits in the structure
+// (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
+// ellipsis menu are baked in; the page passes the full chain and the copy.
+export * from './components/Breadcrumb';

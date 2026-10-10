@@ -295,6 +295,10 @@ class PermissionService:
     ) -> str:
         if subject_type == "user":
             return f"user:{subject_id}"
+        if subject_type == "service_account":
+            if include_children:
+                raise ValueError("service accounts do not support include_children")
+            return f"service_account:{subject_id}"
         if subject_type == "department":
             relation = "subtree_member" if include_children else "member"
             return f"department:{subject_id}#{relation}"

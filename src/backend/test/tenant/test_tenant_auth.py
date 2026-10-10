@@ -9,6 +9,8 @@ modules to isolate JWT/tenant_id logic.
 """
 
 import json
+
+import pytest
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -48,6 +50,16 @@ for _mod_name in _MOCKS_NEEDED:
         sys.modules[_mod_name] = _mock
 
 from bisheng.user.domain.services.auth import AuthJwt, LoginUser
+
+
+@pytest.fixture(autouse=True)
+def _pin_jwt_secret(monkeypatch):
+    """F068: settings no longer ships a default secret. Pin one so AuthJwt does
+    not try the config table when config_service is the real module (combined
+    runs) rather than the pre-mock above (isolated runs)."""
+    from bisheng.common.services import config_service as cs
+
+    monkeypatch.setattr(cs.settings, 'jwt_secret', 'test-secret-key', raising=False)
 
 
 def _make_auth_jwt():

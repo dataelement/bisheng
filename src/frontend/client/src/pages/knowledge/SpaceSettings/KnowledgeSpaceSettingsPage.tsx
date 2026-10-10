@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "~/components/ui/Select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
-import { Textarea } from "~/components/ui/Textarea";
+import { Textarea } from "@bisheng/ui";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
@@ -361,7 +361,6 @@ export function KnowledgeSpaceSettingsPage() {
                     placeholder={localize(
                       "com_subscription.enter_knowledge_space_description",
                     )}
-                    className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-text-3"
                   />
                 </div>
               </div>
@@ -481,7 +480,7 @@ export function KnowledgeSpaceSettingsPage() {
                           placeholder={localize(
                             "com_knowledge.auto_tag_custom_tags_placeholder",
                           )}
-                          className="min-h-28 resize-none bg-white placeholder:text-text-3"
+                          rows={5}
                         />
                       </TabsContent>
                     </Tabs>

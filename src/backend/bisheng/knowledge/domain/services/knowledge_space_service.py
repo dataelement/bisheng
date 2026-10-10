@@ -37,6 +37,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
     SpaceFolderUploadCountExceededError,
+    SpaceGrantedNotJoinedError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -148,6 +149,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+        KnowledgeFileRepository,
+    )
     from bisheng.message.domain.services.message_service import MessageService
 
 # Folder depth cap: product rule is "10 层". UI 第1层 = level 0, so the deepest
@@ -202,7 +206,8 @@ _JOINED_DB_ID_BATCH_SIZE = 500
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
 _SEARCH_SCAN_BATCH_SIZE = 100
-_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
+# Chinese punctuation is intentionally distinct from ASCII punctuation.
+_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]  # noqa: RUF001
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
@@ -222,6 +227,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         f048_file_delivery=None,
         initial_grant_application: InitialGrantApplication | None = None,
         prospective_grant_application: ProspectiveGrantApplication | None = None,
+        knowledge_file_repo: "KnowledgeFileRepository | None" = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -231,6 +237,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.f048_file_delivery = f048_file_delivery
         self.initial_grant_application = initial_grant_application
         self.prospective_grant_application = prospective_grant_application
+        self.knowledge_file_repo = knowledge_file_repo
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -322,6 +329,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
             actions=actions,
         )
 
+    async def _has_joined_visibility(
+        self,
+        space_id: int,
+        *,
+        has_content_permission: bool,
+    ) -> bool:
+        if not has_content_permission:
+            return False
+
+        actor = await self._permission_actor()
+        if not actor.super_admin:
+            return True
+
+        # A full-scope super admin may open every space without an actual grant.
+        # The joined state, unlike access authorization, must reflect OpenFGA
+        # visibility so it stays aligned with the square and /joined list.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=[space_id],
+            actor=actor,
+        )
+        return visible_map.get(str(space_id), False)
+
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
         space_tid = space.tenant_id
@@ -378,6 +409,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if update_time and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW:
                 return SpaceSubscriptionStatusEnum.REJECTED
         return SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+
+    @staticmethod
+    def _resolve_effective_subscription_status(
+        subscription_status: SpaceSubscriptionStatusEnum,
+        *,
+        has_visible: bool,
+    ) -> SpaceSubscriptionStatusEnum:
+        """Treat effective visibility as joined without hiding workflow states."""
+        if subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED and has_visible:
+            return SpaceSubscriptionStatusEnum.SUBSCRIBED
+        return subscription_status
 
     @staticmethod
     def _apply_subscription_flags(
@@ -982,12 +1024,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         parent_id: int | None,
     ) -> tuple[Knowledge, KnowledgeFile | None]:
-        """Load the business scope for a super-admin file listing.
+        """Validate a listing's space and parent without deciding authorization.
 
-        This helper intentionally performs no permission decision. The caller
-        must restrict it to the platform-super-admin system path. Tenant
-        filtering remains active on both business queries, and a parent folder
-        must still belong to the requested knowledge space.
+        Tenant filtering remains active on both business queries. Ordinary
+        callers must also authorize the requested container before scanning.
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -996,6 +1036,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if parent_id:
             parent_folder = await self._get_folder_for_action(space_id, parent_id)
         return space, parent_folder
+
+    async def _require_container_read_permission(
+        self,
+        space_id: int,
+        parent_id: int | None,
+    ) -> tuple[Knowledge, KnowledgeFile | None]:
+        """Authorize the requested container, including a directly granted subtree."""
+        if not parent_id:
+            return await self._require_read_permission(space_id), None
+        space, folder = await self._load_space_listing_scope(space_id, parent_id)
+        if folder is None:
+            raise SpaceFolderNotFoundError()
+        # A folder grant does not imply access to the space root or siblings.
+        # The unified runtime resolves inheritance and CUSTOM boundaries.
+        await self._require_action("folder", folder.id, "visible")
+        return space, folder
 
     @staticmethod
     def _is_square_preview_space(space: Knowledge) -> bool:
@@ -1516,14 +1572,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
         else:
+            has_joined_visibility = await self._has_joined_visibility(
+                space_id,
+                has_content_permission=has_content_permission,
+            )
+            subscription_status = SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
             member_info = await SpaceChannelMemberDao.async_find_member(
                 space_id=space.id,
                 user_id=self.login_user.user_id,
             )
             if member_info:
-                self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
+                subscription_status = self._resolve_subscription_status(member_info)
                 if member_info.is_active:
                     result.user_role = member_info.user_role
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=has_joined_visibility,
+            )
+            self._apply_subscription_flags(result, subscription_status)
             if result.user_role is None and has_content_permission:
                 result.user_role = (
                     UserRoleEnum.ADMIN
@@ -1536,6 +1602,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         result.follower_num = follower_num
         result.file_num = total_file_num
+        # The share link has to tell "already has access" from "may only preview
+        # and apply", and `user_role` cannot: it is absent for a non-member, and
+        # the client maps an absent role to MEMBER — the same value a real member
+        # gets. Report the effective actions the way the space list and the
+        # channel detail already do, so `visible` answers it outright.
+        #
+        # Only for a caller who holds the space. The square preview deliberately
+        # answers without `visible` — asking the permission runtime for a viewer
+        # who has none would both cost a lookup and require a runtime the preview
+        # path does not depend on. No actions is the honest answer there.
+        result.actions = (
+            sorted(await self._get_effective_actions("knowledge_space", space_id)) if has_content_permission else []
+        )
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
 
@@ -2123,7 +2202,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await KnowledgeSpaceUserPinDao.unpin(user_id=self.login_user.user_id, space_id=space_id)
         return True
 
-    async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
+    async def get_knowledge_square(self, keyword: str | None = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService
 
         """
@@ -2162,10 +2241,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             creator_users = []
             success_file_map = await KnowledgeFileDao.async_count_success_files_batch(space_ids_int)
-        visible_map = await self._batch_actions(
-            "knowledge_space",
-            space_ids_int,
-            ("visible",),
+        # Square subscription state must match the personal ``/joined`` list.
+        # Do not use the generic action batch here: it expands every action for
+        # super admins, which would incorrectly label every square space joined.
+        visible_map = await batch_check_business_visible(
+            self.login_user,
+            resource_type="knowledge_space",
+            resource_ids=space_ids_int,
         )
         user_map = {u.user_id: u for u in (creator_users or [])}
         resolved_subscription_status = {
@@ -2188,11 +2270,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 user_subscription_status,
                 user_subscription_update_time,
             )
-            if (
-                subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
-                and "visible" in visible_map.get(str(space.id), frozenset())
-            ):
-                subscription_status = SpaceSubscriptionStatusEnum.SUBSCRIBED
+            subscription_status = self._resolve_effective_subscription_status(
+                subscription_status,
+                has_visible=visible_map.get(str(space.id), False),
+            )
             result_list.append(
                 KnowledgeSpaceInfoResp(
                     **space.model_dump(),
@@ -2323,61 +2404,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return items
 
-    async def _handle_file_folder_extra_info(self, res: list[KnowledgeFile]) -> list[dict]:
-        folder_ids = []
+    async def _handle_file_folder_extra_info(
+        self,
+        res: list[KnowledgeFile],
+        *,
+        space_creator_user_id: int | None = None,
+    ) -> list[dict]:
+        folder_prefix_groups: dict[tuple[int, int], dict[int, str]] = {}
         file_ids = []
         for one in res:
             if one.file_type == FileType.DIR:
-                folder_ids.append(one.id)
+                folder_prefix = f"{one.file_level_path or ''}/{one.id}"
+                group_key = (int(one.knowledge_id), folder_prefix.count("/"))
+                folder_prefix_groups.setdefault(group_key, {})[int(one.id)] = folder_prefix
             else:
                 file_ids.append(one.id)
 
-        # folder need find all success file num and all file num
-        folder_counts = {}
-        if folder_ids:
-            from sqlalchemy import func, or_
-            from sqlmodel import col, select
-
-            from bisheng.core.database import get_async_db_session
-
-            async def count_folder(folder: KnowledgeFile):
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                stmt = (
-                    select(KnowledgeFile.status, func.count(KnowledgeFile.id))
-                    .where(
-                        KnowledgeFile.knowledge_id == folder.knowledge_id,
-                        KnowledgeFile.file_type == 1,
-                        or_(
-                            col(KnowledgeFile.file_level_path) == prefix,
-                            col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                        ),
+        # Prefixes at the same depth cannot contain one another. Children pages
+        # therefore use one query, while search results split parent/child hits.
+        folder_states = {}
+        if folder_prefix_groups:
+            if self.knowledge_file_repo is None:
+                raise RuntimeError("KnowledgeFileRepository is required for folder enrichment")
+            for (knowledge_id, _depth), folder_prefixes in sorted(folder_prefix_groups.items()):
+                folder_states.update(
+                    await self.knowledge_file_repo.find_folder_descendant_status_flags(
+                        knowledge_id,
+                        folder_prefixes,
                     )
-                    .group_by(KnowledgeFile.status)
                 )
-
-                in_progress_statuses = {
-                    KnowledgeFileStatus.PROCESSING.value,
-                    KnowledgeFileStatus.WAITING.value,
-                    KnowledgeFileStatus.REBUILDING.value,
-                }
-                # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
-                retryable_statuses = {
-                    KnowledgeFileStatus.FAILED.value,
-                    KnowledgeFileStatus.VIOLATION.value,
-                }
-                async with get_async_db_session() as session:
-                    rows = (await session.exec(stmt)).all()
-                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
-                    processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
-                    failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
-                    folder_counts[folder.id] = {
-                        "has_failed_files": failed > 0,
-                        "success_file_num": success,
-                        "processing_file_num": processing,
-                    }
-
-            folders = [f for f in res if f.file_type == FileType.DIR]
-            await asyncio.gather(*(count_folder(f) for f in folders))
+        is_space_creator = space_creator_user_id is not None and int(space_creator_user_id) == int(
+            self.login_user.user_id
+        )
 
         # file need find all tags
         file_tags = {}
@@ -2394,11 +2452,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for one in res:
             item = one.model_dump()
             if one.file_type == FileType.DIR:
-                counts = folder_counts.get(
-                    one.id,
-                    {"has_failed_files": False, "success_file_num": 0, "processing_file_num": 0},
+                state = folder_states.get(one.id)
+                has_abnormal = state.has_abnormal_files if state is not None else False
+                item.update(
+                    {
+                        "has_failed_files": has_abnormal,
+                        "has_abnormal_files": is_space_creator and has_abnormal,
+                        "has_processing_files": state.has_processing_files if state is not None else False,
+                    }
                 )
-                item.update(counts)
             else:
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
                 item["tags"] = file_tags.get(one.id, [])
@@ -2450,10 +2512,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 action="visible",
             )
-            performance["target_build_elapsed_ms"] = performance.get(
-                "target_build_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - target_started_at) * 1000
+            performance["target_build_elapsed_ms"] = (
+                performance.get(
+                    "target_build_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - target_started_at) * 1000
+            )
             performance["verified_target_count"] = performance.get(
                 "verified_target_count",
                 0,
@@ -2464,16 +2529,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 targets=targets,
             )
-            performance["decision_elapsed_ms"] = performance.get(
-                "decision_elapsed_ms",
-                0.0,
-            ) + (perf_counter() - decision_started_at) * 1000
+            performance["decision_elapsed_ms"] = (
+                performance.get(
+                    "decision_elapsed_ms",
+                    0.0,
+                )
+                + (perf_counter() - decision_started_at) * 1000
+            )
             for resource_type, resource_ids in by_type.items():
                 for resource_id in resource_ids:
                     permissions[(resource_type, str(resource_id))] = (
-                        {"visible"}
-                        if visible_map.get((resource_type, str(resource_id)), False)
-                        else set()
+                        {"visible"} if visible_map.get((resource_type, str(resource_id)), False) else set()
                     )
         else:
             # Compatibility path for callers that have only ids. The children
@@ -2492,7 +2558,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         {"visible"} if visible_map.get(str(resource_id), False) else set()
                     )
         visible_keys = {key for key, value in permissions.items() if value}
-        return [
+        visible = [
             item
             for item in items
             if (
@@ -2501,6 +2567,54 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             in visible_keys
         ]
+        return await self._hide_others_failed_files(visible, space_id=space_id)
+
+    async def _can_manage_space_cached(self, space_id: int) -> bool:
+        """Admin / space manager check, resolved once per space per request."""
+        if self.login_user.is_admin():
+            return True
+        cache = self.__dict__.setdefault("_can_manage_space_cache", {})
+        normalized = int(space_id)
+        if normalized not in cache:
+            cache[normalized] = await self._check_action(
+                "knowledge_space",
+                normalized,
+                "manage_permission",
+            )
+        return cache[normalized]
+
+    async def _hide_others_failed_files(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+    ) -> list[KnowledgeFile]:
+        """A parse failure is only the uploader's (and the managers') business.
+
+        Everyone else in the space sees neither the row nor, through the folder rollup that
+        reuses this filter, any hint of it. The rule lives here rather than in the client's
+        `file_status` query so listing, folder rollup and any other reader agree — the query
+        param it replaces hid the row from the uploader too, and left the file reachable by
+        anyone who called the API directly.
+
+        Timeout and violation are deliberately NOT covered: they stayed visible to every
+        member under the old client rule, and a violation in particular is the space's
+        business, not just the uploader's.
+        """
+        failed_items = [
+            item
+            for item in items
+            if item.file_type != FileType.DIR.value and item.status == KnowledgeFileStatus.FAILED.value
+        ]
+        if not failed_items:
+            return items
+        if await self._can_manage_space_cached(space_id):
+            return items
+        user_id = self.login_user.user_id
+        hidden = {int(item.id) for item in failed_items if getattr(item, "user_id", None) != user_id}
+        if not hidden:
+            return items
+        return [item for item in items if int(item.id) not in hidden]
 
     async def _scan_visible_child_items(
         self,
@@ -2529,6 +2643,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
+        candidate_batch_size = min(max(page_size + 1, 1), _CHILD_PERMISSION_SCAN_BATCH_SIZE)
         scan_started_at = perf_counter()
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         if permission_context is not None and verified_space is not None:
@@ -2566,9 +2681,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 permission_decision_elapsed_ms=(permission_context or {})
                 .get("performance", {})
                 .get("decision_elapsed_ms", 0.0),
-                verified_target_count=(permission_context or {})
-                .get("performance", {})
-                .get("verified_target_count", 0),
+                verified_target_count=(permission_context or {}).get("performance", {}).get("verified_target_count", 0),
             )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
@@ -2590,7 +2703,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 order_sort=order_sort,
                 file_status=file_status,
                 page=0,  # cursor mode bypasses OFFSET
-                page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
+                page_size=candidate_batch_size,
                 file_type=file_type,
                 exclude_file_ids=exclude_file_ids,
                 cursor=batch_cursor,
@@ -2625,7 +2738,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             last_db = batch_items[-1]
             batch_cursor = candidate_cursor(last_db)
 
-            if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
+            if len(batch_items) < candidate_batch_size:
                 break
 
         emit_scan_metric(has_more=False)
@@ -2710,7 +2823,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_sort: str = "asc",
         file_status: list[int] | None = None,
         cursor: str | None = None,
-        page_size: int = 20,
+        page_size: int = 40,
         file_type: int | None = None,
     ) -> "PageInfiniteCursorData":
         """F027 cursor-paginated listing of direct children under a parent folder.
@@ -2723,7 +2836,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        system_scope = bool(self.login_user.is_global_super)
+        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
         request_started_at = perf_counter()
         stage = "authorize"
         stage_elapsed_ms = {
@@ -2766,18 +2879,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if system_scope:
                 verified_space, _ = await self._load_space_listing_scope(space_id, parent_id)
             else:
-                # _require_read_permission already performs the space-visible
-                # decision. For a folder, only add the folder business-scope
-                # validation and final visible decision; do not repeat the
-                # knowledge-space check through _require_folder_action.
-                verified_space = await self._require_read_permission(space_id)
-                if parent_id:
-                    parent_folder = await self._get_folder_for_action(space_id, parent_id)
-                    await self._require_resource_action(
-                        "visible",
-                        "folder",
-                        parent_folder.id,
-                    )
+                verified_space, _ = await self._require_container_read_permission(space_id, parent_id)
             stage_elapsed_ms["auth_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "decode_cursor"
@@ -2802,9 +2904,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids = (
                     await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
                 )
-            stage_elapsed_ms["version_filter_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_filter_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "scan_visible"
             stage_started_at = perf_counter()
@@ -2827,13 +2927,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             stage = "version_enrich"
             stage_started_at = perf_counter()
             await self._enrich_with_version_info(visible_page_items)
-            stage_elapsed_ms["version_enrich_elapsed_ms"] = (
-                perf_counter() - stage_started_at
-            ) * 1000
+            stage_elapsed_ms["version_enrich_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             stage = "extra_info"
             stage_started_at = perf_counter()
-            data = await self._handle_file_folder_extra_info(visible_page_items)
+            space_creator_user_id = getattr(verified_space, "user_id", None)
+            if space_creator_user_id is None:
+                data = await self._handle_file_folder_extra_info(visible_page_items)
+            else:
+                data = await self._handle_file_folder_extra_info(
+                    visible_page_items,
+                    space_creator_user_id=space_creator_user_id,
+                )
             stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
             next_cursor: str | None = None
@@ -2864,33 +2969,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         space_id: int,
         parent_id: int | None = None,
-        tag_ids: list[int] = None,
-        keyword: str = None,
+        tag_ids: list[int] | None = None,
+        keyword: str | None = None,
         page: int = 1,
         page_size: int = 20,
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
         order_field: str = "file_type",
         order_sort: str = "asc",
     ) -> dict:
-        system_scope = bool(self.login_user.is_global_super)
+        system_scope = bool(self.login_user.is_global_super) and not _f066_data_scope_narrowed()
         parent_folder = None
         if system_scope:
             space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
         else:
-            space = await self._require_read_permission(space_id)
-            if not parent_id:
-                await self._require_action("knowledge_space", space_id, "visible")
+            space, parent_folder = await self._require_container_read_permission(space_id, parent_id)
 
         file_level_path = None
         filter_files = []
 
         if parent_id:
-            if not system_scope:
-                parent_folder = await self._require_folder_action(
-                    space_id,
-                    parent_id,
-                    "visible",
-                )
             if parent_folder is None:
                 raise SpaceFolderNotFoundError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
@@ -2904,7 +3001,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not resources:
                 return {"page": page, "page_size": page_size, "data": [], "has_more": False}
             if filter_files:
-                filter_files = list(set(filter_files) & set([int(one.resource_id) for one in resources]))
+                filter_files = list(set(filter_files) & {int(one.resource_id) for one in resources})
             else:
                 filter_files = [int(one.resource_id) for one in resources]
             if not filter_files:
@@ -2988,7 +3085,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
-        data = await self._handle_file_folder_extra_info(page_items)
+        data = await self._handle_file_folder_extra_info(
+            page_items,
+            space_creator_user_id=space.user_id,
+        )
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
         # count requires materialising every match, which is exactly what the
         # batch-scan avoids. Both consumers (client useFileManager, F030
@@ -3472,6 +3572,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(updated_file.knowledge_id)
         return updated_file
 
+    async def _rollback_uploaded_files(
+        self,
+        files: list[KnowledgeFile],
+        *,
+        parent_type: str,
+        parent_id: int,
+    ) -> None:
+        errors = []
+        for row in files:
+            try:
+                # Creation records do not require an existing permission mirror:
+                # the failed file and subsequent files may never have had one.
+                record = self._new_file_permission_record(
+                    row=row, resource_type="knowledge_file", parent_type=parent_type, parent_id=parent_id
+                )
+                adapter = await self._resource_adapter("knowledge_file")
+                await adapter.rollback_created(record=record, actor=await self._permission_actor())
+                if row.object_name:
+                    storage = get_minio_storage_sync()
+                    storage.remove_object_sync(bucket_name=storage.bucket, object_name=row.object_name)
+                expanded_ids = await self._cascade_version_links_on_delete([row.id])
+                await KnowledgeFileDao.adelete_batch(expanded_ids)
+            except Exception as exc:
+                # Keep this business row if compensation is uncertain, but do
+                # not let it prevent cleanup of the other files in the batch.
+                logger.exception("Failed to roll back uploaded knowledge file {}", row.id)
+                errors.append(exc)
+        if errors:
+            raise ExceptionGroup("Knowledge space upload compensation failed", errors)
+
     async def add_file(
         self,
         knowledge_id: int,
@@ -3550,21 +3680,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         preview_cache_keys = []
         created_files = []
 
-        async def cleanup_created_files() -> None:
-            created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
-            if not created_file_ids:
-                return
-            # Most rollback paths fire before the V1 doc/version rows are
-            # written, so the cascade is a defensive no-op here. Kept for the
-            # case where a partial create leaves stale chain rows.
-            expanded_ids = await self._cascade_version_links_on_delete(created_file_ids)
-            try:
-                await self._cleanup_resource_tuples(
-                    [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
-                )
-            finally:
-                await KnowledgeFileDao.adelete_batch(expanded_ids)
-
         try:
             for one in file_path:
                 db_file = KnowledgeService.process_one_file(
@@ -3580,12 +3695,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     skip_dedup=skip_dedup,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    if getattr(db_file, "id", None):
+                        created_files.append(db_file)
                     resolved_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
                     if db_file.file_source != resolved_file_source:
                         db_file.file_source = resolved_file_source
                         db_file = KnowledgeFileDao.update(db_file)
                     if getattr(db_file, "id", None):
-                        created_files.append(db_file)
                         # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
                         # This is independent of the version-management switch (D3): the rows always
                         # exist so the file list can be document-driven even when the switch is off.
@@ -3647,9 +3763,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         except Exception:
             try:
-                await cleanup_created_files()
+                await self._rollback_uploaded_files(
+                    created_files, parent_type=parent_type, parent_id=parent_resource_id
+                )
             except Exception as cleanup_exc:
-                logger.warning(f"Failed to cleanup files after knowledge space upload error: {cleanup_exc}")
+                logger.exception("Failed to cleanup files after knowledge space upload error: {}", cleanup_exc)
             raise
         from bisheng.worker.knowledge import scheduler as file_scheduler
 
@@ -4350,7 +4468,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int]):
-        """2：支持对单文件的标签管理: Overwrite tags for a single file."""
+        """Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_action("knowledge_file", file_id, "rename")
 
@@ -4360,7 +4478,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def batch_add_file_tags(self, space_id: int, file_ids: list[int], tag_ids: list[int]):
-        """1：支持对文件批量添加标签: Batch add tags to files."""
+        """Batch add tags to files."""
         await self._require_read_permission(space_id)
         if not file_ids or not tag_ids:
             return
@@ -4408,7 +4526,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 db_file.id,
             )
 
-        tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
+        _tmp, file_level_path = await self.process_retry_files(db_files, id2input, self.login_user)
 
         for folder_path in file_level_path:
             await self.update_folder_update_time(folder_path)
@@ -4428,10 +4546,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         retry_files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         all_file_ids = []
         all_file_level_path = set()
-        retryable_status = {
-            KnowledgeFileStatus.FAILED.value,
-            KnowledgeFileStatus.VIOLATION.value,
-        }
+        retryable_status = KnowledgeFileStatus.abnormal_values()
         for file in retry_files:
             if file.knowledge_id != space_id:
                 continue
@@ -4649,7 +4764,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     name, _ = os.path.splitext(rec.file_name)
                     local_path = os.path.join(local_dir, f"{name}.html")
 
-                if not target_object_name:  # no stored object – skip
+                if not target_object_name:  # No stored object to download.
                     continue
 
                 try:
@@ -4930,6 +5045,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ):
             raise SpacePermissionDeniedError()
 
+        if not current_membership:
+            # The joined list is resolved from the `visible` decision, so it also
+            # carries spaces held through a Grant rather than by joining. Exiting
+            # one of those revoked nothing, deleted no row and still reported
+            # success, so the space came back on the next refresh.
+            raise SpaceGrantedNotJoinedError()
+
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)
         return deleted
+
+
+def _f066_data_scope_narrowed() -> bool:
+    """F066: a narrowed open-platform token must not take super-admin reads.
+
+    Off the open-platform surface there is no contextual actor and this stays
+    False, so the v1 console behaviour is untouched.
+    """
+
+    from bisheng.permission.application.data_scope import DATA_SCOPE_ALL
+    from bisheng.permission.application.identity import get_current_permission_actor
+
+    actor = get_current_permission_actor()
+    return actor is not None and actor.data_scope != DATA_SCOPE_ALL

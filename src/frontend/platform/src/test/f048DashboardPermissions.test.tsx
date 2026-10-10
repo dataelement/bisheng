@@ -4,6 +4,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { DashboardDetail } from "@/pages/Dashboard/components/dashboard/DashboardDetail"
 import {
   useDashboardPermissions,
+  useLazyDashboardPermission,
   type DashboardPermissionMap,
 } from "@/pages/Dashboard/hook"
 import { DashboardListItem } from "@/pages/Dashboard/components/dashboard/DashboardListItem"
@@ -14,15 +15,17 @@ import { resolve } from "node:path"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const lazyPermission = vi.hoisted(() => ({ actions: [] as string[], privileged: false }))
-vi.mock("@/pages/Dashboard/hook", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@/pages/Dashboard/hook")>(),
-  useLazyDashboardPermission: () => ({ ...lazyPermission, ensureLoaded: vi.fn() }),
-}))
-
 vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: vi.fn(),
 }))
+
+vi.mock("@/pages/Dashboard/hook", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/pages/Dashboard/hook")>()
+  return {
+    ...actual,
+    useLazyDashboardPermission: vi.fn(),
+  }
+})
 
 vi.mock("@/pages/Dashboard/components/editor/EditorCanvas", () => ({
   EditorCanvas: () => <div>dashboard canvas</div>,
@@ -78,8 +81,13 @@ function renderItem(
   permissionActions: string[],
   { privileged = false } = {},
 ) {
-  lazyPermission.actions = permissionActions
-  lazyPermission.privileged = privileged
+  vi.mocked(useLazyDashboardPermission).mockReturnValue({
+    actions: permissionActions,
+    loaded: true,
+    loading: false,
+    privileged,
+    ensureLoaded: vi.fn(),
+  })
   const callbacks = {
     onSelect: vi.fn(),
     onRename: vi.fn(),

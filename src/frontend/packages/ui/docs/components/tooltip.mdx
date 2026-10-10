@@ -1,132 +1,74 @@
+---
+status: done
+component: Tooltip
+---
+
 # 文字提示 Tooltip
 
-悬停 / 聚焦触发的一句纯文字说明。**组件尚未落地**——本页按规范搭出目标样式与手感（基座 Radix Tooltip），供设计验收后再进实现窗口。规范全文见「文档 → 组件规范 → 文字提示 Tooltip」。
+悬停 / 聚焦触发的一句纯文字说明。组件库 `@bisheng/ui` 导出 **`Tooltip`**（外加可选的 `TooltipProvider`），基座 Radix Tooltip。规范全文见「文档 → 组件规范 → 文字提示 Tooltip」。
 
-## 样式标本
+**内容里有链接、按钮、输入框的任何一个，它就不是 Tooltip，用 Popover**——键盘焦点永远进不去 tooltip，里面的可点元素对键盘用户等于不存在。所以也没有「带标题和按钮的加强版 tooltip」。
 
-深灰底（灰阶第 10 档 · 90% 不透明度）+ 纯白字，14/22 正文档，上下 6px / 左右 12px 内边距（单行总高 34px），圆角 6px，最大宽度 250px 超出自动换行，浮层投影档、不描边；箭头 8×8 旋转方块同底色。
+**触屏上什么都不显示**，也不做长按替代。由此反推出桌面端的铁律：tooltip 只装「没看到也不误事」的信息。
+
+## 长相
+
+深灰实色底 + 白字，14/22 正文档，上下 6px / 左右 12px 内边距（单行总高 34px），圆角 6px，最大宽度 250px 超出自动换行，浮层投影档、不描边；箭头恒定带（没有无箭头档），是 8×8 旋转方块，与气泡同底色。悬停下面两个按钮看气泡。
 
 ```tsx
-const bubble: React.CSSProperties = {
-  display: 'inline-block',
-  maxWidth: 250,
-  padding: '6px 12px',
-  borderRadius: 6,
-  background: 'rgb(var(--arco-gray-10) / 0.9)',
-  color: '#fff',
-  fontSize: 14,
-  lineHeight: '22px',
-  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
-};
-
-// 8×8 rotated square clipped to its lower half — same translucent color as the
-// bubble with zero overlap, so no darker seam shows through.
-const Arrow = () => (
-  <div style={{ position: 'relative', width: 12, height: 6, overflow: 'hidden' }}>
-    <div
-      style={{
-        position: 'absolute',
-        left: 2,
-        top: -4,
-        width: 8,
-        height: 8,
-        transform: 'rotate(45deg)',
-        background: 'rgb(var(--arco-gray-10) / 0.9)',
-      }}
-    />
-  </div>
-);
-
-const Specimen = ({ text, note }: { text: string; note: string }) => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-    <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-      <div style={bubble}>{text}</div>
-      <div style={{ alignSelf: 'flex-start', marginLeft: 24 }}>
-        <Arrow />
-      </div>
-    </div>
-    <span style={{ fontSize: 12, color: 'rgb(var(--text-3))' }}>{note}</span>
-  </div>
-);
+import { Button, Tooltip } from '@bisheng/ui';
 
 export default () => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '8px 0' }}>
-    <Specimen text="恢复默认设置" note="单行：6px/12px 内边距，总高 34px，与 32px 控件近似同高" />
-    <Specimen
-      text="模型输出结果仅供参考，重要结论请结合知识库原文进行二次核对"
-      note="长文：最大宽度 250px（约一行 17 个汉字），超出自动换行，最多两行"
-    />
+  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '48px 0 8px' }}>
+    <Tooltip content="恢复默认设置">
+      <Button color="default" variant="outlined">恢复默认</Button>
+    </Tooltip>
+    <Tooltip content="模型输出结果仅供参考，重要结论请结合知识库原文进行二次核对">
+      <Button color="default" variant="outlined">长文案</Button>
+    </Tooltip>
   </div>
 );
 ```
 
+底色是**实色**，不带透明度：半透明会在箭头与气泡的接缝处叠出深色边、让对比度随背景不可判定，还会关掉小字的次像素抗锯齿。**深色模式下它仍是深底白字**——不跟随灰阶翻转，只把底色换亮一档（暗色灰阶 `gray-2` = `#2E2E30`）与 `#121212` 的页面拉开。底色走 `--tooltip-bg` 语义变量，正是为了不被翻转的灰阶带走。两种品牌主题（蓝 ⇄ 绿）下长相相同，不换肤。
+
 ## 悬停 / 聚焦触发
 
-指针进入 **100ms** 后出现；同组控件间快速移动（300ms 内）时下一个提示立即出现，不再各等一次。键盘 Tab 聚焦**立即**出现。ESC 关闭；指针可移进浮层，移入期间不消失；不自动超时消失。试试在下面一排图标按钮上滑动，或用 Tab 逐个聚焦：
+指针进入 **100ms** 后出现；同组控件间快速移动（300ms 内）时下一个提示立即出现，不再各等一次。键盘 Tab 聚焦**立即**出现。ESC 关闭；指针可移进浮层（读长内容、复制文字），移入期间不消失；不自动超时消失。
+
+「300ms 内不再等一次」需要一个**共享的** `TooltipProvider`——所以应用根上挂一个。不挂也能用（每个 `Tooltip` 自带兜底 provider），只是各自计时。试试在下面一排图标按钮上滑动，或用 Tab 逐个聚焦：
 
 ```tsx
-import * as Tooltip from '@radix-ui/react-tooltip';
 import { Outlined } from 'bisheng-icons';
-import { Button } from '@bisheng/ui';
+import { Button, Tooltip, TooltipProvider } from '@bisheng/ui';
 
-const content: React.CSSProperties = {
-  maxWidth: 250,
-  padding: '6px 12px',
-  borderRadius: 6,
-  background: 'rgb(var(--arco-gray-10) / 0.9)',
-  color: '#fff',
-  fontSize: 14,
-  lineHeight: '22px',
-  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
-};
-
-// aria-label 与 tooltip 文案同源：正式封装由同一个 label 属性喂给两者
+// 单 icon 按钮的 aria-label 与 tooltip 文案同源，不写两份——读屏用户不悬停
 const Item = ({ label, icon }: { label: string; icon: React.ReactNode }) => (
-  <Tooltip.Root>
-    <Tooltip.Trigger asChild>
-      <Button color="default" variant="text" iconOnly aria-label={label}>
-        {icon}
-      </Button>
-    </Tooltip.Trigger>
-    <Tooltip.Portal>
-      <Tooltip.Content side="top" sideOffset={4} style={content}>
-        {label}
-        <Tooltip.Arrow width={11} height={6} style={{ fill: 'rgb(var(--arco-gray-10) / 0.9)' }} />
-      </Tooltip.Content>
-    </Tooltip.Portal>
-  </Tooltip.Root>
+  <Tooltip content={label}>
+    <Button color="default" variant="text" iconOnly aria-label={label}>
+      {icon}
+    </Button>
+  </Tooltip>
 );
 
 export default () => (
-  <Tooltip.Provider delayDuration={100} skipDelayDuration={300}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+  <TooltipProvider>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '48px 0 8px' }}>
       <Item label="重命名" icon={<Outlined.Edit />} />
       <Item label="固定到侧栏" icon={<Outlined.Pin />} />
       <Item label="下载副本" icon={<Outlined.Download />} />
       <Item label="删除会话" icon={<Outlined.Delete />} />
     </div>
-  </Tooltip.Provider>
+  </TooltipProvider>
 );
 ```
 
 ## 十二方位
 
-上 / 下 / 左 / 右 × 居中 / 首端 / 尾端，**默认上方居中**；空间不够时自动翻到对面，任何情况下不被视口裁掉。同一排控件应统一用同一个方位。
+`side` × `align`：上 / 下 / 左 / 右 × 居中 / 首端 / 尾端，**默认上方居中**；空间不够时自动翻到对面，任何情况下不被视口裁掉。同一排控件统一用同一个方位——提示位置跳来跳去会打断视线。
 
 ```tsx
-import * as Tooltip from '@radix-ui/react-tooltip';
-import { Button } from '@bisheng/ui';
-
-const content: React.CSSProperties = {
-  maxWidth: 250,
-  padding: '6px 12px',
-  borderRadius: 6,
-  background: 'rgb(var(--arco-gray-10) / 0.9)',
-  color: '#fff',
-  fontSize: 14,
-  lineHeight: '22px',
-  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
-};
+import { Button, Tooltip, TooltipProvider } from '@bisheng/ui';
 
 const Cell = ({ side, align, label, row, col }: {
   side: 'top' | 'bottom' | 'left' | 'right';
@@ -136,24 +78,16 @@ const Cell = ({ side, align, label, row, col }: {
   col: number;
 }) => (
   <div style={{ gridRow: row, gridColumn: col }}>
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <Button color="default" variant="outlined" size="small" style={{ width: 72 }}>
-          {label}
-        </Button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content side={side} align={align} sideOffset={4} style={content}>
-          提示文案
-          <Tooltip.Arrow width={11} height={6} style={{ fill: 'rgb(var(--arco-gray-10) / 0.9)' }} />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
+    <Tooltip content="提示文案" side={side} align={align}>
+      <Button color="default" variant="outlined" size="small" style={{ width: 72 }}>
+        {label}
+      </Button>
+    </Tooltip>
   </div>
 );
 
 export default () => (
-  <Tooltip.Provider delayDuration={100} skipDelayDuration={300}>
+  <TooltipProvider>
     <div
       style={{
         display: 'inline-grid',
@@ -176,52 +110,38 @@ export default () => (
       <Cell side="bottom" align="center" label="下" row={5} col={3} />
       <Cell side="bottom" align="end" label="下右" row={5} col={4} />
     </div>
-  </Tooltip.Provider>
+  </TooltipProvider>
 );
 ```
 
 ## 禁用控件的提示
 
-禁用控件也要能出提示（说明禁用原因）。禁用元素不派发鼠标事件，正式封装内部会对 disabled 触发元素包一层可聚焦热区（`span` + `tabIndex=0`），业务页不用自己处理：
+禁用控件也要能出提示，说明满足什么条件才能用。禁用元素不派发鼠标事件，**组件内部**会给它包一层可聚焦热区（`span` + `tabIndex=0`）——业务页照常写 `<Tooltip><Button disabled>`，不用自己包，也不许自己包。
 
 ```tsx
-import * as Tooltip from '@radix-ui/react-tooltip';
-import { Button } from '@bisheng/ui';
-
-const content: React.CSSProperties = {
-  maxWidth: 250,
-  padding: '6px 12px',
-  borderRadius: 6,
-  background: 'rgb(var(--arco-gray-10) / 0.9)',
-  color: '#fff',
-  fontSize: 14,
-  lineHeight: '22px',
-  boxShadow: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
-};
+import { Button, Tooltip } from '@bisheng/ui';
 
 export default () => (
-  <Tooltip.Provider delayDuration={100} skipDelayDuration={300}>
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <span tabIndex={0} style={{ display: 'inline-block', outline: 'none' }}>
-          <Button color="danger" variant="outlined" disabled style={{ pointerEvents: 'none' }}>
-            批量删除
-          </Button>
-        </span>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content side="top" sideOffset={4} style={content}>
-          勾选至少一项后可删除
-          <Tooltip.Arrow width={11} height={6} style={{ fill: 'rgb(var(--arco-gray-10) / 0.9)' }} />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  </Tooltip.Provider>
+  <div style={{ padding: '48px 0 8px' }}>
+    <Tooltip content="勾选至少一项后可删除">
+      <Button color="danger" variant="outlined" disabled>批量删除</Button>
+    </Tooltip>
+  </div>
 );
 ```
 
-## 本页与规范的差距（给实现窗口）
+## API
 
-- demo 直接用 Radix 原语手拼样式；正式封装对外只暴一个组件，样式 token（灰阶 / 投影档）接线后替换裸值。
-- 触屏不显示为 Radix 默认行为；动效 150ms 淡入 / 100ms 淡出暂未在 demo 中接（无动效规范，落地时按暂定值加）。
-- z-index 需挂统一阶梯的最高浮层档（tooltip 压在弹窗、Popover 之上），待「01-设计规范 §5」定稿后接线。
+| 属性 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `content` | `ReactNode` | — | 一句纯文字。放链接 / 按钮 / 输入框请改用 Popover |
+| `children` | `ReactElement` | — | 触发元素，应当是可聚焦的（按钮、链接、输入框）；`disabled` 的会被自动包热区 |
+| `side` | `'top' \| 'right' \| 'bottom' \| 'left'` | `'top'` | 方位，空间不足自动翻面 |
+| `align` | `'start' \| 'center' \| 'end'` | `'center'` | 交叉轴对齐 |
+| `disabled` | `boolean` | `false` | 只保留触发元素、整个浮层不挂载——用于「只在真的截断时才提示」这类场合 |
+| `open` / `defaultOpen` / `onOpenChange` | — | — | 受控 / 非受控开合，转交 Radix |
+| `contentClassName` | `string` | — | 气泡的附加类名。底色、字号这些不是页面级决定 |
+
+`TooltipProvider`：`delayDuration`（默认 100）、`skipDelayDuration`（默认 300）。**默认值就是规范**，改它要有理由。
+
+以下三件事组件已经替业务页决定了，不开 prop：`disableHoverableContent` 恒为 `false`（关掉即违反 WCAG 1.4.13 悬停内容必须保持可见）、`z-index` 恒为最高浮层档 1300（弹窗里的图标钮也要有提示）、触屏不响应（不做长按替代）。

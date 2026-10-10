@@ -36,12 +36,22 @@ interface ModelManagementProps {
     onNameChange: (index: number, name: string) => void;
     onDescriptionChange?: (index: number, description: string) => void;
     onVisualToggle?: (index: number, enabled: boolean) => void;
+    /** Daily-mode default model: used for new daily conversations when the user has no valid manual selection. */
+    chatDefaultModelId?: string | null;
+    onChatDefaultChange?: (id: string) => void;
     /** Linsight default model: the model id used as the default executor for Linsight tasks. */
     linsightDefaultModelId?: string | null;
     onLinsightDefaultChange?: (id: string) => void;
 }
+
+/** One source of truth for the header row and every model row — they have to
+ *  line up, and the two used to carry the same literal twice, so widening one
+ *  silently broke the alignment. The three trailing columns are wider than the
+ *  Chinese text needs because English and Japanese labels are longer. */
+const MODEL_ROW_COLUMNS = "1.2fr 0.85fr 1.3fr 88px 140px 140px 36px"
+
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
-    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onDescriptionChange, onVisualToggle, linsightDefaultModelId, onLinsightDefaultChange }, ref) => {
+    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onDescriptionChange, onVisualToggle, chatDefaultModelId, onChatDefaultChange, linsightDefaultModelId, onLinsightDefaultChange }, ref) => {
         // `assistant` mode hits /api/v1/llm/assistant/llm_list which is already
         // filtered to the admin-configured assistant allowlist (default model
         // and its server are placed first). Avoids the fetch-all + client-side
@@ -90,8 +100,9 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
         // }, [models, llmOptions])
 
         return (
-            <div className="mt-2 border p-4 rounded-md bg-background">
-                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1.2fr 0.85fr 1.3fr 72px 116px 36px" }}>
+            <div className="mt-2 border p-4 rounded-md bg-background overflow-x-auto">
+                <div className="min-w-[860px]">
+                <div className="grid mb-4 items-end" style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}>
                     <div className="">
                         <Label className="bisheng-label">{t('bench.model')}</Label>
                     </div>
@@ -101,13 +112,21 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                     <div className="">
                         <Label className="bisheng-label">{t('bench.modelDescription')}</Label>
                     </div>
-                    <div className="flex items-center justify-center">
-                        <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
-                        <QuestionTooltip className="text-[#999999]" content={t('bench.visionText')} />
+                    {/* No whitespace-nowrap on these three: the cells are fixed-width
+                        while the labels are translated, so nowrap made English and
+                        Japanese overflow and paint on top of the next column
+                        ("Vision" over "Linsight Default Model"). Wrapping keeps a long
+                        translation inside its own column whatever its length. */}
+                    <div className="flex items-center justify-center gap-0.5 px-1 text-center">
+                        <Label className="bisheng-label">{t('bench.vision')}</Label>
+                        <QuestionTooltip className="text-[#999999] shrink-0" content={t('bench.visionText')} />
                     </div>
-                    <div className="flex items-center justify-center">
-                        <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('model:model.linsightDefaultModel')}</Label>
-                        <QuestionTooltip className="text-[#999999]" content={t('model:model.linsightDefaultModelTooltip')} />
+                    <div className="flex items-center justify-center px-1 text-center">
+                        <Label className="bisheng-label">{t('model:model.dailyDefaultModel')}</Label>
+                    </div>
+                    <div className="flex items-center justify-center gap-0.5 px-1 text-center">
+                        <Label className="bisheng-label">{t('model:model.linsightDefaultModel')}</Label>
+                        <QuestionTooltip className="text-[#999999] shrink-0" content={t('model:model.linsightDefaultModelTooltip')} />
                     </div>
                     <div className="text-center">
                     </div>
@@ -118,7 +137,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         key={model.key}
                         ref={(el) => setItemRef(el, index)}
                         className="grid items-center mb-4"
-                        style={{ gridTemplateColumns: "1.2fr 0.85fr 1.3fr 72px 116px 36px" }}
+                        style={{ gridTemplateColumns: MODEL_ROW_COLUMNS }}
                     >
                         <div className="pr-2" id={model.id}>
                             {assistantLlmOptions.length > 0 ? (
@@ -170,6 +189,18 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                             />
                         </div>
 
+                        {/* Daily-mode default model: single-select radio across the whole column */}
+                        <div className="flex items-center justify-center">
+                            <input
+                                type="radio"
+                                name="chat-default-model"
+                                className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                                checked={!!model.id && String(model.id) === String(chatDefaultModelId ?? '')}
+                                disabled={!model.id}
+                                onChange={() => model.id && onChatDefaultChange?.(model.id)}
+                            />
+                        </div>
+
                         {/* Linsight default model: single-select radio across the whole column */}
                         <div className="flex items-center justify-center">
                             <input
@@ -192,6 +223,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                     </div>
                 ))}
 
+                </div>
                 <Button
                     variant="outline"
                     className="border-none size-7 bg-gray-200 hover:bg-gray-300 transition-colors mt-2"

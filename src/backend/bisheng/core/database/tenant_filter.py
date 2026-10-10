@@ -27,8 +27,10 @@ logger = logging.getLogger(__name__)
 _tenant_aware_tables: set[str] = set()
 _initialized: bool = False
 
-# Tables that have a tenant_id column but use it as a FK, not as isolation field.
-_EXCLUDED_TABLES: set[str] = {"user_tenant"}
+# Tables whose compatibility tenant_id column is not an isolation boundary.
+# channel_info_source is a public metadata catalog; model discovery may import it,
+# so exclusion here is required even though it is not force-imported below.
+_EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 
 # ORM modules that must be imported before _discover_tenant_aware_tables runs.
 # Without this, models that nothing in the FastAPI router chain happens to
@@ -100,6 +102,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.preset_train",
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
+    "bisheng.open_api.domain.models",
     "bisheng.dsh.domain.models.user_policy",
     "bisheng.dsh.domain.models.admin_operation",
     "bisheng.dsh.domain.models.monthly_usage",

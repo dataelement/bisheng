@@ -1,6 +1,6 @@
 {
   "contract_version": "f048-bench-01-v2",
-  "authorization_model_checksum": "75be8b347d67499beea780a85ad5869b6d37798b24b1b5ed22a79cdab138e957",
+  "authorization_model_checksum": "2ed5c834c0879736fdf731e7e975bcaf01875b35e21065fb08c43f809830abe0",
   "dataset": {
     "name": "f048-single-slot-visible-synthetic-v2",
     "source": "checksum-pinned-representative-synthetic-not-production",
@@ -139,5 +139,5 @@
     "concurrency": 1,
     "consistency": "HIGHER_CONSISTENCY"
   },
-  "contract_checksum": "35bd8ad5b16373911fb7925028743700ae9ef22285ceeaf0bde6fbf6c2da6f8a"
+  "contract_checksum": "0290180531d4f286b5a43540557b750a26465373d3cad0b18d6c64a1dd677ade"
 }

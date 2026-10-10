@@ -4,12 +4,18 @@ from loguru import logger
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.open_api.domain.services.execution_context import restore_execution_context
+from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.permission.application.identity import get_current_permission_actor
+from bisheng.public_endpoints.domain.services.guest_policy import should_skip_public_workflow_use
 from bisheng.utils.exceptions import IgnoreException
+from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.utils.stateful_worker import StatefulWorker
 from bisheng.worker.workflow.redis_callback import RedisCallback
@@ -95,14 +101,29 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
         _clear_workflow_obj(redis_callback.unique_id)
 
 
-@bisheng_celery.task
-def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
-    """Implementationworkflow"""
-    trace_id_var.set(unique_id)
-    start_time = time.time()
+def _authorize_workflow_use(snapshot, user_id: int, workflow_id: str, chat_id: str) -> None:
+    if snapshot is None:
+        return
+    if should_skip_public_workflow_use(
+        channel=getattr(snapshot, "channel", None),
+        chat_id=chat_id,
+        workflow_id=workflow_id,
+    ):
+        return
+    run_async_task(
+        lambda: require_business_action(
+            UserPayload(user_id=user_id, user_role=[], tenant_id=snapshot.tenant_id),
+            resource_type="workflow",
+            resource_id=workflow_id,
+            action="use",
+            actor=get_current_permission_actor(),
+        )
+    )
+
+
+def _log_workflow_telemetry(workflow_id: str, chat_id: str, user_id: int, start_time: float):
+    """Record best-effort workflow telemetry without changing task outcome."""
     try:
-        _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
-    finally:
         end_time = time.time()
         workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
         telemetry_service.log_event_sync(
@@ -119,6 +140,30 @@ def execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: in
                 process_time=int((end_time - start_time) * 1000),
             ),
         )
+    except Exception:
+        # Telemetry is opportunistic and must not reverse the workflow task outcome.
+        logger.exception("failed to record workflow telemetry for workflow_id={}", workflow_id)
+
+
+@bisheng_celery.task
+def execute_workflow(
+    unique_id: str,
+    workflow_id: str,
+    chat_id: str,
+    user_id: int,
+    source: str = "platform",
+    execution_snapshot: dict | None = None,
+):
+    """Implementationworkflow"""
+    trace_id_var.set(unique_id)
+    start_time = time.time()
+    try:
+        with restore_execution_context(execution_snapshot) as snapshot:
+            # Guest runs skip `use` only when session.flow_id matches this workflow.
+            _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
+            _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
+    finally:
+        _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
 
 def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
@@ -147,29 +192,23 @@ def _continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: 
 
 
 @bisheng_celery.task
-def continue_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+def continue_workflow(
+    unique_id: str,
+    workflow_id: str,
+    chat_id: str,
+    user_id: int,
+    source: str = "platform",
+    execution_snapshot: dict | None = None,
+):
     """Resumeworkflow"""
     trace_id_var.set(unique_id)
     start_time = time.time()
     try:
-        _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
+        with restore_execution_context(execution_snapshot) as snapshot:
+            _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
+            _continue_workflow(unique_id, workflow_id, chat_id, user_id, source)
     finally:
-        end_time = time.time()
-        workflow_info = WorkFlowService.get_one_workflow_simple_info_sync(workflow_id)
-        telemetry_service.log_event_sync(
-            user_id=user_id,
-            event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
-            trace_id=trace_id_var.get(),
-            event_data=ApplicationProcessEventData(
-                app_id=workflow_id,
-                app_name=workflow_info.name if workflow_info else workflow_id,
-                app_type=ApplicationTypeEnum.WORKFLOW,
-                chat_id=chat_id,
-                start_time=int(start_time),
-                end_time=int(end_time),
-                process_time=int((end_time - start_time) * 1000),
-            ),
-        )
+        _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 
 
 @bisheng_celery.task

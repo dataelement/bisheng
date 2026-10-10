@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Outlined } from 'bisheng-icons';
+import { Badge } from '@bisheng/ui';
 import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
@@ -29,15 +30,23 @@ import useMediaQuery from '~/hooks/useMediaQuery';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { handleDoubleClick, langSubset, preprocessLaTeX } from '~/utils';
-import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
+import {
+  getCitationDetail,
+  getCitationUnresolvedReason,
+  resolveCitationDetails,
+  type ChatCitation,
+} from '~/api/chatApi';
 import {
   buildCitationPreview,
   createCitationDetailMap,
-  getCitationClassName,
   getCitationDocumentUrl,
-  getCitationSourceLabel,
+  getCitationSourceLabelKey,
+  getCitationArticleUrl,
+  isArticleCitation,
   getLegacyCitationPreview,
+  isFilePreviewCitation,
   isRagCitation,
+  isTempCitation,
   normalizeCitationType,
   transformPrivateCitations,
   type CitationDetailLoader,
@@ -304,6 +313,7 @@ function CitationPreviewCard({
   isLoading,
   error,
   notPermitted,
+  expired,
   onCardClick,
   onOpenDocumentPreview,
 }: {
@@ -312,24 +322,37 @@ function CitationPreviewCard({
   isLoading: boolean;
   error: boolean;
   notPermitted?: boolean;
+  expired?: boolean;
   onCardClick?: () => void;
   onOpenDocumentPreview?: () => void;
 }) {
+  const localize = useLocalize();
+
   if (isLoading) {
     return (
       <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Outlined.Loading className="mr-2 size-4 animate-spin" />
-        加载溯源详情...
+        {localize('com_citation.loading')}
       </div>
     );
   }
 
-  // Backend returned 404: the viewer has no permission for this source (or it no
-  // longer exists). Product decision: show "no permission", not "no source detail".
+  // F054: the server now says WHY it could not resolve, so these are two
+  // different messages instead of one vague failure. "No permission" wins when
+  // both could apply — telling someone a source they may not see has been
+  // deleted still tells them it existed.
   if (notPermitted) {
     return (
       <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
-        暂无权限
+        {localize('com_citation.no_permission')}
+      </div>
+    );
+  }
+
+  if (expired) {
+    return (
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+        {localize('com_citation.source_expired')}
       </div>
     );
   }
@@ -337,7 +360,7 @@ function CitationPreviewCard({
   if (error || !preview) {
     return (
       <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-text-3 shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
-        暂无溯源详情
+        {localize('com_citation.no_detail')}
       </div>
     );
   }
@@ -457,7 +480,7 @@ function CitationPreviewCard({
       <div className="px-4 pb-0">
         <div className="border-l-2 border-border-base pl-3 text-[12px] leading-6 text-text-2">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
-            {preview.snippet || '暂无内容摘要'}
+            {preview.snippet || localize('com_citation.no_snippet')}
           </div>
         </div>
         <div className="mt-3 min-h-6 text-text-3">
@@ -477,7 +500,7 @@ function CitationPreviewCard({
       <div className="px-4 pb-0">
         <div className="border-l-2 border-border-base pl-3 text-[12px] leading-6 text-text-2">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
-            {ragSnippetText || '暂无内容摘要'}
+            {ragSnippetText || localize('com_citation.no_snippet')}
           </div>
         </div>
         <div className="mt-3 min-h-6 text-text-3">
@@ -503,6 +526,7 @@ const Citation = ({
   children,
   initialDetail,
   initialNotPermitted,
+  initialExpired,
   webContent,
   loadCitationDetail,
   popoverKey,
@@ -519,6 +543,8 @@ const Citation = ({
       i.e. the viewer has no permission. Renders "no permission" + un-clickable
       from the start, without waiting for a per-marker 404. */
   initialNotPermitted?: boolean;
+  /** Pre-resolved on load: the batch endpoint said this source no longer exists. */
+  initialExpired?: boolean;
   webContent?: any;
   loadCitationDetail: CitationDetailLoader;
   popoverKey: string;
@@ -533,6 +559,7 @@ const Citation = ({
   const hasData = !!rawData;
 
   const isOpen = activePopoverKey === popoverKey;
+  const localize = useLocalize();
   const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -541,8 +568,14 @@ const Citation = ({
   // pre-resolve (initialNotPermitted) so the hint shows up-front; the per-marker
   // 404 path still sets it for citations the batch didn't cover.
   const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
+  const [expired, setExpired] = useState(!!initialExpired);
   const closeTimerRef = useRef<number | null>(null);
-  const citationClassName = getCitationClassName(data.type);
+  // 组件-Badge徽标.md §2 — the source kind picks the badge color: brand for a
+  // document, the frozen purple for a web page.
+  // 组件-Badge徽标.md §2 — the shared Badge offers two source colours and they
+  // belong to the designer, so an article rides the document colour rather than
+  // inventing a third.
+  const citationSource = normalizeCitationType(data.type) === 'web' ? 'web' : 'document';
   const legacyPreview = data.ref?.startsWith('citation:')
     ? getLegacyCitationPreview(webContent, data.label)
     : null;
@@ -560,7 +593,9 @@ const Citation = ({
       setDetail(nextDetail);
       return nextDetail;
     } catch (err: any) {
-      if (err?.citationForbidden) {
+      if (err?.citationExpired) {
+        setExpired(true);
+      } else if (err?.citationForbidden) {
         setNotPermitted(true);
       } else {
         console.error('Failed to load citation detail:', err);
@@ -612,10 +647,22 @@ const Citation = ({
     event?.preventDefault();
     event?.stopPropagation();
 
-    // No permission for this source — keep the marker inert: only toggle the hover
-    // card (so the "no permission" hint can show) and never open the viewer/link.
-    if (notPermitted) {
+    // No permission, or the source is gone — keep the marker inert: only toggle
+    // the hover card (so the hint can show) and never open the viewer/link.
+    if (notPermitted || expired) {
       handleOpenChange(!isOpen);
+      return;
+    }
+
+    // F054: an article opens its original post in a new tab. The reader is
+    // already on the article page in-app, so the badge's value is saying "this
+    // came from the article", not the jump — but the jump is what a source
+    // badge is expected to do, so it does it.
+    const articleUrl = isArticleCitation(detail, data.type)
+      ? preview?.link || getCitationArticleUrl(detail)
+      : '';
+    if (articleUrl) {
+      openWebCitation(articleUrl);
       return;
     }
 
@@ -644,7 +691,7 @@ const Citation = ({
     }
     pendingWebWindow?.close();
 
-    if (!nextDetail || !isRagCitation(nextDetail, data.type)) {
+    if (!nextDetail || !isFilePreviewCitation(nextDetail, data.type)) {
       return;
     }
 
@@ -670,6 +717,12 @@ const Citation = ({
   // The batch pre-resolve resolves AFTER mount, so initialNotPermitted flips from
   // false → true asynchronously; reflect it (never flip back to clickable).
   useEffect(() => {
+    if (initialExpired) {
+      setExpired(true);
+    }
+  }, [initialExpired]);
+
+  useEffect(() => {
     if (initialNotPermitted) {
       setNotPermitted(true);
     }
@@ -690,8 +743,12 @@ const Citation = ({
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
       <Popover.Trigger asChild>
-        <button
-          type="button"
+        {/* 组件-Badge徽标.md §5 — the 溯源角标 is a Badge: the ordinal of a
+            source, and the one badge form that is clickable. The behaviour
+            below (popover, hover card, no-permission) stays here; the drawing
+            does not. */}
+        <Badge
+          citation={citationSource}
           data-citation-trigger="true"
           data-citation-ref={data.ref}
           data-citation-id={data.citationId}
@@ -699,7 +756,10 @@ const Citation = ({
           data-citation-type={data.type}
           data-citation-group-key={data.groupKey}
           data-citation-chunk-id={data.chunkId}
-          aria-label={`${getCitationSourceLabel(data.type)}引用 ${data.label ?? ''}`}
+          aria-label={localize('com_citation.badge_aria', {
+            source: localize(getCitationSourceLabelKey(data.type)),
+            index: data.label ?? '',
+          })}
           onClick={handleCitationClick}
           onMouseEnter={() => {
             if (!citationPreviewUsesHover) return;
@@ -709,10 +769,10 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-blue-600/25 focus-visible:ring-2 ${citationClassName}`}
+          className={notPermitted ? 'ml-2 cursor-default' : 'ml-2'}
         >
-          <span className="flex items-center justify-center">{children}</span>
-        </button>
+          {children}
+        </Badge>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
@@ -743,6 +803,7 @@ const Citation = ({
             isLoading={isLoading}
             error={error}
             notPermitted={notPermitted}
+            expired={expired}
             onCardClick={() => void handleCitationClick(undefined, { forceDocument: true })}
             onOpenDocumentPreview={() => void handleCitationClick(undefined, { forceDocument: true })}
           />
@@ -834,6 +895,7 @@ const Markdown = memo(({
   resolveImageSrc,
   resolveArtifactLink,
   onArtifactPreview,
+  onOpenSourcePreview,
 }: TContentProps & {
   webContent: any;
   /**
@@ -847,6 +909,11 @@ const Markdown = memo(({
   resolveArtifactLink?: ArtifactLinkResolver;
   /** Open the matched artifact in the Linsight preview panel. */
   onArtifactPreview?: (file: unknown) => void;
+  /**
+   * F071: hand a cited document to the host instead of the floating drawer —
+   * the task-mode workspace shows it beside the report, on every screen width.
+   */
+  onOpenSourcePreview?: (preview: CitationDocumentPreviewState) => void;
 }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
@@ -943,6 +1010,7 @@ const Markdown = memo(({
   // the viewer has no permission (the endpoint omits forbidden ones). Markers in
   // this set render "no permission" + un-clickable from the start.
   const [forbiddenCitationIds, setForbiddenCitationIds] = useState<Set<string>>(() => new Set());
+  const [expiredCitationIds, setExpiredCitationIds] = useState<Set<string>>(() => new Set());
   const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
   const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const citationBatchRequestKeyRef = useRef<string>('');
@@ -954,7 +1022,7 @@ const Markdown = memo(({
     if (!detail) {
       return true;
     }
-    return isRagCitation(detail) && !getCitationDocumentUrl(detail);
+    return (isRagCitation(detail) || isTempCitation(detail)) && !getCitationDocumentUrl(detail);
   }, []);
 
   useEffect(() => {
@@ -1001,12 +1069,24 @@ const Markdown = memo(({
             ...nextMap,
           }));
         }
-        // Requested but unresolved = the backend omitted them (no permission).
-        const forbidden = citationIds.filter((id) => !citationDetailCacheRef.current[id]);
+        // F054: the server now says why each unresolved id did not make it, so
+        // "you may not see this" and "this source is gone" are told apart.
+        // Anything unresolved without a stated reason falls back to the stricter
+        // of the two.
+        const unresolvedIds = citationIds.filter((id) => !citationDetailCacheRef.current[id]);
+        const expiredIds = unresolvedIds.filter((id) => getCitationUnresolvedReason(id) === 'expired');
+        const forbidden = unresolvedIds.filter((id) => getCitationUnresolvedReason(id) !== 'expired');
         if (forbidden.length) {
           setForbiddenCitationIds((prev) => {
             const next = new Set(prev);
             forbidden.forEach((id) => next.add(id));
+            return next;
+          });
+        }
+        if (expiredIds.length) {
+          setExpiredCitationIds((prev) => {
+            const next = new Set(prev);
+            expiredIds.forEach((id) => next.add(id));
             return next;
           });
         }
@@ -1051,6 +1131,11 @@ const Markdown = memo(({
       locateChunk,
     };
 
+    if (onOpenSourcePreview) {
+      onOpenSourcePreview(nextPreview);
+      return;
+    }
+
     if (!isMobileLayout && onOpenCitationPanel) {
       onOpenCitationPanel({
         messageId,
@@ -1068,7 +1153,7 @@ const Markdown = memo(({
       itemId,
       locateChunk,
     });
-  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, webContent]);
+  }, [citations, content, isMobileLayout, messageId, onOpenCitationPanel, onOpenSourcePreview, webContent]);
 
   useEffect(() => {
     if (!documentPreview || isMobileLayout || !onOpenCitationPanel) {
@@ -1201,6 +1286,7 @@ const Markdown = memo(({
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
                               initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
+                              initialExpired={expiredCitationIds.has(citationData.citationId)}
                               loadCitationDetail={loadCitationDetail}
                               popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}-${citationKeyId}`}
                               activePopoverKey={activeCitationPopoverKey}
@@ -1223,6 +1309,7 @@ const Markdown = memo(({
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
+                              initialExpired={expiredCitationIds.has(citationData.citationId)}
                             loadCitationDetail={loadCitationDetail}
                             popoverKey={`private-${privateRef}-${matchIndex}-${citationKeyId}`}
                             activePopoverKey={activeCitationPopoverKey}

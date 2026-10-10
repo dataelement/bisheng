@@ -287,7 +287,7 @@ async def create_flow(
     *,
     request: Request,
     flow: FlowCreate,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload = Depends(UserPayload.get_app_creator_user),
 ):
     """Create a new flow."""
     # Determine if the user repeats the skill name

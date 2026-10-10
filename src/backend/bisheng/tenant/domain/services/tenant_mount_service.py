@@ -103,7 +103,6 @@ _UNMOUNT_MIGRATE_TABLES: list[str] = [
     "knowledgefile",
     "qaknowledge",
     "channel",
-    "channel_info_source",
     "channel_article_read",
     "t_gpts_tools",
     "t_gpts_tools_type",

@@ -10,8 +10,8 @@ import { Outlined } from 'bisheng-icons';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
-import { DropdownMenuItem, Input } from '~/components/ui';
-import { StateView } from '@bisheng/ui';
+import { DropdownMenuItem } from '~/components/ui';
+import { SearchInput, StateView } from '@bisheng/ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
@@ -183,18 +183,19 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             {/* No panel heading: every surface that opens this list already
                 labels it — the desktop submenu hangs off the "添加技能" row, the
                 mobile drill panel has it in the back-navigation row. */}
-            {/* Search — stopPropagation so typing isn't hijacked by the Radix menu's type-ahead */}
-            <div className="relative shrink-0">
-                {/* top nudged 1px past centre: the magnifier's ring sits above the glyph's
-                    own box, so a mathematically centred icon reads high next to the text. */}
-                <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
-                <Input
-                    className="h-[28px] rounded-lg border border-border-base bg-white py-0 pl-8 text-[12px] placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
+            {/* Search — spec SearchInput. stopPropagation lives on the wrapper so
+                a click anywhere in the shell (magnifier, padding, clear) stays out
+                of the Radix menu's type-ahead / close logic. */}
+            <div
+                className="shrink-0"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+            >
+                <SearchInput
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
+                    clearLabel={localize('com_ui_clear')}
                 />
             </div>
 

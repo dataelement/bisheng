@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read out and health-check an .xlsx, for the BiSheng code interpreter.
+"""Read out and health-check an .xlsx, for the platform code interpreter.
 
     python skills/bisheng-xlsx/scripts/inspect_workbook.py output/x.xlsx
     python skills/bisheng-xlsx/scripts/inspect_workbook.py output/x.xlsx --content-only
@@ -14,7 +14,7 @@ Two jobs the official skill delegates to things this environment does not have:
   spilling functions, the ``_xlfn.`` prefix set, percentages stored as text,
   unquoted sheet names, CJK column width — is checked mechanically here.
 
-Always exits 0: the BiSheng executor discards stdout on a non-zero exit, which
+Always exits 0: the platform executor discards stdout on a non-zero exit, which
 would throw away the entire report.
 """
 

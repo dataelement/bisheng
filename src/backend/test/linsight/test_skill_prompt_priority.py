@@ -106,3 +106,11 @@ def test_skill_priority_line_precedes_the_default_export_path():
     assert prompt.index("3z") < prompt.index("3a（始终）")
     # And the skill-reading rule sits in step 2, before the deliverable step.
     assert prompt.index("技能优先") < prompt.index("3. 【产出交付物】")
+
+
+def test_prompt_requires_overwrite_when_regenerating():
+    """Follow-up '重新生成报告' must write_file; reading the leftover is not delivery."""
+    prompt = _build_linsight_system_prompt(True)
+    assert "重新生成必须覆盖写入" in prompt
+    assert "write_file" in prompt
+    assert "只读旧文件" in prompt

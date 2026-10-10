@@ -21,6 +21,7 @@ from bisheng.permission.application.identity import (
     resolve_permission_actor,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.data_scope import DATA_SCOPE_ALL
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 _MAX_BATCH_CHECKS = 100
@@ -38,7 +39,16 @@ async def check_business_action(
     """Check one business-verified resource through the sole F048 facade."""
 
     actor = actor or await resolve_permission_actor(login_user)
-    if actor.super_admin:
+    if action in {"visible", "use"} and resource_type in {"workflow", "assistant"}:
+        from bisheng.public_endpoints.domain.services.guest_policy import (
+            ensure_guest_link_enabled,
+            is_public_published_resource,
+        )
+
+        if is_public_published_resource(str(resource_id), resource_type):
+            await ensure_guest_link_enabled(resource_type, str(resource_id))
+            return True
+    if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer allows a super admin unconditionally, but only after
         # the target is resolved. Resolution runs business data-validity guards
         # (e.g. owner/tenant/status checks in the F048 resource adapter) that do
@@ -46,6 +56,8 @@ async def check_business_action(
         # raise before the decision is ever reached. The batch path already
         # short-circuits super admins for the same reason; mirror it here so the
         # single-resource path (detail, delete, etc.) stays consistent.
+        # F066: a data-scope-narrowed token never takes this shortcut — the
+        # narrowing is enforced inside the runtime, so the call must reach it.
         return True
     registry = await get_f048_resource_registry()
     target = await registry.resolve(
@@ -64,14 +76,39 @@ async def require_business_action(
     resource_type: str,
     resource_id: str | int,
     action: str,
+    actor: PermissionActor | None = None,
 ) -> None:
     if not await check_business_action(
         login_user,
         resource_type=resource_type,
         resource_id=resource_id,
         action=action,
+        actor=actor,
     ):
         raise UnAuthorizedError()
+
+
+async def list_business_effective_direct_user_ids_by_model(
+    *,
+    actor: PermissionActor,
+    resource_type: str,
+    resource_id: str | int,
+    model_keys: Iterable[str],
+) -> dict[str, tuple[str, ...]]:
+    """Resolve effective direct-user Grant assignees for internal workflows."""
+
+    registry = await get_f048_resource_registry()
+    target = await registry.resolve(
+        resource_type=resource_type,
+        resource_id=str(resource_id),
+        actor=actor,
+        action="visible",
+    )
+    runtime = await get_f048_runtime()
+    return await runtime.list_effective_direct_user_ids_by_model(
+        target=target,
+        model_keys=tuple(model_keys),
+    )
 
 
 @contextual_operation
@@ -90,11 +127,13 @@ async def batch_check_business_actions(
         return {}
 
     actor = await resolve_permission_actor(login_user)
-    if actor.super_admin:
+    if actor.super_admin and actor.data_scope == DATA_SCOPE_ALL:
         # The decision layer already allows a super admin unconditionally, but it
         # only says so after every candidate has been resolved — several queries
         # each, per action. Listing a page of 100 candidates against 5 actions
         # therefore paid 500 resolutions to reach a foregone conclusion.
+        # F066: a narrowed token pays the full path instead — the runtime is
+        # where the data-scope denial lives, and it must not be skipped.
         return {resource_id: frozenset(normalized_actions) for resource_id in normalized_ids}
 
     registry = await get_f048_resource_registry()
@@ -136,11 +175,23 @@ async def batch_check_business_actions(
         for offset in range(0, len(targets), _MAX_BATCH_CHECKS):
             batch_targets = tuple(targets[offset : offset + _MAX_BATCH_CHECKS])
             batch_ids = target_ids[offset : offset + _MAX_BATCH_CHECKS]
-            allowed = await runtime.batch_check_actions(
-                actor,
-                batch_targets,
-                action,
-            )
+            try:
+                allowed = await runtime.batch_check_actions(
+                    actor,
+                    batch_targets,
+                    action,
+                )
+            except InvalidCatalogActionError:
+                # The Catalog has this action switched off for the resource type,
+                # so nobody holds it. Asking "which actions does this caller have"
+                # must answer that by leaving the action out, the way an action the
+                # resolver already rejected above is left out. Raising instead
+                # turned one disabled action into a failure of the whole listing:
+                # every knowledge space detail returned 25001 the moment an admin
+                # disabled upload_file, and the client read that as a missing space.
+                # Executing the action still fails loudly - require_business_action
+                # and the single check keep the raise.
+                break
             for resource_id, is_allowed in zip(
                 batch_ids,
                 allowed,

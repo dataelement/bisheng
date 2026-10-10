@@ -3,7 +3,7 @@ import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
-import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
+import { KnowledgeSpace } from "~/api/knowledge";
 import {
     DropdownMenu,
     DropdownMenuItem,
@@ -306,13 +306,6 @@ export default function KnowledgeSpaceItem({
                         compact={compact}
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
-                        // Mirror the right-side panel: MEMBER-role users hide FAILED
-                        // items, so the tree must apply the same status filter.
-                        fileStatus={
-                            space.role === SpaceRole.MEMBER
-                                ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED
-                                : undefined
-                        }
                         onSelectFolder={handleSelectFolder}
                     />
                 </div>
