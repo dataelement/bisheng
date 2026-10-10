@@ -548,6 +548,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [selectableSpaces]);
 
     const handleOpenSpaceSettings = useCallback(async (space: KnowledgeSpace) => {
+        if (space.spaceLevel === SpaceLevel.PERSONAL) return;
         try {
             const detail = await getSpaceInfoApi(space.id);
             setEditingSpace({ ...space, ...detail, id: space.id });

@@ -71,9 +71,16 @@ export default function KnowledgeSpaceItem({
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
     const showDangerAction = canDeleteSpace || Boolean(space.canUnsubscribe);
     // 『我的收藏』为系统知识库：只可查看/取消收藏，不提供设置、删除、重命名等操作。
-    // 所有个人知识库均不支持置顶。
+    // 个人知识库不提供空间设置，也不支持置顶。
     const isFavorite = isFavoriteSpace(space);
-    const canPin = type !== SpaceLevel.PERSONAL && space.spaceLevel !== SpaceLevel.PERSONAL;
+    const isPersonal = type === SpaceLevel.PERSONAL || space.spaceLevel === SpaceLevel.PERSONAL;
+    const canOpenSettings = canEditSpace && !isFavorite && !isPersonal;
+    const canPin = !isPersonal;
+    const showMemberAction = canManageMembers && !isFavorite;
+    const showDangerMenu = showDangerAction && !isFavorite;
+    // Favorites keep the menu trigger so the row still has a hover target; other
+    // spaces hide it when every action is unavailable.
+    const hasMenuAction = canOpenSettings || showMemberAction || canPin || showDangerMenu || isFavorite;
 
     const { data: bsConfig } = useGetBsConfig();
     const treeEnabled =
@@ -173,7 +180,7 @@ export default function KnowledgeSpaceItem({
                 </div>
 
                 <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
-                    <DropdownMenu onOpenChange={setMenuOpen}>
+                    {hasMenuAction ? <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
@@ -187,7 +194,7 @@ export default function KnowledgeSpaceItem({
                         </DropdownMenuTrigger>
 
                         <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                            {canEditSpace && !isFavorite && (
+                            {canOpenSettings && (
                                 <DropdownMenuItem
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onSettings?.(space)}
@@ -198,7 +205,7 @@ export default function KnowledgeSpaceItem({
                                     </span>
                                 </DropdownMenuItem>
                             )}
-                            {canManageMembers && !isFavorite && (
+                            {showMemberAction && (
                                 <DropdownMenuItem
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onManageMembers?.(space)}
@@ -228,9 +235,9 @@ export default function KnowledgeSpaceItem({
                                 </DropdownMenuItem>
                             )}
 
-                            {showDangerAction && !isFavorite && <SidebarListMoreMenuDivider />}
+                            {showDangerMenu && <SidebarListMoreMenuDivider />}
 
-                            {showDangerAction && !isFavorite && (
+                            {showDangerMenu && (
                                 <DropdownMenuItem
                                     onClick={async () => {
                                         let description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
@@ -266,7 +273,7 @@ export default function KnowledgeSpaceItem({
                                 </DropdownMenuItem>
                             )}
                         </SidebarListMoreMenuContent>
-                    </DropdownMenu>
+                    </DropdownMenu> : null}
                 </div>
             </div>
 
