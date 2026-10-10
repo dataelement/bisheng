@@ -32,6 +32,7 @@ from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.department.domain.services.department_display_service import build_department_name_projection
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.utils.constants import CAPTCHA_PREFIX, RSA_KEY, USER_CURRENT_SESSION, USER_PASSWORD_ERROR
 
@@ -425,7 +426,8 @@ async def list_user(
     user_admin_groups: list[int] = []
     user_ids: list[int] = []
 
-    if not login_user.is_admin():
+    # 审计页按用户筛选复用本接口. 运营岗与管理员一样看当前租户用户, 不开放创建/停用.
+    if not login_user.is_admin() and not has_platform_operator_role(login_user):
         # 用户组管理员：可管理哪些用户组
         user_admin_groups = UserGroupDao.get_user_admin_group(login_user.user_id)
         user_admin_groups = [one.group_id for one in user_admin_groups]

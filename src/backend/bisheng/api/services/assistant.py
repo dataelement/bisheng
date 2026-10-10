@@ -32,6 +32,7 @@ from bisheng.permission.domain.services.application_permission_service import Ap
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools
 from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.services.platform_operator import has_platform_operator_role
 from bisheng.utils import get_request_ip
 
 
@@ -128,8 +129,10 @@ class AssistantService(BaseService, AssistantUtils):
             meta_data = share_link.meta_data or {}
             share_assistant_id = str(meta_data.get('flowId') or share_link.resource_id or '')
             has_share_grant = share_assistant_id == str(assistant_id)
-        # Check if you have permission to access the information
-        if not has_share_grant and not await ApplicationPermissionService.has_any_permission_async(
+        # 审计会话详情会 GET 助手信息. 业务码 403 会把内嵌页整页跳走, 会话正文就看不到.
+        # 天花板: 运营岗因此能读任意助手详情(含配置). 编辑和删除不走这里. 要收紧时改成只返回名称和头像.
+        operator_audit_view = has_platform_operator_role(login_user)
+        if not has_share_grant and not operator_audit_view and not await ApplicationPermissionService.has_any_permission_async(
             login_user,
             'assistant',
             str(assistant.id),
