@@ -2519,5 +2519,8 @@
   "com_citation.tab_report": "Report",
   "com_citation.tab_source": "Source",
   "com_citation.back_to_report": "Back to report",
-  "com_citation.locate_missed": "Couldn't find the cited passage automatically. Here is the quoted text:"
+  "com_citation.locate_missed": "Couldn't find the cited passage automatically. Here is the quoted text:",
+  "com_ui": {
+    "scroll_to_bottom": "Scroll to bottom"
+  }
 }

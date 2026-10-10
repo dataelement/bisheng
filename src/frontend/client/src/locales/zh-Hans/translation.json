@@ -2448,5 +2448,8 @@
   "com_citation.tab_report": "报告",
   "com_citation.tab_source": "来源",
   "com_citation.back_to_report": "回到报告",
-  "com_citation.locate_missed": "没能自动找到被引段落，下面是引用的原文"
+  "com_citation.locate_missed": "没能自动找到被引段落，下面是引用的原文",
+  "com_ui": {
+    "scroll_to_bottom": "回到底部"
+  }
 }
