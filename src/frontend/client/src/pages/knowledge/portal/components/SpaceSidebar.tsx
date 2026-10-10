@@ -160,10 +160,14 @@ function SpaceMenu({
     onLeaveSpace: (space: KnowledgeSpace) => void;
 }) {
     // 『我的收藏』为系统库：隐藏 空间设置/成员管理/删除 等操作。
-    // 所有个人知识库均不支持置顶。
+    // 个人知识库不提供空间设置，也不支持置顶。
     const isFavorite = isFavoriteSpace(space);
-    const canPin = group.level !== SpaceLevel.PERSONAL;
+    const isPersonal = group.level === SpaceLevel.PERSONAL || space.spaceLevel === SpaceLevel.PERSONAL;
+    const canOpenSettings = permissions.canEditSpace && !isFavorite && !isPersonal;
+    const showMembers = permissions.canManageMembers && !isFavorite;
+    const canPin = !isPersonal;
     const showDangerAction = (permissions.canDeleteSpace || Boolean(space.canUnsubscribe)) && !isFavorite;
+    if (!canOpenSettings && !showMembers && !canPin && !showDangerAction) return null;
     return (
         <DropdownMenu onOpenChange={onOpenChange}>
             <DropdownMenuTrigger asChild>
@@ -178,7 +182,7 @@ function SpaceMenu({
                 </button>
             </DropdownMenuTrigger>
             <SidebarListMoreMenuContent onClick={(event) => event.stopPropagation()}>
-                {permissions.canEditSpace && !isFavorite ? (
+                {canOpenSettings ? (
                     <DropdownMenuItem
                         className={sidebarListMoreMenuItemClassName}
                         onClick={() => onOpenSpaceSettings(space)}
@@ -187,7 +191,7 @@ function SpaceMenu({
                         <span className={sidebarListMoreMenuLabelClassName}>空间设置</span>
                     </DropdownMenuItem>
                 ) : null}
-                {permissions.canManageMembers && !isFavorite ? (
+                {showMembers ? (
                     <DropdownMenuItem
                         className={sidebarListMoreMenuItemClassName}
                         onClick={() => onOpenSpaceMembers(space)}

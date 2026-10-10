@@ -591,6 +591,16 @@ async def list_space_children(
     return resp_200(result)
 
 
+@router.get("/{space_id}/file-count")
+async def get_space_file_count(
+    space_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Count documents stored under a knowledge space."""
+    result = await svc.count_space_files(space_id)
+    return resp_200(result)
+
+
 @router.post("/{space_id}/folder-stats")
 async def get_space_folder_stats(
     space_id: int,

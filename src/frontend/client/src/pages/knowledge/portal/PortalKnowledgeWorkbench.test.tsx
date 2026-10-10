@@ -47,6 +47,7 @@ import {
     getMineSpacesApi,
     getSpacesByLevelApi,
     getSpaceChildrenApi,
+    getSpaceFileCountApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
@@ -459,6 +460,7 @@ jest.mock("~/api/knowledge", () => ({
     getSpaceChildrenApi: jest.fn(),
     getFolderParentPathApi: jest.fn(),
     getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
+    getSpaceFileCountApi: jest.fn(),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
@@ -723,6 +725,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getFolderParentPathApi).mockImplementation(() => { throw new Error("未配置父目录查询"); });
         jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
+        jest.mocked(getSpaceFileCountApi).mockResolvedValue(0);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
@@ -1790,7 +1793,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(teamRow).queryByRole("button", { name: "退出空间" })).not.toBeInTheDocument();
     });
 
-    test("hides member management action for personal spaces in portal sidebar", async () => {
+    test("hides space settings and other edit actions for personal spaces in portal sidebar", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.CREATOR,
             spaceLevel: SpaceLevel.PERSONAL,
@@ -1811,14 +1814,14 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const personalRow = await screen.findByTestId("space-row-personal-1");
-        fireEvent.click(within(personalRow).getByRole("button", { name: "更多我的技术文档操作" }));
 
+        expect(within(personalRow).queryByRole("button", { name: "更多我的技术文档操作" })).not.toBeInTheDocument();
+        expect(within(personalRow).queryByRole("button", { name: "空间设置" })).not.toBeInTheDocument();
         expect(within(personalRow).queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
         expect(within(personalRow).queryByRole("button", { name: "置顶空间" })).not.toBeInTheDocument();
         expect(within(personalRow).queryByRole("button", { name: "取消置顶" })).not.toBeInTheDocument();
-        expect(within(personalRow).getByRole("button", { name: "空间设置" })).toBeInTheDocument();
+        expect(within(personalRow).queryByRole("button", { name: "删除空间" })).not.toBeInTheDocument();
         expect(pinSpaceApi).not.toHaveBeenCalled();
-        expect(within(personalRow).getByRole("button", { name: "删除空间" })).toBeInTheDocument();
     });
 
     test("opens space settings drawer with fetched space detail", async () => {

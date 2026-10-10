@@ -22,6 +22,7 @@ import {
     getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
+    getSpaceFileCountApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     importWebLinkApi,
@@ -88,12 +89,14 @@ import {
     toStatusNumbers,
     updateTreeNode,
 } from "./utils";
+import { resolvePortalScopeFileCount } from "./scopeFileCount";
 import { KnowledgeSpaceContent, type ExternalFileActionPermissions } from "../SpaceDetail";
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { isFavoriteSpace } from "./favoriteView";
 import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
+import { PortalScopeFileCount } from "./components/PortalScopeFileCount";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
@@ -548,6 +551,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [selectableSpaces]);
 
     const handleOpenSpaceSettings = useCallback(async (space: KnowledgeSpace) => {
+        if (space.spaceLevel === SpaceLevel.PERSONAL) return;
         try {
             const detail = await getSpaceInfoApi(space.id);
             setEditingSpace({ ...space, ...detail, id: space.id });
@@ -2948,6 +2952,44 @@ export default function PortalKnowledgeWorkbench() {
 
 
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
+    const scopeFileCount = resolvePortalScopeFileCount({
+        space: activeSpace ? { id: String(activeSpace.id), name: activeSpace.name } : null,
+        folder: currentFolderId
+            ? {
+                id: currentFolderId,
+                name: currentFolderNode?.file.name || "文件夹",
+                fileNum: currentFolderNode?.file.fileNum,
+            }
+            : null,
+        file: selectedFile && !isFolder(selectedFile) ? { name: selectedFile.name } : null,
+    });
+    const scopeSpaceId = scopeFileCount?.kind === "space" ? scopeFileCount.spaceId : "";
+    const scopeFolderId = scopeFileCount?.kind === "folder" ? scopeFileCount.folderId : "";
+    const spaceFileCountQuery = useQuery({
+        queryKey: ["portalSpaceFileCount", scopeSpaceId],
+        enabled: Boolean(scopeSpaceId),
+        queryFn: async () => Number(await getSpaceFileCountApi(scopeSpaceId) || 0),
+        staleTime: 30_000,
+    });
+    const folderFileCountQuery = useQuery({
+        queryKey: ["portalFolderFileCount", activeSpace?.id, scopeFolderId],
+        enabled: Boolean(activeSpace?.id && scopeFolderId && scopeFileCount?.kind === "folder" && scopeFileCount.count === null),
+        queryFn: async () => {
+            const stats = await getSpaceFolderStatsApi({
+                space_id: String(activeSpace?.id),
+                folder_ids: [scopeFolderId],
+            });
+            return stats.find((item) => item.folderId === scopeFolderId)?.fileNum ?? 0;
+        },
+        staleTime: 30_000,
+    });
+    const displayedScopeFileCount = scopeFileCount?.kind === "file"
+        ? 0
+        : scopeFileCount?.kind === "folder"
+            ? (scopeFileCount.count ?? folderFileCountQuery.data ?? null)
+            : scopeFileCount?.kind === "space"
+                ? (spaceFileCountQuery.data ?? null)
+                : null;
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
     }, []);
@@ -3401,6 +3443,9 @@ export default function PortalKnowledgeWorkbench() {
                     </form>
                 </DialogContent>
             </Dialog>
+            {scopeFileCount ? (
+                <PortalScopeFileCount scope={scopeFileCount} count={displayedScopeFileCount} />
+            ) : null}
         </div>
     );
 }

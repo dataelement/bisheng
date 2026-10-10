@@ -14889,6 +14889,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }
         return folder_counts
 
+    async def count_space_files(self, space_id: int) -> dict[str, int]:
+        """Count active documents under a knowledge space.
+
+        Matches folder ``file_num``: every non-deleted file, all statuses, folders excluded.
+        """
+        await self._require_read_permission(space_id)
+        stmt = select(func.count(KnowledgeFile.id)).where(
+            KnowledgeFile.knowledge_id == space_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFileDao.active_inventory_predicate(),
+        )
+        async with get_async_db_session() as session:
+            total = (await session.exec(stmt)).one()
+        return {"file_num": int(total or 0)}
+
     async def get_space_folder_stats(
         self,
         space_id: int,

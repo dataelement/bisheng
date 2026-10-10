@@ -23,7 +23,7 @@ jest.mock("~/api/permission", () => ({ checkPermission: jest.fn(async () => ({ a
 jest.mock("~/api/knowledge", () => ({
     ...jest.requireActual("~/api/knowledge"),
     getSpaceChildrenApi: jest.fn(), searchSpaceChildrenApi: jest.fn(), getSpacesByLevelApi: jest.fn(), getSpaceInfoApi: jest.fn(),
-    getCreateSpaceOptionsApi: jest.fn(), getSpaceFolderStatsApi: jest.fn(), getFolderParentPathApi: jest.fn(), getFilePreviewApi: jest.fn(),
+    getCreateSpaceOptionsApi: jest.fn(), getSpaceFileCountApi: jest.fn(), getSpaceFolderStatsApi: jest.fn(), getFolderParentPathApi: jest.fn(), getFilePreviewApi: jest.fn(),
 }));
 jest.mock("../hooks/useFileUpload", () => ({ useFileUpload: () => mockUpload }));
 jest.mock("./hooks/usePortalUploadDialog", () => ({ usePortalUploadDialog: () => ({ uploadFolderNodes: [], uploadFiles: [], uploadReviewRows: [], fileCategoryGroups: [], businessDomainOptions: [] }) }));

@@ -75,14 +75,14 @@ function renderSidebar(extraGroups: SpaceGroup[] = [], options: { isAdminUser?: 
 }
 
 describe("SpaceSidebar 收藏库操作门控（portal 内嵌工作台）", () => {
-    it("普通个人知识库菜单不含置顶操作", async () => {
+    it("普通个人知识库菜单不含空间设置和置顶", async () => {
         const user = userEvent.setup();
         renderSidebar();
         await user.click(screen.getByLabelText("更多普通库操作"));
-        expect(await screen.findByText("空间设置")).toBeInTheDocument();
+        expect(await screen.findByText("删除空间")).toBeInTheDocument();
+        expect(screen.queryByText("空间设置")).not.toBeInTheDocument();
         expect(screen.queryByText("置顶空间")).not.toBeInTheDocument();
         expect(screen.queryByText("取消置顶")).not.toBeInTheDocument();
-        expect(screen.getByText("删除空间")).toBeInTheDocument();
     });
 
     it("『我的收藏』不显示菜单按钮", () => {
