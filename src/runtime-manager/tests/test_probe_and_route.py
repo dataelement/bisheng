@@ -19,7 +19,7 @@ import pytest
 
 from runtime_manager.api.schemas import DeployRequest, HealthIn, TierIn
 from runtime_manager.errors import NotFoundError
-from runtime_manager.probe import ProbeService
+from runtime_manager.probe import PROBE_LOG_TAIL_LINES, ProbeService
 from runtime_manager.routing import RoutingService
 from tests.fakes import FakeClock, FakeHostProbe, FakeHttpProbe, ImmediateScheduler
 
@@ -155,6 +155,36 @@ def test_probe_standalone_image_cleans_up_on_failure(rtm_config, fake_docker):
     assert fake_docker.containers == {}
 
 
+def test_a_failed_image_probe_returns_the_instance_output(rtm_config, fake_docker, monkeypatch):
+    """The probe instance is removed right after; its output is the only explanation.
+
+    Read before the cleanup, with docker's timestamps taken off, capped, and
+    blank lines dropped. A ready probe carries none.
+    """
+    output = "\n".join(
+        ["2026-10-11T01:02:03.000000000Z Traceback (most recent call last):"]
+        + [f"2026-10-11T01:02:03.000000000Z   line {n}" for n in range(60)]
+        + ["", "2026-10-11T01:02:04.000000000Z ModuleNotFoundError: No module named 'fastapi'"]
+    )
+    monkeypatch.setattr(fake_docker, "container_logs", lambda container, tail="all", since=None: output)
+    service = ProbeService(
+        rtm_config, docker=fake_docker, http=FakeHttpProbe([ConnectionRefusedError("nope")]), clock=FakeClock()
+    )
+
+    outcome = service.probe_image(image_ref="img", env={}, port=8080, health_path="/", timeout=3)
+
+    assert outcome.ready is False
+    assert outcome.log_tail[-1] == "ModuleNotFoundError: No module named 'fastapi'"
+    assert len(outcome.log_tail) == PROBE_LOG_TAIL_LINES
+    assert not [line for line in outcome.log_tail if line.startswith("2026-")]
+    assert fake_docker.containers == {}
+
+    ready = ProbeService(rtm_config, docker=fake_docker, http=FakeHttpProbe([200]), clock=FakeClock()).probe_image(
+        image_ref="img", env={}, port=8080, health_path="/", timeout=3
+    )
+    assert ready.ready is True and ready.log_tail == ()
+
+
 def test_route_returns_bridge_ip_port(rtm_config, fake_docker):
     """AC-25 / AC-33 — an address on the bridge: host-reachable, world-unreachable."""
     _lifecycle(rtm_config, fake_docker).deploy(_deploy_request())
@@ -235,7 +265,7 @@ def test_probe_endpoint_app_and_standalone(rtm_client, rtm_config, fake_docker, 
 
     by_app = rtm_client.post("/v1/intents/probe", {"app_id": "app-1"})
     assert by_app.status_code == 200
-    assert by_app.json() == {"ready": True, "reason": ""}
+    assert by_app.json() == {"ready": True, "reason": "", "log_tail": []}
 
     standalone = rtm_client.post(
         "/v1/intents/probe",

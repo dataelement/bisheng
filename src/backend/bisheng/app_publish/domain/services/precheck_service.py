@@ -77,6 +77,7 @@ PROBE_HINTS: tuple[str, ...] = (
     "平台不提供自带数据库 / 消息队列 / 缓存: 应用要连的中间件不会在托管环境里存在",
     "数据请改接平台应用数据库: 读环境变量 BISHENG_APP_DB_URL 连接, 应用内自行建表",
     "确认应用监听 bisheng-app.yaml 里声明的 port, 且监听地址是 0.0.0.0 而不是 127.0.0.1",
+    "探活直接请求容器里的 /, 不带访问者身份头: / 在拿不到身份时也要返回 500 以下的状态码",
     "本地用 bisheng dev 复现: 它注入与线上同名的环境变量",
 )
 
@@ -260,10 +261,19 @@ async def precheck_probe(deployment: AppDeployment, *, manifest: AppManifest, im
     disturb the version that is currently serving traffic.
     """
     client = _client()
+    slug, _ = await _build_identity(deployment, manifest)
     payload = {
         "image_ref": image_ref,
         "port": manifest.port,
-        "env": {"PORT": str(manifest.port), "BISHENG_APP_PORT": str(manifest.port)},
+        # The base path the instance will have once it is online. Without it an
+        # app that builds links or mounts its routes from the variable starts
+        # here at a different path than in production, and the probe judges a
+        # start-up the real instance will never have.
+        "env": {
+            "PORT": str(manifest.port),
+            "BISHENG_APP_PORT": str(manifest.port),
+            "BISHENG_APP_BASE_PATH": f"/apps/{slug}",
+        },
         "health": {"path": "/", "interval": 10, "timeout": 5, "retries": 3, "start_period": 20},
     }
     try:
@@ -273,9 +283,18 @@ async def precheck_probe(deployment: AppDeployment, *, manifest: AppManifest, im
 
     if result.get("ready"):
         return
+    tail = result.get("log_tail") or []
     raise AppStartupProbeFailedError(
         msg=f"应用启动探活失败: {result.get('reason') or ''}".strip(),
-        details={"reason": "probe_not_ready", "probe_reason": result.get("reason"), "port": manifest.port},
+        details={
+            "reason": "probe_not_ready",
+            "probe_reason": result.get("reason"),
+            "port": manifest.port,
+            # The probe instance is already gone; its last output is the only
+            # place a start-up traceback survives. Same key as a build failure,
+            # so the CLI prints it the same way.
+            "tail": list(tail) if isinstance(tail, (list, tuple)) else [str(tail)],
+        },
         hints=list(PROBE_HINTS),
     )
 

@@ -47,6 +47,7 @@ import os
 import socket
 import sqlite3
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,9 +90,8 @@ MODEL_FACE_ENV_NAMES: tuple[str, ...] = (
 )
 
 #: Framework spellings of the base path, exported by the hosted image's
-#: `entrypoint.sh.j2` from `BISHENG_APP_BASE_PATH`. Set here too, and set
-#: unconditionally (empty is the correct value at the root path), so the app
-#: behaves identically in both places.
+#: `entrypoint.sh.j2` from `BISHENG_APP_BASE_PATH`. Set here too, from the same
+#: `/apps/{slug}` value, so the app behaves identically in both places.
 FRAMEWORK_ENV_NAMES: tuple[str, ...] = (
     "UVICORN_ROOT_PATH",
     "STREAMLIT_SERVER_BASE_URL_PATH",
@@ -139,6 +139,22 @@ def prepare_dev_db(root: Path) -> DevDatabase:
     return DevDatabase(path=path, url=f"sqlite:///{path.resolve().as_posix()}")
 
 
+#: The slug `dev` serves under before the platform has assigned one. Any
+#: non-empty prefix exposes a link that forgets the base path; the real slug
+#: only matters for code that hard-codes it, which the approval preview
+#: (`/apps/preview/{session}`) exposes anyway.
+DEV_FALLBACK_SLUG = "dev"
+
+
+def dev_slug(manifest: Mapping[str, Any], app_ref: Mapping[str, Any] | None = None) -> str:
+    """The slug the app has, or will have, on the platform; a placeholder before the first deploy."""
+    for source in (manifest, app_ref or {}):
+        value = str(source.get("slug") or "").strip()
+        if value:
+            return value
+    return DEV_FALLBACK_SLUG
+
+
 def build_dev_env(
     *,
     manifest: dict[str, Any],
@@ -149,6 +165,7 @@ def build_dev_env(
     base_env: dict[str, str] | None = None,
     model_base_url: str | None = None,
     model_api_key: str | None = None,
+    slug: str | None = None,
 ) -> dict[str, str]:
     """The child environment: the shell's, with the platform names on top.
 
@@ -166,20 +183,22 @@ def build_dev_env(
     """
     env = dict(os.environ if base_env is None else base_env)
     env.pop(LOGIN_KEY_ENV, None)
-    base_path = ""
+    slug = slug or dev_slug(manifest)
+    base_path = f"/apps/{slug}"
     env.update(
         {
             "BISHENG_APP_DB_URL": db.url,
             "BISHENG_APP_DB_PATH": str(db.path),
             "BISHENG_APP_ID": app_id or "",
-            "BISHENG_APP_SLUG": str(manifest.get("slug") or ""),
+            "BISHENG_APP_SLUG": slug,
             "BISHENG_APP_VERSION": DEV_VERSION,
             "BISHENG_APP_VERSION_ID": DEV_VERSION,
             "BISHENG_PLATFORM_API_BASE": platform_base_url,
             "PORT": str(app_port),
             "BISHENG_APP_PORT": str(app_port),
-            # Empty under `dev`, `/apps/{slug}` hosted — the name is the
-            # contract, the value is environment specific (INV-32 / D5.2).
+            # `/apps/{slug}` in both places: `DevProxy` serves the app under
+            # the same prefix app-proxy does, so a link that forgets it breaks
+            # here first (INV-32 / D5.2).
             "BISHENG_APP_BASE_PATH": base_path,
             "BISHENG_APP_HEALTH_PATH": DEFAULT_HEALTH_PATH,
             # entrypoint.sh.j2 exports, spelled the same way it spells them.

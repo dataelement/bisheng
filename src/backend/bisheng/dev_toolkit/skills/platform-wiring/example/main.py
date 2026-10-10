@@ -6,7 +6,8 @@
 * **应用数据库**:从 `BISHENG_APP_DB_PATH` 连 SQLite,`CREATE TABLE IF NOT EXISTS` 建表,
   按 `user_id` 隔离每个人的便签,并演示一次幂等加列(`ensure_column`)。
 
-本地跑:``bisheng dev``,然后打开它打印的本地入口地址(不是应用端口——直连没有身份头)。
+本地跑:``bisheng dev``,然后打开它打印的本地入口地址 ``http://127.0.0.1:8080/apps/who-am-i/``
+(不是应用端口——直连没有身份头)。
 """
 
 from __future__ import annotations

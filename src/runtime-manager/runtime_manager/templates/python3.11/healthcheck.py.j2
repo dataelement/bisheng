@@ -9,6 +9,7 @@ variables the platform injects, so there is exactly one place they are defined.
 """
 import os
 import sys
+import urllib.error
 import urllib.request
 
 port = os.environ.get("BISHENG_APP_PORT") or os.environ.get("PORT") or "{{ port }}"
@@ -17,9 +18,36 @@ if not path.startswith("/"):
     path = "/" + path
 
 url = f"http://127.0.0.1:{port}{path}"
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Judge the answer to `/` itself, as the publish-time probe does.
+
+    Following a redirect would judge some other path instead: an app behind
+    its base path that sends `/` to `/apps/{slug}/login` gets a 404 from its
+    own loopback port, and the instance would be rebuilt for being correct.
+    """
+
+    def redirect_request(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        return None
+
+
+opener = urllib.request.build_opener(_NoRedirect)
 try:
-    with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310 - loopback only
-        sys.exit(0 if response.status < 500 else 1)
-except Exception as exc:  # noqa: BLE001 - any failure is an unhealthy verdict
+    with opener.open(url, timeout=2) as response:  # noqa: S310 - loopback only
+        status = response.status
+except urllib.error.HTTPError as exc:
+    # urllib raises for every status >= 400 and for an unfollowed 3xx. Those
+    # are answers, not failures: the verdict rule is the one the publish-time
+    # probe and the node20 probe use, any answer below 500 is healthy. Without
+    # this an API-only app whose `/` is a 404 passes publishing and is then
+    # rebuilt by the reconciler every two rounds.
+    status = exc.code
+except Exception as exc:  # noqa: BLE001 - no answer at all is an unhealthy verdict
     print(f"health probe {url} failed: {exc}", file=sys.stderr)
     sys.exit(1)
+
+if status >= 500:
+    print(f"health probe {url} answered {status}", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)

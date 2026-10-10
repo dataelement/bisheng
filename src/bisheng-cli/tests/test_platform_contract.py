@@ -43,6 +43,7 @@ OPEN_API_ERRCODES = REPO_ROOT / "src/backend/bisheng/common/errcode/open_api.py"
 # `bisheng dev` mirrors these two; INV-32 says the names must be identical.
 APP_PROXY_HEADERS = REPO_ROOT / "src/app-proxy/app_proxy/headers.py"
 APP_PROXY_CONFIG = REPO_ROOT / "src/app-proxy/app_proxy/config.py"
+APP_PROXY_ROUTING = REPO_ROOT / "src/app-proxy/app_proxy/routing.py"
 RUNTIME_LIFECYCLE = REPO_ROOT / "src/runtime-manager/runtime_manager/lifecycle.py"
 RUNTIME_ENTRYPOINT = REPO_ROOT / "src/runtime-manager/runtime_manager/templates/python3.11/entrypoint.sh.j2"
 #: §5 of this document is the one definition of what gets injected into an app.
@@ -194,6 +195,55 @@ def test_dev_proxy_injects_exactly_app_proxys_ten_headers_in_order() -> None:
 def test_dev_proxy_strips_the_same_equivalence_class_and_hop_by_hop_set() -> None:
     assert devproxy.DROPPED_HEADERS == frozenset(_module_constant(APP_PROXY_HEADERS, "DROPPED_HEADERS"))
     assert devproxy.PLATFORM_SESSION_COOKIE == _module_constant(APP_PROXY_CONFIG, "ACCESS_TOKEN_COOKIE")
+
+
+def _app_proxy_functions(*names: str) -> dict[str, Any]:
+    """Compile named top-level functions of app-proxy's ``routing.py`` without importing the package.
+
+    ``routing.py`` imports app-proxy's RPC client, which this environment does
+    not have. The two path functions only need ``urlsplit``, so they are lifted
+    out of the parsed module and compiled on their own.
+    """
+    from urllib.parse import urlsplit
+
+    module = _module(APP_PROXY_ROUTING)
+    nodes = [node for node in module.body if isinstance(node, ast.FunctionDef) and node.name in names]
+    missing = set(names) - {node.name for node in nodes}
+    assert not missing, f"app-proxy routing.py 里找不到 {missing}"
+    namespace: dict[str, Any] = {"urlsplit": urlsplit}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(APP_PROXY_ROUTING), "exec"), namespace)
+    return namespace
+
+
+@pytest.mark.parametrize(
+    ("location", "upstream"),
+    [
+        ("/login", ""),
+        ("/docs/?a=1#top", ""),
+        ("/", ""),
+        ("/apps/survey/login", ""),
+        ("/apps/survey", ""),
+        ("/apps/other/", ""),
+        ("next", ""),
+        ("//cdn.example.com/x", ""),
+        ("https://example.com/login", "http://127.0.0.1:51234"),
+        ("http://127.0.0.1:51234/login?next=%2F", "http://127.0.0.1:51234"),
+    ],
+)
+def test_dev_proxy_restores_the_prefix_on_redirects_exactly_like_app_proxy(location: str, upstream: str) -> None:
+    """A redirect the app sends must land in the same place locally and hosted.
+
+    The local copy exists because this package cannot import app-proxy; this
+    test is what keeps the copy honest.
+    """
+    hosted = _app_proxy_functions("entry_prefix_for", "restore_entry_prefix")["restore_entry_prefix"]
+    assert devproxy.restore_entry_prefix(location, "survey", "/apps", upstream) == hosted(
+        location, "survey", "/apps", upstream
+    )
+
+
+def test_dev_proxy_uses_app_proxys_entry_prefix() -> None:
+    assert devproxy.ENTRY_PREFIX == _module_constant(APP_PROXY_CONFIG, "DEFAULT_ENTRY_PREFIX")
 
 
 def test_dev_env_names_equal_the_runtime_managers_build_env() -> None:

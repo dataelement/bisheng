@@ -1,9 +1,9 @@
 #!/bin/sh
 # BiSheng hosted-app entrypoint (D5.2).
 #
-# The platform serves every app under /apps/{slug} while the same code runs at
-# the root path under `bisheng dev`. INV-32 makes the *variable name* identical
-# in both places (BISHENG_APP_BASE_PATH); this wrapper is what connects that
+# The platform serves every app under /apps/{slug}, and so does `bisheng dev`.
+# INV-32 makes the variable name identical in both places
+# (BISHENG_APP_BASE_PATH); this wrapper is what connects that
 # variable to whichever framework the app happens to use, so an app that follows
 # the DEV-04 contract needs no per-environment branching of its own.
 set -eu
@@ -13,8 +13,10 @@ PORT="${PORT:-${BISHENG_APP_PORT:-{{ port }}}}"
 BISHENG_APP_PORT="$PORT"
 export PORT BISHENG_APP_PORT BISHENG_APP_BASE_PATH
 
-# Framework-specific spellings of the same idea. Set unconditionally (empty is
-# the correct value at the root path) so behaviour is identical in dev and prod.
+# Framework-specific spellings of the same idea. Set unconditionally so
+# behaviour is identical in dev and prod. Note: uvicorn reads UVICORN_ROOT_PATH
+# only when started as the `uvicorn` command; `uvicorn.run(app)` in app code
+# must pass root_path=os.environ["BISHENG_APP_BASE_PATH"] itself.
 export UVICORN_ROOT_PATH="$BISHENG_APP_BASE_PATH"
 export STREAMLIT_SERVER_BASE_URL_PATH="${BISHENG_APP_BASE_PATH#/}"
 export GRADIO_ROOT_PATH="$BISHENG_APP_BASE_PATH"

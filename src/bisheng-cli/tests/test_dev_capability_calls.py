@@ -77,7 +77,7 @@ def test_a_capability_path_goes_to_the_app_not_to_the_platform() -> None:
     proxy = _proxy(seen)
     try:
         for path in CAPABILITY_PATHS:
-            proxy.forward("POST", path, [("Content-Type", "application/json")], b"{}")
+            proxy.forward("POST", f"{proxy.prefix}{path}", [("Content-Type", "application/json")], b"{}")
     finally:
         proxy.stop()
 
@@ -98,7 +98,7 @@ def test_the_proxy_never_attaches_the_login_credential() -> None:
     try:
         proxy.forward(
             "GET",
-            "/api/v2/model/v1/models",
+            f"{proxy.prefix}/api/v2/model/v1/models",
             [("Authorization", f"Bearer {FAKE_KEY}")],
             b"",
         )
@@ -113,7 +113,7 @@ def test_the_proxy_never_attaches_the_login_credential() -> None:
     seen.clear()
     proxy = _proxy(seen)
     try:
-        proxy.forward("GET", "/api/v2/model/v1/models", [], b"")
+        proxy.forward("GET", f"{proxy.prefix}/api/v2/model/v1/models", [], b"")
     finally:
         proxy.stop()
     assert "authorization" not in seen[0].headers

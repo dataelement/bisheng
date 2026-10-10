@@ -19,7 +19,7 @@
 | `GET /v1/builds/{build_id}` | `{build_id, status, stage, message, tail[], image_ref}` | F055 预检轮询 |
 | `POST /v1/intents/deploy` | `{instance_id, phase, generation}` | F054 上线动作 |
 | `POST /v1/intents/stop` / `destroy` | `{phase}` / `{}` | F054 下线 / 删除 |
-| `POST /v1/intents/probe` | `{ready, reason}`（入参 `app_id` 或 `{image_ref, env, port, health}` 二选一，都不给 → 400） | F055 预检 / 终检 |
+| `POST /v1/intents/probe` | `{ready, reason, log_tail}`（入参 `app_id` 或 `{image_ref, env, port, health}` 二选一，都不给 → 400）。`log_tail` 是失败的镜像探活实例在被删除前的最后 40 行输出（已去掉 docker 时间戳），其他情况为空数组 | F055 预检 / 终检 |
 | `GET /v1/apps/{app_id}/route` | `{upstream, version_id, generation}`；**404 = 无实例 / 已下线 → 直接渲染停用页，不要重试** | **app-proxy** |
 | `POST /v1/intents/preview` | `{instance_id, upstream, phase}`（入参 `{session_id, app_id, slug, version_id, version_no, image_ref, tier, port, env, health, platform_api_base, base_path, expires_at, timeout}` —— 与 `deploy` 同一组，因为容器拿的是 §5 的**整套**环境；`base_path` 是 `/apps/preview/{session}`，**不注入附件句柄**）；容量不足 → `capacity_exhausted`、探活不过 → `probe_failed`（两种都已把容器拆掉） | **F055 审批期预览拉起（T053）** |
 | `POST /v1/intents/preview/stop` | `{reclaimed: bool}`，**幂等**——已回收的会话答 `{reclaimed:false}` 而不是 404 | F055 回收（终态 / 手动 / 超时三条腿都走它） |
@@ -88,7 +88,7 @@ manager 的 body 恒为 `{"detail": {"code","message",...}}`，backend 按此映
 
 ## 5. 注入应用的环境变量（F053 `bisheng dev` 必须**同名**注入，否则本地线上不同构）
 
-`BISHENG_APP_DB_URL`（`sqlite:////data/app.db`）· `BISHENG_APP_DB_PATH` · `BISHENG_APP_ID` · `BISHENG_APP_SLUG` · `BISHENG_APP_VERSION`（版本号）· `BISHENG_APP_VERSION_ID` · `BISHENG_PLATFORM_API_BASE` · `PORT` 与 `BISHENG_APP_PORT`（两者恒等）· `BISHENG_APP_BASE_PATH`（dev 期为空串）· `BISHENG_APP_HEALTH_PATH`。
+`BISHENG_APP_DB_URL`（`sqlite:////data/app.db`）· `BISHENG_APP_DB_PATH` · `BISHENG_APP_ID` · `BISHENG_APP_SLUG` · `BISHENG_APP_VERSION`（版本号）· `BISHENG_APP_VERSION_ID` · `BISHENG_PLATFORM_API_BASE` · `PORT` 与 `BISHENG_APP_PORT`（两者恒等）· `BISHENG_APP_BASE_PATH`（dev 期同为 `/apps/{slug}`，2026-10-11 起；此前为空串）· `BISHENG_APP_HEALTH_PATH`。
 **附件句柄（T085，2026-09-16 起）**：`BISHENG_APP_STORAGE_ENDPOINT`（`{RTM_APP_FACING_BASE_URL}/v1/apps/{app_id}/storage`）· `BISHENG_APP_STORAGE_TOKEN`（每应用一把、整个生命周期不变、destroy 后才轮换；deploy 新版本沿用旧 token，30s 宽限期内新旧实例同一凭据）· `BISHENG_APP_STORAGE_MAX_FILE_MB`。**不注入** bucket / 前缀 / MinIO 凭据——收窄在 manager 侧做，应用只见相对路径（F057 AC-21）。名字的 backend 侧副本在 `app_runtime/domain/constants.py::APP_STORAGE_ENV_NAMES`。F053 `dev` 期同名注入的是**本地附件目录句柄**（F053 AC-27），SDK 按有无 `ENDPOINT` 分辨两种形态。
 **模型协议直连面（F051，2026-09-16 起）**：`OPENAI_BASE_URL`（= `{浏览器可见 origin}/api/v2/model/v1`，由 backend 的 `open_api/api/public_base_url.py::model_gateway_base_url` 唯一产出，不因租户或密钥而异）· `OPENAI_API_KEY`（= 该应用的运行期凭据明文，与 `BISHENG_APP_TOKEN` 同值——官方 `openai` 客户端零配置直读的就是这两个名字）· `BISHENG_MODEL_BASE_URL`（= `OPENAI_BASE_URL`，给不读 OpenAI 惯例变量的引擎与技能包文案用的平台保留名）。三名的定义方是 F051 design D2；`dev` 期由 F053 同名注入，故本地与线上代码零差异。
 **出站代理（T077，2026-09-16 起，仅在 `RTM_EGRESS_PROXY` 非空时注入）**：`HTTP_PROXY` / `HTTPS_PROXY`（= `http://{principal}:{token}@{RTM_EGRESS_PROXY}`）· `NO_PROXY`（本网内可直连的地址：本进程的 `RTM_APP_FACING_BASE_URL` 主机 + 回环）· 三者各带一份小写孪生（`curl` 只读小写）· `BISHENG_APP_EGRESS_TOKEN`（凭据本身，名字取成 `*_TOKEN` 是为了让 `readonly._redactions` 按名命中，从而把它在日志里的每一处出现——包括 `HTTP_PROXY` 里的那份——一起抹掉）。`principal` 是 `app_id`，**预览实例是 `bisheng-preview-{session}`**，绝不共用应用的那把。**`BISHENG_APP_EGRESS_TOKEN` 还是 SDK 的托管期判据**（F057 D11，2026-09-17）：`bisheng_sdk` 见它存在就让 httpx 读代理变量，平台调用因此经代理出去——改这个变量名必须同步 `bisheng_sdk/_env.py::ENV_EGRESS_TOKEN`，SDK 的 `test_egress_token_env_name_matches_the_manager` 读本仓 `egress.py` 对账。**这四个名字属平台保留，覆盖应用自带的同名值**：能靠自带 `HTTP_PROXY` 改写出口的白名单等于没有白名单。

@@ -261,6 +261,68 @@ async def test_deployment_polling_returns_failure_tuple(
     assert data["version_no"] == version.version_no
 
 
+@pytest.mark.parametrize(
+    ("instance_status", "reason"),
+    [("rejected", "接口缺少鉴权，请补上后重新提交。"), ("withdrawn", None), ("exception", None)],
+)
+async def test_deployment_polling_carries_the_approval_outcome(
+    publish_db,
+    api_app,
+    service_account_principal,
+    app_factory,
+    deployment_factory,
+    approval_env,
+    audit_sink,
+    approval_notifications,
+    super_admin_user,
+    instance_status,
+    reason,
+):
+    """``deploy --wait`` branches on ``approval.status`` and prints ``reject_reason``.
+
+    The poll used to carry the instance id only. A rejection then reached the
+    CLI as a failure with no code (exit 19, no reason), and an approval parked
+    as an exception never reached it at all until the wait timed out.
+    """
+    from bisheng.app_publish.domain.models.app_deployment import AppDeploymentDao
+    from bisheng.app_publish.domain.services import publish_approval_service
+    from bisheng.approval.domain.models.approval_instance import ApprovalTaskStatus
+    from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+    from bisheng.core.database import get_async_db_session
+
+    app, version = await app_factory(with_version=True)
+    deployment = await deployment_factory(
+        app_id=app.id, stage="precheck_probe", status="running", version_id=version.id, tier_code="light"
+    )
+    result = await publish_approval_service.submit(deployment)
+    async with get_async_db_session() as session:
+        await AppDeploymentDao.aadvance_stage(
+            session,
+            deployment.id,
+            stage="waiting_approval",
+            status="waiting_approval",
+            approval_instance_id=int(result.instance_id),
+        )
+        await session.commit()
+
+    if reason:
+        tasks = await ApprovalInstanceRepository.list_tasks(result.instance_id)
+        tasks[0].status = ApprovalTaskStatus.REJECTED
+        tasks[0].comment = reason
+        await ApprovalInstanceRepository.update_task(tasks[0])
+    instance = await ApprovalInstanceRepository.get_instance(result.instance_id)
+    instance.status = instance_status
+    await ApprovalInstanceRepository.update_instance(instance)
+
+    async with api_app(principal=service_account_principal()) as client:
+        payload = _body(await client.get(f"/api/v2/apps/deployments/{deployment.id}"))
+
+    approval = payload["data"]["approval"]
+    assert approval["instance_id"] == int(result.instance_id)
+    assert approval["status"] == instance_status
+    assert approval["reject_reason"] == reason
+
+
 async def test_polling_another_owners_deployment_is_rejected(
     publish_db, api_app, service_account_principal, app_factory, deployment_factory
 ):

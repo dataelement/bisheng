@@ -172,4 +172,5 @@ async def probe(request: ProbeRequest) -> dict:
         else:
             raise InvalidRequestError("probe needs either app_id or image_ref")
         span.result = "ready" if outcome.ready else (outcome.reason or "not_ready")
-        return {"ready": outcome.ready, "reason": outcome.reason}
+        # ``log_tail`` is empty unless an image probe failed (see ProbeOutcome).
+        return {"ready": outcome.ready, "reason": outcome.reason, "log_tail": list(outcome.log_tail)}

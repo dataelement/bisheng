@@ -49,12 +49,22 @@ def test_16225_and_16226_map_to_different_codes_and_different_next_step() -> Non
     assert scene.next_step != capacity.next_step
 
 
-def test_16231_and_16230_next_step_is_delete_capabilities_not_ask_admin() -> None:
+def test_16231_and_16230_are_precheck_failures_with_the_fix_in_the_manifest() -> None:
     for code in (16230, 16231):
         err = _err(code)
         assert err.exit_code == EXIT_PRECHECK_FAILED == 10
         assert err.exit_code != EXIT_NOT_ENABLED
-        assert "capabilities" in err.next_step
+        assert "bisheng-app.yaml" in err.next_step
+    # 16231 is raised only when this deployment has not opened the capability
+    # the declaration needs (manifest_validator._check_capabilities), so the
+    # administrator is one of the two ways out — the platform copy says so too.
+    assert "管理员" in _err(16231).next_step
+
+
+def test_16232_says_to_delete_the_key_not_that_websocket_is_unsupported() -> None:
+    err = _err(16232)
+    assert "不支持" not in err.message + err.next_step and "4501" not in err.next_step
+    assert "重连" in err.next_step
 
 
 def test_16203_next_step_points_to_package_root_not_create_manifest() -> None:
@@ -177,6 +187,20 @@ def test_build_failure_prints_the_log_excerpt_it_tells_you_to_read() -> None:
 
     assert "No matching distribution found for fastapi" in text
     assert "构建环境的网络问题" in text
+
+
+def test_a_failed_start_prints_the_apps_own_last_output() -> None:
+    """16228's probe instance is removed right after; its output is all that is left."""
+    err = _err(
+        16228,
+        "应用启动探活失败",
+        details={"reason": "probe_not_ready", "tail": ["ModuleNotFoundError: No module named 'fastapi'"]},
+    )
+
+    text = render_human(err)
+
+    assert "应用启动输出(末尾)" in text and "构建日志" not in text
+    assert "No module named 'fastapi'" in text
 
 
 def test_a_failure_without_a_log_excerpt_prints_no_empty_section() -> None:

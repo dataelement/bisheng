@@ -258,8 +258,30 @@ def test_selfcheck_probes_the_dev_entry_not_the_app_port(tmp_path, monkeypatch):
 
     resolved = selfcheck.dev_entry_url(None)
 
-    assert resolved == "http://127.0.0.1:8080"
+    # The proxy serves the app under the same prefix as hosted; without a slug
+    # in the manifest or in .bisheng/app.json that is `bisheng dev`'s `dev`.
+    assert resolved == "http://127.0.0.1:8080/apps/dev"
     assert "54321" not in resolved
+
+
+def test_selfcheck_entry_url_uses_the_slug_bisheng_dev_uses(tmp_path, monkeypatch):
+    """Same order as ``devdb.dev_slug``: the manifest's slug, then the one the platform assigned."""
+    import json
+
+    selfcheck = _selfcheck_module()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv(selfcheck.DEV_ENTRY_ENV, raising=False)
+    manifest = tmp_path / "bisheng-app.yaml"
+
+    manifest.write_text("name: x\nport: 8080\n", encoding="utf-8")
+    (tmp_path / ".bisheng").mkdir()
+    (tmp_path / ".bisheng" / "app.json").write_text(
+        json.dumps({"apps": {"http://platform.test": {"app_id": "a1", "slug": "assigned"}}}), encoding="utf-8"
+    )
+    assert selfcheck.dev_entry_url(None) == "http://127.0.0.1:8080/apps/assigned"
+
+    manifest.write_text("name: x\nslug: survey\nport: 8080\n", encoding="utf-8")
+    assert selfcheck.dev_entry_url(None) == "http://127.0.0.1:8080/apps/survey"
 
 
 def test_selfcheck_entry_url_prefers_the_explicit_address(tmp_path, monkeypatch):

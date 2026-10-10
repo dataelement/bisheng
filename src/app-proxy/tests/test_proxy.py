@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from app_proxy.routing import restore_entry_prefix
 from tests.conftest import NAVIGATE_HEADERS
 from tests.fakes import DEFAULT_APP_ID, DEFAULT_UPSTREAM, EchoUpstream
 
@@ -120,6 +123,60 @@ class TestPrefixStripping:
     def test_query_string_survives_untouched(self, logged_in, echo_upstream):
         logged_in.get("/apps/foo/search?q=%E4%B8%AD%E6%96%87&page=2", headers=NAVIGATE_HEADERS)
         assert echo_upstream.requests[-1]["query"] == "q=%E4%B8%AD%E6%96%87&page=2"
+
+
+class TestRedirectPrefix:
+    """``Location`` goes back under the prefix the strip took off (D5.2).
+
+    The app is served at its root, so ``redirect("/login")`` means its own
+    ``/login``. Forwarded unchanged, the browser would leave the app for the
+    platform's ``/login`` — and the static runtime's own nginx sends exactly
+    that form (``Location: /docs/``) for a directory without its slash.
+    """
+
+    @pytest.mark.parametrize(
+        ("sent", "seen"),
+        [
+            ("/login", "/apps/foo/login"),
+            ("/docs/?a=1#top", "/apps/foo/docs/?a=1#top"),
+            ("/", "/apps/foo/"),
+            # Already under the prefix: a framework honouring root_path.
+            ("/apps/foo/login", "/apps/foo/login"),
+            ("/apps/foo", "/apps/foo"),
+            # Another hosted app.
+            ("/apps/bar/", "/apps/bar/"),
+            # Relative and foreign references resolve correctly as they are.
+            ("next", "next"),
+            ("../up", "../up"),
+            ("//cdn.example.com/x", "//cdn.example.com/x"),
+            ("https://example.com/login", "https://example.com/login"),
+        ],
+    )
+    def test_rewrite_rule(self, sent, seen):
+        assert restore_entry_prefix(sent, "foo", "/apps", DEFAULT_UPSTREAM) == seen
+
+    def test_absolute_url_on_the_upstream_origin_is_brought_under_the_prefix(self):
+        """What a framework builds from the ``Host`` it was sent: the bridge address."""
+        sent = f"{DEFAULT_UPSTREAM}/login?next=%2F"
+        assert restore_entry_prefix(sent, "foo", "/apps", DEFAULT_UPSTREAM) == "/apps/foo/login?next=%2F"
+
+    def test_preview_sessions_get_their_own_prefix(self):
+        assert restore_entry_prefix("/login", "preview/s1", "/apps") == "/apps/preview/s1/login"
+
+    def test_redirect_through_the_entry_stays_inside_the_app(self, logged_in, echo_upstream):
+        echo_upstream.status_code = 302
+        echo_upstream.response_headers = [(b"location", b"/login")]
+        response = logged_in.get("/apps/foo/admin", headers=NAVIGATE_HEADERS, follow_redirects=False)
+
+        assert response.status_code == 302
+        assert response.headers["location"] == "/apps/foo/login"
+
+    def test_other_headers_are_untouched(self, logged_in, echo_upstream):
+        echo_upstream.response_headers = [(b"content-location", b"/x"), (b"link", b"</style.css>; rel=preload")]
+        response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+
+        assert response.headers["content-location"] == "/x"
+        assert response.headers["link"] == "</style.css>; rel=preload"
 
 
 class TestForwarding:

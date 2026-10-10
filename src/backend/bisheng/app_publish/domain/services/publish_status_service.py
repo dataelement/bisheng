@@ -62,12 +62,11 @@ PENDING_REASON_DEPLOY_FAILED = "deploy_failed"
 _APP_STATE_PENDING_CAPACITY = "pending_capacity"
 _APP_STATE_DELETED = "deleted"
 
-#: Approval instance statuses that still hold the application.
-_OPEN_INSTANCE_STATUSES = (
-    ApprovalInstanceStatus.PENDING,
-    ApprovalInstanceStatus.EXCEPTION,
-    ApprovalInstanceStatus.EXECUTE_FAILED,
-)
+#: The one approval instance status the approval centre lets an applicant
+#: withdraw (``ApprovalCenterService.withdraw_instance``). ``exception`` and
+#: ``execute_failed`` still hold the application, but a withdraw on them is
+#: refused, so drawing the button there only produces an error toast.
+_WITHDRAWABLE_INSTANCE_STATUS = ApprovalInstanceStatus.PENDING
 
 
 class PublishStatusService:
@@ -85,12 +84,12 @@ class PublishStatusService:
 
         deployment = await cls._latest_deployment(app.id)
         instance = await cls._latest_instance(app)
-        approval = await cls._approval_payload(instance)
+        approval = await cls.approval_payload(instance)
         current_version = await VersionService.get_version(app.id, str(app.current_version_id or ""))
         pending_version = await VersionService.get_version(app.id, str(app.pending_version_id or ""))
 
         is_owner = cls._is_owner(app, actor)
-        has_open_approval = instance is not None and instance.status in _OPEN_INSTANCE_STATUSES
+        withdrawable = instance is not None and instance.status == _WITHDRAWABLE_INSTANCE_STATUS
         deleted = app.state == _APP_STATE_DELETED
 
         return {
@@ -108,7 +107,7 @@ class PublishStatusService:
                 # Withdrawing goes through the approval centre's own endpoint,
                 # which enforces "applicant only" itself; this flag only decides
                 # whether the button is drawn.
-                "withdraw": bool(is_owner and has_open_approval and not deleted),
+                "withdraw": bool(is_owner and withdrawable and not deleted),
                 "manual_publish": bool(is_owner and not deleted and app.state == _APP_STATE_PENDING_CAPACITY),
                 # AC-06: an application that arrived through the CLI has no
                 # draft workspace on the platform, so there is nothing for a
@@ -274,7 +273,12 @@ class PublishStatusService:
         )
 
     @staticmethod
-    async def _approval_payload(instance) -> dict[str, Any] | None:
+    async def approval_payload(instance) -> dict[str, Any] | None:
+        """The approval block, shared by the publish face and the CLI's deployment poll.
+
+        One builder for both, so ``bisheng deploy --wait`` reads the same
+        ``status`` and ``reject_reason`` the detail page shows.
+        """
         if instance is None:
             return None
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)

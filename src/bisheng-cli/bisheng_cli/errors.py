@@ -208,19 +208,19 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
     ),
     16228: (
         "应用启动探活失败",
-        "确认应用在声明的端口上监听、entrypoint 可执行；本地跑通后再重发。",
+        "先看下方应用启动输出的末尾；再确认应用监听声明的端口、绑定 0.0.0.0，且 / 返回 500 以下的状态码。用 bisheng dev 本地复现后再重发。",
     ),
     16230: (
-        "能力声明里含密钥引用",
-        "从 bisheng-app.yaml 的 capabilities 段删除密钥引用后重发；密钥由平台注入，不写进声明。",
+        "bisheng-app.yaml 里含密钥或密钥引用",
+        "从 bisheng-app.yaml 删除密钥值或 vault:// 这类引用后重发；清单里不写任何密钥。",
     ),
     16231: (
-        "本环境未启用能力总线",
-        "本版本不支持能力声明，请从 bisheng-app.yaml 删除 capabilities 段后重发。",
+        "本环境尚未开放能力声明需要的平台能力",
+        "请管理员开启开放平台能力后重发，或先从 bisheng-app.yaml 移除对应的能力声明。",
     ),
     16232: (
-        "本版托管运行时不支持 WebSocket",
-        "删掉声明里的 WebSocket 键；服务端推送改用 SSE 或轮询——托管入口会直接关闭 WS 握手（close 4501），本地连得上不代表线上连得上。",
+        "WebSocket 无需在 bisheng-app.yaml 里声明",
+        "删掉清单里的 WebSocket 键后重发；托管入口直接转发 WebSocket，前端要对任何 close 自动重连。",
     ),
     16241: (
         "安全扫描在包内命中了疑似密钥",
@@ -467,6 +467,8 @@ def render_human(err: CliError) -> str:
         lines.append(f"  提示: {hint}")
     excerpt = _log_excerpt(err.details)
     if excerpt:
-        lines.append("  构建日志(末尾):")
+        # 16228 carries the start-up probe instance's output, everything else
+        # with a tail is a build.
+        lines.append("  应用启动输出(末尾):" if err.code == 16228 else "  构建日志(末尾):")
         lines.extend(f"    {one}" for one in excerpt)
     return mask("\n".join(lines))

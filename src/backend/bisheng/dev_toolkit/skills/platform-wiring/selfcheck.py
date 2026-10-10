@@ -10,7 +10,11 @@ SDK 版本是否在平台支持区间、身份注入读得到、检索与附件�
 
 用法:
     python selfcheck.py                      # 在项目根跑(有 bisheng-app.yaml)
-    python selfcheck.py http://127.0.0.1:8080   # bisheng dev 用了 --port 时,把它打印的本地入口地址传进来
+    python selfcheck.py http://127.0.0.1:8080/apps/my-app/   # 把 bisheng dev 打印的本地入口地址传进来(最稳)
+
+检索、附件两步读的是**本脚本自己进程里的** BISHENG_APP_TOKEN / BISHENG_APP_STORAGE_DIR,
+不是应用进程的。从另一个终端跑时这两个变量不存在:检索一步必然报缺应用运行期凭据,
+附件一步要先在这个终端 export BISHENG_APP_STORAGE_DIR 才能过。
 
 退出码:0 = 一切就绪(当前环境跑不了的步骤会明确说"跳过",不算失败);
        非 0 = 有一条前置条件没满足(原因见输出)。
@@ -176,10 +180,10 @@ def check_sdk_compatible(base_url: str, sdk_version: str) -> None:
     print(f"✓ SDK 版本兼容:本机 {sdk_version} ≥ 平台要求的 {minimum}")
 
 
-def _manifest_port(start: Path) -> int | None:
-    """最近的 bisheng-app.yaml 里的 `port:` —— 不带 --port 时 `bisheng dev` 的入口端口。
+def _manifest_values(start: Path) -> dict[str, str]:
+    """最近的 bisheng-app.yaml 里顶层的 `port:` 和 `slug:`。
 
-    只认顶层的一行 `port: <整数>`,不引 YAML 库(本脚本零依赖)。
+    只认顶层的 `key: 值` 行,不引 YAML 库(本脚本零依赖)。
     """
     for directory in [start, *start.parents][:4]:
         manifest = directory / "bisheng-app.yaml"
@@ -188,13 +192,31 @@ def _manifest_port(start: Path) -> int | None:
         try:
             lines = manifest.read_text(encoding="utf-8").splitlines()
         except OSError:
-            return None
+            return {}
+        values: dict[str, str] = {}
         for line in lines:
-            matched = re.match(r"^port:\s*(\d+)\s*(?:#.*)?$", line)
+            matched = re.match(r"^(port|slug):\s*([A-Za-z0-9-]+)\s*(?:#.*)?$", line)
             if matched:
-                return int(matched.group(1))
-        return None
-    return None
+                values.setdefault(matched.group(1), matched.group(2))
+        values["_dir"] = str(directory)
+        return values
+    return {}
+
+
+def _dev_slug(values: dict[str, str]) -> str:
+    """和 `bisheng dev` 同序:清单的 slug → `.bisheng/app.json` 里平台分配的 slug → `dev`。
+
+    app.json 按平台地址分条记录;只有一条带 slug 时取它,多条时无法判断当前平台,退到 `dev`
+    以外就会猜错,所以此时要把 dev 打印的地址作为参数传进来。
+    """
+    if values.get("slug"):
+        return values["slug"]
+    try:
+        store = json.loads((Path(values.get("_dir", ".")) / ".bisheng" / "app.json").read_text(encoding="utf-8"))
+        slugs = {entry.get("slug") for entry in (store.get("apps") or {}).values() if entry.get("slug")}
+    except (OSError, ValueError, AttributeError):
+        slugs = set()
+    return slugs.pop() if len(slugs) == 1 else "dev"
 
 
 def dev_entry_url(argv_url: str | None = None) -> str | None:
@@ -203,17 +225,23 @@ def dev_entry_url(argv_url: str | None = None) -> str | None:
     `bisheng dev` 起两个监听:**迷你代理**(本地入口,注入 `X-BiSheng-*` 身份头)和
     应用进程本身。`PORT` / `BISHENG_APP_PORT` 给的是**后者**,直连它的请求一个注入头
     都没有 —— 那正是本脚本要替开发者验的坑,拿它当探测地址等于自己跳进去。
+    迷你代理和线上一样把应用挂在 `/apps/<slug>/` 下,前缀外的请求一律 404。
 
     按这个顺序找:命令行参数 → `BISHENG_DEV_ENTRY_URL` → 最近的 `bisheng-app.yaml`
     的 `port`(`bisheng dev` 不带 `--port` 时的默认入口端口)。都没有就返回 None,
-    上层跳过这几步而不是判失败。
+    上层跳过这几步而不是判失败。最后一种按 `bisheng dev` 的规则补上 `/apps/<slug>`
+    前缀;`bisheng dev` 带了 `--port`,或项目登记过多个平台时推不准,
+    把它打印的完整地址作为参数传进来。
     """
     for candidate in (argv_url, os.environ.get(DEV_ENTRY_ENV)):
         text = (candidate or "").strip().rstrip("/")
         if text:
             return text if "://" in text else f"http://{text}"
-    port = _manifest_port(Path.cwd())
-    return f"http://127.0.0.1:{port}" if port else None
+    values = _manifest_values(Path.cwd())
+    port = values.get("port")
+    if not (port and port.isdigit()):
+        return None
+    return f"http://127.0.0.1:{port}/apps/{_dev_slug(values)}"
 
 
 def check_sdk_auth(entry_url: str | None) -> dict | None:
@@ -235,6 +263,11 @@ def check_sdk_auth(entry_url: str | None) -> dict | None:
         print(f"· 连不上本地入口 {entry_url},跳过身份 / 检索 / 附件三步。")
         print("  先在项目根执行 bisheng dev;用了 --port 的话把它打印的地址作为参数传给本脚本。")
         return None
+    if status == 404:
+        fail(
+            f"{entry_url}/__whoami 返回 404:地址可能少了 /apps/<slug> 前缀或 slug 不对,也可能应用没有 /__whoami 端点。",
+            "把 bisheng dev 打印的本地入口地址原样作为参数传给本脚本;仍是 404 就照 example-sdk/main.py 加一个 /__whoami 端点。",
+        )
     if status != 200 or not headers:
         fail(
             f"{entry_url} 能连上,但没拿到注入头的回显(应用没有 /__whoami 端点,或它没返回 JSON)。",
@@ -260,13 +293,12 @@ def check_sdk_retrieve(headers: dict) -> None:
         try:
             retrieve.search("selfcheck", top_k=1)
         except errors.AppCredentialMissingError:
-            # 检索要两把凭据:应用运行期凭据(BISHENG_APP_TOKEN,答"哪个应用")
-            # 与注入的访问者凭据(答"为谁做")。`bisheng dev` 本轮只注入后者,
-            # 所以本地跑到这里是**上游未就绪**,不是接线写错。
+            # SDK 从**本脚本自己的**环境读 BISHENG_APP_TOKEN。本轮 bisheng dev 不注入它,
+            # 而且就算注入了,也只注入给应用进程,不会出现在另开终端跑的本脚本里。
             fail(
-                "没有应用运行期凭据(BISHENG_APP_TOKEN)。**本轮 bisheng dev 还不会注入它**,"
-                "线上则由平台在拉起容器前注入。",
-                "本地:接线照写即可,等 dev 补上注入;线上:重新上线应用,仍缺就报平台故障。",
+                "本脚本进程里没有应用运行期凭据(BISHENG_APP_TOKEN)。本轮 bisheng dev 不注入它,"
+                "另开终端跑本脚本时也读不到应用进程的变量;线上由平台在拉起容器前注入。",
+                "本地:接线照写即可,检索的真实行为发布后用真实账号验;线上:重新上线应用,仍缺就报平台故障。",
             )
         except errors.VisitorCredentialMissingError:
             fail(
@@ -275,10 +307,8 @@ def check_sdk_retrieve(headers: dict) -> None:
             )
         except errors.VisitorCredentialRejectedError:
             fail(
-                "平台拒绝了这枚访问者凭据。本地 `bisheng dev` 的句柄是**本机自签**的,平台无从验签,"
-                "所以本地跑到这一步必被拒 —— 不是你的密钥有问题,换密钥没有用;"
-                "线上被拒则是凭据过期、被伪造,或签给了另一个应用。",
-                "本地:接线照写即可,检索的真实行为发布后用真实账号验;线上:让用户刷新重进。",
+                "平台拒绝了这枚访问者凭据:已过期、被伪造,或签给了另一个应用。",
+                "让用户刷新重进;检索的真实行为发布后用真实账号验。",
             )
         except errors.ScopeMissingError:
             fail("这把密钥没有知识库读取能力位。", "请管理员给该服务账号的密钥勾上 knowledge:read 后重试。")
@@ -298,8 +328,10 @@ def check_sdk_storage() -> None:
         storage.delete(probe)
     except errors.StorageHandleMissingError:
         fail(
-            "没有附件存储句柄。**本轮 bisheng dev 还不会注入本地附件目录**,线上则是没注入或已下线。",
-            "本地临时自造一个再起应用:export BISHENG_APP_STORAGE_DIR=<项目>/.bisheng/attachments;线上请报平台故障。",
+            "本脚本进程里没有附件存储句柄。SDK 从本脚本自己的环境读 BISHENG_APP_STORAGE_DIR,"
+            "本轮 bisheng dev 也不注入它;线上则是没注入或已下线。",
+            "本地:在跑本脚本的终端里 export BISHENG_APP_STORAGE_DIR=<项目>/.bisheng/attachments 后重跑"
+            "(应用要用,在启动 bisheng dev 的终端里也 export 一次);线上请报平台故障。",
         )
     except errors.BishengSdkError as exc:
         fail(f"附件存取没通过:{exc.message}", exc.next_step)
@@ -319,8 +351,8 @@ def main() -> None:
 
     check_sdk_compatible(base_url, sdk_version)
     headers = check_sdk_auth(dev_entry_url(sys.argv[1] if len(sys.argv) > 1 else None))
-    # 三件套一起跳过:检索要上一步拿到的访问者头,附件要注入给应用进程的句柄,
-    # 而这两样只有在 bisheng dev 起的会话里才存在。跳过不是失败(见模块 docstring 的退出码)。
+    # 三件套一起跳过:检索要上一步拿到的访问者头;没有入口就没有头。
+    # 检索、附件读的是本脚本自己的环境变量(见模块 docstring)。跳过不是失败(见模块 docstring 的退出码)。
     if headers is not None:
         check_sdk_retrieve(headers)
         check_sdk_storage()

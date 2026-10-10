@@ -76,6 +76,7 @@ def run(args: Any, emitter: Emitter) -> int:
             next_step="去掉 --app-port 让 CLI 自动挑一个，或给两者不同的端口。",
         )
 
+    slug = devdb.dev_slug(manifest, app_ref)
     db = devdb.prepare_dev_db(root)
     # AC-27 / AC-28: the model face is wired from `whoami` — the address it
     # reports (never one composed here) and the key this session logged in with,
@@ -90,6 +91,7 @@ def run(args: Any, emitter: Emitter) -> int:
         db=db,
         model_base_url=model_base_url,
         model_api_key=profile.api_key,
+        slug=slug,
     )
     start = devdb.resolve_start_command(root)
 
@@ -99,6 +101,7 @@ def run(args: Any, emitter: Emitter) -> int:
         app_port=app_port,
         listen_port=proxy_port,
         emitter=emitter,
+        slug=slug,
     )
     # Bind the entry port before spawning anything: a busy port (8080 usually
     # is) must be a clean refusal, not a child process started and then killed.
@@ -133,6 +136,7 @@ def run(args: Any, emitter: Emitter) -> int:
             "subject_kind": identity.subject_kind,
             "app_id": app_id,
             "local_url": proxy.url,
+            "base_path": proxy.prefix,
             "app_port": app_port,
             "db_path": str(db.path),
             "start_command": start.display,
@@ -227,7 +231,16 @@ def _report(
         f"  应用进程监听 127.0.0.1:{app_port}（PORT / BISHENG_APP_PORT），启动命令来自 {start.source}：{start.display}"
     )
     emitter.info(f"  应用数据库: {db.path}（BISHENG_APP_DB_URL / BISHENG_APP_DB_PATH，跨重启保留，不进上传包）")
-    emitter.info("  BISHENG_APP_BASE_PATH 为空串；平台上是 /apps/<slug>，对外链接请经它拼接。")
+    prefix = local_url.split("://", 1)[-1].partition("/")[2].rstrip("/")
+    emitter.info(
+        f"  应用挂在 /{prefix}/ 下，和平台上一样（BISHENG_APP_BASE_PATH=/{prefix}）。"
+        "以 / 开头、不带这个前缀的请求会得到 404 和说明，托管后它们同样会失败。"
+    )
+    if start.source == "BISHENG_APP_START":
+        emitter.warn(
+            "启动命令来自 shell 里的 BISHENG_APP_START。托管环境没有途径设置这个变量，"
+            "上线后会退回 Procfile 或 main.py / app.py。请把命令写进 Procfile 的 web: 行。"
+        )
     if model_base_url:
         emitter.info(
             f"  模型调用地址: {model_base_url}（OPENAI_BASE_URL / BISHENG_MODEL_BASE_URL；"

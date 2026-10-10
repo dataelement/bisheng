@@ -114,9 +114,12 @@ def test_forwarded_and_hop_by_hop_headers_dropped_and_rewritten() -> None:
         ("Host", "localhost:8080"),
         ("Content-Length", "99"),
     ]
-    upstream = build_upstream_headers(inbound, _identity(), request_id="rid", handle=None, host="localhost:8080")
+    upstream = build_upstream_headers(
+        inbound, _identity(), request_id="rid", handle=None, host="localhost:8080", prefix="/apps/survey"
+    )
     values = dict(upstream)
-    assert values["X-Forwarded-Prefix"] == ""  # dev = root path, same header the hosted proxy fills
+    # Ours, never the client's: the same value app-proxy fills in hosted.
+    assert values["X-Forwarded-Prefix"] == "/apps/survey"
     assert values["X-Forwarded-Proto"] == "http"
     assert values["X-Forwarded-Host"] == "localhost:8080"
     assert "forwarded" not in _names(upstream)
@@ -214,7 +217,7 @@ def test_forward_strips_and_injects_and_relays_response() -> None:
         transport=_echo_transport(seen),
         request_id_factory=lambda: "fixed-rid",
     )
-    result = proxy.forward("POST", "/submit?x=1", [*FORGED_VARIANTS, ("Content-Type", "text/plain")], b"hello")
+    result = proxy.forward("POST", "/apps/dev/submit?x=1", [*FORGED_VARIANTS, ("Content-Type", "text/plain")], b"hello")
     assert result.status == 200
     assert dict(result.headers)["x-app"] == "yes"
     assert b"".join(result.body)
@@ -239,7 +242,7 @@ def test_app_not_listening_is_a_readable_502_not_a_crash() -> None:
         transport=httpx.MockTransport(lambda r: (_ for _ in ()).throw(httpx.ConnectError("refused"))),
         emitter=Emitter(stdout=io.StringIO(), stderr=err),
     )
-    result = proxy.forward("GET", "/", [], b"")
+    result = proxy.forward("GET", "/apps/dev/", [], b"")
     assert result.status == 502
     assert "PORT" in b"".join(result.body).decode("utf-8")
     assert "警告" in err.getvalue()
@@ -256,7 +259,7 @@ def test_real_listener_round_trip_over_loopback() -> None:
     proxy.start()
     try:
         conn = http.client.HTTPConnection("127.0.0.1", proxy.listen_port, timeout=5)
-        conn.request("GET", "/hello?a=b", headers={"X_BiSheng_User_Id": "forged", "X-Custom": "kept"})
+        conn.request("GET", "/apps/dev/hello?a=b", headers={"X_BiSheng_User_Id": "forged", "X-Custom": "kept"})
         response = conn.getresponse()
         payload = json.loads(response.read())
         conn.close()
@@ -266,10 +269,101 @@ def test_real_listener_round_trip_over_loopback() -> None:
     assert payload["path"] == "/hello?a=b"
     upstream = {name.lower(): value for name, value in payload["headers"]}
     assert upstream["x-bisheng-user-id"] == "123" and upstream["x-custom"] == "kept"
-    assert proxy.url.startswith("http://127.0.0.1:")
+    assert proxy.url.startswith("http://127.0.0.1:") and proxy.url.endswith("/apps/dev/")
 
 
 def test_module_exposes_no_identity_override() -> None:
     # AC-25: nothing in the proxy takes "who to be" from anywhere but the identity
     # built from `whoami`.
     assert not [name for name in dir(devproxy) if "impersonat" in name.lower() or "on_behalf" in name.lower()]
+
+
+# ---- served under the hosted prefix ---------------------------------------------
+
+
+def _prefixed_proxy(seen: list[httpx.Request], *, err: io.StringIO | None = None, location: str = "") -> DevProxy:
+    identity = _identity()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        headers = {"content-type": "text/plain"}
+        if location:
+            return httpx.Response(302, headers={**headers, "location": location})
+        return httpx.Response(200, content=request.url.raw_path, headers=headers)
+
+    return DevProxy(
+        identity=identity,
+        minter=HandleMinter(identity),
+        app_port=51234,
+        listen_port=0,
+        transport=httpx.MockTransport(handler),
+        emitter=Emitter(stdout=io.StringIO(), stderr=err or io.StringIO()),
+        slug="survey",
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "upstream_path"),
+    [("/apps/survey/", "/"), ("/apps/survey/x?y=1", "/x?y=1"), ("/apps/survey/static/app.css", "/static/app.css")],
+)
+def test_the_prefix_is_stripped_like_app_proxy_does(path: str, upstream_path: str) -> None:
+    seen: list[httpx.Request] = []
+    proxy = _prefixed_proxy(seen)
+    result = proxy.forward("GET", path, [], b"")
+    proxy.stop()
+    assert result.status == 200
+    assert seen[0].url.raw_path.decode() == upstream_path
+    assert seen[0].headers["x-forwarded-prefix"] == "/apps/survey"
+
+
+def test_the_bare_prefix_redirects_to_its_slashed_form() -> None:
+    seen: list[httpx.Request] = []
+    proxy = _prefixed_proxy(seen)
+    result = proxy.forward("GET", "/apps/survey?a=1", [], b"")
+    proxy.stop()
+    assert result.status == 308
+    assert dict(result.headers)["Location"] == "/apps/survey/?a=1"
+    assert seen == []
+
+
+@pytest.mark.parametrize("path", ["/logo.png", "/api/x", "/apps/other/", "/"])
+def test_a_request_outside_the_prefix_is_a_404_that_names_the_cause(path: str) -> None:
+    """Hosted, this request reaches the platform instead of the app; locally the cause is named."""
+    seen: list[httpx.Request] = []
+    err = io.StringIO()
+    proxy = _prefixed_proxy(seen, err=err)
+    result = proxy.forward("GET", path, [], b"")
+    proxy.stop()
+    page = b"".join(result.body).decode("utf-8")
+    assert result.status == 404 and seen == []
+    assert "BISHENG_APP_BASE_PATH" in page and "/apps/survey/" in page
+    if path == "/":
+        # The habitual first visit: no warning, a link to the app.
+        assert "href='/apps/survey/'" in page and err.getvalue() == ""
+    else:
+        assert path in err.getvalue()
+
+
+def test_each_stray_path_is_warned_about_once() -> None:
+    seen: list[httpx.Request] = []
+    err = io.StringIO()
+    proxy = _prefixed_proxy(seen, err=err)
+    for _ in range(3):
+        proxy.forward("GET", "/logo.png", [], b"")
+    proxy.forward("GET", "/favicon.ico", [], b"")
+    proxy.stop()
+    assert err.getvalue().count("/logo.png") == 1
+    assert "/favicon.ico" not in err.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("sent", "seen_by_browser"),
+    [("/login", "/apps/survey/login"), ("/apps/survey/next", "/apps/survey/next"), ("next", "next")],
+)
+def test_a_redirect_from_the_app_stays_inside_the_prefix(sent: str, seen_by_browser: str) -> None:
+    seen: list[httpx.Request] = []
+    proxy = _prefixed_proxy(seen, location=sent)
+    result = proxy.forward("GET", "/apps/survey/admin", [], b"")
+    proxy.stop()
+    assert result.status == 302
+    assert {name.lower(): value for name, value in result.headers}["location"] == seen_by_browser

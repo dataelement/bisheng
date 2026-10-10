@@ -204,9 +204,10 @@ def test_app_db_chapter_uses_the_injected_env_names_and_stdlib_sqlite3():
         assert name in text
     assert "BISHENG_APP_DB_PATH" in example and "import sqlite3" in example
     assert "CREATE TABLE IF NOT EXISTS" in example and "ensure_column" in example
-    # The schema-evolution policy is stated honestly: the confirmation is
-    # recorded, not enforced, this round.
-    assert "--confirm-schema-change" in text and "只**记录**" in text
+    # The schema-evolution policy as the code enforces it: a breaking change
+    # without --confirm-schema-change is refused with 16229, and the platform
+    # migrates declared tables at go-live.
+    assert "--confirm-schema-change" in text and "16229" in text
 
 
 def test_example_reads_identity_from_headers_and_has_no_login():

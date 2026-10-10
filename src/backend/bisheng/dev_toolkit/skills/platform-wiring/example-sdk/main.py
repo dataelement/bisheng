@@ -8,8 +8,8 @@
 * 只往 /data 写(本样例不落库,附件一律走 storage)。
 * 对外链接带 BISHENG_APP_BASE_PATH。
 
-本地跑:`bisheng dev`(它会注入身份头与同名环境变量),然后开它打印的**本地入口地址**——
-不是应用自己的端口,直连端口的请求没有身份。
+本地跑:`bisheng dev`(它会注入身份头与同名环境变量),然后开它打印的**本地入口地址**
+(`http://127.0.0.1:<port>/apps/<slug>/`)——不是应用自己的端口,直连端口的请求没有身份。
 """
 
 from __future__ import annotations
@@ -23,12 +23,12 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 # 读平台注入的端口,取不到用本地默认。别写死。
 PORT = int(os.environ.get("PORT") or os.environ.get("BISHENG_APP_PORT") or 8080)
 
-# 对外基路径。平台上是 /apps/{slug},本地是空串。所有对外链接都过 url()。
+# 对外基路径。平台上和 bisheng dev 下都是 /apps/{slug}。所有对外链接都过 url()。
 BASE_PATH = (os.environ.get("BISHENG_APP_BASE_PATH") or "").rstrip("/")
 
 # ⚠️ 与 bisheng-app.yaml 的 capabilities.knowledge_bases 同一份事实:
 # 那里声明「这个应用会检索哪些知识库」(审批通过后成为平台侧的白名单),
-# 这里是调用时传的 id。**改一处就要改另一处**,否则线上会得到「目标不可及」。
+# 这里是调用时传的 id。**改一处就要改另一处**,否则线上会得到 CapabilityNotDeclaredError(平台码 16274)。
 KNOWLEDGE_BASE_IDS = [12]
 
 app = FastAPI(title="平台能力接线样例(SDK 版)")
@@ -53,10 +53,11 @@ def problem(exc: errors.BishengSdkError, status: int = 400) -> JSONResponse:
 
 @app.get("/healthz")
 def healthz() -> Response:
-    """健康探活 —— **刻意不读身份**。
+    """给运维用的探针 —— **刻意不读身份**。
 
-    探活请求不经平台入口、没有身份头,在这里读身份会抛错,
-    平台于是把整个应用判成不健康。身份是给业务端点用的,不是给探针用的。
+    平台自己的健康检查探的是 `/`(不经平台入口、没有身份头):`/` 读身份会抛
+    PlatformIdentityMissingError,由文件末尾的 exception_handler 转成 401。
+    低于 500 就算健康;漏了那个转换就是 500,整个应用被判不健康。
     """
     return JSONResponse({"status": "ok"})
 
@@ -183,7 +184,10 @@ def download(path: str) -> Response:
 
 @app.exception_handler(errors.PlatformIdentityMissingError)
 def identity_missing(request: Request, exc: errors.PlatformIdentityMissingError) -> JSONResponse:
-    """请求没经平台入口进来 —— 提示怎么访问,而不是 500 一个堆栈。"""
+    """请求没经平台入口进来 —— 回 401 和访问提示,而不是 500 一个堆栈。
+
+    平台的健康检查请求 `/` 时就走到这里:401 低于 500,算健康;500 会被判不健康。
+    """
     return problem(exc, status=401)
 
 
@@ -191,4 +195,6 @@ if __name__ == "__main__":
     import uvicorn
 
     # 绑 0.0.0.0:平台从容器外探活与转发,绑 127.0.0.1 在本机测得好好的、上线必不健康。
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    # uvicorn.run() 不读 UVICORN_ROOT_PATH,前缀要显式传给 root_path
+    # (用 `uvicorn main:app` 命令启动时才会自动读那个变量)。
+    uvicorn.run(app, host="0.0.0.0", port=PORT, root_path=os.environ.get("BISHENG_APP_BASE_PATH", ""))

@@ -435,6 +435,24 @@ class PublishPipelineService:
 
             entry_url = AppQueryService.entry_url(app_row.slug)
 
+        # The approval block the publish face shows, not just its id. The CLI's
+        # ``deploy --wait`` branches on ``approval.status`` (rejected / withdrawn
+        # / cancelled / exception → exit 20-23) and prints ``reject_reason`` in
+        # full; with only the id it saw a rejection as an unexplained failure
+        # (exit 19), and an exception or a cancellation not at all until its
+        # wait timed out.
+        approval = None
+        if deployment.approval_instance_id:
+            from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
+            from bisheng.approval.domain.repositories.approval_instance_repository import (
+                ApprovalInstanceRepository,
+            )
+
+            instance = await ApprovalInstanceRepository.get_instance(deployment.approval_instance_id)
+            approval = await PublishStatusService.approval_payload(instance) or {
+                "instance_id": deployment.approval_instance_id
+            }
+
         return {
             "deployment_id": deployment.id,
             "app_id": deployment.app_id,
@@ -446,7 +464,7 @@ class PublishPipelineService:
             # prints ``message`` + ``hints``; a partially filled failure is what
             # turns an actionable error into "something went wrong".
             "failure": deployment.failure,
-            "approval": {"instance_id": deployment.approval_instance_id} if deployment.approval_instance_id else None,
+            "approval": approval,
             "app_state": app_state,
             # F053 T034 write-back 3. Without it the CLI's ``deploy --wait``
             # could not print the entry address on success: ``entry_url`` was

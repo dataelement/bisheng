@@ -229,6 +229,29 @@ async def test_probe_failure_16228_with_hosting_contract_hints(prepared, fake_or
     assert "数据库" in hints or "database" in hints.lower()
 
 
+async def test_probe_failure_carries_the_instance_output(prepared, fake_orchestrator):
+    """The probe instance is gone by now; its last output is the only explanation left.
+
+    Carried under ``details.tail``, the key a build failure uses, so the CLI
+    prints both the same way.
+    """
+    from bisheng.common.errcode.app_publish import AppStartupProbeFailedError
+
+    output = ["Traceback (most recent call last):", "ModuleNotFoundError: No module named 'fastapi'"]
+    fake_orchestrator.responses["probe"] = {"ready": False, "reason": "exited (code 1)", "log_tail": output}
+    with pytest.raises(AppStartupProbeFailedError) as excinfo:
+        await _probe(prepared)
+    assert excinfo.value.kwargs["details"]["tail"] == output
+
+
+async def test_probe_runs_with_the_base_path_the_instance_will_have(prepared, fake_orchestrator):
+    """The same ``/apps/{slug}`` the online instance gets, not an empty one."""
+    await _probe(prepared)
+    _, payload = next(call for call in fake_orchestrator.calls if call[0] == "probe")
+    base_path = payload["env"]["BISHENG_APP_BASE_PATH"]
+    assert base_path.startswith("/apps/") and len(base_path) > len("/apps/")
+
+
 async def test_probe_is_temporary_and_takes_no_instance_slot(prepared, fake_orchestrator):
     """``probe`` is called with ``image_ref`` + port + health, not with an ``app_id`` (contract §2)."""
     await _probe(prepared, "img:7")

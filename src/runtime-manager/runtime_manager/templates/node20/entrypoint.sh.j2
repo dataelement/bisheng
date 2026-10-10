@@ -1,9 +1,9 @@
 #!/bin/sh
 # BiSheng hosted-app entrypoint (D5.2) — node20 runtime.
 #
-# The platform serves every app under /apps/{slug} while the same code runs at
-# the root path locally. INV-32 makes the *variable name* identical in both
-# places (BISHENG_APP_BASE_PATH); this wrapper is what connects that variable
+# The platform serves every app under /apps/{slug}, and so does `bisheng dev`.
+# INV-32 makes the variable name identical in both places
+# (BISHENG_APP_BASE_PATH); this wrapper is what connects that variable
 # to whichever framework the app happens to use, so an app that follows the
 # DEV-04 contract needs no per-environment branching of its own.
 set -eu
@@ -14,9 +14,10 @@ BISHENG_APP_PORT="$PORT"
 export PORT BISHENG_APP_PORT BISHENG_APP_BASE_PATH
 
 # Node has no framework-wide root-path variable the way uvicorn / streamlit do;
-# BASE_PATH is the spelling most server templates and build tools read. Set
-# unconditionally (empty is the correct value at the root path) so behaviour is
-# identical in dev and prod.
+# BASE_PATH is the spelling most server templates read at run time. Set
+# unconditionally so behaviour is identical in dev and prod. It does not exist
+# yet when `npm run build` runs in the image, so a bundler's `base` has to be
+# relative ('./') rather than read from it.
 export BASE_PATH="$BISHENG_APP_BASE_PATH"
 export NODE_ENV="${NODE_ENV:-production}"
 # What `npm start` would have put on PATH — resolved here so the start script

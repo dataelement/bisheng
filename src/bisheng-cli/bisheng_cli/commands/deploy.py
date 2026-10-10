@@ -461,11 +461,19 @@ def _follow(client: PlatformClient, emitter: Emitter, args: Any, state: dict[str
             last_stage = stage
             emitter.stage(COMMAND, stage, "running")
 
+        # A person's decision is read before the failure tuple. The platform
+        # also closes a rejected or withdrawn attempt as ``failed`` with no
+        # code (a person decided against it, no check failed), so checking the
+        # tuple first reported every rejection as an unexplained failure, exit
+        # 19, with the reason never printed.
+        outcome = _terminal(payload, wait=wait)
+        if outcome is not None and outcome.kind in APPROVAL_TERMINALS:
+            return _report_outcome(emitter, outcome, state)
+
         if status == "failed" or failure:
             emitter.stage(COMMAND, stage or "unknown", "failed", failure=failure)
             raise _failure_error(stage, failure)
 
-        outcome = _terminal(payload, wait=wait)
         if outcome is not None:
             return _report_outcome(emitter, outcome, state)
 

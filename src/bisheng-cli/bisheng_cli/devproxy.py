@@ -39,6 +39,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import html
 import json
 import secrets
 import threading
@@ -48,7 +49,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -295,12 +296,12 @@ def build_injected_headers(
     handle: str | None,
     proto: str = "http",
     host: str = "",
+    prefix: str = "",
 ) -> list[tuple[str, str]]:
     """The ten identity headers plus the three forwarding headers we own.
 
-    `X-Forwarded-Prefix` is the empty string under `dev` — the same header the
-    hosted proxy fills with `/apps/{slug}` — because `BISHENG_APP_BASE_PATH` is
-    empty here too (INV-32: same names, environment-specific values).
+    `X-Forwarded-Prefix` carries the same `/apps/{slug}` the hosted proxy sends,
+    and `BISHENG_APP_BASE_PATH` holds the same value (see `DevProxy`).
     """
     values: dict[str, str] = {}
     for raw_name, raw_value in identity.material().items():
@@ -313,7 +314,7 @@ def build_injected_headers(
     values["X-BiSheng-Request-Id"] = request_id
 
     injected = [(name, encode_header_value(values[name])) for name in INJECTED_HEADER_NAMES if name in values]
-    injected.append(("X-Forwarded-Prefix", ""))
+    injected.append(("X-Forwarded-Prefix", prefix))
     if proto:
         injected.append(("X-Forwarded-Proto", proto))
     if host:
@@ -329,10 +330,74 @@ def build_upstream_headers(
     handle: str | None,
     proto: str = "http",
     host: str = "",
+    prefix: str = "",
 ) -> list[tuple[str, str]]:
     """Strip then inject, in that order — the only order that is safe."""
     return strip_platform_headers(inbound) + build_injected_headers(
-        identity, request_id=request_id, handle=handle, proto=proto, host=host
+        identity, request_id=request_id, handle=handle, proto=proto, host=host, prefix=prefix
+    )
+
+
+# ---- the entry prefix -----------------------------------------------------------
+
+#: The platform's entry segment. Hosted, every app lives at `/apps/{slug}`.
+ENTRY_PREFIX = "/apps"
+
+
+def entry_prefix_for(slug: str, entry_prefix: str = ENTRY_PREFIX) -> str:
+    return f"{entry_prefix.rstrip('/')}/{slug}"
+
+
+def restore_entry_prefix(location: str, slug: str, entry_prefix: str = ENTRY_PREFIX, upstream_base: str = "") -> str:
+    """Put the prefix back on a redirect the app sent — a copy of app-proxy's.
+
+    `tests/test_platform_contract.py` runs both implementations over the same
+    cases, so the redirect an app sends lands in the same place locally and
+    hosted. See `app_proxy.routing.restore_entry_prefix` for the rule.
+    """
+    prefix = entry_prefix_for(slug, entry_prefix)
+    value = location
+    if upstream_base and "://" in value:
+        target, origin = urlsplit(value), urlsplit(upstream_base)
+        if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
+            return location
+        value = target.path or "/"
+        if target.query:
+            value += "?" + target.query
+        if target.fragment:
+            value += "#" + target.fragment
+    if not value.startswith("/") or value.startswith("//"):
+        return location
+    if value == prefix or value.startswith((prefix + "/", prefix + "?", prefix + "#")):
+        return value
+    if value.startswith(entry_prefix.rstrip("/") + "/"):
+        return value
+    return prefix + value
+
+
+def outside_prefix_page(path: str, prefix: str) -> str:
+    """The 404 body for a request that left the app's prefix.
+
+    Hosted, the same request reaches the platform instead of the app, and the
+    developer sees a platform page or a bare 404 with nothing pointing at the
+    cause. Here the cause is known, so it is named.
+    """
+    shown = html.escape(path)
+    root = html.escape(prefix)
+    return (
+        "<!doctype html><meta charset='utf-8'><title>请求离开了应用的路径前缀</title>"
+        "<body style='font-family:system-ui,sans-serif;max-width:46rem;margin:3rem auto;line-height:1.6'>"
+        f"<h1 style='font-size:1.25rem'>这个请求不在应用的路径前缀 {root}/ 下</h1>"
+        f"<p>请求路径：<code>{shown}</code></p>"
+        f"<p>托管到平台后，应用挂在 <code>{root}/</code> 下。这个请求会落到平台自己的 "
+        f"<code>{shown}</code>，而不是你的应用，所以在线上同样会失败。</p>"
+        "<p>原因通常是代码或构建产物里写了以 <code>/</code> 开头的绝对路径，例如 "
+        '<code>&lt;img src="/logo.png"&gt;</code>、<code>fetch("/api/x")</code>，'
+        "或者前端构建工具的 base 用了默认的 <code>/</code>。</p>"
+        "<p>改法：经环境变量 <code>BISHENG_APP_BASE_PATH</code> 拼接链接，或者改用相对路径"
+        "（<code>logo.png</code>、<code>api/x</code>）；Vite 把 <code>base</code> 设为 <code>'./'</code>。</p>"
+        f"<p><a href='{root}/'>打开应用 {root}/</a></p>"
+        "</body>"
     )
 
 
@@ -379,8 +444,16 @@ class DevProxy:
         emitter: Emitter | None = None,
         transport: httpx.BaseTransport | None = None,
         request_id_factory: Callable[[], str] = lambda: uuid.uuid4().hex,
+        slug: str = "dev",
     ) -> None:
         self.identity = identity
+        # Served under the same `/apps/{slug}` as hosted, prefix stripped on the
+        # way in and announced in `X-Forwarded-Prefix`. A root-absolute link
+        # (`/logo.png`) then fails here, with a page that names the cause,
+        # instead of working locally and 404ing only once deployed.
+        self.slug = slug
+        self.prefix = entry_prefix_for(slug)
+        self._warned_paths: set[str] = set()
         self.minter = minter
         self.app_port = app_port
         self.listen_host = listen_host
@@ -409,6 +482,19 @@ class DevProxy:
         *,
         host: str = "",
     ) -> ProxiedResponse:
+        raw_path, _, query = path.partition("?")
+        suffix = f"?{query}" if query else ""
+        if raw_path == self.prefix and method in ("GET", "HEAD"):
+            # app-proxy answers the bare prefix the same way: relative links in
+            # the page only resolve inside the app with the trailing slash.
+            return self._redirect(308, f"{self.prefix}/{suffix}")
+        if raw_path == self.prefix:
+            upstream_path = "/" + suffix
+        elif raw_path.startswith(self.prefix + "/"):
+            upstream_path = raw_path[len(self.prefix) :] + suffix
+        else:
+            return self._outside_prefix(method, raw_path)
+
         request_id = self._request_id_factory()
         headers = build_upstream_headers(
             inbound,
@@ -417,10 +503,11 @@ class DevProxy:
             handle=self.minter.mint(request_id),
             proto="http",
             host=host,
+            prefix=self.prefix,
         )
         started = time.monotonic()
         try:
-            request = self._client.build_request(method, path, headers=headers, content=body)
+            request = self._client.build_request(method, upstream_path, headers=headers, content=body)
             response = self._client.send(request, stream=True)
         except httpx.ConnectError:
             return self._error(
@@ -434,14 +521,41 @@ class DevProxy:
         if self.emitter is not None:
             elapsed = int((time.monotonic() - started) * 1000)
             self.emitter.info(f"{method} {path} → {response.status_code} {elapsed}ms")
+        upstream_base = str(self._client.base_url).rstrip("/")
         relayed = [
-            (name, value) for name, value in response.headers.multi_items() if name.lower() not in _RESPONSE_DROPPED
+            (name, restore_entry_prefix(value, self.slug, upstream_base=upstream_base))
+            if name.lower() == "location"
+            else (name, value)
+            for name, value in response.headers.multi_items()
+            if name.lower() not in _RESPONSE_DROPPED
         ]
         return ProxiedResponse(
             status=response.status_code,
             headers=relayed,
             body=_response_body(response),
             close=response.close,
+        )
+
+    def _redirect(self, status: int, location: str) -> ProxiedResponse:
+        return ProxiedResponse(status=status, headers=[("Location", location), ("Content-Length", "0")], body=iter([]))
+
+    def _outside_prefix(self, method: str, path: str) -> ProxiedResponse:
+        # Not redirected, not even `/`: a link to `/` in the app is the same
+        # defect as any other root-absolute link, and the page below carries a
+        # link to the app for the habitual first visit to `127.0.0.1:<port>/`.
+        # The browser asks for /favicon.ico at the origin root by itself;
+        # hosted it gets the platform's icon, which is not a defect.
+        if path not in ("/", "/favicon.ico") and path not in self._warned_paths and self.emitter is not None:
+            self._warned_paths.add(path)
+            self.emitter.warn(
+                f"{method} {path} 不在应用前缀 {self.prefix}/ 下，托管后会落到平台而不是应用（返回 404）。"
+                "检查代码或构建产物里以 / 开头的绝对路径。"
+            )
+        payload = outside_prefix_page(path, self.prefix).encode("utf-8")
+        return ProxiedResponse(
+            status=404,
+            headers=[("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(payload)))],
+            body=iter([payload]),
         )
 
     def _error(self, status: int, text: str) -> ProxiedResponse:
@@ -498,7 +612,8 @@ class DevProxy:
 
     @property
     def url(self) -> str:
-        return f"http://{self.listen_host}:{self.listen_port}"
+        """Where to open the app: the listener plus the app's prefix."""
+        return f"http://{self.listen_host}:{self.listen_port}{self.prefix}/"
 
     def stop(self) -> None:
         if self._server is not None:

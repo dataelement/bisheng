@@ -42,8 +42,9 @@ def test_env_carries_exactly_the_contract_names_plus_framework_exports(sample_pr
     env = _env(sample_project)
     assert set(env) == set(devdb.PLATFORM_ENV_NAMES) | set(devdb.FRAMEWORK_ENV_NAMES)
     assert env["PORT"] == env["BISHENG_APP_PORT"] == "51234"
-    assert env["BISHENG_APP_BASE_PATH"] == "" and env["UVICORN_ROOT_PATH"] == "" and env["GRADIO_ROOT_PATH"] == ""
-    assert env["STREAMLIT_SERVER_BASE_URL_PATH"] == "" and env["FORWARDED_ALLOW_IPS"] == "*"
+    # The hosted value, not an empty one: `DevProxy` serves the app under it.
+    assert env["BISHENG_APP_BASE_PATH"] == env["UVICORN_ROOT_PATH"] == env["GRADIO_ROOT_PATH"] == "/apps/survey"
+    assert env["STREAMLIT_SERVER_BASE_URL_PATH"] == "apps/survey" and env["FORWARDED_ALLOW_IPS"] == "*"
     assert env["BISHENG_APP_SLUG"] == "survey" and env["BISHENG_APP_ID"] == "app-1"
     assert env["BISHENG_APP_VERSION"] == "dev" and env["BISHENG_APP_VERSION_ID"] == "dev"
     assert env["BISHENG_PLATFORM_API_BASE"] == "http://platform.test"
@@ -178,3 +179,22 @@ def test_start_resolution_order_matches_the_hosted_entrypoint(tmp_path: Path) ->
 def test_pick_free_port_avoids_the_proxy_port() -> None:
     port = devdb.pick_free_port(exclude=1)
     assert 1024 < port < 65536 and port != 1
+
+
+@pytest.mark.parametrize(
+    ("manifest", "app_ref", "expected"),
+    [
+        ({"slug": "survey"}, {"slug": "assigned"}, "survey"),
+        ({}, {"slug": "assigned"}, "assigned"),
+        ({}, None, devdb.DEV_FALLBACK_SLUG),
+        ({"slug": "  "}, {}, devdb.DEV_FALLBACK_SLUG),
+    ],
+)
+def test_dev_slug_prefers_the_declared_then_the_assigned_slug(manifest, app_ref, expected) -> None:
+    assert devdb.dev_slug(manifest, app_ref) == expected
+
+
+def test_the_base_path_follows_the_slug_it_is_given(sample_project: Path) -> None:
+    env = _env(sample_project, slug="assigned")
+    assert env["BISHENG_APP_SLUG"] == "assigned"
+    assert env["BISHENG_APP_BASE_PATH"] == "/apps/assigned"

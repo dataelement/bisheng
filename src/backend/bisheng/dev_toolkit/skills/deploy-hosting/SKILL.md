@@ -39,7 +39,7 @@ metadata:
 |---|---|---|
 | **① 监听平台注入的端口** | 读环境变量 `PORT`(等价 `BISHENG_APP_PORT`),别写死 | 硬编码端口 → 健康探针连不上,永远卡在「启动中」 |
 | **② 绑 `0.0.0.0`,不是 `127.0.0.1`** | 服务绑 `0.0.0.0` | 绑 `127.0.0.1` 在容器里只有进程自己连得上,探针一直失败**而日志没有任何错误**——最难诊断的一种「起来了但不健康」 |
-| **③ 只往 `/data` 写** | 数据库/缓存/上传文件一律写 `/data` 下 | 根文件系统**只读**,往别处写会在**运行期**才炸(不是构建期);另有 `/tmp` 是小容量临时卷 |
+| **③ 只往 `/data` 写** | 数据库/缓存/上传文件一律写 `/data` 下 | 根文件系统**只读**,往别处写会在**运行期**才炸(不是构建期)。`/tmp` 是 64 MB 内存盘且 `noexec`:往 `/tmp` 解压再执行 `.so`/二进制的库会失败,框架暂存到 `/tmp` 的大于约 64 MB 的上传也会失败 |
 | **④ 对外链接带上 `BISHENG_APP_BASE_PATH`** | 见下方专节 | 平台把应用挂在 `/apps/{slug}` 下,链接漏前缀会跳到平台根路径 |
 
 **平台注入、应用不可覆盖的环境变量**(前缀 `PORT` / `BISHENG_APP_` / `BISHENG_PLATFORM_` 都是平台保留的):
@@ -47,10 +47,10 @@ metadata:
 | 变量 | 含义 | 本地默认 |
 |---|---|---|
 | `PORT` / `BISHENG_APP_PORT` | 必须监听的端口(两者相等) | 自己给个默认如 8080 |
-| `BISHENG_APP_BASE_PATH` | 对外基路径,如 `/apps/my-app` | 空串(= 根路径) |
+| `BISHENG_APP_BASE_PATH` | 对外基路径,如 `/apps/my-app` | `bisheng dev` 下同样是 `/apps/<slug>`;直接 `python main.py` 时未设置 |
 | `BISHENG_APP_DB_URL` | 应用数据库连接串,如 `sqlite:////data/app.db` | 自己给个 `/data` 或本地路径 |
 | `BISHENG_APP_DB_PATH` | 数据库文件路径,如 `/data/app.db` | 同上 |
-| `BISHENG_APP_HEALTH_PATH` | 健康探测路径(默认 `/`) | `/` |
+| `BISHENG_APP_HEALTH_PATH` | 健康探测路径,恒为 `/`(不可配置) | `/` |
 | `BISHENG_APP_ID` / `BISHENG_APP_SLUG` / `BISHENG_APP_VERSION` | 平台侧标识 | 可不用 |
 | `BISHENG_PLATFORM_API_BASE` | 平台 API 基址(调用平台能力时用) | 可不用 |
 | `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`(及小写同名) | 出站代理,访问外网只能经过它(见 §2 `egress.domains`);应用自带的同名值会被覆盖 | 不设 |
@@ -64,7 +64,9 @@ metadata:
 
 - 应用**收到的**请求路径是**根路径**(`/`、`/submit`……)——你按根路径写路由即可,不用自己拼前缀去匹配。
 - 但应用**发出的**每一个链接、表单 `action`、跳转、静态资源引用,**必须自己带上 `BISHENG_APP_BASE_PATH` 前缀**,
-  否则用户点一下就跳到平台根路径去了。本地这个变量是空串,拼出来正好是原样,所以本地看不出问题。
+  否则用户点一下就跳到平台根路径去了。`bisheng dev` 也把应用挂在 `http://127.0.0.1:<port>/apps/<slug>/` 下
+  (slug 取清单的 `slug`,没有就取 `.bisheng/app.json` 里的,再没有就是 `dev`),本地代理同样剥前缀,
+  所以漏前缀的链接在本地就会出错:前缀外的请求得到一个说明原因的 404 页,终端对每个路径警告一次。
 
   统一写一个拼接函数,所有对外 URL 都过它:
   ```python
@@ -73,34 +75,46 @@ metadata:
   ```
 
 - **主流框架有现成开关,入口脚本已自动设好**,你只要用框架的相对路径能力,不用手拼:
-  - FastAPI/uvicorn:`UVICORN_ROOT_PATH` 已注入 → uvicorn 自动处理;模板里用 `request.url_for(...)` 或 `{{ request.scope.root_path }}`。
+  - FastAPI/uvicorn:`UVICORN_ROOT_PATH` 已注入,但**只在用 `uvicorn` 命令启动时生效**(如 `Procfile` 写
+    `web: uvicorn main:app --host 0.0.0.0 --port $PORT`)。在代码里 `uvicorn.run(app, ...)` 启动时它不生效,
+    要显式传 `root_path=os.environ.get("BISHENG_APP_BASE_PATH", "")`。模板里用 `request.url_for(...)` 或 `{{ request.scope.root_path }}`。
   - Streamlit:`STREAMLIT_SERVER_BASE_URL_PATH` 已注入。
   - Gradio:`GRADIO_ROOT_PATH` 已注入。
-- ⚠️ **但根绝对路径仍会 404**:手写的 `<img src="/logo.png">`、`fetch("/api/x")`、`redirect("/next")` 这类
-  **以 `/` 开头的绝对路径**,平台**不会**帮你改写 HTML,预检也**不会**报错——它只是在浏览器里 404。
-  要么用上面的 `url()` 前缀,要么用相对路径(`logo.png`、`api/x`)。
+- **跳转会补前缀**:应用回的 `Location: /login`,入口(和 `bisheng dev` 的本地代理)改成 `/apps/<slug>/login`;
+  已带本应用前缀的值、`/apps/<别的应用>/...`、相对地址、外站绝对地址原样不动;指向应用自身源站的绝对地址映射到前缀下。
+  所以 `redirect("/next")` 不会离开应用。
+- ⚠️ **页面和 JS 里的根绝对路径仍会 404**:平台**不**改写 HTML 正文和 JS。手写的 `<img src="/logo.png">`、
+  `fetch("/api/x")` 这类**以 `/` 开头的绝对路径**,上线后在浏览器里 404,预检也**不会**报错;
+  `bisheng dev` 下它们得到说明原因的 404 页。要么用上面的 `url()` 前缀,要么用相对路径(`logo.png`、`api/x`)。
 
 ### 运行时其它事实
 
-- ⚠️ **本版不支持 WebSocket**——这是唯一一条会让**一整类应用**上线即报废的限制,**动手写代码之前就要定型**。
-  托管入口本版不反代 WS(反代能力在后续波次),握手会被**当场关闭**,close code `4501`。症状极具迷惑性:
-  **不是 502**,前置 nginx 是通的、请求确实到了入口;应用自己的 JS 只收到一个 `close` 事件,
-  **平台侧日志干干净净**——本地 `ws://localhost` 连得上,线上一定连不上,而且没有任何东西提示你为什么。
-  凡是要服务端推送的场景(聊天、进度条、实时看板、协同编辑、`socket.io`/Gradio 的实时通道),
-  **一开始就用 SSE(`text/event-stream`)或轮询实现**,别等上线才发现要重写。SSE 走普通 HTTP、入口原样透传流式响应;
-  长连接**每几分钟发一次心跳**(入口上游读超时 600s,静默超过就会被断开)。
-  清单里也不要写 `websocket:` / `ws_path:` 这类键——预检会以 **16232** 当场拒绝,换个键名不会让它变得可用。
+- **WebSocket 可用,但前端必须对任何 close 自动重连**。托管入口默认转发 WebSocket 升级,清单里**不用**声明;
+  写了 `websocket:` / `ws_path:` 这类键,预检以 **16232** 拒绝(删掉该键即可)。连接的授权在握手时确定,
+  有效期 = min(访问者凭据剩余时长(约 15 分钟), 8 小时),到期入口以 `4001` 关闭——所以**大约每 15 分钟会断一次**;
+  入口每 30 秒重新核一次权限,权限被收回、应用下线或被删时以 `4403` 关闭。其它 close code:`4401` 需要登录、
+  `4404` 没有这个应用、`4503` 部署中/恢复中/暂不可用。每个 close code 的含义都是「重连」。只有运维关掉了 WebSocket 转发时才会收到 `4501`。
+  ⚠️ `bisheng dev` 的本地代理**不转发** WebSocket,WebSocket 只能上线后验证。
+  SSE(`text/event-stream`)同样可用、本地也能测;长连接**每几分钟发一次心跳**(入口上游读超时 600s,静默超过就会被断开)。
 - **运行环境三选一**:`python3.11`(Python 服务)/ `node20`(Node.js 服务)/ `static`(纯静态页面,平台用 nginx 托管)。
   不确定目标平台装了哪几个时,以 `bisheng deploy` 预检回的 16222 提示为准——它会列出本环境实际支持的取值。
-- **健康检查探 `/`**:确保应用在 `/`(或 `BISHENG_APP_HEALTH_PATH`)返回 2xx,否则一直判不健康。
-- **启动命令解析顺序**(最显式优先;清单里**没有**启动命令字段):
-  - `python3.11`:环境变量 `BISHENG_APP_START` → 项目根 `Procfile` 里的 `web:` 行 → `main.py` → `app.py`。多数情况把入口写成 `main.py` 即可。
-  - `node20`:`BISHENG_APP_START` → `Procfile` 的 `web:` 行 → `package.json` 的 `scripts.start` → `package.json` 的 `main` →
+- **健康检查探 `/`,路径固定、不可配置**:发布时的启动探活和运行期的容器健康检查用同一条规则——直接请求容器的 `/`,
+  **不带身份头、不跟随跳转**,状态码低于 500 即通过(最好是 2xx)。所以 `/` 不能要求身份,也不能报 5xx。
+  启动探活最多等 90 秒;失败(16228)时 CLI 打印「应用启动输出(末尾)」,即容器最后 40 行输出。探活环境里 `BISHENG_APP_BASE_PATH` 已是 `/apps/<slug>`。
+- **换版本时短暂有两个进程**:新实例启动并探活(最多 90 秒)期间旧实例继续服务,新实例就绪后旧实例再服务 30 秒才退出;
+  两者打开同一个 `/data` 下的 SQLite,所以要开 WAL(`PRAGMA journal_mode=WAL`)。
+- **启动命令解析顺序**(最显式优先;清单里**没有**启动命令字段)。**把启动命令写进项目根 `Procfile` 的 `web:` 行**:
+  - `python3.11`:`Procfile` 的 `web:` 行 → `main.py` → `app.py`。
+  - `node20`:`Procfile` 的 `web:` 行 → `package.json` 的 `scripts.start` → `package.json` 的 `main` →
     `server.js` / `index.js` / `app.js` / `main.js`。`scripts.start` 里的命令会被直接执行(`node_modules/.bin` 已在 PATH 上),
-    **不经过 `npm start`**;`BASE_PATH` 与 `BISHENG_APP_BASE_PATH` 同值,给框架用。有 `scripts.build` 时平台在构建镜像时先跑一次 `npm run build`
-    (装齐 devDependencies 再裁掉),没有就只装 `dependencies`;有 `package-lock.json`(或 `npm-shrinkwrap.json`)用 `npm ci`,没有用 `npm install`。
-  - `static`:没有进程可启动,以上都不看。平台找 `index.html`:先看包根目录,再看 `dist/`、`build/`、`public/`,取第一个命中的目录整个托管;
-    未知路径回落到 `index.html`(前端路由可用),带扩展名的资源找不到就是 404。
+    **不经过 `npm start`**;`BASE_PATH` 与 `BISHENG_APP_BASE_PATH` 同值,运行期给框架用。有 `scripts.build` 时平台在**构建镜像时**先跑一次 `npm run build`
+    (装齐 devDependencies 再裁掉),那时 `BASE_PATH` 还没有设置,所以打包工具的 `base` 必须是相对路径(Vite 写 `base: './'`;默认的 `'/'` 上线后白屏)。
+    没有 `scripts.build` 就只装 `dependencies`;有 `package-lock.json`(或 `npm-shrinkwrap.json`)用 `npm ci`,没有用 `npm install`。
+  - 环境变量 `BISHENG_APP_START` 只在 `bisheng dev` 下有效(从 shell 读,`dev` 会给出警告);托管环境没有途径设置它
+    (清单没有 env 字段,`BISHENG_APP_` 是平台保留前缀)。
+  - `static`:没有进程可启动,以上都不看,运行期也读不到 `BISHENG_APP_BASE_PATH`。平台找 `index.html`:先看包根目录,再看 `dist/`、`build/`、`public/`,取第一个命中的目录整个托管;
+    未知路径回落到 `index.html`,带扩展名的资源找不到就是 404。单页应用要用相对 `base` 构建(Vite `base: './'`),
+    并用 hash 路由或运行期算出的路由 basename;用相对资源路径时,嵌套路由下的资源可能 404。
 - **依赖**:能只用标准库就别加依赖。`requirements.txt` 留空(node20 则 `package.json` 没有 `dependencies`)是合法且推荐的——
   构建就不需要联网拉包;在内网/信创环境「构建卡在拉不到包」是最常见、也最容易被误判成平台故障的失败。真要装,确认构建环境能联网。
   `node_modules/` 永远不会被打进包里;`dist/`、`build/` **默认也不打包**——`static` 应用要发构建产物时在 `.bishengignore` 里加一行 `!dist/`
@@ -132,11 +146,12 @@ port: 8080                   # 必填,应用监听的端口
 - `capabilities:`(声明要调用的平台模型/知识库)由另一份技能覆盖:**平台能力接线**(`platform-wiring`)
   的「知识库检索」一章讲怎么声明、怎么以当前访问者的身份检索;本包只管交付,不讲接线。
   (部署到未开放能力位的环境时非空声明会被拒,错误码 16231——那一章也写明了。)
-- `database.tables:` 可以声明,但**本轮平台不替你建表**——你自己在应用里用 `BISHENG_APP_DB_URL` 连库、
-  `CREATE TABLE IF NOT EXISTS` 建表。声明了就会被**逐版本对比**:迭代发布时相对在线版本**删表 / 删列 / 改列**
-  (类型、可空、默认值任一变化)都算破坏性变更,平台会拒(错误码 16229)并要求显式确认——终端上 `bisheng deploy`
-  会打印变更清单后问你;非终端或脚本里要先看清清单、确认后带 `--confirm-schema-change` 重发同一个包。
-  只加表 / 加列不用确认。**没有终端不等于默认同意**,不要为了跳过提问而无脑加这个 flag。
+- `database.tables:` 里**列出了 `columns`** 的表,平台在上线时建表并迁移(新版本启动之前执行);没写 `columns` 的表平台跳过
+  (预检提示会列出是哪几张),要你自己在应用里用 `BISHENG_APP_DB_URL` 连库、`CREATE TABLE IF NOT EXISTS` 建表。
+  声明的表会被**逐版本对比**:相对在线版本只加表 / 加列不用确认;**删表 / 删列 / 改列**(类型、可空、默认值任一变化)
+  是破坏性变更,平台会拒(错误码 16229)并要求显式确认——终端上 `bisheng deploy` 会打印变更清单后问你;
+  非终端或脚本里要先看清清单、确认后带 `--confirm-schema-change` 重发同一个包。**没有终端不等于默认同意**,不要为了跳过提问而无脑加这个 flag。
+  破坏性迁移执行前平台先存一份数据快照;迁移失败报 16259,新版本不启动,旧版本照常服务。
 - `egress.domains:`(出站域名白名单)**平台会真的拦截**:应用上线后默认连不上任何外网地址,只放行平台自身和这里列出的域名。
   **本地 `python main.py` 不受限,上线后才拦**——这是少数本地验不出来的差别,所以应用要访问的每个外部接口都要列上:
   ```yaml
@@ -158,8 +173,9 @@ port: 8080                   # 必填,应用监听的端口
 平台托管应用天然处在企业内网、由平台管身份与网络,所以:
 
 - **不要在应用里自建鉴权/登录页、不要硬编码密钥、不要硬编码数据库连接串**。
-- 需要密钥/凭据时,**用环境变量引用**(`os.environ[...]`),不要把明文写进代码或清单;
-  清单里出现疑似密钥会被密钥扫描拦下(错误码 16230/16241)。
+- 不要把密钥明文写进代码或清单:`bisheng-app.yaml` 里任何位置出现密钥类键名(`secret`/`credential`/`password`/`token`/`api_key`/`private_key`)
+  或 `vault://` 这类引用会被拒(16230),源码里扫到疑似密钥会被拒(16241)。
+  ⚠️ 托管环境**目前没有**设置自定义环境变量的途径:你自己定义的变量只在本地 `bisheng dev` 下(从 shell 继承)存在,上线后读不到。
 - 数据库连接用平台注入的 `BISHENG_APP_DB_URL` / `BISHENG_APP_DB_PATH`,不要自己写死连接串。
 - (用户身份、检索、附件存储等「平台能力接线」由另一份技能覆盖,本轮不展开。)
 
@@ -216,14 +232,21 @@ bisheng deploy . --wait               # --wait-timeout 秒数,默认 1800
 
 | 码 | 含义 | 怎么修 |
 |---|---|---|
+| 16103 | slug 已被占用(已删除的应用也占着原 slug) | 清单里换一个 `slug` |
+| 16201 | 上传包超过体量上限 | 按 CLI 列出的大文件清理,或补 `.bishengignore` |
+| 16203 | 包根没有 `bisheng-app.yaml` | 在项目根执行 `bisheng deploy .` |
 | 16221 | 清单格式非法 | 按报错的字段名改;注意未知字段/缺必填 |
 | 16222 | runtime 不支持 | 改成报错里列出的取值之一(`python3.11` / `node20` / `static`,以该环境实际装了哪些为准) |
-| 16228 | 启动探活失败 | 十有八九是铁律 ①②:没读 `PORT`、或绑了 `127.0.0.1`;也可能应用 `/` 不返回 2xx |
-| 16230 / 16241 | 清单里有密钥 / 源码里扫到密钥 | 移除明文密钥,改环境变量引用 |
+| 16223 | 资源档位不存在或已停用 | 换平台提供的档位,或删掉 `tier` 用默认 |
+| 16227 | 依赖安装失败 | 看构建日志末尾:包名/版本错就改依赖清单;连不上软件源是构建环境网络问题,找管理员 |
+| 16228 | 启动探活失败 | 先看 CLI 打印的「应用启动输出(末尾)」;常见原因是铁律 ①②(没读 `PORT`、绑了 `127.0.0.1`),或 `/` 返回 5xx / 无身份头时报错 |
 | 16229 | 表结构变更未确认(相对在线版本删表 / 删列 / 改列) | 看清 CLI 打印的变更清单;确认影响后在终端回答「是」,或带 `--confirm-schema-change` 重发同一个包 |
-| 16231 | capabilities 非空 | 本轮删掉 `capabilities:` |
-| 16232 | 清单里声明了 WebSocket | 本版入口不反代 WS(握手关闭,close `4501`);删掉该键,推送改用 SSE / 轮询 |
+| 16230 / 16241 | 清单里有密钥或 `vault://` 类引用 / 源码里扫到密钥 | 删掉明文密钥和引用 |
+| 16231 | 本环境没开放能力声明需要的平台能力 | 请管理员开启,或从清单删掉这条能力声明 |
+| 16232 | 清单里声明了 WebSocket | WebSocket 不用声明,删掉该键 |
 | 16226 | 平台容量不足 | 稍后重试或联系管理员;审批已过时可用「手动上线」重试,无需重新审批 |
+| 16251 / 16252 | 已有在途的发布审批单 / 应用处于待上线 | 先在应用详情页·发布撤回在途单,或完成/放弃这次上线,再 `deploy` |
+| 16259 | 上线时数据表迁移失败(如给已有数据的表加了无默认值的 NOT NULL 列) | 改 `database.tables` 的声明后重发;新版本没有启动,旧版本照常服务 |
 
 ---
 
@@ -235,9 +258,10 @@ bisheng deploy . --wait               # --wait-timeout 秒数,默认 1800
 - [ ] 服务绑的是 `0.0.0.0`,不是 `127.0.0.1`。
 - [ ] 需要写文件的地方(数据库/缓存/上传)都写在 `/data` 下;数据库连接用 `BISHENG_APP_DB_URL`/`BISHENG_APP_DB_PATH`。
 - [ ] 对外链接/表单 action/跳转/静态资源都带了 `BISHENG_APP_BASE_PATH`,或用框架相对路径;没有手写 `/开头` 的根绝对路径。
-- [ ] 应用在 `/` 返回 2xx(健康检查过得去)。
-- [ ] **没有用 WebSocket**(本版握手会被关闭);需要服务端推送的地方用的是 SSE 或轮询。
-- [ ] `bisheng-app.yaml` 有 `name`/`runtime`(`python3.11` / `node20` / `static` 之一)/`port`;没有 `health`/`command` 等未知字段;`capabilities` 为空。
+- [ ] 应用在 `/` 不带身份头时返回低于 500 的状态码(最好 2xx),而且这个请求很便宜(健康检查每 10 秒探一次)。
+- [ ] 用了 WebSocket 的话:前端对任何 close 都自动重连(约每 15 分钟会被关一次);清单里没有 WebSocket 相关的键。
+- [ ] `bisheng-app.yaml` 有 `name`/`runtime`(`python3.11` / `node20` / `static` 之一)/`port`;没有 `health`/`command` 等未知字段。
+- [ ] 启动命令写在 `Procfile` 的 `web:` 行(或用 `main.py`/`app.py` 默认入口),不依赖 `BISHENG_APP_START` 或自定义环境变量。
 - [ ] 没有硬编码密钥/连接串/自建登录页。
 - [ ] 应用要访问的外网地址都写进了 `egress.domains`;发请求的 HTTP 客户端会读 `HTTPS_PROXY`。
 - [ ] 依赖尽量少;`requirements.txt`(或 `package.json` 的 `dependencies`)里没有的包不要 import;纯标准库时留空。

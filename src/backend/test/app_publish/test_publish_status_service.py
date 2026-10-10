@@ -362,6 +362,40 @@ async def test_can_flags_reflect_role_and_state(
     assert status["can"]["submit"] is False
 
 
+@pytest.mark.parametrize("instance_status", ["exception", "execute_failed", "rejected"])
+async def test_withdraw_is_offered_only_where_the_approval_centre_accepts_it(
+    publish_db,
+    app_factory,
+    deployment_factory,
+    approval_env,
+    audit_sink,
+    approval_notifications,
+    super_admin_user,
+    instance_status,
+):
+    """The approval centre withdraws a ``pending`` request and refuses every other status.
+
+    ``exception`` and ``execute_failed`` still hold the application, which is
+    why the flag used to be drawn for them; the click then only produced an
+    error toast.
+    """
+    from bisheng.app_publish.domain.services import publish_approval_service
+    from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+
+    app, version = await app_factory(with_version=True)
+    deployment = await deployment_factory(
+        app_id=app.id, stage="precheck_probe", status="running", version_id=version.id, tier_code="light"
+    )
+    result = await publish_approval_service.submit(deployment)
+    instance = await ApprovalInstanceRepository.get_instance(result.instance_id)
+    instance.status = instance_status
+    await ApprovalInstanceRepository.update_instance(instance)
+
+    status = await _service().get_publish_status(app.id, actor=_actor(OWNER_USER_ID))
+
+    assert status["can"]["withdraw"] is False
+
+
 async def test_manual_publish_flag_true_only_when_parked(publish_db, app_factory, deployment_factory, tier_seed):
     app, _, _ = await _parked(app_factory, deployment_factory)
 

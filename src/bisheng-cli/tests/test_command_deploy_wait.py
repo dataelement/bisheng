@@ -296,6 +296,38 @@ def test_wait_rejected_exits_20_with_full_reason(
     assert reason in err  # never truncated: it is the instruction for the retry
 
 
+@pytest.mark.parametrize(
+    ("approval_status", "reason_kind", "exit_code"),
+    [("rejected", "approval_rejected", EXIT_REJECTED), ("withdrawn", "approval_withdrawn", EXIT_WITHDRAWN)],
+)
+def test_a_decided_attempt_reads_as_the_decision_not_as_a_failure(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path, approval_status, reason_kind, exit_code
+) -> None:
+    """The shape the platform really sends once a person decided against a release.
+
+    ``PublishTerminalService`` also closes the attempt as ``failed`` with a
+    code-less failure tuple. Read in that order, every rejection used to exit
+    19 ("unknown code") and the reason was never printed.
+    """
+    reason = "接口缺少鉴权，请补上后重新提交。" if approval_status == "rejected" else None
+    closed = deployment(
+        stage="approved",
+        status="failed",
+        failure={
+            "stage": "approved",
+            "code": None,
+            "message": "发布审批被驳回",
+            "details": {"reason": reason_kind},
+            "hints": ["修改后可重新执行 bisheng deploy 提交新的发布"],
+        },
+        approval={"instance_id": 7, "status": approval_status, "reject_reason": reason},
+    )
+    code, _, err = _run(["deploy", str(sample_project), "--wait"], monkeypatch=monkeypatch, mock=_mock([closed]))
+    assert code == exit_code
+    if reason:
+        assert reason in err
+
+
 def test_wait_withdrawn_exits_21(monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path) -> None:
     withdrawn = deployment(
         stage="approval_created",

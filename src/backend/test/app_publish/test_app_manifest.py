@@ -198,33 +198,47 @@ async def test_secret_reference_rejected_16230(tier_seed):
     ],
 )
 async def test_websocket_declaration_rejected_16232(tier_seed, overrides, expected_field):
-    """A declared WebSocket is refused before the schema can call it an unknown field.
+    """A WebSocket key is refused with "no declaration needed", not "unknown field".
 
-    The whole point is the *answer*, not the rejection: ``extra="forbid"`` would
-    already reject every one of these as 16221 "unknown field, did you mean …",
-    which sends the developer off to rename a key and ship an app whose sockets
-    are closed with 4501 in production while the platform logs stay clean.
+    The entry carries sockets for every app without a declaration. As 16221
+    "unknown field, did you mean …" the developer would go looking for the
+    right spelling of a key that does not exist.
     """
-    from bisheng.common.errcode.app_publish import AppWebSocketUnsupportedError
+    from bisheng.common.errcode.app_publish import AppWebSocketDeclarationError
 
-    with pytest.raises(AppWebSocketUnsupportedError) as excinfo:
+    with pytest.raises(AppWebSocketDeclarationError) as excinfo:
         await _validate(_yaml(**overrides))
     assert excinfo.value.code == 16232
     details = excinfo.value.kwargs["details"]
     assert details["field"] == expected_field
-    assert details["reason"] == "websocket_unsupported"
+    assert details["reason"] == "websocket_needs_no_declaration"
 
 
-async def test_websocket_rejection_carries_close_code_and_the_replacement(tier_seed):
-    """``details`` matches what the browser showed; ``hints`` say what to build instead."""
-    from bisheng.common.errcode.app_publish import AppWebSocketUnsupportedError
+async def test_websocket_rejection_says_to_delete_the_key_and_reconnect(tier_seed):
+    """The hints carry the fix (delete the key) and the one thing the frontend must do (reconnect)."""
+    from bisheng.common.errcode.app_publish import AppWebSocketDeclarationError
 
-    with pytest.raises(AppWebSocketUnsupportedError) as excinfo:
+    with pytest.raises(AppWebSocketDeclarationError) as excinfo:
         await _validate(_yaml(ws_path="/ws"))
-    assert excinfo.value.kwargs["details"]["ws_close_code"] == 4501, "the code app-proxy closes the upgrade with"
+    assert "ws_close_code" not in excinfo.value.kwargs["details"]
     joined = " ".join(excinfo.value.kwargs["hints"])
-    assert "SSE" in joined, "a refusal without the replacement is a dead end"
-    assert "4501" in joined
+    assert "删除该键" in joined and "重连" in joined
+    assert "不支持" not in joined and "SSE" not in joined
+
+
+async def test_only_tables_without_columns_get_the_not_created_hint(tier_seed):
+    """The platform creates every declared table that lists ``columns``; only the bare ones are named."""
+    from bisheng.app_publish.domain.services.manifest_validator import validate_manifest
+
+    document = _yaml(
+        database={"tables": [{"name": "answers", "columns": [{"name": "id", "type": "integer"}]}, {"name": "cache"}]}
+    )
+    outcome = await validate_manifest(document)
+    assert len(outcome.hints) == 1
+    assert "cache" in outcome.hints[0] and "answers" not in outcome.hints[0]
+
+    declared = _yaml(database={"tables": [{"name": "answers", "columns": [{"name": "id", "type": "integer"}]}]})
+    assert (await validate_manifest(declared)).hints == []
 
 
 @pytest.mark.parametrize(

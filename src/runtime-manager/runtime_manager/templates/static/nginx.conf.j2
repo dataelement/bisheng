@@ -31,9 +31,12 @@ http {
     gzip_types text/plain text/css application/javascript application/json image/svg+xml;
 
     # The app is always behind app-proxy under /apps/{slug}. A directory
-    # redirect must stay relative (`/docs/`), never `http://<bridge-ip>:port/docs/`,
-    # or the browser leaves the platform. Root-absolute links inside the shipped
-    # HTML are the developer's contract (DEV-04); the platform rewrites no HTML.
+    # redirect must carry no origin (`Location: /docs/`), never
+    # `http://<bridge-ip>:port/docs/`. That form is path-absolute, not relative:
+    # app-proxy puts the stripped prefix back on it (`restore_entry_prefix`), so
+    # the browser lands on /apps/{slug}/docs/. Root-absolute links inside the
+    # shipped HTML are the developer's contract (DEV-04); the platform rewrites
+    # no HTML.
     absolute_redirect off;
     port_in_redirect off;
 

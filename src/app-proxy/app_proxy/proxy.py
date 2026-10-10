@@ -42,7 +42,7 @@ from app_proxy.pages import (
     json_status,
     render_page,
 )
-from app_proxy.routing import entry_prefix_for, resolve_upstream, strip_entry_prefix
+from app_proxy.routing import entry_prefix_for, resolve_upstream, restore_entry_prefix, strip_entry_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +136,25 @@ def log_forged_headers(connection: HTTPConnection, request_id: str, slug: str) -
         # is either a misconfigured integration or someone probing AC-32, and
         # both are worth seeing before they become an incident.
         log_header_strip(logger, request_id=request_id, slug=slug, stripped=sorted(forged))
+
+
+def _response_header(
+    name: bytes, value: bytes, *, slug: str, entry_prefix: str, upstream_base: str
+) -> tuple[bytes, bytes]:
+    """One upstream response header, with ``Location`` put back under the entry prefix.
+
+    Every other header leaves byte for byte (see the ``raw`` note in
+    :func:`forward`). ``Location`` is the one the strip breaks: see
+    :func:`app_proxy.routing.restore_entry_prefix`.
+    """
+    if name.lower() != b"location":
+        return name, value
+    try:
+        location = value.decode("latin-1")
+    except UnicodeDecodeError:  # pragma: no cover - latin-1 decodes every byte
+        return name, value
+    rewritten = restore_entry_prefix(location, slug, entry_prefix, upstream_base)
+    return name, rewritten.encode("latin-1")
 
 
 def upstream_headers_for(connection: HTTPConnection, verdict: Verdict, *, slug: str, request_id: str) -> list:
@@ -327,7 +346,7 @@ async def forward(
             background=BackgroundTask(response.aclose),
         )
         proxied.raw_headers = [
-            (name, value)
+            _response_header(name, value, slug=slug, entry_prefix=config.entry_prefix, upstream_base=upstream.base_url)
             for name, value in response.headers.raw
             if name.lower().decode("latin-1") not in _RESPONSE_HOP_BY_HOP
         ]

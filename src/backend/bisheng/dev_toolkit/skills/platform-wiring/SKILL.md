@@ -131,7 +131,9 @@ with auth.bind(incoming_headers):
 几条必须知道的：
 
 - **没有注入身份时 `current_user()` 抛 `PlatformIdentityMissingError`，不返回 `None`。** 这是刻意的：
-  健康检查端点**不要调** `current_user()`（它没有身份头），后台任务 / 线程池里也不要假设有访问者。
+  平台的健康检查直接请求容器的 `/`、**不带身份头**，状态码低于 500 才算健康：`/` 若调 `current_user()`，
+  要把这个异常转成 4xx（`example-sdk/` 用 `exception_handler` 转成 401），漏转就是 500、判不健康。
+  后台任务 / 线程池里也不要假设有访问者。
   想「取不到就当匿名」的那一行，正是这一章开头说的静默失败点。
 - `user_id` 是 **`str`**，而且**不是**平台 `user` 表的行号——别拿它做外键或去查平台用户。
 - `subject_kind` 线上恒为 `human`；本地 `bisheng dev` 期**取决于你 login 用的密钥**（服务账号密钥 →
@@ -187,20 +189,19 @@ for chunk in result.chunks:
 | 异常 | 说明 | 下一步 |
 |---|---|---|
 | `VisitorCredentialMissingError` | 本请求没有访问者凭据（直连了应用端口 / 后台任务 / 健康检查） | 经平台入口访问；后台任务不要检索 |
-| `VisitorCredentialRejectedError` | 平台拒绝了这枚凭据：已过期、被伪造，或签给的是另一个应用 | 让用户刷新重进；本地见下方「如实说明」 |
+| `VisitorCredentialRejectedError` | 平台拒绝了这枚凭据：已过期、被伪造，或签给的是另一个应用 | 让用户刷新重进 |
 | `AppCredentialMissingError` | 没有应用自己的运行期凭据（`BISHENG_APP_TOKEN` 未注入） | 线上：重新上线应用；本地 `bisheng dev`：见下方「如实说明」 |
 | `ScopeMissingError` | 本地期密钥缺 `knowledge:read` 能力位 | 找管理员给这把密钥勾上 |
-| `TargetUnreachableError` | 指定的库里有不可及的（线上：未声明；本地：不存在/未授予） | 去掉它，或在清单里声明后重发 |
-| `CapabilityRevokedError` / `CapabilityNotDeclaredError` | 能力被收回 / 从没声明过 | 找 owner 重新声明并重发 |
+| `TargetUnreachableError` | 指定的库里有不可及的（本地：不存在/未授予） | 去掉它，或找管理员授予 |
+| `CapabilityRevokedError` / `CapabilityNotDeclaredError` | 能力被收回 / 从没声明过（线上请求了清单没声明的知识库就是后者，平台码 16274） | 在清单里声明后重发 |
 | `PermissionEvaluationError` | 权限引擎暂时不可用 | 稍后重试；**不要**改小范围重试 |
 | `SdkIncompatibleError` / `PlatformTooOldError` | SDK 与平台版本不兼容 / 平台没发布 SDK | 从当前平台重新取 SDK；或联系管理员 |
 
 > **如实说明（本轮）：线上能用，本地 `bisheng dev` 还不能。**
 > 线上托管期检索已经打通（前提是部署配好了访问者凭据的签发密钥；没配就没有访问者凭据，
 > 平台一律拒绝而不是退回应用身份）。
-> 本地 `bisheng dev` 期则有两处上游还没就绪：① 它**不注入** `BISHENG_APP_TOKEN`，所以本地先撞上
-> `AppCredentialMissingError`；② 它本地自签的访问者凭据平台无从验签，补上①也会被拒。
-> **两者都不是你的代码写错了，也不是密钥的问题，换密钥没有用**——按本章写法接好线，
+> 本地 `bisheng dev` 期它**不注入** `BISHENG_APP_TOKEN`，SDK 在发请求前就抛 `AppCredentialMissingError`。
+> **这不是你的代码写错了，也不是密钥的问题，换密钥没有用**——按本章写法接好线，
 > 本地先用别的方式验业务逻辑，检索的真实行为**发布后用真实账号验**。
 
 ---
@@ -243,8 +244,8 @@ storage.delete("报告/2026-Q1.pdf")                # 逐个删，没有「清�
 
 > **如实说明（本轮）**：`bisheng dev` **还没有注入**本地附件目录变量，所以本地调 `storage`
 > 会抛「没有存储句柄」（`StorageHandleMissingError`）。这同样不是你的代码问题；
-> 在它补齐前，本地想跑通可以自己 `export BISHENG_APP_STORAGE_DIR=<项目>/.bisheng/attachments`
-> 再启动——**变量名和线上完全一样，应用代码一个字都不用改**。
+> 在它补齐前，本地想跑通可以在启动 `bisheng dev` 的那个 shell 里先 `export BISHENG_APP_STORAGE_DIR=<项目>/.bisheng/attachments`
+> （`dev` 把 shell 里的变量传给应用）——**变量名和线上完全一样，应用代码一个字都不用改**。
 
 ---
 
@@ -273,9 +274,12 @@ def connect() -> sqlite3.Connection:
     return conn
 ```
 
-### 建表：应用自己建，用 `IF NOT EXISTS`
+### 建表：两种做法选一种
 
-平台**不替你建表**（清单里的 `database.tables` 本轮只是声明，不产生任何 DDL）。在应用启动时执行：
+- **在清单里声明**：`database.tables` 里**列出了 `columns`** 的表，平台在上线时、新版本启动之前建表并迁移
+  （加表、加列自动做；删表、删列、改列要带 `--confirm-schema-change`，否则 16229；破坏性迁移前平台先存一份数据快照；
+  迁移失败报 16259，新版本不启动）。没写 `columns` 的表平台跳过，预检提示会列出是哪几张。
+- **应用自己建**：在应用启动时用 `IF NOT EXISTS` 执行，例如：
 
 ```python
 def init_schema(conn: sqlite3.Connection) -> None:
@@ -308,15 +312,16 @@ def init_schema(conn: sqlite3.Connection) -> None:
    ```
    新列必须**带默认值或允许 NULL**，老数据才能原样活下来。
 2. **改列 / 删列 / 改表名——须确认，尽量不做。** 这类变更会让回滚到上一版的代码读不懂库。
-   真要做：先加新列、双写一段时间、再在**后一个**版本清理旧列；发布时带 `bisheng deploy --confirm-schema-change`
-   表示你知道自己在做什么。**如实说明**：本轮平台只**记录**这个确认、不做结构检测也不阻断——
-   护栏在你这边，不在平台那边。
+   真要做：先加新列、双写一段时间、再在**后一个**版本清理旧列。平台只检测 `database.tables` 里声明过的表：
+   相对在线版本删表 / 删列 / 改列时拒绝发布（16229），确认后带 `bisheng deploy --confirm-schema-change` 重发。
+   应用自己建、没在清单里声明的表，平台不检测，护栏在你这边。
 
 ### 不要做的
 
 - 不要往 `/data` 之外写库文件（根文件系统只读，运行期才炸）。
 - 不要把库文件提交进 git、也不要指望它进上传包（`*.db` 默认排除，`.bisheng/` 硬排除）。
-- 不要在两个进程里同时开同一个库做写操作（一个应用一个进程，平台就是这么跑的）。
+- 换版本时会短暂有两个进程打开同一个库：新实例启动并探活（最多 90 秒）期间旧实例继续服务，新实例就绪后旧实例再服务 30 秒；
+  迁移也在旧版本仍在服务时执行。所以要开 WAL（上面的 `connect()` 已开），写操作要能容忍另一个进程同时在写。
 
 ---
 
@@ -492,8 +497,11 @@ bisheng dev --port 3000
 |---|---|
 | 入口代理注入 `X-BiSheng-*` 身份头、剥离伪造头 | 内置迷你代理做同样的事；**身份恒为你 login 用的那把密钥对应的账号**（服务账号密钥 → `Subject-Kind=service_account`；个人访问令牌 → `human`） |
 | `/data/app.db`，环境变量 `BISHENG_APP_DB_*` | `<项目>/.bisheng/dev/app.db`，**同名**环境变量；跨重启保留、不进上传包 |
-| `PORT` / `BISHENG_APP_PORT` / `BISHENG_APP_BASE_PATH=/apps/<slug>` 等 | 同名注入；`BASE_PATH` 为空串（根路径） |
-| 启动命令：`BISHENG_APP_START` → `Procfile web:` → `main.py` → `app.py` | 同一顺序 |
+| `PORT` / `BISHENG_APP_PORT` / `BISHENG_APP_BASE_PATH=/apps/<slug>` 等 | 同名注入；`BASE_PATH` 同样是 `/apps/<slug>`（slug 取清单的，没有就取 `.bisheng/app.json` 里的，再没有就是 `dev`），本地入口是 `http://127.0.0.1:<port>/apps/<slug>/` |
+| 入口剥掉 `/apps/<slug>` 前缀再转发，跳转的 `Location` 补回前缀 | 同样剥前缀、补前缀；前缀外的请求（如 `/logo.png`）得到说明原因的 404 页 |
+| 启动命令：`Procfile web:` → `main.py` → `app.py` | 同一顺序；另外先看 shell 里的 `BISHENG_APP_START`（只在本地有效，托管环境设置不了，`dev` 会警告） |
+| 入口转发 WebSocket | **不转发** WebSocket，只能上线后验证 |
+| 没有设置自定义环境变量的途径 | shell 里你自己的变量会传给应用——上线后它们不存在 |
 | 模型面三名 `OPENAI_BASE_URL` / `OPENAI_API_KEY` / `BISHENG_MODEL_BASE_URL`，密钥是应用自己的运行期凭据（[第 5 章](#5-平台模型openai-兼容)） | 同名注入；地址同样由平台给出，密钥换成你 login 用的那把。平台没开模型面时三个都不设，连 shell 里同名的值也清掉 |
 
 - 浏览器打开的是 `dev` 打印的**本地入口地址**（迷你代理），不是应用自己的端口——直连应用端口的请求没有身份头，
@@ -516,13 +524,14 @@ bisheng dev --port 3000
 - [ ] 没有拼任何模型端点地址（读注入的 `OPENAI_BASE_URL` / `OPENAI_API_KEY`，不碰 `BISHENG_PLATFORM_API_BASE`）；
       要调的模型都写进了清单的 `capabilities.models`；线上转发 `X-BiSheng-Access-Token`、本地不转发。
 - [ ] `bisheng dev` 起来后，通过**本地入口地址**访问，页面上显示的是你的服务账号名。
-- [ ] 用了 SDK 的话：健康检查端点**没有**调 `auth.current_user()`；检索没有任何「取不到凭据就换一种身份」的分支；
+- [ ] 用了 SDK 的话：`PlatformIdentityMissingError` 转成了 4xx（`/` 不带身份头时不是 500）；检索没有任何「取不到凭据就换一种身份」的分支；
       附件路径是应用内相对路径，代码里没有 bucket / 对象键 / 存储地址。
 
 跑一次连通自检：`python selfcheck.py`（未 login / 平台不可达 / SDK 未装 / 版本不兼容 时各给一句可读原因）。
-想连身份、检索、附件三件套一起验：**另开一个终端让 `bisheng dev` 跑着**，在项目根再执行一次；
-用了 `bisheng dev --port` 的话把它打印的**本地入口地址**作为参数传进来——
-`python selfcheck.py http://127.0.0.1:3000`。传应用自己的端口验不出东西（那条路上没有注入头）。
+想验身份：**另开一个终端让 `bisheng dev` 跑着**，在项目根再执行一次，把 `dev` 打印的**本地入口地址**（带 `/apps/<slug>/`）作为参数传进来（不传时脚本只推得出端口，探测会 404）——
+`python selfcheck.py http://127.0.0.1:3000/apps/my-app/`。传应用自己的端口验不出东西（那条路上没有注入头）。
+检索和附件两步读的是**自检脚本自己进程里的** `BISHENG_APP_TOKEN` / `BISHENG_APP_STORAGE_DIR`，不是应用进程的：
+从另一个终端跑，检索一步必然报缺 `BISHENG_APP_TOKEN`；附件一步要在这个终端也 `export BISHENG_APP_STORAGE_DIR=...` 才能过。
 
 ---
 
@@ -555,6 +564,6 @@ SDK 的版本**独立于平台版本**。平台会声明自己支持的最低 SD
 - `example/` —— 零依赖、可直接 `bisheng dev` / `bisheng deploy` 的最小样例：读身份头显示「你是谁」，
   按人存便签到应用数据库，含一次幂等加列。**不装 SDK 也能接线**，改造它比从零写更稳。
 - `example-sdk/` —— 装 SDK 的 FastAPI 样例：三件套齐用（身份 / 检索 / 附件），
-  健康检查端点刻意不调身份，每类异常都翻成一句给用户看的话。
+  缺身份时回 401 而不是 500（健康检查才过得去），每类异常都翻成一句给用户看的话。
 - `selfcheck.py` —— 连通自检（登录态 + 平台可达 + 库变量 + SDK 版本 + 三件套各一次探测）。
 - 「部署纳管」技能（`deploy-hosting`）—— 打包、清单、预检排障；本包假定你已经读过它的四条铁律。

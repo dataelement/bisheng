@@ -8,7 +8,11 @@
 * 铁律③  只往 /data 写(这里落一个 SQLite 计数器演示)。
 * 铁律④  对外链接带 BISHENG_APP_BASE_PATH。
 
-本地跑:``python main.py`` 然后开 http://127.0.0.1:8080
+健康检查每 10 秒请求一次 `/`(不带身份头),所以 `/` 只渲染页面、不写库;
+计数放在 `/hits`。
+
+本地跑:``bisheng dev`` 然后开它打印的 http://127.0.0.1:8080/apps/hello-hosted/
+(直接 ``python main.py`` 也能跑,那时没有前缀,开 http://127.0.0.1:8080)
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # 铁律①:读平台注入的端口,取不到用本地默认。别写死。
 PORT = int(os.environ.get("PORT") or os.environ.get("BISHENG_APP_PORT") or 8080)
 
-# 铁律④:对外基路径。平台上是 /apps/{slug},本地是空串。所有对外链接都过 url()。
+# 铁律④:对外基路径。平台上和 bisheng dev 下都是 /apps/{slug};直接 python main.py 时未设置。所有对外链接都过 url()。
 BASE_PATH = (os.environ.get("BISHENG_APP_BASE_PATH") or "").rstrip("/")
 
 # 铁律③:只往 /data 写。平台用 BISHENG_APP_DB_PATH 告诉应用数据库在哪;本地退回当前目录。
@@ -34,6 +38,8 @@ def url(path: str) -> str:
 
 def bump_and_read() -> int:
     conn = sqlite3.connect(DB_PATH)
+    # 换版本时新旧两个实例会同时打开这个文件,WAL 让读写互不阻塞。
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("CREATE TABLE IF NOT EXISTS hits (id INTEGER PRIMARY KEY AUTOINCREMENT)")
     conn.execute("INSERT INTO hits DEFAULT VALUES")
     total = conn.execute("SELECT COUNT(*) FROM hits").fetchone()[0]
@@ -47,19 +53,27 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.rstrip("/") or "/"
-        if path == "/healthz":
-            # 平台默认探 `/`;这条只是给运维一个不渲染页面的探针。
-            self._send(200, b'{"status":"ok"}', "application/json")
+        if path == "/":
+            # 健康检查探的就是这里:不读身份、不写库,只回一个页面。
+            body = (
+                "<!doctype html><meta charset='utf-8'>"
+                "<title>你好,托管应用</title>"
+                "<h1>你好,托管应用 👋</h1>"
+                f"<p><a href='{url('/hits')}'>记一次访问</a></p>"
+            ).encode()
+            self._send(200, body)
             return
-        total = bump_and_read()
-        body = (
-            "<!doctype html><meta charset='utf-8'>"
-            "<title>你好,托管应用</title>"
-            "<h1>你好,托管应用 👋</h1>"
-            f"<p>这是第 {total} 次访问(计数落在应用自己的 /data 数据卷里)。</p>"
-            f"<p><a href='{url('/')}'>刷新一下</a></p>"
-        ).encode()
-        self._send(200, body)
+        if path == "/hits":
+            total = bump_and_read()
+            body = (
+                "<!doctype html><meta charset='utf-8'>"
+                "<title>访问计数</title>"
+                f"<p>这是第 {total} 次访问(计数落在应用自己的 /data 数据卷里)。</p>"
+                f"<p><a href='{url('/hits')}'>再记一次</a> · <a href='{url('/')}'>回首页</a></p>"
+            ).encode()
+            self._send(200, body)
+            return
+        self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def _send(self, status: int, body: bytes, content_type: str = "text/html; charset=utf-8") -> None:
         self.send_response(status)

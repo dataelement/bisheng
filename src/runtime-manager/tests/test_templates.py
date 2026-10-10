@@ -316,6 +316,49 @@ def test_node_probe_is_node_not_curl(tmp_path):
     assert "statusCode < 500" in probe
 
 
+@pytest.mark.parametrize(
+    ("status", "healthy"),
+    [(200, True), (302, True), (401, True), (404, True), (500, False), (503, False)],
+)
+def test_python_probe_judges_like_the_publish_probe(tmp_path, status, healthy):
+    """Any answer below 500 is healthy, redirects are not followed.
+
+    The publish-time probe (``probe.py``) and the node20 probe already use this
+    rule. The python probe used to let urllib raise on every 4xx, so an
+    API-only app whose ``/`` is a 404 passed publishing and was then rebuilt by
+    the reconciler every two rounds.
+    """
+    import http.server
+    import subprocess
+    import sys
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(status)
+            if status == 302:
+                # A target that would 404: following it must not decide the verdict.
+                self.send_header("Location", "/apps/demo/login")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        files = _render("python3.11", _tree(tmp_path / "app", _minimal_source("python3.11")))
+        probe = tmp_path / "healthcheck.py"
+        probe.write_text(files["healthcheck.py"])
+        env = {"BISHENG_APP_PORT": str(server.server_address[1]), "BISHENG_APP_HEALTH_PATH": "/"}
+        result = subprocess.run([sys.executable, str(probe)], env=env, capture_output=True, timeout=10)
+    finally:
+        server.shutdown()
+    assert (result.returncode == 0) is healthy, result.stderr
+
+
 # ---------------------------------------------------------------------------
 # static
 # ---------------------------------------------------------------------------

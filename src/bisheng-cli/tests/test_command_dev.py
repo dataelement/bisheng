@@ -227,6 +227,18 @@ def test_same_port_for_proxy_and_app_is_a_usage_error(
 # ---- happy path: what is printed and what is injected --------------------------
 
 
+def test_a_start_command_only_the_shell_knows_is_called_out(
+    monkeypatch: pytest.MonkeyPatch, logged_in, echo_project: Path
+) -> None:
+    """``BISHENG_APP_START`` runs locally, but nothing can set it on the platform."""
+    _fake_launch(monkeypatch)
+    monkeypatch.setenv("BISHENG_APP_START", "python main.py")
+    mock = PlatformMock().get(VERSIONS, versions_ok()).get(WHOAMI, whoami_ok())
+    code, _, err = _run(["dev", str(echo_project), "--port", str(_free_port())], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert "BISHENG_APP_START" in err and "Procfile" in err
+
+
 def test_output_names_identity_source_platform_and_local_url_never_the_key(
     monkeypatch: pytest.MonkeyPatch, logged_in, echo_project: Path
 ) -> None:
@@ -246,7 +258,9 @@ def test_output_names_identity_source_platform_and_local_url_never_the_key(
 
     events = [json.loads(line) for line in out.splitlines() if line.strip()]
     ready = next(e for e in events if e["event"] == "stage" and e["stage"] == "ready")
-    assert ready["data"]["local_url"] == f"http://127.0.0.1:{port}" == captured["proxy_url"]
+    # Opened under the same prefix the app has hosted (manifest slug "echo").
+    assert ready["data"]["local_url"] == f"http://127.0.0.1:{port}/apps/echo/" == captured["proxy_url"]
+    assert ready["data"]["base_path"] == "/apps/echo"
     assert ready["data"]["app_id"] == "app-42" and ready["data"]["actor_name"] == "问卷小队开发号"
     assert events[-1]["event"] == "result" and events[-1]["ok"] is True
 
@@ -329,7 +343,7 @@ def test_end_to_end_headers_and_env_reach_a_real_app(
         while time.monotonic() < deadline:
             try:
                 conn = http.client.HTTPConnection("127.0.0.1", proxy.listen_port, timeout=3)
-                conn.request("GET", "/echo?q=1", headers={"X_BiSheng_User_Id": "forged", "X-Custom": "kept"})
+                conn.request("GET", "/apps/echo/echo?q=1", headers={"X_BiSheng_User_Id": "forged", "X-Custom": "kept"})
                 response = conn.getresponse()
                 if response.status == 200:
                     seen.update(json.loads(response.read()))
@@ -353,7 +367,8 @@ def test_end_to_end_headers_and_env_reach_a_real_app(
     assert headers["x-bisheng-access-token"].startswith("bsdev.")
     assert "x-bisheng-dept-id" not in headers
     env = seen["env"]
-    assert env["BISHENG_APP_BASE_PATH"] == "" and env["BISHENG_PLATFORM_API_BASE"] == BASE
+    assert headers["x-forwarded-prefix"] == "/apps/echo"
+    assert env["BISHENG_APP_BASE_PATH"] == "/apps/echo" and env["BISHENG_PLATFORM_API_BASE"] == BASE
     assert env["PORT"] == env["BISHENG_APP_PORT"] and env["PORT"] != str(port)
     assert "BISHENG_API_KEY" not in env and FAKE_KEY not in json.dumps(seen)
     assert (echo_project / ".bisheng" / "dev" / "app.db").is_file()

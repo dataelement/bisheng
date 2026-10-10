@@ -20,9 +20,10 @@ Two behaviours matter more than the polling itself:
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from runtime_manager.config import LABEL_MANAGED, Config
@@ -39,6 +40,15 @@ class ProbeOutcome:
     ready: bool
     reason: str = ""
     elapsed: float = 0.0
+    #: The probe instance's last output lines when it did not become ready.
+    #: Only ``probe_image`` fills it: its instance is removed right after, so
+    #: without this a start-up crash leaves nothing anyone can read.
+    log_tail: tuple[str, ...] = ()
+
+
+#: Lines of the throw-away instance's output kept on a failed probe.
+PROBE_LOG_TAIL_LINES = 40
+_DOCKER_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+ ")
 
 
 class HttpProbe(Protocol):
@@ -155,7 +165,13 @@ class ProbeService:
         try:
             container_id = self._docker.create_container(name, payload)
             self._docker.start_container(container_id)
-            return self.wait_ready(container_id, port, health_path, timeout)
+            outcome = self.wait_ready(container_id, port, health_path, timeout)
+            if not outcome.ready:
+                # Read before the instance is removed. The reason above says
+                # "exited (code 1)" or "not ready"; the traceback or the
+                # "Address already in use" that explains it is only here.
+                outcome = replace(outcome, log_tail=self._log_tail(container_id))
+            return outcome
         except Exception as exc:
             return ProbeOutcome(False, f"cannot start a probe instance: {exc}")
         finally:
@@ -163,6 +179,15 @@ class ProbeService:
                 self._cleanup(container_id)
 
     # -- helpers -----------------------------------------------------------
+    def _log_tail(self, ref: str) -> tuple[str, ...]:
+        try:
+            raw = self._docker.container_logs(ref, tail=PROBE_LOG_TAIL_LINES)
+        except Exception as exc:
+            logger.debug("probe logs %s: %s", ref, exc)
+            return ()
+        lines = [_DOCKER_TIMESTAMP.sub("", line).rstrip() for line in raw.splitlines()]
+        return tuple(line for line in lines if line)[-PROBE_LOG_TAIL_LINES:]
+
     def _cleanup(self, ref: str) -> None:
         for action in (
             lambda: self._docker.stop_container(ref, timeout=2),

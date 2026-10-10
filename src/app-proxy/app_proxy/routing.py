@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from app_proxy.clients import ROUTE_PHASE_STARTING, InternalRpcError, get_manager_client
 
@@ -98,3 +99,42 @@ def strip_entry_prefix(request_path: str, slug: str, entry_prefix: str = "/apps"
         return remainder or "/"
     # Not ours to strip — forward as-is rather than silently mangling.
     return request_path or "/"
+
+
+def restore_entry_prefix(location: str, slug: str, entry_prefix: str = "/apps", upstream_base: str = "") -> str:
+    """Put the stripped prefix back on a redirect the app sent (the reverse of the strip).
+
+    The app is served at its root, so a ``Location: /login`` it sends means its
+    own ``/login``. Forwarded unchanged, the browser resolves it against the
+    platform origin and leaves the app for the platform's ``/login``. nginx's
+    ``proxy_redirect default`` and Apache's ``ProxyPassReverse`` exist for the
+    same reason. Rewritten:
+
+    * a path-absolute value outside the prefix — ``/login`` → ``/apps/foo/login``;
+    * an absolute URL on the upstream's own origin — what a framework builds
+      from the ``Host`` it was sent — to the same path under the prefix.
+
+    Left alone: values already under this app's prefix (a framework honouring
+    ``root_path`` / ``X-Forwarded-Prefix``), values under the platform's entry
+    prefix (a link to another hosted app), protocol-relative and foreign
+    absolute URLs, and relative references, which the browser already resolves
+    inside the prefix.
+    """
+    prefix = entry_prefix_for(slug, entry_prefix)
+    value = location
+    if upstream_base and "://" in value:
+        target, origin = urlsplit(value), urlsplit(upstream_base)
+        if (target.scheme, target.netloc) != (origin.scheme, origin.netloc):
+            return location
+        value = target.path or "/"
+        if target.query:
+            value += "?" + target.query
+        if target.fragment:
+            value += "#" + target.fragment
+    if not value.startswith("/") or value.startswith("//"):
+        return location
+    if value == prefix or value.startswith((prefix + "/", prefix + "?", prefix + "#")):
+        return value
+    if value.startswith(entry_prefix.rstrip("/") + "/"):
+        return value
+    return prefix + value

@@ -56,7 +56,7 @@ from bisheng.common.errcode.app_publish import (
     AppManifestInvalidError,
     AppRuntimeUnsupportedError,
     AppSecretReferenceUnsupportedError,
-    AppWebSocketUnsupportedError,
+    AppWebSocketDeclarationError,
 )
 from bisheng.database.models.resource_tier import ResourceTier
 
@@ -85,16 +85,11 @@ _WEBSOCKET_KEY_RE = re.compile(
     r"(?i)^(wss?|websockets?|socketio|socket_io)(_[a-z0-9_]+)?$|^[a-z0-9_]+_(wss?|websockets?)$"
 )
 
-#: The code ``app-proxy`` closes an unsupported upgrade with
-#: (``app_proxy/login_handoff.py::WS_CLOSE_NOT_IMPLEMENTED``). **Copied, not
-#: imported** — app-proxy is a separate service and backend must not take a
-#: dependency on it. Carried in ``details`` so a developer can match the number
-#: their browser already showed them.
-_WS_NOT_IMPLEMENTED_CLOSE_CODE = 4501
-
-#: Hint attached to a declared-but-not-created table set (design D3).
-_DATABASE_TABLES_HINT = (
-    "本环境暂不由平台建表: 请在应用内用 BISHENG_APP_DB_URL 连接自带数据库并自行 CREATE TABLE IF NOT EXISTS"
+#: Hint for declared tables the platform will not create: ``schema_evolution_
+#: service`` builds a migration plan only from tables that list ``columns``.
+_TABLES_WITHOUT_COLUMNS_HINT = (
+    "这些表没有写 columns, 平台不会替你建: {names}。补上 columns 由平台在上线时建表, "
+    "或在应用内用 BISHENG_APP_DB_URL 自行 CREATE TABLE IF NOT EXISTS"
 )
 
 
@@ -124,8 +119,9 @@ async def validate_manifest(raw: str | bytes) -> ManifestValidation:
     tier = await ResourceTierService.resolve_tier(manifest.tier)
 
     hints: list[str] = []
-    if manifest.database.tables:
-        hints.append(_DATABASE_TABLES_HINT)
+    bare = [table.name for table in manifest.database.tables if not table.columns]
+    if bare:
+        hints.append(_TABLES_WITHOUT_COLUMNS_HINT.format(names=", ".join(bare)))
     return ManifestValidation(manifest=manifest, tier=tier, hints=hints)
 
 
@@ -187,30 +183,24 @@ def _find_secret_reference(node: Any, *, path: str) -> str | None:
 
 
 def _reject_websocket_declaration(document: dict[str, Any]) -> None:
-    """Refuse a manifest that asks the platform to serve a WebSocket (16232).
+    """Refuse a manifest key that tries to declare a WebSocket (16232).
 
-    Caught here rather than left to the schema because the generic answer is
-    actively misleading: ``extra="forbid"`` turns ``ws_path:`` into "unknown
-    field ws_path, did you mean slug", the developer deletes or renames the key
-    and ships — and the socket then dies in production with nothing to look at
-    (nginx forwards the upgrade, app-proxy closes it with 4501, platform logs
-    stay clean). The remedy is not a spelling change, it is SSE or polling.
+    The entry carries WebSocket upgrades for every app without any
+    declaration. Caught here rather than left to the schema because the
+    generic answer misleads: ``extra="forbid"`` turns ``ws_path:`` into
+    "unknown field ws_path, did you mean slug", and the developer goes looking
+    for the right spelling of a key that does not exist.
     """
     hit = _find_websocket_key(document)
     if hit is None:
         return
-    raise AppWebSocketUnsupportedError(
-        msg="本版托管运行时不支持 WebSocket",
-        details={
-            "field": hit,
-            "reason": "websocket_unsupported",
-            "ws_close_code": _WS_NOT_IMPLEMENTED_CLOSE_CODE,
-        },
+    raise AppWebSocketDeclarationError(
+        msg="WebSocket 无需在 bisheng-app.yaml 里声明",
+        details={"field": hit, "reason": "websocket_needs_no_declaration"},
         hints=[
-            f"托管入口本版不反代 WebSocket: 握手会被直接关闭(close code {_WS_NOT_IMPLEMENTED_CLOSE_CODE}), "
-            "不会返回 502 —— 应用侧只收到 close 事件, 平台侧不留任何错误日志, 本地连得上不代表线上连得上",
-            "服务端推送请改用 SSE(text/event-stream)或轮询: 两者走普通 HTTP, 托管入口原样透传流式响应",
-            f"请从 {MANIFEST_FILENAME} 删除该键后重新发布; 换个键名不会让 WebSocket 变得可用",
+            f"托管入口直接转发 WebSocket, 应用照常监听即可; 从 {MANIFEST_FILENAME} 删除该键后重新发布",
+            "入口会在授权到期(close 4001)、权限收回或应用下线(4403)、发布或恢复中(4503)时关闭连接, "
+            "前端要对任何 close 自动重连",
         ],
     )
 

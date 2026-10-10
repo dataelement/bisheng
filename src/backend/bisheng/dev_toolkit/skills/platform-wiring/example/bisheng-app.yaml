@@ -9,4 +9,5 @@ runtime: python3.11
 port: 8080
 
 # 不写 tier 即「轻量」档。
-# database.tables 只是声明,平台本轮不替你建表——建表在 main.py 的 init_schema() 里。
+# 本样例不声明 database.tables,建表在 main.py 的 init_schema() 里。
+# 声明了且列出 columns 的表,平台会在上线时建表并迁移(见 SKILL.md 第 4 章)。
