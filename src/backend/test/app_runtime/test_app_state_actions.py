@@ -415,6 +415,52 @@ class TestDelete:
         assert excinfo.value.code == 16105
         assert await _state(app_db, app.id) == AppState.STOPPED.value
 
+    @pytest.mark.parametrize("who", ("tenant_admin", "super_admin"))
+    async def test_delete_allowed_for_admins_once_the_owner_is_disabled(
+        self, app_db, app_factory, app_owner, tenant_admins, who
+    ):
+        """With the owner's account disabled nobody could delete the app at all
+        (found on 114, 2026-10-10); the administrators who may stop it may then
+        delete it too."""
+        from sqlmodel import select
+
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.user.domain.models.user import User
+
+        app, _ = await app_factory(state=AppState.STOPPED.value)
+        async with app_db() as session:
+            owner = (await session.exec(select(User).where(User.user_id == app_owner.user_id))).one()
+            owner.delete = 1
+            session.add(owner)
+            await session.commit()
+        actor = _super_admin_payload()
+        if who == "tenant_admin":
+            actor.is_global_super = False
+            tenant_admins.grant(actor.user_id, app.tenant_id)
+
+        await AppStateService.delete(app.id, actor=actor)
+        assert await _state(app_db, app.id) == AppState.DELETED.value
+
+    async def test_delete_of_a_disabled_owners_app_still_refuses_ordinary_users(self, app_db, app_factory, app_owner):
+        from sqlmodel import select
+
+        from bisheng.app_runtime.domain.services.app_state_service import AppStateService
+        from bisheng.user.domain.models.user import User
+
+        app, _ = await app_factory(state=AppState.STOPPED.value)
+        async with app_db() as session:
+            owner = (await session.exec(select(User).where(User.user_id == app_owner.user_id))).one()
+            owner.delete = 1
+            session.add(owner)
+            await session.commit()
+        actor = _super_admin_payload(user_id=90998)
+        actor.is_global_super = False
+
+        with pytest.raises(AppManageForbiddenError) as excinfo:
+            await AppStateService.delete(app.id, actor=actor)
+        assert excinfo.value.code == 16106
+        assert await _state(app_db, app.id) == AppState.STOPPED.value
+
     async def test_delete_purges_assets_and_marks_deleted(
         self, app_db, app_factory, app_owner, fake_orchestrator, fake_permission_projection
     ):

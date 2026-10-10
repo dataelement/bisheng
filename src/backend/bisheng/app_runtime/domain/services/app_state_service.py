@@ -66,6 +66,7 @@ from bisheng.database.models.app_version import TERMINAL_STATE_ONLINE, AppVersio
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.permission.application.access import get_f048_resource_adapter
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
+from bisheng.user.domain.models.user import UserDao
 
 #: Health probe defaults when the manifest declares none. Mirrors
 #: runtime-manager's ``HealthIn`` so an omitted block means the same thing on
@@ -210,7 +211,7 @@ class AppStateService:
         state action instead of orphaned by a row that disappeared.
         """
         app = await cls._load(app_id)
-        await cls._require_owner(app, actor)
+        await cls._require_deleter(app, actor)
         if app.state == AppState.ONLINE.value:
             raise AppOnlineCannotDeleteError(app_id=app_id)
         if not is_transition_allowed(app.state, AppState.DELETED.value):
@@ -632,6 +633,25 @@ class AppStateService:
         """
         if int(getattr(actor, "user_id", 0) or 0) != int(app.owner_user_id or 0):
             raise AppOwnerOnlyError(app_id=app.id)
+
+    @classmethod
+    async def _require_deleter(cls, app: App, actor) -> None:
+        """Owner-only, unless the owner's account is gone.
+
+        Delete stays owner-only (AC-44): an administrator must not remove an
+        application whose owner can still look after it. But once the owner is
+        disabled or removed, nobody could delete the application at all — it
+        would sit in the list forever (found on 114, 2026-10-10). Then the
+        administrators who may already stop it (``_require_operator``) may also
+        delete it.
+        """
+        if int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0):
+            return
+        owner = await UserDao.aget_user(int(app.owner_user_id or 0))
+        if owner is None or int(owner.delete or 0) == 1:
+            await cls._require_operator(app, actor)
+            return
+        raise AppOwnerOnlyError(app_id=app.id)
 
     @staticmethod
     async def _require_operator(app: App, actor) -> None:
