@@ -1189,6 +1189,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if required_capability not in {"can_view", "can_preview"}:
             raise SpacePermissionDeniedError()
 
+        # 专家问答放行写在 decision map 里. 文档入口的 can_preview 仍是 false,
+        # 再走部门权限会把已允许的预览打成无权限. 下载不走这里.
+        from bisheng.knowledge.domain.services.expert_qa_content_preview import (
+            grant_expert_qa_content_preview,
+        )
+
+        qa_granted = grant_expert_qa_content_preview(
+            resolved,
+            self._portal_file_access_decision_map.get(int(file_record.id)),
+            required_capability,
+        )
+        if qa_granted is not None:
+            return qa_granted
+
         access_service = self.department_file_view_access_service
         if access_service is None:
             raise RuntimeError("DepartmentFileViewAccessService 未注入")
