@@ -417,7 +417,7 @@ class TestDelete:
 
     @pytest.mark.parametrize("who", ("tenant_admin", "super_admin"))
     async def test_delete_allowed_for_admins_once_the_owner_is_disabled(
-        self, app_db, app_factory, app_owner, tenant_admins, who
+        self, app_db, app_factory, app_owner, tenant_admins, audit_sink, who
     ):
         """With the owner's account disabled nobody could delete the app at all
         (found on 114, 2026-10-10); the administrators who may stop it may then
@@ -440,6 +440,9 @@ class TestDelete:
 
         await AppStateService.delete(app.id, actor=actor)
         assert await _state(app_db, app.id) == AppState.DELETED.value
+        # The audit remark must not claim the owner deleted it.
+        delete_rows = [row for row in audit_sink if row["action"] == AppAuditAction.DELETE.value]
+        assert delete_rows and "administrator" in str(delete_rows[-1])
 
     async def test_delete_of_a_disabled_owners_app_still_refuses_ordinary_users(self, app_db, app_factory, app_owner):
         from sqlmodel import select

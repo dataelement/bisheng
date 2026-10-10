@@ -206,7 +206,8 @@ class AppStateService:
     async def delete(cls, app_id: str, *, actor) -> ActionResult:
         """Explicit deletion — the **only** path that destroys an app's data (AC-40).
 
-        Owner-only (AC-44) and blocked while online (AC-42): stopping first is
+        Owner-only (AC-44, administrators once the owner is gone) and blocked
+        while online (AC-42): stopping first is
         what guarantees the container and its host volume are torn down by a
         state action instead of orphaned by a row that disappeared.
         """
@@ -232,17 +233,19 @@ class AppStateService:
         # visible, retryable failure.
         await orchestrator_client.destroy(app_id=app_id, purge_volume=True)
 
+        # The audit remark names who actually deleted it: an administrator may
+        # now delete an app whose owner is gone (_require_deleter).
+        by_owner = int(getattr(actor, "user_id", 0) or 0) == int(app.owner_user_id or 0)
+        reason = "deleted by owner" if by_owner else "deleted by administrator (owner account inactive)"
         won = await cls._transition(
-            app_id, to_state=AppState.DELETED, from_states=(app.state,), reason="deleted by owner", actor=actor
+            app_id, to_state=AppState.DELETED, from_states=(app.state,), reason=reason, actor=actor
         )
         if not won:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action="delete")
 
         # The deletion is a fact from here on: audit it before any follow-up step
         # that can fail, so the record never depends on the cleanup succeeding.
-        await cls._audit(
-            AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason="deleted by owner"
-        )
+        await cls._audit(AppAuditAction.DELETE, app, actor, version_id=app.current_version_id, reason=reason)
 
         failures: list[str | Exception] = []
         try:
