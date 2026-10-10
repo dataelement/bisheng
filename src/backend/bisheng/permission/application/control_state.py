@@ -202,6 +202,41 @@ class SqlPermissionControlState:
             raise PermissionPublishNotReadyError(msg="Resource permission mode is missing")
         return row
 
+    async def absent_resource_target(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+    ) -> VerifiedPermissionTarget:
+        """Build a cleanup target for a resource its business Service no longer has.
+
+        The caller must first confirm through the business port that the
+        resource is gone (``ResourceAuthorizationRegistry.confirm_absent``).
+        No business row exists to verify, so the target carries only the
+        permission mirror's own facts: tenant, version and parent. The mirror
+        must be CURRENT; any other state fails closed.
+        """
+
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                ResourcePermissionMode.tenant_id == tenant_id,
+                ResourcePermissionMode.resource_type == resource_type,
+                ResourcePermissionMode.resource_id == resource_id,
+            )
+            row = (await session.execute(statement)).scalars().first()
+        if row is None or row.projection_state != "CURRENT":
+            raise PermissionPublishNotReadyError(msg="Resource permission projection is not current")
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=row.tenant_id,
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+            resource_version=row.version,
+            context_version=f"absent:{row.version}"[:64],
+            parent_type=row.parent_type,
+            parent_id=row.parent_id,
+        )
+
     async def permission_version(
         self,
         *,

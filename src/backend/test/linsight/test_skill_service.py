@@ -83,6 +83,13 @@ class FakeSkillDao:
         return True
 
     @classmethod
+    async def set_default_checked(cls, name, default_checked):
+        if name not in cls.rows:
+            return False
+        cls.rows[name].default_checked = default_checked
+        return True
+
+    @classmethod
     async def delete_by_name(cls, name):
         return cls.rows.pop(name, None) is not None
 

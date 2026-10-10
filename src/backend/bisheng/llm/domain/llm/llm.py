@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any, Self, Union
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.language_models import BaseChatModel, LangSmithParams, LanguageModelInput
 from langchain_core.language_models.chat_models import agenerate_from_stream, generate_from_stream
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
@@ -148,6 +148,16 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
     return params
 
 
+def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params = _get_openai_params(params, server_config, model_config)
+    extra_body = dict(params.pop("extra_body", {}) or {})
+    # Hunyuan's OpenAI-compatible endpoint names its search switch
+    # `enable_enhancement`; the model-level web search toggle drives it.
+    extra_body["enable_enhancement"] = model_config.get("enable_web_search", False)
+    params["extra_body"] = extra_body
+    return params
+
+
 def _get_minimax_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     # Built-in web search toggle is consumed by ChatMinimax to inject the tool.
@@ -212,7 +222,7 @@ _llm_node_type: dict = {
     LLMServerType.ANTHROPIC.value: {"client": ChatAnthropic, "params_handler": _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {"client": CustomChatDeepSeek, "params_handler": _get_deepseek_params},
     LLMServerType.SPARK.value: {"client": ChatOpenAICompatible, "params_handler": _get_spark_params},
-    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_tencent_params},
     LLMServerType.MOONSHOT.value: {"client": ChatMoonshot, "params_handler": _get_moonshot_params},
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
@@ -356,6 +366,15 @@ class BishengLLM(BishengBase, BaseChatModel):
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
         return normalize_reasoning_content(ret)
+
+    def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
+        # Report the wrapped client's provider. The default derives "bishengllm" from
+        # the class name, which never equals the "model_provider" the client stamps on
+        # its messages (e.g. "openai"), so langchain's summarization ignored the
+        # provider-reported token usage and its trigger never fired on CJK content.
+        if self.llm is None:
+            return super()._get_ls_params(stop=stop, **kwargs)
+        return self.llm._get_ls_params(stop=stop, **kwargs)
 
     def bind_tools(
         self,

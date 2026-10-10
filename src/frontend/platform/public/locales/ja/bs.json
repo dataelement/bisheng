@@ -613,7 +613,7 @@
     "voiceType": "音声タイプ",
     "voiceTypeRequired": "音声タイプは必須項目です",
     "voiceTypeTooltip": "音声合成で使用する音声タイプを選択してください",
-    "webSearch": "Web 検索",
+    "webSearch": "モデル内蔵のウェブ検索",
     "visitOfficialWebsiteToViewAvailableModels": "公式サイトで利用可能なモデルを確認してください",
     "modelManagement": "モデル管理",
     "modelFineTune": "モデル微調整",
@@ -636,7 +636,41 @@
     "unknown": "不明",
     "empty": "データがありません",
     "gpuResourceUsageTitle": "GPU リソース使用状況",
-    "jsonFormatError": "JSON フォーマットエラー"
+    "jsonFormatError": "JSON フォーマットエラー",
+    "webSearchTipQwen": "オンにすると、Alibaba Cloud Model Studio がモデル内部でウェブ検索の要否を判断し、検索結果を回答に使います。出典リンクは表示されません。一部のモデルのみ対応し、検索は回数ごとに別途課金されます。ワークベンチの「ウェブ検索」ツールとは別の機能です。詳細パラメータの enable_search は無効で、このスイッチの設定が優先されます。",
+    "webSearchTipMoonshot": "オンにすると、Kimi が必要に応じて Moonshot AI 内蔵のウェブ検索ツールを呼び出し、検索結果を回答に使います。出典リンクは表示されません。検索は回数ごとに別途課金されます。ワークベンチの「ウェブ検索」ツールとは別の機能です。",
+    "webSearchTipTencent": "オンにすると、Tencent Hunyuan が必要に応じてウェブ検索を行い、検索結果を回答に使います。ワークベンチの「ウェブ検索」ツールとは別の機能です。詳細パラメータの enable_enhancement は無効で、このスイッチの設定が優先されます。",
+    "untitledModel": "モデル名が未入力",
+    "deleteModel": "モデルを削除",
+    "maxOutputTokens": "最大出力トークン数",
+    "contextLength": "コンテキスト長",
+    "maxTokensTip": "API パラメータ {{param}} として送信されます",
+    "maxTokensPlaceholder": "空欄の場合はモデルの既定値を使用",
+    "advancedParams": "詳細パラメータ",
+    "advancedParamsCount": "{{count}} 項目をカスタマイズ済み",
+    "advancedParamsNone": "未設定",
+    "edit": "編集",
+    "insertParamsExample": "例を挿入",
+    "providerNames": {
+      "qwen": "Alibaba Cloud Model Studio",
+      "silicon": "SiliconFlow",
+      "volcengine": "Volcano Engine",
+      "zhipu": "Zhipu AI",
+      "spark": "iFLYTEK Spark",
+      "tencent": "Tencent Cloud",
+      "moonshot": "Moonshot AI",
+      "qianfan": "Baidu Qianfan"
+    },
+    "sectionConnection": "接続情報",
+    "sectionUsage": "利用設定",
+    "providerType": "プロバイダーの種類",
+    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
+    "dailyLimitPrefix": "1 日最大",
+    "dailyLimitSuffix": "回",
+    "shareToChildrenTip": "オンにすると、子テナントはこのプロバイダーのモデルを利用できますが、設定の閲覧や変更はできません。",
+    "getApiKey": "{{provider}} の API キーを取得",
+    "formatExample": "形式の例：{{example}}"
   },
   "finetune": {
     "all": "すべて",
@@ -2173,6 +2207,7 @@
       "displayName": "表示名",
       "description": "説明",
       "status": "状態",
+      "defaultChecked": "デフォルト選択",
       "updateTime": "更新日時",
       "actions": "操作"
     },
@@ -2184,6 +2219,9 @@
     "deleteConfirm": "削除するとエンドユーザーは選択できなくなり、復元できません。「{{name}}」を削除しますか？",
     "enabledToast": "有効化しました。エンドユーザーの選択リストに即時表示されます",
     "disabledToast": "無効化しました。エンドユーザーの選択リストから削除されました",
+    "defaultCheckedTip": "オンにすると、新しい会話を始めるたびにこのスキルが選択済みになります。ユーザーは選択を外せます。スキルが無効の間は適用されません。",
+    "defaultCheckedOnToast": "デフォルト選択に設定しました。新しい会話から適用されます",
+    "defaultCheckedOffToast": "デフォルト選択を解除しました",
     "deleted": "削除しました",
     "saved": "保存しました",
     "count": "全 {{count}} 件",
@@ -2376,7 +2414,7 @@
     "scopes": {
       "workflow_invoke": {
         "label": "ワークフローを実行",
-        "desc": "ワークフローの実行・停止と、ワークフローセッションの接続を行います。"
+        "desc": "ワークフローの実行と停止を行います。"
       },
       "workflow_read": {
         "label": "ワークフローを参照",
@@ -2396,11 +2434,11 @@
       },
       "knowledge_read": {
         "label": "ナレッジを参照",
-        "desc": "ナレッジベースとファイルの一覧、検索、Q&A、出典を参照します。"
+        "desc": "ナレッジベースとファイルの一覧、検索、Q&A、メタデータ、出典を参照します。"
       },
       "knowledge_write": {
         "label": "ナレッジを更新",
-        "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。"
+        "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。「ナレッジを参照」のすべての権限を含みます。"
       },
       "delegate": {
         "label": "ユーザーの代理で実行",

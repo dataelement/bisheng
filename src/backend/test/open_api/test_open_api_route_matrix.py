@@ -13,6 +13,10 @@ REMOVED_CHAT_ROUTES = {
     "/api/v2/chat/comment",
     "/api/v2/chat/sync/messages",
 }
+# The v2 workflow WebSocket ran a client-submitted graph; it is offline in this release.
+REMOVED_WEBSOCKET_ROUTES = {
+    ("WS", "/api/v2/workflow/chat/{workflow_id}"),
+}
 DAILY_ROUTES = {
     ("POST", "/api/v2/workstation/chat/completions"),
     ("GET", "/api/v2/workstation/config"),
@@ -42,19 +46,21 @@ def test_every_real_v2_route_is_globally_key_protected_and_marked():
 
 
 def test_route_registry_matches_complete_key_authenticated_surface():
-    registered = {
-        endpoint
-        for scope in OPEN_API_SCOPES
-        for endpoint in scope.endpoints
-    }
+    registered = {endpoint for scope in OPEN_API_SCOPES for endpoint in scope.endpoints}
     actual = actual_v2_routes()
     actual_without_whoami = actual - {("GET", "/api/v2/auth/whoami")}
     assert DAILY_ROUTES <= actual_without_whoami
     assert registered - actual_without_whoami == set()
     assert actual_without_whoami - registered == set()
-    assert len([item for item in actual if item[0] == "WS"]) == 2
+    assert {item for item in actual if item[0] == "WS"} == {("WS", "/api/v2/assistant/chat/{assistant_id}")}
 
 
 def test_removed_chat_routes_are_not_registered():
     paths = {path for _method, path in actual_v2_routes()}
     assert paths.isdisjoint(REMOVED_CHAT_ROUTES)
+
+
+def test_removed_websocket_routes_are_not_registered_or_scoped():
+    registered = {endpoint for scope in OPEN_API_SCOPES for endpoint in scope.endpoints}
+    assert actual_v2_routes().isdisjoint(REMOVED_WEBSOCKET_ROUTES)
+    assert registered.isdisjoint(REMOVED_WEBSOCKET_ROUTES)

@@ -618,7 +618,7 @@
     "voiceType": "语音类型",
     "voiceTypeRequired": "语音类型为必填项",
     "voiceTypeTooltip": "选择语音合成的声音类型",
-    "webSearch": "网络搜索",
+    "webSearch": "模型内置联网搜索",
     "visitOfficialWebsiteToViewAvailableModels": "前往官网查看可用模型",
     "modelManagement": "模型管理",
     "modelFineTune": "模型微调",
@@ -641,7 +641,41 @@
     "unknown": "未知",
     "empty": "暂无数据",
     "gpuResourceUsageTitle": "GPU资源使用情况",
-    "jsonFormatError": "JSON格式有误"
+    "jsonFormatError": "JSON格式有误",
+    "webSearchTipQwen": "开启后，由阿里云百炼在模型内部判断是否需要检索网页，并用检索结果作答；回答里不会显示来源链接。仅部分模型支持，检索按次单独计费。它与工作台的「联网搜索」工具是两套独立的能力。高级参数里填写的 enable_search 不生效，以此开关为准。",
+    "webSearchTipMoonshot": "开启后，Kimi 会在需要时调用月之暗面自带的网页检索工具，并用检索结果作答；回答里不会显示来源链接。检索按次单独计费。它与工作台的「联网搜索」工具是两套独立的能力。",
+    "webSearchTipTencent": "开启后，腾讯混元会在需要时联网检索，并用检索结果作答。它与工作台的「联网搜索」工具是两套独立的能力。高级参数里填写的 enable_enhancement 不生效，以此开关为准。",
+    "untitledModel": "未填写模型名称",
+    "deleteModel": "删除模型",
+    "maxOutputTokens": "最大输出 token 数",
+    "contextLength": "上下文长度",
+    "maxTokensTip": "对应接口参数 {{param}}",
+    "maxTokensPlaceholder": "留空则使用模型默认值",
+    "advancedParams": "高级参数",
+    "advancedParamsCount": "已自定义 {{count}} 项",
+    "advancedParamsNone": "未配置",
+    "edit": "编辑",
+    "insertParamsExample": "填入参数示例",
+    "providerNames": {
+      "qwen": "阿里云百炼",
+      "silicon": "硅基流动",
+      "volcengine": "火山引擎",
+      "zhipu": "智谱 AI",
+      "spark": "讯飞星火",
+      "tencent": "腾讯云",
+      "moonshot": "月之暗面",
+      "qianfan": "百度千帆"
+    },
+    "sectionConnection": "连接信息",
+    "sectionUsage": "使用设置",
+    "providerType": "服务提供商类型",
+    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
+    "dailyLimitPrefix": "每天最多",
+    "dailyLimitSuffix": "次",
+    "shareToChildrenTip": "开启后，子租户可以使用这个服务提供商下的模型，但不能查看或修改它的配置。",
+    "getApiKey": "获取{{provider}} API Key",
+    "formatExample": "格式示例：{{example}}"
   },
   "finetune": {
     "all": "全部",
@@ -2173,6 +2207,7 @@
       "displayName": "展示名称",
       "description": "描述",
       "status": "状态",
+      "defaultChecked": "默认勾选",
       "updateTime": "修改时间",
       "actions": "操作"
     },
@@ -2184,6 +2219,9 @@
     "deleteConfirm": "删除后终端用户将无法再选用该技能，且不可恢复。确认删除「{{name}}」？",
     "enabledToast": "已启用，终端用户输入区即时可见",
     "disabledToast": "已停用，已从终端用户输入区移除",
+    "defaultCheckedTip": "开启后，用户每次新建对话时，这个技能已经勾选好，用户可以自己取消。技能停用期间不生效。",
+    "defaultCheckedOnToast": "已设为默认勾选，新建对话时生效",
+    "defaultCheckedOffToast": "已取消默认勾选",
     "deleted": "已删除",
     "saved": "保存成功",
     "count": "共 {{count}} 条",
@@ -2376,7 +2414,7 @@
     "scopes": {
       "workflow_invoke": {
         "label": "调用工作流",
-        "desc": "运行、停止工作流，并建立工作流会话连接。"
+        "desc": "运行和停止工作流。"
       },
       "workflow_read": {
         "label": "读取工作流",
@@ -2396,11 +2434,11 @@
       },
       "knowledge_read": {
         "label": "读取知识库",
-        "desc": "列出知识库与文件、检索内容、读取问答与溯源。"
+        "desc": "列出知识库与文件、检索内容、读取问答、元数据与溯源。"
       },
       "knowledge_write": {
         "label": "写入知识库",
-        "desc": "创建、修改或删除知识库、文件、分段、问答与元数据。"
+        "desc": "创建、修改或删除知识库、文件、分段、问答与元数据。包含读取知识库的全部权限。"
       },
       "delegate": {
         "label": "代表用户调用",

@@ -157,7 +157,15 @@ class TestCrudFlow:
     def test_selectable_shape(self, client):
         _create_form(client)
         item = client.get(f"{BASE}/selectable").json()["data"][0]
-        assert set(item) == {"name", "display_name", "description"}
+        assert set(item) == {"name", "display_name", "description", "default_checked"}
+        assert item["default_checked"] is False
+
+    def test_default_checked_toggle(self, client):
+        _create_form(client)
+        resp = client.patch(f"{BASE}/ji-du-cai-bao-fen-xi/default-checked", json={"default_checked": True})
+        assert resp.json()["data"] == {"ok": True}
+        assert client.get(f"{BASE}/selectable").json()["data"][0]["default_checked"] is True
+        assert client.get(BASE).json()["data"]["data"][0]["default_checked"] is True
 
 
 class TestErrorCodes:
@@ -166,6 +174,8 @@ class TestErrorCodes:
         assert client.get(f"{BASE}/kernel-core").json()["status_code"] == 11053
         assert client.delete(f"{BASE}/kernel-core").json()["status_code"] == 11053
         assert client.patch(f"{BASE}/kernel-core/status", json={"enabled": False}).json()["status_code"] == 11053
+        resp = client.patch(f"{BASE}/kernel-core/default-checked", json={"default_checked": True})
+        assert resp.json()["status_code"] == 11053
 
     def test_duplicate_name_11055(self, client):
         _create_form(client)

@@ -2,14 +2,15 @@
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-// 模型表单项
+// Connection fields per provider; `example` is shown as the input placeholder
 const modelProviders = {
     ollama: [
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://ip:11434",
+            example: "http://ip:11434",
             default: "",
             required: true,
             key: "base_url",
@@ -19,7 +20,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://ip:9997/v1",
+            example: "http://ip:9997/v1",
             default: "",
             required: true,
             key: "openai_api_base",
@@ -29,7 +30,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://ip:8080/v1",
+            example: "http://ip:8080/v1",
             default: "",
             required: true,
             key: "openai_api_base",
@@ -39,7 +40,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://ip:8000/v1",
+            example: "http://ip:8000/v1",
             default: "",
             required: true,
             key: "openai_api_base",
@@ -83,7 +84,7 @@ const modelProviders = {
         {
             label: "Azure Endpoint",
             type: "text",
-            placeholder: "格式示例：https://xxx.openai.azure.com/",
+            example: "https://xxx.openai.azure.com/",
             default: "",
             required: true,
             key: "azure_endpoint",
@@ -99,7 +100,7 @@ const modelProviders = {
         {
             label: "OpenAI API Version",
             type: "text",
-            placeholder: "格式示例：2024-02-01",
+            example: "2024-02-01",
             default: "",
             required: true,
             key: "openai_api_version",
@@ -151,7 +152,7 @@ const modelProviders = {
             key: "openai_api_key",
         },
         {
-            label: "Base Url",
+            label: "Base URL",
             type: "text",
             placeholder: "",
             default: "https://open.bigmodel.cn/api/paas/v4/",
@@ -181,7 +182,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：http://ip:port/v1",
+            example: "http://ip:port/v1",
             default: "",
             required: true,
             key: "base_url",
@@ -213,7 +214,7 @@ const modelProviders = {
             key: "api_secret",
         },
         {
-            label: "Base Url",
+            label: "Base URL",
             type: "text",
             placeholder: "",
             default: "https://spark-api-open.xf-yun.com/v1",
@@ -239,7 +240,7 @@ const modelProviders = {
         //     key: "minimax_group_id",
         // },
         {
-            label: "Api Host",
+            label: "API Host",
             type: "text",
             placeholder: "",
             default: "https://api.minimax.com/v1",
@@ -267,7 +268,7 @@ const modelProviders = {
     ],
     bisheng_rt: [
         {
-            label: "Api Host",
+            label: "API Host",
             type: "text",
             placeholder: "",
             default: "",
@@ -296,7 +297,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：https://api.moonshot.cn/v1",
+            example: "https://api.moonshot.cn/v1",
             default: "https://api.moonshot.cn/v1",
             required: true,
             key: "base_url",
@@ -314,7 +315,7 @@ const modelProviders = {
         {
             label: "Base URL",
             type: "text",
-            placeholder: "格式示例：https://ark.cn-beijing.volces.com/api/v3",
+            example: "https://ark.cn-beijing.volces.com/api/v3",
             default: "https://ark.cn-beijing.volces.com/api/v3",
             required: true,
             key: "base_url",
@@ -350,20 +351,27 @@ const modelProviders = {
 
 
 const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChange }) => {
+    const { t } = useTranslation()
     useEffect(() => {
         showDefault && field.default && onChange(field.key, field.default)
     }, [showDefault])
 
+    const showApiKeyLink = apiKeySite && field.label.indexOf('API Key') !== -1
     return (
-        <div className="mb-2">
-            <Label className="bisheng-label">
-                {field.label}
-                {apiKeySite && field.label.indexOf('API Key') !== -1 && <a href={apiKeySite} target="_blank" rel="noreferrer" className="ml-1 text-primary">(获取{providerName} API Key)</a>}
-            </Label>
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-4">
+                <Label className="bisheng-label">
+                    {field.label}
+                    {field.required && <span className="text-red-500">*</span>}
+                </Label>
+                {showApiKeyLink && <a href={apiKeySite} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-primary hover:underline">
+                    {t('model.getApiKey', { provider: providerName })}
+                </a>}
+            </div>
             <Input
                 type={field.type}
                 autoComplete="off"
-                placeholder={field.placeholder}
+                placeholder={field.example ? t('model.formatExample', { example: field.example }) : field.placeholder}
                 value={value}
                 onChange={(e) => onChange(field.key, e.target.value)}
                 required={field.required}
@@ -398,7 +406,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, 
     }))
 
     return (
-        <div className="overflow-hidden">
+        <div className="space-y-4">
             {fields.map((field) => (
                 <FormField
                     key={provider + field.key}

@@ -89,6 +89,14 @@ from bisheng.permission.domain.services.resource_lifecycle_policy import (
 
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 
+# A service account that creates a top-level resource gets a revocable
+# "manager" grant through a CREATOR_GRANT source (see ``authorize_created``).
+# The manager model stops at level 3, but delete is level 4, so that service
+# account could not delete what it created. This exception adds delete only,
+# only for the creating service account, and only while that source is active.
+_CREATOR_DELETE_ACTION = "delete"
+_CREATOR_DELETE_MODEL_KEY = "manager"
+
 
 def _idempotency_key(*parts: object) -> str:
     canonical = "|".join(str(part) for part in parts)
@@ -141,7 +149,10 @@ class F048PermissionRuntime:
     ) -> bool:
         if action == "visible":
             return await self._decision.check_visible(actor, target)
-        return await self._decision.check_action(actor, target, action)
+        allowed = await self._decision.check_action(actor, target, action)
+        if not allowed and await self._creator_grant_allows_delete(actor, target, action):
+            return True
+        return allowed
 
     @contextual_operation
     async def batch_check_actions(
@@ -151,12 +162,91 @@ class F048PermissionRuntime:
         action: str,
     ) -> tuple[bool, ...]:
         if action != "visible":
-            return await self._decision.batch_check_actions(
+            results = await self._decision.batch_check_actions(
                 actor,
                 targets,
                 action,
             )
+            if action != _CREATOR_DELETE_ACTION or actor.subject_type != "service_account" or all(results):
+                return results
+            return tuple(
+                [
+                    allowed or await self._creator_grant_allows_delete(actor, target, action)
+                    for target, allowed in zip(targets, results, strict=True)
+                ]
+            )
         return await self._decision.batch_check_visible(actor, targets)
+
+    async def _creator_grant_allows_delete(
+        self,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        action: str,
+    ) -> bool:
+        """Let a service account delete a resource it created.
+
+        The check reads the SQL grant roster, which is the source of truth for
+        the OpenFGA projection, and does not change the authorization model or
+        add a second owner. It allows only when all of these are true:
+
+        - the action is ``delete`` and the subject is a service account (a
+          delegated call or a PAT authorizes as a user and never matches);
+        - the target is in the caller's tenant;
+        - an active "manager" grant that applies to the target has an active
+          CREATOR_GRANT source for this exact service account. For a CUSTOM
+          target that is its local grant. For an INHERIT target (a file or a
+          folder) it is the grant on the nearest CUSTOM ancestor, so the
+          exception follows the inheritance that gives the manager rights.
+
+        When the owner revokes the source or moves it to another model, the
+        exception stops at once. Any read failure denies.
+        """
+
+        if (
+            action != _CREATOR_DELETE_ACTION
+            or actor.subject_type != "service_account"
+            or target.tenant_id != actor.tenant_id
+        ):
+            return False
+        try:
+            catalog = await self._runtime_catalog()
+            models = tuple(
+                item.snapshot
+                for item in catalog.models
+                if item.snapshot.model_key == _CREATOR_DELETE_MODEL_KEY and item.snapshot.active
+            )
+            if not models:
+                return False
+            mode = await self._require_current_target(target)
+            if str(mode.mode).upper() == "CUSTOM":
+                grants = await self._state.load_grants(target=target, models=models)
+            else:
+                inherited = await self._state.inherited_grant_set(target=target, models=models)
+                grants = inherited.grants if inherited is not None else ()
+        except PermissionPublishNotReadyError:
+            return False
+        subject_id = str(actor.subject_id)
+        allowed = any(
+            grant.active
+            and grant.model.active
+            and grant.model.model_key == _CREATOR_DELETE_MODEL_KEY
+            and source.active
+            and source.source_type == "CREATOR_GRANT"
+            and source.subject_type == "service_account"
+            and source.subject_id == subject_id
+            and source.userset_relation is None
+            for grant in grants
+            for source in grant.sources
+        )
+        if allowed:
+            logger.info(
+                "F048 creator delete allowed subject=service_account:{} target={}:{} tenant={}",
+                subject_id,
+                target.resource_type,
+                target.resource_id,
+                target.tenant_id,
+            )
+        return allowed
 
     async def current_catalog(self) -> RuntimeCatalogSnapshot:
         return await self._runtime_catalog()
@@ -775,6 +865,47 @@ class F048PermissionRuntime:
             changes=changes,
             expected_resource_version=expected_resource_version,
             expected_catalog_release_id=expected_catalog_release_id,
+            idempotency_key=idempotency_key,
+        )
+
+    async def remove_absent_resource_sources(
+        self,
+        *,
+        actor: PermissionActor,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: str,
+        assignees: tuple[tuple[int, int], ...],
+        idempotency_key: str,
+    ):
+        """Remove grant sources left on a resource that no longer exists.
+
+        Resource deletion only closes the ``permission_enabled`` gate; the grant
+        roster stays. The caller must confirm through the business port that the
+        resource is gone. The removal then uses the ordinary Grant mutation, so
+        the SQL roster and the OpenFGA tuples change in one projection operation.
+        ``assignees`` holds (assignee id, expected assignee version) pairs.
+        """
+
+        target = await self._state.absent_resource_target(
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        catalog = await self._runtime_catalog()
+        return await self.mutate_grants(
+            actor=actor,
+            target=target,
+            changes=tuple(
+                CanonicalGrantChange(
+                    operation="REMOVE",
+                    assignee_id=assignee_id,
+                    expected_assignee_version=version,
+                )
+                for assignee_id, version in assignees
+            ),
+            expected_resource_version=target.resource_version,
+            expected_catalog_release_id=catalog.release_id,
             idempotency_key=idempotency_key,
         )
 
