@@ -178,6 +178,19 @@ def test_example_sdk_requirements_carry_the_sdk():
     assert not [line for line in stdlib_example.splitlines() if line.strip() and not line.startswith("#")]
 
 
+def test_example_sdk_requirements_cover_form_parsing():
+    """``UploadFile`` / ``Form`` need python-multipart at import time.
+
+    Without it FastAPI refuses to build the route and the hosted start-up probe
+    fails with exit code 1 — found by deploying this sample on 114 (2026-10-10).
+    """
+    source = (EXAMPLE_SDK / "main.py").read_text(encoding="utf-8")
+    requirements = (EXAMPLE_SDK / "requirements.txt").read_text(encoding="utf-8")
+    lines = {line.strip().lower() for line in requirements.splitlines() if line.strip() and not line.startswith("#")}
+    if "UploadFile" in source or "Form(" in source:
+        assert "python-multipart" in lines
+
+
 def test_example_sdk_separates_a_missing_app_credential_from_a_platform_outage():
     """An un-injected ``BISHENG_APP_TOKEN`` is an environment fault, not a 502.
 
