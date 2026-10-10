@@ -20,8 +20,7 @@ interface PortalScopeSpace {
 
 /**
  * Decide which container the corner count describes.
- * A selected document has no children. An open folder uses its recursive file count.
- * Otherwise the count is the whole knowledge space.
+ * The number itself is the direct file count of that directory, not files inside child folders.
  */
 export function resolvePortalScopeFileCount(input: {
     space: PortalScopeSpace | null;

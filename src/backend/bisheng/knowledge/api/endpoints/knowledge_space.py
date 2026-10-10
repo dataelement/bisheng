@@ -594,10 +594,15 @@ async def list_space_children(
 @router.get("/{space_id}/file-count")
 async def get_space_file_count(
     space_id: int,
+    parent_id: int | None = Query(default=None),
+    direct: bool = Query(default=False),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    """Count documents stored under a knowledge space."""
-    result = await svc.count_space_files(space_id)
+    """direct 为真时只数当前目录这一层、当前用户可见的文件."""
+    if direct:
+        result = await svc.count_direct_directory_files(space_id, parent_id)
+    else:
+        result = await svc.count_space_files(space_id)
     return resp_200(result)
 
 

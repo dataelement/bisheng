@@ -2961,33 +2961,20 @@ export default function PortalKnowledgeWorkbench() {
             : null,
         file: selectedFile && !isFolder(selectedFile) ? { name: selectedFile.name } : null,
     });
-    const scopeSpaceId = scopeFileCount?.kind === "space" ? scopeFileCount.spaceId : "";
-    const scopeFolderId = scopeFileCount?.kind === "folder" ? scopeFileCount.folderId : "";
-    const spaceFileCountQuery = useQuery({
-        queryKey: ["portalSpaceFileCount", scopeSpaceId],
+    const scopeSpaceId = scopeFileCount?.kind === "space" || scopeFileCount?.kind === "folder"
+        ? String(activeSpace?.id || "")
+        : "";
+    const directFileCountQuery = useQuery({
+        queryKey: ["portalDirectFileCount", scopeSpaceId, currentFolderId ?? ""],
         enabled: Boolean(scopeSpaceId),
-        queryFn: async () => Number(await getSpaceFileCountApi(scopeSpaceId) || 0),
-        staleTime: 30_000,
-    });
-    const folderFileCountQuery = useQuery({
-        queryKey: ["portalFolderFileCount", activeSpace?.id, scopeFolderId],
-        enabled: Boolean(activeSpace?.id && scopeFolderId && scopeFileCount?.kind === "folder" && scopeFileCount.count === null),
-        queryFn: async () => {
-            const stats = await getSpaceFolderStatsApi({
-                space_id: String(activeSpace?.id),
-                folder_ids: [scopeFolderId],
-            });
-            return stats.find((item) => item.folderId === scopeFolderId)?.fileNum ?? 0;
-        },
+        queryFn: async () => Number(await getSpaceFileCountApi(scopeSpaceId, currentFolderId) || 0),
         staleTime: 30_000,
     });
     const displayedScopeFileCount = scopeFileCount?.kind === "file"
         ? 0
-        : scopeFileCount?.kind === "folder"
-            ? (scopeFileCount.count ?? folderFileCountQuery.data ?? null)
-            : scopeFileCount?.kind === "space"
-                ? (spaceFileCountQuery.data ?? null)
-                : null;
+        : scopeFileCount
+            ? (directFileCountQuery.data ?? null)
+            : null;
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
     }, []);
