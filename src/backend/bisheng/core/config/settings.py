@@ -15,7 +15,7 @@ from bisheng.core.config.app_runtime import AppRuntimeConf
 from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
-from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
+from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
@@ -629,6 +629,8 @@ class PaddleOcrConf(BaseModel):
 
     url: str = Field(default="", description="PaddleOcrService Address")
     timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient PaddleOcrService errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial PaddleOcrService retry delay (sec)")
     auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
     headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
@@ -828,6 +830,67 @@ class MetricLogConf(BaseModel):
     )
 
 
+class SandboxConf(BaseModel):
+    """Isolation-environment (sandbox) access settings on worker/backend.
+
+    Session capacity, idle TTL and uid isolation live on the runner
+    (``SANDBOX_MAX_SESSIONS`` / ``SANDBOX_LEASE_TTL_S`` /
+    ``SANDBOX_ENABLE_UID_ISOLATION``), not here.
+
+    Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
+    ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
+    ``orchestrator`` field — replica discovery is the hostname pattern only.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    endpoints: list[str] = Field(
+        default_factory=list, description="Explicit runner URLs; non-empty skips DNS discovery"
+    )
+    discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
+    discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
+    discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
+    discover_ttl_s: int = Field(
+        default=60, description="Background refresh interval for discovered runner URLs (seconds)"
+    )
+    discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
+    token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
+    pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
+    default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
+    max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
+    code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
+
+    @model_validator(mode="after")
+    def overlay_env(self):
+        prefix = "BS_SANDBOX_CONF__"
+        for name, field in type(self).model_fields.items():
+            raw = os.getenv(f"{prefix}{name.upper()}")
+            if raw is None:
+                continue
+            object.__setattr__(self, name, _coerce_sandbox_env(field.annotation, raw))
+        return self
+
+
+def _coerce_sandbox_env(annotation, raw: str):
+    origin = getattr(annotation, "__origin__", annotation)
+    args = getattr(annotation, "__args__", ())
+    if origin is list or (args and origin is list):
+        text = raw.strip()
+        if text.startswith("["):
+            parsed = json.loads(text)
+            if not isinstance(parsed, list):
+                raise ValueError("sandbox_conf list env must be a JSON array")
+            return [str(item) for item in parsed]
+        if not text:
+            return []
+        return [item.strip() for item in text.split(",") if item.strip()]
+    if annotation is bool or origin is bool:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    if annotation is int or origin is int:
+        return int(raw)
+    return raw
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -867,7 +930,7 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    # F068: no shipped default. Empty means "generate once and keep in the config
+    # F072: no shipped default. Empty means "generate once and keep in the config
     # table" — see ``bisheng.user.domain.services.jwt_secret``.
     jwt_secret: str = ""
     gpts: dict = {}
@@ -900,6 +963,7 @@ class Settings(BaseModel):
     # wiring. Sibling key of open_platform, never merged with it — any
     # combination of the two must boot (AC-61).
     app_runtime: AppRuntimeConf = AppRuntimeConf()
+    open_mcp: OpenMcpConf = OpenMcpConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()
@@ -908,6 +972,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
 
     @field_validator("database_url")
     @classmethod

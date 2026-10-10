@@ -407,10 +407,11 @@ class CustomMiddleware(BaseHTTPMiddleware):
         # Tenant context injection from JWT cookie. Decode the JWT once and
         # share it with the F012 token_version + visible_tenant_ids step so
         # the same token isn't decoded twice on the hot path.
-        # v2 resolves its API credential and v3 uses its default operator.
-        # Browser credentials must not change either channel's identity or errors.
+        # v2 resolves its API credential and v3 uses its default operator, and DSH
+        # owns its own credential. Browser credentials must not change any of
+        # those channels' identity or errors.
         token = (
-            _extract_http_access_token(request) if not dsh_owned and _uses_browser_identity(request.url.path) else None
+            _extract_http_access_token(request) if _uses_browser_identity(request.url.path) and not dsh_owned else None
         )
         decoded_subject = _decode_jwt_subject(token) if token else None
         tenant_id = None if dsh_owned else _set_tenant_context(token, decoded_subject=decoded_subject)

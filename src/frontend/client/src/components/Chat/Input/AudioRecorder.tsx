@@ -31,7 +31,7 @@ export default function AudioRecorder({
       if (isSubmitting) {
         showToast({
           message: localize('com_ui_speech_while_submitting'),
-          status: 'error',
+          status: 'warning',
         });
         return;
       }

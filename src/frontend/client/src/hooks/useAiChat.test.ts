@@ -293,7 +293,9 @@ describe("useAiChat adopts a new conversation id", () => {
             turn.submission.onStart();
             turn.submission.onCreated?.("c-real", {
                 messageId: "42",
+                parentMessageId: "",
                 conversationId: "c-real",
+                sender: "user",
                 text: "blocked keyword",
             });
             turn.submission.onAgentUpdate?.({

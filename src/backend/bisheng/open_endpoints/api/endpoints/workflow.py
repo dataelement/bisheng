@@ -2,23 +2,19 @@ import time
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Path, WebSocket, WebSocketException
-from fastapi import status as http_status
+from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.responses import StreamingResponse
 
 from bisheng.api.services.workflow import WorkFlowService
-from bisheng.api.v1.chat import chat_manager
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowStream
 from bisheng.api.v1.schemas import resp_200
-from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
-from bisheng.open_api.api.dependencies import watch_websocket_credential
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot, get_current_open_api_principal
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
@@ -132,46 +128,3 @@ async def stop_workflow(workflow_id: UUID = Body(..., description='Workflow Uniq
     )
     return resp_200()
 
-
-@router.websocket('/chat/{workflow_id}')
-@open_api_scope("workflow:invoke", session=True)
-async def workflow_ws(*,
-                      workflow_id: UUID = Path(..., description='Workflow UniqueID'),
-                      websocket: WebSocket,
-                      chat_id: str | None = None):
-    """ Use Exempt Login Link """
-    try:
-        workflow_id = workflow_id.hex
-        # Authorize.jwt_required(auth_from='websocket', websocket=websocket)
-        # payload = Authorize.get_jwt_subject()
-        login_user = await get_open_api_operator_async()
-        principal = get_current_open_api_principal()
-        if principal is None:
-            raise ServerError(msg="Open API execution identity is missing")
-        session_subject = session_subject_from_principal(principal)
-        await PublishedWorkflowService.validate_websocket_session(
-            workflow_id=workflow_id,
-            chat_id=chat_id,
-            session_subject=session_subject,
-        )
-        execution_snapshot = OpenApiExecutionSnapshot.from_principal(
-            principal,
-            trace_id=str(trace_id_var.get() or uuid.uuid4().hex),
-        ).model_dump(mode="json")
-        async with watch_websocket_credential(websocket):
-            await chat_manager.dispatch_client(
-                websocket,
-                workflow_id,
-                chat_id,
-                login_user,
-                WorkType.WORKFLOW,
-                websocket,
-                session_subject=session_subject,
-                execution_snapshot=execution_snapshot,
-            )
-    except WebSocketException as exc:
-        logger.error(f'Websocket exception: {exc!s}')
-        await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(exc))
-    except Exception as e:
-        logger.error(f'Websocket handle error: {e!s}')
-        await websocket.close(code=http_status.WS_1011_INTERNAL_ERROR, reason=str(e))

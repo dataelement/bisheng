@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -255,6 +256,33 @@ class ChatFolderReq(ChatReq):
     folder_id: int = Field(default=0, description="Folder ID")
     chat_id: str = Field(..., description="Chat ID")
     tags: list[dict] | None = Field(None, description="List of Tag info for filtering")
+
+
+class KnowledgeChatSessionResponse(BaseModel):
+    """Public knowledge-chat session shape; excludes the internal entry override."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    chat_id: str
+    name: str | None = None
+    flow_id: str
+    flow_type: int
+    flow_name: str
+    flow_description: str | None = None
+    flow_logo: str | None = None
+    user_id: int
+    tenant_id: int | None = None
+    api_subject_type: str | None = None
+    api_subject_id: int | None = None
+    external_user_id: str | None = None
+    group_ids: list[int] | None = None
+    is_delete: bool | None = None
+    like: int | None = None
+    dislike: int | None = None
+    copied: int | None = None
+    sensitive_status: int
+    create_time: datetime | None = None
+    update_time: datetime | None = None
 
 
 class SubscribeSpaceResp(BaseModel):

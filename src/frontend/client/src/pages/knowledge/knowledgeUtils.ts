@@ -452,3 +452,22 @@ export function canOpenSharedSpace(info: {
     if (info?.role === "creator") return true;
     return Array.isArray(info?.actions) && info.actions.includes("visible");
 }
+
+/** Router state key the knowledge page hands to the settings page on entry. */
+export const SETTINGS_RETURN_STATE_KEY = "returnTo";
+
+/**
+ * Where the space settings page goes back to on save / cancel / back.
+ *
+ * Entering settings from the knowledge page records the location the user was
+ * browsing (space + folder), so leaving settings resumes there — even when the
+ * settings belonged to another space opened from the sidebar. A settings URL
+ * opened directly carries no such state and falls back to `fallback`.
+ * Only in-app knowledge paths are honored, never an arbitrary URL.
+ */
+export function resolveSettingsReturnPath(state: unknown, fallback: string): string {
+    const returnTo = (state as Record<string, unknown> | null | undefined)?.[SETTINGS_RETURN_STATE_KEY];
+    if (typeof returnTo !== "string") return fallback;
+    if (!/^\/knowledge(?:[/?]|$)/.test(returnTo)) return fallback;
+    return returnTo;
+}

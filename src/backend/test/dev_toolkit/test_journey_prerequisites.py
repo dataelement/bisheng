@@ -202,9 +202,9 @@ class TestJourneyLastStepApprovalTracking:
 
     def test_the_status_tool_it_names_is_a_real_tool_with_that_scope(self, skill_text):
         """`app:manage` is what the pack tells the developer to ask their admin for."""
-        from bisheng.open_api.mcp.registry import TOOLS_BY_NAME
+        from bisheng.open_mcp.registry import TOOL_REGISTRY
 
-        spec = TOOLS_BY_NAME.get("bisheng_app_status")
+        spec = TOOL_REGISTRY.get("bisheng_app_status")
         assert spec is not None, "the pack names an MCP tool the face does not serve"
         assert spec.scope == "app:manage"
         assert "app:manage" in skill_text

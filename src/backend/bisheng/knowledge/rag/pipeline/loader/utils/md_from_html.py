@@ -118,7 +118,7 @@ class HTML2MarkdownConverter:
         The HTML is user-supplied and ``base_url`` is that directory as a
         ``file://`` URI, so both ``<img src="file:///etc/passwd">`` and a
         relative ``../../etc/passwd`` resolve to a local path here. Anything
-        outside the extraction directory is an arbitrary-file read (NVDB F068).
+        outside the extraction directory is an arbitrary-file read (NVDB F072).
         Symlinks are resolved before the containment check.
         """
         source = getattr(self, "source_html_filepath", None)

@@ -153,14 +153,14 @@ export default function DataTableKnowledge<TData, TValue>({
       } else {
         showToast({
           message: uploadRes.status_message || localize('com_tools_file_upload_failed'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     } catch (error) {
       console.error('com_tools_file_upload_failed:', error);
       showToast({
         message: localize('com_tools_file_upload_failed') + error.message,
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     } finally {
       setRetryLoad(false);
@@ -257,13 +257,13 @@ export default function DataTableKnowledge<TData, TValue>({
           // 如果有错误，尝试解析哪些文件失败了
           showToast({
             message: localize('com_tools_file_upload_partial_error'),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
           });
           hasError = true;
         } else if (uploadRes.data?.remark) {
           // showToast({
           //   message: uploadRes.data.remark || localize('com_tools_knowledge_upload_remark'),
-          //   severity: NotificationSeverity.ERROR,
+          //   severity: NotificationSeverity.WARNING,
           // });
           hasError = true;
         }
@@ -281,7 +281,7 @@ export default function DataTableKnowledge<TData, TValue>({
       console.error('com_tools_file_upload_failed:', error);
       showToast({
         message: localize('com_tools_file_upload_failed') + ': ' + error.message,
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     } finally {
       if (duplicateFiles.length === 0) {

@@ -99,7 +99,7 @@ export function ExportFormatSheet({
                     message:
                         translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
                         || localize('workstation.messageExport.renderFailed'),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
             } finally {
                 setBusy(null);

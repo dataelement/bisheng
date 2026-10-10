@@ -159,5 +159,10 @@ async def test_tenant_relocation_calls_atomic_profile_path(user_store, monkeypat
     from bisheng.admin.domain.services.tenant_scope import TenantScopeService
 
     monkeypatch.setattr(TenantScopeService, "clear_on_token_version_bump", AsyncMock())
+    # Relocation also migrates personal tokens, which reaches Redis. This test has
+    # no Redis, and the migration itself is covered by the open-api suite.
+    from bisheng.open_api.domain.services.personal_token_service import PersonalTokenService
+
+    monkeypatch.setattr(PersonalTokenService, "migrate_tenant", AsyncMock())
     await module.UserTenantSyncService.sync_user(20)
     atomic.assert_awaited_once_with(20, 3)

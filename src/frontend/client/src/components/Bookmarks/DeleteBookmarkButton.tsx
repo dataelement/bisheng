@@ -28,7 +28,7 @@ const DeleteBookmarkButton: FC<{
     onError: () => {
       showToast({
         message: localize('com_ui_bookmarks_delete_error'),
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
   });

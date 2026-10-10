@@ -72,6 +72,9 @@ def test_real_celery_registration_and_existing_jwt_decoder(tmp_path):
         "database_url: sqlite:///" + str(tmp_path / "import.db") + "\n"
         "redis_url: redis://127.0.0.1:16362/15\n"
         "celery_redis_url: redis://127.0.0.1:16362/15\n"
+        # The unified line resolves an unset jwt_secret from the database; this
+        # subprocess has none, so pin one here.
+        "jwt_secret: dsh-operations-runtime-test-secret\n"
         "dsh:\n  enabled: true\n"
         "  platform_public_url: https://bisheng.example\n"
         "  gateway_internal_url: https://gateway.example\n"

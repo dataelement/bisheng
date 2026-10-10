@@ -1,4 +1,4 @@
-"""Celery task — hourly ETL license refresh (F067).
+"""Celery task — hourly ETL license refresh (F070).
 
 Deployment-level: do not pass tenant_id, do not iterate tenants, do not
 restore a tenant ContextVar. Authorization is not tenant-scoped (INV-35).

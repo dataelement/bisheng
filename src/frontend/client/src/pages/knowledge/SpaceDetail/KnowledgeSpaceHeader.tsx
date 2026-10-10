@@ -256,13 +256,13 @@ export function KnowledgeSpaceHeader({
                         </button>
                         <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
                         */}
-                        <h1 className="min-w-0 truncate text-base font-normal text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
+                        <h1 className="min-w-0 truncate text-base font-normal leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                             {currentPath[currentPath.length - 1]?.name || space.name}
                         </h1>
                     </>
                 ) : (
                     <div className="flex min-w-0 flex-1 items-center gap-1">
-                        <h1 className="min-w-0 truncate text-base text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
+                        <h1 className="min-w-0 truncate text-base leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                             {space.name}
                         </h1>
                         <Tooltip>

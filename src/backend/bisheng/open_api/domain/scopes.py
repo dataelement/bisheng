@@ -41,7 +41,6 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         (
             ("POST", f"{_V2}/workflow/invoke"),
             ("POST", f"{_V2}/workflow/stop"),
-            (WS, f"{_V2}/workflow/chat/{{workflow_id}}"),
         ),
         "app",
         "openApiManagement.scopes.workflow_invoke.label",
@@ -103,6 +102,8 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("GET", f"{_V2}/filelib/download_statistic"),
             ("GET", f"{_V2}/filelib/detail_qa"),
             ("POST", f"{_V2}/filelib/query_qa"),
+            ("GET", f"{_V2}/knowledge/get_metadata_fields/{{knowledge_id}}"),
+            ("POST", f"{_V2}/knowledge/file/list_user_metadata"),
             ("GET", f"{_V2}/citation/{{citation_id}}"),
         ),
         "knowledge",
@@ -128,11 +129,9 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
             ("POST", f"{_V2}/knowledge/add_metadata_fields"),
             ("PUT", f"{_V2}/knowledge/modify_metadata_fields"),
             ("DELETE", f"{_V2}/knowledge/delete_metadata_fields"),
-            ("GET", f"{_V2}/knowledge/get_metadata_fields/{{knowledge_id}}"),
             ("POST", f"{_V2}/knowledge/file/add_user_metadata"),
             ("PUT", f"{_V2}/knowledge/file/modify_user_metadata"),
             ("DELETE", f"{_V2}/knowledge/file/delete_user_metadata"),
-            ("POST", f"{_V2}/knowledge/file/list_user_metadata"),
         ),
         "knowledge",
         "openApiManagement.scopes.knowledge_write.label",
@@ -167,10 +166,10 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         GROUP_LOCAL_DEV_TOOLKIT,
         "openApiManagement.scopes.identity_read.label",
         "openApiManagement.scopes.identity_read.desc",
-        # F052 MCP face shipped: the three identity / organisation tools read it.
-        # No ``endpoints`` entry — this scope has no REST route of its own, it
-        # gates MCP tools, and the registry check happens in
-        # ``open_api/mcp/registry.py`` rather than off a route marker.
+        # Read by the three identity / organisation MCP tools. No ``endpoints``
+        # entry — this scope has no REST route of its own, it gates MCP tools,
+        # and the check happens in ``open_mcp/registry.py`` rather than off a
+        # route marker.
         requires_open_platform=True,
         hint_keys=("openApiManagement.scopes.identity_read.warning",),
     ),
@@ -229,6 +228,21 @@ def issuable_scope_codes() -> frozenset[str]:
     """Codes accepted at issue / edit time on this deployment, evaluated per call."""
     return frozenset(scope.code for scope in issuable_scopes())
 
+
+# Required scope -> granted scopes that also satisfy it. Only one pair exists:
+# a credential that may write knowledge bases may also read them. The grant
+# itself is not changed, so a credential's listed scopes stay what was issued.
+OPEN_API_SCOPE_IMPLIED_BY: dict[str, frozenset[str]] = {
+    "knowledge:read": frozenset({"knowledge:write"}),
+}
+
+
+def is_scope_granted(required: str, granted: frozenset[str] | set[str]) -> bool:
+    """Return whether the granted scopes satisfy the required scope."""
+
+    if required in granted:
+        return True
+    return not OPEN_API_SCOPE_IMPLIED_BY.get(required, frozenset()).isdisjoint(granted)
 
 OPEN_API_SCOPE_ATTR = "__open_api_scope__"
 

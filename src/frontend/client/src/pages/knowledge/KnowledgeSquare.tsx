@@ -307,7 +307,7 @@ export default function KnowledgeSquare({
                 const message =
                     rawMessage ||
                     localize("com_knowledge.operation_failed_retry");
-                showToast({ message, severity: NotificationSeverity.ERROR });
+                showToast({ message, severity: NotificationSeverity.WARNING });
             }
         } finally {
             setJoiningIds((prev) => {

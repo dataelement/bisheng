@@ -32,6 +32,9 @@ import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
+    /** Pin / rename of the active space: update it in place, never re-select it
+     *  (re-selecting navigates to the space root and drops the open folder). */
+    onActiveSpaceUpdate: (space: KnowledgeSpace) => void;
     onCreateSpace: () => void;
     onSpaceSettings: (space: KnowledgeSpace) => void;
     onKnowledgeSquare?: () => void;
@@ -59,6 +62,7 @@ interface KnowledgeSpaceSidebarProps {
 export function KnowledgeSpaceSidebar({
     activeSpaceId,
     onSpaceSelect,
+    onActiveSpaceUpdate,
     onCreateSpace,
     onSpaceSettings,
     onKnowledgeSquare,
@@ -220,7 +224,7 @@ export function KnowledgeSpaceSidebar({
         ])),
         [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
     );
-    const { actions: spaceActions, ensureSpaceActions } = useKnowledgeSpaceActions(permissionSpaceIds);
+    const { actions: spaceActions, ensureSpaceActions, isSpaceActionsPending } = useKnowledgeSpaceActions(permissionSpaceIds);
 
     const getItemPermissions = (space: KnowledgeSpace) => {
         const canEditSpace = hasKnowledgeSpaceAction(
@@ -238,7 +242,8 @@ export function KnowledgeSpaceSidebar({
             space.id,
             "manage_permission",
         );
-        return { canEditSpace, canDeleteSpace, canManageMembers };
+        const permissionsLoading = isSpaceActionsPending(space.id);
+        return { canEditSpace, canDeleteSpace, canManageMembers, permissionsLoading };
     };
 
     // CRUD operations with optimistic updates (mirrors useChannelActions)
@@ -256,6 +261,7 @@ export function KnowledgeSpaceSidebar({
         joinedSpaces: filteredJoinedSpaces,
         departmentSpaces,
         onSpaceSelect,
+        onActiveSpaceUpdate,
     });
 
     // Auto-select first space when no space is active (mirrors ChannelSidebar).

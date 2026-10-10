@@ -411,6 +411,11 @@ export const AttachmentBar = ({
         el.scrollBy({ left: dir === "left" ? -el.clientWidth : el.clientWidth, behavior: "smooth" });
     }, []);
 
+    // Edge fades must match the surface they sit on or they read as missing:
+    // the strip is rgba(244,244,244,0.55) over white, which composites to
+    // #f9f9f9; the inline row sits on the white input box.
+    const fadeFrom = appearance === "strip" ? "from-[#f9f9f9]" : "from-white";
+
     return (
         <div
             className={cn(
@@ -491,14 +496,16 @@ export const AttachmentBar = ({
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[49%] to-transparent transition-opacity",
+                            fadeFrom,
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[49%] to-transparent transition-opacity",
+                            fadeFrom,
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />

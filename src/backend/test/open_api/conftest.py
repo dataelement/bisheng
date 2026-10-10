@@ -112,11 +112,10 @@ def fake_redis(monkeypatch):
 
 @asynccontextmanager
 async def _mcp_app():
-    """A FastAPI app carrying only the MCP route, with its session manager running.
+    """A FastAPI app carrying only the MCP path (F067 ``open_mcp``), with its session manager running.
 
-    Not ``bisheng.main.app``: the route is registered at import time under
-    ``open_platform.enabled``, which is off in the shipped test config. Each
-    caller gets its own server because ``StreamableHTTPSessionManager.run()``
+    Not ``bisheng.main.app``, so a test does not pull in the whole router. Each
+    caller gets its own runtime because ``StreamableHTTPSessionManager.run()``
     may be entered once per instance.
 
     This is a plain context manager rather than an async fixture on purpose. The
@@ -130,13 +129,13 @@ async def _mcp_app():
     from fastapi import FastAPI
 
     from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
-    from bisheng.open_api.mcp.server import build_mcp_route, mcp_session_manager_run, new_mcp_server
+    from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 
-    server = new_mcp_server()
+    runtime = create_open_mcp_runtime()
     app = FastAPI()
     register_open_api_exception_handlers(app)
-    app.router.routes.append(build_mcp_route(server))
-    async with mcp_session_manager_run(server):
+    app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=runtime.app)
+    async with runtime.lifespan():
         yield app
 
 

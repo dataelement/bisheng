@@ -4,6 +4,8 @@ from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.app_publish.tasks import run_publish_pipeline
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.commercial_license.tasks import refresh_etl_license
+
+# DSH tasks register without performing network IO; startup owns approved runtimes.
 from bisheng.worker.dsh.registry import register_dsh_tasks
 from bisheng.worker.information.article import dispatch_information_article_poll, sync_information_articles
 from bisheng.worker.information.knowledge_delivery import (
@@ -18,6 +20,9 @@ from bisheng.worker.knowledge.file_worker import (
     file_copy_celery,
     parse_knowledge_file_celery,
     retry_knowledge_file_celery,
+)
+from bisheng.worker.knowledge.knowledge_chat_history_retention import (
+    rehome_knowledge_chat_sessions as rehome_knowledge_chat_sessions,
 )
 from bisheng.worker.knowledge.move_worker import migrate_file_vectors
 from bisheng.worker.knowledge.qa import copy_qa_knowledge_celery, insert_qa_celery, rebuild_qa_knowledge_celery

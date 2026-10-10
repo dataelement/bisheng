@@ -286,7 +286,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           message:
             translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
             || t('workstation.messageExport.renderFailed'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       }
     },
@@ -798,7 +798,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   </div>
                 ) : (hasMessages || !isNew) ? (
                   <div ref={compareFreeze.rowRef} className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input). F071: while the report is
+                    {/* Left: Chat Main (Messages + Input). F074: while the report is
                         compared with a cited source the workspace takes this column's
                         width; fade it, and pin its children's width while compare is
                         open so the hidden messages are clipped, never re-wrapped at
@@ -929,13 +929,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
                           taskArtifacts.open ? 'p-1 opacity-100' : 'pointer-events-none p-0 opacity-0',
                         )}
-                        // F071: compare view → the whole row (the chat column gives way).
+                        // F074: compare view → the whole row (the chat column gives way).
                         style={{
                           width: !taskArtifacts.open ? '0px' : taskArtifacts.comparing ? '100%' : 'clamp(440px, 46%, 720px)',
                         }}
                       >
                         {!fsMounted && (
-                          // F071: pinned to its end width while entering/leaving compare
+                          // F074: pinned to its end width while entering/leaving compare
                           // (useCompareTransitionFreeze) so the wrapper's width animation
                           // clips the report + source instead of re-laying them out.
                           <div ref={dockedCardRef} className="h-full min-w-[420px]">

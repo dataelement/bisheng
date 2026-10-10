@@ -67,7 +67,7 @@ def test_building_a_node_is_refused_while_the_switch_is_off(bare_base_node):
 
 
 def test_the_gate_runs_before_the_code_is_parsed(bare_base_node):
-    with _with_conf(False), patch.object(code_node, "CodeParser") as parser:
+    with _with_conf(False), patch.object(code_node, "make_code_parser") as parser:
         with pytest.raises(IgnoreException):
             code_node.CodeNode()
 

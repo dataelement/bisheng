@@ -1,4 +1,4 @@
-"""F068: JWT signing secret must never be the shipped default.
+"""F072: JWT signing secret must never be the shipped default.
 
 Resolution order: config.yaml ``jwt_secret`` (unless it is a leaked legacy
 value) → generated-once secret persisted in the ``config`` table.

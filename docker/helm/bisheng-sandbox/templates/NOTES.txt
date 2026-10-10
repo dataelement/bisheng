@@ -1,0 +1,12 @@
+bisheng-sandbox {{ .Chart.Version }}
+
+Headless Service: {{ include "bisheng-sandbox.fullname" . }}
+Replicas:         {{ .Values.replicaCount }}
+Discover from the BiSheng worker (do not use the Service name as a VIP):
+
+  BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN=code-runner-{n}.{{ include "bisheng-sandbox.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  BS_SANDBOX_CONF__DISCOVER_INDEX_START=0
+  BS_SANDBOX_CONF__TOKEN=<same as this chart's token>
+
+Example Pod DNS:
+  {{ include "bisheng-sandbox.fullname" . }}-0.{{ include "bisheng-sandbox.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}

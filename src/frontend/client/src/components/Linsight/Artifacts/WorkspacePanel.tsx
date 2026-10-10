@@ -6,7 +6,7 @@
  *   - preview: ArrowLeft back / "文件" / Download / fullscreen toggle / Close,
  *              with the file rendered in place. Fullscreen expands within `main`
  *              (the chat column is hidden by the parent), not the browser.
- *   - compare (F071): clicking a document citation in the report opens the
+ *   - compare (F074): clicking a document citation in the report opens the
  *              cited file BESIDE the report (split layout) or behind a
  *              report / source switch (tabs layout, < 1024px) — never on top of
  *              the report it is being checked against.
@@ -40,9 +40,9 @@ interface WorkspacePanelProps {
     /** Hide the fullscreen toggle — used on mobile, where the panel is already a
      *  full-screen overlay / drawer and the toggle would be meaningless. */
     hideFullscreenToggle?: boolean;
-    /** F071: cited source shown with the report; null → report only. */
+    /** F074: cited source shown with the report; null → report only. */
     sourcePreview?: SourcePreview | null;
-    /** F071: 'split' puts the source beside the report; 'tabs' (narrow screens)
+    /** F074: 'split' puts the source beside the report; 'tabs' (narrow screens)
      *  switches between them because two columns would each be too narrow. */
     compareLayout?: 'split' | 'tabs';
     onOpenSource?: (preview: SourcePreview) => void;
@@ -185,7 +185,7 @@ export function WorkspacePanel({
                         )}
                     </button>
                 )}
-                {/* F071: this X closes the report AND its source; the source pane
+                {/* F074: this X closes the report AND its source; the source pane
                     has its own, differently drawn, collapse button. */}
                 <Tooltip>
                     <TooltipTrigger asChild>

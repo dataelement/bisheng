@@ -3,7 +3,7 @@ from typing import Any
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
-from bisheng.workflow.nodes.code.code_parse import CodeParser
+from bisheng.workflow.nodes.code.code_parse import make_code_parser
 
 # Surfaced to whoever ran the workflow as the run's failure reason, so it has
 # to name the setting an administrator would have to change.
@@ -34,7 +34,7 @@ class CodeNode(BaseNode):
         self._code = self.node_params["code"]
         self._code_output = self.node_params["code_output"]
 
-        self._code_parser = CodeParser(self._code)
+        self._code_parser = make_code_parser(self._code)
 
         self._parse_code()
 

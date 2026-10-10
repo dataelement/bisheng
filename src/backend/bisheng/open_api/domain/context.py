@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from bisheng.open_api.domain.scopes import is_scope_granted
+
 
 class OpenApiPrincipal(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -33,7 +35,8 @@ class OpenApiPrincipal(BaseModel):
     end_user_id: str | None = None
 
     def has_scope(self, scope: str) -> bool:
-        return scope in self.scopes
+        # Implied scopes are resolved here; ``scopes`` keeps the issued grant.
+        return is_scope_granted(scope, self.scopes)
 
 
 class OpenApiExecutionSnapshot(BaseModel):

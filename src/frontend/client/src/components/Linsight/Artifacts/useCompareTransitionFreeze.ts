@@ -1,5 +1,5 @@
 /**
- * F071: keep the report ↔ source compare view off the layout hot path.
+ * F074: keep the report ↔ source compare view off the layout hot path.
  *
  * Opening a cited source animates the docked workspace's width (docked clamp() →
  * the whole row) while the chat column, a flex-1 sibling, is squeezed to zero and

@@ -7,7 +7,11 @@ that ``test/open_api/test_error_codes.py`` pins, and squatting there would make
 
 Sub-ranges:
 
-* ``26300-26319`` MCP transport + tool face (owned by ``open_api/mcp/``)
+* ``26300-26319`` MCP tool face. Since 2026-10-10 the MCP server is the F067
+  ``open_mcp`` package; F052's own server was folded into it. Only 26305
+  (application not yours) and 26306 (identity not found) are still raised, by
+  ``open_mcp/tools/``. 26301-26304 belonged to F052's transport gate and are
+  retired — never reuse them.
 * ``26320-26339`` unified retrieval facade (shared by its four callers: the MCP
   search tool, ``POST /api/v2/filelib/retrieve``, the hosted-app runtime and the
   SDK's ``retrieve``)
@@ -23,9 +27,7 @@ Two constraints that are easy to miss:
   collector would read the example as a real code.)
 * Copy for every code lives in
   ``src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`` and ships
-  in the same change. The ``next_step`` guidance an MCP client reads is **not**
-  there — the backend process does not carry the frontend locale package, so it
-  lives in ``open_api/mcp/errors.py: NEXT_STEP_COPY`` instead.
+  in the same change.
 """
 
 from typing import Any

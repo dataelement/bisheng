@@ -1,5 +1,5 @@
 /**
- * F071: the cited source file shown beside the report in the task-mode
+ * F074: the cited source file shown beside the report in the task-mode
  * workspace. It replaces the floating CitationDocumentPreviewDrawer there, which
  * covered the report it was supposed to be checked against.
  *

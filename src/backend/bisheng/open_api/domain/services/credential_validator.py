@@ -102,9 +102,11 @@ async def resolve_natural_person(row: ApiCredential) -> OpenApiPrincipal:
     if holder is None or holder.tenant_id != row.tenant_id:
         raise PersonalTokenHolderInvalidError()
 
-    # A PAT inherits the holder's ordinary resource grants, not management
-    # shortcuts. Administrator status is loaded separately by the issuance and
-    # ledger services only to cap TTL and surface the mandatory risk warning.
+    # A PAT acts with the holder's permissions inside the credential tenant,
+    # including administrator shortcuts (global super admin, or tenant admin of
+    # this tenant). The access context loads those shortcuts per request, pins
+    # the visible tenants to {root, credential tenant} so they never reach
+    # another tenant, and applies the tenant PAT data_scope policy on top.
     return OpenApiPrincipal(
         credential_id=row.id,
         actor_kind="natural_person",

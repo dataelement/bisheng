@@ -243,7 +243,7 @@ const modelProviders = {
             label: "API Host",
             type: "text",
             placeholder: "",
-            default: "https://api.minimax.com/v1",
+            default: "https://api.minimax.cn/v1",
             required: true,
             key: "openai_api_base",
         },

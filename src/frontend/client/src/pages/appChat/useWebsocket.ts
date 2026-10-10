@@ -264,7 +264,7 @@ export const useWebSocket = (helpers) => {
             if (![10421, 13002].includes(code)) {
                 showToast({
                     message: code === 500 ? message : localize(`api_errors.${String(code)}`, { ...(data.message?.data || {}), defaultValue: localize('api_errors.fallback') }),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 })
             } else {
                 helpers.handleMsgError({ code, data: data.message?.data })
@@ -364,7 +364,7 @@ export const useWebSocket = (helpers) => {
         } catch (error: any) {
             showToast({
                 message: error.message,
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             })
         }
     }

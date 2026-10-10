@@ -7,6 +7,8 @@ export {
   buildQrPayload,
   collectDiagnostics,
   deriveErrorCode,
+  formatErrorTime,
+  formatUtc8Timestamp,
   pickTopFrame,
 } from './diagnostics';
 export type { CollectDiagnosticsInput, ErrorDiagnostics } from './diagnostics';

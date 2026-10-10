@@ -31,6 +31,13 @@ interface ChatErrorCardProps {
     onRetry?: () => void;
     /** disables the retry button + spins its icon while a retry is in flight */
     retrying?: boolean;
+    /** Replaces the per-type description on the failure card. Daily chat uses it
+        when a stream fails *after* emitting an answer: the specific reason is noise,
+        what matters is that the reply above is cut short. */
+    description?: string;
+    /** Drops the per-type "建议…" line. Daily chat sets it when the card carries a
+        plain backend message as its description — a hint would just repeat it. */
+    hideHint?: boolean;
 }
 
 // error_type values that have their own localized copy; anything else (or a
@@ -72,14 +79,22 @@ export function isTransientErrorType(errorType?: string): boolean {
     return !!errorType && TRANSIENT_TYPES.has(errorType);
 }
 
-export function ChatErrorCard({ errorType, detail, fallbackMessage, onRetry, retrying }: ChatErrorCardProps) {
+export function ChatErrorCard({
+    errorType,
+    detail,
+    fallbackMessage,
+    onRetry,
+    retrying,
+    description,
+    hideHint,
+}: ChatErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 
     const key = errorType && KNOWN_TYPES.has(errorType) ? errorType : 'unknown';
     const title = localize(`com_linsight_error_title_${key}`);
-    const desc = localize(`com_linsight_error_desc_${key}`);
-    const hint = localize(`com_linsight_error_hint_${key}`);
+    const desc = description ?? localize(`com_linsight_error_desc_${key}`);
+    const hint = hideHint ? '' : localize(`com_linsight_error_hint_${key}`);
     const rawDetail = detail || fallbackMessage || '';
 
     // Transient → calm neutral notice (with retry where the surface wires it).

@@ -108,7 +108,7 @@ export default function Subscription() {
         if (channelPluginGate !== "disabled") return;
         showToast({
             message: localize("com_plugin_feature_no_access_toast"),
-            severity: NotificationSeverity.ERROR,
+            severity: NotificationSeverity.WARNING,
         });
         navigate("/c/new", { replace: true });
     }, [channelPluginGate, showToast, navigate, localize]);

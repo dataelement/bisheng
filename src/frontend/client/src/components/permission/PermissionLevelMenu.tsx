@@ -5,7 +5,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import { ChevronDown } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import type { RelationModelOption } from "./RelationSelect";
@@ -64,7 +64,7 @@ export function PermissionLevelMenu({
           )}
         >
           <span className="truncate">{label}</span>
-          <ChevronDown className="size-3.5 shrink-0 text-text-3" />
+          <Outlined.Down className="size-3.5 shrink-0 text-text-3" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

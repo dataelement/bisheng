@@ -1,5 +1,5 @@
 import os
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +22,7 @@ from bisheng.open_api.api.middleware import OpenApiAuditMiddleware
 from bisheng.open_api.api.openapi_schema import install_open_api_schema
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 from bisheng.open_api.domain.services.model_call_record_writer import model_call_record_writer
+from bisheng.open_mcp.server import OpenMcpDispatchMiddleware, create_open_mcp_runtime
 from bisheng.public_endpoints.api.exception_handlers import register_public_exception_handlers
 from bisheng.public_endpoints.api.router import router_public
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
@@ -104,88 +105,73 @@ def _register_app_publish_composition() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await initialize_app_context(config=settings)
-    _register_permission_runtime_contexts()
-    _register_app_publish_composition()
-    open_api_call_audit_service.start()
-    # F051: the model protocol face writes one model_call_record per call
-    # write-behind. Own writer, own table — the audit page must not be drowned
-    # by a face a local coding agent calls in a loop.
-    model_call_record_writer.start()
-    async with AsyncExitStack() as startup_stack:
-        # F052 MCP face. The streamable-HTTP session manager owns a task group
-        # that every request's transport is started into, so it has to be
-        # entered here — and exactly once per process, which is what its own
-        # ``_has_started`` guard enforces. Entered only when the route exists,
-        # so a deployment without the open-capability layer starts nothing.
-        if settings.open_platform.enabled:
-            from bisheng.open_api.mcp.server import mcp_session_manager_run
+    async with app.state.open_mcp_runtime.lifespan():
+        await initialize_app_context(config=settings)
+        _register_permission_runtime_contexts()
+        _register_app_publish_composition()
+        open_api_call_audit_service.start()
+        # F051: the model protocol face writes one model_call_record per call
+        # write-behind. Own writer, own table — the audit page must not be drowned
+        # by a face a local coding agent calls in a loop.
+        model_call_record_writer.start()
+        try:
+            await init_default_data()
+            # F035 task-mode compatibility data remains unrelated to F048 resource
+            # authorization and is safe to maintain independently.
+            try:
+                from bisheng.linsight.domain.services.task_mode_menu_backfill import (
+                    backfill_linsight_task_mode_web_menu,
+                )
 
-            await startup_stack.enter_async_context(mcp_session_manager_run())
-        async with _platform_lifespan():
+                await backfill_linsight_task_mode_web_menu()
+            except Exception:
+                logger.exception("linsight task-mode menu backfill failed; continuing startup")
+            try:
+                from bisheng.llm.domain.services.linsight_default_model_backfill import (
+                    backfill_linsight_default_model,
+                )
+
+                await backfill_linsight_default_model()
+            except Exception:
+                logger.exception("linsight default-model backfill failed; continuing startup")
+            # Skill bundles moved from node-local disk to object storage. Publish what
+            # this host still holds so an upgraded deployment heals itself; anything it
+            # cannot resolve is logged by name for the operator to run the migration
+            # script on the host that has it. Runs before seeding: built-in rows are
+            # left to the seeder, which republishes them from the image.
+            try:
+                from bisheng.linsight.domain.services.skill_bundle_backfill import (
+                    backfill_skill_bundles_from_local_disk,
+                )
+
+                await backfill_skill_bundles_from_local_disk()
+            except Exception:
+                logger.exception("linsight skill bundle backfill failed; continuing startup")
+            # Ships the kernel's built-in skills into every tenant so a fresh deploy
+            # has them without any operator step. Content-addressed and idempotent:
+            # an unchanged image costs one existence probe per skill.
+            try:
+                from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
+
+                await seed_builtin_skills()
+            except Exception:
+                logger.exception("built-in linsight skill seeding failed; continuing startup")
+            # LangfuseInstance.update()
             yield
-
-
-@asynccontextmanager
-async def _platform_lifespan():
-    try:
-        await init_default_data()
-        # F035 task-mode compatibility data remains unrelated to F048 resource
-        # authorization and is safe to maintain independently.
-        try:
-            from bisheng.linsight.domain.services.task_mode_menu_backfill import (
-                backfill_linsight_task_mode_web_menu,
-            )
-
-            await backfill_linsight_task_mode_web_menu()
-        except Exception:
-            logger.exception("linsight task-mode menu backfill failed; continuing startup")
-        try:
-            from bisheng.llm.domain.services.linsight_default_model_backfill import (
-                backfill_linsight_default_model,
-            )
-
-            await backfill_linsight_default_model()
-        except Exception:
-            logger.exception("linsight default-model backfill failed; continuing startup")
-        # Skill bundles moved from node-local disk to object storage. Publish what
-        # this host still holds so an upgraded deployment heals itself; anything it
-        # cannot resolve is logged by name for the operator to run the migration
-        # script on the host that has it. Runs before seeding: built-in rows are
-        # left to the seeder, which republishes them from the image.
-        try:
-            from bisheng.linsight.domain.services.skill_bundle_backfill import (
-                backfill_skill_bundles_from_local_disk,
-            )
-
-            await backfill_skill_bundles_from_local_disk()
-        except Exception:
-            logger.exception("linsight skill bundle backfill failed; continuing startup")
-        # Ships the kernel's built-in skills into every tenant so a fresh deploy
-        # has them without any operator step. Content-addressed and idempotent:
-        # an unchanged image costs one existence probe per skill.
-        try:
-            from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
-
-            await seed_builtin_skills()
-        except Exception:
-            logger.exception("built-in linsight skill seeding failed; continuing startup")
-        # LangfuseInstance.update()
-        yield
-    finally:
-        await open_api_call_audit_service.stop()
-        await model_call_record_writer.stop()
-        # Hosted-app access records are written fire-and-forget (F054 AC-38);
-        # give the in-flight ones a bounded chance to land before the database
-        # goes away, so a deploy restart is not a silent gap in an audit asset.
-        await flush_pending_access_records(timeout=5.0)
-        try:
-            dsh_runtime = getattr(app.state, "dsh_runtime", None)
-            if dsh_runtime is not None:
-                await dsh_runtime.close()
         finally:
-            thread_pool.tear_down()
-            await close_app_context()
+            await open_api_call_audit_service.stop()
+            await model_call_record_writer.stop()
+            # Hosted-app access records are written fire-and-forget (F054 AC-38);
+            # give the in-flight ones a bounded chance to land before the database
+            # goes away, so a deploy restart is not a silent gap in an audit asset.
+            await flush_pending_access_records(timeout=5.0)
+            try:
+                dsh_runtime = getattr(app.state, "dsh_runtime", None)
+                if dsh_runtime is not None:
+                    await dsh_runtime.close()
+            finally:
+                thread_pool.tear_down()
+                await close_app_context()
 
 
 def create_app():
@@ -195,6 +181,7 @@ def create_app():
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
+    app.state.open_mcp_runtime = create_open_mcp_runtime()
     # /api/v2 and /api/v3 answer with real HTTP status codes while keeping the
     # platform envelope in the body. Registered via add_exception_handler rather
     # than in ``_EXCEPTION_HANDLERS`` because they must sit *below*
@@ -243,6 +230,7 @@ def create_app():
     # the inbound path, which means AdminScopeMiddleware must be added
     # *first* (inner). See ``common/middleware/admin_scope.py`` docstring.
     app.add_middleware(AdminScopeMiddleware)
+    app.add_middleware(OpenMcpDispatchMiddleware, mcp_app=app.state.open_mcp_runtime.app)
     app.add_middleware(OpenApiAuditMiddleware)
     app.add_middleware(CustomMiddleware)
     app.add_middleware(WebSocketLoggingMiddleware)
@@ -254,17 +242,6 @@ def create_app():
     app.include_router(router)
     app.include_router(router_rpc)
     app.include_router(router_public)
-    # F052 MCP face. A bare Starlette ``Route``, not ``app.mount`` and not an
-    # ``APIRoute``: the path has to match exactly (a ``Mount`` would answer 307
-    # on the bare path), and it must stay out of ``app.openapi()`` and out of
-    # ``router_rpc``'s dependency — it authenticates itself in ``McpAccessGate``
-    # because a Starlette route carries no ``@open_api_scope`` marker to read.
-    # Conditional on purpose, like ``dev_toolkit_router``: where the
-    # open-capability layer is not deployed the path simply does not exist.
-    if settings.open_platform.enabled:
-        from bisheng.open_api.mcp.server import build_mcp_route
-
-        app.router.routes.append(build_mcp_route())
     from bisheng.department.api.endpoints.department_limit import (
         router as department_limit_router,
     )

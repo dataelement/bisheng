@@ -510,7 +510,7 @@ export function SimilarDocumentDialog({
         onError: () => {
             showToast({
                 message: localize("com_knowledge.version.toast_link_failure"),
-                status: "error",
+                status: "warning",
             });
         },
     });

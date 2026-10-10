@@ -96,7 +96,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                     },
                     onError: () => {
                         setTitleInput(conv.title);
-                        showToast({ message: localize('com_ui_rename_failed') || '重命名失败', status: 'error' });
+                        showToast({ message: localize('com_ui_rename_failed') || '重命名失败', status: 'warning' });
                     },
                 }
             );

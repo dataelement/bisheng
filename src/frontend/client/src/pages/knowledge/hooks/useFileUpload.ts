@@ -353,7 +353,7 @@ export function useFileUpload({
             void refreshQuota();
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) {
-                showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
+                showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
             }
 
             // If all uploads failed, clear placeholders and bail out
@@ -415,7 +415,7 @@ export function useFileUpload({
                 console.error("[useFileUpload] file registration failed:", e);
                 showToast({
                     message: localize("com_knowledge.file_register_failed"),
-                    severity: NotificationSeverity.ERROR,
+                    severity: NotificationSeverity.WARNING,
                 });
             }
 
@@ -437,7 +437,7 @@ export function useFileUpload({
             void refreshQuota();
             await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
         } catch {
-            showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.WARNING });
         } finally {
             setDuplicateFiles([]);
         }
@@ -587,7 +587,7 @@ export function useFileUpload({
 
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) {
-                showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
+                showToast({ message: failureMessage, severity: NotificationSeverity.WARNING });
             }
 
             if (uploadedItems.length === 0) return;
@@ -681,7 +681,7 @@ export function useFileUpload({
                         showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
                         setCreatingFolder(null);
                     } else {
-                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.WARNING });
                     }
                 }
                 return;
@@ -704,7 +704,7 @@ export function useFileUpload({
                 }
                 showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS });
             } catch {
-                showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.WARNING });
             }
         },
         [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
@@ -748,7 +748,7 @@ export function useFileUpload({
                     await deleteFileApi(activeSpace.id, fileId);
                 }
             } catch {
-                showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
+                showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.WARNING });
                 clearPendingDeletion([fileId]);
                 loadFiles(1); // roll back to a fresh first page (cursor mode: page>1 = append)
                 return;

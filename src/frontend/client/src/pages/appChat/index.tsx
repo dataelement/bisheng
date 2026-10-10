@@ -116,7 +116,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
             })
                 .catch(() => ({ allowed: false }));
             if (permission?.allowed) return true;
-            showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
             navigate('/apps', { replace: true });
             return false;
         };
@@ -152,7 +152,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 // Handle 403: no permission, redirect to app center
                 if (flowRes.status_code === 403) {
-                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
+                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
                     navigate('/apps', { replace: true });
                     return;
                 }
@@ -185,7 +185,7 @@ export default function index({ chatId = '', flowId = '', shareToken = '', flowT
 
                 // Handle 403: no permission, redirect to app center
                 if (assistantRes.status_code === 403) {
-                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.ERROR });
+                    showToast?.({ message: localize("com_plugin_feature_no_access_toast"), severity: NotificationSeverity.WARNING });
                     navigate('/apps', { replace: true });
                     return;
                 }
@@ -304,7 +304,7 @@ const useBuild = () => {
             eventSource.close();
             // if (error.data) {
             //     const parsedData = JSON.parse(error.data);
-            //     showToast({ message: parsedData.error, status: 'error' });
+            //     showToast({ message: parsedData.error, status: 'warning' });
             // }
         };
         // Step 3: Wait for the stream to finish
@@ -333,7 +333,7 @@ const useBuild = () => {
         try {
             // const errors = flow.data.nodes.flatMap((n) => validateNode(n, flow.data.edges))
             // if (errors.length > 0) {
-            //     return showToast({ message: errors.join('\n'), status: 'error' });
+            //     return showToast({ message: errors.join('\n'), status: 'warning' });
             // }
 
             const minimumLoadingTime = 200; // in milliseconds

@@ -45,7 +45,8 @@ def _publish_chat_completion_request(schema: dict) -> None:
 
     The endpoint takes a raw body so it can dispatch on ``run_mode``; without
     this the published contract would show an untyped object. Daily mode stays
-    the default branch (no ``run_mode``); task mode is ``run_mode="task"``.
+    the default branch (``run_mode`` omitted or ``"daily"``); task mode is
+    ``run_mode="task"``.
     """
     from bisheng.open_api.domain.schemas.task_mode import OpenTaskSubmitReq
     from bisheng.open_api.domain.schemas.workstation import OpenDailyChatCompletionReq

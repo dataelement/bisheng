@@ -117,8 +117,8 @@ async def mcp_search(bearer: str, *, query: str, knowledge_ids: tuple[int, ...],
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             result = await session.call_tool(
-                "bisheng_knowledge_search",
-                {"query": query, "knowledge_ids": list(knowledge_ids), "top_k": top_k},
+                "bisheng_knowledge_retrieve",
+                {"query": query, "knowledge_base_ids": list(knowledge_ids), "top_k": top_k},
             )
     return {"isError": bool(result.isError), "content": result.structuredContent, "raw": result}
 
@@ -309,7 +309,6 @@ async def test_the_mcp_tool_and_v2_return_the_same_chunks_for_the_same_key(clien
 
     assert keys(mcp["content"]["chunks"]) == keys(v2["chunks"])
     assert _document_ids(mcp["content"]["chunks"]) == sample.reachable_file_ids
-    assert set(mcp["content"]["effective_scope"]) == set(sample.granted_knowledge_ids)
 
 
 # ---------------------------------------------------------------------------

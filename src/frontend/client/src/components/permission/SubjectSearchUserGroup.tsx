@@ -1,9 +1,21 @@
 import { Checkbox } from "~/components/ui/Checkbox";
+import { Tag } from "@bisheng/ui";
 import { getUserGroups } from "~/api/permission";
 import type { ResourceType, SelectedSubject } from "~/api/permission";
-import { Users, Search } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { PermissionEmptyState } from "./PermissionEmptyState";
+import {
+  PERMISSION_SUBJECT_ICON_CLASS,
+  PERMISSION_SUBJECT_LIST_CLASS,
+  PERMISSION_SUBJECT_ROW_CLASS,
+  PERMISSION_SUBJECT_ROW_DISABLED_CLASS,
+  PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+  PERMISSION_SUBJECT_SLOT_CLASS,
+  permissionSubjectIndent,
+} from "./permissionDialogStyles";
 
 interface UserGroup {
   id: number;
@@ -80,7 +92,7 @@ export function SubjectSearchUserGroup({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
+        <Outlined.Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_user_group")}
@@ -91,48 +103,61 @@ export function SubjectSearchUserGroup({
       </div>
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
         {loading && (
-          <div className="py-4 text-center text-sm text-gray-500">
+          <div className="py-4 text-center text-sm text-text-3">
             {localize("com_ui_loading")}
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_user_groups")}
+          <PermissionEmptyState
+            message={localize(keyword ? "com_permission.empty_search" : "com_permission.empty_user_groups")}
+          />
+        )}
+        {!loading && filtered.length > 0 && (
+          <div className={PERMISSION_SUBJECT_LIST_CLASS}>
+            {filtered.map((group) => {
+              const isDisabled = disabledIdSet.has(group.id);
+              const grantedLabel = grantedLabels[String(group.id)];
+              return (
+                <div
+                  key={group.id}
+                  className={cn(
+                    PERMISSION_SUBJECT_ROW_CLASS,
+                    isDisabled
+                      ? PERMISSION_SUBJECT_ROW_DISABLED_CLASS
+                      : PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+                  )}
+                  style={{ paddingLeft: permissionSubjectIndent(0) }}
+                  onClick={() => toggle(group)}
+                >
+                  {/* No switcher slot: this list is flat, so nothing in it expands
+                      and the slot would only be dead space. The checkbox leads. */}
+                  <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                    <Checkbox
+                      className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                      checked={selectedIds.has(group.id) || isDisabled}
+                      disabled={isDisabled}
+                    />
+                  </div>
+                  <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                    <Outlined.PeopleGroup className={PERMISSION_SUBJECT_ICON_CLASS} />
+                  </div>
+                  <span className="min-w-0 flex-1 truncate pl-1" title={group.group_name}>
+                    {group.group_name}
+                  </span>
+                  {(grantedLabel || isDisabled) && (
+                    <Tag size="small" className="shrink-0">
+                      {grantedLabel
+                        ? localize("com_permission.already_granted_as", {
+                            model: grantedLabel,
+                          })
+                        : localize("com_permission.already_granted")}
+                    </Tag>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
-        {!loading &&
-          filtered.map((group) => {
-            const isDisabled = disabledIdSet.has(group.id);
-            const grantedLabel = grantedLabels[String(group.id)];
-            return (
-              <div
-                key={group.id}
-                className={`flex items-center gap-2 px-3 py-2 ${
-                  isDisabled
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-gray-50"
-                }`}
-                onClick={() => toggle(group)}
-              >
-                <Checkbox
-                  className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  checked={selectedIds.has(group.id) || isDisabled}
-                  disabled={isDisabled}
-                />
-                <Users className="h-4 w-4 text-gray-400" />
-                <span className="min-w-0 flex-1 truncate text-sm">{group.group_name}</span>
-                {(grantedLabel || isDisabled) && (
-                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                    {grantedLabel
-                      ? localize("com_permission.already_granted_as", {
-                          model: grantedLabel,
-                        })
-                      : localize("com_permission.already_granted")}
-                  </span>
-                )}
-              </div>
-            );
-          })}
       </div>
     </div>
   );

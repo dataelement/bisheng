@@ -1,0 +1,86 @@
+# Default fullname is "code-runner" so Pod DNS is
+#   code-runner-{n}.code-runner.<namespace>.svc.cluster.local
+# (StatefulSet ordinal from 0). Do not use a ClusterIP Service as the only
+# entry — that breaks keep_session sticky binds.
+fullnameOverride: code-runner
+nameOverride: code-runner
+
+image:
+  repository: dataelement/bisheng-sandbox
+  tag: v3.0.0-beta1
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+replicaCount: 2
+
+service:
+  port: 8080
+
+# Shared with the BiSheng worker (BS_SANDBOX_CONF__TOKEN).
+token:
+  value: bisheng-sandbox-local
+  existingSecret: ""
+  existingSecretKey: token
+
+env:
+  SANDBOX_MAX_SESSIONS: "2"
+  SANDBOX_ENABLE_UID_ISOLATION: "true"
+  SANDBOX_LEASE_TTL_S: "900"
+  SANDBOX_LOG_LEVEL: INFO
+  TZ: Asia/Shanghai
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+# Isolation hardening — keep in lockstep with docker/docker-compose.yml.
+securityContext:
+  runAsUser: 0
+  runAsNonRoot: false
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+    add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE"]
+
+podSecurityContext: {}
+
+# Who may call POST /v1/sessions. Uses the automatic namespace name label.
+networkPolicy:
+  enabled: true
+  # Deny all egress (user code shares the runner netns).
+  denyEgress: true
+  allowFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: worker
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: false
+  name: ""

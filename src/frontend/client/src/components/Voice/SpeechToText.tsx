@@ -179,7 +179,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                 onChange(transcript)
             } catch (err) {
                 console.error("Speech recognition error:", err)
-                showToast({ message: localize('no_text_recognized'), status: "error" })
+                showToast({ message: localize('no_text_recognized'), status: "warning" })
             } finally {
                 setIsProcessing(false)
             }
@@ -252,7 +252,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
                     await convertSpeechToText(wavBlob)
                 } catch (conversionError) {
                     console.error("Audio conversion failed:", conversionError)
-                    showToast({ message: "Audio format conversion failed, please try again", status: "error" })
+                    showToast({ message: "Audio format conversion failed, please try again", status: "warning" })
                     setIsProcessing(false)
                 } finally {
                     await cleanupResources()
@@ -265,7 +265,7 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
             setIsRecording(true)
         } catch (err) {
             console.error("Microphone access error:", err)
-            showToast({ message: "Microphone access denied", status: "error" })
+            showToast({ message: "Microphone access denied", status: "warning" })
             await cleanupResources()
         }
     }, [convertSpeechToText, showToast, cleanupResources, interruptAudio])

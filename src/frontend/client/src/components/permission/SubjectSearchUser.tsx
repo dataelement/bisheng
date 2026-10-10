@@ -1,9 +1,21 @@
 import { Checkbox } from "~/components/ui/Checkbox";
+import { Tag } from "@bisheng/ui";
 import { searchUsers } from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
-import { User as UserIcon, Search } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
+import { PermissionEmptyState } from "./PermissionEmptyState";
+import {
+  PERMISSION_SUBJECT_ICON_CLASS,
+  PERMISSION_SUBJECT_LIST_CLASS,
+  PERMISSION_SUBJECT_ROW_CLASS,
+  PERMISSION_SUBJECT_ROW_DISABLED_CLASS,
+  PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+  PERMISSION_SUBJECT_SLOT_CLASS,
+  permissionSubjectIndent,
+} from "./permissionDialogStyles";
 
 export interface SubjectSearchUserProps {
   value: SelectedSubject[];
@@ -192,7 +204,7 @@ export function SubjectSearchUser({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
+        <Outlined.Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_user")}
@@ -206,17 +218,16 @@ export function SubjectSearchUser({
         className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base"
       >
         {loading && (
-          <div className="py-4 text-center text-sm text-gray-500">
+          <div className="py-4 text-center text-sm text-text-3">
             {localize("com_ui_loading")}
           </div>
         )}
         {!loading && results.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_search")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_search")} />
         )}
-        {!loading &&
-          results.map((user) => {
+        {!loading && results.length > 0 && (
+          <div className={PERMISSION_SUBJECT_LIST_CLASS}>
+          {results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
             const grantedLabel = grantedLabels[String(user.user_id)];
             // User id (external_id) renders right after the username; the dedicated
@@ -226,25 +237,35 @@ export function SubjectSearchUser({
             return (
               <div
                 key={user.user_id}
-                className={`flex items-center gap-2 px-3 py-2 ${
+                className={cn(
+                  PERMISSION_SUBJECT_ROW_CLASS,
                   isDisabled
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer hover:bg-gray-50"
-                }`}
+                    ? PERMISSION_SUBJECT_ROW_DISABLED_CLASS
+                    : PERMISSION_SUBJECT_ROW_INTERACTIVE_CLASS,
+                )}
+                style={{ paddingLeft: permissionSubjectIndent(0) }}
                 onClick={() => toggle(user)}
               >
-                <Checkbox
-                  className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-                  // Already-granted rows read as checked: the picker shows who holds
-                  // the resource, so an empty box next to the badge reads as a bug.
-                  checked={selectedIds.has(user.user_id) || isDisabled}
-                  disabled={isDisabled}
-                />
+                {/* No switcher slot: this list is flat, so nothing in it expands and
+                    the slot would only be dead space. The checkbox leads the row. */}
+                <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                  <Checkbox
+                    className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                    // Already-granted rows read as checked: the picker shows who holds
+                    // the resource, so an empty box next to the badge reads as a bug.
+                    checked={selectedIds.has(user.user_id) || isDisabled}
+                    disabled={isDisabled}
+                  />
+                </div>
+                {/* Icon slot: 20×20 wrapper, 16×16 user icon — same column as the
+                    department tab's entity icon. */}
+                <div className={PERMISSION_SUBJECT_SLOT_CLASS}>
+                  <Outlined.People className={PERMISSION_SUBJECT_ICON_CLASS} />
+                </div>
                 {/* Name column: username + user id (external_id) after it; the next
                     column shows only the org/department path. */}
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                  <span className="min-w-0 truncate text-sm" title={user.user_name}>{user.user_name}</span>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5 pl-1">
+                  <span className="min-w-0 truncate" title={user.user_name}>{user.user_name}</span>
                   {showUserId && (
                     <>
                       <span className="h-3 w-px shrink-0 bg-[#D9D9D9]" aria-hidden />
@@ -255,21 +276,23 @@ export function SubjectSearchUser({
                       full width while the username truncates, so it never crowds the
                       department column on the right. */}
                   {(grantedLabel || isDisabled) && (
-                    <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                    <Tag size="small" className="shrink-0">
                       {grantedLabel
                         ? localize("com_permission.already_granted_as", {
                             model: grantedLabel,
                           })
                         : localize("com_permission.already_granted")}
-                    </span>
+                    </Tag>
                   )}
                 </div>
                 <span className="max-w-[45%] shrink-0 truncate text-xs text-text-3" title={departmentPath}>{departmentPath}</span>
               </div>
             );
           })}
+          </div>
+        )}
         {!loading && hasMore && (
-          <div ref={sentinelCallback} className="py-2 text-center text-xs text-gray-500">
+          <div ref={sentinelCallback} className="py-2 text-center text-caption text-text-3">
             {loadingMore ? localize("com_ui_loading") : ""}
           </div>
         )}

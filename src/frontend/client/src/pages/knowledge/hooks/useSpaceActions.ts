@@ -23,6 +23,8 @@ interface UseSpaceActionsOptions {
     joinedSpaces: KnowledgeSpace[];
     departmentSpaces: KnowledgeSpace[];
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
+    /** Refresh the active space's fields in place — keeps the folder being browsed. */
+    onActiveSpaceUpdate: (space: KnowledgeSpace) => void;
 }
 
 /**
@@ -39,6 +41,7 @@ export function useSpaceActions({
     joinedSpaces,
     departmentSpaces,
     onSpaceSelect,
+    onActiveSpaceUpdate,
 }: UseSpaceActionsOptions) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -70,7 +73,7 @@ export function useSpaceActions({
         // Optimistic update
         updateAllCaches(list => list.map(s => s.id === space.id ? space : s));
         if (activeSpaceId === space.id) {
-            onSpaceSelect(space);
+            onActiveSpaceUpdate(space);
         }
 
         try {
@@ -84,7 +87,7 @@ export function useSpaceActions({
         } catch {
             // Rollback on failure
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: localize("com_knowledge.update_space_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.update_space_failed"), severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -139,7 +142,7 @@ export function useSpaceActions({
             showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
         } catch {
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -180,7 +183,7 @@ export function useSpaceActions({
             const message = errorCode === ORGANIZATION_GRANT_EXIT_DENIED_CODE
                 ? localize("com_knowledge.organization_grant_exit_blocked")
                 : extractApiErrorMessage(e) || localize("com_knowledge.exit_space_failed");
-            showToast({ message, severity: NotificationSeverity.ERROR });
+            showToast({ message, severity: NotificationSeverity.WARNING });
         }
     };
 
@@ -199,7 +202,7 @@ export function useSpaceActions({
 
         if (activeSpaceId === spaceId) {
             const space = targetList.find(s => s.id === spaceId);
-            if (space) onSpaceSelect({ ...space, isPinned: pinned });
+            if (space) onActiveSpaceUpdate({ ...space, isPinned: pinned });
         }
 
         try {
@@ -212,9 +215,9 @@ export function useSpaceActions({
             updateAllCaches(rollback);
             if (activeSpaceId === spaceId) {
                 const space = targetList.find(s => s.id === spaceId);
-                if (space) onSpaceSelect({ ...space, isPinned: !pinned });
+                if (space) onActiveSpaceUpdate({ ...space, isPinned: !pinned });
             }
-            showToast({ message: localize("com_knowledge.operation_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.operation_failed"), severity: NotificationSeverity.WARNING });
         }
     };
 

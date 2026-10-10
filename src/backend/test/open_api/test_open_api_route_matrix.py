@@ -15,6 +15,10 @@ REMOVED_CHAT_ROUTES = {
     "/api/v2/chat/comment",
     "/api/v2/chat/sync/messages",
 }
+# The v2 workflow WebSocket ran a client-submitted graph; it is offline in this release.
+REMOVED_WEBSOCKET_ROUTES = {
+    ("WS", "/api/v2/workflow/chat/{workflow_id}"),
+}
 DAILY_ROUTES = {
     ("POST", "/api/v2/workstation/chat/completions"),
     ("GET", "/api/v2/workstation/config"),
@@ -58,60 +62,22 @@ def test_every_real_v2_route_is_globally_key_protected_and_marked():
     assert all(get_open_api_scope_marker(route.endpoint) is not None for route in v2_routes)
 
 
-def test_mcp_route_is_gated_or_absent():
-    """The one non-APIRoute under /api/v2 — present iff the layer is on, and gated.
+def test_no_unmarked_route_lives_under_v2():
+    """Every ``/api/v2`` route is an ``APIRoute`` carrying a scope marker.
 
-    Without this, the isinstance filter above would silently excuse any future
-    unauthenticated Starlette route someone appends to the app.
+    The MCP endpoint is not a route at all: ``OpenMcpDispatchMiddleware`` takes
+    the exact ``/api/v2/mcp`` path before routing and authenticates it through
+    the shared access context. Without this check, the isinstance filter above
+    would silently excuse any future unauthenticated Starlette route someone
+    appends to the app.
     """
-
-    from bisheng.common.services.config_service import settings
-    from bisheng.open_api.mcp.gate import McpAccessGate
-    from bisheng.open_api.mcp.server import MCP_ROUTE_PATH
 
     non_api_routes = [
         route
         for route in app.routes
         if route.path.startswith("/api/v2") and not isinstance(route, (APIRoute, APIWebSocketRoute))
     ]
-    if not settings.open_platform.enabled:
-        assert non_api_routes == []
-        return
-
-    assert [route.path for route in non_api_routes] == [MCP_ROUTE_PATH]
-    assert isinstance(non_api_routes[0].endpoint, McpAccessGate)
-
-
-def test_the_mcp_route_is_registered_exactly_when_the_open_capability_layer_is_on(monkeypatch):
-    """Both halves of the switch, whatever this checkout's config happens to say.
-
-    ``test_mcp_route_is_gated_or_absent`` above reads the app built at import
-    time, so on a tree whose ``config.yaml`` leaves the layer off it only ever
-    exercises "absent" — and the registration in ``create_app`` would be
-    untested (AC-01 / AC-37). This builds the app both ways instead.
-    """
-
-    from bisheng.common.services.config_service import settings
-    from bisheng.main import create_app
-    from bisheng.open_api.mcp.gate import McpAccessGate
-    from bisheng.open_api.mcp.server import MCP_ROUTE_PATH
-
-    monkeypatch.setattr(settings.open_platform, "enabled", True)
-    enabled = create_app()
-    mounted = [route for route in enabled.routes if getattr(route, "path", None) == MCP_ROUTE_PATH]
-    assert len(mounted) == 1
-    route = mounted[0]
-    # Not an APIRoute: it carries no ``@open_api_scope`` marker, so it must not
-    # be governed by ``router_rpc``'s dependency, and it must stay out of the
-    # published OpenAPI document the v2 contract test compares against.
-    assert not isinstance(route, (APIRoute, APIWebSocketRoute))
-    assert isinstance(route.endpoint, McpAccessGate)
-    assert {"GET", "POST", "DELETE"} <= set(route.methods)
-    assert MCP_ROUTE_PATH not in enabled.openapi().get("paths", {})
-
-    monkeypatch.setattr(settings.open_platform, "enabled", False)
-    disabled = create_app()
-    assert [route for route in disabled.routes if getattr(route, "path", None) == MCP_ROUTE_PATH] == []
+    assert non_api_routes == []
 
 
 def test_route_registry_matches_complete_key_authenticated_surface():
@@ -128,7 +94,7 @@ def test_route_registry_matches_complete_key_authenticated_surface():
     assert DAILY_ROUTES <= actual_without_whoami
     assert registered - actual_without_whoami == set()
     assert actual_without_whoami - registered == set()
-    assert len([item for item in actual if item[0] == "WS"]) == 2
+    assert {item for item in actual if item[0] == "WS"} == {("WS", "/api/v2/assistant/chat/{assistant_id}")}
 
 
 def test_removed_chat_routes_are_not_registered():
@@ -185,3 +151,9 @@ def test_a_route_admits_no_hosted_application_unless_it_says_so():
         return None
 
     assert get_open_api_scope_marker(_endpoint).hosted_app is False
+
+
+def test_removed_websocket_routes_are_not_registered_or_scoped():
+    registered = {endpoint for scope in OPEN_API_SCOPES for endpoint in scope.endpoints}
+    assert actual_v2_routes().isdisjoint(REMOVED_WEBSOCKET_ROUTES)
+    assert registered.isdisjoint(REMOVED_WEBSOCKET_ROUTES)
