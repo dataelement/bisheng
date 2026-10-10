@@ -90,6 +90,8 @@ interface KnowledgeSpaceContentProps {
     loading: boolean;
     listError?: ReactNode;
     paginationFooter?: ReactNode;
+    /** 门户当前目录文件数. 传入后顶栏不再重复显示共计, 数字放在列表右下角. */
+    directoryFileCount?: number | null;
     paginationKey?: string;
     searchState?: { keyword: string; tagIds: number[] };
     onSearch: (params: SearchParams) => void;
@@ -170,6 +172,7 @@ export function KnowledgeSpaceContent({
     loading,
     listError,
     paginationFooter,
+    directoryFileCount,
     paginationKey,
     searchState,
     onSearch,
@@ -1744,7 +1747,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
-                totalFileCount={paginationFooter || listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
+                totalFileCount={paginationFooter || directoryFileCount !== undefined || listError || (loading && displayFiles.length === 0) ? null : totalFileCount}
             />
             </div>
 
@@ -2000,6 +2003,11 @@ export function KnowledgeSpaceContent({
                     )}
 
                     {paginationFooter}
+                    {directoryFileCount !== undefined && directoryFileCount !== null && !listError ? (
+                        <span className="ml-auto px-4 text-sm text-[#86909c]" data-testid="portal-directory-file-count">
+                            共计 {directoryFileCount} 文件
+                        </span>
+                    ) : null}
                 </div>
             </div>
 

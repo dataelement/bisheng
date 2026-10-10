@@ -47,6 +47,7 @@ import {
     getMineSpacesApi,
     getSpacesByLevelApi,
     getSpaceChildrenApi,
+    getSpaceFileCountApi,
     getSpaceFolderStatsApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
@@ -459,6 +460,7 @@ jest.mock("~/api/knowledge", () => ({
     getSpaceChildrenApi: jest.fn(),
     getFolderParentPathApi: jest.fn(),
     getPublicSpaceFilePermissionsApi: (...args: any[]) => mockGetPublicSpaceFilePermissionsApi(...args),
+    getSpaceFileCountApi: jest.fn(),
     getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
@@ -723,6 +725,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getFolderParentPathApi).mockImplementation(() => { throw new Error("未配置父目录查询"); });
         jest.mocked(getPortalSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(getPortalSpaceFolderStatsApi).mockResolvedValue([] as any);
+        jest.mocked(getSpaceFileCountApi).mockResolvedValue(0);
         jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
@@ -6050,7 +6053,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
             expect(await screen.findByText("第一页.md")).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
+            await intersectionObserver.trigger();
 
             expect(await screen.findByText("第二页.md")).toBeInTheDocument();
             await waitFor(() => {
@@ -6094,7 +6097,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         if (empty) {
             expect(await within(workspace).findByAltText("empty")).toBeInTheDocument();
-            expect(within(workspace).queryByText("共计 0 文件")).not.toBeInTheDocument();
+            expect(within(workspace).getByTestId("portal-directory-file-count")).toHaveTextContent("共计 0 文件");
         } else {
             expect(await within(workspace).findByText("天气预报.md")).toBeInTheDocument();
             expect(within(workspace).queryByAltText("empty")).not.toBeInTheDocument();
@@ -6158,7 +6161,7 @@ describe("PortalKnowledgeWorkbench", () => {
             fireEvent.click(await within(workspace).findByRole("button", { name: "打开规章目录" }));
             expect(await screen.findByText("目录第一页.md")).toBeInTheDocument();
 
-            fireEvent.click(screen.getByRole("button", { name: "com_knowledge.history_next" }));
+            await intersectionObserver.trigger();
 
             expect(await screen.findByText("目录第二页.md")).toBeInTheDocument();
             await waitFor(() => {

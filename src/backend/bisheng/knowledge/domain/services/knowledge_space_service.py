@@ -14889,6 +14889,70 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }
         return folder_counts
 
+    async def count_space_files(self, space_id: int) -> dict[str, int]:
+        """Count active documents under a knowledge space.
+
+        Matches folder ``file_num``: every non-deleted file, all statuses, folders excluded.
+        """
+        await self._require_read_permission(space_id)
+        stmt = select(func.count(KnowledgeFile.id)).where(
+            KnowledgeFile.knowledge_id == space_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFileDao.active_inventory_predicate(),
+        )
+        async with get_async_db_session() as session:
+            total = (await session.exec(stmt)).one()
+        return {"file_num": int(total or 0)}
+
+    async def count_direct_directory_files(self, space_id: int, parent_id: int | None = None) -> dict[str, int]:
+        """当前目录这一层、当前用户可见的文件数. parent_id 为空表示知识库根目录."""
+        from bisheng.knowledge.domain.services.direct_visible_file_count import (
+            count_visible_direct_files,
+        )
+
+        await self._require_read_permission(space_id)
+        if parent_id is not None:
+            folder = await KnowledgeFileDao.query_by_id(int(parent_id))
+            if folder is None or int(folder.knowledge_id) != int(space_id):
+                raise SpaceFolderNotFoundError()
+            await self._require_resource_permission("can_read", "folder", int(parent_id))
+        # 与当前目录列表一致: 旧版本和回收站文件不出现在列表里, 也不能计入右下角数量.
+        exclude_file_ids: list[int] | None = None
+        if self.version_repo is not None:
+            exclude_file_ids = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([int(space_id)]) or None
+        from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
+
+        recycled = await KnowledgeRecycleService.list_recycled_file_ids(int(space_id))
+        if recycled:
+            exclude_file_ids = list(dict.fromkeys([*(exclude_file_ids or []), *recycled])) or None
+        permission_context = await self._build_child_permission_context(space_id)
+
+        async def list_batch(cursor: list | None):
+            return await SpaceFileDao.async_list_children(
+                int(space_id),
+                parent_id,
+                order_field="update_time",
+                order_sort="asc",
+                page=0,
+                page_size=100,
+                file_type=FileType.FILE.value,
+                exclude_file_ids=exclude_file_ids,
+                cursor=cursor,
+            )
+
+        async def filter_visible(items: list):
+            return await self._filter_visible_child_items(
+                items,
+                space_id=int(space_id),
+                context=permission_context,
+            )
+
+        total = await count_visible_direct_files(
+            list_batch=list_batch,
+            filter_visible=filter_visible,
+        )
+        return {"file_num": int(total or 0)}
+
     async def get_space_folder_stats(
         self,
         space_id: int,
