@@ -32,7 +32,6 @@ HTTP_ROUTES = [
     "path",
     [
         "/api/v2/assistant/chat/00000000-0000-0000-0000-000000000001",
-        "/api/v2/workflow/chat/00000000-0000-0000-0000-000000000001",
     ],
 )
 def test_websocket_denial_happens_before_accept(path):

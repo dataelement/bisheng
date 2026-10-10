@@ -1,7 +1,7 @@
 #! /bin/bash
 
-old_version="3.0.0-beta1"
-new_version="3.0.0-beta2"
+old_version="3.0.0-beta2"
+new_version="3.0.0-beta3"
 sed -i.bak "s/$old_version/$new_version/g" ./docker/docker-compose.yml
 sed -i.bak "s/$old_version/$new_version/g" ./src/backend/pyproject.toml
 # uv.lock stores prerelease versions in normalized PEP 440 form.
