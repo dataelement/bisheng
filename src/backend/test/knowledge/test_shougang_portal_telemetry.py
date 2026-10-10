@@ -244,3 +244,26 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
         {"file_id": 101, "read_count": 9},
         {"file_id": 102, "read_count": 7},
     ]
+
+
+@pytest.mark.asyncio
+async def test_count_file_favorites_includes_content_stat_events(monkeypatch):
+    class FakeEsClient:
+        async def search(self, **kwargs):
+            body = kwargs["body"]
+            assert body["query"]["bool"]["must"] == [
+                {"term": {"event_type": "portal_favorite"}},
+                {"term": {"event_data.portal_favorite_file_id": 88}},
+            ]
+            assert "must_not" not in body["query"]["bool"]
+            return {"hits": {"total": {"value": 4}}}
+
+    async def fake_get_statistics_es_connection():
+        return FakeEsClient()
+
+    monkeypatch.setattr(
+        "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
+        fake_get_statistics_es_connection,
+    )
+
+    assert await PortalTelemetryEventService.count_file_favorites(88) == 4

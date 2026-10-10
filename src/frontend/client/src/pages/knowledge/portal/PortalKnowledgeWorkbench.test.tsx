@@ -4586,6 +4586,7 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getFileStatsApi).mockResolvedValue({
             downloads: 652,
             views: 1216,
+            favorites: 18,
         } as any);
 
         renderWorkbench("/knowledge-portal?spaceId=team-1");
@@ -4645,9 +4646,11 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByRole("tab", { name: "使用" })).toHaveAttribute("aria-selected", "true");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("下载次数");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("浏览次数");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("收藏次数");
         await waitFor(() => {
             expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("652");
             expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("1216");
+            expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("18");
         });
 
         fireEvent.click(within(rail).getByRole("button", { name: "权限" }));

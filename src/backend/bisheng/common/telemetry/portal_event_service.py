@@ -204,6 +204,32 @@ class PortalTelemetryEventService:
             return 0
 
     @staticmethod
+    async def count_file_favorites(file_id: int) -> int:
+        """统计这篇文档的收藏成功次数.
+
+        收藏事件带 content_stat_schema_version, 不能像浏览次数那样排除它, 否则结果一直是 0.
+        取消收藏不会把已记的次数减掉, 和浏览、下载次数一样只增不减.
+        """
+        body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_FAVORITE.value}},
+                        {"term": {"event_data.portal_favorite_file_id": file_id}},
+                    ]
+                }
+            },
+        }
+        try:
+            es_client = await get_statistics_es_connection()
+            response = await es_client.search(index=telemetry_service.index_name, body=body)
+            return int(response.get("hits", {}).get("total", {}).get("value", 0))
+        except Exception:
+            logger.exception("Failed to count file favorites for file_id=%s", file_id)
+            return 0
+
+    @staticmethod
     async def count_home_events() -> dict[str, int]:
         """首页阅读/收藏/问答计数.
 

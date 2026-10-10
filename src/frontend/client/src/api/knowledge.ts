@@ -3957,6 +3957,7 @@ export async function checkSensitiveWordsApi(
 export interface FileUsageStats {
     views: number;
     downloads: number;
+    favorites: number;
 }
 
 export async function getFileStatsApi(
@@ -3966,7 +3967,7 @@ export async function getFileStatsApi(
     const res = await request.get<ApiResponse<FileUsageStats>>(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/stats`,
     );
-    return res?.data ?? { views: 0, downloads: 0 };
+    return res?.data ?? { views: 0, downloads: 0, favorites: 0 };
 }
 
 export async function recordPortalDownloadEventApi(
