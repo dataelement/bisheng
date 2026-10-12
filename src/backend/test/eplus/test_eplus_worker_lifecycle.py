@@ -6,6 +6,21 @@ from types import SimpleNamespace
 
 import yaml
 
+from bisheng.eplus.domain.schemas.protocol import EPlusCallback, EPlusContentBlock, EPlusContentKind
+
+
+def _parsed_callback(frame):
+    return EPlusCallback(
+        req_id=f"req-{frame['id']}",
+        msg_id=frame["id"],
+        bot_id="bot-1",
+        sender_external_id="user-1",
+        chat_type="single",
+        chat_id=None,
+        msg_type="text",
+        blocks=(EPlusContentBlock(EPlusContentKind.TEXT, text="hello"),),
+    )
+
 
 async def _eventually(predicate, *, timeout: float = 1.0) -> None:
     async with asyncio.timeout(timeout):
@@ -223,7 +238,7 @@ async def test_worker_connection_waits_for_recovery_before_accepting_callbacks(m
         return None
 
     monkeypatch.setattr(worker_module, "EPlusConnectionClient", Client)
-    monkeypatch.setattr(worker_module, "parse_message_callback", lambda frame: frame)
+    monkeypatch.setattr(worker_module, "parse_message_callback", _parsed_callback)
     registry = CallbackTaskRegistry()
     connection = WorkerConnection(
         ref=BotConnectionRef(tenant_id=9, bot_config_id=73),
@@ -307,24 +322,24 @@ async def test_worker_connection_preserves_callback_arrival_order_before_admissi
 
     class Robot:
         async def handle_message(self, context, callback) -> None:
-            if callback["id"] == "first":
+            if callback.msg_id == "first":
                 first_preparation_started.set()
                 await release_first_preparation.wait()
             else:
                 second_reserved.set()
-            handled.append(callback["id"])
+            handled.append(callback.msg_id)
 
         async def reserve_message(self, context, callback):
-            reserved.append(callback["id"])
-            if callback["id"] == "second":
+            reserved.append(callback.msg_id)
+            if callback.msg_id == "second":
                 second_reserved.set()
             return callback
 
         async def handle_reserved_message(self, context, callback, reservation) -> None:
-            if callback["id"] == "first":
+            if callback.msg_id == "first":
                 first_preparation_started.set()
                 await release_first_preparation.wait()
-            handled.append(callback["id"])
+            handled.append(callback.msg_id)
 
         async def cancel_bot(self, **kwargs) -> None:
             return None
@@ -336,7 +351,7 @@ async def test_worker_connection_preserves_callback_arrival_order_before_admissi
         return None
 
     monkeypatch.setattr(worker_module, "EPlusConnectionClient", Client)
-    monkeypatch.setattr(worker_module, "parse_message_callback", lambda frame: frame)
+    monkeypatch.setattr(worker_module, "parse_message_callback", _parsed_callback)
     registry = CallbackTaskRegistry()
     connection = WorkerConnection(
         ref=BotConnectionRef(tenant_id=9, bot_config_id=73),
@@ -414,7 +429,7 @@ async def test_reconnect_releases_callbacks_waiting_on_shared_recovery(monkeypat
             return callback
 
         async def handle_reserved_message(self, context, callback, reservation) -> None:
-            handled.append(callback["id"])
+            handled.append(callback.msg_id)
 
         async def cancel_bot(self, **kwargs) -> None:
             return None
@@ -433,7 +448,7 @@ async def test_reconnect_releases_callbacks_waiting_on_shared_recovery(monkeypat
         return None
 
     monkeypatch.setattr(worker_module, "EPlusConnectionClient", Client)
-    monkeypatch.setattr(worker_module, "parse_message_callback", lambda frame: frame)
+    monkeypatch.setattr(worker_module, "parse_message_callback", _parsed_callback)
     target = EPlusConnectionTarget(
         tenant_id=9,
         bot_config_id=73,

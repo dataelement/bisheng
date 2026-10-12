@@ -1,4 +1,12 @@
 {
+  "preview_diagnostics": {
+    "setting": "File preview diagnostics",
+    "setting_hint": "Enable before reproducing. Export the log from the knowledge space; expires after 24 hours.",
+    "active": "File preview diagnostics is active",
+    "export": "Export diagnostics",
+    "stop": "Stop diagnostics",
+    "copy_hint": "If the download is unavailable, select and copy the log below."
+  },
   "admin": "Administrator",
   "bisheng": "{{bisheng}}",
   "cancel": "Cancel",

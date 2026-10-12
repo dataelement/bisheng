@@ -1,5 +1,6 @@
 """Exercise both real assistant executors with deterministic local models."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -117,7 +118,10 @@ async def test_actual_assistant_executor_observes_tool_then_returns_answer(mode,
         )
     assert output == "done"
     assert trace.tool_call_count == 1
-    assert trace.events[-1]["data"]["model_tool_output"] == "[]"
+    payload = json.loads(trace.events[-1]["data"]["model_tool_output"])
+    assert payload["sources"] == []
+    assert payload["chunks"] == []
+    assert payload["is_complete_file_list"] is False
 
 
 async def test_real_react_reports_tool_failure_even_when_final_answer_succeeds():

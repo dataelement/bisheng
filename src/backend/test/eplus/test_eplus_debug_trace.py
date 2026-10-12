@@ -55,14 +55,18 @@ async def test_observation_preserves_schema_result_and_separate_metadata():
     ):
         result = await observed.ainvoke({"query": "reformulated"})
         await observed.ainvoke({"query": "empty"})
-    assert json.loads(result) == ["A/same.csv", "B/same.csv"]
+    payload = json.loads(result)
+    assert payload["sources"] == [
+        {"file_id": 101, "file_name": "same.csv", "space_id": 11, "space_name": "A"},
+        {"file_id": 102, "file_name": "same.csv", "space_id": 12, "space_name": "B"},
+    ]
     assert [e["type"] for e in trace.events] == ["tool_start", "tool_end", "tool_start", "tool_end"]
     assert trace.events[0]["data"]["query"] == "reformulated"
     end = trace.events[1]["data"]
     assert end["model_tool_output"] == result
     assert [m["document_id"] for m in end["retrieval_metadata"]] == [101, 102]
-    assert "101" not in result
-    assert trace.events[3]["data"]["model_tool_output"] == "[]"
+    assert payload["chunks"][0]["source_file_id"] == 101
+    assert json.loads(trace.events[3]["data"]["model_tool_output"])["sources"] == []
 
 
 async def test_failed_tool_is_visible_without_exception_payload():
@@ -100,7 +104,8 @@ async def test_observed_and_formal_tools_use_the_real_formatter_byte_for_byte(mo
     formal_output = await formal.ainvoke({"query": "search"})
     observed_output = await observed.ainvoke({"query": "search"})
     assert formal_output == observed_output == trace.events[-1]["data"]["model_tool_output"]
-    assert "<knowledge_base_id>11</knowledge_base_id>" in observed_output
-    assert "<knowledge_base_name>B</knowledge_base_name>" in observed_output
-    assert "<file_title>same.csv</file_title>" in observed_output
-    assert "document_id" not in observed_output
+    payload = json.loads(observed_output)
+    assert [s["space_id"] for s in payload["sources"]] == [11, 12]
+    assert [s["space_name"] for s in payload["sources"]] == ["A", "B"]
+    assert [s["file_name"] for s in payload["sources"]] == ["same.csv", "same.csv"]
+    assert [s["file_id"] for s in payload["sources"]] == [101, 102]

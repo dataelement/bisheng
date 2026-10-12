@@ -15,6 +15,7 @@ import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { resolveKnowledgePreviewUrl } from "./previewUrlUtils";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { previewDiagnosticRecorder } from "./previewDiagnostics";
 
 /**
  * Extract file extension from a URL path, ignoring query parameters.
@@ -92,8 +93,10 @@ export default function FilePreviewPage({
         setLoading(true);
         setConversionFailed(false);
         setPreviewData(null);
+        previewDiagnosticRecorder.record('preview.request.started', { fileId, spaceId });
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
+                previewDiagnosticRecorder.record('preview.request.succeeded', { fileId, spaceId });
                 const resolvedPreview = {
                     ...data,
                     original_url: resolveKnowledgePreviewUrl(data.original_url),
@@ -130,7 +133,13 @@ export default function FilePreviewPage({
                 setFileUrl(resolveKnowledgePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
-            .catch((err) => console.error("Failed to load preview URL:", err))
+            .catch((err: unknown) => {
+                const error = err as { response?: { status?: number }; name?: string } | null;
+                previewDiagnosticRecorder.record('preview.request.failed', {
+                    fileId, spaceId, status: error?.response?.status ?? null, name: error?.name ?? 'unknown',
+                });
+                console.error("Failed to load preview URL:", err);
+            })
             .finally(() => setLoading(false));
     }, [fileId, spaceId]);
 

@@ -21,6 +21,7 @@ class EPlusHistoryTurn:
     user_text: str | None
     content_manifest: tuple[dict, ...]
     answer_text: str
+    extracted_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,7 @@ class EPlusConversationScheduler:
         answer_text: str | None = None,
         error_code: str | None = None,
         execution_token: str,
+        extracted_text: str | None = None,
     ) -> ReadyEPlusTurn | None:
         async with self._session_factory() as session, session.begin():
             completed = await EPlusConversationRepository(session).complete_turn(
@@ -77,6 +79,7 @@ class EPlusConversationScheduler:
                 answer_text=answer_text,
                 error_code=error_code,
                 execution_token=execution_token,
+                extracted_text=extracted_text,
             )
             if completed is None:
                 return None
@@ -84,6 +87,10 @@ class EPlusConversationScheduler:
 
         self.wake(tenant_id, conversation_id)
         return await self.next_ready_turn(tenant_id, conversation_id)
+
+    async def expire_waiting_turn(self, *, tenant_id: int, turn_id: str) -> bool:
+        async with self._session_factory() as session, session.begin():
+            return await EPlusConversationRepository(session).expire_waiting_turn(tenant_id=tenant_id, turn_id=turn_id)
 
     async def recover_queued(self, *, tenant_id: int, bot_config_id: int) -> tuple[str, ...]:
         async with self._session_factory() as session, session.begin():
@@ -121,4 +128,5 @@ def _history_item(turn: EPlusTurn) -> EPlusHistoryTurn:
         user_text=turn.user_text,
         content_manifest=tuple(turn.content_manifest or []),
         answer_text=turn.answer_text or "",
+        extracted_text=turn.extracted_text,
     )

@@ -226,7 +226,7 @@ class EPlusMessageRepository:
         values: dict[str, object] = {"status": target_status.value}
         now = datetime.now()
         if target_status == EPlusInboundStatus.PROCESSING:
-            values["started_at"] = now
+            values["started_at"] = func.coalesce(EPlusInboundMessage.started_at, now)
         if target_status in {
             EPlusInboundStatus.SUCCEEDED,
             EPlusInboundStatus.FAILED,
@@ -466,6 +466,7 @@ class EPlusConversationRepository:
         tenant_id: int,
         conversation_id: str,
         before_sequence: int,
+        limit: int = 20,
     ) -> list[EPlusTurn]:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         statement = (
@@ -476,9 +477,10 @@ class EPlusConversationRepository:
                 EPlusTurn.turn_seq < int(before_sequence),
                 EPlusTurn.status == EPlusTurnStatus.SUCCEEDED.value,
             )
-            .order_by(EPlusTurn.turn_seq.asc())
+            .order_by(EPlusTurn.turn_seq.desc())
+            .limit(max(1, min(int(limit), 20)))
         )
-        return list((await self.session.exec(statement)).all())
+        return list(reversed((await self.session.exec(statement)).all()))
 
     async def complete_turn(
         self,
@@ -489,6 +491,7 @@ class EPlusConversationRepository:
         answer_text: str | None,
         error_code: str | None,
         execution_token: str,
+        extracted_text: str | None = None,
     ) -> EPlusTurn | None:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         turn = (
@@ -505,6 +508,7 @@ class EPlusConversationRepository:
             return None
         turn.status = EPlusTurnStatus.SUCCEEDED.value if succeeded else EPlusTurnStatus.FAILED.value
         turn.answer_text = answer_text
+        turn.extracted_text = extracted_text
         turn.error_code = error_code
         turn.finished_at = datetime.now()
         self.session.add(turn)
@@ -520,6 +524,40 @@ class EPlusConversationRepository:
             raise RuntimeError("E+ completed turn has no matching processing inbound message")
         return turn
 
+    async def expire_waiting_turn(self, *, tenant_id: int, turn_id: str) -> bool:
+        resolved_tenant_id = _require_matching_tenant(tenant_id)
+        turn = (
+            await self.session.exec(
+                select(EPlusTurn).where(
+                    EPlusTurn.tenant_id == resolved_tenant_id,
+                    EPlusTurn.id == str(turn_id),
+                )
+            )
+        ).first()
+        if turn is None:
+            return False
+        changed = await self.session.exec(
+            update(EPlusTurn)
+            .where(
+                EPlusTurn.tenant_id == resolved_tenant_id,
+                EPlusTurn.id == str(turn_id),
+                col(EPlusTurn.status).in_((EPlusTurnStatus.PREPARING.value, EPlusTurnStatus.QUEUED.value)),
+            )
+            .values(status=EPlusTurnStatus.FAILED.value, error_code="ASSISTANT_TIMEOUT", finished_at=datetime.now())
+            .execution_options(synchronize_session=False)
+        )
+        if not changed.rowcount:
+            return False
+        transitioned = await EPlusMessageRepository(self.session).transition(
+            tenant_id=resolved_tenant_id,
+            message_id=turn.inbound_message_id,
+            target=EPlusInboundStatus.FAILED,
+            error_code="ASSISTANT_TIMEOUT",
+        )
+        if not transitioned:
+            raise RuntimeError("E+ waiting timeout has no matching inflight inbound message")
+        return True
+
     async def recover_bot_turns(self, *, tenant_id: int, bot_config_id: int) -> tuple[str, ...]:
         resolved_tenant_id = _require_matching_tenant(tenant_id)
         interrupted_statement = (
@@ -529,17 +567,13 @@ class EPlusConversationRepository:
                 EPlusTurn.tenant_id == resolved_tenant_id,
                 EPlusConversation.tenant_id == resolved_tenant_id,
                 EPlusConversation.bot_config_id == int(bot_config_id),
-                col(EPlusTurn.status).in_(
-                    (EPlusTurnStatus.PREPARING.value, EPlusTurnStatus.RUNNING.value)
-                ),
+                col(EPlusTurn.status).in_((EPlusTurnStatus.PREPARING.value, EPlusTurnStatus.RUNNING.value)),
             )
         )
         interrupted_turns = list((await self.session.exec(interrupted_statement)).all())
         for turn in interrupted_turns:
             error_code = (
-                "ADMISSION_INTERRUPTED"
-                if turn.status == EPlusTurnStatus.PREPARING.value
-                else "WORKER_INTERRUPTED"
+                "ADMISSION_INTERRUPTED" if turn.status == EPlusTurnStatus.PREPARING.value else "WORKER_INTERRUPTED"
             )
             turn.status = EPlusTurnStatus.FAILED.value
             turn.error_code = error_code

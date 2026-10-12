@@ -22,6 +22,7 @@ import {
     type FontSizeLevel,
 } from "~/utils/fontSize";
 import { StorageSection } from "./StorageSection";
+import { PreviewDiagnosticSetting } from "./PreviewDiagnosticSetting";
 
 interface SettingSelectProps {
     value: string;
@@ -135,6 +136,7 @@ export function GeneralSection() {
                     <SettingSelect value={normalizeLang(langcode)} options={languages} onValueChange={setLangcode} />
                 </div>
             </div>
+            <PreviewDiagnosticSetting />
         </section>
     );
 }

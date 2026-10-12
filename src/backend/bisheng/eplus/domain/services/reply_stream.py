@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
+
+from loguru import logger
 
 from bisheng.eplus.domain.models.eplus import EPlusReplyStatus
 from bisheng.eplus.infrastructure.protocol import MAX_STREAM_BYTES, build_stream_frame, truncate_utf8
@@ -148,6 +151,14 @@ class EPlusReplyStream:
         self._last_flush_at = now
         await self._recorder.record(EPlusReplyStatus.STREAMING)
 
+    async def resume(self, *, elapsed_seconds: float) -> None:
+        """Restore an acknowledged placeholder without resetting its reply window."""
+        if self._started_at is not None or elapsed_seconds < 0:
+            raise EPlusReplyError("invalid recovered reply stream")
+        now = self._clock()
+        self._started_at = now - elapsed_seconds
+        self._last_flush_at = self._started_at
+
     async def append(self, fragment: str) -> bool:
         self._require_started()
         if self._finished:
@@ -228,6 +239,7 @@ class EPlusReplyStream:
             raise EPlusReplyQuotaExceeded("E+ reply quota exhausted")
 
         frame = build_stream_frame(self._req_id, self._stream_id, content, finish=finish)
+        send_started = self._clock()
         try:
             ack = await self._sender.send_with_ack(frame)
         except TimeoutError as exc:
@@ -241,6 +253,13 @@ class EPlusReplyStream:
             error_code = ack.get("errcode")
             await self._mark_send_failed("EPLUS_ACK_REJECTED")
             raise EPlusReplyAckError(f"E+ rejected reply frame with errcode={error_code}")
+        logger.info(
+            "E+ reply acknowledged stream_hash={} finish={} content_bytes={} elapsed_ms={:.1f}",
+            hashlib.sha256(self._stream_id.encode()).hexdigest()[:12],
+            finish,
+            len(content.encode("utf-8")),
+            (self._clock() - send_started) * 1000,
+        )
         return True
 
     async def _mark_send_failed(self, error_code: str) -> None:

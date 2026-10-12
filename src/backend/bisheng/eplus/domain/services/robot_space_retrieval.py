@@ -14,13 +14,9 @@ from typing import Any, Protocol
 
 from langchain_core.documents import Document
 from pydantic import Field
-from sqlmodel import col, select
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
-from bisheng.core.database import get_async_db_session
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.eplus.domain.schemas.knowledge import RobotFileSource, RobotKnowledgeInput
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.utils.async_utils import run_async_safe
 
@@ -45,13 +41,14 @@ class RobotToolScopeViolation(PermissionError):
 
 
 class RobotDocumentStateReader(Protocol):
-    async def valid_file_ids(
+    async def file_sources(
         self,
         *,
         tenant_id: int,
         space_ids: tuple[int, ...],
-        file_ids: set[int],
-    ) -> set[int]: ...
+        file_ids: set[int] | None = None,
+        file_name: str | None = None,
+    ) -> dict[int, RobotFileSource]: ...
 
 
 class RobotRetrievalBackend(Protocol):
@@ -64,62 +61,8 @@ class RobotRetrievalBackend(Protocol):
         invoke_user_id: int,
         max_content: int,
         sort_by_source_and_index: bool,
+        file_ids: tuple[int, ...] | None = None,
     ) -> list[Document]: ...
-
-
-class DatabaseRobotDocumentStateReader:
-    async def valid_file_ids(
-        self,
-        *,
-        tenant_id: int,
-        space_ids: tuple[int, ...],
-        file_ids: set[int],
-    ) -> set[int]:
-        if not space_ids or not file_ids:
-            return set()
-        async with get_async_db_session() as session:
-            statement = select(KnowledgeFile.id).where(
-                KnowledgeFile.tenant_id == tenant_id,
-                col(KnowledgeFile.knowledge_id).in_(space_ids),
-                col(KnowledgeFile.id).in_(file_ids),
-                KnowledgeFile.file_type == FileType.FILE.value,
-                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            )
-            return {int(file_id) for file_id in (await session.exec(statement)).all()}
-
-
-class DatabaseRobotRetrievalBackend:
-    async def retrieve_space(
-        self,
-        *,
-        tenant_id: int,
-        space_id: int,
-        query: str,
-        invoke_user_id: int,
-        max_content: int,
-        sort_by_source_and_index: bool,
-    ) -> list[Document]:
-        async with get_async_db_session() as session:
-            statement = select(Knowledge).where(
-                Knowledge.tenant_id == tenant_id,
-                Knowledge.id == space_id,
-                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            )
-            space = (await session.exec(statement)).first()
-        if space is None:
-            return []
-
-        vector_store = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge=space)
-        elastic_store = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
-        retriever = KnowledgeRetrieverTool(
-            vector_retriever=vector_store.as_retriever(),
-            elastic_retriever=elastic_store.as_retriever(),
-            max_content=max_content,
-            sort_by_source_and_index=sort_by_source_and_index,
-            rrf_weights=_DEFAULT_RRF_WEIGHTS,
-            rrf_remove_zero_score=True,
-        )
-        return await retriever._arun(query)
 
 
 class RobotSpaceRetrievalPolicy:
@@ -132,6 +75,11 @@ class RobotSpaceRetrievalPolicy:
         document_state_reader: RobotDocumentStateReader | None = None,
         retrieval_backend: RobotRetrievalBackend | None = None,
     ) -> None:
+        from bisheng.eplus.infrastructure.robot_retrieval import (
+            DatabaseRobotDocumentStateReader,
+            DatabaseRobotRetrievalBackend,
+        )
+
         self.tenant_id = int(tenant_id)
         self.bot_config_id = int(bot_config_id)
         self.invoke_user_id = int(invoke_user_id)
@@ -145,13 +93,31 @@ class RobotSpaceRetrievalPolicy:
         expected_scope: AssistantRobotScope,
         max_content: int = 15000,
         sort_by_source_and_index: bool = False,
+        file_name: str | None = None,
     ) -> list[Document]:
         space_ids = tuple(sorted({int(space_id) for space_id in expected_scope.space_ids}))
         if not space_ids:
             return []
 
+        matched_sources = None
+        if file_name is not None:
+            matched_sources = await self.document_state_reader.file_sources(
+                tenant_id=self.tenant_id,
+                space_ids=space_ids,
+                file_name=file_name,
+            )
+            if not matched_sources:
+                return []
+
         candidates: list[Document] = []
         for space_id in space_ids:
+            selected_ids = (
+                None
+                if matched_sources is None
+                else tuple(fid for fid, source in matched_sources.items() if source.space_id == space_id)
+            )
+            if selected_ids == ():
+                continue
             candidates.extend(
                 await self.retrieval_backend.retrieve_space(
                     space_id=space_id,
@@ -160,15 +126,17 @@ class RobotSpaceRetrievalPolicy:
                     invoke_user_id=self.invoke_user_id,
                     max_content=max_content,
                     sort_by_source_and_index=sort_by_source_and_index,
+                    file_ids=selected_ids,
                 )
             )
 
         file_ids = {_document_id(doc) for doc in candidates}
         file_ids.discard(None)
-        valid_file_ids = await self.document_state_reader.valid_file_ids(
+        sources = await self.document_state_reader.file_sources(
             tenant_id=self.tenant_id,
             space_ids=space_ids,
-            file_ids={int(file_id) for file_id in file_ids},
+            file_ids=set(matched_sources) if matched_sources is not None else {int(file_id) for file_id in file_ids},
+            file_name=file_name,
         )
 
         result: list[Document] = []
@@ -176,19 +144,24 @@ class RobotSpaceRetrievalPolicy:
         content_size = 0
         for document in candidates:
             file_id = _document_id(document)
-            if file_id is None or file_id not in valid_file_ids:
+            if file_id is None or file_id not in sources:
                 continue
-            metadata = document.metadata or {}
+            metadata = dict(document.metadata or {})
             key = (file_id, int(metadata.get("chunk_index") or 0), document.page_content)
             if key in seen:
                 continue
             if result and content_size >= max_content:
                 break
             seen.add(key)
-            metadata["access_scope"] = "robot_bound"
-            document.metadata = metadata
-            result.append(document)
+            source = sources[file_id]
+            metadata.update(_source_metadata(source))
+            result.append(Document(page_content=document.page_content, metadata=metadata))
             content_size += len(document.page_content)
+        if matched_sources is not None:
+            retrieved_ids = {_document_id(doc) for doc in result}
+            for file_id, source in sources.items():
+                if file_id not in retrieved_ids:
+                    result.append(Document(page_content="", metadata={**_source_metadata(source), "source_only": True}))
         return result
 
     async def build_tool(
@@ -208,33 +181,52 @@ class RobotSpaceRetrievalPolicy:
         )
         return RobotKnowledgeRagTool(
             name="eplus_robot_knowledge",
-            description="仅在当前 E+ 机器人绑定的知识空间中检索与查询相关的文档内容。",
+            description=(
+                "检索机器人可用知识空间中的文档内容, 或核实具体文件的归属。"
+                "用户指定完整文件名时必须传 file_name, 仅查询该文件, 不用其他文件代替。"
+                "sources 是后台核实的文件归属, chunks 仅是相关正文, 正文中的名称和编号不是来源。"
+                "只能说明本次命中的文件, 不能列出空间完整目录或推断部门归属; 未命中不代表不存在。"
+            ),
             llm=llm,
             knowledge_retriever_tool=retriever,
         )
 
 
 class RobotSpaceRetrieverTool(KnowledgeRetrieverTool):
+    args_schema: type = RobotKnowledgeInput
     policy: Any = Field(exclude=True)
     expected_scope: Any = Field(exclude=True)
 
     def _run(self, query: str, **kwargs: Any) -> list[Document]:
-        return run_async_safe(self._aretrieve(query), timeout=120)
+        return run_async_safe(self._aretrieve(query, file_name=kwargs.get("file_name")), timeout=120)
 
     async def _arun(self, query: str, **kwargs: Any) -> list[Document]:
-        return await self._aretrieve(query)
+        return await self._aretrieve(query, file_name=kwargs.get("file_name"))
 
-    async def _aretrieve(self, query: str) -> list[Document]:
+    async def _aretrieve(self, query: str, *, file_name: str | None = None) -> list[Document]:
         return await self.policy.retrieve(
             query,
             expected_scope=self.expected_scope,
             max_content=self.max_content,
             sort_by_source_and_index=self.sort_by_source_and_index,
+            file_name=file_name,
         )
 
 
 class RobotKnowledgeRagTool(KnowledgeRagTool):
+    args_schema: type = RobotKnowledgeInput
     robot_scope_enforced: bool = True
+
+
+def _source_metadata(source: RobotFileSource) -> dict[str, Any]:
+    return {
+        "document_id": source.file_id,
+        "document_name": source.file_name,
+        "knowledge_id": source.space_id,
+        "kb_id": source.space_id,
+        "knowledge_name": source.space_name,
+        "access_scope": "robot_bound",
+    }
 
 
 def _document_id(document: Document) -> int | None:

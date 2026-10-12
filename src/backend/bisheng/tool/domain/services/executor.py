@@ -349,8 +349,11 @@ class ToolExecutor(BaseTool):
         app_type: ApplicationTypeEnum,
         user_id: int,
         skip_unauthorized: bool = False,
+        enforce_user_permission: bool = True,
         **kwargs,
     ) -> list[BaseTool]:
+        # Trusted robot execution authorizes the assistant-bound tool set, not
+        # the sender's personal tool grants. All other callers keep the default.
         tools = await GptsToolsDao.aget_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = await GptsToolsDao.aget_all_tool_type(list(set(tool_type_ids)))
@@ -360,12 +363,13 @@ class ToolExecutor(BaseTool):
             tool_type = tool_type_map.get(tool.type)
             if not tool_type:
                 raise ValueError(f"Tool type with id {tool.type} not found.")
-            try:
-                await cls._ensure_use_permission_async(tool_type, user_id)
-            except PermissionError:
-                if skip_unauthorized:
-                    continue
-                raise
+            if enforce_user_permission:
+                try:
+                    await cls._ensure_use_permission_async(tool_type, user_id)
+                except PermissionError:
+                    if skip_unauthorized:
+                        continue
+                    raise
             allowed_tools.append(tool)
 
         return cls._init_tools(

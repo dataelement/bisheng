@@ -223,9 +223,7 @@ async def test_preparing_head_blocks_later_queued_turn(engine):
 
     async with AsyncSession(engine) as session, session.begin():
         await session.exec(
-            update(EPlusTurn)
-            .where(EPlusTurn.id == "turn-c1-1")
-            .values(status=EPlusTurnStatus.QUEUED.value)
+            update(EPlusTurn).where(EPlusTurn.id == "turn-c1-1").values(status=EPlusTurnStatus.QUEUED.value)
         )
         await session.exec(
             update(EPlusInboundMessage)
@@ -261,9 +259,7 @@ async def test_claim_refreshes_scope_and_stale_execution_token_cannot_complete(e
 
     async with AsyncSession(engine) as session, session.begin():
         await session.exec(
-            update(EPlusTurn)
-            .where(EPlusTurn.id == claimed.turn.id)
-            .values(assistant_run_id="replacement-owner")
+            update(EPlusTurn).where(EPlusTurn.id == claimed.turn.id).values(assistant_run_id="replacement-owner")
         )
 
     assert (
@@ -340,3 +336,133 @@ async def test_failed_or_cancelled_completion_releases_conversation_for_next_tur
     )
 
     assert second.turn.turn_seq == 2
+
+
+async def test_history_loads_only_recent_completed_turns_in_chronological_order(engine):
+    for sequence in range(1, 24):
+        await _seed_turn(
+            engine,
+            conversation_id="bounded",
+            conversation_key="u1",
+            turn_seq=sequence,
+            status=EPlusTurnStatus.SUCCEEDED,
+            answer=f"a{sequence}",
+        )
+    await _seed_turn(engine, conversation_id="bounded", conversation_key="u1", turn_seq=24)
+
+    ready = await _scheduler(engine).next_ready_turn(TENANT_ID, "bounded")
+
+    assert [item.turn_seq for item in ready.history] == list(range(4, 24))
+    async with AsyncSession(engine) as session:
+        stored = list((await session.exec(select(EPlusTurn))).all())
+    assert len(stored) == 24
+
+
+async def test_expired_waiting_turn_is_durable_and_not_recovered(engine):
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=1)
+    scheduler = _scheduler(engine)
+
+    assert await scheduler.expire_waiting_turn(tenant_id=TENANT_ID, turn_id="turn-c1-1")
+
+    restarted = _scheduler(engine)
+    assert await restarted.recover_queued(tenant_id=TENANT_ID, bot_config_id=BOT_CONFIG_ID) == ()
+    assert await restarted.next_ready_turn(TENANT_ID, "c1") is None
+    async with AsyncSession(engine) as session:
+        turn = await session.get(EPlusTurn, "turn-c1-1")
+    assert turn.status == "FAILED"
+    assert turn.error_code == "ASSISTANT_TIMEOUT"
+
+
+async def test_completed_turn_persists_materialized_input_for_history(engine):
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=1)
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=2)
+    scheduler = _scheduler(engine)
+    first = await scheduler.next_ready_turn(TENANT_ID, "c1")
+
+    next_turn = await scheduler.complete_and_wake_next(
+        tenant_id=TENANT_ID,
+        turn_id=first.turn.id,
+        succeeded=True,
+        answer_text="answer",
+        execution_token=first.turn.assistant_run_id,
+        extracted_text="before\n[图片文字]\nOCR result\nafter",
+    )
+
+    assert next_turn.history[0].extracted_text == "before\n[图片文字]\nOCR result\nafter"
+
+
+async def test_expiring_preparing_head_wakes_next_turn_without_waiting_for_media(engine):
+    from dataclasses import replace
+
+    from bisheng.eplus.domain.services.message_service import EPlusAdmissionReservation
+    from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream
+    from bisheng.eplus.domain.services.robot_service import EPlusRobotService
+    from test.eplus.test_eplus_reply_stream import FakeQuota, FakeRecorder, FakeSender
+    from test.eplus.test_eplus_robot_service import FakeAssistantFactory, FakeMedia, FakeTurnLoader, _callback, _context
+
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=1, status=EPlusTurnStatus.PREPARING)
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=2)
+    async with AsyncSession(engine) as session:
+        head = await session.get(EPlusTurn, "turn-c1-1")
+    assistant, sender = FakeAssistantFactory(), FakeSender()
+    context = _context(sender)
+    context = replace(context, admission=replace(context.admission, tenant_id=TENANT_ID, bot_config_id=BOT_CONFIG_ID))
+
+    class Loader(FakeTurnLoader):
+        async def load(self, ready):
+            return replace(await super().load(ready), tenant_id=TENANT_ID)
+
+    class Replies:
+        def create(self, **values):
+            return EPlusReplyStream(
+                sender=sender,
+                quota=FakeQuota(),
+                recorder=FakeRecorder(),
+                req_id=values["req_id"],
+                stream_id=values["stream_id"],
+            )
+
+    service = EPlusRobotService(
+        admission_service=None,
+        scheduler=_scheduler(engine),
+        turn_loader=Loader(),
+        media_service=FakeMedia(),
+        assistant_factory=assistant,
+        reply_factory=Replies(),
+        execution_timeout_seconds=0.05,
+    )
+    try:
+        await service._start_waiting_reply(
+            context, _callback("head"), EPlusAdmissionReservation(head.inbound_message_id, "c1", head.id)
+        )
+        await service.run_turn(context, "c1")
+        await service.wait_idle()
+        await asyncio.wait_for(assistant.started.wait(), timeout=0.5)
+        await service.wait_idle()
+        assert len(assistant.requests) == 1
+    finally:
+        await service.close()
+
+
+async def test_acknowledged_reply_timestamp_survives_claim_and_delivery_reload(engine):
+    from datetime import datetime
+
+    from bisheng.eplus.worker import SqlEPlusTurnLoader, SqlReplyStateRecorder
+
+    await _seed_turn(engine, conversation_id="c1", conversation_key="u1", turn_seq=1)
+    async with AsyncSession(engine) as session:
+        turn = await session.get(EPlusTurn, "turn-c1-1")
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    recorder = SqlReplyStateRecorder(factory, tenant_id=TENANT_ID, inbound_message_id=turn.inbound_message_id)
+    await recorder.record(EPlusReplyStatus.STREAMING)
+    async with AsyncSession(engine) as session, session.begin():
+        inbound = await session.get(EPlusInboundMessage, turn.inbound_message_id)
+        assert inbound.started_at is not None
+        inbound.started_at = datetime(2020, 1, 2, 3, 4, 5)
+        session.add(inbound)
+    await recorder.record(EPlusReplyStatus.STREAMING)
+    ready = await _scheduler(engine).next_ready_turn(TENANT_ID, "c1")
+    delivery = await SqlEPlusTurnLoader(factory).load(ready)
+
+    assert delivery.reply_started_at == datetime(2020, 1, 2, 3, 4, 5)
+    assert delivery.reply_status == "STREAMING"

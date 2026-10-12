@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import ipaddress
+import time
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlsplit
@@ -191,6 +192,26 @@ class EPlusMediaService:
                 content.append({"type": "text", "text": "[无法读取图片: 媒体引用缺失]"})
                 continue
 
+            cache_key = f"{block.media.object_key}.ocr-v1-user-{int(user_id)}.txt"
+            if not supports_vision:
+                try:
+                    cached = await self.store.get(object_key=cache_key)
+                except FileNotFoundError:
+                    cached = None
+                except OSError:
+                    # Cache is optional; retry the original image, not the same cache read.
+                    logger.opt(exception=True).warning("E+ OCR cache read failed sha256={}", block.media.sha256)
+                    cached = None
+                if cached is not None:
+                    try:
+                        extracted = cached.decode("utf-8")
+                    except UnicodeDecodeError:
+                        logger.opt(exception=True).warning("E+ OCR cache is invalid sha256={}", block.media.sha256)
+                    else:
+                        content.append({"type": "text", "text": f"[图片文字]\n{extracted}"})
+                        logger.info("E+ OCR cache hit sha256={}", block.media.sha256)
+                        continue
+
             try:
                 data = await self.store.get(object_key=block.media.object_key)
             except Exception:
@@ -218,10 +239,16 @@ class EPlusMediaService:
                 content.append({"type": "text", "text": "[当前助手无法理解图片, 请补充文字描述]"})
                 continue
             try:
+                extraction_started = time.monotonic()
                 extracted = await extractor.extract(
                     data=data,
                     mime_type=block.media.mime_type,
                     user_id=user_id,
+                )
+                logger.info(
+                    "E+ OCR completed sha256={} elapsed_ms={:.1f}",
+                    block.media.sha256,
+                    (time.monotonic() - extraction_started) * 1000,
                 )
             except Exception:
                 logger.opt(exception=True).warning(
@@ -230,6 +257,15 @@ class EPlusMediaService:
                 )
                 content.append({"type": "text", "text": "[图片文字提取失败, 请补充文字描述]"})
                 continue
+            try:
+                await self.store.put(
+                    object_key=cache_key,
+                    data=extracted.encode("utf-8"),
+                    content_type="text/plain; charset=utf-8",
+                )
+            except OSError:
+                # Optional cache failure must not discard successfully extracted text.
+                logger.opt(exception=True).warning("E+ OCR cache write failed sha256={}", block.media.sha256)
             content.append({"type": "text", "text": f"[图片文字]\n{extracted}"})
         return content
 

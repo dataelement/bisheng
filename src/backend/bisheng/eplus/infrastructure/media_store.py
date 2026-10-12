@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import aiohttp
+from minio.error import S3Error
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -103,16 +104,24 @@ class MinioEPlusMediaStore:
 
     async def put(self, *, object_key: str, data: bytes, content_type: str) -> None:
         minio = await get_minio_storage()
-        await minio.put_object(
-            bucket_name=self.bucket_name,
-            object_name=object_key,
-            file=data,
-            content_type=content_type,
-        )
+        try:
+            await minio.put_object(
+                bucket_name=self.bucket_name,
+                object_name=object_key,
+                file=data,
+                content_type=content_type,
+            )
+        except S3Error as exc:
+            raise OSError("E+ media object write failed") from exc
 
     async def get(self, *, object_key: str) -> bytes:
         minio = await get_minio_storage()
-        data = await minio.get_object(bucket_name=self.bucket_name, object_name=object_key)
+        try:
+            data = await minio.get_object(bucket_name=self.bucket_name, object_name=object_key)
+        except S3Error as exc:
+            if exc.code == "NoSuchKey":
+                raise FileNotFoundError("E+ media object not found") from exc
+            raise OSError("E+ media object read failed") from exc
         if data is None:
             raise FileNotFoundError("E+ media object not found")
         return data

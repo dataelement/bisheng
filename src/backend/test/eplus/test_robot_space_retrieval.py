@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from langchain_core.documents import Document
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
@@ -21,15 +23,31 @@ class FakeDocumentStateReader:
         self.calls.append((tenant_id, space_ids, file_ids))
         return file_ids & self.valid_ids
 
+    async def file_sources(self, *, tenant_id, space_ids, file_ids=None, file_name=None):
+        self.calls.append((tenant_id, space_ids, file_ids))
+        ids = self.valid_ids if file_ids is None else file_ids & self.valid_ids
+        return {
+            file_id: SimpleNamespace(
+                file_id=file_id,
+                file_name=f"file-{file_id}.pdf",
+                space_id=11 if file_id < 102 else 12,
+                space_name="真实空间" if file_id < 102 else "另一空间",
+            )
+            for file_id in ids
+            if (11 if file_id < 102 else 12) in space_ids and (file_name is None or file_name == f"file-{file_id}.pdf")
+        }
+
 
 class FakeRetrievalBackend:
     def __init__(self, docs_by_space: dict[int, list[Document]], on_retrieve=None) -> None:
         self.docs_by_space = docs_by_space
         self.on_retrieve = on_retrieve
         self.calls: list[int] = []
+        self.file_filters: dict[int, tuple[int, ...] | None] = {}
 
     async def retrieve_space(self, *, space_id: int, query: str, invoke_user_id: int, **kwargs) -> list[Document]:
         self.calls.append(space_id)
+        self.file_filters[space_id] = kwargs.get("file_ids")
         if self.on_retrieve:
             self.on_retrieve()
         return self.docs_by_space.get(space_id, [])
@@ -123,3 +141,49 @@ async def test_scope_change_during_retrieval_keeps_the_turn_snapshot():
 
     assert [doc.metadata["document_id"] for doc in result] == [100]
     assert backend.calls == [11]
+    assert backend.file_filters == {11: None}
+
+
+async def test_current_database_source_replaces_stale_index_names_and_space():
+    stale = _doc(100, 999)
+    stale.metadata["document_name"] = "旧文件名.pdf"
+    policy, scope, _, _ = _policy(spaces=(11,), docs_by_space={11: [stale]}, valid_ids={100})
+
+    result = await policy.retrieve("归属", expected_scope=scope)
+
+    assert result[0].metadata["knowledge_id"] == 11
+    assert result[0].metadata["knowledge_name"] == "真实空间"
+    assert result[0].metadata["document_name"] == "file-100.pdf"
+    assert stale.metadata["knowledge_id"] == 999
+
+
+async def test_explicit_file_search_excludes_unrelated_content_even_when_it_mentions_the_file():
+    policy, scope, backend, _ = _policy(
+        spaces=(11, 12),
+        docs_by_space={11: [_doc(101, 11, text="正文提到了 file-100.pdf"), _doc(100, 11)], 12: [_doc(102, 12)]},
+        valid_ids={100, 101, 102},
+    )
+
+    result = await policy.retrieve("查询 file-100.pdf", file_name="file-100.pdf", expected_scope=scope)
+
+    assert [d.metadata["document_id"] for d in result] == [100]
+    assert backend.calls == [11]
+    assert backend.file_filters == {11: (100,)}
+
+
+async def test_explicit_missing_file_does_not_fall_back_to_other_documents():
+    policy, scope, backend, _ = _policy(spaces=(11,), docs_by_space={11: [_doc(100, 11)]}, valid_ids={100})
+
+    assert await policy.retrieve("不存在.pdf", file_name="不存在.pdf", expected_scope=scope) == []
+    assert backend.calls == []
+
+
+async def test_exact_source_is_available_without_vector_hits_but_not_invented_content():
+    policy, scope, _, _ = _policy(spaces=(11,), docs_by_space={}, valid_ids={100})
+
+    result = await policy.retrieve("归属", file_name="file-100.pdf", expected_scope=scope)
+
+    assert len(result) == 1
+    assert result[0].metadata["document_id"] == 100
+    assert result[0].metadata["source_only"] is True
+    assert result[0].page_content == ""

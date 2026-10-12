@@ -109,7 +109,7 @@ class AssistantCitationToolWrapper(BaseTool):
         if getattr(self.tool, "robot_scope_enforced", False):
             # E+ replies are text-only; robot-bound sources have no internal
             # citation resolve contract and must not enter that registry.
-            return self._dump_knowledge_chunks(source_documents)
+            return self._dump_robot_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
@@ -117,7 +117,7 @@ class AssistantCitationToolWrapper(BaseTool):
     async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
         if getattr(self.tool, "robot_scope_enforced", False):
-            return self._dump_knowledge_chunks(source_documents)
+            return self._dump_robot_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
@@ -134,6 +134,11 @@ class AssistantCitationToolWrapper(BaseTool):
             kb_name = self.kb_name_by_id.get(kb_id, "")
             results.append(KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
         return json.dumps(results, ensure_ascii=False)
+
+    def _dump_robot_knowledge_chunks(self, source_documents: list) -> str:
+        from bisheng.eplus.domain.services.knowledge_result import format_robot_knowledge_result
+
+        return format_robot_knowledge_result(source_documents, self.kb_name_by_id)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         cache_citation_registry_items_sync(items)
@@ -158,7 +163,10 @@ class AssistantCitationToolWrapper(BaseTool):
         # the chat per search — named after the retriever instead of the
         # knowledge base, so it read "知识库已被删除", carrying the raw Document
         # dump as its output.
-        retrieval_result = self.tool.knowledge_retriever_tool._run(query)
+        retrieval_options = (
+            {"file_name": kwargs.get("file_name")} if getattr(self.tool, "robot_scope_enforced", False) else {}
+        )
+        retrieval_result = self.tool.knowledge_retriever_tool._run(query, **retrieval_options)
         return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
@@ -169,7 +177,10 @@ class AssistantCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query)
+        retrieval_options = (
+            {"file_name": kwargs.get("file_name")} if getattr(self.tool, "robot_scope_enforced", False) else {}
+        )
+        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query, **retrieval_options)
         return await self._aformat_knowledge_results(retrieval_result)
 
 
@@ -282,6 +293,12 @@ class AssistantAgent(AssistantUtils):
         """Get by nametool Vertical
         tools_name_param:: {name: params}
         """
+        is_eplus = context is not None and context.entry_point == AssistantEntryPoint.EPLUS
+        if is_eplus and context.robot_scope is None:
+            from bisheng.eplus.domain.services.robot_space_retrieval import RobotToolScopeViolation
+
+            raise RobotToolScopeViolation("E+ assistant execution requires a robot scope")
+
         links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
         # tool
         tools: list[BaseTool] = []
@@ -300,11 +317,12 @@ class AssistantAgent(AssistantUtils):
                 app_type=ApplicationTypeEnum.ASSISTANT,
                 user_id=self.invoke_user_id,
                 skip_unauthorized=True,
+                enforce_user_permission=not is_eplus,
                 llm=self.llm,
                 callbacks=callbacks,
             )
 
-        if context is not None and context.entry_point == AssistantEntryPoint.EPLUS:
+        if is_eplus:
             from bisheng.database.models.flow import FlowDao
             from bisheng.eplus.domain.services.robot_space_retrieval import (
                 RobotSpaceRetrievalPolicy,
@@ -313,12 +331,9 @@ class AssistantAgent(AssistantUtils):
                 flow_uses_bisheng_knowledge,
             )
 
-            if context.robot_scope is None:
-                raise RobotToolScopeViolation("E+ assistant execution requires a robot scope")
-
-            # External tools keep their normal user authorization. The only
-            # additional guard rejects an explicit call back into BiSheng's own
-            # knowledge APIs, which would otherwise bypass the robot binding.
+            # Admitted robot users can use the assistant's configured tools
+            # without personal tool grants. Tool loading keeps tenant/deletion
+            # filters; this guard still rejects knowledge-scope bypasses.
             tools = [assert_eplus_tool_scope(tool) for tool in tools]
 
             # Assistant flow links are not executable tools in this legacy

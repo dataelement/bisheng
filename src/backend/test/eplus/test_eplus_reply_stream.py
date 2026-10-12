@@ -277,6 +277,18 @@ async def test_failure_replaces_partial_answer_with_safe_terminal_message() -> N
     assert stream.answer == "处理失败，请稍后重试"  # noqa: RUF001
 
 
+async def test_recovered_stream_reuses_placeholder_and_original_deadline():
+    sender, clock = FakeSender(), FakeClock()
+    stream = _stream(sender=sender, clock=clock)
+
+    await stream.resume(elapsed_seconds=299)
+    assert sender.frames == []
+    clock.advance(2)
+    with pytest.raises(EPlusReplyDeadlineExceeded):
+        await stream.append("late")
+    assert sender.frames[-1]["body"]["stream"]["finish"] is True
+
+
 class FakeRedisConnection:
     def __init__(self) -> None:
         self.counts: dict[str, int] = {}

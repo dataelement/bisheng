@@ -1,4 +1,12 @@
 {
+  "preview_diagnostics": {
+    "setting": "文件预览诊断",
+    "setting_hint": "复现前开启，在知识空间导出记录；24 小时后失效。",
+    "active": "文件预览诊断已开启",
+    "export": "导出诊断",
+    "stop": "关闭诊断",
+    "copy_hint": "如果无法下载，请选中并复制下方记录。"
+  },
   "admin": "管理员",
   "bisheng": "{{bishengZh}}",
   "cancel": "取消",

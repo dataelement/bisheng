@@ -103,6 +103,9 @@ class FakeScheduler:
         queue = self.queues[conversation_id]
         return queue.pop(0) if queue else None
 
+    async def expire_waiting_turn(self, *, tenant_id, turn_id):
+        return False
+
     async def complete_and_wake_next(
         self,
         *,
@@ -548,3 +551,228 @@ async def _eventually(predicate, *, timeout: float = 1) -> None:
     async with asyncio.timeout(timeout):
         while not predicate():
             await asyncio.sleep(0)
+
+
+async def test_history_budget_excludes_old_image_before_materialization():
+    class RejectOldImage(FakeMedia):
+        async def materialize(self, blocks, **kwargs):
+            assert all(block.kind != "image" for block in blocks), "out-of-budget image must not be read"
+            return await super().materialize(blocks, **kwargs)
+
+    older = EPlusHistoryTurn(
+        "old",
+        1,
+        88,
+        "user-1",
+        None,
+        ({"kind": "image", "media": {"object_key": "o", "sha256": "s", "mime_type": "image/png", "size": 4}},),
+        "x" * 1000,
+    )
+    recent = EPlusHistoryTurn("recent", 2, 88, "user-1", "recent q", (), "recent a")
+    delivery = await FakeTurnLoader().load(_ready("c-3", "c", history=(older, recent)))
+    service = _service(FakeAdmission(), FakeScheduler(), FakeAssistantFactory(), FakeReplyFactory())
+    service._media = RejectOldImage()
+
+    request = await service._build_request(_context(), delivery, False, history_budget=100)
+
+    assert [(item.content, item.answer) for item in request.history] == [
+        ([{"type": "text", "text": "recent q"}], "recent a"),
+    ]
+
+
+async def test_waiting_hint_is_sent_before_media_finalization_and_reused_for_answer():
+    from bisheng.eplus.domain.services.message_service import EPlusAdmissionReservation
+    from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream
+    from test.eplus.test_eplus_reply_stream import FakeQuota, FakeRecorder, FakeSender
+
+    sender = FakeSender()
+    callback = _callback("early")
+    scheduler = FakeScheduler()
+    scheduler.queues["c"] = [_ready("c-1", "c")]
+
+    class ReservedAdmission:
+        async def finalize(self, context, callback, reservation):
+            assert sender.frames[0]["body"]["stream"]["content"] == "处理中"
+            return AdmissionResult(AdmissionDisposition.QUEUED, 1, "c", "c-1")
+
+    class ReplyFactory:
+        def create(self, **values):
+            return EPlusReplyStream(
+                sender=values["sender"],
+                quota=FakeQuota(),
+                recorder=FakeRecorder(),
+                req_id=values["req_id"],
+                stream_id=values["stream_id"],
+            )
+
+    service = _service(ReservedAdmission(), scheduler, FakeAssistantFactory(), ReplyFactory())
+    await service.handle_reserved_message(_context(sender), callback, EPlusAdmissionReservation(1, "c", "c-1"))
+    await service.wait_idle()
+
+    streams = [frame["body"]["stream"] for frame in sender.frames]
+    assert [item["content"] for item in streams].count("处理中") == 1
+    assert len({item["id"] for item in streams}) == 1
+    assert streams[-1]["content"] == "answer"
+    assert streams[-1]["finish"] is True
+
+
+async def test_queue_wait_timeout_returns_terminal_without_executing_later():
+    from bisheng.eplus.domain.services.message_service import EPlusAdmissionReservation
+    from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream
+    from test.eplus.test_eplus_reply_stream import FakeQuota, FakeRecorder, FakeSender
+
+    sender = FakeSender()
+    gate = asyncio.Event()
+    scheduler = FakeScheduler()
+    assistant = FakeAssistantFactory()
+
+    class Admission:
+        async def finalize(self, context, callback, reservation):
+            await gate.wait()
+            return AdmissionResult(AdmissionDisposition.QUEUED, 1, "c", "c-1")
+
+    class Replies:
+        def create(self, **values):
+            return EPlusReplyStream(
+                sender=sender,
+                quota=FakeQuota(),
+                recorder=FakeRecorder(),
+                req_id=values["req_id"],
+                stream_id=values["stream_id"],
+            )
+
+    service = _service(Admission(), scheduler, assistant, Replies(), execution_timeout_seconds=0.02)
+    task = asyncio.create_task(
+        service.handle_reserved_message(
+            _context(sender),
+            _callback("expiry"),
+            EPlusAdmissionReservation(1, "c", "c-1"),
+        )
+    )
+    await _eventually(lambda: len(sender.frames) == 2)
+    assert sender.frames[-1]["body"]["stream"]["finish"] is True
+    scheduler.queues["c"] = [_ready("c-1", "c")]
+    gate.set()
+    await task
+    await service.wait_idle()
+
+    assert assistant.created == 0
+    assert scheduler.completed == [("c-1", False, None, "ASSISTANT_TIMEOUT")]
+    assert len(sender.frames) == 2
+
+
+async def test_history_with_saved_text_does_not_retry_failed_image_ocr():
+    from dataclasses import replace
+
+    old = EPlusHistoryTurn("old", 1, 88, "user-1", None, ({"kind": "image", "media": None},), "answer")
+    old = replace(old, extracted_text="[图片文字提取失败, 请补充文字描述]")
+    delivery = await FakeTurnLoader().load(_ready("c-2", "c", history=(old,)))
+    service = _service(FakeAdmission(), FakeScheduler(), FakeAssistantFactory(), FakeReplyFactory())
+    request = await service._build_request(_context(), delivery, False)
+
+    assert request.history[0].content == [{"type": "text", "text": "[图片文字提取失败, 请补充文字描述]"}]
+
+
+async def test_claim_does_not_cancel_an_inflight_timeout_ack():
+    from bisheng.eplus.domain.services.message_service import EPlusAdmissionReservation
+    from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream
+    from test.eplus.test_eplus_reply_stream import FakeQuota, FakeRecorder, FakeSender
+
+    terminal_started, terminal_ack = asyncio.Event(), asyncio.Event()
+
+    class SlowTerminalSender(FakeSender):
+        async def send_with_ack(self, frame):
+            result = await super().send_with_ack(frame)
+            if frame["body"]["stream"]["finish"]:
+                terminal_started.set()
+                await terminal_ack.wait()
+            return result
+
+    sender = SlowTerminalSender()
+    recorder = FakeRecorder()
+
+    class Replies:
+        def create(self, **values):
+            return EPlusReplyStream(
+                sender=sender,
+                quota=FakeQuota(),
+                recorder=recorder,
+                req_id=values["req_id"],
+                stream_id=values["stream_id"],
+            )
+
+    scheduler = FakeScheduler()
+    service = _service(FakeAdmission(), scheduler, FakeAssistantFactory(), Replies(), execution_timeout_seconds=0.02)
+    await service._start_waiting_reply(
+        _context(sender), _callback("ack-race"), EPlusAdmissionReservation(1, "c", "c-1")
+    )
+    await terminal_started.wait()
+    execution = asyncio.create_task(service._execute_turn(_context(sender), _ready("c-1", "c")))
+    try:
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(asyncio.shield(execution), timeout=0.02)
+    finally:
+        terminal_ack.set()
+        await execution
+        await service.close()
+
+    assert recorder.events[-1][0].value == "FINISHED"
+    assert scheduler.completed == [("c-1", False, None, "ASSISTANT_TIMEOUT")]
+
+
+async def test_cancelled_media_admission_does_not_send_after_losing_ownership():
+    from bisheng.eplus.domain.services.message_service import EPlusAdmissionReservation
+    from bisheng.eplus.domain.services.reply_stream import EPlusReplyStream
+    from test.eplus.test_eplus_reply_stream import FakeQuota, FakeRecorder, FakeSender
+
+    sender, entered = FakeSender(), asyncio.Event()
+
+    class Admission:
+        async def finalize(self, *args):
+            entered.set()
+            await asyncio.Event().wait()
+
+    class Replies:
+        def create(self, **values):
+            return EPlusReplyStream(
+                sender=sender,
+                quota=FakeQuota(),
+                recorder=FakeRecorder(),
+                req_id=values["req_id"],
+                stream_id=values["stream_id"],
+            )
+
+    service = _service(Admission(), FakeScheduler(), FakeAssistantFactory(), Replies())
+    task = asyncio.create_task(
+        service.handle_reserved_message(
+            _context(sender),
+            _callback("cancel-admission"),
+            EPlusAdmissionReservation(1, "c", "c-1"),
+        )
+    )
+    await entered.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await service.close()
+
+    assert len(sender.frames) == 1
+    assert sender.frames[0]["body"]["stream"]["finish"] is False
+
+
+async def test_recovered_expired_delivery_never_starts_placeholder_or_model():
+    from dataclasses import replace
+    from datetime import datetime, timedelta
+
+    class RecoveredLoader(FakeTurnLoader):
+        async def load(self, ready):
+            return replace(await super().load(ready), reply_started_at=datetime.now() - timedelta(seconds=310))
+
+    scheduler, assistant, replies = FakeScheduler(), FakeAssistantFactory(), FakeReplyFactory()
+    service = _service(FakeAdmission(), scheduler, assistant, replies, turn_loader=RecoveredLoader())
+
+    await service._execute_turn(_context(), _ready("c-1", "c"))
+
+    assert assistant.created == 0
+    assert all(event[0] != "start" for event in replies.streams["req-c-1"].events)
+    assert scheduler.completed == [("c-1", False, None, "ASSISTANT_TIMEOUT")]

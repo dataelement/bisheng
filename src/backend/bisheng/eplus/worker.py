@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import signal
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,7 +14,7 @@ from typing import Any, Protocol
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -384,6 +386,9 @@ class SqlEPlusTurnLoader:
             space_ids=tuple(turn.scope_space_ids),
             history=ready.history,
             execution_token=turn.assistant_run_id or "",
+            reply_started_at=inbound.started_at,
+            reply_status=inbound.reply_status,
+            reply_error_code=inbound.error_code,
         )
 
 
@@ -395,6 +400,8 @@ class SqlReplyStateRecorder:
 
     async def record(self, status: EPlusReplyStatus, *, error_code: str | None = None) -> None:
         values: dict[str, Any] = {"reply_status": status.value}
+        if status == EPlusReplyStatus.STREAMING:
+            values["started_at"] = func.coalesce(EPlusInboundMessage.started_at, datetime.now())
         if error_code is not None:
             values["error_code"] = error_code
         async with self._session_factory() as session, session.begin():
@@ -439,6 +446,11 @@ class BiShengAssistantRuntime:
         self._agent = agent
         self.supports_vision = agent.supports_vision
 
+    @property
+    def history_budget(self) -> int:
+        # Existing assistant trimming still enforces the final model context.
+        return max(0, int(self._agent.assistant.max_token) - len(self._agent.assistant.prompt.encode("utf-8")) - 512)
+
     async def astream(self, request: EPlusAssistantRequest) -> AsyncIterator[str]:
         context = AssistantExecutionContext(
             entry_point=AssistantEntryPoint.EPLUS,
@@ -449,8 +461,14 @@ class BiShengAssistantRuntime:
             cancellation_check=request.cancellation_check,
         )
         self._agent.execution_context = context
+        stage_started = time.monotonic()
         await self._agent.init_tools(context=context)
         await self._agent.init_agent()
+        logger.info(
+            "E+ tools and agent initialized conversation_hash={} elapsed_ms={:.1f}",
+            hashlib.sha256(request.conversation_id.encode()).hexdigest()[:12],
+            (time.monotonic() - stage_started) * 1000,
+        )
         history = []
         for item in request.history:
             history.extend((HumanMessage(content=item.content), AIMessage(content=item.answer)))
@@ -564,6 +582,7 @@ class WorkerConnection:
         self._callback_registry.spawn(self._ref, self._handle_message(frame))
 
     async def _handle_message(self, frame: dict[str, Any]) -> None:
+        admission_started = time.monotonic()
         await self._ingress.wait_recovered()
         if self._closed:
             return
@@ -585,6 +604,12 @@ class WorkerConnection:
             callback = parse_message_callback(frame)
             with _tenant_scope(self._ref.tenant_id):
                 reservation = await self._robot.reserve_message(context, callback)
+        logger.info(
+            "E+ callback admitted tenant_id={} msgid_hash={} elapsed_ms={:.1f}",
+            self._ref.tenant_id,
+            hashlib.sha256(callback.msg_id.encode()).hexdigest()[:12],
+            (time.monotonic() - admission_started) * 1000,
+        )
         with _tenant_scope(self._ref.tenant_id):
             await self._robot.handle_reserved_message(context, callback, reservation)
 

@@ -35,6 +35,8 @@ class MemoryStore:
         self.objects[object_key] = data
 
     async def get(self, *, object_key: str) -> bytes:
+        if object_key not in self.objects:
+            raise FileNotFoundError(object_key)
         return self.objects[object_key]
 
 
@@ -195,7 +197,7 @@ async def test_visual_ocr_and_no_capability_paths_materialize_from_object_storag
 
     no_capability, _, _ = _service(extractor=FakeExtractor(available=False))
     no_capability.store = service.store
-    unavailable = await no_capability.materialize(prepared.blocks, supports_vision=False, user_id=88)
+    unavailable = await no_capability.materialize(prepared.blocks, supports_vision=False, user_id=89)
     assert "无法理解图片" in unavailable[0]["text"]
 
 
@@ -220,3 +222,69 @@ async def test_mixed_blocks_keep_order_and_one_bad_image_does_not_drop_text():
     assert "无法读取图片" in content[1]["text"]
     assert content[2]["text"] == "after"
     assert len(prepared.errors) == 1
+
+
+async def test_successful_ocr_is_reused_by_another_service_without_reading_original_image():
+    class OnceExtractor(FakeExtractor):
+        async def extract(self, **kwargs):
+            self.available = False
+            return await super().extract(**kwargs)
+
+    service, _, store = _service(extractor=OnceExtractor(True))
+    with patch("bisheng.eplus.domain.services.media_service.decrypt_media", return_value=PNG):
+        prepared = await service.ingest_blocks(
+            tenant_id=9,
+            blocks=(EPlusContentBlock(EPlusContentKind.IMAGE, url="https://media.example/1", aes_key="key"),),
+            allowed_hosts=(),
+            ca_pem=None,
+        )
+    first = await service.materialize(prepared.blocks, supports_vision=False, user_id=88)
+    del store.objects[prepared.media_refs[0].object_key]
+    restarted = EPlusMediaService(downloader=service.downloader, store=store)
+    second = await restarted.materialize(prepared.blocks, supports_vision=False, user_id=88)
+
+    assert first == second == [{"type": "text", "text": "[图片文字]\nOCR result"}]
+
+
+async def test_failed_ocr_is_not_cached_and_can_succeed_on_retry():
+    class RetryExtractor(FakeExtractor):
+        attempts = 0
+
+        async def extract(self, **kwargs):
+            self.attempts += 1
+            if self.attempts == 1:
+                raise TimeoutError("OCR unavailable")
+            return await super().extract(**kwargs)
+
+    service, _, _ = _service(extractor=RetryExtractor(True))
+    with patch("bisheng.eplus.domain.services.media_service.decrypt_media", return_value=PNG):
+        prepared = await service.ingest_blocks(
+            tenant_id=9,
+            blocks=(EPlusContentBlock(EPlusContentKind.IMAGE, url="https://media.example/1", aes_key="key"),),
+            allowed_hosts=(),
+            ca_pem=None,
+        )
+    failed = await service.materialize(prepared.blocks, supports_vision=False, user_id=88)
+    retried = await service.materialize(prepared.blocks, supports_vision=False, user_id=88)
+
+    assert "文字提取失败" in failed[0]["text"]
+    assert retried == [{"type": "text", "text": "[图片文字]\nOCR result"}]
+
+
+async def test_optional_cache_write_failure_keeps_successful_ocr_text():
+    service, _, store = _service(extractor=FakeExtractor(True))
+    with patch("bisheng.eplus.domain.services.media_service.decrypt_media", return_value=PNG):
+        prepared = await service.ingest_blocks(
+            tenant_id=9,
+            blocks=(EPlusContentBlock(EPlusContentKind.IMAGE, url="https://media.example/1", aes_key="key"),),
+            allowed_hosts=(),
+            ca_pem=None,
+        )
+
+    async def unavailable_cache(**kwargs):
+        raise OSError("storage temporarily unavailable")
+
+    store.put = unavailable_cache
+    content = await service.materialize(prepared.blocks, supports_vision=False, user_id=88)
+
+    assert content == [{"type": "text", "text": "[图片文字]\nOCR result"}]

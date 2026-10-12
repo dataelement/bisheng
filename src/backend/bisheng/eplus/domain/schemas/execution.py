@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from bisheng.assistant.domain.schemas.execution import AssistantMessageContent, AssistantRobotScope
@@ -54,3 +55,6 @@ class EPlusTurnDelivery:
     space_ids: tuple[int, ...]
     history: tuple[EPlusHistoryTurn, ...]
     execution_token: str
+    reply_started_at: datetime | None = None
+    reply_status: str | None = None
+    reply_error_code: str | None = None
