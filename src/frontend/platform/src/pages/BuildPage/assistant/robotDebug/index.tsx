@@ -51,12 +51,12 @@ function RobotDebugSession({ assistantId }: RobotDebugSessionProps) {
             {debug.context.execution_mode === "ReAct" && <p className="text-sm text-muted-foreground">{t("build.robotDebug.reactNotice")}</p>}
             {!!debug.context.disabled_tools?.length && <p className="break-words text-sm text-muted-foreground">{t("build.robotDebug.disabledTools", { tools: debug.context.disabled_tools.join(", ") })}</p>}
           </>}
-          <div className="flex flex-wrap items-end gap-2">
+          {debug.context?.can_switch_user && <div className="flex flex-wrap items-end gap-2">
             <div><label htmlFor="robot-debug-user" className="mb-2 block text-sm">{t("build.robotDebug.testUser")}</label>
               <Input id="robot-debug-user" className="w-44" value={userId} inputMode="numeric" onChange={event => setUserId(event.target.value)} />
             </div>
             <Button variant="outline" disabled={!userValid || debug.busy || debug.loading} onClick={() => { setQuery(""); void debug.loadContext(Number(userId)); }}>{t("build.robotDebug.applyUser")}</Button>
-          </div>
+          </div>}
         </section>
         <div className="grid items-start gap-4 md:grid-cols-2">
           <section className="min-w-0 space-y-4 rounded-xl border bg-background p-4" aria-label={t("build.robotDebug.conversation")}>

@@ -39,10 +39,17 @@ class TestE2ERobotDebug:
             yield client, path, headers, context
 
     async def test_ac01_admin_and_ordinary_identity_are_paired(self, prepared):
-        """AC-01/09: Real authenticated context is permitted only to admins."""
+        """AC-01/09: Login permits self-debugging, only admins may impersonate."""
         client, path, _headers, context = prepared
         assert context["space_ids"] and context["test_user_id"] > 0
-        rejected = await client.get(path + "/context", headers=auth_headers(os.environ["E2E_F075_USER_TOKEN"]))
+        user_headers = auth_headers(os.environ["E2E_F075_USER_TOKEN"])
+        own = assert_resp_200(await client.get(path + "/context", headers=user_headers))
+        assert own["can_switch_user"] is False
+        assert own["test_user_id"] > 0
+        assert own["space_ids"] == context["space_ids"]
+        rejected = await client.get(
+            path + "/context", headers=user_headers, params={"test_user_id": own["test_user_id"] + 1}
+        )
         assert rejected.status_code == 403
         assert_resp_error(rejected, 403)
         anonymous = await client.get(DEBUG_BASE + "/status")

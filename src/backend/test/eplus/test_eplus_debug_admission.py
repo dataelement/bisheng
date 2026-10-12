@@ -35,13 +35,12 @@ class Reader:
 
 
 class Authorization:
-    async def require_admin(self, operator):
-        if not operator.admin:
+    async def require_login(self, operator):
+        if operator.user_id <= 0 or operator.tenant_id != 7:
             raise HTTPException(403)
 
-    async def require_assistant_edit(self, operator, assistant_id):
-        if not operator.edit:
-            raise HTTPException(403)
+    async def can_switch_user(self, operator):
+        return operator.admin
 
 
 def operator(**kwargs):
@@ -72,12 +71,25 @@ def test_history_limits_and_question_normalization():
         DebugRunRequest(query="hi", test_user_id=2, history=[DebugHistoryTurn(question="hi", answer="x" * 16000)] * 5)
 
 
-async def test_non_admin_and_missing_edit_are_denied():
+async def test_logged_in_user_without_edit_can_debug_as_self():
+    service = DebugAdmissionService(Authorization(), Reader(replace(snapshot(), test_user_id=1)))
+    value = await service.context(SimpleNamespace(user_id=1, tenant_id=7, admin=False, edit=False), "a", 1)
+    assert value.public_view()["test_user_id"] == 1
+    assert value.public_view()["can_switch_user"] is False
+
+
+async def test_non_admin_cannot_impersonate_another_user():
     service = DebugAdmissionService(Authorization(), Reader(snapshot()))
-    for admin, edit in [(False, True), (True, False)]:
-        with pytest.raises(HTTPException) as exc:
-            await service.context(SimpleNamespace(user_id=1, tenant_id=7, admin=admin, edit=edit), "a", 2)
-        assert exc.value.status_code == 403
+    with pytest.raises(HTTPException) as exc:
+        await service.context(SimpleNamespace(user_id=1, tenant_id=7, admin=False, edit=False), "a", 2)
+    assert exc.value.status_code == 403
+
+
+async def test_admin_without_edit_can_switch_test_user():
+    service = DebugAdmissionService(Authorization(), Reader(snapshot()))
+    value = await service.context(SimpleNamespace(user_id=1, tenant_id=7, admin=True, edit=False), "a", 2)
+    assert value.public_view()["test_user_id"] == 2
+    assert value.public_view()["can_switch_user"] is True
 
 
 @pytest.mark.parametrize(

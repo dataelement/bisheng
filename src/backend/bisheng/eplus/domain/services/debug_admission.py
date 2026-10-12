@@ -1,5 +1,6 @@
 """Read-only admission; caller-supplied space/model scopes are never accepted."""
 
+from dataclasses import replace
 from typing import Any, Protocol
 
 from fastapi import HTTPException
@@ -8,8 +9,8 @@ from bisheng.eplus.domain.schemas.debug import DebugContext
 
 
 class DebugAuthorization(Protocol):
-    async def require_admin(self, operator: Any) -> None: ...
-    async def require_assistant_edit(self, operator: Any, assistant_id: str) -> None: ...
+    async def require_login(self, operator: Any) -> None: ...
+    async def can_switch_user(self, operator: Any) -> bool: ...
 
 
 class DebugContextReader(Protocol):
@@ -43,7 +44,12 @@ class DebugAdmissionService:
         self.reader = reader
 
     async def context(self, operator: Any, assistant_id: str, test_user_id: int) -> DebugContext:
-        await self.authorization.require_admin(operator)
-        await self.authorization.require_assistant_edit(operator, assistant_id)
+        await self.authorization.require_login(operator)
+        can_switch_user = await self.authorization.can_switch_user(operator)
+        if test_user_id != operator.user_id and not can_switch_user:
+            raise HTTPException(403, "only administrators may switch test users")
         snapshot = await self.reader.load_context(assistant_id, test_user_id, operator.user_id)
-        return validate_debug_context(snapshot, operator, assistant_id, test_user_id)
+        return replace(
+            validate_debug_context(snapshot, operator, assistant_id, test_user_id),
+            can_switch_user=can_switch_user,
+        )

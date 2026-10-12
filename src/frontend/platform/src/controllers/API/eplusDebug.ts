@@ -11,6 +11,7 @@ export type DebugContext = {
   space_ids: number[];
   spaces: { id: number; name: string }[];
   scope_version: number;
+  can_switch_user: boolean;
   execution_mode?: string;
   model_name?: string;
   disabled_tools?: string[];

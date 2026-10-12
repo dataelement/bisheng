@@ -43,6 +43,7 @@ class DebugContext:
     robot_scope: AssistantRobotScope
     bot_id: str
     spaces: tuple[dict, ...]
+    can_switch_user: bool = False
 
     def public_view(self) -> dict:
         return {
@@ -56,4 +57,5 @@ class DebugContext:
             "space_ids": list(self.robot_scope.space_ids),
             "spaces": list(self.spaces),
             "scope_version": self.robot_scope.scope_version,
+            "can_switch_user": self.can_switch_user,
         }

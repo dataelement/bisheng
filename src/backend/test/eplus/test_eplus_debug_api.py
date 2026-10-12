@@ -3,6 +3,7 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from types import SimpleNamespace
 
 from fastapi import FastAPI
@@ -28,12 +29,12 @@ class Runtime:
         yield "two"
 
 
-def client(runtime=None, admin=True):
+def client(runtime=None, admin=True, test_user_id=2):
     app = FastAPI()
-    service = DebugAdmissionService(Authorization(), Reader(snapshot()))
+    service = DebugAdmissionService(Authorization(), Reader(replace(snapshot(), test_user_id=test_user_id)))
     app.include_router(create_debug_router(lambda: service, runtime or Runtime(), Gate()))
     app.dependency_overrides[UserPayload.get_login_user] = lambda: SimpleNamespace(
-        user_id=1, tenant_id=7, admin=admin, edit=True
+        user_id=1, tenant_id=7, admin=admin, edit=False
     )
     return TestClient(app)
 
@@ -46,6 +47,17 @@ def test_http_rejects_scope_expansion_and_non_admin():
         == 422
     )
     assert client(admin=False).get("/robot-debug/api/assistants/a/context?test_user_id=2").status_code == 403
+
+
+def test_logged_in_non_admin_can_get_status_context_and_run_as_self():
+    app = client(admin=False, test_user_id=1)
+    assert app.get("/robot-debug/api/status").status_code == 200
+    context = app.get("/robot-debug/api/assistants/a/context")
+    assert context.status_code == 200
+    assert context.json()["data"]["can_switch_user"] is False
+    response = app.post("/robot-debug/api/assistants/a/run", json={"query": "hi", "test_user_id": 1})
+    assert response.status_code == 200
+    assert '"type": "completed"' in response.text
 
 
 def test_cross_origin_run_is_rejected_before_execution():

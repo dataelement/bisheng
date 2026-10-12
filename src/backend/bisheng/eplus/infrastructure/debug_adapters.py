@@ -10,20 +10,20 @@ from bisheng.database.models.tenant import UserTenantDao
 from bisheng.eplus.domain.repositories.eplus_repository import EPlusConfigRepository
 from bisheng.eplus.domain.schemas.debug import DebugContext
 from bisheng.eplus.infrastructure.config_adapters import SqlSpaceReader
-from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.user.domain.models.user import UserDao
 
 
 class PlatformDebugAuthorization:
-    async def require_admin(self, operator):
+    async def require_login(self, operator):
+        if not operator.user_id or int(operator.user_id) <= 0:
+            raise HTTPException(401, "login required")
         tenant_id = get_current_tenant_id()
         if tenant_id is None or int(tenant_id) != int(operator.tenant_id):
             raise HTTPException(403, "debug tenant mismatch")
-        if not operator.is_global_super and not await check_tenant_admin(operator.user_id, int(tenant_id)):
-            raise HTTPException(403, "robot debug requires an administrator")
 
-    async def require_assistant_edit(self, operator, assistant_id):
-        await require_business_action(operator, resource_type="assistant", resource_id=assistant_id, action="edit")
+    async def can_switch_user(self, operator):
+        await self.require_login(operator)
+        return bool(operator.is_global_super or await check_tenant_admin(operator.user_id, int(operator.tenant_id)))
 
 
 class PlatformDebugReader:

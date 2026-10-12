@@ -22,7 +22,7 @@ def create_debug_router(service_provider, runtime, admission_gate) -> APIRouter:
 
     @router.get("/status")
     async def status(operator=Depends(UserPayload.get_login_user), service=Depends(service_provider)):
-        await service.authorization.require_admin(operator)
+        await service.authorization.require_login(operator)
         return resp_200({"enabled": True})
 
     @router.get("/assistants/{assistant_id}/context")

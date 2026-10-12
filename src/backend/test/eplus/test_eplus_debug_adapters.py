@@ -9,6 +9,33 @@ from fastapi import HTTPException
 from bisheng.eplus.infrastructure import debug_adapters as module
 
 
+async def test_login_admission_allows_non_admin_without_resource_edit(monkeypatch):
+    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
+    monkeypatch.setattr(module, "check_tenant_admin", AsyncMock(return_value=False))
+    authorization = module.PlatformDebugAuthorization()
+    operator = SimpleNamespace(user_id=1, tenant_id=7, is_global_super=False)
+    await authorization.require_login(operator)
+    assert await authorization.can_switch_user(operator) is False
+
+
+@pytest.mark.parametrize("tenant_id,user_id", [(8, 1), (7, 0)])
+async def test_login_admission_rejects_invalid_identity(monkeypatch, tenant_id, user_id):
+    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
+    with pytest.raises(HTTPException) as error:
+        await module.PlatformDebugAuthorization().require_login(
+            SimpleNamespace(user_id=user_id, tenant_id=tenant_id, is_global_super=False)
+        )
+    assert error.value.status_code in (401, 403)
+
+
+@pytest.mark.parametrize("global_super,tenant_admin", [(True, False), (False, True)])
+async def test_only_admin_can_switch_test_identity(monkeypatch, global_super, tenant_admin):
+    monkeypatch.setattr(module, "get_current_tenant_id", lambda: 7)
+    monkeypatch.setattr(module, "check_tenant_admin", AsyncMock(return_value=tenant_admin))
+    operator = SimpleNamespace(user_id=1, tenant_id=7, is_global_super=global_super)
+    assert await module.PlatformDebugAuthorization().can_switch_user(operator) is True
+
+
 @pytest.mark.parametrize(
     "user,membership",
     [
