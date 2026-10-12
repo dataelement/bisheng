@@ -41,6 +41,14 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         const { appConfig } = useContext(locationContext);
         const securityRef = useRef<any>(null);
 
+        // Shown as a placeholder only: a prefilled value was submitted unchanged and became the assistant's prompt
+        const assistantDescExample = `${t('build.example', { ns: 'bs' })}：
+${t('build.exampleOne', { ns: 'bs' })}
+${t('build.exampleTwo', { ns: 'bs' })}
+1. XX
+2. XX
+3. …`;
+
         const [appId, setAppId] = useState<string>('');
         const [errors, setErrors] = useState<any>({});
 
@@ -51,12 +59,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                 setFormData({
                     url: '',
                     name: '',
-                    desc: AppType.ASSISTANT === type ? `${t('build.example', { ns: 'bs' })}：
-${t('build.exampleOne', { ns: 'bs' })}
-${t('build.exampleTwo', { ns: 'bs' })}
-1. XX
-2. XX
-3. …` : '',
+                    desc: '',
                 });
                 if (tempId) {
                     handleSelectTemplate(type, tempId);
@@ -260,7 +263,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             <Textarea
                                 id="desc"
                                 name="desc"
-                                placeholder={appType === AppType.ASSISTANT ? t('build_forExample') : t('enterWorkflowDescription')}
+                                placeholder={appType === AppType.ASSISTANT ? assistantDescExample : t('enterWorkflowDescription')}
                                 maxLength={1000}
                                 className="mt-3 min-h-32 pt-3"
                                 value={formData.desc}
