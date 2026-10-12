@@ -111,3 +111,10 @@ def test_create_assistant_no_longer_calls_the_model():
 
     source = inspect.getsource(AssistantService.create_assistant)
     assert "AssistantAgent" not in source and "get_auto_info" not in source
+
+
+def test_create_request_accepts_an_empty_role():
+    from bisheng.api.v1.schemas import AssistantCreateReq
+
+    assert AssistantCreateReq(name="a", logo="").prompt == ""
+    assert AssistantCreateReq(name="a", prompt="翻译助手", logo="").prompt == "翻译助手"

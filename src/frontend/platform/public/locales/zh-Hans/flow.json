@@ -21,7 +21,6 @@
   "templateManagementDescription": "应用模板管理，模板对所有用户可见，支持拖拽排序、删除操作",
   "maxNameLengthAssistant": "名称最多50个字符",
   "maxNameLengthWorkflow": "工作流名称不可超过 50 字",
-  "minDescLengthAssistant": "为了更好的助手效果，描述需要大于20 个字",
   "edit": "编辑",
   "create": "创建",
   "name": "工作流名称",

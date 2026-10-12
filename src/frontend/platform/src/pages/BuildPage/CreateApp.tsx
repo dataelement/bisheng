@@ -104,9 +104,6 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                 case 'name':
                     if (value.length > 50) return AppType.ASSISTANT === appType ? t('maxNameLengthAssistant') : t('maxNameLengthWorkflow');
                     return '';
-                case 'desc':
-                    if (AppType.ASSISTANT === appType && value.length < 20) return t('minDescLengthAssistant');
-                    return '';
                 default:
                     return '';
             }
