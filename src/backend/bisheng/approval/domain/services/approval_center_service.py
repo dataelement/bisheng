@@ -563,7 +563,7 @@ class ApprovalCenterService:
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:
                 task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.utcnow()
+                task.acted_at = datetime.now()
                 await ApprovalInstanceRepository.update_task(task)
 
         instance.status = ApprovalInstanceStatus.CANCELLED
