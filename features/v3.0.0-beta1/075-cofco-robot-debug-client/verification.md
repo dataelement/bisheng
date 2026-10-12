@@ -386,3 +386,15 @@ FAILED test/workstation/test_conversation_export_service.py::test_load_happy_pat
 - 未运行前端测试/构建；未部署，未打tag。合并手册新增F075独立进程/显式开关保留检查。
 
 本次临时日志：`/private/tmp/f075-merge-base.log`、`/private/tmp/f075-merged-backend.log`、`/private/tmp/f075-merged-focused.log`。
+
+## 2026-10-12 文件名命中后的正文补查修复
+
+修复前在105授权复现：同一助手、deepseek-v4-pro、无历史，问题「深圳市医学研究 大概是什么内容」被模型传入 `file_name_query="深圳市 医学研究"`；工具只返回文件718、空间130，正文片段0个，模型未再检索正文。此记录只证明旧版本根因，不是新版本现场验收。
+
+本次基于 `2af37f487` 在原分支修改：文件名匹配不提前返回、不限制主题正文检索；全绑定空间召回后，只给缺少有效正文的命中文件按空间批量补查，保留过滤、来源复核、去重、统一排序与预算。明确完整文件名的精确约束仍保留。没有修改普通助手、表或迁移，也没有修改105部署和页面提示词。
+
+- TDD：旧实现新增/改写的7项测试按预期失败；修复后检索策略19项通过。
+- 机器人及助手相关回归：291 passed；Ruff、架构守卫、diff检查通过。独立代码审查无遗留问题。
+- 广覆盖后端：6609 passed、297 failed、22 errors、67 skipped、6 deselected；与修复前 `/private/tmp/robot-retrieval-full.xml` 的319项失败/错误身份双向差集为空。各失败/错误名称同本文既有基线清单，不声明整体后端通过。
+- 新全量证据：`/private/tmp/robot-body-supplement-full.log`、`/private/tmp/robot-body-supplement-full.xml`。
+- 环境E2E：4 skipped，因未配置授权测试环境参数；真实模型效果和Milvus/ES现场联调仍待部署后验收。无前端变更，未执行前端测试/构建。

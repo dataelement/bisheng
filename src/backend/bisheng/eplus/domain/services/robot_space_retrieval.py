@@ -18,6 +18,7 @@ from pydantic import Field
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
 from bisheng.eplus.domain.schemas.knowledge import RobotFileSource, RobotKnowledgeInput
+from bisheng.eplus.domain.services.knowledge_result import robot_document_body
 from bisheng.eplus.domain.services.retrieval_ranking import rank_robot_candidates, trim_robot_candidates
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.utils.async_utils import run_async_safe
@@ -106,19 +107,17 @@ class RobotSpaceRetrievalPolicy:
         if not space_ids:
             return []
 
+        filename_matches = {}
         if file_name_query is not None:
             keywords = tuple(dict.fromkeys(file_name_query.split()))
             if not keywords or file_name is not None:
                 raise ValueError("filename keywords must be nonblank and exclusive of exact filename")
-            matches = await self.document_state_reader.search_file_sources(
+            filename_matches = await self.document_state_reader.search_file_sources(
                 tenant_id=self.tenant_id, space_ids=space_ids, keywords=keywords
             )
-            logger.info("E+ filename search bot={} spaces={} matched={}", self.bot_config_id, space_ids, len(matches))
-            if matches:
-                return [
-                    Document(page_content="", metadata={**_source_metadata(source), "source_only": True})
-                    for source in matches.values()
-                ]
+            logger.info(
+                "E+ filename search bot={} spaces={} matched={}", self.bot_config_id, space_ids, len(filename_matches)
+            )
 
         matched_sources = None
         if file_name is not None:
@@ -157,12 +156,47 @@ class RobotSpaceRetrievalPolicy:
 
         file_ids = {_document_id(doc) for doc in candidates}
         file_ids.discard(None)
-        sources = await self.document_state_reader.file_sources(
-            tenant_id=self.tenant_id,
-            space_ids=space_ids,
-            file_ids=set(matched_sources) if matched_sources is not None else {int(file_id) for file_id in file_ids},
-            file_name=file_name,
-        )
+        source_options = {
+            "tenant_id": self.tenant_id,
+            "space_ids": space_ids,
+            "file_ids": set(matched_sources) if matched_sources is not None else file_ids | set(filename_matches),
+            "file_name": file_name,
+        }
+        sources = await self.document_state_reader.file_sources(**source_options)
+
+        # Filename matches supplement, never narrow, a topic's full-scope recall.
+        # Only files without any valid body need another index query. Batch them
+        # per space, and discard any out-of-filter hit before the final DB check.
+        body_ids = {
+            _document_id(doc)
+            for doc in candidates
+            if _document_id(doc) in sources and robot_document_body(doc.page_content)
+        }
+        missing_ids = set(filename_matches) & set(sources) - body_ids
+        supplemented = False
+        for space_id in space_ids:
+            selected_ids = tuple(sorted(fid for fid in missing_ids if sources[fid].space_id == space_id))
+            if not selected_ids:
+                continue
+            documents = await self.retrieval_backend.retrieve_space(
+                space_id=space_id,
+                tenant_id=self.tenant_id,
+                query=query,
+                invoke_user_id=self.invoke_user_id,
+                max_content=max_content,
+                sort_by_source_and_index=False,
+                file_ids=selected_ids,
+            )
+            supplemented = True
+            recalled[space_id] = recalled.get(space_id, 0) + len(documents)
+            for rank, doc in enumerate(documents, 1):
+                if _document_id(doc) in selected_ids:
+                    candidates.append(
+                        Document(page_content=doc.page_content, metadata={"robot_recall_rank": rank, **doc.metadata})
+                    )
+        if supplemented:
+            # A file can be deleted/moved while its supplemental query runs.
+            sources = await self.document_state_reader.file_sources(**source_options)
 
         result: list[Document] = []
         seen: set[tuple[int, int, str]] = set()
@@ -171,7 +205,10 @@ class RobotSpaceRetrievalPolicy:
             if file_id is None or file_id not in sources:
                 continue
             metadata = dict(document.metadata or {})
-            key = (file_id, int(metadata.get("chunk_index") or 0), document.page_content)
+            body = robot_document_body(document.page_content)
+            if not body:
+                continue
+            key = (file_id, int(metadata.get("chunk_index") or 0), body)
             if key in seen:
                 continue
             seen.add(key)
@@ -190,10 +227,10 @@ class RobotSpaceRetrievalPolicy:
             retained,
             sum(len(doc.page_content) for doc in result),
         )
-        if matched_sources is not None:
+        if matched_sources is not None or filename_matches:
             retrieved_ids = {_document_id(doc) for doc in result}
             for file_id, source in sources.items():
-                if file_id not in retrieved_ids:
+                if file_id not in retrieved_ids and (matched_sources is not None or file_id in filename_matches):
                     result.append(Document(page_content="", metadata={**_source_metadata(source), "source_only": True}))
         return result
 
@@ -217,8 +254,8 @@ class RobotSpaceRetrievalPolicy:
             description=(
                 "检索机器人可用知识空间中的文档内容, 或核实具体文件的归属。"
                 "用户指定完整文件名时必须传 file_name, 仅查询该文件, 不用其他文件代替。"
-                "用户问某主题有哪些文件时, 传 file_name_query 为主题关键词(多词用空格分隔), 优先按真实文件名查找;"
-                "文件名未命中时回退正文检索。具体内容问答不传 file_name_query。"
+                "需要按主题查找文件时, 可传 file_name_query 为主题关键词(多词用空格分隔), 补充真实文件名匹配;"
+                "仍检索全部可用空间正文, 并给文件名命中但缺少正文的文件补查内容, 不用再调用一次工具才能读正文。"
                 "sources 是后台核实的文件归属, chunks 仅是相关正文, 正文中的名称和编号不是来源。"
                 "只能说明本次命中的文件, 不能列出空间完整目录或推断部门归属; 未命中不代表不存在。"
             ),

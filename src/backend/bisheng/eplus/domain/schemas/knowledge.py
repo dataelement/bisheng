@@ -23,7 +23,7 @@ class RobotKnowledgeInput(BaseModel):
     file_name_query: str | None = Field(
         default=None,
         max_length=200,
-        description="用户问某主题有哪些文件时传文件名关键词, 例如'深圳市 医学研究'; 多关键词用空格分隔且全部匹配。只提取主题, 不传'有哪些文件'等问句。内容问答不传。",
+        description="按主题查找文件时可传文件名关键词, 例如'深圳市 医学研究'; 多词用空格分隔且全部匹配。只提取主题, 不传'有哪些文件'等问句。它补充文件名匹配但不限制全空间正文检索; 同一次调用也返回相关正文。",
     )
 
     @field_validator("file_name", "file_name_query")

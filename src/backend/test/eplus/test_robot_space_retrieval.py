@@ -48,12 +48,17 @@ class FakeRetrievalBackend:
         self.on_retrieve = on_retrieve
         self.calls: list[int] = []
         self.file_filters: dict[int, tuple[int, ...] | None] = {}
+        self.requests: list[tuple[int, tuple[int, ...] | None]] = []
+        self.supplement_docs_by_space: dict[int, list[Document]] = {}
 
     async def retrieve_space(self, *, space_id: int, query: str, invoke_user_id: int, **kwargs) -> list[Document]:
         self.calls.append(space_id)
         self.file_filters[space_id] = kwargs.get("file_ids")
+        self.requests.append((space_id, kwargs.get("file_ids")))
         if self.on_retrieve:
             self.on_retrieve()
+        if kwargs.get("file_ids") is not None and space_id in self.supplement_docs_by_space:
+            return self.supplement_docs_by_space[space_id]
         return self.docs_by_space.get(space_id, [])
 
 
@@ -193,12 +198,88 @@ async def test_exact_source_is_available_without_vector_hits_but_not_invented_co
     assert result[0].page_content == ""
 
 
-async def test_filename_keyword_search_returns_authoritative_sources_without_loading_bodies():
+async def test_filename_keyword_search_preserves_sources_when_body_is_unavailable():
     policy, scope, backend, _ = _policy(spaces=(11, 12), docs_by_space={}, valid_ids={100, 102})
     result = await policy.retrieve("有哪些文件", file_name_query="file-102", expected_scope=scope)
     assert [(d.metadata["document_id"], d.metadata["knowledge_id"]) for d in result] == [(102, 12)]
     assert all(d.metadata["source_only"] and d.page_content == "" for d in result)
-    assert backend.calls == []
+    assert backend.requests == [(11, None), (12, None), (12, (102,))]
+
+
+async def test_filename_match_does_not_skip_other_spaces_relevant_bodies():
+    policy, scope, backend, _ = _policy(
+        spaces=(11, 12),
+        docs_by_space={
+            11: [_doc(100, 11, text="医学研究项目的申请条件")],
+            12: [_doc(102, 12, text="指南的医学研究内容")],
+        },
+        valid_ids={100, 102},
+    )
+    result = await policy.retrieve("医学研究大概是什么内容", file_name_query="file-102", expected_scope=scope)
+    assert {d.metadata["document_id"] for d in result} == {100, 102}
+    assert all(d.page_content and not d.metadata.get("source_only") for d in result)
+    assert backend.requests == [(11, None), (12, None)]
+
+
+async def test_missing_filename_body_is_supplemented_without_losing_unrelated_name_content():
+    policy, scope, backend, _ = _policy(
+        spaces=(11, 12), docs_by_space={11: [_doc(100, 11, text="医学研究的内容")], 12: []}, valid_ids={100, 102}
+    )
+    backend.supplement_docs_by_space = {12: [_doc(102, 12, text="医学研究申请指南的正文")]}
+    result = await policy.retrieve("医学研究大概是什么内容", file_name_query="file-102", expected_scope=scope)
+    assert {d.metadata["document_id"] for d in result} == {100, 102}
+    assert next(d for d in result if d.metadata["document_id"] == 102).page_content == "医学研究申请指南的正文"
+    assert backend.requests == [(11, None), (12, None), (12, (102,))]
+
+
+async def test_empty_ingestion_wrapper_does_not_prevent_body_supplement():
+    policy, scope, backend, _ = _policy(
+        spaces=(11,),
+        docs_by_space={
+            11: [_doc(100, 11, text="{<file_title>file-100.pdf</file_title><paragraph_content></paragraph_content>}")]
+        },
+        valid_ids={100},
+    )
+    backend.supplement_docs_by_space = {11: [_doc(100, 11, text="医学研究正文")]}
+    result = await policy.retrieve("医学研究", file_name_query="file-100", expected_scope=scope)
+    assert [d.page_content for d in result] == ["医学研究正文"]
+    assert backend.requests == [(11, None), (11, (100,))]
+
+
+async def test_supplement_is_postfiltered_and_cannot_add_wrong_file_or_unbound_space():
+    policy, scope, backend, _ = _policy(spaces=(11,), docs_by_space={}, valid_ids={100, 101, 999})
+    backend.supplement_docs_by_space = {11: [_doc(100, 11), _doc(101, 11), _doc(999, 99)]}
+    result = await policy.retrieve("内容", file_name_query="file-100", expected_scope=scope)
+    assert [d.metadata["document_id"] for d in result] == [100]
+    assert result[0].page_content
+    assert not result[0].metadata.get("source_only")
+    assert backend.requests == [(11, None), (11, (100,))]
+
+
+async def test_missing_filename_bodies_are_batched_per_space_and_keep_sources_after_budget():
+    policy, scope, backend, _ = _policy(spaces=(11,), docs_by_space={}, valid_ids={100, 101})
+    backend.supplement_docs_by_space = {11: [_doc(100, 11, text="医学研究正文"), _doc(101, 11, text="项目说明")]}
+    result = await policy.retrieve("医学研究", file_name_query="file-", expected_scope=scope, max_content=4)
+    assert {d.metadata["document_id"] for d in result} == {100, 101}
+    assert sum(len(d.page_content) for d in result) == 4
+    assert backend.requests == [(11, None), (11, (100, 101))]
+
+
+async def test_equal_body_with_different_index_wrappers_is_not_returned_twice():
+    policy, scope, _, _ = _policy(
+        spaces=(11,),
+        docs_by_space={
+            11: [
+                _doc(100, 11, text="医学研究正文"),
+                _doc(
+                    100, 11, text="{<file_title>旧名字</file_title><paragraph_content>医学研究正文</paragraph_content>}"
+                ),
+            ]
+        },
+        valid_ids={100},
+    )
+    result = await policy.retrieve("医学研究", file_name_query="file-100", expected_scope=scope)
+    assert [d.page_content for d in result] == ["医学研究正文"]
 
 
 async def test_no_filename_match_falls_back_to_content_recall_without_inventing_sources():
