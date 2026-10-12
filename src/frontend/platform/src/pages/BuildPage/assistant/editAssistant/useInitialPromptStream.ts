@@ -20,6 +20,8 @@ export function streamErrorMessage(event: StreamEndEvent): string {
  * Streams the optimized prompt of a newly created assistant straight into the
  * portrait panel, then fills its (still empty) opening lines and questions.
  * Tool and skill selection is left to the manual auto-optimization dialog.
+ * Returns whether the prompt is still streaming (panel read-only) and whether
+ * any generation is still running (opening lines continue after the prompt).
  */
 export function useInitialPromptStream(enabled: boolean) {
     const { toast } = useToast()
@@ -27,6 +29,7 @@ export function useInitialPromptStream(enabled: boolean) {
     const prompt = useAssistantStore((state) => state.assistantState.prompt)
     const dispatchAssistant = useAssistantStore((state) => state.dispatchAssistant)
     const [streaming, setStreaming] = useState(false)
+    const [promptStreaming, setPromptStreaming] = useState(false)
     const sourceRef = useRef<EventSource | null>(null)
     const startedRef = useRef(false)
 
@@ -37,6 +40,7 @@ export function useInitialPromptStream(enabled: boolean) {
 
         const start = async () => {
             setStreaming(true)
+            setPromptStreaming(true)
             const res = await getAssistantOptimizeTaskApi(String(id), originalPrompt) as unknown as { task_id: string }
             const source = new EventSource(`${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?task_id=${res.task_id}`)
             sourceRef.current = source
@@ -44,6 +48,7 @@ export function useInitialPromptStream(enabled: boolean) {
             const finish = () => {
                 source.close()
                 setStreaming(false)
+                setPromptStreaming(false)
             }
 
             source.onmessage = (event) => {
@@ -64,7 +69,11 @@ export function useInitialPromptStream(enabled: boolean) {
                         finish()
                         break
                     case 'end':
-                        if (!data.message) break
+                        // The first clean end closes the prompt; the user may edit it while the opening lines generate
+                        if (!data.message) {
+                            setPromptStreaming(false)
+                            break
+                        }
                         // The prompt is replaced only once generation succeeded; keep what the user wrote
                         if (!generated.trim()) dispatchAssistant('setPrompt', { prompt: originalPrompt })
                         toast({ title: t('tip'), variant: 'error', description: streamErrorMessage(data) })
@@ -77,10 +86,13 @@ export function useInitialPromptStream(enabled: boolean) {
                 finish()
             }
         }
-        start().catch(() => setStreaming(false))
+        start().catch(() => {
+            setStreaming(false)
+            setPromptStreaming(false)
+        })
     }, [enabled, id, prompt, dispatchAssistant, toast])
 
     useEffect(() => () => sourceRef.current?.close(), [])
 
-    return streaming
+    return { streaming, promptStreaming }
 }

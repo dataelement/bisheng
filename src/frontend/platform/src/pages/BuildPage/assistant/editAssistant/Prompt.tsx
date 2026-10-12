@@ -22,7 +22,7 @@ export default function Prompt({ canEdit = false }) {
     useEffect(() => {
         delete window.assistantCreate
     }, [])
-    const streaming = useInitialPromptStream(isNew && canEdit)
+    const { streaming, promptStreaming } = useInitialPromptStream(isNew && canEdit)
 
     return <div className="w-[50%] h-full bg-background-login shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
@@ -39,7 +39,7 @@ export default function Prompt({ canEdit = false }) {
             className="h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"
             value={assistantState.prompt}
             placeholder={t('prompt')}
-            disabled={!canEdit || streaming}
+            disabled={!canEdit || promptStreaming}
             onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
         ></Textarea>
     </div>
