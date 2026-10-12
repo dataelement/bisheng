@@ -16,7 +16,6 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { FileChangePreviewPage } from "./FileChangePreviewPage";
 import FilePreviewPage from "./FilePreviewPage";
-import { PreviewDiagnostics } from "./PreviewDiagnostics";
 
 interface FilePreviewDrawerProps {
     open: boolean;
@@ -64,15 +63,8 @@ export function FilePreviewDrawer({
 
     return (
         <Sheet open={open && !!(fileId || changeRequestId)} onOpenChange={onOpenChange}>
-            <PreviewDiagnostics open={open} fileId={fileId || changeRequestId} spaceId={spaceId} />
             <SheetContent
                 data-preview-file-drawer
-                onInteractOutside={event => {
-                    const target = event.detail.originalEvent.target;
-                    if (target instanceof Element && target.closest('[data-preview-diagnostics]')) {
-                        event.preventDefault();
-                    }
-                }}
                 side="right"
                 hideClose
                 className={cn(
