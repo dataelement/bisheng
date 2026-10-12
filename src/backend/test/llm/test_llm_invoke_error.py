@@ -110,7 +110,6 @@ def test_assistant_agent_auto_calls_raise_llm_invoke_error():
     agent.assistant = SimpleNamespace(name="a", prompt="p")
 
     for call in (
-        lambda: agent.generate_description("p"),
         lambda: agent.generate_guide("p"),
         lambda: agent.choose_tools([{"name": "t", "description": ""}], "p"),
     ):
@@ -131,4 +130,8 @@ async def test_assistant_prompt_optimization_stream_raises_llm_invoke_error():
 
     with pytest.raises(LlmInvokeError):
         async for _ in agent.optimize_assistant_prompt():
+            pass
+
+    with pytest.raises(LlmInvokeError):
+        async for _ in agent.astream_description("p"):
             pass

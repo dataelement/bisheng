@@ -39,12 +39,11 @@ from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (
-    generate_breif_description,
     generate_opening_dialog,
     optimize_assistant_prompt,
 )
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
-from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
+from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT, BREIF_DES_PROMPT
 
 
 class AssistantCitationToolWrapper(BaseTool):
@@ -464,10 +463,12 @@ class AssistantAgent(AssistantUtils):
             logger.exception("assistant guide generation failed")
             raise to_llm_invoke_error(self.llm, e) from e
 
-    def generate_description(self, prompt: str):
-        """Generate description dialog"""
+    async def astream_description(self, prompt: str):
+        """Stream a short assistant description generated from its prompt"""
+        chain = BREIF_DES_PROMPT | self.llm
         try:
-            return generate_breif_description(self.llm, prompt)
+            async for one in chain.astream({"description": prompt}):
+                yield one.content
         except Exception as e:
             logger.exception("assistant description generation failed")
             raise to_llm_invoke_error(self.llm, e) from e

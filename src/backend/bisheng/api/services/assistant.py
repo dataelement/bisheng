@@ -366,8 +366,8 @@ class AssistantService(BaseService, AssistantUtils):
                     assistant.model_name = str(one.model_id)
                     break
 
-        # Autogenerate Descriptions
-        assistant, _, _ = await cls.get_auto_info(assistant, login_user)
+        # The description is generated afterwards by the config page (description_stream),
+        # so a slow or unreachable model neither delays nor fails creation.
         assistant = AssistantDao.create_assistant(assistant)
 
         # RecordTelemetryJournal
@@ -716,19 +716,34 @@ class AssistantService(BaseService, AssistantUtils):
         return False
 
     @classmethod
-    async def get_auto_info(cls, assistant: Assistant, login_user: UserPayload) -> (Assistant, list[int], list[int]):
-        """
-        Auto Generate Assistant'sprompt, Automatically select tools and skills
-        return: Assistant Information, ToolsIDList, SkillsIDVertical
-        """
-        # Inisialisasiagent
+    async def description_stream(cls, assistant_id: str, login_user: UserPayload):
+        """Stream an auto-generated description, then store it if the assistant still has none."""
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
+        if not assistant:
+            raise AssistantNotExistsError()
+        await cls.check_update_permission_async(assistant, login_user)
+        if assistant.desc or not assistant.prompt:
+            return
+
         auto_agent = AssistantAgent(assistant, "", login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
-        # Autogenerate Descriptions
-        assistant.desc = auto_agent.generate_description(assistant.prompt)
+        desc = ""
+        async for chunk in auto_agent.astream_description(assistant.prompt):
+            if not chunk:
+                continue
+            desc += chunk
+            yield str(StreamData(event="message", data={"type": "description", "message": chunk}))
 
-        return assistant, [], []
+        desc = desc.strip()
+        if not desc:
+            return
+        current = await AssistantDao.aget_one_assistant(assistant_id)
+        # A save while streaming stores a prefix of this text, which is completed here;
+        # any other value is the owner's own description and is left alone.
+        if current and desc.startswith((current.desc or "").strip()):
+            current.desc = desc
+            AssistantDao.update_assistant(current)
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> list[GptsTools]:

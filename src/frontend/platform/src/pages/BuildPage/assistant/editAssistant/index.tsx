@@ -10,7 +10,7 @@ import { checkAppEditPermission } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAssistantStore } from "@/store/assistantStore";
 import { OnlineState } from "@/types/flow";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { useBlocker, useNavigate, useParams } from "react-router-dom";
@@ -18,8 +18,9 @@ import Header from "./Header";
 import Prompt from "./Prompt";
 import Setting from "./Setting";
 import TestChat from "./TestChat";
+import { useAutoDescription } from "./useAutoDescription";
 
-export default function editAssistant() {
+export default function EditAssistant() {
     const { t } = useTranslation()
     const { id: assisId } = useParams()
     const navigate = useNavigate()
@@ -33,6 +34,9 @@ export default function editAssistant() {
     const assistantId = assisId ? String(assisId) : ''
     const { actions } = useResourceActions('assistant', assistantId ? [assistantId] : [], ['edit'])
     const canEdit = assistantId ? hasResourceAction(actions, assistantId, 'edit') : false
+    // Read once on mount: Prompt clears this flag after it opens the optimization dialog
+    const isNewRef = useRef(Boolean(window.assistantCreate))
+    useAutoDescription(isNewRef.current && canEdit && !checking)
 
     const flowInit = async () => {
         await checkAppEditPermission(assisId, 5)
