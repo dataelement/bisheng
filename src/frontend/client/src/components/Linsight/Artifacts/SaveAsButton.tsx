@@ -205,7 +205,15 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className }
     }
 
     return (
-        <>
+        <span
+            className="contents"
+            // The knowledge picker and dropdown content render through portals,
+            // but React events still bubble through this component tree. Keep
+            // those interactions inside the save-as control so a surrounding
+            // clickable file row never treats them as a preview request.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+        >
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
                 {/* Shared ActionMenu chrome — same panel as the sidebar convo menu
@@ -271,6 +279,6 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className }
                     onSyncSelect={saveTo}
                 />
             )}
-        </>
+        </span>
     );
 }
