@@ -1171,7 +1171,16 @@ export const copyText = (text: string | HTMLElement) => {
   areaDom.value = text;
   document.body.appendChild(areaDom);
 
-  return copyTextInDom(areaDom).then((str) => {
+  // Selecting the textarea as a node makes Chrome serialize it with a newline
+  // on each side, so a copied API key pastes as "\n<key>\n". Write the exact
+  // string in the copy event instead of relying on the selection's text.
+  const handleCopy = (e: ClipboardEvent) => {
+    e.clipboardData?.setData('text/plain', text);
+    e.preventDefault();
+  };
+  document.addEventListener('copy', handleCopy);
+  return copyTextInDom(areaDom).then(() => {
+    document.removeEventListener('copy', handleCopy);
     document.body.removeChild(areaDom);
   })
 };
