@@ -102,8 +102,8 @@ class ContainerExecutor(LocalExecutor):
         # Same library list as local mode; skills/ is visible because copy-in
         # happens at run() (AC-04 / AC-11), unlike the frozen E2B snapshot.
         if "skills/" not in LOCAL_DESCRIPTION:
-            return LOCAL_DESCRIPTION + path_namespace_rules(include_skills=True)
-        return LOCAL_DESCRIPTION
+            return LOCAL_DESCRIPTION + path_namespace_rules(include_skills=True) + self.kb_stage_hint()
+        return LOCAL_DESCRIPTION + self.kb_stage_hint()
 
     def execute_code(
         self,

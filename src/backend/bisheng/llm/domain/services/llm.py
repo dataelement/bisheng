@@ -61,7 +61,7 @@ from bisheng.llm.domain.schemas import (
     WSModel,
 )
 from bisheng.llm.domain.share_fallback import avalidate_system_model_refs
-from bisheng.llm.domain.utils import invalidate_llm_info_cache, usable_proxy_url
+from bisheng.llm.domain.utils import invalidate_llm_info_cache, to_llm_invoke_error, usable_proxy_url
 from bisheng.tenant.domain.constants import TenantAuditAction
 from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
 from bisheng.utils import generate_uuid, md5_hash
@@ -1609,7 +1609,8 @@ class LLMService:
                 try:
                     await embeddings.aembed_query("test")
                 except Exception as e:
-                    raise Exception(f"EmbeddingModel initialization failed: {e!s}")
+                    logger.exception("workbench embedding model probe failed")
+                    raise to_llm_invoke_error(embeddings, e) from e
 
                 # Update Personal Knowledge Base
                 # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model

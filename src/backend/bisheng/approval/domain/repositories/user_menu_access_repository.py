@@ -114,7 +114,7 @@ class UserMenuAccessRepository:
             row.status = UserMenuAccessStatus.REVOKED
             row.revoked_by_user_id = revoked_by_user_id
             row.revoked_reason = revoked_reason
-            row.revoked_at = datetime.utcnow()
+            row.revoked_at = datetime.now()
             await session.commit()
             await session.refresh(row)
         return row

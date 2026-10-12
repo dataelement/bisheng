@@ -858,6 +858,14 @@ class SandboxConf(BaseModel):
     pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
     default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
     max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
+    kb_image_stage_max_files: int = Field(
+        default=100,
+        description="Max knowledge-base images written into the code interpreter workspace per run",
+    )
+    kb_image_stage_max_total_bytes: int = Field(
+        default=0,
+        description="Total bytes of knowledge-base images written per run; 0 means 5 x max_copy_in_bytes",
+    )
     code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
 
     @model_validator(mode="after")

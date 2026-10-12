@@ -13,6 +13,7 @@ import { t } from "i18next";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { streamErrorMessage } from "./useInitialPromptStream";
 
 const enum LoadType {
     Prompt = 5,
@@ -60,7 +61,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         toast({
                             title: t('tip'),
                             variant: 'error',
-                            description: parsedData.message
+                            description: streamErrorMessage(parsedData)
                         });
                     }
                     break

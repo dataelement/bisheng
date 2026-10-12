@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, Request
 from loguru import logger
-from pymilvus import Collection
+from pymilvus import Collection, MilvusException
 from starlette.concurrency import run_in_threadpool
 
 from bisheng.api.services.knowledge_imp import (
@@ -91,6 +91,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgePermissionService,
 )
 from bisheng.llm.domain.const import LLMModelType
+from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.permission.application.access import (
     get_f048_resource_adapter,
     get_f048_runtime,
@@ -2364,7 +2365,14 @@ class KnowledgeService(KnowledgeUtils):
         new_metadata = metadata[0]
         new_metadata["bbox"] = bbox
         new_text = KnowledgeUtils.aggregate_chunk_metadata(text, new_metadata)
-        res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
+        try:
+            res = vector_client.add_texts([new_text], [new_metadata], timeout=10)
+        except MilvusException:
+            raise
+        except Exception as e:
+            # add_texts embeds the text first; anything that is not a Milvus error is the embedding model
+            logger.exception("update chunk embedding failed")
+            raise to_llm_invoke_error(vector_client.embedding_func, e) from e
         # delete data
         logger.info(f"act=delete_vector pk={pk}")
         res = vector_client.col.delete(f"pk in {pk}", timeout=10)

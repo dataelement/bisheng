@@ -1517,9 +1517,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 15
     }
   },
   "src/pages/BuildPage/bench/AppCenter.tsx": {

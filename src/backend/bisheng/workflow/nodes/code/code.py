@@ -9,18 +9,17 @@ from bisheng.workflow.nodes.code.code_parse import make_code_parser
 # to name the setting an administrator would have to change.
 CODE_NODE_DISABLED_MESSAGE = (
     "The Code node is disabled. An administrator can enable it under "
-    "workflow.code_node_enabled in the system settings. It is off by default because this "
-    "release runs the node without an execution sandbox: while it is on, everyone who can "
-    "edit a workflow can run commands on the server."
+    "workflow.code_node_enabled in the system settings. It is off by default because, "
+    "while it is on, everyone who can edit a workflow can run Python through the "
+    "configured code interpreter."
 )
 
 
 def assert_code_node_enabled() -> None:
-    """Refuse to touch user code while the node is switched off.
+    """Refuse to build the node while the switch is off.
 
-    Checked when the node is built rather than when it runs: parsing the code
-    already executes it (decorators, module-level statements), so a gate in the
-    run path would fire after the fact.
+    Checked at construction so a disabled node never looks up an executor or
+    runs user code.
     """
     if not bisheng_settings.get_workflow_conf().code_node_enabled:
         raise IgnoreException(CODE_NODE_DISABLED_MESSAGE)

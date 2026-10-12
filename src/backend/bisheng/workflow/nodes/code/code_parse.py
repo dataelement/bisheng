@@ -2,6 +2,7 @@ import ast
 import importlib
 import inspect
 import json
+import tempfile
 from typing import Any, Union
 
 from bisheng.common.errcode.sandbox import SandboxCodeNodeOutputError
@@ -47,15 +48,42 @@ def _parse_sentinel(logs: str):
         raise SandboxCodeNodeOutputError() from exc
 
 
-def make_code_parser(code: str, *, execute_code=None, enabled: bool | None = None):
-    """CodeParser (in-process) or SandboxCodeParser. Only the system switch rolls back."""
-    if enabled is None:
-        from bisheng.common.services.config_service import settings
+# Session bindings the linsight tool adds after reading extra. The code node has
+# no workspace, so they must not ride along into the executor.
+_SESSION_KEYS = ("local_sync_path", "workspace_prefix", "file_list")
+_CODE_INTERPRETER_TOOL_KEY = "bisheng_code_interpreter"
 
-        enabled = settings.sandbox_conf.code_node_enabled
-    if enabled:
-        return SandboxCodeParser(code, execute_code=execute_code)
-    return CodeParser(code)
+
+def make_code_parser(code: str, *, execute_code=None, enabled: bool | None = None):
+    """Out-of-process parser. Backend kind is read from the tool row at exec time.
+
+    ``enabled`` is ignored. ``sandbox_conf.code_node_enabled`` no longer selects
+    an in-process fallback. ``workflow.code_node_enabled`` is the only gate, and
+    it is checked before this function runs.
+    """
+    del enabled
+    return SandboxCodeParser(code, execute_code=execute_code)
+
+
+def load_code_interpreter_extra() -> dict:
+    """Preset extra for the built-in code interpreter, in the current tenant.
+
+    Tool-row extra wins. An empty row falls back to the category extra, which is
+    where the admin UI stores ``type``. ``t_gpts_tools.type`` is the category id,
+    not local/container/e2b.
+    """
+    from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+    from bisheng.tool.domain.services.executor import ToolExecutor
+
+    tool = GptsToolsDao.get_tool_by_tool_key(_CODE_INTERPRETER_TOOL_KEY)
+    if tool is None:
+        return {}
+    tool_type = None
+    type_id = getattr(tool, "type", None)
+    if not tool.extra and type_id:
+        tool_type = GptsToolsDao.get_one_tool_type(tool_type_id=type_id)
+    extra = ToolExecutor.parse_preset_extra(tool, tool_type)
+    return extra if isinstance(extra, dict) else {}
 
 
 class CodeParser:
@@ -209,18 +237,29 @@ class SandboxCodeParser(CodeParser):
 
     def _invoke_execute(self, wrapper: str):
         fn = self._execute_code
-        if fn is None:
-            from bisheng.common.services.config_service import settings
-            from bisheng_langchain.gpts.tools.code_interpreter.container_executor import (
-                ContainerExecutor,
-            )
+        if fn is not None:
+            # Inputs are inlined in ``wrapper``. Do not pass the worker cwd —
+            # that would copy-in /app (backend sources) as if it were a workspace.
+            return fn(code=wrapper, lang="python", work_dir=None)
+        extra = load_code_interpreter_extra()
+        kind = extra.get("type") or "local"
+        config = extra.get("config") if isinstance(extra.get("config"), dict) else {}
+        backend = dict(config.get(kind) or {}) if isinstance(config, dict) else {}
+        for key in _SESSION_KEYS:
+            backend.pop(key, None)
+        if kind == "container":
+            backend["keep_session"] = False
+        elif kind == "e2b":
+            backend = {key: backend[key] for key in ("api_key", "domain") if backend.get(key)}
+            backend["keep_sandbox"] = False
+        from bisheng_langchain.gpts.tools.code_interpreter.factory import build_code_executor
 
-            fn = ContainerExecutor(
-                minio={},
-                sandbox_conf=settings.sandbox_conf,
-                keep_session=False,
-            ).execute_code
-            self._execute_code = fn
-        # Inputs are inlined in ``wrapper``. Do not pass the worker cwd —
-        # that would copy-in /app (backend sources) as if it were a workspace.
-        return fn(code=wrapper, lang="python", work_dir=None)
+        executor = build_code_executor(kind, minio={}, **backend)
+        try:
+            if kind == "local":
+                # work_dir=None writes into the shared extensions/ directory.
+                with tempfile.TemporaryDirectory() as work_dir:
+                    return executor.execute_code(code=wrapper, lang="python", work_dir=work_dir)
+            return executor.execute_code(code=wrapper, lang="python", work_dir=None)
+        finally:
+            executor.close()

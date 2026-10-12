@@ -110,6 +110,10 @@ def handle_exec(store: LeaseStore, lease: Lease, payload: dict) -> dict:
         script = os.path.join(lease.work_dir, "_run.py")
         with open(script, "w", encoding="utf-8") as fh:
             fh.write(code)
+        # Copy-in skips empty directories, so the zones the tool description promises
+        # must be created here. Done while the tree is still root-owned (before the chown).
+        for zone in ("output", "scratch"):
+            os.makedirs(os.path.join(lease.work_dir, zone), exist_ok=True)
         cmd = [sys.executable, script] if str(lang).startswith("python") else ["sh", "-c", code]
         started = time.monotonic()
         dropped = os.geteuid() == 0 and lease.uid != 0

@@ -448,7 +448,7 @@ class ApprovalCenterService:
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:
                 task.status = ApprovalTaskStatus.CANCELLED
-                task.acted_at = datetime.utcnow()
+                task.acted_at = datetime.now()
                 await ApprovalInstanceRepository.update_task(task)
         instance.status = ApprovalInstanceStatus.WITHDRAWN
         await ApprovalInstanceRepository.update_instance(instance)
@@ -820,12 +820,12 @@ class ApprovalCenterService:
         if action == "reject":
             task.status = ApprovalTaskStatus.REJECTED
             task.comment = comment
-            task.acted_at = datetime.utcnow()
+            task.acted_at = datetime.now()
             await self.instance_repository.update_task(task)
             for sibling in same_node_tasks:
                 if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
                     sibling.status = ApprovalTaskStatus.CANCELLED
-                    sibling.acted_at = datetime.utcnow()
+                    sibling.acted_at = datetime.now()
                     await self.instance_repository.update_task(sibling)
             instance.status = ApprovalInstanceStatus.REJECTED
             await self.instance_repository.update_instance(instance)
@@ -881,7 +881,7 @@ class ApprovalCenterService:
 
         task.status = ApprovalTaskStatus.APPROVED
         task.comment = comment
-        task.acted_at = datetime.utcnow()
+        task.acted_at = datetime.now()
         await self.instance_repository.update_task(task)
         await self.instance_repository.create_action_log(
             ApprovalActionLog(
@@ -916,7 +916,7 @@ class ApprovalCenterService:
             for sibling in same_node_tasks:
                 if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
                     sibling.status = ApprovalTaskStatus.SKIPPED
-                    sibling.acted_at = datetime.utcnow()
+                    sibling.acted_at = datetime.now()
                     await self.instance_repository.update_task(sibling)
             await self._advance_after_node_approved(
                 instance=instance, current_node_order=task.node_order, operator_user_id=operator_user_id
