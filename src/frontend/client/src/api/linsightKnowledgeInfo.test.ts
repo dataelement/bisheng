@@ -17,7 +17,6 @@ describe("organization knowledge list", () => {
     mockedRequest.get.mockResolvedValue({ data: { data: [] } });
 
     await getKnowledgeInfo({
-      page: 1,
       page_size: 20,
       name: "",
       sort_by: "name",
@@ -26,7 +25,24 @@ describe("organization knowledge list", () => {
     });
 
     expect(mockedRequest.get).toHaveBeenCalledWith(
-      "/api/v1/knowledge?page_num=1&page_size=20&type=0&name=&sort_by=name&preferred_ids=12%2C13&action=visible",
+      "/api/v1/knowledge?page_size=20&type=0&name=&sort_by=name&preferred_ids=12%2C13&action=visible",
+    );
+  });
+
+  it("uses the previous response cursor when requesting the next page", async () => {
+    mockedRequest.get.mockResolvedValue({ data: { data: [] } });
+
+    await getKnowledgeInfo({
+      page_size: 20,
+      name: "",
+      sort_by: "name",
+      preferred_ids: "3811",
+      action: "visible",
+      cursor: "next+page=2",
+    });
+
+    expect(mockedRequest.get).toHaveBeenCalledWith(
+      "/api/v1/knowledge?page_size=20&type=0&name=&sort_by=name&preferred_ids=3811&action=visible&cursor=next%2Bpage%3D2",
     );
   });
 });

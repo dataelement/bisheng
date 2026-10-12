@@ -49,6 +49,10 @@ class ImageRegistry:
     def get(self, image_id: str) -> dict[str, str] | None:
         return self._by_id.get(image_id)
 
+    def ids(self) -> list[str]:
+        """img#N in registration order."""
+        return list(self._by_id)
+
     def __len__(self) -> int:
         return len(self._by_id)
 
@@ -67,7 +71,7 @@ def annotate(text: str, registry: ImageRegistry) -> str:
 # Weak VL models claim they will show the image but omit `![](url)`.
 # The model's answer is the decision; we only repair a forgotten markdown tag.
 _CLAIMED_DISPLAY_RE = re.compile(
-    r"我将显示|如下图|相关图片如下|图片如下|见下图"
+    r"我将显示|如下图|相关图片如下|图片如下|见下图|该图片清晰"
     r"|I(?:['’]ll| will) (?:show|display)"
     r"|here (?:is|are) the (?:image|picture|screenshot)s?",
     re.IGNORECASE,
@@ -79,22 +83,70 @@ def should_splice_viewed_images(answer: str) -> bool:
     return bool(_CLAIMED_DISPLAY_RE.search(answer or ""))
 
 
-def missing_viewed_markdown(content: str, registry: ImageRegistry) -> str:
-    """Markdown to append so the UI can render images the model already viewed.
+# "有哪些美女图片" wants the pictures on screen. Field / trend questions stay text.
+_SHOW_PICTURES_RE = re.compile(r"哪些.{0,12}图|美女|看图|显示图片|展示图片|有图|找出.{0,16}图")
+_TEXT_ONLY_RE = re.compile(r"字段|走势|图意|图里|图上")
+_FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`]*`")
 
-    The model decides whether to show a picture by writing `![](url)`. Weak VL
-    models often write "I will show img#7" instead — splice only then, and only
-    for successfully viewed ids.
+
+def question_wants_pictures(question: str) -> bool:
+    text = question or ""
+    if _TEXT_ONLY_RE.search(text):
+        return False
+    return bool(_SHOW_PICTURES_RE.search(text))
+
+
+_IMG_ID = re.compile(r"img#\d+")
+
+
+def cited_display_ids(text: str, registry: ImageRegistry | None = None) -> list[str]:
+    """img# ids the model wrote. Relevance is the model's decision, not a second pass."""
+    del registry
+    found: list[str] = []
+    for match in _IMG_ID.finditer(text or ""):
+        image_id = match.group(0)
+        if image_id not in found:
+            found.append(image_id)
+    return found
+
+
+def _has_rendered_image(content: str, url: str) -> bool:
+    """True when a real markdown image is outside code, so the UI will draw it."""
+    visible = _INLINE_CODE_RE.sub("", _FENCED_CODE_RE.sub("", content or ""))
+    return bool(re.search(r"!\[[^\]]*\]\(" + re.escape(url) + r"\)", visible))
+
+
+def missing_viewed_markdown(
+    content: str,
+    registry: ImageRegistry,
+    *,
+    question: str = "",
+    only_ids: list[str] | None = None,
+) -> str:
+    """Append markdown only when the model decided to show a picture and forgot `![](url)`.
+
+    Which pictures match the question is the model's call: it writes `![](url)`
+    for those. This repair uses the ids it named. With no ids, it only fills in
+    a forgotten tag when exactly one picture was viewed. Several viewed pictures
+    and no named id must not be appended together.
     """
+    del question
     if not should_splice_viewed_images(content):
         return ""
+    named = cited_display_ids(content) if only_ids is None else only_ids
+    viewed = set(registry.viewed_ids())
+    source = [image_id for image_id in named if image_id in viewed]
+    if not source:
+        viewed_ids = registry.viewed_ids()
+        source = viewed_ids if len(viewed_ids) == 1 else []
     blocks: list[str] = []
-    for image_id in registry.viewed_ids():
+    for image_id in source:
         entry = registry.get(image_id)
         if not entry:
             continue
         url = entry["url"]
-        if url in content:
+        if _has_rendered_image(content, url):
             continue
         alt = url.rstrip("/").rsplit("/", 1)[-1] or image_id
         blocks.append(f"![{alt}]({url})")

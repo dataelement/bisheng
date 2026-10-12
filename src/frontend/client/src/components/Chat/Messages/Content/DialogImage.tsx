@@ -1,6 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog';
 
-export default function DialogImage({ src = '', width = 1920, height = 1080 }) {
+/**
+ * Full-screen preview for an attached image. The picture renders at its own
+ * size and only shrinks: 60% of the viewport on either axis and at most 640px
+ * wide, so a small icon stays small instead of being stretched across the
+ * screen and a large one still leaves the conversation visible around it.
+ */
+export default function DialogImage({ src = '' }: { src?: string }) {
   return (
     <Dialog.Portal>
       <Dialog.Overlay
@@ -30,11 +36,15 @@ export default function DialogImage({ src = '', width = 1920, height = 1080 }) {
           </button>
         </Dialog.Close>
         <Dialog.Content
-          className="radix-state-open:animate-contentShow relative max-h-[85vh] max-w-[90vw] shadow-xl focus:outline-none"
+          className="radix-state-open:animate-contentShow relative flex items-center justify-center focus:outline-none"
           tabIndex={-1}
-          style={{ pointerEvents: 'auto', aspectRatio: height > width ? 1 / 1.75 : 1.75 / 1 }}
+          style={{ pointerEvents: 'auto' }}
         >
-          <img src={src} alt="Uploaded image" className="h-full w-full object-contain" />
+          <img
+            src={src}
+            alt="Uploaded image"
+            className="max-h-[60vh] max-w-[min(60vw,640px)] object-contain shadow-xl"
+          />
         </Dialog.Content>
       </Dialog.Overlay>
     </Dialog.Portal>

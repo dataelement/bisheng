@@ -1,11 +1,15 @@
 // @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import type { MsEdgeTTS } from 'msedge-tts';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { VoiceOption } from '~/common';
 import { useToastContext } from '~/Providers/ToastContext';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
+
+// msedge-tts drags in the Node crypto/stream polyfills (~600 KB). This hook sits behind the
+// `~/hooks` barrel that the first screen imports, so load the library only when it is used.
+const loadEdgeTTS = () => import('msedge-tts');
 
 interface UseTextToSpeechEdgeReturn {
   generateSpeechEdge: (text: string) => void;
@@ -33,12 +37,17 @@ function useTextToSpeechEdge({
     [],
   );
 
-  const fetchVoices = useCallback(() => {
+  const getTTS = useCallback(async () => {
+    const edgeTTS = await loadEdgeTTS();
     if (!ttsRef.current) {
-      ttsRef.current = new MsEdgeTTS();
+      ttsRef.current = new edgeTTS.MsEdgeTTS();
     }
-    ttsRef.current
-      .getVoices()
+    return { tts: ttsRef.current, OUTPUT_FORMAT: edgeTTS.OUTPUT_FORMAT };
+  }, []);
+
+  const fetchVoices = useCallback(() => {
+    getTTS()
+      .then(({ tts }) => tts.getVoices())
       .then((voicesList) => {
         setVoices(
           voicesList.map((v) => ({
@@ -51,39 +60,40 @@ function useTextToSpeechEdge({
         console.error('Error fetching voices:', error);
         showToast({
           message: localize('com_nav_voices_fetch_error'),
-          status: 'error',
+          status: 'warning',
         });
       });
-  }, [showToast, localize]);
+  }, [getTTS, showToast, localize]);
 
   const initializeTTS = useCallback(() => {
-    if (!ttsRef.current) {
-      ttsRef.current = new MsEdgeTTS();
-    }
     const availableVoice: VoiceOption | undefined = voices.find((v) => v.value === voiceName);
 
     if (availableVoice) {
-      ttsRef.current
-        .setMetadata(availableVoice.value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3)
+      getTTS()
+        .then(({ tts, OUTPUT_FORMAT }) =>
+          tts.setMetadata(availableVoice.value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3),
+        )
         .catch((error) => {
           console.error('Error initializing TTS:', error);
           showToast({
             message: localize('com_nav_tts_init_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
         });
     } else if (voices.length > 0) {
-      ttsRef.current
-        .setMetadata(voices[0].value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3)
+      getTTS()
+        .then(({ tts, OUTPUT_FORMAT }) =>
+          tts.setMetadata(voices[0].value, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3),
+        )
         .catch((error) => {
           console.error('Error initializing TTS:', error);
           showToast({
             message: localize('com_nav_tts_init_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
         });
     }
-  }, [voiceName, showToast, localize, voices]);
+  }, [getTTS, voiceName, showToast, localize, voices]);
 
   const appendNextBuffer = useCallback(() => {
     if (
@@ -99,7 +109,7 @@ function useTextToSpeechEdge({
           console.error('Error appending buffer:', error);
           showToast({
             message: localize('com_nav_buffer_append_error'),
-            status: 'error',
+            status: 'warning',
           });
           pendingBuffers.current.unshift(nextBuffer);
         }
@@ -116,7 +126,7 @@ function useTextToSpeechEdge({
         console.error('Error adding source buffer:', error);
         showToast({
           message: localize('com_nav_source_buffer_error'),
-          status: 'error',
+          status: 'warning',
         });
       }
     }
@@ -170,7 +180,7 @@ function useTextToSpeechEdge({
           console.error('Error generating speech:', error);
           showToast({
             message: localize('com_nav_audio_play_error', { 0: (error as Error).message }),
-            status: 'error',
+            status: 'warning',
           });
           setIsSpeaking(false);
         }
@@ -196,7 +206,7 @@ function useTextToSpeechEdge({
       console.error('Error cancelling speech:', error);
       showToast({
         message: localize('com_nav_speech_cancel_error'),
-        status: 'error',
+        status: 'warning',
       });
     }
   }, [setIsSpeaking, showToast, localize]);

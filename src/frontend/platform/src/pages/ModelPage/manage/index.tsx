@@ -16,13 +16,21 @@ import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLL
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
-import { useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
 import SystemModelConfig from "./SystemModelConfig"
 
-function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
+// Saving a provider returns before its model probes finish: they run in the
+// background, each bounded by the backend's 30s probe timeout. The list polls
+// for a bounded window so the rows that the save reset to unknown pick up the
+// verdict without a manual refresh.
+const PROBE_POLL_MS = 3000
+const PROBE_WINDOW_MS = 45000
+const STATUS_UNKNOWN = 2
+
+function CustomTableRow({ data, index, user, probing, onModel, onCheck, onVerified }) {
     const { t } = useTranslation()
     const { message } = useToast()
     const { appConfig } = useContext(locationContext)
@@ -62,7 +70,6 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                     <Badge variant="secondary" className="ml-2">
                         {t('model.tenantSharedReadonly', {
                             tenantName: data.tenant_name || 'Root',
-                            defaultValue: '{{tenantName}} 共享 · 只读',
                         })}
                     </Badge>
                 )}
@@ -93,9 +100,14 @@ function CustomTableRow({ data, index, user, onModel, onCheck, onVerified }) {
                                 <TableCell>{m.model_name}</TableCell>
                                 <TableCell>{m.model_type}</TableCell>
                                 <TableCell>
-                                    <span className={['text-green-500', 'text-orange-500', 'text-gray-500'][m.status]}>
-                                        {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
-                                    </span>
+                                    {probing && m.status === STATUS_UNKNOWN
+                                        ? <span className="inline-flex items-center gap-1 align-middle text-gray-500">
+                                            <LoadingIcon className="size-3" />
+                                            {t('model.modelStatusChecking')}
+                                        </span>
+                                        : <span className={['text-green-500', 'text-orange-500', 'text-gray-500'][m.status]}>
+                                            {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
+                                        </span>}
                                     {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
                                     {/* Verifying is a real call to the model, so it stays an
                                         explicit per-row action rather than anything automatic. */}
@@ -149,10 +161,14 @@ export default function Management() {
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
     const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
-
     const [searchParams, setSearchParams] = useSearchParams()
+    const navigate = useNavigate()
     useEffect(() => {
         const tab = searchParams.get('systemModel')
+        if (tab === 'dsh') {
+            navigate('/dsh', { replace: true })
+            return
+        }
         // Wait for model list to load before opening SystemModelConfig — otherwise
         // AssisModel's ModelSelect sees empty options and nulls out existing model_ids.
         if (tab && data.length > 0) {
@@ -162,7 +178,7 @@ export default function Management() {
             next.delete('systemModel')
             setSearchParams(next, { replace: true })
         }
-    }, [searchParams, setSearchParams, data])
+    }, [searchParams, setSearchParams, data, navigate])
 
     const reload = async () => {
         setLoading(true)
@@ -171,6 +187,19 @@ export default function Management() {
         refetch()
     }
     useEffect(() => { reload() }, [])
+
+    // 0 = not polling; otherwise the time after which polling gives up.
+    const [probeUntil, setProbeUntil] = useState(0)
+    useEffect(() => {
+        if (!probeUntil) return
+        const timer = setInterval(async () => {
+            const list = await getModelListApi()
+            setData(list)
+            const pending = list.some(server => server.models.some(m => m.status === STATUS_UNKNOWN))
+            if (!pending || Date.now() > probeUntil) setProbeUntil(0)
+        }, PROBE_POLL_MS)
+        return () => clearInterval(timer)
+    }, [probeUntil])
 
     const handleGetRepeatName = (name) => {
         let index = 0
@@ -219,6 +248,7 @@ export default function Management() {
         onAfterSave={(msg) => {
             message({ variant: 'success', description: msg })
             reload()
+            setProbeUntil(Date.now() + PROBE_WINDOW_MS)
         }}
     />
 
@@ -264,6 +294,7 @@ export default function Management() {
                             user={user}
                             data={d}
                             index={index}
+                            probing={probeUntil > 0}
                             onCheck={handleCheck}
                             onVerified={handleVerified}
                             onModel={setModelId}

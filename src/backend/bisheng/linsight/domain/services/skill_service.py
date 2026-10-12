@@ -141,7 +141,12 @@ class SkillService:
     async def get_selectable(self) -> list[SkillSelectable]:
         skills = await LinsightSkillDao.list_enabled()
         return [
-            SkillSelectable(name=s.name, display_name=s.display_name or s.name, description=s.description)
+            SkillSelectable(
+                name=s.name,
+                display_name=s.display_name or s.name,
+                description=s.description,
+                default_checked=bool(s.default_checked),
+            )
             for s in skills
         ]
 
@@ -263,6 +268,10 @@ class SkillService:
 
     async def set_status(self, name: str, enabled: bool) -> None:
         if not await LinsightSkillDao.set_enabled(name, enabled):
+            raise SkillNotFoundError()
+
+    async def set_default_checked(self, name: str, default_checked: bool) -> None:
+        if not await LinsightSkillDao.set_default_checked(name, default_checked):
             raise SkillNotFoundError()
 
     async def delete(self, tenant_id: int, name: str) -> None:

@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Protocol
 
-from bisheng.common.errcode.open_api import ServiceAccountNotFoundError, ServiceAccountOwnerInvalidError
+from bisheng.common.errcode.open_api import (
+    ServiceAccountNameTakenError,
+    ServiceAccountNotFoundError,
+    ServiceAccountOwnerInvalidError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
@@ -70,6 +74,8 @@ class ServiceAccountService:
         tenant_id = cls._creation_tenant(operator, owner)
         if owner.tenant_id != tenant_id:
             raise ServiceAccountOwnerInvalidError()
+        if await ServiceAccountRepository.name_taken(tenant_id, data.name):
+            raise ServiceAccountNameTakenError()
         tenant_token = current_tenant_id.set(tenant_id)
         visible_token = visible_tenant_ids.set(frozenset({tenant_id}))
         try:
@@ -101,7 +107,9 @@ class ServiceAccountService:
             if owner.tenant_id != row.tenant_id:
                 raise ServiceAccountOwnerInvalidError()
             row.resource_owner_user_id = owner.user_id
-        if data.name is not None:
+        if data.name is not None and data.name != row.name:
+            if await ServiceAccountRepository.name_taken(row.tenant_id, data.name, exclude_id=row.id):
+                raise ServiceAccountNameTakenError()
             row.name = data.name
         if "description" in data.model_fields_set:
             row.description = data.description
@@ -198,9 +206,7 @@ class ServiceAccountService:
             resource_owner=ServiceAccountOwner(
                 user_id=row.resource_owner_user_id,
                 user_name=(
-                    owner.user_name
-                    if owner
-                    else await OwnerRepository.get_user_name(row.resource_owner_user_id)
+                    owner.user_name if owner else await OwnerRepository.get_user_name(row.resource_owner_user_id)
                 ),
                 disabled=owner is None,
             ),

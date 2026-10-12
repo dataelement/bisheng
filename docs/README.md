@@ -9,6 +9,7 @@
 | [`constitution.md`](constitution.md) | 架构铁律 C1–C7(双 DB / 多租户 / 权限 / 分层 / 错误码 / 安全)——不可违反 |
 | [`SDD-Guide.md`](SDD-Guide.md) | 开发流程总纲:流程分级、★ 暂停点、偏差处理、测试分层、harness 现状 |
 | `../AGENTS.md` | 全局 agent 规则入口(各子项目规则按目录自动加载) |
+| [`security-response.md`](security-response.md) | 漏洞报告怎么接、怎么定级、怎么修、怎么发公告;对外承诺见根目录 `SECURITY.md` |
 
 ## 架构(子系统深度)
 
@@ -23,7 +24,7 @@
 | 目录 | 内容 |
 |------|------|
 | [`api/`](api/) | 接口文档(filelib 纯检索、知识空间/知识库接口) |
-| [`PRD/`](PRD/) | 现行迭代的产品 PRD 与技术方案(按 `{版本} {主题} PRD/` 组织) |
+| [`PRD/`](PRD/) | 现行迭代的产品 PRD 与技术方案(按 `{版本} {主题} PRD/` 组织;3.0 起按版本分子目录,如 [`3.0-beta2/`](PRD/3.0-beta2/)、[`3.0-release/`](PRD/3.0-release/)) |
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |
 | [`私有化部署/`](私有化部署/) | 部署文档 |
 | [`blog/`](blog/) | 设计科普(如"企业权限体系的前世今生") |

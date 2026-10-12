@@ -962,6 +962,8 @@ class KnowledgeFilePermissionPort(Protocol):
 
     async def authorize_created(self, **kwargs): ...
 
+    async def rollback_created(self, **kwargs): ...
+
     async def project_parent_change(self, **kwargs): ...
 
     async def project_copy(self, **kwargs): ...
@@ -1148,6 +1150,13 @@ class F048KnowledgeFilePermissionAdapter:
             protected=True,
         )
 
+    async def rollback_created(self, *, record: KnowledgeFilePermissionRecord, actor: PermissionActor) -> None:
+        await self._permission.rollback_created(
+            actor=actor,
+            target=self._record_target(record, actor),
+            owner_user_id=record.owner_user_id,
+        )
+
     async def project_move(
         self,
         *,
@@ -1261,7 +1270,7 @@ class F048KnowledgeFilePermissionAdapter:
             or resource_type not in valid_resource_types
             or record.parent_type not in valid_parents
             or not record.parent_id
-            or record.parent_id == record.resource_id
+            or (record.parent_type == record.resource_type and record.parent_id == record.resource_id)
             or record.resource_id in record.ancestor_ids
             or record.mode not in {"INHERIT", "CUSTOM"}
             or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
@@ -1297,7 +1306,7 @@ class F048KnowledgeFilePermissionAdapter:
             or record.status not in valid_statuses[resource_type]
             or record.parent_type not in valid_parents
             or not record.parent_id
-            or record.parent_id == record.resource_id
+            or (record.parent_type == record.resource_type and record.parent_id == record.resource_id)
             or record.resource_id in record.ancestor_ids
             or record.mode not in {"INHERIT", "CUSTOM"}
             or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)

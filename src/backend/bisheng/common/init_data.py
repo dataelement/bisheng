@@ -171,6 +171,8 @@ async def init_default_data():
                     await session.exec(update(GptsTools).where(GptsTools.id.in_(jr_types)).values(type=8))
                     await session.commit()
 
+                await _ensure_image_view_tool(session)
+
             # Initialize Databaseconfig while init bypass is still active.
             await settings.init_config()
 
@@ -515,6 +517,55 @@ async def _backfill_guest_department_membership(session):
                 is_primary=1,
                 source="local",
             )
+
+
+async def _ensure_image_view_tool(session) -> None:
+    """Insert the Image View builtin tool when an existing database was seeded earlier."""
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+
+    existing = (
+        await session.exec(
+            select(GptsTools).where(
+                GptsTools.tool_key == "image_view",
+                GptsTools.tenant_id == DEFAULT_TENANT_ID,
+                GptsTools.is_delete == 0,
+            )
+        )
+    ).first()
+    if existing is not None:
+        return
+    tool_type = GptsToolsType(
+        name="Image View",
+        logo="",
+        description="使用模型管理中的视觉模型查看文档图片",
+        server_host="",
+        auth_method=0,
+        api_key="",
+        auth_type="basic",
+        is_preset=1,
+        user_id=None,
+        is_delete=0,
+        extra=json.dumps({"model_id": ""}),
+        tenant_id=DEFAULT_TENANT_ID,
+    )
+    session.add(tool_type)
+    await session.flush()
+    session.add(
+        GptsTools(
+            name="Image View",
+            logo=None,
+            desc="查看文档中的图片，并判断哪些图片符合问题",
+            tool_key="image_view",
+            type=tool_type.id,
+            extra="{}",
+            is_preset=1,
+            is_delete=0,
+            user_id=None,
+            api_params=[],
+            tenant_id=DEFAULT_TENANT_ID,
+        )
+    )
+    await session.commit()
 
 
 def upload_preset_minio_file():

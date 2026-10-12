@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from bisheng.common.schemas.api import PageData
 from bisheng.open_api.domain.models.api_credential import ApiCredential
 
 
@@ -87,6 +88,10 @@ class KeyItem(BaseModel):
             created_by=row.created_by,
             create_time=row.create_time,
         )
+
+
+class KeyPage(PageData[KeyItem]):
+    active_count: int
 
 
 class KeyIssuedResponse(KeyItem):

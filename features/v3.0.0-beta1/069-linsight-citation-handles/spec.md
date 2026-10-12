@@ -3,7 +3,7 @@
 > **本文档定位 — 纯 What（需求口径，不随代码漂移）**
 > spec 只回答 **做什么 / 验收标准 / 不做什么**；所有 How 在 [design.md](./design.md)。
 
-**关联 PRD**: [`docs/PRD/3.0 灵思任务模式引用溯源优化方案/灵思任务模式引用溯源优化方案.md`]（2026-09-20 评审通过，决策 D1～D8）
+**关联 PRD**: [`docs/PRD/3.0-beta2/3.0 灵思任务模式引用溯源优化方案.md`]（2026-09-20 评审通过，决策 D1～D8）
 **优先级**: P1
 **所属版本**: v3.0.0-beta1（发版线 `feat/3.0.0-beta2`）
 **依赖**: F047（灵思任务模式引用溯源，已上线 release）· F054（统一角标入口：resolve 分态、导出剥标契约 AC-07 / AC-12）· F029（`view_file` 过滤，INV-7）
@@ -122,5 +122,5 @@
 - 设计真相: [design.md](./design.md)
 - 执行与落档: [tasks.md](./tasks.md)（待拆解）
 - 版本契约: [../release-contract.md](../release-contract.md)
-- 承接 PRD: `docs/PRD/3.0 灵思任务模式引用溯源优化方案/灵思任务模式引用溯源优化方案.md`
+- 承接 PRD: `docs/PRD/3.0-beta2/3.0 灵思任务模式引用溯源优化方案.md`
 - 前序 Feature: [../047-linsight-citation-traceability/](../047-linsight-citation-traceability/)、[../054-unified-citation-entries/](../054-unified-citation-entries/)

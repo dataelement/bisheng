@@ -11,9 +11,9 @@ import { extractApiStatusCode } from '~/utils/apiStatusError';
 
 export type GuestAccessState = 'loading' | 'ok' | 'offline' | 'invalid' | 'closed';
 
-export const PUBLIC_LINK_INVALID = 26101;
-export const PUBLIC_APP_OFFLINE = 26102;
-export const PUBLIC_GUEST_CLOSED = 26103;
+export const PUBLIC_LINK_INVALID = 26401;
+export const PUBLIC_APP_OFFLINE = 26402;
+export const PUBLIC_GUEST_CLOSED = 26403;
 
 /**
  * Map a rejected response onto a visitor-facing state.

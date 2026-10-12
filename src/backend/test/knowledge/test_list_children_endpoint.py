@@ -6,12 +6,11 @@ file_type is wired through the service signature and the endpoint signature.
 
 The actual filter behavior is covered by test_space_file_dao_filter.py.
 """
+
 import ast
-import inspect
 from pathlib import Path
 
 import pytest
-
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2] / "bisheng"
 
@@ -68,3 +67,18 @@ def test_endpoint_route_accepts_file_type_query():
         if found:
             break
     assert found, "no endpoint handler with /children decorator + file_type kwarg found"
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "function_name"),
+    [
+        ("knowledge/domain/services/knowledge_space_service.py", "list_space_children"),
+        ("knowledge/api/endpoints/knowledge_space.py", "list_space_children"),
+    ],
+)
+def test_children_page_size_defaults_to_40(relative_path, function_name):
+    fn = _find_function_def((_BACKEND_ROOT / relative_path).read_text(), function_name)
+    assert fn is not None
+    argument_names = [argument.arg for argument in fn.args.args]
+    defaults_by_name = dict(zip(argument_names[-len(fn.args.defaults) :], fn.args.defaults, strict=True))
+    assert ast.literal_eval(defaults_by_name["page_size"]) == 40

@@ -13,6 +13,7 @@ import matplotlib
 from loguru import logger
 
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
+    EXECUTION_BOUNDARY_RULES,
     OUTPUT_DIR_NAME,
     BaseExecutor,
     clip_middle,
@@ -51,16 +52,17 @@ leading slash such as `/output/...` or `/scratch/...` — anything written outsi
 current working directory is DISCARDED and will NOT be delivered to the user. \
 """
     + path_namespace_rules(include_skills=True)
+    + EXECUTION_BOUNDARY_RULES
     + """\
 Do not use things like plot.show() as it will not work; save figures to `output/` \
 instead. print() any output and results so you can capture the output. \
-AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
-installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
+AVAILABLE LIBRARIES: these are ALREADY installed in this \
+environment — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
 python-docx (Word), python-pptx (PowerPoint), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
 `fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
 (PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
 import fails, switch to an already-installed library instead of assuming a package \
-exists; do NOT run `pip install` (this is a shared, offline environment)."""
+exists; do NOT run `pip install` (this environment is offline)."""
 )
 
 

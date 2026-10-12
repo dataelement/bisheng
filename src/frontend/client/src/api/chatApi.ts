@@ -4,6 +4,7 @@
  */
 import http from "~/api/request";
 import { normalizeHistoryMediaFiles } from "~/utils/mediaAttachmentUtils";
+import { getShareTokenFromPath } from "~/utils/shareToken";
 
 // --- Endpoints ---
 const API = {
@@ -368,13 +369,20 @@ function throwCitationResolveError(citationId: string, payload: any): never {
     throw err;
 }
 
+function citationShareHeaders(): { headers: { "share-token": string } } | undefined {
+    // Share-page reads of a workflow conversation carry the token so a
+    // recipient can open that chat's temporary-knowledge-base sources.
+    const token = getShareTokenFromPath();
+    return token ? { headers: { "share-token": token } } : undefined;
+}
+
 export async function getCitationDetail(citationId: string): Promise<ChatCitation> {
     if (canUseCachedCitationDetail(citationDetailMemoryCache[citationId])) {
         return citationDetailMemoryCache[citationId];
     }
 
     try {
-        const res = await http.get<any>(API.citationDetail(citationId));
+        const res = await http.get<any>(API.citationDetail(citationId), citationShareHeaders());
         // 404 = not found, no permission, or the temp object is gone. Read `reason`
         // so expired and forbidden stay distinct (F054/F062).
         if (res?.status_code === 404 || res?.data?.status_code === 404) {
@@ -412,9 +420,14 @@ export async function resolveCitationDetails(citationIds: string[]): Promise<Cha
 
     const requestKey = uniqueCitationIds.slice().sort().join("|");
     if (!citationResolveRequestCache[requestKey]) {
-        citationResolveRequestCache[requestKey] = http.post(API.citationResolve(), {
-            citationIds: uniqueCitationIds,
-        }).then((res) => {
+        const shareHeaders = citationShareHeaders();
+        citationResolveRequestCache[requestKey] = http.post(
+            API.citationResolve(),
+            { citationIds: uniqueCitationIds },
+            shareHeaders
+                ? { headers: { "Content-Type": "application/json", ...shareHeaders.headers } }
+                : undefined,
+        ).then((res) => {
             const payload = res?.data ?? res;
             const items = Array.isArray(payload?.items)
                 ? payload.items

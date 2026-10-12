@@ -77,7 +77,7 @@ def test_offline_application_reports_a_readable_close(client, publication) -> No
     # a handshake rejection here, never as a frame.
     assert frame["category"] == "error"
     assert frame["type"] == "end"
-    assert frame["message"]["status_code"] == 26102
+    assert frame["message"]["status_code"] == 26402
     assert frame["message"]["data"] == {}
     assert close_code == 1008
 
@@ -88,7 +88,7 @@ def test_unknown_application_reports_the_invalid_link_code(client, publication) 
 
     frame, close_code = _connect_and_read(client, take_it_away)
 
-    assert frame["message"]["status_code"] == 26101
+    assert frame["message"]["status_code"] == 26401
     assert close_code == 1008
 
 
@@ -101,4 +101,4 @@ def test_deleted_assistant_reads_as_an_invalid_link(client, publication) -> None
 
     frame, _ = _connect_and_read(client, swap)
 
-    assert frame["message"]["status_code"] == 26101
+    assert frame["message"]["status_code"] == 26401

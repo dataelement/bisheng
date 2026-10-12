@@ -84,6 +84,56 @@ Options:
 - `--include-deleted`: 包含已删除会话
 - `--full-session`: 只要会话在时间窗口内活跃，就导出该会话的全部消息
 
+## Verification Scripts
+
+### `verify_open_mcp.py`
+
+Verify the F067 Streamable HTTP MCP endpoint with the official MCP client. The
+script initializes the connection, lists the tools visible to the supplied API
+key or PAT, compares them with an explicit expected profile in both directions, and can
+optionally invoke one of the three read-only tools. It never prints the
+credential and does not expose write or destructive calls.
+
+Run from `src/backend/`:
+
+```bash
+export BISHENG_MCP_URL=https://bisheng.example.com/api/v2/mcp
+export BISHENG_API_KEY='<full-scope-api-key>'
+.venv/bin/python scripts/verify_open_mcp.py --expected-profile full
+```
+
+Optional read-only smoke calls:
+
+```bash
+.venv/bin/python scripts/verify_open_mcp.py \
+  --expected-profile full \
+  --call-tool bisheng_knowledge_list \
+  --arguments-json '{"type":0,"page_size":1}'
+
+.venv/bin/python scripts/verify_open_mcp.py \
+  --expected-profile full \
+  --call-tool bisheng_knowledge_file_list \
+  --arguments-json '{"knowledge_id":123,"page_size":1}'
+```
+
+Use `--expected-profile pat` for a PAT, which must expose exactly the three
+read-only tools. `--expected-profile scope-filtered` is diagnostic-only for an
+intentionally restricted API key: it still rejects tools outside the F067
+allowlist, but does not prove that all ten release tools are present.
+
+```bash
+export BISHENG_API_KEY='<personal-access-token>'
+.venv/bin/python scripts/verify_open_mcp.py --expected-profile pat
+```
+
+For delegated service-account mode, add `--on-behalf-of <external-user-id>`.
+Use `--end-user <partition>` only for the existing end-user partition mode;
+the two headers are mutually exclusive. To keep secrets out of shell history
+and process arguments, the credential is accepted only through the environment
+variable named by `--api-key-env` (default `BISHENG_API_KEY`). Exit codes are
+`0` for success, `2` for missing/invalid local configuration, `3` for a
+connection/protocol failure, and `4` for an allowlist or tool-call failure.
+
 ## Permission Scripts
 
 For an existing F048 installation, run the model publisher below in the release
@@ -227,6 +277,15 @@ and files, then verifies them with higher consistency. It preserves CUSTOM
 boundaries, existing parent edges, and per-account Grants. This also runs before
 the `already_current` result; `service_account_marker_tuples_verified` records
 successful verification. A write or verification failure exits nonzero.
+
+On the `already_current` path it also ensures the CURRENT Catalog's own
+`service_account:*` markers (`active`, and `enabled_marker` / `<action>_marker` /
+`grant_level_<n>_marker` on every model release), compiled with the same rule a
+publish uses; `service_account_catalog_marker_tuples_verified` records them. A
+Catalog released before service accounts joined the model (2026-09-09) carries
+only `user:*` markers there, so every action a service account receives through
+a model (edit, use, manage_permission ...) was denied until this ran. The user
+half of the Catalog is never touched.
 
 When the model changes, it publishes or reuses the immutable model in the same
 Store and its `authorization_model_release`. It verifies the markers against
@@ -858,6 +917,37 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py
 
 ## Tenant / Data Fix Scripts
 
+### `migrate_f068_knowledge_chat_entries.py`
+
+F068 知识空间历史会话入口迁移。脚本只访问数据库，扫描指定会话租户（不传
+`--tenant-id` 时扫描全部租户）的全部知识空间 session，识别原资源已删除或已移出
+原空间的活动会话，并把 `message_session.entry_flow_id` 指向原空间根目录。脚本不会
+改写 session/message/citation 的内容 `flow_id`，也不会初始化 OpenFGA、Redis、Milvus
+或 Elasticsearch。
+
+默认 dry-run，输出不含密码的数据库身份、稳定 manifest SHA-256、分类计数和掩码后的
+chat 样例。先处理所有 `unparseable`、`cross_tenant_conflict` 和非法 entry blocker，
+再复制 dry-run 的 SHA 执行 apply。apply 按 `--batch-size` 独立提交，并把同一 manifest
+hash 与最后完成的 `(tenant_id, chat_id)` 写入 checkpoint；可用同一命令续跑。原知识
+空间已删除的会话只计入非阻断的 `deleted_space_skipped`，不写 entry。
+
+> 前置：先执行包含 `f068_knowledge_chat_entry` 的 `alembic upgrade head`。运行期间应保持
+> 资源迁移/删除和知识空间会话写入入口关闭，避免 dry-run 与 apply 之间输入变化。
+
+Usage (from `src/backend/`):
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f068_knowledge_chat_entries.py --tenant-id 3
+
+PYTHONPATH=./ .venv/bin/python scripts/migrate_f068_knowledge_chat_entries.py \
+  --tenant-id 3 \
+  --apply \
+  --expected-input-sha256 <dry-run-sha256> \
+  --batch-size 500 \
+  --checkpoint-file /var/lib/bisheng/f068-tenant-3.checkpoint.json
+```
+
 ### `backfill_message_citation_relations.py`
 
 把历史 `message_citation.message_id` 回填到新的 `message_citation_relation` 关联表，使同一个全局 `citation_id` 可以被多条工作流输出消息复用。脚本默认 dry-run、分批执行且幂等；必须在升级后的服务已经创建 `message_citation_relation` 表后运行。
@@ -1030,4 +1120,15 @@ config=config.yaml PYTHONPATH=./ python scripts/seed_load_test_org.py --purge --
 
 # 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
 bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
+```
+
+### `dsh_migrate_role_policies.py`
+
+将当前角色授权的有效额度迁为个人额度，用于切换到部门树授权；执行前后核对每个成员的最终额度，席位和累计用量沿用原记录。
+
+从 `src/backend/` 运行，`config` 与线上服务配置一致。默认输出迁移计划，确认计划后加 `--apply` 保存。
+
+```bash
+python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
+python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```

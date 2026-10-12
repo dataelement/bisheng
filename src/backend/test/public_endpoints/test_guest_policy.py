@@ -1,10 +1,8 @@
 from types import SimpleNamespace
 
 import pytest
-from starlette.datastructures import Headers
 
 from bisheng.common.errcode.public_endpoints import (
-    PublicAccessError,
     PublicGuestAccessDisabledError,
 )
 from bisheng.core.context.tenant import get_current_tenant_id, get_visible_tenant_ids
@@ -73,14 +71,6 @@ def guest_config(monkeypatch):
     monkeypatch.setattr(guest_policy.UserTenantDao, "aget_user_tenant", aget_user_tenant)
     monkeypatch.setattr(guest_policy.TenantDao, "aget_by_id", aget_by_id)
     return state
-
-
-def test_identity_headers_are_rejected() -> None:
-    for name in ("X-On-Behalf-Of", "X-End-User"):
-        with pytest.raises(PublicAccessError) as caught:
-            guest_policy.reject_identity_headers(Headers({name: "value"}))
-        assert caught.value.http_status == 403
-        assert caught.value.code == 26104
 
 
 @pytest.mark.asyncio
@@ -244,5 +234,5 @@ async def test_operator_liveness_fails_closed(guest_config, operator_identity, b
         auth_module.UserRoleDao.aget_user_roles = original
 
     assert caught.value.http_status == 403
-    assert caught.value.code == 26103
+    assert caught.value.code == 26403
     assert resolved == []

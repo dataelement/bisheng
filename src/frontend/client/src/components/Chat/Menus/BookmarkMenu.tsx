@@ -47,7 +47,7 @@ const BookmarkMenu: FC = () => {
     onError: () => {
       showToast({
         message: 'Error adding bookmark',
-        severity: NotificationSeverity.ERROR,
+        severity: NotificationSeverity.WARNING,
       });
     },
     onMutate: (vars) => {
@@ -73,7 +73,7 @@ const BookmarkMenu: FC = () => {
       if (tag === undefined || tag === '' || !conversationId) {
         showToast({
           message: 'Invalid tag or conversationId',
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
         return;
       }

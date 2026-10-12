@@ -1474,7 +1474,13 @@ class WorkStationService(BaseService):
         return ""
 
     @classmethod
-    async def get_chat_history(cls, chat_id: str, size: int = 4, max_tokens: int | None = None):
+    async def get_chat_history(
+        cls,
+        chat_id: str,
+        size: int = 4,
+        max_tokens: int | None = None,
+        citation_key_to_handle: dict[str, str] | None = None,
+    ):
         """Build LLM-consumable chat history, backward compatible with both
         legacy plain-text messages and v2.5 JSON-formatted messages.
 
@@ -1491,7 +1497,19 @@ class WorkStationService(BaseService):
         ``daily_chat.history_max_tokens`` in the DB config). If ``None`` the
         token-cap stage is skipped — keep this for callers that only want
         row-count trimming or that manage budgeting themselves.
+
+        ``citation_key_to_handle`` (F075): when given, citation markers in past
+        answers are shown to the model as ``[Sn]`` handles, and markers whose
+        key has no handle are dropped — the model never sees the verbatim-id
+        format it is no longer taught.
         """
+        from bisheng.citation.domain.services.daily_citation_handles import markers_to_handles
+
+        def _ai(content: str) -> AIMessage:
+            if citation_key_to_handle is not None:
+                content = markers_to_handles(content, citation_key_to_handle)
+            return AIMessage(content=content)
+
         import re as _re
 
         chat_history = []
@@ -1545,19 +1563,19 @@ class WorkStationService(BaseService):
                     content = parsed.get("msg", "") if isinstance(parsed, dict) else raw
                 except (json.JSONDecodeError, TypeError):
                     content = raw
-                chat_history.append(AIMessage(content=content))
+                chat_history.append(_ai(content))
 
             elif one.category == MessageCategory.ANSWER.value:
                 # Legacy plain-text: strip :::thinking / :::web markup so the
                 # model sees only the visible answer.
                 content = _re.sub(r":::thinking\n[\s\S]*?\n:::", "", raw)
                 content = _re.sub(r":::web\n[\s\S]*?\n:::", "", content).strip()
-                chat_history.append(AIMessage(content=content))
+                chat_history.append(_ai(content))
 
             elif one.category == MessageCategory.TASK.value:
                 # F035 Track J: linsight task-turn answer — plain text (the rich
                 # execution detail lives on the linked session_version, not here).
-                chat_history.append(AIMessage(content=raw))
+                chat_history.append(_ai(raw))
 
         # Token-count cap: drop oldest until total tokens ≤ max_tokens.
         # Keep at least one message (the most recent) so the model still

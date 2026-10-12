@@ -59,6 +59,17 @@ class LinsightSkillBase(SQLModelSerializable):
         description="Whether the skill is enabled",
         sa_column=Column("enabled", Integer, nullable=False, server_default=text("1"), comment="Enabled flag"),
     )
+    default_checked: bool = Field(
+        default=False,
+        description="Preselected in the end-user picker of every new conversation (user can still remove it)",
+        sa_column=Column(
+            "default_checked",
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Preselected in the end-user picker",
+        ),
+    )
     source: str = Field(
         default=SKILL_SOURCE_MANUAL,
         description="manual | sop_migrated | builtin",
@@ -219,6 +230,22 @@ class LinsightSkillDao:
                 .where(col(LinsightSkill.name) == name)
                 .where(col(LinsightSkill.tenant_id) == tid)
                 .values(enabled=enabled, update_time=datetime.now())
+            )
+            result = await session.exec(statement)
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def set_default_checked(cls, name: str, default_checked: bool) -> bool:
+        # Same explicit tenant scoping (and update_time bump) as set_enabled;
+        # MySQL's ON UPDATE would bump update_time anyway.
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        async with get_async_db_session() as session:
+            statement = (
+                update(LinsightSkill)
+                .where(col(LinsightSkill.name) == name)
+                .where(col(LinsightSkill.tenant_id) == tid)
+                .values(default_checked=default_checked, update_time=datetime.now())
             )
             result = await session.exec(statement)
             await session.commit()

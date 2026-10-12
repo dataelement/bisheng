@@ -137,7 +137,7 @@ export function EdgeTTS({ isLast, index, messageId, content, className }: TMessa
           if (!isBrowserSupported) {
             showToast({
               message: localize('com_nav_tts_unsupported_error'),
-              status: 'error',
+              status: 'warning',
             });
             return;
           }

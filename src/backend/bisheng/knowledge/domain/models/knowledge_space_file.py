@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 
-# F068: ``order_field_text`` lands in ``ORDER BY`` as raw SQL text. The space
+# F072: ``order_field_text`` lands in ``ORDER BY`` as raw SQL text. The space
 # children/search endpoints type their query params with these aliases (FastAPI
 # answers 422 for anything else) and the DAO re-checks below so no other caller
 # can smuggle an expression such as ``if(1=1,sleep(5),1)`` in.
@@ -219,8 +219,10 @@ class SpaceFileDao(KnowledgeFileDao):
 
         statement = select(KnowledgeFile).where(*filters)
 
-        # F027: cursor-based keyset takes precedence over OFFSET.
-        if cursor is not None and order_field == "file_type":
+        # F027: page=0 identifies the cursor scan, including its first page
+        # where no cursor key exists yet. Keep that first fetch bounded and use
+        # exactly the same stable order as subsequent keyset batches.
+        if page == 0 and order_field == "file_type":
             from bisheng.database.utils.keyset import build_keyset_where
 
             order_dir_asc = (order_sort or "asc").lower() == "asc"
@@ -238,7 +240,8 @@ class SpaceFileDao(KnowledgeFileDao):
                 True,
                 True,
             )
-            statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
+            if cursor is not None:
+                statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
             if page_size:
                 statement = statement.limit(page_size)
             statement = statement.order_by(text(f"{cls.order_field_text(order_field, order_sort)}, id desc"))

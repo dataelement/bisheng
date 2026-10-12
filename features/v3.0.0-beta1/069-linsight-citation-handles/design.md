@@ -8,7 +8,7 @@
 >
 > 调整原则（详见 `docs/SDD-Guide.md` §3-§4）：实现变化 → 覆盖更新本文档；推翻已 ★ 确认的决策 → 停下与用户重新确认。
 
-**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待拆解） · PRD `docs/PRD/3.0 灵思任务模式引用溯源优化方案/灵思任务模式引用溯源优化方案.md`
+**关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待拆解） · PRD `docs/PRD/3.0-beta2/3.0 灵思任务模式引用溯源优化方案.md`
 **版本**: v3.0.0-beta1（发版线 `feat/3.0.0-beta2`）
 **最后更新**: 2026-09-20（初版 + sdd-review 修订；行号核对到 `a0770eb67` / beta2 `3b8b83965`，两线该部分代码相同）
 

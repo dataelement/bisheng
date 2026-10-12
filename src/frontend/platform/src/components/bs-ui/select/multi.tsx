@@ -193,7 +193,11 @@ const MultiSelect = ({
         // 开始观察目标元素
         observer.observe(footerRef.current);
 
-        return () => observer.unobserve(footerRef.current);
+        // When the select unmounts while open, React has already detached footerRef
+        // before this cleanup runs, and unobserve(null) throws a TypeError. disconnect()
+        // needs no element, and also stops watching the footer node rendered for the
+        // open dropdown (a different node from footerRef.current once it closes).
+        return () => observer.disconnect();
     }, [created])
 
     const handleClearClick = () => {

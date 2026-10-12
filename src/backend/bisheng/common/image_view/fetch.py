@@ -15,6 +15,9 @@ from loguru import logger
 LONG_EDGE = 512
 MIN_READABLE_EDGE = 32
 _KNOWLEDGE_IMAGES = "knowledge/images/"
+# WeChat article images. Exact hosts only; the CDN rejects requests without this Referer.
+_WECHAT_IMAGE_HOSTS = frozenset({"mmbiz.qpic.cn", "mmecoa.qpic.cn"})
+_WECHAT_REFERER = "https://mp.weixin.qq.com"
 
 
 @dataclass(frozen=True)
@@ -67,12 +70,32 @@ async def _async_file_download(url: str) -> bytes:
         return handle.read()
 
 
+async def _download_wechat(url: str) -> bytes:
+    """Download a WeChat CDN image. The CDN returns non-200 without the mp Referer."""
+    from bisheng.core.external.http_client.http_client_manager import get_http_client
+
+    http_client = await get_http_client()
+    response = await http_client.get(
+        url=url,
+        data_type="binary",
+        headers={"Referer": _WECHAT_REFERER},
+    )
+    if response.status_code != 200:
+        raise ValueError(f"wechat image download status {response.status_code}")
+    body = response.body
+    if isinstance(body, (bytes, bytearray)) and body:
+        return bytes(body)
+    raise ValueError("wechat image download returned no bytes")
+
+
 def _classify(url: str) -> str:
-    """Return minio_path | http | reject. Never follows 3xx off the allow-list."""
+    """Return minio_path | http | wechat | reject. Never follows 3xx off the allow-list."""
     if "X-Amz-Algorithm" in url and url.startswith("/"):
         return "http"
     if url.startswith("http://") or url.startswith("https://"):
         host = urlparse(url).netloc.lower()
+        if host in _WECHAT_IMAGE_HOSTS:
+            return "wechat"
         if host in _share_hosts() or host in _info_hosts():
             return "http"
         return "reject"
@@ -116,6 +139,8 @@ async def fetch_and_encode(url: str) -> FetchEncodeResult:
         if kind == "minio_path":
             bucket, object_key = _split_internal_path(url)
             raw = await _get_object(bucket, object_key)
+        elif kind == "wechat":
+            raw = await _download_wechat(url)
         else:
             raw = await _async_file_download(url)
     except Exception:

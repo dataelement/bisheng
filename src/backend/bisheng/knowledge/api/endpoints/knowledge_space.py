@@ -27,6 +27,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderCreateReq,
     FolderRenameReq,
     FolderUploadReq,
+    KnowledgeChatSessionResponse,
     KnowledgeSpaceCreateReq,
     KnowledgeSpaceUpdateReq,
     WebLinkCreateReq,
@@ -113,9 +114,7 @@ async def list_creation_grant_users(
     page_size: int = Query(50, ge=1, le=200),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(
-        await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size)
-    )
+    return resp_200(await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size))
 
 
 @router.get("/creation-grant-subjects/user-groups")
@@ -125,9 +124,7 @@ async def list_creation_grant_user_groups(
     page_size: int = Query(50, ge=1, le=200),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    return resp_200(
-        await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size)
-    )
+    return resp_200(await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size))
 
 
 @router.get("/creation-grant-subjects/departments/children")
@@ -331,7 +328,7 @@ async def batch_create_department_spaces(
 async def get_knowledge_square(
     page: int = 1,
     page_size: int = 20,
-    keyword: str = None,
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_knowledge_square(keyword, page, page_size)
@@ -346,7 +343,7 @@ async def list_space_children(
     order_field: SpaceFileOrderField = "file_type",
     order_sort: SpaceFileOrderSort = "asc",
     file_status: list[int] = Query(default=None, description="文件状态列表"),
-    page_size: int = 20,
+    page_size: int = 40,
     cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
@@ -675,7 +672,7 @@ async def subscribe_space(
 
 
 @router.post("/{space_id}/unsubscribe", response_model=None)
-async def subscribe_space(
+async def unsubscribe_space(
     space_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
@@ -734,7 +731,7 @@ async def get_chat_folder_session(
     svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.get_chat_folder_session(space_id, folder_id)
-    return resp_200(result)
+    return resp_200([KnowledgeChatSessionResponse.model_validate(item) for item in result])
 
 
 @router.post("/{space_id}/chat/folder/session")
@@ -744,11 +741,11 @@ async def create_chat_folder_session(
     svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
 ):
     result = await svc.create_chat_folder_session(space_id, folder_id)
-    return resp_200(result)
+    return resp_200(KnowledgeChatSessionResponse.model_validate(result))
 
 
 @router.delete("/{space_id}/chat/folder/session")
-async def create_chat_folder_session(
+async def delete_chat_folder_session(
     space_id: int,
     folder_id: int = Body(default=0, description="folder id"),
     chat_id: str = Body(..., description="Chat ID"),
@@ -771,7 +768,7 @@ async def get_chat_folder_history(
 
 
 @router.delete("/{space_id}/chat/folder/history")
-async def get_chat_folder_history(
+async def delete_chat_folder_history(
     space_id: int,
     folder_id: int = Query(default=0, description="folder id"),
     chat_id: str = Query(..., description="Chat ID"),

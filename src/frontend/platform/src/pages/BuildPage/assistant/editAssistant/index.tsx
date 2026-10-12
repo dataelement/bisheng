@@ -13,7 +13,7 @@ import { OnlineState } from "@/types/flow";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
-import { unstable_useBlocker as useBlocker, useNavigate, useParams } from "react-router-dom";
+import { useBlocker, useNavigate, useParams } from "react-router-dom";
 import Header from "./Header";
 import Prompt from "./Prompt";
 import Setting from "./Setting";

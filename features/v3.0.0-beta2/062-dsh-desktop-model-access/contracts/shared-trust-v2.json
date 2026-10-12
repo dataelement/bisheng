@@ -1,0 +1,33 @@
+{
+  "test_only": true,
+  "shared_secret": "dsh-integration-fixture-shared-secret",
+  "derived_keys": {
+    "bisheng-to-gateway-v1": "ac41068bbe156cfbc04687160432dc79095c5c80539926e173956381902e5c02",
+    "gateway-to-bisheng-v1": "b320329d755bdf66211e90e958629d7802bf8a746ae37199b4127d3069aebcea",
+    "dsh-access-v1": "9eedf27d8d53532cfd0758a25968b0f5296e8084cc801795787c854b451afef8"
+  },
+  "service_requests": [
+    {
+      "method": "POST",
+      "path": "/api/internal/dsh/introspect",
+      "body": "{\"token\":\"test-only\"}",
+      "headers": {
+        "X-DSH-Key-Id": "bisheng-to-gateway-v1",
+        "X-DSH-Timestamp": "1788919200",
+        "X-DSH-Nonce": "T_2TYsg1VLRaLHl6OFvbXWRBprTFNeEz",
+        "X-DSH-Signature": "b9960da7f58f5e7d799b928daa9cc334e6a667c256f076d5bc17267f68cabe67"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/internal/dsh/identity/check",
+      "body": "{\"tenant_id\":\"2\",\"user_id\":\"12\"}",
+      "headers": {
+        "X-DSH-Key-Id": "gateway-to-bisheng-v1",
+        "X-DSH-Timestamp": "1788919200",
+        "X-DSH-Nonce": "011K8rAf0QTXMj7LobQOw7n5bj5JE56w",
+        "X-DSH-Signature": "784ed384a24f18d459c0eb9c3a7ce7f27c5c55cbaaa2cd6ca174ac21bbfd88b9"
+      }
+    }
+  ]
+}

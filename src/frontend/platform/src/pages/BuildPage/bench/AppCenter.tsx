@@ -13,7 +13,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { FormInput } from "./FormInput";
-import { clampMenuName } from "./menuDisplayName";
+import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
 
 const MAX_LEN = 1000;
 
@@ -23,8 +23,8 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const { reloadConfig } = useContext(locationContext);
     const [welcome, setWelcome] = useState('');
     const [description, setDescription] = useState('');
-    // Sidebar entry name for the app-center module — required, defaults to the tab name.
-    const [menuDisplayName, setMenuDisplayName] = useState(() => t('bench.appCenter'));
+    // Sidebar entry name for the app-center module — optional, blank keeps the localized default.
+    const [menuDisplayName, setMenuDisplayName] = useState('');
     const [errors, setErrors] = useState({ welcome: '', description: '', menuDisplayName: '' });
     const [configMeta, setConfigMeta] = useState<any>(null);
     // Full loaded config — round-tripped on save so home-tab fields survive.
@@ -38,9 +38,8 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
             loadedCfgRef.current = cfg || {};
             setWelcome(cfg?.applicationCenterWelcomeMessage ?? '');
             setDescription(cfg?.applicationCenterDescription ?? '');
-            // 空字符串同样视为「未配置」，回落到默认菜单名
-            const savedMenuName = (cfg?.appCenterMenuDisplayName ?? '').trim();
-            setMenuDisplayName(savedMenuName || t('bench.appCenter'));
+            // Blank = unconfigured; the placeholder shows the default and the client localizes it
+            setMenuDisplayName((cfg?.appCenterMenuDisplayName ?? '').trim());
         });
     }, [scopeVersion, t]);
 
@@ -52,15 +51,12 @@ export function AppCenter({ scopeVersion = 0 }: { scopeVersion?: number }) {
         }));
     };
 
-    const handleSave = () => {
-        // 菜单显示名称必填（长度在输入时已截断）
-        if (!menuDisplayName.trim()) {
-            setErrors(prev => ({ ...prev, menuDisplayName: t('chatConfig.errors.required') }));
-            return;
-        }
+    const handleSave = async () => {
         const dataToSave = {
             ...(loadedCfgRef.current || {}),
-            appCenterMenuDisplayName: menuDisplayName.trim(),
+            // Round-tripped from the home tab; normalize so a saved default name doesn't stay frozen
+            homeMenuDisplayName: await toStoredMenuName(loadedCfgRef.current?.homeMenuDisplayName ?? '', 'bench.home'),
+            appCenterMenuDisplayName: await toStoredMenuName(menuDisplayName, 'bench.appCenter'),
             applicationCenterWelcomeMessage: welcome.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
             applicationCenterDescription: description.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
         };

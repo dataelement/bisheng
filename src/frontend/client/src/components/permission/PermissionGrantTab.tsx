@@ -1,4 +1,6 @@
-import { Loader2, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+// `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
+import { LockKeyhole } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
@@ -144,6 +146,31 @@ export function PermissionGrantTab({
     ],
     [assignees, queuedAdds, subjectType],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => [
+      ...assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === "department"
+            && assignee.scope === "LOCAL"
+            && assignee.source.include_children,
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+      ...queuedAdds
+        .filter(
+          (change) =>
+            change.op === "ADD"
+            && change.subject.type === "department"
+            && change.subject.include_children,
+        )
+        .map((change) =>
+          change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
+        )
+        .filter(Number.isFinite),
+    ],
+    [assignees, queuedAdds],
+  );
 
   // The badge names which model they already hold, so a locked row explains
   // itself rather than just refusing to be clicked.
@@ -265,6 +292,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
           grantedLabels={grantedModelLabels}
         />
       )}
@@ -360,7 +388,7 @@ export function PermissionGrantTab({
             onClick={() => void handleSubmit(selectedAddChanges)}
           >
             {submitting && (
-              <Loader2 aria-hidden="true" className="animate-spin" />
+              <Outlined.Loading aria-hidden="true" className="animate-spin" />
             )}
             {localize("f048_permission.grant.submit")}
           </Button>
@@ -464,7 +492,7 @@ export function PermissionGrantTab({
                     })
                   }
                 >
-                  <Trash2 aria-hidden="true" />
+                  <Outlined.Delete aria-hidden="true" />
                 </Button>
               </div>
             );
@@ -538,7 +566,7 @@ export function PermissionGrantTab({
               }
               onClick={handleAdd}
             >
-              <Plus aria-hidden="true" />
+              <Outlined.Plus aria-hidden="true" />
               {localize("f048_permission.grant.add")}
             </Button>
           </div>
@@ -557,7 +585,7 @@ export function PermissionGrantTab({
           onClick={() => void handleSubmit()}
         >
           {submitting && (
-            <Loader2 aria-hidden="true" className="animate-spin" />
+            <Outlined.Loading aria-hidden="true" className="animate-spin" />
           )}
           {localize("f048_permission.grant.submit")}
         </Button>

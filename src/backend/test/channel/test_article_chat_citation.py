@@ -273,6 +273,18 @@ async def test_persist_failure_does_not_raise():
         await ChannelChatService.save_article_citations(items, message_id=77, chat_id="chat-1", flow_id="doc-9")
 
 
+def test_citation_key_survives_truncation_of_a_long_article():
+    """The endpoint decorates the article, then the stream truncates it to
+    max_chunk_size. A key appended at the end was cut off for every long
+    article, so the model had nothing to cite."""
+    key = "articlesearch_abc:0"
+    decorated = ChannelChatService.decorate_article_content("正文" * 20000, key)
+
+    truncated = ChannelChatService._truncate_article_content(decorated, 15000)
+
+    assert f"citation_key: {key}" in truncated
+
+
 def test_prompt_building_without_a_citation_key_is_unchanged():
     """Degraded path: registration failed, so the prompt carries no key and the
     model simply has nothing to cite."""

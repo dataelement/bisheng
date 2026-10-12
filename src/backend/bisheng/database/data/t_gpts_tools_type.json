@@ -244,5 +244,20 @@
     "user_id": null,
     "is_delete": 0,
     "openapi_schema": null
+  },
+  {
+    "id": 17,
+    "name": "Image View",
+    "logo": "",
+    "description": "使用模型管理中的视觉模型查看文档图片",
+    "server_host": "",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "extra": "{\"model_id\": \"\"}",
+    "openapi_schema": null
   }
 ]

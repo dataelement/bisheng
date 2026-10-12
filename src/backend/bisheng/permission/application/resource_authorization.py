@@ -81,6 +81,29 @@ class ResourceAuthorizationRegistry:
             raise PermissionInvalidResourceError()
         return target
 
+    async def confirm_absent(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+    ) -> bool:
+        """Return True only when the owning business Service has no record.
+
+        ``resolve`` raises the same 19003 for a missing resource, a cross-tenant
+        resource and a resource in a state that cannot be authorized. Cleanup
+        paths need to tell "the resource is gone" apart from the other cases,
+        so this asks the business loader directly. An unregistered type or a
+        port without a loader cannot confirm anything and returns False. A
+        loader error propagates, so the caller stays fail-closed.
+        """
+
+        normalized_id = resource_id.strip()
+        port = self.port_for(resource_type)
+        load_permission_record = getattr(port, "load_permission_record", None) if port else None
+        if load_permission_record is None or not normalized_id:
+            return False
+        return await load_permission_record(resource_id=normalized_id) is None
+
 
 class BoundResourceAuthorizationPort:
     """Bind a multi-resource business adapter to one registry key."""
@@ -101,6 +124,14 @@ class BoundResourceAuthorizationPort:
             resource_id=resource_id,
             actor=actor,
             action=action,
+        )
+
+    async def load_permission_record(self, *, resource_id: str):
+        """Load the business record so the registry can confirm absence."""
+
+        return await self._adapter.load_permission_record(
+            resource_type=self._resource_type,
+            resource_id=resource_id,
         )
 
 

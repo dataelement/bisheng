@@ -70,8 +70,78 @@ def _dept(
 # =========================================================================
 
 
+@pytest.mark.parametrize(
+    ("relationships", "expected_order"),
+    [
+        ([], []),
+        ([("LEAF", "CHILD"), ("CHILD", "ROOT"), ("ROOT", None)], ["ROOT", "CHILD", "LEAF"]),
+        ([("B", None), ("A", None)], ["B", "A"]),
+        ([("CHILD", "MISSING"), ("ROOT", None)], ["CHILD", "ROOT"]),
+        ([("A", "B"), ("B", "A"), ("ROOT", None)], ["ROOT", "A", "B"]),
+        ([("SELF", "SELF")], ["SELF"]),
+    ],
+)
+def test_parent_first_order_retains_unresolvable_items(relationships, expected_order):
+    """Ordering must keep malformed items for the existing per-item error handler."""
+    from bisheng.sso_sync.domain.services.departments_sync_service import (
+        DepartmentsSyncService,
+    )
+
+    items = [
+        DepartmentUpsertItem(external_id=external_id, name=external_id, parent_external_id=parent_id)
+        for external_id, parent_id in relationships
+    ]
+    ordered = DepartmentsSyncService._parent_first_upserts(items)
+
+    assert [item.external_id for item in ordered] == expected_order
+    assert [item.external_id for item in items] == [external_id for external_id, _ in relationships]
+
+
 @pytest.mark.asyncio
 class TestUpsertBatch:
+    async def test_child_before_parent_is_applied_in_parent_first_order(self):
+        """A flat Gateway payload need not be ordered like the org tree."""
+        from bisheng.sso_sync.domain.services.departments_sync_service import (
+            DepartmentsSyncService,
+        )
+
+        payload = DepartmentsSyncRequest(
+            upsert=[
+                DepartmentUpsertItem(external_id="CHILD", name="Child", parent_external_id="PARENT"),
+                DepartmentUpsertItem(external_id="PARENT", name="Parent"),
+            ],
+            remove=[],
+        )
+        applied: list[str] = []
+
+        async def fake_get(source, external_id):
+            if external_id in applied:
+                return _dept(external_id)
+            return None
+
+        async def fake_upsert(**kwargs):
+            item = kwargs["item"]
+            if item.parent_external_id and item.parent_external_id not in applied:
+                raise RuntimeError("parent missing")
+            applied.append(item.external_id)
+            return _dept(item.external_id)
+
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new=fake_get,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new=fake_upsert,
+            ),
+        ):
+            result = await DepartmentsSyncService.execute(payload)
+
+        assert applied == ["PARENT", "CHILD"]
+        assert result.applied_upsert == 2
+        assert result.errors == []
+
     async def test_happy_path_new_items_applied(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,

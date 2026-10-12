@@ -45,6 +45,26 @@ class ServiceAccountRepository:
         return row
 
     @classmethod
+    async def name_taken(cls, tenant_id: int, name: str, *, exclude_id: int | None = None) -> bool:
+        """Whether ``name`` is used by any account of ``tenant_id``, deleted ones included.
+
+        Mirrors ``uk_service_account_tenant_name``. The tenant predicate is
+        explicit and the filter bypassed, because the automatic filter would
+        widen a child tenant to ``IN (leaf, ROOT)`` while the constraint is
+        per tenant.
+        """
+
+        statement = select(func.count(ServiceAccount.id)).where(
+            ServiceAccount.tenant_id == tenant_id,
+            ServiceAccount.name == name,
+        )
+        if exclude_id is not None:
+            statement = statement.where(ServiceAccount.id != exclude_id)
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                return int((await session.exec(statement)).one()) > 0
+
+    @classmethod
     async def get(cls, service_account_id: int, *, include_deleted: bool = False) -> ServiceAccount | None:
         statement = select(ServiceAccount).where(ServiceAccount.id == service_account_id)
         if not include_deleted:

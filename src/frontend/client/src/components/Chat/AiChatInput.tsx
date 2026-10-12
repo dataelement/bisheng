@@ -17,12 +17,14 @@ import { useRecoilValue, useRecoilState } from "recoil";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
+import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
+import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
@@ -259,8 +261,13 @@ const AiChatInput = memo(
             mediaCoverUrl?: string;
             cover_filepath?: string;
             mediaDurationSec?: number;
+            /** Folder upload: path relative to the picked folder root. */
+            relative_path?: string;
         }>>([]);
         const inputFilesRef = useRef<any>(null);
+        const supportsVision = modelOptions?.some(
+            (model) => String(model.id) === String(modelValue) && model.visual
+        );
 
         // Leaving task mode drops what only task mode could carry: the skill
         // selection (so the panel's checkboxes reset in sync with the now-hidden
@@ -275,6 +282,7 @@ const AiChatInput = memo(
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     enableEtl4lm: !!bsConfig?.enable_etl4lm,
+                    enableVision: !isLingsi && !!supportsVision,
                     includeOfd: !isLingsi,
                 });
                 const isKept = (name: string) => isFileNameAccepted(name || "", dailyAccept);
@@ -301,7 +309,7 @@ const AiChatInput = memo(
             // envConfig/bsConfig are read only when the transition fires; leaving them
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, setDailySkills]);
+        }, [taskMode, setDailySkills, supportsVision]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -313,6 +321,7 @@ const AiChatInput = memo(
         // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
         // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
         const showAddSkill = !!bsConfig?.skillEntry?.enabled;
+        useDefaultCheckedSkills({ taskMode, skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
 
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
@@ -321,6 +330,13 @@ const AiChatInput = memo(
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
+        const fileAccept = buildChatAccept({
+            enableMedia: !!envConfig?.enable_media_upload,
+            enableEtl4lm: !!bsConfig?.enable_etl4lm,
+            enableVision: !isLingsi && !!supportsVision,
+            includeOfd: !isLingsi,
+            taskMode,
+        });
 
         const navigate = useNavigate();
 
@@ -352,6 +368,11 @@ const AiChatInput = memo(
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            // The selected model may have changed since these files were attached.
+            if (chatFiles?.some((file) => !isFileNameAccepted(file.name || file.filename || '', fileAccept))) {
+                showToast({ message: localize('com_ui_upload_file_type_error'), status: 'error' });
+                return;
+            }
             // Pass files through to parent. The local first-frame poster is a blob
             // that this component revokes on the very next line, and it outranks
             // the server cover in the message bubble — so it stops here, and the
@@ -375,7 +396,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -409,9 +430,31 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        const hasMountedKbs = !!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi;
-        const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
-        const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
+        // Skills join the knowledge spaces in the strip: both are context you
+        // mount onto the conversation, not something you are about to send.
+        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        // An uploaded FOLDER is mounted context too — the workspace rebuilds its
+        // tree and the task works against it — so its card goes to the strip
+        // beside the skills. Loose files stay inline: they are part of the
+        // message being sent. A file belongs to a folder when its
+        // relative_path still carries a directory separator.
+        const isFolderFile = (f: { relative_path?: string }) => (f?.relative_path || '').includes('/');
+        const folderUploadingFiles = uploadingFiles.filter(isFolderFile);
+        const looseUploadingFiles = uploadingFiles.filter((f) => !isFolderFile(f));
+        const folderChatFiles = (chatFiles || []).filter(isFolderFile);
+        const looseChatFiles = (chatFiles || []).filter((f) => !isFolderFile(f));
+        const hasMountedFolders = (folderChatFiles.length > 0 || folderUploadingFiles.length > 0) && !isLingsi;
+        const hasMountedKbs = (!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0;
+        const hasStripItems = hasMountedKbs || hasMountedFolders;
+        const hasInlineAttachments = (looseChatFiles.length > 0 || looseUploadingFiles.length > 0) && !isLingsi;
+        const hasSelectionTags = hasStripItems || hasInlineAttachments;
+
+        const handleRemoveAttachment = (file: { clientId?: string | number }) => {
+            // clientId, not name: a folder upload can carry the same file name in
+            // several subdirectories.
+            inputFilesRef.current?.removeByClientId?.(file.clientId);
+            setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
+        };
 
         // Tell the landing page whether the attachment bar is present so it can
         // hide/show the welcome subtitle without shifting the title or input box.
@@ -435,25 +478,28 @@ const AiChatInput = memo(
                             onClick={onScrollToBottom}
                         >
                             <ArrowDown className="size-4" />
-                            <span className="text-sm">回到底部</span>
+                            <span className="text-sm">{localize('com_ui.scroll_to_bottom')}</span>
                         </Button>
                     </div>
                 </div>}
 
-                {/* Mounted knowledge spaces — a gray strip stacked ABOVE the input
-                    box (Figma 12841:47449). Attachments deliberately do not join
-                    it: files stay inline inside the box, where they read as part
-                    of what you are about to send rather than as mounted context. */}
-                {hasMountedKbs && (
+                {/* Mounted knowledge spaces, task-mode skills and uploaded
+                    folders — a gray strip stacked ABOVE the input box (Figma
+                    12841:47449). Loose files deliberately do not join it: they
+                    stay inline inside the box, where they read as part of what
+                    you are about to send rather than as mounted context. */}
+                {hasStripItems && (
                     <AttachmentBar
                         appearance="strip"
-                        uploadingFiles={[]}
-                        files={[]}
-                        kbs={selectedOrgKbs}
-                        skills={[]}
+                        uploadingFiles={folderUploadingFiles}
+                        files={folderChatFiles}
+                        kbs={selectedOrgKbs || []}
+                        skills={mountedSkills}
+                        onRemoveFile={handleRemoveAttachment}
                         onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
                             onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
                         } : undefined}
+                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                     />
                 )}
 
@@ -472,17 +518,11 @@ const AiChatInput = memo(
                 >
                     {hasInlineAttachments && (
                         <AttachmentBar
-                            uploadingFiles={uploadingFiles}
-                            files={chatFiles || []}
+                            uploadingFiles={looseUploadingFiles}
+                            files={looseChatFiles}
                             kbs={[]}
-                            skills={taskMode ? dailySkills : []}
-                            onRemoveFile={(file) => {
-                                // clientId, not name: a folder upload can carry the
-                                // same file name in several subdirectories.
-                                inputFilesRef.current?.removeByClientId?.(file.clientId);
-                                setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
-                            }}
-                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
+                            skills={[]}
+                            onRemoveFile={handleRemoveAttachment}
                         />
                     )}
 
@@ -490,20 +530,11 @@ const AiChatInput = memo(
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = buildChatAccept({
-                            enableMedia: !!envConfig?.enable_media_upload,
-                            enableEtl4lm: !!bsConfig?.enable_etl4lm,
-                            includeOfd: !isLingsi,
-                            // Task mode also takes data/config/source files: it has a
-                            // workspace and a code interpreter to use them with. Daily
-                            // chat has neither, and would fail the turn on parse.
-                            taskMode,
-                        });
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
                             showVoice={showVoice}
-                            accepts={accept}
+                            accepts={fileAccept}
                             disabled={filesDisabled}
                             hideTrigger
                             hideList
@@ -588,7 +619,9 @@ const AiChatInput = memo(
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
-                        disabled={disabled || isStreaming || isParsingMedia}
+                        // Media parsing only has to block a second send, not typing:
+                        // the send button below stays disabled while `isParsingMedia`.
+                        disabled={disabled || isStreaming}
                         placeholder={placeholder || bsConfig?.inputPlaceholder}
                         tabIndex={0}
                         data-testid="ai-chat-input"
@@ -720,6 +753,14 @@ const AiChatInput = memo(
 
                         {/* Send / Stop / Voice — 固定宽度列，不参与挤压 */}
                         <div className="flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
+                            {/* Media parsing hint — sits left of the model select so the
+                                send button's disabled state has a visible reason. */}
+                            {(isParsingMedia || filesParsing) && (
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs text-primary">
+                                    <Outlined.Loading className="size-3.5 animate-spin" />
+                                    {localize('com_chat.media_parsing')}
+                                </span>
+                            )}
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
@@ -788,11 +829,6 @@ const AiChatInput = memo(
                             )}
                         </div>
                     </div>
-                    {(isParsingMedia || filesParsing) && (
-                        <p className="px-4 pb-1 text-center text-xs text-primary">
-                            {localize('com_chat.media_parsing')}
-                        </p>
-                    )}
                 </div>
             </div>
         );

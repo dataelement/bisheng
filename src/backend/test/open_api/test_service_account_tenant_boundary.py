@@ -116,6 +116,8 @@ async def test_child_tenant_admin_cannot_reach_a_root_accounts_keys(open_api_db,
         with pytest.raises(ServiceAccountNotFoundError):
             await key_endpoints.list_keys(root.id, admin)
         with pytest.raises(ServiceAccountNotFoundError):
+            await key_endpoints.list_keys_page(root.id, page=1, page_size=20, _admin=admin)
+        with pytest.raises(ServiceAccountNotFoundError):
             await key_endpoints.filter_delegate_candidates(root.id, [], admin)
         with pytest.raises(ServiceAccountNotFoundError):
             await key_endpoints.issue_key(root.id, KeyIssueRequest(name="stolen-key"), admin)

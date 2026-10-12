@@ -37,6 +37,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from types import SimpleNamespace
 from typing import Any
 
 _BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -73,6 +74,7 @@ from bisheng.permission.application.catalog_api import (  # noqa: E402
     SqlCatalogImpact,
     SqlCatalogState,
 )
+from bisheng.permission.application.catalog_bootstrap import _catalog_tuples  # noqa: E402
 from bisheng.permission.application.control_state import (  # noqa: E402
     SqlPermissionControlState,
 )
@@ -123,6 +125,7 @@ EXIT_OK = 0
 EXIT_BLOCKED = 3
 EXIT_RUNTIME_ERROR = 4
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
+SERVICE_ACCOUNT_MARKER_SUBJECT = "service_account:*"
 ACTIVE_OPERATION_STATUSES = ("PREPARED", "STAGING", "COMMIT_UNKNOWN", "COMMITTED")
 
 
@@ -457,6 +460,27 @@ async def load_service_account_resource_markers() -> frozenset[tuple[str, str, s
                 ).all()
             )
     return _compile_service_account_resource_markers(rows)
+
+
+async def load_service_account_catalog_markers() -> frozenset[tuple[str, str, str]]:
+    """Compile the CURRENT Catalog's ``service_account:*`` markers from SQL.
+
+    A Catalog released before service accounts joined the model (2026-09-09)
+    carries only ``user:*`` markers on its model releases, so every action a
+    service account receives through a model (edit, use, manage_permission ...)
+    evaluates to false. Re-publishing a Catalog writes both subjects, but an
+    unchanged model never re-publishes one. This uses the exact rule a publish
+    or a fresh install uses (``catalog_bootstrap._catalog_tuples``) and keeps
+    only the service-account half; the ``user:*`` half is already there.
+    """
+
+    snapshot = await SqlPermissionControlState().current_catalog()
+    model_release = SimpleNamespace(models=tuple(model.snapshot for model in snapshot.models))
+    return frozenset(
+        (row["user"], row["relation"], row["object"])
+        for row in _catalog_tuples(snapshot.release_key, model_release)
+        if row["user"] == SERVICE_ACCOUNT_MARKER_SUBJECT
+    )
 
 
 def _compile_service_account_resource_markers(
@@ -840,6 +864,19 @@ async def ensure_service_account_resource_markers(
     Both the model publisher and the full reconciler use CURRENT SQL modes as
     their source. Never turn CUSTOM resources into INHERIT or create per-account
     descendant Grants. Duplicate-ignore writes make unchanged-model runs safe.
+    """
+    await _ensure_expected_tuples(client, expected, batch_size=80)
+    await _verify_expected_tuples(client, expected)
+
+
+async def ensure_service_account_catalog_markers(
+    client: FGAClient,
+    expected: frozenset[tuple[str, str, str]],
+) -> None:
+    """Write and verify the CURRENT Catalog's service-account markers.
+
+    Additive and duplicate-ignoring, like the resource markers: the user half of
+    the Catalog and every Grant are left exactly as they are.
     """
     await _ensure_expected_tuples(client, expected, batch_size=80)
     await _verify_expected_tuples(client, expected)

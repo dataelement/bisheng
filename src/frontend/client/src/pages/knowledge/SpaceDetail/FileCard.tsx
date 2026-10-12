@@ -11,12 +11,12 @@ import {
     DropdownMenu,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
+import { ActionMenuContent, ActionMenuItem, ActionMenuLoadingRow } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemRetryable, isKnowledgeItemUploading, type KnowledgeStatusTone } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
@@ -40,6 +40,9 @@ interface FileCardProps {
     userRole: SpaceRole;
     /** F040: lazily resolve this file's action permissions when its menu opens. */
     onEnsureFilePermissions?: (file: KnowledgeFile) => void;
+    /** True while that lookup is in flight — the menu shows a loading row instead
+     *  of the fail-closed item set so items don't pop in after it opens. */
+    permissionsLoading?: boolean;
     isSelected: boolean;
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
@@ -90,6 +93,7 @@ export function FileCard({
     file,
     userRole,
     onEnsureFilePermissions,
+    permissionsLoading = false,
     isSelected,
     onSelect,
     onDownload,
@@ -215,9 +219,7 @@ export function FileCard({
             // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
             return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
         }
-        // Folder rollup: 存在异常 is not an admin-only signal — anyone who can see the files
-        // needs to know their folder holds one that needs attention. Checked before the
-        // isAdmin gate that guards the per-file status tags.
+        // The backend returns this folder anomaly signal only to the space creator.
         if (isFolder) {
             if (file.hasAbnormalFiles !== true) return null;
             const pill = (
@@ -361,13 +363,7 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
-    const hasRetryOption = Boolean(
-        onRetry && (
-            file.status === FileStatus.FAILED ||
-            file.status === FileStatus.VIOLATION ||
-            (isFolder && file.hasFailedFiles === true)
-        )
-    );
+    const hasRetryOption = Boolean(onRetry && isKnowledgeItemRetryable(file));
     // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
@@ -386,8 +382,12 @@ export function FileCard({
         !isUploadingFolderPlaceholder &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
-    // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    // Shared action-menu items, reused by the "..." dropdown, the H5 row menu and
+    // the right-click menu. While permissions are still resolving, show a single
+    // loading row so the menu doesn't open with a few items and then grow.
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : (
         <>
             {showMenuDownloadItem && (
                 <ActionMenuItem
@@ -701,7 +701,7 @@ export function FileCard({
                                         <Button
                                             variant="outline"
                                             size="icon"
-                                            className="w-5 h-5 rounded-md shrink-0"
+                                            className="w-5 h-5 rounded-md shrink-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                                             onClick={(e) => e.stopPropagation()}
                                         >
                                             <MoreVertical className="size-4 text-text-2 group-hover:text-text-1" />
@@ -780,74 +780,7 @@ export function FileCard({
                                 align="end"
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                {showMenuDownloadItem && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                        icon={<Outlined.Download />}
-                                        label={localize("com_knowledge.download")}
-                                    />
-                                )}
-                                {onManagePermission && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                        icon={<Outlined.PeopleSafe />}
-                                        label={localize("com_permission.manage_permission")}
-                                    />
-                                )}
-                                {isAdmin && !isFolder && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                        icon={<Outlined.Tag />}
-                                        label={localize("com_knowledge.edit_tags")}
-                                    />
-                                )}
-                                {canRename && (
-                                    <ActionMenuItem
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            startRenaming();
-                                        }}
-                                        icon={<Outlined.Edit />}
-                                        label={localize("com_knowledge.rename")}
-                                    />
-                                )}
-                                {showMoveItem && (
-                                    <ActionMenuItem
-                                        disabled={!canMove || isUploading}
-                                        onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                        icon={<Outlined.MoveToFolder />}
-                                        label={localize("com_knowledge.move")}
-                                    />
-                                )}
-                                {isAdmin && hasRetryOption && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                        icon={<Outlined.Refresh />}
-                                        label={localize("com_knowledge.retry")}
-                                    />
-                                )}
-                                {showVersionManagement && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                        icon={<GitBranch />}
-                                        label={localize("com_knowledge.version.menu_version_management")}
-                                    />
-                                )}
-                                {showVersionHistory && (
-                                    <ActionMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                        icon={<History />}
-                                        label={localize("com_knowledge.version.menu_version_history")}
-                                    />
-                                )}
-                                {canDelete && (
-                                    <ActionMenuItem
-                                        danger
-                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                        icon={<Outlined.Delete />}
-                                        label={localize("com_knowledge.delete")}
-                                    />
-                                )}
+                                {moreMenuItems}
                             </ActionMenuContent>
                         </DropdownMenu>
                     )}

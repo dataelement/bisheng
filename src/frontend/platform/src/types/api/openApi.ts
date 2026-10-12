@@ -99,6 +99,12 @@ export interface ApiKeyIssued extends ApiKeyItem {
   plaintext: string
 }
 
+export interface ApiKeyPage {
+  data: ApiKeyItem[]
+  total: number
+  active_count: number
+}
+
 export interface ApiKeyIssueForm {
   name: string
   scopes: string[]

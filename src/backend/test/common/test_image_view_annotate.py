@@ -7,6 +7,7 @@ from bisheng.common.image_view.annotate import (
     ImageRegistry,
     annotate,
     missing_viewed_markdown,
+    question_wants_pictures,
     should_splice_viewed_images,
 )
 
@@ -117,8 +118,79 @@ def test_missing_viewed_markdown_skips_when_answer_does_not_claim_display():
     assert extra == ""
 
 
+def test_picture_question_splices_viewed_images_even_when_url_is_in_code():
+    registry = ImageRegistry()
+    annotate(f"![chart]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = missing_viewed_markdown(
+        f"我将显示 img#1：一位女性。`![]({_CHART})`",
+        registry,
+        question="有哪些美女图片？",
+    )
+
+    assert f"]({_CHART})" in extra
+    assert question_wants_pictures("这张图的走势") is False
+    assert question_wants_pictures("找出文档中美女的图片") is True
+
+
+def test_filter_question_splices_only_named_images():
+    registry = ImageRegistry()
+    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    registry.record_viewed("img#2", "data:image/png;base64,bbb")
+
+    extra = missing_viewed_markdown(
+        "我将显示 img#1。其余图片为风景，均不含“美女”。",
+        registry,
+        question="找出文档中美女的图片",
+        only_ids=["img#1"],
+    )
+
+    assert _CHART in extra
+    assert _TABLE not in extra
+
+
+def test_unnamed_claim_does_not_splice_every_viewed_image():
+    registry = ImageRegistry()
+    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    registry.record_viewed("img#2", "data:image/png;base64,bbb")
+
+    extra = missing_viewed_markdown("相关图片如下。", registry, question="是否有火车票的图片？")
+
+    assert extra == ""
+
+
+def test_single_viewed_image_splices_when_answer_describes_the_picture():
+    registry = ImageRegistry()
+    annotate(f"![a]({_CHART})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+
+    extra = missing_viewed_markdown("是的，其中是一张火车票的图片。该图片清晰显示了车票信息。", registry)
+
+    assert _CHART in extra
+
+
+def test_filter_question_does_not_splice_until_the_model_shows_pictures():
+    registry = ImageRegistry()
+    annotate(f"![a]({_CHART}) ![b]({_TABLE})", registry)
+    registry.record_viewed("img#1", "data:image/png;base64,aaa")
+    registry.record_viewed("img#2", "data:image/png;base64,bbb")
+
+    extra = missing_viewed_markdown(
+        "img#1 是证书。其余图片 (image1、image2) 不属证书类。其余图片内容如下：",
+        registry,
+        question="找出证书相关的图片",
+    )
+
+    assert extra == ""
+
+
 def test_should_splice_viewed_images_follows_model_answer():
     assert should_splice_viewed_images("我将显示 img#7。")
     assert should_splice_viewed_images("如下图所示。")
+    assert should_splice_viewed_images("该图片清晰显示了车票信息。")
+    assert not should_splice_viewed_images('是一张火车票（非证书），但问题仅问"是否有证书的图片"，因此满足条件。')
     assert not should_splice_viewed_images("单据编号、单位名称。")
     assert not should_splice_viewed_images("开户登记相关截图。")

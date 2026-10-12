@@ -1,4 +1,4 @@
-"""Anonymous public v3 channel errors (module 261).
+"""Anonymous public v3 channel errors (module 264).
 
 The public v3 surface serves guest share links. Callers are anonymous, so the
 messages here must stay free of internal object names and must never reveal
@@ -39,7 +39,7 @@ class PublicAccessError(BaseErrorCode):
 class PublicLinkInvalidError(PublicAccessError):
     """The link points at nothing we can serve — wrong, truncated or deleted."""
 
-    Code: int = 26101
+    Code: int = 26401
     Msg: str = "This link is invalid or has expired"
     http_status: int = 404
 
@@ -47,7 +47,7 @@ class PublicLinkInvalidError(PublicAccessError):
 class PublicApplicationOfflineError(PublicAccessError):
     """The application exists but its owner took it offline."""
 
-    Code: int = 26102
+    Code: int = 26402
     Msg: str = "This app has been taken offline and is unavailable"
     http_status: int = 404
 
@@ -55,7 +55,7 @@ class PublicApplicationOfflineError(PublicAccessError):
 class PublicGuestAccessDisabledError(PublicAccessError):
     """Guest access is switched off platform-wide, or its operator is unusable."""
 
-    Code: int = 26103
+    Code: int = 26403
     Msg: str = "Link sharing is turned off. Contact whoever shared the link."
     http_status: int = 403
 
@@ -63,7 +63,7 @@ class PublicGuestAccessDisabledError(PublicAccessError):
 class PublicIdentityHeaderRejectedError(PublicAccessError):
     """An anonymous caller tried to assert a v2 identity header."""
 
-    Code: int = 26104
+    Code: int = 26404
     Msg: str = "Identity headers are not accepted by the public API"
     http_status: int = 403
 

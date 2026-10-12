@@ -1,16 +1,13 @@
 import debounce from 'lodash/debounce';
 import { useState, useEffect } from 'react';
 import { useFormContext } from 'react-hook-form';
-import {
-  validateAndParseOpenAPISpec,
-  openapiToFunction,
-  AuthTypeEnum,
-} from '~/types/chat';
+import { AuthTypeEnum } from '~/types/chat';
+import { validateAndParseOpenAPISpec, openapiToFunction } from '~/api/chat/actions';
+import type { ValidationResult } from '~/api/chat/actions';
 import type {
   Action,
   FunctionTool,
   ActionMetadata,
-  ValidationResult,
 } from '~/types/chat';
 import type { ActionAuthForm } from '~/common';
 import type { Spec } from './ActionsTable';
@@ -97,7 +94,7 @@ export default function ActionsInput({
     onError(error) {
       showToast({
         message: (error as Error).message || localize('com_assistants_update_actions_error'),
-        status: 'error',
+        status: 'warning',
       });
     },
   });

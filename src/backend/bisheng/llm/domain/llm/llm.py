@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from typing import Any, Self, Union
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
-from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.language_models import BaseChatModel, LangSmithParams, LanguageModelInput
 from langchain_core.language_models.chat_models import agenerate_from_stream, generate_from_stream
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk, ChatResult
@@ -52,7 +52,7 @@ def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
         return json.loads(user_kwargs)
-    return user_kwargs if user_kwargs else {}
+    return dict(user_kwargs) if user_kwargs else {}
 
 
 def _assert_ascii_http_header_values(params: dict) -> None:
@@ -168,7 +168,9 @@ def _get_azure_openai_params(params: dict, server_config: dict, model_config: di
 def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> dict:
     params = _get_openai_params(params, server_config, model_config)
     params["base_url"] = params.get("base_url") or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    extra_body = params.pop("extra_body", {}) or params.pop("model_kwargs", {})
+    # Copy: the popped dict can be the stored model config itself, and writing
+    # the derived flags into it would mutate the ORM row (DSH fix).
+    extra_body = dict(params.pop("extra_body", {}) or params.pop("model_kwargs", {}))
 
     extra_body["enable_search"] = model_config.get("enable_web_search", False)
 
@@ -177,6 +179,16 @@ def _get_qwen_params(params: dict, server_config: dict, model_config: dict) -> d
 
     params["extra_body"] = extra_body
 
+    return params
+
+
+def _get_tencent_params(params: dict, server_config: dict, model_config: dict) -> dict:
+    params = _get_openai_params(params, server_config, model_config)
+    extra_body = dict(params.pop("extra_body", {}) or {})
+    # Hunyuan's OpenAI-compatible endpoint names its search switch
+    # `enable_enhancement`; the model-level web search toggle drives it.
+    extra_body["enable_enhancement"] = model_config.get("enable_web_search", False)
+    params["extra_body"] = extra_body
     return params
 
 
@@ -244,7 +256,7 @@ _llm_node_type: dict = {
     LLMServerType.ANTHROPIC.value: {"client": ChatAnthropic, "params_handler": _get_anthropic_params},
     LLMServerType.DEEPSEEK.value: {"client": CustomChatDeepSeek, "params_handler": _get_deepseek_params},
     LLMServerType.SPARK.value: {"client": ChatOpenAICompatible, "params_handler": _get_spark_params},
-    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
+    LLMServerType.TENCENT.value: {"client": ChatOpenAICompatible, "params_handler": _get_tencent_params},
     LLMServerType.MOONSHOT.value: {"client": ChatMoonshot, "params_handler": _get_moonshot_params},
     LLMServerType.VOLCENGINE.value: {"client": ChatVoiceEngine, "params_handler": _get_openai_params},
     LLMServerType.SILICON.value: {"client": ChatOpenAICompatible, "params_handler": _get_openai_params},
@@ -259,6 +271,8 @@ class BishengLLM(BishengBase, BaseChatModel):
 
     streaming: bool | None = Field(default=None, description="Whether to use streaming output", alias="stream")
     temperature: float | None = Field(default=None, description="Model Generated Temperature")
+    # DSH: overrides retries for this client only, never the stored provider config.
+    max_retries: int | None = Field(default=None, ge=0, description="Per-instance client retry override")
 
     llm: BaseChatModel | None = Field(default=None)
 
@@ -300,6 +314,9 @@ class BishengLLM(BishengBase, BaseChatModel):
 
         class_object = self._get_llm_class(server_info.type)
         params = self._get_llm_params(server_info, model_info)
+        if self.max_retries is not None:
+            # Override only this client's parameters; never update the ORM config.
+            params["max_retries"] = self.max_retries
         try:
             self.llm = class_object(**params)
         except Exception as e:
@@ -391,6 +408,15 @@ class BishengLLM(BishengBase, BaseChatModel):
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
         return normalize_reasoning_content(ret)
+
+    def _get_ls_params(self, stop: list[str] | None = None, **kwargs: Any) -> LangSmithParams:
+        # Report the wrapped client's provider. The default derives "bishengllm" from
+        # the class name, which never equals the "model_provider" the client stamps on
+        # its messages (e.g. "openai"), so langchain's summarization ignored the
+        # provider-reported token usage and its trigger never fired on CJK content.
+        if self.llm is None:
+            return super()._get_ls_params(stop=stop, **kwargs)
+        return self.llm._get_ls_params(stop=stop, **kwargs)
 
     def bind_tools(
         self,

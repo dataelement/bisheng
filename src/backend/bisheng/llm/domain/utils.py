@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import time
 from datetime import datetime
@@ -331,6 +332,13 @@ def wrapper_bisheng_model_limit_check_async(func):
                     kwargs["run_manager"].handlers.append(telemetry_callback)
             result = await func(*args, **kwargs)
             return result
+        except asyncio.CancelledError:
+            # The caller gave up (a probe timeout, a closed request). The call did
+            # not succeed, but nothing says the model is broken either: record a
+            # failed invocation and leave the model status to the caller.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -340,7 +348,8 @@ def wrapper_bisheng_model_limit_check_async(func):
             end_time = time.time()
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            await args[0].update_model_status(status, remark)
+            if status is not None:
+                await args[0].update_model_status(status, remark)
 
     return wrapper
 

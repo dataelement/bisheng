@@ -21,7 +21,7 @@ export async function listPersonalTokensApi(params: {
   page: number
   page_size: number
 }): Promise<PersonalTokenLedgerPage> {
-  return await axios.get("/api/v1/personal-tokens", { params })
+  return await axios.get("/api/v1/personal-tokens", { params, silent: true })
 }
 
 export async function revokePersonalTokenApi(id: number): Promise<void> {

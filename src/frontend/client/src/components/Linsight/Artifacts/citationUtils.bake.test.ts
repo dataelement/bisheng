@@ -7,6 +7,7 @@
 import type { ChatCitation } from '~/api/chatApi';
 import {
     bakeCitationsForExport,
+    formatCitationLocation,
     stripCitationHandles,
     stripCitationMarkers,
 } from '~/components/Chat/Messages/Content/citationUtils';
@@ -89,8 +90,9 @@ describe('bakeCitationsForExport grammar', () => {
             `C${S}knowledgesearch_aaa:1${E} D${S}knowledgesearch_aaa:0${SEP}knowledgesearch_aaa:0${E}`;
         const baked = bakeCitationsForExport(text, details, HEADING);
         expect(baked.startsWith('A[1] B[1] C[2] D[1]\n\n## References\n\n')).toBe(true);
-        // The second chunk has no page, so it falls back to its chunk index.
-        expect(baked).toContain('2. 《policy.pdf》 · com_linsight_export_chunk:7 · Policies\n');
+        // The second chunk has no page, so it falls back to its chunk index
+        // (zero-based, shown from 1).
+        expect(baked).toContain('2. 《policy.pdf》 · com_linsight_export_chunk:8 · Policies\n');
         expect(baked.split('\n').filter((line) => /^\d+\. /.test(line))).toHaveLength(2);
     });
 
@@ -180,5 +182,34 @@ describe('bakeCitationsForExport grammar', () => {
 
     it('returns empty input as is', () => {
         expect(bakeCitationsForExport('', details, HEADING)).toBe('');
+    });
+});
+
+describe('formatCitationLocation', () => {
+    const box = (page: number) => JSON.stringify({ chunk_bboxes: [{ page, bbox: [27, 69, 469, 100] }] });
+    const detail = (item: Record<string, unknown>): ChatCitation => ({
+        citationId: 'knowledgesearch_loc',
+        type: 'knowledgeSearch',
+        sourcePayload: { documentName: 'plan.pdf', items: [{ itemId: '0', ...item }] },
+    });
+
+    it('reads a PDF page as zero-based, like its bboxes: page 0 is the first page', () => {
+        expect(formatCitationLocation(detail({ page: 0, chunkIndex: 0, bbox: box(0) }), '0')).toBe('com_linsight_export_page:1');
+        expect(formatCitationLocation(detail({ page: 19, chunkIndex: 20, bbox: box(19) }), '0')).toBe('com_linsight_export_page:20');
+    });
+
+    it('reads a page without bboxes as one-based (slides)', () => {
+        expect(formatCitationLocation(detail({ page: 3, chunkIndex: 5 }), '0')).toBe('com_linsight_export_page:3');
+    });
+
+    it('falls back to the paragraph, counted from 1, when the file is not paginated', () => {
+        expect(formatCitationLocation(detail({ page: 0, chunkIndex: 0 }), '0')).toBe('com_linsight_export_chunk:1');
+        expect(formatCitationLocation(detail({ page: 0, chunkIndex: 7, bbox: '{"chunk_bboxes": ""}' }), '0')).toBe(
+            'com_linsight_export_chunk:8',
+        );
+    });
+
+    it('returns nothing when neither is known', () => {
+        expect(formatCitationLocation(detail({ page: 0 }), '0')).toBe('');
     });
 });

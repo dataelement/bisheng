@@ -35,7 +35,7 @@ const SaveAsPresetDialog = ({ open, onOpenChange, preset }: TEditPresetProps) =>
       onError: () => {
         showToast({
           message: localize('com_endpoint_preset_save_error'),
-          severity: NotificationSeverity.ERROR,
+          severity: NotificationSeverity.WARNING,
         });
       },
     });

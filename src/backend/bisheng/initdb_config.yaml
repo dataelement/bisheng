@@ -19,6 +19,9 @@ knowledges: # 知识库相关配置
     url: "https://xxx.aistudio-app.com/layout-parsing"
     auth_token: ''
     timeout: 60
+    # 瞬时拥塞（如队列已满、限流、503）采用指数退避重试
+    max_retries: 3
+    retry_backoff: 1
     headers:
       x-api-key: "11"
     request_kwargs:

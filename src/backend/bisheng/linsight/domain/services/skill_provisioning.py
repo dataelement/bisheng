@@ -65,11 +65,21 @@ def _collect_bundle_pairs(store: SkillStore, tenant_id: int, name: str, content_
     ]
 
 
+class SkillsUnavailableForRunError(Exception):
+    """F073: an unattended (Open API) run must not start without a picked skill."""
+
+    def __init__(self, names: list[str]):
+        self.names = list(names)
+        super().__init__(f"Selected skills are unavailable: {', '.join(self.names)}")
+
+
 async def materialize_session_skills(
     backend,
     tenant_id: int,
     selected: list[str] | None,
     store: SkillStore | None = None,
+    *,
+    strict: bool = False,
 ) -> SkillProvisionResult:
     """Copy allowed skill bundles into the workspace ``/skills/`` subtree.
 
@@ -82,6 +92,10 @@ async def materialize_session_skills(
             nothing. Only an explicit non-empty list opts in, and each name is
             still intersected with the tenant's governance-enabled set.
         store: skill bundle store (injectable for tests).
+        strict: F073 — for unattended runs. Any selected skill that is unknown,
+            disabled or fails to copy raises ``SkillsUnavailableForRunError``
+            (the run fails naming them) instead of being dropped or merely
+            surfaced; the workbench keeps the lenient behaviour.
 
     Returns:
         ``SkillProvisionResult(copied, failed)``. ``copied`` gates attaching the
@@ -103,6 +117,10 @@ async def materialize_session_skills(
     # resolving one costs no extra query.
     enabled = {skill.name: skill for skill in await LinsightSkillDao.list_enabled()}
     wanted = sorted(name for name in selected if name in enabled)
+    if strict:
+        missing = [name for name in selected if name not in enabled]
+        if missing:
+            raise SkillsUnavailableForRunError(missing)
     if not wanted:
         return SkillProvisionResult([], [])
 
@@ -142,4 +160,6 @@ async def materialize_session_skills(
         copied,
         failed,
     )
+    if strict and failed:
+        raise SkillsUnavailableForRunError(failed)
     return SkillProvisionResult(copied, failed)

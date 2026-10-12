@@ -485,7 +485,7 @@
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -529,7 +529,7 @@
           }
         },
         "responses": {
-          "201": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -1461,7 +1461,7 @@
           "Knowledge"
         ],
         "summary": "Query Qa",
-        "description": "Deleteqa Question to Information",
+        "description": "Return visible QA rows while tolerating invalid legacy records.",
         "operationId": "query_qa_api_v2_filelib_query_qa_post",
         "requestBody": {
           "content": {
@@ -1992,8 +1992,28 @@
           "OpenAPI",
           "WorkStation"
         ],
-        "summary": "Get Daily Config",
-        "operationId": "get_daily_config_api_v2_workstation_config_get",
+        "summary": "Get Workstation Config",
+        "operationId": "get_workstation_config_api_v2_workstation_config_get",
+        "parameters": [
+          {
+            "name": "run_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "daily (default) or task",
+              "title": "Run Mode"
+            },
+            "description": "daily (default) or task"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2001,6 +2021,114 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/config/knowledge": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "List Task Knowledge",
+        "operationId": "list_task_knowledge_api_v2_workstation_config_knowledge_get",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "library",
+                "space"
+              ],
+              "type": "string",
+              "description": "library = document knowledge base",
+              "title": "Type"
+            },
+            "description": "library = document knowledge base"
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2019,17 +2147,25 @@
           "OpenAPI",
           "WorkStation"
         ],
-        "summary": "Daily Chat Completions",
-        "operationId": "daily_chat_completions_api_v2_workstation_chat_completions_post",
+        "summary": "Chat Completions",
+        "description": "Daily mode streams (unchanged); ``run_mode=\"task\"`` queues a task and returns JSON.\n\nThe body is taken raw so one endpoint can serve both run modes (PRD D11 /\nD12); each branch validates it against its own model with FastAPI's error\nshape. The documented request schema is injected in ``openapi_schema``.",
+        "operationId": "chat_completions_api_v2_workstation_chat_completions_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/OpenDailyChatCompletionReq"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/OpenDailyChatCompletionReq"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OpenTaskSubmitReq"
+                  }
+                ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -2037,6 +2173,157 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "Get Task",
+        "operationId": "get_task_api_v2_workstation_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/tasks/{task_id}/files/{file_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "Download Task File",
+        "operationId": "download_task_file_api_v2_workstation_tasks__task_id__files__file_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/workstation/tasks/{task_id}/terminate": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "WorkStation"
+        ],
+        "summary": "Terminate Task",
+        "operationId": "terminate_task_api_v2_workstation_tasks__task_id__terminate_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/bisheng__api__v1__schemas__UnifiedResponseModel"
+                }
               }
             }
           },
@@ -2684,7 +2971,11 @@
             "anyOf": [
               {
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "before",
+                    "after"
+                  ]
                 },
                 "type": "array"
               },
@@ -2795,53 +3086,61 @@
           "retain_images": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Retain Images",
-            "description": "Keep document image",
+            "description": "Keep document image: 0 or 1",
             "default": 1
           },
           "force_ocr": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Force Ocr",
-            "description": "EnableOCR",
+            "description": "Enable OCR: 0 or 1",
             "default": 0
           },
           "enable_formula": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Enable Formula",
-            "description": "latexFormula Recognition",
+            "description": "LaTeX formula recognition: 0 or 1",
             "default": 1
           },
           "filter_page_header_footer": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 1.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
               }
             ],
             "title": "Filter Page Header Footer",
-            "description": "Filter Header Footer",
+            "description": "Filter header/footer: 0 or 1",
             "default": 0
           },
           "excel_rule": {
@@ -3468,10 +3767,12 @@
         "title": "OpenCitationResponse"
       },
       "OpenDailyChatCompletionReq": {
+        "additionalProperties": false,
+        "description": "Current APIChatCompletion minus task and knowledge-base selectors.",
         "properties": {
           "clientTimestamp": {
-            "type": "string",
-            "title": "Clienttimestamp"
+            "title": "Clienttimestamp",
+            "type": "string"
           },
           "conversationId": {
             "anyOf": [
@@ -3482,6 +3783,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Conversationid"
           },
           "error": {
@@ -3493,8 +3795,8 @@
                 "type": "null"
               }
             ],
-            "title": "Error",
-            "default": false
+            "default": false,
+            "title": "Error"
           },
           "generation": {
             "anyOf": [
@@ -3505,8 +3807,8 @@
                 "type": "null"
               }
             ],
-            "title": "Generation",
-            "default": ""
+            "default": "",
+            "title": "Generation"
           },
           "isCreatedByUser": {
             "anyOf": [
@@ -3517,8 +3819,8 @@
                 "type": "null"
               }
             ],
-            "title": "Iscreatedbyuser",
-            "default": false
+            "default": false,
+            "title": "Iscreatedbyuser"
           },
           "isContinued": {
             "anyOf": [
@@ -3529,12 +3831,12 @@
                 "type": "null"
               }
             ],
-            "title": "Iscontinued",
-            "default": false
+            "default": false,
+            "title": "Iscontinued"
           },
           "model": {
-            "type": "string",
-            "title": "Model"
+            "title": "Model",
+            "type": "string"
           },
           "text": {
             "anyOf": [
@@ -3545,8 +3847,8 @@
                 "type": "null"
               }
             ],
-            "title": "Text",
-            "default": ""
+            "default": "",
+            "title": "Text"
           },
           "tools": {
             "anyOf": [
@@ -3560,6 +3862,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Tools"
           },
           "skills": {
@@ -3574,6 +3877,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Skills"
           },
           "files": {
@@ -3589,6 +3893,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Files"
           },
           "search_enabled": {
@@ -3600,8 +3905,8 @@
                 "type": "null"
               }
             ],
-            "title": "Search Enabled",
-            "default": false
+            "default": false,
+            "title": "Search Enabled"
           },
           "parentMessageId": {
             "anyOf": [
@@ -3612,6 +3917,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Parentmessageid"
           },
           "overrideParentMessageId": {
@@ -3623,6 +3929,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Overrideparentmessageid"
           },
           "responseMessageId": {
@@ -3634,24 +3941,24 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Responsemessageid"
           }
         },
-        "additionalProperties": false,
-        "type": "object",
         "required": [
           "clientTimestamp",
           "model"
         ],
         "title": "OpenDailyChatCompletionReq",
-        "description": "Current APIChatCompletion minus task and knowledge-base selectors."
+        "type": "object"
       },
       "OpenDailyToolPayload": {
+        "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "integer",
+            "default": 0,
             "title": "Id",
-            "default": 0
+            "type": "integer"
           },
           "tool_key": {
             "anyOf": [
@@ -3662,18 +3969,171 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Tool Key"
           },
           "type": {
-            "type": "string",
             "const": "tool",
+            "default": "tool",
             "title": "Type",
-            "default": "tool"
+            "type": "string"
           }
         },
+        "title": "OpenDailyToolPayload",
+        "type": "object"
+      },
+      "OpenTaskFileRef": {
+        "description": "One attachment, exactly as ``POST /api/v2/knowledge/upload`` returned it.",
+        "properties": {
+          "file_path": {
+            "minLength": 1,
+            "title": "File Path",
+            "type": "string"
+          },
+          "file_name": {
+            "minLength": 1,
+            "title": "File Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "file_name"
+        ],
+        "title": "OpenTaskFileRef",
+        "type": "object"
+      },
+      "OpenTaskSubmitReq": {
         "additionalProperties": false,
-        "type": "object",
-        "title": "OpenDailyToolPayload"
+        "description": "Task-mode submission. Same endpoint as daily chat, told apart by ``run_mode``.",
+        "properties": {
+          "run_mode": {
+            "const": "task",
+            "title": "Run Mode",
+            "type": "string"
+          },
+          "execution": {
+            "const": "async",
+            "title": "Execution",
+            "type": "string"
+          },
+          "clientTimestamp": {
+            "title": "Clienttimestamp",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instructions"
+          },
+          "model": {
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Skills"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OpenDailyToolPayload"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tools"
+          },
+          "knowledge_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Knowledge Ids"
+          },
+          "knowledge_space_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Knowledge Space Ids"
+          },
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OpenTaskFileRef"
+                },
+                "maxItems": 50,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Files"
+          }
+        },
+        "required": [
+          "run_mode",
+          "execution",
+          "clientTimestamp",
+          "text",
+          "model"
+        ],
+        "title": "OpenTaskSubmitReq",
+        "type": "object"
       },
       "OpenWorkflowInvokeRequest": {
         "properties": {
@@ -4009,6 +4469,17 @@
               }
             ],
             "title": "Repeat Update Time"
+          },
+          "cover_filepath": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Filepath"
           }
         },
         "type": "object",

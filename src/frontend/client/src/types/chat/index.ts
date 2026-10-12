@@ -30,7 +30,6 @@ export { dataService };
 import * as dataService from '~/api/chat/data-service';
 /* general helpers */
 export * from '~/api/chat/utils';
-export * from '~/api/chat/actions';
 export { default as createPayload } from '~/api/chat/createPayload';
 /* schemas */
 export * from './schemas';

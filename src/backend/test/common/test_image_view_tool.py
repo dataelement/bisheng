@@ -48,7 +48,7 @@ async def test_unknown_image_id_does_not_fetch(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_more_than_three_ids_fetches_only_three(monkeypatch):
+async def test_four_ids_in_one_turn_are_all_fetched(monkeypatch):
     fetch = AsyncMock()
     fetch.return_value = type("R", (), {"ok": True, "data_uri": "data:image/png;base64,abc", "error": None})()
     monkeypatch.setattr("bisheng.common.image_view.tool.fetch_and_encode", fetch)
@@ -56,9 +56,8 @@ async def test_more_than_three_ids_fetches_only_three(monkeypatch):
 
     observation = await tool.ainvoke({"image_ids": ["img#1", "img#2", "img#3", "img#4"], "quality": "standard"})
 
-    assert fetch.await_count == 3
-    assert "img#4" in observation
-    assert "3" in observation
+    assert fetch.await_count == 4
+    assert "not fetched" not in observation
     assert "data:image" not in observation
 
 
@@ -85,5 +84,6 @@ async def test_success_ack_has_no_image_block(monkeypatch):
 
     fetch.assert_awaited_once()
     assert "img#1" in observation
+    assert "![](/bisheng/knowledge/images/1/2/a.png)" in observation
     assert "data:image" not in observation
     assert "image_url" not in observation

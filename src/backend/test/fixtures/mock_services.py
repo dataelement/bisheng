@@ -70,6 +70,10 @@ class _KnowledgeUtilsPlaceholder:
         return "preview-cache-key"
 
     @classmethod
+    def preview_cache_key_for_split_rule(cls, *args, **kwargs):
+        return "preview-cache-key"
+
+    @classmethod
     async def process_retry_files(cls, *args, **kwargs):
         return ([], set())
 

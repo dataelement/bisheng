@@ -82,7 +82,7 @@ const PromptForm = () => {
   const updateGroupMutation = useUpdatePromptGroup({
     onError: () => {
       showToast({
-        status: 'error',
+        status: 'warning',
         message: localize('com_ui_prompt_update_error'),
       });
     },

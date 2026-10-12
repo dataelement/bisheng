@@ -15,6 +15,7 @@ from langchain_core.tools import tool as lc_tool
 
 from bisheng.citation.domain.services.citation_prompt_helper import CitationRegistryCollector
 from bisheng.common.image_view import IMAGE_VIEW_PROMPT_RULES, ImageRegistry, VisionToolBindWrapper, annotate
+from bisheng.common.image_view.fetch import FetchEncodeResult
 from bisheng.workstation.domain.services.chat_service import (
     DailyChatCitationToolWrapper,
     _prepare_tools,
@@ -52,7 +53,8 @@ def test_dump_knowledge_chunks_annotates_after_format():
         page_content="see ![chart](/bisheng/knowledge/images/1/2/c.png)",
         metadata={"document_name": "f.md", "knowledge_id": "1"},
     )
-    text = _wrapper(registry)._dump_knowledge_chunks([doc, doc])
+    w = _wrapper(registry)
+    text = w._dump_knowledge_chunks(w._format_knowledge_chunks([doc, doc]))
     assert "![chart](/bisheng/knowledge/images/1/2/c.png)⟦img#1⟧" in text
     assert text.count("⟦img#1⟧") == 2
     assert "⟦img#2⟧" not in text
@@ -64,7 +66,8 @@ def test_dump_knowledge_chunks_skips_annotate_without_registry():
         page_content="see ![chart](/bisheng/knowledge/images/1/2/c.png)",
         metadata={"document_name": "f.md", "knowledge_id": "1"},
     )
-    text = _wrapper(None)._dump_knowledge_chunks([doc])
+    w = _wrapper(None)
+    text = w._dump_knowledge_chunks(w._format_knowledge_chunks([doc]))
     assert "⟦img#" not in text
     assert "![chart](/bisheng/knowledge/images/1/2/c.png)" in text
 
@@ -98,6 +101,26 @@ async def test_prepare_tools_does_not_include_view_image(monkeypatch):
     assert "view_image" not in names
     assert "web_search" in names
     assert "search_knowledge_bases" in names
+
+
+@pytest.mark.asyncio
+async def test_prepare_tools_skips_image_view_config_row(monkeypatch):
+    init = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.chat_service.ToolExecutor.init_by_tool_id",
+        init,
+    )
+
+    tools, failures = await _prepare_tools(
+        tool_payloads=[{"type": "tool", "tool_key": "image_view", "id": 39}],
+        login_user=MagicMock(),
+        ws_config=SimpleNamespace(maxTokens=1000),
+        citation_collector=CitationRegistryCollector(),
+    )
+
+    assert tools == []
+    assert failures == []
+    init.assert_not_called()
 
 
 class _NamedTool:
@@ -175,3 +198,39 @@ async def test_vision_wrapper_relocates_tool_images_to_human():
     humans = [m for m in messages if isinstance(m, HumanMessage) and isinstance(m.content, list)]
     assert humans
     assert any(isinstance(block, dict) and block.get("type") == "image_url" for block in humans[-1].content)
+
+
+class _VisionAnswer:
+    def __init__(self):
+        self.seen: list[list] = []
+
+    async def astream(self, messages, config=None, **kwargs):
+        del config, kwargs
+        self.seen.append(list(messages))
+        yield AIMessage(content="是的，有这张图。\n![](/bisheng/knowledge/images/1/2/c.png)")
+
+
+@pytest.mark.asyncio
+async def test_configured_vision_model_reads_pixels_without_view_image(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.common.image_view.react_loop.fetch_and_encode",
+        AsyncMock(return_value=FetchEncodeResult(ok=True, data_uri="data:image/png;base64,aaa")),
+    )
+    chat = _RecordingLLM()
+    vision = _VisionAnswer()
+    registry = ImageRegistry()
+    annotate("![chart](/bisheng/knowledge/images/1/2/c.png)", registry)
+    wrapper = VisionToolBindWrapper(
+        chat,
+        registry,
+        [_NamedTool("web_search")],
+        vision_llm=vision,
+    )
+    runnable = wrapper({}, None)
+    result = await runnable.ainvoke([HumanMessage(content="文档里有哪些图片")])
+    assert chat.bind_calls == [["web_search"]]
+    assert "view_image" not in chat.bind_calls[0]
+    assert vision.seen
+    joined = "".join(str(m.content) for m in vision.seen[0])
+    assert "data:image/png;base64,aaa" in joined
+    assert "/bisheng/knowledge/images/1/2/c.png" in result.content

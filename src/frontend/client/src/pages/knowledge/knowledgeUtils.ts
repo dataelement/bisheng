@@ -59,12 +59,12 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
     }
-    // Folder rows have no `status`; treat as pending only when children are
-    // still in an in-progress state (PROCESSING / WAITING / REBUILDING).
+    // Folder rows have no `status`; treat as pending only when their subtree
+    // still has an in-progress file (PROCESSING / WAITING / REBUILDING).
     // Terminal failures (FAILED / TIMEOUT / VIOLATION) must NOT keep the
     // auto-refresh polling alive — e.g. 8 success + 1 failed is a stable state.
     if (file.type === FileType.FOLDER) {
-        return file.processingFileNum != null && file.processingFileNum > 0;
+        return file.hasProcessingFiles === true;
     }
     return Boolean(
         file.status && [
@@ -72,6 +72,19 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
             FileStatus.WAITING,
             FileStatus.REBUILDING,
             FileStatus.UPLOADING,
+        ].includes(file.status)
+    );
+}
+
+export function isKnowledgeItemRetryable(file: KnowledgeFile): boolean {
+    if (file.type === FileType.FOLDER) {
+        return file.hasFailedFiles === true;
+    }
+    return Boolean(
+        file.status && [
+            FileStatus.FAILED,
+            FileStatus.TIMEOUT,
+            FileStatus.VIOLATION,
         ].includes(file.status)
     );
 }
@@ -438,4 +451,23 @@ export function canOpenSharedSpace(info: {
     // otherwise lock the owner out of their own share link.
     if (info?.role === "creator") return true;
     return Array.isArray(info?.actions) && info.actions.includes("visible");
+}
+
+/** Router state key the knowledge page hands to the settings page on entry. */
+export const SETTINGS_RETURN_STATE_KEY = "returnTo";
+
+/**
+ * Where the space settings page goes back to on save / cancel / back.
+ *
+ * Entering settings from the knowledge page records the location the user was
+ * browsing (space + folder), so leaving settings resumes there — even when the
+ * settings belonged to another space opened from the sidebar. A settings URL
+ * opened directly carries no such state and falls back to `fallback`.
+ * Only in-app knowledge paths are honored, never an arbitrary URL.
+ */
+export function resolveSettingsReturnPath(state: unknown, fallback: string): string {
+    const returnTo = (state as Record<string, unknown> | null | undefined)?.[SETTINGS_RETURN_STATE_KEY];
+    if (typeof returnTo !== "string") return fallback;
+    if (!/^\/knowledge(?:[/?]|$)/.test(returnTo)) return fallback;
+    return returnTo;
 }

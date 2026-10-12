@@ -107,3 +107,11 @@ def audit_events(monkeypatch):
     service_module = importlib.import_module("bisheng.open_api.domain.services.service_account_service")
     monkeypatch.setattr(service_module.AuditLogDao, "ainsert_v2", record)
     return events
+
+
+@pytest.fixture
+def task_mode_seams(monkeypatch):
+    """F073: patch every seam OpenTaskModeService calls (see task_mode_support)."""
+    from test.open_api.task_mode_support import install_task_mode_seams
+
+    return install_task_mode_seams(monkeypatch)

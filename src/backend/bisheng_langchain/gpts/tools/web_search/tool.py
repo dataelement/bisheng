@@ -17,6 +17,11 @@ class SearchInput(BaseModel):
 
 
 class SearchTool(ABC):
+    # (connect, read) seconds. Without a timeout, a search endpoint that accepts
+    # the connection but never answers (a common intranet proxy behaviour) blocks
+    # the calling agent forever.
+    request_timeout: tuple[float, float] = (10, 60)
+
     def __init__(self, *args, **kwargs) -> None:
         self.args = args
         self.kwargs = kwargs
@@ -35,6 +40,7 @@ class SearchTool(ABC):
 
     def _requests(self, url: str, method: str, **kwargs):
         """Base requests method to handle GET and POST requests."""
+        kwargs.setdefault('timeout', self.request_timeout)
         if method == 'GET':
             response = requests.get(url, **kwargs)
         elif method == 'POST':
@@ -183,6 +189,9 @@ class BoChaSearch(SearchTool):
 
 
 class JinaDeepSearch(SearchTool):
+    # DeepSearch reasons over several fetches before it answers.
+    request_timeout = (10, 300)
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.api_key = kwargs.get('api_key')

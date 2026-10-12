@@ -11,9 +11,10 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
-from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
+from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
@@ -627,6 +628,8 @@ class PaddleOcrConf(BaseModel):
 
     url: str = Field(default="", description="PaddleOcrService Address")
     timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient PaddleOcrService errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial PaddleOcrService retry delay (sec)")
     auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
     headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
@@ -913,6 +916,10 @@ class Settings(BaseModel):
     environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated
     debug: bool = False
+    dsh: DshSettings = Field(
+        default_factory=DshSettings,
+        description="DSH Desktop access, gateway trust, verified model capabilities and quota infrastructure configuration.",
+    )
     database_url: str | None = None
     redis_url: Union[str, dict] | None = None
     celery_redis_url: Union[str, dict] | None = None
@@ -922,7 +929,7 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    # F068: no shipped default. Empty means "generate once and keep in the config
+    # F072: no shipped default. Empty means "generate once and keep in the config
     # table" — see ``bisheng.user.domain.services.jwt_secret``.
     jwt_secret: str = ""
     gpts: dict = {}
@@ -948,6 +955,7 @@ class Settings(BaseModel):
     multi_tenant: MultiTenantConf = MultiTenantConf()
     open_platform: OpenPlatformConf = OpenPlatformConf()
     open_api: OpenApiConf = OpenApiConf()
+    open_mcp: OpenMcpConf = OpenMcpConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()
@@ -1028,7 +1036,7 @@ class Settings(BaseModel):
     @classmethod
     def validate_lists(cls, values):
         for key, value in values.items():
-            if key != "dev" and not value:
+            if key not in {"dev", "dsh"} and not value:
                 values[key] = []
         return values
 
