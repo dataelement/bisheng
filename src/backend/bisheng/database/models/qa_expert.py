@@ -236,7 +236,7 @@ class PublishRequest(SQLModel, table=True):
     question_id: int = Field(index=True, description="问题ID")
     initiator_user_id: int = Field(description="发起人用户ID")
     status: str = Field(max_length=16, description="pending/approved/rejected/expired/ended")
-    duration_days: int = Field(description="有效期天数：1/3/7")
+    duration_days: int = Field(description="当前有效期天数；发起时为 1/3/7，新增会签人时 +1")
     expire_at: datetime = Field(description="到期时间")
     extension_days: int = Field(default=0, description="已累计延期天数（≤3）")
     version: int = Field(default=0, description="乐观锁版本")
