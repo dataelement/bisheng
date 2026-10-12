@@ -52,6 +52,8 @@ export function useInitialPromptStream(enabled: boolean) {
                 switch (data.type) {
                     case 'prompt':
                         generated += data.message
+                        // Thinking models send empty chunks first; keep the user's prompt until text arrives
+                        if (!generated.trim()) break
                         dispatchAssistant('setPrompt', { prompt: generated.replace('```markdown', '') })
                         break
                     case 'guide_word':
