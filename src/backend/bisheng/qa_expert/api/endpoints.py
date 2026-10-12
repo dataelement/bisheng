@@ -396,8 +396,8 @@ async def get_answer_count_by_domain(
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: QuestionService = Depends(get_question_service),
 ):
-    """获取每个业务域的回答数"""
-    answer_count = await service.get_answer_count_by_domain()
+    """按业务域统计当前用户可见的问题数."""
+    answer_count = await service.get_answer_count_by_domain(user)
     return resp_200(data=answer_count)
 
 
