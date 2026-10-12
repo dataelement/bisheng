@@ -15,6 +15,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
     SkillCreateForm,
+    SkillDefaultCheckedUpdate,
     SkillGitHubImportRequest,
     SkillStatusUpdate,
 )
@@ -173,6 +174,16 @@ async def set_skill_status(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     await SkillService().set_status(name, payload.enabled)
+    return resp_200({"ok": True})
+
+
+@router.patch("/{name}/default-checked", summary="Preselect / un-preselect skill in the end-user picker")
+async def set_skill_default_checked(
+    name: str,
+    payload: SkillDefaultCheckedUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    await SkillService().set_default_checked(name, payload.default_checked)
     return resp_200({"ok": True})
 
 

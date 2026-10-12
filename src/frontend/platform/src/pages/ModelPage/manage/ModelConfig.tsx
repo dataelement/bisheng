@@ -373,7 +373,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 loading={isLoading}
                 onClick={handleSave}
             >
-                {isLoading ? t('model.modelStatusChecking') : t('model.save')}
+                {t('model.save')}
             </LoadButton>
         </div>
     </div>

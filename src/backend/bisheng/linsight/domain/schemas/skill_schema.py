@@ -18,6 +18,7 @@ class SkillBrief(BaseModel):
     display_name: str
     description: str
     enabled: bool
+    default_checked: bool = False
     source: str
     create_time: datetime | None = None
     update_time: datetime | None = None
@@ -30,6 +31,7 @@ class SkillBrief(BaseModel):
             display_name=skill.display_name or skill.name,
             description=skill.description,
             enabled=bool(skill.enabled),
+            default_checked=bool(skill.default_checked),
             source=skill.source,
             create_time=skill.create_time,
             # never-edited skills report their creation time as the modified time
@@ -43,6 +45,8 @@ class SkillSelectable(BaseModel):
     name: str
     display_name: str
     description: str
+    # Admin-preselected: the picker starts every new conversation with it selected.
+    default_checked: bool = False
 
 
 class SkillFileEntry(BaseModel):
@@ -70,6 +74,10 @@ class SkillFileContent(BaseModel):
 
 class SkillStatusUpdate(BaseModel):
     enabled: bool
+
+
+class SkillDefaultCheckedUpdate(BaseModel):
+    default_checked: bool
 
 
 class SkillCreateForm(BaseModel):
