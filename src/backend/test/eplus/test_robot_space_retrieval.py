@@ -37,6 +37,10 @@ class FakeDocumentStateReader:
             if (11 if file_id < 102 else 12) in space_ids and (file_name is None or file_name == f"file-{file_id}.pdf")
         }
 
+    async def search_file_sources(self, *, tenant_id, space_ids, keywords, limit=50):
+        sources = await self.file_sources(tenant_id=tenant_id, space_ids=space_ids)
+        return {fid: source for fid, source in sources.items() if all(t in source.file_name for t in keywords)}
+
 
 class FakeRetrievalBackend:
     def __init__(self, docs_by_space: dict[int, list[Document]], on_retrieve=None) -> None:
@@ -187,3 +191,52 @@ async def test_exact_source_is_available_without_vector_hits_but_not_invented_co
     assert result[0].metadata["document_id"] == 100
     assert result[0].metadata["source_only"] is True
     assert result[0].page_content == ""
+
+
+async def test_filename_keyword_search_returns_authoritative_sources_without_loading_bodies():
+    policy, scope, backend, _ = _policy(spaces=(11, 12), docs_by_space={}, valid_ids={100, 102})
+    result = await policy.retrieve("有哪些文件", file_name_query="file-102", expected_scope=scope)
+    assert [(d.metadata["document_id"], d.metadata["knowledge_id"]) for d in result] == [(102, 12)]
+    assert all(d.metadata["source_only"] and d.page_content == "" for d in result)
+    assert backend.calls == []
+
+
+async def test_no_filename_match_falls_back_to_content_recall_without_inventing_sources():
+    policy, scope, _, _ = _policy(spaces=(11,), docs_by_space={11: [_doc(100, 11)]}, valid_ids={100})
+    result = await policy.retrieve("topic", file_name_query="不存在", expected_scope=scope)
+    assert [d.metadata["document_id"] for d in result] == [100]
+    assert not result[0].metadata.get("source_only")
+
+
+async def test_later_space_relevant_content_is_ranked_before_budget_cutoff():
+    policy, scope, backend, _ = _policy(
+        spaces=(12, 11),
+        docs_by_space={
+            11: [_doc(100, 11, text="发票内容" * 100)],
+            12: [_doc(102, 12, text="深圳市医学研究专项资金申请指南")],
+        },
+        valid_ids={100, 102},
+    )
+    result = await policy.retrieve("深圳市医学研究", expected_scope=scope, max_content=20)
+    assert result[0].metadata["document_id"] == 102
+    assert backend.calls == [11, 12]
+    assert sum(len(d.page_content) for d in result) <= 20
+
+
+async def test_content_budget_trims_first_oversized_chunk_instead_of_exceeding_limit():
+    policy, scope, _, _ = _policy(
+        spaces=(11,), docs_by_space={11: [_doc(100, 11, text="医学研究" * 100)]}, valid_ids={100}
+    )
+    result = await policy.retrieve("医学研究", expected_scope=scope, max_content=10)
+    assert result[0].page_content == "医学研究医学研究医学"
+    assert result[0].metadata["content_truncated"] is True
+
+
+async def test_same_body_from_different_files_keeps_both_provenances():
+    policy, scope, _, _ = _policy(
+        spaces=(11, 12),
+        docs_by_space={11: [_doc(100, 11, text="医学研究")], 12: [_doc(102, 12, text="医学研究")]},
+        valid_ids={100, 102},
+    )
+    result = await policy.retrieve("医学研究", expected_scope=scope)
+    assert {d.metadata["document_id"] for d in result} == {100, 102}

@@ -75,3 +75,14 @@ def test_duplicate_chunks_are_removed_without_losing_different_chunks():
 def test_invalid_exact_filename_is_rejected_instead_of_becoming_unbounded_search(name):
     with pytest.raises(ValidationError):
         RobotKnowledgeInput(query="query", file_name=name)
+
+
+@pytest.mark.parametrize("keywords", ["", "  ", "x" * 201])
+def test_invalid_filename_keywords_are_rejected(keywords):
+    with pytest.raises(ValidationError):
+        RobotKnowledgeInput(query="query", file_name_query=keywords)
+
+
+def test_exact_and_keyword_filename_search_are_mutually_exclusive():
+    with pytest.raises(ValidationError):
+        RobotKnowledgeInput(query="query", file_name="real.csv", file_name_query="real")

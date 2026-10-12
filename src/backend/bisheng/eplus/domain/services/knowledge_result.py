@@ -6,6 +6,14 @@ from collections.abc import Mapping, Sequence
 from langchain_core.documents import Document
 
 
+def robot_document_body(content: str) -> str:
+    """Remove index wrappers before ranking or truncation, not body XML."""
+    content = content.strip()
+    if content.startswith("{<file_title>") and "<paragraph_content>" in content:
+        return content.split("<paragraph_content>", 1)[1].rsplit("</paragraph_content>", 1)[0].strip()
+    return content.split("\n----------\n")[-1].strip()
+
+
 def format_robot_knowledge_result(documents: Sequence[Document], space_names: Mapping[str, str]) -> str:
     sources, chunks, summaries = [], [], []
     seen_sources = set()
@@ -26,12 +34,11 @@ def format_robot_knowledge_result(documents: Sequence[Document], space_names: Ma
             )
         if metadata.get("source_only"):
             continue
-        content = document.page_content.strip()
-        # Remove the ingestion wrapper, not XML appearing inside a document body.
-        if content.startswith("{<file_title>") and "<paragraph_content>" in content:
-            content = content.split("<paragraph_content>", 1)[1].rsplit("</paragraph_content>", 1)[0].strip()
-        else:
-            content = content.split("\n----------\n")[-1].strip()
+        content = (
+            document.page_content
+            if metadata.get("robot_body_normalized")
+            else robot_document_body(document.page_content)
+        )
         key = (source_key, metadata.get("chunk_index"), content)
         if key not in seen_chunks:
             seen_chunks.add(key)

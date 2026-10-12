@@ -91,6 +91,20 @@ async def test_exact_filename_also_constrains_the_postfilter(source_reader):
     assert await source_reader.file_sources(tenant_id=73, space_ids=(11,), file_ids={101}, file_name="wrong.csv") == {}
 
 
+async def test_filename_keywords_are_bounded_literal_and_scope_checked(source_reader):
+    sources = await source_reader.search_file_sources(
+        tenant_id=73, space_ids=(11, 12, 13, 100), keywords=("same", "csv")
+    )
+    assert set(sources) == {101, 102}
+    assert await source_reader.search_file_sources(tenant_id=73, space_ids=(11, 12), keywords=("%",)) == {}
+    assert await source_reader.search_file_sources(tenant_id=73, space_ids=(11, 12), keywords=("_",)) == {}
+    with pytest.raises(ValueError):
+        await source_reader.search_file_sources(tenant_id=73, space_ids=(11,), keywords=())
+    assert (
+        len(await source_reader.search_file_sources(tenant_id=73, space_ids=(11, 12), keywords=("same",), limit=1)) == 1
+    )
+
+
 async def test_exact_search_applies_file_ids_to_both_index_queries(source_reader, monkeypatch):
     class Retriever(BaseRetriever):
         def _get_relevant_documents(self, query, *, run_manager):
@@ -127,3 +141,37 @@ async def test_exact_search_applies_file_ids_to_both_index_queries(source_reader
     assert [d.page_content for d in result] == ["answer"]
     assert vector.options == {"expr": "document_id in [101]"}
     assert elastic.options == {"filter": [{"terms": {"metadata.document_id": [101]}}]}
+
+
+async def test_hybrid_rank_keeps_both_channels_without_local_trimming(source_reader, monkeypatch):
+    def doc(fid):
+        return Document(page_content="same body", metadata={"document_id": fid, "knowledge_id": 11})
+
+    class Retriever(BaseRetriever):
+        documents: list[Document]
+
+        def _get_relevant_documents(self, query, *, run_manager):
+            return self.documents
+
+    class Store:
+        def __init__(self, ids):
+            self.ids = ids
+
+        def as_retriever(self, *, search_kwargs):
+            return Retriever(documents=[doc(fid) for fid in self.ids])
+
+    async def vector(*args, **kwargs):
+        return Store([101, 102, 103, 104])
+
+    async def elastic(*args, **kwargs):
+        return Store([104, 105])
+
+    monkeypatch.setattr(robot_retrieval.KnowledgeRag, "init_knowledge_milvus_vectorstore", vector)
+    monkeypatch.setattr(robot_retrieval.KnowledgeRag, "init_knowledge_es_vectorstore", elastic)
+    result = await DatabaseRobotRetrievalBackend().retrieve_space(
+        tenant_id=73, space_id=11, query="query", invoke_user_id=9, max_content=1, sort_by_source_and_index=False
+    )
+    assert result[0].metadata["document_id"] == 104
+    assert {d.metadata["document_id"] for d in result} == {101, 102, 103, 104, 105}
+    assert all(d.page_content == "same body" for d in result)
+    assert [d.metadata["robot_recall_rank"] for d in result] == list(range(1, 6))

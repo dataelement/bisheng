@@ -13,10 +13,12 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from langchain_core.documents import Document
+from loguru import logger
 from pydantic import Field
 
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
 from bisheng.eplus.domain.schemas.knowledge import RobotFileSource, RobotKnowledgeInput
+from bisheng.eplus.domain.services.retrieval_ranking import rank_robot_candidates, trim_robot_candidates
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool, KnowledgeRetrieverTool
 from bisheng.utils.async_utils import run_async_safe
 
@@ -41,6 +43,10 @@ class RobotToolScopeViolation(PermissionError):
 
 
 class RobotDocumentStateReader(Protocol):
+    async def search_file_sources(
+        self, *, tenant_id: int, space_ids: tuple[int, ...], keywords: tuple[str, ...], limit: int = 50
+    ) -> dict[int, RobotFileSource]: ...
+
     async def file_sources(
         self,
         *,
@@ -94,10 +100,25 @@ class RobotSpaceRetrievalPolicy:
         max_content: int = 15000,
         sort_by_source_and_index: bool = False,
         file_name: str | None = None,
+        file_name_query: str | None = None,
     ) -> list[Document]:
         space_ids = tuple(sorted({int(space_id) for space_id in expected_scope.space_ids}))
         if not space_ids:
             return []
+
+        if file_name_query is not None:
+            keywords = tuple(dict.fromkeys(file_name_query.split()))
+            if not keywords or file_name is not None:
+                raise ValueError("filename keywords must be nonblank and exclusive of exact filename")
+            matches = await self.document_state_reader.search_file_sources(
+                tenant_id=self.tenant_id, space_ids=space_ids, keywords=keywords
+            )
+            logger.info("E+ filename search bot={} spaces={} matched={}", self.bot_config_id, space_ids, len(matches))
+            if matches:
+                return [
+                    Document(page_content="", metadata={**_source_metadata(source), "source_only": True})
+                    for source in matches.values()
+                ]
 
         matched_sources = None
         if file_name is not None:
@@ -110,6 +131,7 @@ class RobotSpaceRetrievalPolicy:
                 return []
 
         candidates: list[Document] = []
+        recalled = {}
         for space_id in space_ids:
             selected_ids = (
                 None
@@ -118,17 +140,20 @@ class RobotSpaceRetrievalPolicy:
             )
             if selected_ids == ():
                 continue
-            candidates.extend(
-                await self.retrieval_backend.retrieve_space(
-                    space_id=space_id,
-                    tenant_id=self.tenant_id,
-                    query=query,
-                    invoke_user_id=self.invoke_user_id,
-                    max_content=max_content,
-                    sort_by_source_and_index=sort_by_source_and_index,
-                    file_ids=selected_ids,
-                )
+            documents = await self.retrieval_backend.retrieve_space(
+                space_id=space_id,
+                tenant_id=self.tenant_id,
+                query=query,
+                invoke_user_id=self.invoke_user_id,
+                max_content=max_content,
+                sort_by_source_and_index=sort_by_source_and_index,
+                file_ids=selected_ids,
             )
+            recalled[space_id] = len(documents)
+            for rank, doc in enumerate(documents, 1):
+                candidates.append(
+                    Document(page_content=doc.page_content, metadata={"robot_recall_rank": rank, **doc.metadata})
+                )
 
         file_ids = {_document_id(doc) for doc in candidates}
         file_ids.discard(None)
@@ -141,7 +166,6 @@ class RobotSpaceRetrievalPolicy:
 
         result: list[Document] = []
         seen: set[tuple[int, int, str]] = set()
-        content_size = 0
         for document in candidates:
             file_id = _document_id(document)
             if file_id is None or file_id not in sources:
@@ -150,13 +174,22 @@ class RobotSpaceRetrievalPolicy:
             key = (file_id, int(metadata.get("chunk_index") or 0), document.page_content)
             if key in seen:
                 continue
-            if result and content_size >= max_content:
-                break
             seen.add(key)
             source = sources[file_id]
             metadata.update(_source_metadata(source))
             result.append(Document(page_content=document.page_content, metadata=metadata))
-            content_size += len(document.page_content)
+        result = trim_robot_candidates(rank_robot_candidates(result, query), max_content)
+        # Index order is only restored for one retained file, never across spaces.
+        if sort_by_source_and_index and len({_document_id(doc) for doc in result}) == 1:
+            result.sort(key=lambda doc: int(doc.metadata.get("chunk_index") or 0))
+        retained = {space_id: sum(doc.metadata["knowledge_id"] == space_id for doc in result) for space_id in space_ids}
+        logger.info(
+            "E+ retrieval fusion bot={} recalled={} retained={} content_chars={}",
+            self.bot_config_id,
+            recalled,
+            retained,
+            sum(len(doc.page_content) for doc in result),
+        )
         if matched_sources is not None:
             retrieved_ids = {_document_id(doc) for doc in result}
             for file_id, source in sources.items():
@@ -184,6 +217,8 @@ class RobotSpaceRetrievalPolicy:
             description=(
                 "检索机器人可用知识空间中的文档内容, 或核实具体文件的归属。"
                 "用户指定完整文件名时必须传 file_name, 仅查询该文件, 不用其他文件代替。"
+                "用户问某主题有哪些文件时, 传 file_name_query 为主题关键词(多词用空格分隔), 优先按真实文件名查找;"
+                "文件名未命中时回退正文检索。具体内容问答不传 file_name_query。"
                 "sources 是后台核实的文件归属, chunks 仅是相关正文, 正文中的名称和编号不是来源。"
                 "只能说明本次命中的文件, 不能列出空间完整目录或推断部门归属; 未命中不代表不存在。"
             ),
@@ -198,18 +233,26 @@ class RobotSpaceRetrieverTool(KnowledgeRetrieverTool):
     expected_scope: Any = Field(exclude=True)
 
     def _run(self, query: str, **kwargs: Any) -> list[Document]:
-        return run_async_safe(self._aretrieve(query, file_name=kwargs.get("file_name")), timeout=120)
+        return run_async_safe(
+            self._aretrieve(query, file_name=kwargs.get("file_name"), file_name_query=kwargs.get("file_name_query")),
+            timeout=120,
+        )
 
     async def _arun(self, query: str, **kwargs: Any) -> list[Document]:
-        return await self._aretrieve(query, file_name=kwargs.get("file_name"))
+        return await self._aretrieve(
+            query, file_name=kwargs.get("file_name"), file_name_query=kwargs.get("file_name_query")
+        )
 
-    async def _aretrieve(self, query: str, *, file_name: str | None = None) -> list[Document]:
+    async def _aretrieve(
+        self, query: str, *, file_name: str | None = None, file_name_query: str | None = None
+    ) -> list[Document]:
         return await self.policy.retrieve(
             query,
             expected_scope=self.expected_scope,
             max_content=self.max_content,
             sort_by_source_and_index=self.sort_by_source_and_index,
             file_name=file_name,
+            file_name_query=file_name_query,
         )
 
 

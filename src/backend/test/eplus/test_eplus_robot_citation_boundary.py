@@ -119,3 +119,22 @@ async def test_robot_wrapper_forwards_exact_file_constraint_to_real_retrieval_st
     assert payload["sources"] == []
     assert payload["chunks"] == []
     assert payload["is_complete_file_list"] is False
+
+
+async def test_robot_wrapper_forwards_topic_filename_query_to_real_retrieval_step():
+    class Policy:
+        async def retrieve(self, query, **kwargs):
+            assert kwargs["file_name_query"] == "深圳市 医学研究"
+            assert kwargs["file_name"] is None
+            return []
+
+    retriever = RobotSpaceRetrieverTool(policy=Policy(), expected_scope=AssistantRobotScope(3, (11,), 1))
+    tool = RobotKnowledgeRagTool(
+        name="eplus_robot_knowledge",
+        description="robot knowledge",
+        llm=FakeListChatModel(responses=["unused"]),
+        knowledge_retriever_tool=retriever,
+    )
+    wrapped = AssistantCitationToolWrapper.wrap(tool, CitationRegistryCollector())
+    payload = json.loads(await wrapped.ainvoke({"query": "有哪些文件", "file_name_query": "深圳市 医学研究"}))
+    assert payload["sources"] == []

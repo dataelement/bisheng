@@ -164,7 +164,9 @@ class AssistantCitationToolWrapper(BaseTool):
         # knowledge base, so it read "知识库已被删除", carrying the raw Document
         # dump as its output.
         retrieval_options = (
-            {"file_name": kwargs.get("file_name")} if getattr(self.tool, "robot_scope_enforced", False) else {}
+            {key: kwargs.get(key) for key in ("file_name", "file_name_query")}
+            if getattr(self.tool, "robot_scope_enforced", False)
+            else {}
         )
         retrieval_result = self.tool.knowledge_retriever_tool._run(query, **retrieval_options)
         return self._format_knowledge_results(retrieval_result)
@@ -178,7 +180,9 @@ class AssistantCitationToolWrapper(BaseTool):
             return await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
 
         retrieval_options = (
-            {"file_name": kwargs.get("file_name")} if getattr(self.tool, "robot_scope_enforced", False) else {}
+            {key: kwargs.get(key) for key in ("file_name", "file_name_query")}
+            if getattr(self.tool, "robot_scope_enforced", False)
+            else {}
         )
         retrieval_result = await self.tool.knowledge_retriever_tool._arun(query, **retrieval_options)
         return await self._aformat_knowledge_results(retrieval_result)

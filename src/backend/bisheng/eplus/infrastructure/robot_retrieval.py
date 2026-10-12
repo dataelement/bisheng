@@ -1,6 +1,7 @@
 """Scoped SQL provenance reads and index adapters for robot retrieval."""
 
 from langchain_core.documents import Document
+from sqlalchemy import func
 from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session
@@ -8,10 +9,35 @@ from bisheng.eplus.domain.schemas.knowledge import RobotFileSource
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
-from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 
 
 class DatabaseRobotDocumentStateReader:
+    async def search_file_sources(
+        self, *, tenant_id: int, space_ids: tuple[int, ...], keywords: tuple[str, ...], limit: int = 50
+    ) -> dict[int, RobotFileSource]:
+        if not keywords or any(not term.strip() for term in keywords):
+            raise ValueError("filename search requires nonblank keywords")
+        if not space_ids:
+            return {}
+        statement = (
+            select(KnowledgeFile.id, KnowledgeFile.file_name, Knowledge.id, Knowledge.name)
+            .join(Knowledge, KnowledgeFile.knowledge_id == Knowledge.id)
+            .where(
+                KnowledgeFile.tenant_id == tenant_id,
+                Knowledge.tenant_id == tenant_id,
+                col(Knowledge.id).in_(space_ids),
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                *(func.lower(KnowledgeFile.file_name).contains(term.casefold(), autoescape=True) for term in keywords),
+            )
+            .order_by(KnowledgeFile.id)
+            .limit(max(1, min(int(limit), 50)))
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {int(fid): RobotFileSource(int(fid), name, int(sid), space_name) for fid, name, sid, space_name in rows}
+
     async def file_sources(
         self,
         *,
@@ -81,12 +107,31 @@ class DatabaseRobotRetrievalBackend:
             ids = sorted({int(fid) for fid in file_ids})
             vector_kwargs["expr"] = f"document_id in {ids}"
             elastic_kwargs["filter"] = [{"terms": {"metadata.document_id": ids}}]
-        retriever = KnowledgeRetrieverTool(
-            vector_retriever=vector_store.as_retriever(search_kwargs=vector_kwargs),
-            elastic_retriever=elastic_store.as_retriever(search_kwargs=elastic_kwargs),
-            max_content=max_content,
-            sort_by_source_and_index=sort_by_source_and_index,
-            rrf_weights=[0.5, 0.5],
-            rrf_remove_zero_score=True,
-        )
-        return await retriever._arun(query)
+        # Keep bounded index top-k candidates, but defer all character trimming
+        # until every bound space has contributed to the global fusion.
+        vector_docs = await vector_store.as_retriever(search_kwargs=vector_kwargs).ainvoke(query)
+        elastic_docs = await elastic_store.as_retriever(search_kwargs=elastic_kwargs).ainvoke(query)
+        candidates, scores = {}, {}
+        for channel in (vector_docs, elastic_docs):
+            seen = set()
+            for rank, doc in enumerate(channel, 1):
+                key = (
+                    str(doc.metadata.get("document_id")),
+                    str(doc.metadata.get("chunk_index") or 0),
+                    doc.page_content,
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.setdefault(key, doc)
+                scores[key] = scores.get(key, 0) + 1 / (60 + rank)
+        # Preserve support from both recall channels without comparing their
+        # raw scores or merging equal text belonging to different files.
+        ordered = sorted(candidates, key=lambda key: (-scores[key], key))
+        return [
+            Document(
+                page_content=candidates[key].page_content,
+                metadata={**candidates[key].metadata, "robot_recall_rank": rank},
+            )
+            for rank, key in enumerate(ordered, 1)
+        ]
