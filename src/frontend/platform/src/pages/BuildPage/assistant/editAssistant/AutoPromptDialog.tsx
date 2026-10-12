@@ -28,11 +28,15 @@ export default function AutoPromptDialog({ onOpenChange }) {
     const { id } = useParams()
     const { assistantState, dispatchAssistant } = useAssistantStore()
 
+    const eventSourceRef = useRef<EventSource | null>(null)
     const init = async () => {
+        // A retry replaces the previous run instead of letting both stream into the dialog
+        eventSourceRef.current?.close()
         const prompt = areaRef.current?.value || assistantState.prompt
         const res = await getAssistantOptimizeTaskApi(id, prompt)
         const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?task_id=${res.task_id}`;
         const eventSource = new EventSource(apiUrl);
+        eventSourceRef.current = eventSource
         if (areaRef.current) areaRef.current.value = ''
         let queue = LoadType.Prompt
         setLoading(queue)
@@ -56,13 +60,18 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 case 'flow_list':
                     setFlows(parsedData.message); break
                 case 'end':
-                    setLoading(--queue)
                     if (parsedData.message) {
+                        // The server stops the whole run after an error: clear every pending step so retry works
+                        eventSource.close()
+                        queue = 0
+                        setLoading(0)
                         toast({
                             title: t('tip'),
                             variant: 'error',
                             description: streamErrorMessage(parsedData)
                         });
+                    } else {
+                        setLoading(--queue)
                     }
                     break
             }
@@ -73,9 +82,10 @@ export default function AutoPromptDialog({ onOpenChange }) {
         eventSource.onerror = (error: any) => {
             console.error("EventSource failed:", error);
             eventSource.close();
+            // The stream is over either way (normal close after the last step, or a dropped connection)
+            setLoading(0);
             if (error.data) {
                 const parsedData = JSON.parse(error.data);
-                setLoading(0);
                 toast({
                     title: parsedData.error,
                     variant: 'error',
@@ -89,6 +99,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
     useEffect(() => {
         // api
         init()
+        return () => eventSourceRef.current?.close()
     }, [])
 
     const [loading, setLoading] = useState(0)
