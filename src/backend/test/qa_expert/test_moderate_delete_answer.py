@@ -29,6 +29,10 @@ def _service_with_mocks() -> tuple[ModerateDeleteService, MagicMock]:
     svc.comment_repo = MagicMock()
     svc.expert_repo = MagicMock()
     svc.expert_repo.increment_answer_count = AsyncMock()
+    svc.expert_repo.increment_adoption_count = AsyncMock()
+    svc.adopt_repo = MagicMock()
+    svc.adopt_repo.delete_by_answer_id = AsyncMock(return_value=1)
+    svc.answer_repo.latest_active_adopted_id = AsyncMock(return_value=None)
     svc.pending_deduct = MagicMock()
     return svc, svc.pending_deduct
 
@@ -95,10 +99,14 @@ async def test_delete_answer_no_rule_cascades_and_clears_adopted():
     svc.question_repo.update.assert_awaited_once_with(
         100,
         answer_count=1,
+        adopt_count=0,
         adopted_answer_id=None,
         status=0,
     )
+    svc.adopt_repo.delete_by_answer_id.assert_awaited_once_with(10)
+    svc.expert_repo.increment_adoption_count.assert_awaited_once_with(5, count=-1)
     svc.expert_repo.increment_answer_count.assert_awaited_once_with(5, count=-1)
+    svc.answer_repo.latest_active_adopted_id.assert_not_called()
     pending.deduct_or_enqueue.assert_not_called()
 
 
@@ -146,6 +154,8 @@ async def test_delete_answer_with_rule_uses_qa_answer_biz_type():
     assert kwargs["operator_id"] == 9
     assert kwargs["remark"] == "违规"
     svc.question_repo.update.assert_awaited_once_with(101, answer_count=0)
+    svc.adopt_repo.delete_by_answer_id.assert_not_called()
+    svc.expert_repo.increment_adoption_count.assert_not_called()
     svc.expert_repo.increment_answer_count.assert_awaited_once_with(6, count=-1)
 
 
@@ -203,6 +213,51 @@ async def test_delete_others_question_with_rule_deducts(monkeypatch):
     assert kwargs["rule_code"] == "R1"
     assert kwargs["biz_type"] == "qa_question"
     assert kwargs["biz_id"] == "9"
+
+
+@pytest.mark.asyncio
+async def test_delete_one_of_two_adopted_keeps_solved_and_repoints():
+    """还有其他已采纳回答时, 只减采纳数并把指针改到剩余回答, 问题仍是已解决."""
+    svc, _ = _service_with_mocks()
+    svc.answer_repo.get_by_id = AsyncMock(
+        return_value=SimpleNamespace(
+            id=10,
+            question_id=100,
+            expert_id=5,
+            status=1,
+            adopted=True,
+        )
+    )
+    svc.expert_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=5, user_id=55))
+    svc.answer_repo.delete = AsyncMock(return_value=True)
+    svc.comment_repo.delete_by_answer_id = AsyncMock(return_value=0)
+    svc.answer_repo.latest_active_adopted_id = AsyncMock(return_value=11)
+    svc.question_repo.get_by_id = AsyncMock(
+        return_value=SimpleNamespace(
+            id=100,
+            answer_count=2,
+            adopt_count=2,
+            adopted_answer_id=10,
+            status=1,
+        )
+    )
+    svc.question_repo.update = AsyncMock(return_value=True)
+
+    result = await svc.moderate_delete(
+        operator=_admin_user(),
+        target_type="answer",
+        target_id=10,
+    )
+
+    assert result.deleted is True
+    svc.question_repo.update.assert_awaited_once_with(
+        100,
+        answer_count=1,
+        adopt_count=1,
+        adopted_answer_id=11,
+    )
+    svc.adopt_repo.delete_by_answer_id.assert_awaited_once_with(10)
+    svc.expert_repo.increment_adoption_count.assert_awaited_once_with(5, count=-1)
 
 
 @pytest.mark.asyncio
