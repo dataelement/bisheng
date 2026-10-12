@@ -37,8 +37,9 @@ export default function AutoPromptDialog({ onOpenChange }) {
         const apiUrl = `${__APP_ENV__.BASE_URL}/api/v1/assistant/auto?task_id=${res.task_id}`;
         const eventSource = new EventSource(apiUrl);
         eventSourceRef.current = eventSource
+        setStoppedAt(0)
         if (areaRef.current) areaRef.current.value = ''
-        let queue = LoadType.Prompt
+        let queue: number = LoadType.Prompt
         setLoading(queue)
 
         eventSource.onmessage = (event) => {
@@ -63,6 +64,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     if (parsedData.message) {
                         // The server stops the whole run after an error: clear every pending step so retry works
                         eventSource.close()
+                        setStoppedAt(queue)
                         queue = 0
                         setLoading(0)
                         toast({
@@ -83,6 +85,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
             console.error("EventSource failed:", error);
             eventSource.close();
             // The stream is over either way (normal close after the last step, or a dropped connection)
+            if (queue > 0) setStoppedAt(queue)
+            queue = 0
             setLoading(0);
             if (error.data) {
                 const parsedData = JSON.parse(error.data);
@@ -103,6 +107,9 @@ export default function AutoPromptDialog({ onOpenChange }) {
     }, [])
 
     const [loading, setLoading] = useState(0)
+    // Step the run stopped at after an error; it and the later steps have no result to use
+    const [stoppedAt, setStoppedAt] = useState(0)
+    const unfinished = (step: LoadType) => step <= loading || step <= stoppedAt
     const handleReload = () => {
         init()
     }
@@ -193,7 +200,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         <Textarea ref={areaRef} className="h-full"
                             placeholder={t('prompt')}
                         ></Textarea>
-                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.Prompt <= loading} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
+                        <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.Prompt)} size="sm" onClick={handleUsePropmt}>{t('build.use')}</Button>
                     </div>
                 </div>
                 {/* Automatic configuration */}
@@ -206,7 +213,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
                             <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
                             <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
-                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideWord <= loading} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
+                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideWord)} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                         </div>
                         {/* Guide questions */}
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
@@ -218,7 +225,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                                     ))
                                 }
                             </div>
-                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={LoadType.GuideQuestion <= loading} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
+                            <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideQuestion)} size="sm" onClick={handleUserQuestion}>{t('build.use')}</Button>
                         </div>
                         {/* Tools */}
                         <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
@@ -235,7 +242,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                             </div>
                             <Button
                                 className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
-                                disabled={LoadType.Tool <= loading || !tools.length} size="sm"
+                                disabled={unfinished(LoadType.Tool) || !tools.length} size="sm"
                                 onClick={handleUseTools}
                             >{t('build.use')}</Button>
                         </div>
@@ -254,7 +261,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         </div>
                         <Button
                             className="group-hover:flex text-slate-50 hidden h-6 absolute bottom-4 right-4"
-                            disabled={LoadType.Flow <= loading || !flows.length}
+                            disabled={unfinished(LoadType.Flow) || !flows.length}
                             size="sm"
                             onClick={handleUseFlows}
                         >{t('build.use')}</Button>
@@ -268,7 +275,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
             <DialogClose>
                 <Button variant="outline" className="px-11" type="button">{t('cancle')}</Button>
             </DialogClose>
-            <Button type="submit" className="px-11" disabled={!!loading} onClick={handleUseAll}>{t('build.useAll')}</Button>
+            <Button type="submit" className="px-11" disabled={!!loading || stoppedAt > 0} onClick={handleUseAll}>{t('build.useAll')}</Button>
         </DialogFooter>
     </DialogContent>
 };
