@@ -16,6 +16,11 @@ export function streamErrorMessage(event: StreamEndEvent): string {
     return t(`api_errors:${event.code}`, { ...(event.data || {}), defaultValue: event.message })
 }
 
+// The model wraps the prompt in a ```markdown fence whose pieces can arrive in separate chunks
+function stripMarkdownFence(text: string): string {
+    return text.replace(/^\s*(```)?\s*markdown\s*\n/i, '').replace(/\n?```\s*$/, '')
+}
+
 /**
  * Streams the optimized prompt of a newly created assistant straight into the
  * portrait panel, then fills its (still empty) opening lines and questions.
@@ -59,7 +64,7 @@ export function useInitialPromptStream(enabled: boolean) {
                         generated += data.message
                         // Thinking models send empty chunks first; keep the user's prompt until text arrives
                         if (!generated.trim()) break
-                        dispatchAssistant('setPrompt', { prompt: generated.replace('```markdown', '') })
+                        dispatchAssistant('setPrompt', { prompt: stripMarkdownFence(generated) })
                         break
                     case 'guide_word':
                         dispatchAssistant('setGuideword', { guide_word: data.message })
