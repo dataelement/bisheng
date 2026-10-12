@@ -10,7 +10,7 @@ export function RobotDebugPage() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const assistantId = params.get("assistantId") ?? "";
-  if (import.meta.env.VITE_EPLUS_DEBUG_ENABLED !== "true" || !assistantId) {
+  if (import.meta.env.VITE_EPLUS_DEBUG_ENABLED === "false" || !assistantId) {
     return <p role="alert" className="p-6">{t("build.robotDebug.unavailable")}</p>;
   }
   return <RobotDebugSession key={assistantId} assistantId={assistantId} />;

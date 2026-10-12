@@ -43,7 +43,7 @@ const root = "/robot-debug/api";
 const assistantPath = (id: string) => `${root}/assistants/${encodeURIComponent(id)}`;
 
 export async function getRobotDebugStatus(): Promise<boolean> {
-  if (import.meta.env.VITE_EPLUS_DEBUG_ENABLED !== "true") return false;
+  if (import.meta.env.VITE_EPLUS_DEBUG_ENABLED === "false") return false;
   try {
     const result = await request.get<{ enabled: boolean }, { enabled: boolean }>(`${root}/status`, { silent: true });
     return result.enabled === true;

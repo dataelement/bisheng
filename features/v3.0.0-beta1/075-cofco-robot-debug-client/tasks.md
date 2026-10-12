@@ -201,7 +201,7 @@ await runRobotDebug({ assistantId, query, testUserId, history }, handleEvent, co
 
 - [x] 实现顶部脱敏配置摘要、合法测试用户选择、文字聊天/停止/清空，以及每轮追踪；不把检索元数据混入模型结果，也不补猜缺失空间。
 - [x] 一轮结束摘要明确显示 0/多次调用；工具错误与最终回答分开，ReAct 显示整段返回说明；保存配置后再测试，未保存内容不参与。
-- [x] 配置区按钮使用同源固定路径携带 assistantId，不传 secret/token；只在 `VITE_EPLUS_DEBUG_ENABLED=true` 且 status 确认管理员时显示，不增加一级菜单。独立页面同样有服务器准入。
+- [x] 配置区按钮使用同源固定路径携带 assistantId，不传 secret/token；前端默认开启（构建时 `VITE_EPLUS_DEBUG_ENABLED=false` 可关闭），status 确认已登录且服务可用后显示，不增加一级菜单。独立页面同样有服务器准入。2026-10-12 按用户确认调整默认值；独立后端服务仍默认关闭。
 - [x] 所有新组件 named exports，使用现有/已落地组件；不改变 UI 规范或新增视觉样式。新增文字提取到 zh-Hans/en-US/ja 现有 build 语言文件，分小提交处理三份语言文件，不编辑 api_errors 生成产物。
 - [ ] 前端测试覆盖关闭时无按钮、非管理员无入口、当前助手带入、失败/停止/清空、缺失来源及历史隔离；提交测试但本地不运行。镜像构建阶段和部署后验证，未执行不能标通过。
 

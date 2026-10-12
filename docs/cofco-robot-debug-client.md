@@ -16,7 +16,7 @@
 
 需要包含 F075 代码的前后端，不能只启动旧镜像。没有新增表或迁移；不需要降级数据库，也不要复制生产密钥到本地文件。
 
-1. 在专门的调试前端构建中设置 `VITE_EPLUS_DEBUG_ENABLED=true`。默认关闭，不出现入口。该变量是**构建时**开关，改容器运行环境不能改变已构建页面。
+1. 前端入口默认开启，不再需要设置 `VITE_EPLUS_DEBUG_ENABLED=true`；如需隐藏，构建时显式设置 `VITE_EPLUS_DEBUG_ENABLED=false`。该变量是**构建时**开关，改容器运行环境不能改变已构建页面。入口仍要求独立调试服务的 status 检查成功及已保存机器人配置；后端独立服务仍需显式启用，不影响正式 API/Worker。
 2. 使用既有环境的 backend 配置启动独立服务，不替换正式 API/Worker，不使用 `bisheng.main:app`：
 
    ```bash

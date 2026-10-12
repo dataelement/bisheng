@@ -6,6 +6,12 @@ vi.mock("@/controllers/request", () => ({ default: mocks }));
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });
 
 describe("robot debug transport", () => {
+  it("probes the service when the build flag is not configured", async () => {
+    vi.stubEnv("VITE_EPLUS_DEBUG_ENABLED", undefined);
+    mocks.get.mockResolvedValue({ enabled: true });
+    expect(await getRobotDebugStatus()).toBe(true);
+    expect(mocks.get).toHaveBeenCalledWith("/robot-debug/api/status", { silent: true });
+  });
   it("does not probe when disabled", async () => {
     vi.stubEnv("VITE_EPLUS_DEBUG_ENABLED", "false");
     expect(await getRobotDebugStatus()).toBe(false);
