@@ -1,11 +1,13 @@
 """Observe actual robot tool results without changing model-visible bytes."""
 
+import asyncio
 import json
 from unittest.mock import patch
 
 import pytest
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantCitationToolWrapper
 from bisheng.assistant.domain.schemas.execution import AssistantRobotScope
@@ -109,3 +111,46 @@ async def test_observed_and_formal_tools_use_the_real_formatter_byte_for_byte(mo
     assert [s["space_name"] for s in payload["sources"]] == ["A", "B"]
     assert [s["file_name"] for s in payload["sources"]] == ["same.csv", "same.csv"]
     assert [s["file_id"] for s in payload["sources"]] == [101, 102]
+
+
+@pytest.mark.parametrize("sync", [False, True])
+async def test_tool_diagnostics_preserve_filename_arguments_and_model_result(sync):
+    records = []
+    sink = logger.add(
+        lambda message: records.append(message.record), filter=lambda r: r["extra"].get("robot_debug_safe")
+    )
+    trace = DebugTrace()
+    tool = observe_robot_tool(wrapper(), trace)
+    try:
+        arguments = {"query": "content", "file_name_query": "same"}
+        result = await asyncio.to_thread(tool.invoke, arguments) if sync else await tool.ainvoke(arguments)
+        trace.emit("completed", {"tool_call_count": 1}, terminal=True)
+    finally:
+        logger.remove(sink)
+    diagnostics = [json.loads(r["message"].split("EPLUS_DEBUG_DIAG ", 1)[1]) for r in records]
+    assert [d["type"] for d in diagnostics] == ["tool_start", "tool_end", "completed"]
+    assert all(d["run_id"] == trace.run_id for d in diagnostics)
+    assert diagnostics[0]["data"]["arguments"] == {"query": "content", "file_name": None, "file_name_query": "same"}
+    assert diagnostics[1]["data"]["call_id"] == diagnostics[0]["data"]["call_id"]
+    assert diagnostics[1]["data"]["model_tool_output"] == result
+    assert json.loads(result)["chunks"][0]["content"] == "content"
+
+
+async def test_tool_failure_diagnostics_log_type_not_provider_body_or_answer_deltas():
+    records = []
+    sink = logger.add(
+        lambda message: records.append(message.record), filter=lambda r: r["extra"].get("robot_debug_safe")
+    )
+    trace = DebugTrace()
+    try:
+        with pytest.raises(RuntimeError):
+            await observe_robot_tool(wrapper(), trace).ainvoke({"query": "fail"})
+        trace.emit("answer_delta", {"text": "delta-not-logged"})
+    finally:
+        logger.remove(sink)
+    diagnostics = [json.loads(r["message"].split("EPLUS_DEBUG_DIAG ", 1)[1]) for r in records]
+    assert [d["type"] for d in diagnostics] == ["tool_start", "tool_error"]
+    assert diagnostics[1]["data"]["error_type"] == "RuntimeError"
+    assert diagnostics[1]["data"]["call_id"] == diagnostics[0]["data"]["call_id"]
+    assert "sensitive provider response" not in str(records)
+    assert "delta-not-logged" not in str(records)

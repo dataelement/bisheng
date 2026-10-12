@@ -398,3 +398,12 @@ FAILED test/workstation/test_conversation_export_service.py::test_load_happy_pat
 - 广覆盖后端：6609 passed、297 failed、22 errors、67 skipped、6 deselected；与修复前 `/private/tmp/robot-retrieval-full.xml` 的319项失败/错误身份双向差集为空。各失败/错误名称同本文既有基线清单，不声明整体后端通过。
 - 新全量证据：`/private/tmp/robot-body-supplement-full.log`、`/private/tmp/robot-body-supplement-full.xml`。
 - 环境E2E：4 skipped，因未配置授权测试环境参数；真实模型效果和Milvus/ES现场联调仍待部署后验收。无前端变更，未执行前端测试/构建。
+
+## 2026-10-12 独立调试服务诊断日志
+
+基于 `542f9b13d`，按用户确认增加原文业务诊断日志：请求与历史、模型/空间上下文、完整知识工具参数、模型工具结果和最终回复以 run_id/call_id 关联；系统配置凭证和供应商异常正文不提取，不逐字打印流式增量。没有修改检索行为、模型输入、正式机器人、普通助手、数据库或前端。
+
+- TDD：3项新增测试在旧实现因诊断日志缺失失败；实现后通过。另补充错误类型隔离、增量不落日志、异常/真实任务取消后部分回复不标为完整的验证。
+- 最终相关回归：297 passed；Ruff、架构守卫及 diff 检查通过。只读评审无阻塞问题，建议的取消验证已补齐。
+- 完整后端回归：6614 passed、297 failed、22 errors、67 skipped、6 deselected；与 `/private/tmp/robot-body-supplement-full.xml` 的319项失败/错误身份双向差集为空，失败名称同本文既有基线清单。全量运行开始后补充的取消用例由上述最终相关回归覆盖，不声明整体后端通过。
+- 全量证据：`/private/tmp/robot-debug-diag-full.log`、`/private/tmp/robot-debug-diag-full.xml`。现场E2E 4 skipped（未配置测试环境参数）；未调用真实模型、未部署105、未提交或推送；无前端测试/构建。

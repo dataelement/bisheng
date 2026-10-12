@@ -94,7 +94,8 @@ def debug_auth_jwt(req: Request, res: Response):
 
 
 def configure_debug_logging():
-    # Only request-local, sanitized diagnostics may reach this process's sinks.
+    # Only explicitly selected request-local diagnostics reach these sinks.
+    # Business text is recorded verbatim; configuration credentials are excluded.
     # Uvicorn and provider libraries have independent stdlib sinks; suppress them
     # in this standalone process rather than leaking raw exception bodies.
     logging.disable(logging.CRITICAL)

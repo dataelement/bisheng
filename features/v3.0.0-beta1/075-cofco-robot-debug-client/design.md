@@ -70,7 +70,7 @@
 - `GET /robot-debug/api/assistants/{assistant_id}/context`：校验登录身份、租户及测试用户，不要求助手 edit；返回脱敏配置、有效绑定空间、合法测试用户及 `can_switch_user`。真实模型名、执行模式和工具差异在 run 初始化后由 `context` 事件返回，不为预览再次初始化模型与工具。
 - `POST /robot-debug/api/assistants/{assistant_id}/run`：输入 `query`、`test_user_id`、独立测试历史；服务每轮重新校验全部准入和绑定，浏览器不能指定知识空间。
 - 运行响应采用事件流，事件包含 `run_id`、递增 `seq`、`type` 和 `data`。类型为 `context`、`tool_start`、`tool_end`、`tool_error`、`answer_delta`、`completed`、`failed`；无工具调用在结束摘要中明确显示 `tool_call_count=0`。
-- 工具结束事件区分 `model_tool_output` 与 `retrieval_metadata`；异常仅返回脱敏摘要，服务日志记录关联 ID，不输出密钥或默认打印检索正文。
+- 工具结束事件区分 `model_tool_output` 与 `retrieval_metadata`；异常仅返回错误类型。2026-10-12 用户确认独立调试服务原文诊断日志：以 `run_id` 关联问题、实际历史、模型/空间上下文、完整知识工具参数、工具结果及最终回复，工具以 `call_id` 关联；不逐字打印增量。只显式选取业务字段，不读取密钥、认证头或配置全文，供应商异常正文仍禁止。日志由容器系统保存、轮转，不新增业务表、不改变正式机器人或普通助手。
 - 断开请求即取消本地任务；一个页面只运行一轮，服务限制总并发 1、总时长 180 秒；多进程或多副本部署必须以 Redis 协调准入，不能用进程内锁冒充全局限流。
 
 依赖既有用户认证、租户上下文、统一管理员身份判定和有效用户读取；调试不要求助手 edit 权限。依赖 F073 绑定边界、助手执行器、知识工具包装器及真实 Milvus/ES/LLM。以上内部格式或工具执行方式变化都需要两种模式回归。不得返回 Bot Secret、证书、APIKey、认证头或模型配置全文。

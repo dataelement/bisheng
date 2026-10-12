@@ -28,6 +28,18 @@ class DebugAssistantRuntime:
     async def run(self, context: DebugContext, request: DebugRunRequest, trace: DebugTrace) -> AsyncIterator[str]:
         if os.getenv("BISHENG_RECORD_HISTORY"):
             raise RuntimeError("robot debug refuses local history recording")
+        trace.log_diagnostic(
+            "request",
+            {
+                "tenant_id": context.tenant_id,
+                "operator_id": context.operator_id,
+                "assistant_id": str(context.assistant.id),
+                "test_user_id": context.test_user_id,
+                "query": request.query,
+                "history_turns": len(request.history),
+                "history": [turn.model_dump() for turn in request.history],
+            },
+        )
         task = asyncio.current_task()
         execution_context = AssistantExecutionContext(
             entry_point=AssistantEntryPoint.EPLUS,
@@ -59,9 +71,23 @@ class DebugAssistantRuntime:
         history = []
         for turn in request.history:
             history.extend((HumanMessage(content=turn.question), AIMessage(content=turn.answer)))
-        async for messages in agent.astream("", history, context=execution_context):
-            message = messages[-1] if isinstance(messages, list) and messages else messages
-            if isinstance(message, (AIMessage, AIMessageChunk)):
-                text = text_content(message.content)
-                if text:
-                    yield text
+        answer = []
+        execution_completed = False
+        try:
+            async for messages in agent.astream("", history, context=execution_context):
+                message = messages[-1] if isinstance(messages, list) and messages else messages
+                if isinstance(message, (AIMessage, AIMessageChunk)):
+                    text = text_content(message.content)
+                    if text:
+                        answer.append(text)
+                        yield text
+            execution_completed = True
+        finally:
+            trace.log_diagnostic(
+                "answer",
+                {
+                    "text": "".join(answer),
+                    "execution_completed": execution_completed,
+                    "tool_call_count": trace.tool_call_count,
+                },
+            )

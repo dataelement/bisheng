@@ -7,6 +7,7 @@ import uuid
 from contextvars import ContextVar
 from typing import Any
 
+from loguru import logger
 from pydantic import Field, PrivateAttr
 
 from bisheng.api.services.assistant_agent import AssistantCitationToolWrapper
@@ -37,7 +38,16 @@ class DebugTrace:
                 self._loop.call_soon_threadsafe(self.queue.put_nowait, event)
             else:
                 self.queue.put_nowait(event)
+            if event_type != "answer_delta":
+                self.log_diagnostic(event_type, data, seq=event["seq"])
             return event
+
+    def log_diagnostic(self, event_type: str, data: dict, *, seq: int | None = None):
+        # Callers supply business fields only, never config/model/request objects.
+        event = {"run_id": self.run_id, "type": event_type, "data": data}
+        if seq is not None:
+            event["seq"] = seq
+        logger.bind(robot_debug_safe=True).info("EPLUS_DEBUG_DIAG {}", json.dumps(event, ensure_ascii=False))
 
     @property
     def tool_call_count(self) -> int:
@@ -72,19 +82,24 @@ class ObservedRobotTool(AssistantCitationToolWrapper):
         self._capture_metadata(documents)
         return super()._format_knowledge_results(documents)
 
-    def _begin(self, query):
+    def _begin(self, query, kwargs):
         call = {
             "call_id": uuid.uuid4().hex,
             "tool_name": self.name,
             "tool_type": self.original_tool_type,
             "observer_type": f"{type(self).__module__}.{type(self).__name__}",
             "query": query,
+            "arguments": {
+                "query": query,
+                "file_name": kwargs.get("file_name"),
+                "file_name_query": kwargs.get("file_name_query"),
+            },
         }
         self.trace.emit("tool_start", dict(call))
         return call, self._call.set(call)
 
     async def _arun(self, query: str, **kwargs):
-        call, token = self._begin(query)
+        call, token = self._begin(query, kwargs)
         try:
             result = await super()._arun(query, **kwargs)
             self.trace.emit("tool_end", {**call, "model_tool_output": result})
@@ -97,7 +112,7 @@ class ObservedRobotTool(AssistantCitationToolWrapper):
             self._call.reset(token)
 
     def _run(self, query: str, **kwargs):
-        call, token = self._begin(query)
+        call, token = self._begin(query, kwargs)
         try:
             result = super()._run(query, **kwargs)
             self.trace.emit("tool_end", {**call, "model_tool_output": result})

@@ -1,11 +1,13 @@
 """Exercise both real assistant executors with deterministic local models."""
 
+import asyncio
 import json
 from types import SimpleNamespace
 
 import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.eplus.domain.schemas.debug import DebugRunRequest
@@ -49,6 +51,90 @@ async def test_runtime_uses_robot_context_and_only_test_history():
     assert event["model_name"] == "actual-model"
     assert event["disabled_tools"] == ["dangerous"]
     assert trace.tool_call_count == 0
+
+
+async def test_runtime_logs_raw_request_history_and_answer_without_model_credentials():
+    records = []
+    sink = logger.add(
+        lambda message: records.append(message.record), filter=lambda r: r["extra"].get("robot_debug_safe")
+    )
+    trace = DebugTrace()
+    request = DebugRunRequest(query="new", test_user_id=2, history=[{"question": "old", "answer": "answer"}])
+    context = snapshot()
+    context.assistant.api_key = "credential-must-not-appear"
+    try:
+        assert [s async for s in DebugAssistantRuntime(agent_factory=Agent).run(context, request, trace)] == ["text"]
+    finally:
+        logger.remove(sink)
+    diagnostics = [json.loads(r["message"].split("EPLUS_DEBUG_DIAG ", 1)[1]) for r in records]
+    assert [d["type"] for d in diagnostics] == ["request", "context", "answer"]
+    assert all(d["run_id"] == trace.run_id for d in diagnostics)
+    assert diagnostics[0]["data"]["query"] == "new"
+    assert diagnostics[0]["data"]["history"] == [{"question": "old", "answer": "answer"}]
+    assert diagnostics[0]["data"]["history_turns"] == 1
+    assert diagnostics[-1]["data"]["text"] == "text"
+    assert diagnostics[-1]["data"]["execution_completed"] is True
+    assert "credential-must-not-appear" not in str(records)
+    assert [e["type"] for e in trace.events] == ["context"]
+
+
+async def test_interrupted_execution_records_partial_answer_as_incomplete():
+    class InterruptedAgent(Agent):
+        async def astream(self, query, history, context):
+            yield AIMessageChunk(content="partial")
+            raise RuntimeError("sensitive provider body")
+
+    records = []
+    sink = logger.add(
+        lambda message: records.append(message.record), filter=lambda r: r["extra"].get("robot_debug_safe")
+    )
+    try:
+        with pytest.raises(RuntimeError):
+            _ = [
+                s
+                async for s in DebugAssistantRuntime(agent_factory=InterruptedAgent).run(
+                    snapshot(), DebugRunRequest(query="new", test_user_id=2), DebugTrace()
+                )
+            ]
+    finally:
+        logger.remove(sink)
+    diagnostics = [json.loads(r["message"].split("EPLUS_DEBUG_DIAG ", 1)[1]) for r in records]
+    assert diagnostics[-1]["data"] == {"text": "partial", "execution_completed": False, "tool_call_count": 0}
+    assert "sensitive provider body" not in str(records)
+
+
+async def test_cancelled_execution_records_partial_answer_as_incomplete():
+    waiting = asyncio.Event()
+
+    class WaitingAgent(Agent):
+        async def astream(self, query, history, context):
+            yield AIMessageChunk(content="partial")
+            waiting.set()
+            await asyncio.Event().wait()
+
+    async def consume():
+        return [
+            s
+            async for s in DebugAssistantRuntime(agent_factory=WaitingAgent).run(
+                snapshot(), DebugRunRequest(query="new", test_user_id=2), DebugTrace()
+            )
+        ]
+
+    records = []
+    sink = logger.add(
+        lambda message: records.append(message.record), filter=lambda r: r["extra"].get("robot_debug_safe")
+    )
+    task = asyncio.create_task(consume())
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        task.cancel()
+        logger.remove(sink)
+    diagnostics = [json.loads(r["message"].split("EPLUS_DEBUG_DIAG ", 1)[1]) for r in records]
+    assert diagnostics[-1]["data"] == {"text": "partial", "execution_completed": False, "tool_call_count": 0}
 
 
 async def test_runtime_refuses_shared_history_file_mode(monkeypatch):
