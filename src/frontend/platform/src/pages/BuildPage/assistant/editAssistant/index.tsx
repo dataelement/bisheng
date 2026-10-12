@@ -217,9 +217,10 @@ export default function EditAssistant() {
 const useBeforeUnload = (changed, checking) => {
     const { t } = useTranslation()
 
-    // Prompt to save when leaving
+    // Prompt to save when leaving. Only with unsaved changes: the browser dialog
+    // otherwise shows on every reload or back step that leaves the page.
     useEffect(() => {
-        if (checking) return // Don't prompt when checking permissions
+        if (checking || !changed) return
         const fun = (e) => {
             const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
             (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
@@ -227,7 +228,7 @@ const useBeforeUnload = (changed, checking) => {
         }
         window.addEventListener('beforeunload', fun);
         return () => { window.removeEventListener('beforeunload', fun) }
-    }, [checking])
+    }, [checking, changed])
 
     return useBlocker(changed);
 }
