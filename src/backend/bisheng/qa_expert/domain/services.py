@@ -1888,9 +1888,10 @@ class AnswerService:
         question_id: int,
         user=None,
     ) -> Answer | None:
-        """按专家名取回答；同样挂脱敏 author。"""
+        """按专家名取未软删回答；同样挂脱敏 author。"""
         answer = await self.repository.get_by_expertname(expert_name, question_id)
-        if answer is None:
+        # 仓储已排除软删. 这里再挡一层, 避免概况把已删回答算成该专家已回答.
+        if answer is None or int(getattr(answer, "status", 0) or 0) == ANSWER_STATUS_DELETED:
             return None
         resolved = await self._resolve_answer(answer)
         question = await self.question_repo.get_by_id(question_id)

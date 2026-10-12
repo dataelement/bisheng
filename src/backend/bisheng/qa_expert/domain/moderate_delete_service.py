@@ -12,6 +12,7 @@ from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.points.domain.services.points_auth import is_platform_super_admin
 from bisheng.points.domain.services.points_pending_deduct_service import PointsPendingDeductService
 from bisheng.qa_expert.domain.repositories import (
+    AnswerAdoptRepository,
     AnswerRepository,
     CommentRepository,
     ExpertRepository,
@@ -54,6 +55,7 @@ class ModerateDeleteService:
         self.answer_repo = AnswerRepository()
         self.comment_repo = CommentRepository()
         self.expert_repo = ExpertRepository()
+        self.adopt_repo = AnswerAdoptRepository()
         self.pending_deduct = PointsPendingDeductService()
 
     async def moderate_delete(
@@ -159,7 +161,18 @@ class ModerateDeleteService:
         return author_id, "qa_question", str(target_id)
 
     async def _delete_answer(self, target_id: int) -> tuple[int, str, str]:
-        """软删回答：解析专家作者、级联评论、维护问题计数与最佳答案指针。"""
+        """软删回答, 并回退问题概况用的回答数和采纳数.
+
+        Args:
+            target_id: qa_answer.id.
+
+        Returns:
+            作者用户 id, 业务类型 qa_answer, 以及回答 id 字符串.
+
+        Raises:
+            AnswerNotFoundError: 回答不存在或已软删.
+            ExpertNotFoundError: 回答没有可解析的专家作者.
+        """
         answer = await self.answer_repo.get_by_id(target_id)
         if not answer or int(getattr(answer, "status", 0) or 0) == _ANSWER_STATUS_DELETED:
             raise AnswerNotFoundError()
@@ -170,6 +183,8 @@ class ModerateDeleteService:
         if expert is None or getattr(expert, "user_id", None) is None:
             raise ExpertNotFoundError(message="Answer expert not found")
         author_id = int(expert.user_id)
+        # 详情状态看 adopt_count, 不是只看 adopted_answer_id. 先记下再软删.
+        was_adopted = bool(getattr(answer, "adopted", False)) or int(getattr(answer, "status", 1) or 0) == 2
 
         question_id = int(answer.question_id)
         deleted = await self.answer_repo.delete(target_id)
@@ -178,17 +193,29 @@ class ModerateDeleteService:
 
         # 级联硬删该回答下评论；不对评论作者逐条扣分
         await self.comment_repo.delete_by_answer_id(target_id)
+        if was_adopted:
+            await self.adopt_repo.delete_by_answer_id(target_id)
 
         question = await self.question_repo.get_by_id(question_id)
         if question is not None:
-            next_count = max(0, int(question.answer_count or 0) - 1)
-            update_kwargs: dict = {"answer_count": next_count}
-            # 删掉最佳答案时回退为未解决，避免详情脏指针
-            if int(question.adopted_answer_id or 0) == target_id:
+            next_answer_count = max(0, int(question.answer_count or 0) - 1)
+            next_adopt = int(getattr(question, "adopt_count", 0) or 0)
+            if was_adopted:
+                next_adopt = max(0, next_adopt - 1)
+            update_kwargs: dict = {"answer_count": next_answer_count}
+            if was_adopted:
+                update_kwargs["adopt_count"] = next_adopt
+            pointer_hit = int(question.adopted_answer_id or 0) == target_id
+            # 采纳数归零后指针必须清空, 否则详情仍可能显示已解决
+            if next_adopt == 0 and (was_adopted or pointer_hit):
                 update_kwargs["adopted_answer_id"] = None
                 update_kwargs["status"] = 0
+            elif pointer_hit:
+                update_kwargs["adopted_answer_id"] = await self.answer_repo.latest_active_adopted_id(question_id)
             await self.question_repo.update(question_id, **update_kwargs)
 
+        if was_adopted:
+            await self.expert_repo.increment_adoption_count(int(expert.id), count=-1)
         # 软删后回退专家累计回答数, 与作者自删路径同一不变量
         await self.expert_repo.increment_answer_count(int(expert.id), count=-1)
 

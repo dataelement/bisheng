@@ -11,6 +11,7 @@ from bisheng.common.utils.beijing_time import now_beijing
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
 from bisheng.database.models.department import Department
 from bisheng.database.models.qa_expert import (
+    ANSWER_STATUS_DELETED,
     AnonymousAlias,
     Answer,
     AnswerAdopt,
@@ -232,9 +233,19 @@ class ExpertRepository:
             await session.commit()
 
     async def increment_adoption_count(self, expert_id: int, count: int = 1):
-        """原子性增加专家采纳采纳数量"""
+        """原子增减专家采纳数. 删已采纳回答回退时 count 可为负, 结果不低于 0.
+
+        Args:
+            expert_id: qa_expert.id.
+            count: 增量, 删除已采纳回答时传 -1.
+        """
         async with get_async_db_session() as session:
-            stmt = update(Expert).where(Expert.id == expert_id).values(adoption_count=Expert.adoption_count + count)
+            next_count = Expert.adoption_count + count
+            stmt = (
+                update(Expert)
+                .where(Expert.id == expert_id)
+                .values(adoption_count=case((next_count < 0, 0), else_=next_count))
+            )
             await session.exec(stmt)
             await session.commit()
 
@@ -703,12 +714,57 @@ class AnswerRepository:
             return result.first()
 
     async def get_by_expertname(self, expert_name: str, question_id: int) -> Answer | None:
-        """根据专家名称获取回答"""
-        async with get_async_db_session() as session:
-            stmt = select(Answer).where(and_(Answer.expert_name == expert_name, Answer.question_id == question_id))
-            result = await session.exec(stmt)
+        """按专家名取该题未软删的最新回答.
 
+        软删后不再返回, 问题概况里的受邀专家才会从已回答回到待回答.
+
+        Args:
+            expert_name: qa_answer.expert_name, 与邀请名单上的姓名一致.
+            question_id: qa_question.id.
+
+        Returns:
+            仍有效的最新回答. 没有或只剩软删行时为 None.
+        """
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Answer)
+                .where(
+                    and_(
+                        Answer.expert_name == expert_name,
+                        Answer.question_id == question_id,
+                        Answer.status != ANSWER_STATUS_DELETED,
+                    )
+                )
+                .order_by(desc(Answer.id))
+            )
+            result = await session.exec(stmt)
             return result.first()
+
+    async def latest_active_adopted_id(self, question_id: int) -> int | None:
+        """同题未软删的最新已采纳回答 id.
+
+        Args:
+            question_id: qa_question.id.
+
+        Returns:
+            仍有效的已采纳回答 id. 没有则 None.
+        """
+        async with get_async_db_session() as session:
+            stmt = (
+                select(Answer)
+                .where(
+                    and_(
+                        Answer.question_id == question_id,
+                        Answer.status != ANSWER_STATUS_DELETED,
+                        or_(Answer.adopted.is_(True), Answer.status == 2),
+                    )
+                )
+                .order_by(desc(Answer.id))
+            )
+            answer = (await session.exec(stmt)).first()
+            if answer is None or answer.id is None:
+                return None
+            return int(answer.id)
 
     async def count_active_by_expert_id(self, expert_id: int) -> int:
         """统计专家未软删的回答数(硬删前校验)"""
@@ -972,6 +1028,24 @@ class AnswerAdoptRepository:
             await session.commit()
             await session.refresh(row)
             return row
+
+    async def delete_by_answer_id(self, answer_id: int) -> int:
+        """删掉该回答的采纳槽位.
+
+        Args:
+            answer_id: qa_answer.id.
+
+        Returns:
+            删除的槽位行数. 没有槽位时为 0.
+        """
+        async with get_async_db_session() as session:
+            stmt = select(AnswerAdopt).where(AnswerAdopt.answer_id == answer_id)
+            rows = list((await session.exec(stmt)).all())
+            for row in rows:
+                await session.delete(row)
+            if rows:
+                await session.commit()
+            return len(rows)
 
 
 class AnswerEligibilityRepository:
