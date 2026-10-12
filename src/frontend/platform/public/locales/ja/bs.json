@@ -1005,6 +1005,7 @@
     "assistantConfiguration": "アシスタント設定",
     "assistantPortrait": "アシスタント画像",
     "portraitOptimization": "アシスタント画像の最適化",
+    "portraitGenerating": "入力された役割とタスクからアシスタント画像を生成しています。完了後に編集できます。",
     "automaticOptimization": "自動最適化",
     "searchApp": "必要なアプリケーションを検索",
     "establishAssistant": "アシスタントを作成",

@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { LoadIcon } from "@/components/bs-icons/loading";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
@@ -26,7 +27,14 @@ export default function Prompt({ canEdit = false }) {
 
     return <div className="w-[50%] h-full bg-background-login shadow-sm p-4 overflow-y-auto scrollbar-hide">
         <div className="flex-between-center">
-            <span className="text-sm font-medium leading-none">{t('build.assistantPortrait')}</span>
+            <div className="flex items-center min-w-0">
+                <span className="text-sm font-medium leading-none shrink-0">{t('build.assistantPortrait')}</span>
+                {/* The panel is read-only while generating; a thinking model may stay silent for a minute */}
+                {promptStreaming && <>
+                    <LoadIcon className="ml-2 shrink-0 text-gray-600" />
+                    <span className="ml-1 truncate text-xs text-muted-foreground">{t('build.portraitGenerating')}</span>
+                </>}
+            </div>
             <Dialog open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                 <DialogTrigger asChild>
                     <Button variant="link" className="p-0" disabled={!canEdit || streaming}><Settings2 className="mr-1 h-4 w-4" />{t('build.automaticOptimization')}</Button>
