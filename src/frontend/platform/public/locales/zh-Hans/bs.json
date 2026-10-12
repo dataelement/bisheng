@@ -1011,6 +1011,7 @@
     "assistantConfiguration": "助手配置",
     "assistantPortrait": "助手画像",
     "portraitOptimization": "助手画像优化",
+    "portraitGenerating": "正在根据你填写的角色和任务生成助手画像，完成后可编辑",
     "automaticOptimization": "自动优化",
     "searchApp": "搜索您需要的应用",
     "establishAssistant": "创建助手",
