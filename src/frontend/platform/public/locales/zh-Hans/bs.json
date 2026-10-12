@@ -2736,8 +2736,8 @@
       "loadFailed": "应用信息加载失败"
     },
     "publish": {
-      "stateLabel": "应用态",
-      "entryLabel": "访问入口",
+      "stateLabel": "应用状态",
+      "entryLabel": "访问地址",
       "copy": "复制链接",
       "copied": "链接已复制",
       "open": "打开",
@@ -2751,7 +2751,14 @@
       "instanceHealth": "健康",
       "instanceRestart": "重启次数",
       "instanceStartedAt": "启动时间",
-      "instanceUnavailable": "暂时读取不到运行实例状态"
+      "instanceUnavailable": "暂时读取不到运行实例状态",
+      "overviewTitle": "运行与访问",
+      "settingsTitle": "运行配置",
+      "healthValue": {
+        "healthy": "正常",
+        "unhealthy": "异常",
+        "starting": "检测中"
+      }
     },
     "logs": {
       "sincePlaceholder": "起始时间",
@@ -2840,7 +2847,7 @@
       "loadFailed": "发布状态加载失败",
       "noPermission": "你没有权限查看该应用的发布状态。",
       "submit": "提交发布",
-      "submitDisabledHint": "该应用由命令行导入，平台侧没有草稿工作区；请在本地项目中执行 bisheng deploy 提交新版本。",
+      "submitDisabledHint": "新版本请在本地项目中执行 bisheng deploy 提交，平台上不能直接提交。",
       "tierLabel": "资源档位",
       "tierSpec": "CPU {{cpu}}m / 内存 {{memory}}MB",
       "approvalNone": "该应用还没有发布审批记录。",
@@ -2904,7 +2911,8 @@
       "previewBlockedNoImage": "这个版本还没构建完成，暂时不能预览。",
       "previewBlockedSettled": "这个版本的审批已经结束，不能再预览。",
       "previewBlockedUnknown": "这个版本暂时不能预览。",
-      "previewActionFailed": "操作没有成功，请稍后重试。"
+      "previewActionFailed": "操作没有成功，请稍后重试。",
+      "approvalLabel": "审批结果"
     },
     "versionList": {
       "title": "版本记录",

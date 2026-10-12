@@ -22,6 +22,7 @@
 import type { HostedAppCapability } from "@/controllers/API/hostedApp"
 import { Database, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { StatusTag, SubSection } from "./Panel"
 
 interface CapabilityListCardProps {
   capabilities: HostedAppCapability[] | undefined
@@ -49,43 +50,45 @@ export function CapabilityListCard({ capabilities }: CapabilityListCardProps) {
   const rows = capabilities ?? []
 
   return (
-    <section data-testid="capability-list-card" className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">
-        {t("hostedApp.publishStatus.capabilityTitle")}
-      </h3>
+    <SubSection
+      data-testid="capability-list-card"
+      label={t("hostedApp.publishStatus.capabilityTitle")}
+    >
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {t("hostedApp.publishStatus.capabilityNone")}
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2.5">
           {rows.map((capability, index) => {
             const Icon = capability.kind === "model" ? Sparkles : Database
             return (
               <li
                 key={`${capability.kind}-${capability.name}-${index}`}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                className="flex flex-col gap-1 text-sm"
               >
-                <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {t(kindI18nKey(capability.kind))}
-                </span>
-                <span className="min-w-0 break-all font-medium">{capability.name}</span>
-                {capability.revoked && (
-                  <>
-                    <span className="rounded-sm bg-red-100 px-1.5 py-0.5 text-xs text-red-700 dark:bg-red-900 dark:text-red-200">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Icon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="text-muted-foreground">
+                    {t(kindI18nKey(capability.kind))}
+                  </span>
+                  <span className="min-w-0 break-all">{capability.name}</span>
+                  {capability.revoked && (
+                    <StatusTag className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
                       {t("hostedApp.publishStatus.capabilityRevokedTag")}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {t(reasonI18nKey(capability.reason))}
-                    </span>
-                  </>
+                    </StatusTag>
+                  )}
+                </div>
+                {capability.revoked && (
+                  <p className="pl-6 text-xs text-muted-foreground">
+                    {t(reasonI18nKey(capability.reason))}
+                  </p>
                 )}
               </li>
             )
           })}
         </ul>
       )}
-    </section>
+    </SubSection>
   )
 }

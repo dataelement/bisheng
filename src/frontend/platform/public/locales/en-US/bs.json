@@ -2791,8 +2791,8 @@
       "loadFailed": "Failed to load the application"
     },
     "publish": {
-      "stateLabel": "Application state",
-      "entryLabel": "Entry",
+      "stateLabel": "App status",
+      "entryLabel": "Address",
       "copy": "Copy link",
       "copied": "Link copied",
       "open": "Open",
@@ -2806,7 +2806,14 @@
       "instanceHealth": "Health",
       "instanceRestart": "Restarts",
       "instanceStartedAt": "Started at",
-      "instanceUnavailable": "Instance state is temporarily unavailable"
+      "instanceUnavailable": "Instance state is temporarily unavailable",
+      "overviewTitle": "Status and access",
+      "settingsTitle": "Runtime settings",
+      "healthValue": {
+        "healthy": "Healthy",
+        "unhealthy": "Unhealthy",
+        "starting": "Checking"
+      }
     },
     "logs": {
       "sincePlaceholder": "From",
@@ -2895,7 +2902,7 @@
       "loadFailed": "Failed to load the release state",
       "noPermission": "You do not have permission to view this application's release state.",
       "submit": "Submit for release",
-      "submitDisabledHint": "This application was imported from the CLI and has no draft workspace on the platform. Run bisheng deploy in the local project to submit a new version.",
+      "submitDisabledHint": "Submit new versions by running bisheng deploy in your local project; they cannot be submitted from the platform.",
       "tierLabel": "Resource tier",
       "tierSpec": "CPU {{cpu}}m / memory {{memory}}MB",
       "approvalNone": "This application has no release approval yet.",
@@ -2959,7 +2966,8 @@
       "previewBlockedNoImage": "This version has not finished building yet, so it cannot be previewed.",
       "previewBlockedSettled": "The approval of this version has ended, so it can no longer be previewed.",
       "previewBlockedUnknown": "This version cannot be previewed right now.",
-      "previewActionFailed": "That did not work. Please try again in a moment."
+      "previewActionFailed": "That did not work. Please try again in a moment.",
+      "approvalLabel": "Approval"
     },
     "versionList": {
       "title": "Version records",

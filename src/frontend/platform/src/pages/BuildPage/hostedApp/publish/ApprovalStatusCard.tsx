@@ -18,6 +18,10 @@
  * - **Withdraw goes to the approval centre's endpoint**, which enforces
  *   "applicant only" itself. This card only decides whether the button is drawn.
  *
+ * The capability list and the resource tier are *not* here either: they say
+ * what the release runs with, not where it stands, and live in the tab's
+ * settings column.
+ *
  * The manual-publish button is *not* here: F054's shell already renders it next
  * to the state badge, and it now takes `can.manual_publish` from this same read
  * model. Two buttons doing one thing on one screen is worse than either.
@@ -39,8 +43,8 @@ import {
   approvalStatusI18nKey,
   pendingReasonI18nKey,
 } from "../types"
-import { CapabilityListCard } from "./CapabilityListCard"
 import { OwnerPreviewCard } from "./OwnerPreviewCard"
+import { Field, formatTimestamp, Panel, StatusTag } from "./Panel"
 import { SchemaChangeNotice } from "./SchemaChangeNotice"
 
 interface ApprovalStatusCardProps {
@@ -52,20 +56,6 @@ interface ApprovalStatusCardProps {
   errorMessage: string
   /** Re-read the release state and the page shell after a withdraw. */
   onChanged: () => void
-}
-
-interface FieldProps {
-  label: string
-  value: string
-}
-
-function Field({ label, value }: FieldProps) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="break-all text-sm">{value}</dd>
-    </div>
-  )
 }
 
 export function ApprovalStatusCard({
@@ -80,7 +70,6 @@ export function ApprovalStatusCard({
   const [withdrawing, setWithdrawing] = useState(false)
 
   const approval = status?.approval ?? null
-  const tier = status?.tier ?? null
   // Fall back to the shell's own state so the card still explains a parked
   // application when the read model itself could not be loaded.
   const parked = (status?.app_state ?? app.state) === "pending_capacity"
@@ -127,34 +116,36 @@ export function ApprovalStatusCard({
     })
   }
 
-  const tierSpec =
-    tier && tier.cpu_millicores !== null && tier.memory_mb !== null
-      ? t("hostedApp.publishStatus.tierSpec", {
-          cpu: tier.cpu_millicores,
-          memory: tier.memory_mb,
-        })
-      : ""
+  // AC-06 — every application in this release arrives through the CLI and
+  // has no draft workspace on the platform, so there is nothing for a submit
+  // button to submit. Shown disabled with the real remedy as the panel's
+  // description rather than hidden: an owner looking for "where do I publish"
+  // needs to be told where publishing happens, not to find nothing.
+  const actions = (
+    <>
+      {canWithdraw && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={withdrawing}
+          onClick={handleWithdraw}
+        >
+          {withdrawing && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+          {t("hostedApp.publishStatus.withdraw")}
+        </Button>
+      )}
+      <Button variant="outline" size="sm" disabled>
+        {t("hostedApp.publishStatus.submit")}
+      </Button>
+    </>
+  )
 
   return (
-    <section className="rounded-md border bg-background-login p-4">
-      <h2 className="mb-3 text-sm font-medium">
-        {t("hostedApp.publishStatus.title")}
-      </h2>
-
-      {/* AC-06 — every application in this release arrives through the CLI and
-          has no draft workspace on the platform, so there is nothing for a
-          submit button to submit. Shown disabled with the real remedy rather
-          than hidden: an owner looking for "where do I publish" needs to be
-          told where publishing happens, not to find nothing. */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <Button variant="outline" size="sm" disabled>
-          {t("hostedApp.publishStatus.submit")}
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          {t("hostedApp.publishStatus.submitDisabledHint")}
-        </p>
-      </div>
-
+    <Panel
+      title={t("hostedApp.publishStatus.title")}
+      description={t("hostedApp.publishStatus.submitDisabledHint")}
+      actions={actions}
+    >
       {loading && (
         <p className="text-sm text-muted-foreground">
           {t("hostedApp.publishStatus.loading")}
@@ -175,88 +166,58 @@ export function ApprovalStatusCard({
 
       {!loading && !!status && (
         <div className="flex flex-col gap-4">
-          {!!tier && (
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
-              <Field
-                label={t("hostedApp.publishStatus.tierLabel")}
-                value={[tier.name || tier.code || "-", tierSpec]
-                  .filter(Boolean)
-                  .join(" · ")}
-              />
-            </dl>
-          )}
-
           {approval ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className={`rounded-sm px-2 py-0.5 text-xs ${approvalStatusBadgeClass(approval.status)}`}
-                >
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <Field label={t("hostedApp.publishStatus.approvalLabel")}>
+                <StatusTag className={approvalStatusBadgeClass(approval.status)}>
                   {t(approvalStatusI18nKey(approval.status))}
+                </StatusTag>
+              </Field>
+              <Field label={t("hostedApp.publishStatus.approvers")}>
+                {approval.approver_names?.length
+                  ? approval.approver_names.join(", ")
+                  : "-"}
+              </Field>
+              <Field label={t("hostedApp.publishStatus.submittedAt")}>
+                <span className="tabular-nums">
+                  {formatTimestamp(approval.submitted_at)}
                 </span>
-                {canWithdraw && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={withdrawing}
-                    onClick={handleWithdraw}
-                  >
-                    {withdrawing && (
-                      <Loader2 className="mr-1 size-3.5 animate-spin" />
-                    )}
-                    {t("hostedApp.publishStatus.withdraw")}
-                  </Button>
-                )}
-              </div>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-3">
-                <Field
-                  label={t("hostedApp.publishStatus.submittedAt")}
-                  value={approval.submitted_at || "-"}
-                />
-                <Field
-                  label={t("hostedApp.publishStatus.decidedAt")}
-                  value={approval.decided_at || "-"}
-                />
-                <Field
-                  label={t("hostedApp.publishStatus.approvers")}
-                  value={
-                    approval.approver_names?.length
-                      ? approval.approver_names.join(", ")
-                      : "-"
-                  }
-                />
-              </dl>
-              {!!approval.reject_reason && (
-                <div className="rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950">
-                  <p className="mb-1 text-xs text-muted-foreground">
-                    {t("hostedApp.publishStatus.rejectReason")}
-                  </p>
-                  {/* Full text, wrapped — AC-33 forbids truncation. */}
-                  <p className="whitespace-pre-wrap break-words text-sm">
-                    {approval.reject_reason}
-                  </p>
-                </div>
-              )}
-              {!!previewVersionId && (
-                <OwnerPreviewCard
-                  appId={app.app_id}
-                  versionId={previewVersionId}
-                />
-              )}
-            </div>
+              </Field>
+              <Field label={t("hostedApp.publishStatus.decidedAt")}>
+                <span className="tabular-nums">
+                  {formatTimestamp(approval.decided_at)}
+                </span>
+              </Field>
+            </dl>
           ) : (
             <p className="text-sm text-muted-foreground">
               {t("hostedApp.publishStatus.approvalNone")}
             </p>
           )}
 
+          {!!approval?.reject_reason && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950">
+              <p className="text-xs text-muted-foreground">
+                {t("hostedApp.publishStatus.rejectReason")}
+              </p>
+              {/* Full text, wrapped — AC-33 forbids truncation. */}
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                {approval.reject_reason}
+              </p>
+            </div>
+          )}
+
+          {!!previewVersionId && (
+            <OwnerPreviewCard appId={app.app_id} versionId={previewVersionId} />
+          )}
+
           {parked && (
-            <div className="flex flex-wrap items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-700 dark:bg-amber-950">
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
               <AlertTriangle
                 aria-hidden="true"
                 className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
               />
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-medium">
                   {t("hostedApp.publishStatus.pendingTitle")}
                 </p>
@@ -271,14 +232,8 @@ export function ApprovalStatusCard({
               tables. Confirmed on the CLI at submit time; shown here, never
               asked again. Renders nothing when the read model sends null. */}
           <SchemaChangeNotice change={status.schema_change} />
-
-          {/* AC-61 / AC-63 — what the release asks the platform for, with
-              anything that no longer resolves marked. Always rendered: an
-              application that declares nothing says so, because a section that
-              disappears reads as "the page failed to load it". */}
-          <CapabilityListCard capabilities={status.capabilities} />
         </div>
       )}
-    </section>
+    </Panel>
   )
 }

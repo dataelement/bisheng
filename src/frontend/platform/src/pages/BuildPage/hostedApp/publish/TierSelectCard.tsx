@@ -1,5 +1,5 @@
 /**
- * Resource-tier card of the publish tab (AC-61 / AC-06, F055 T067).
+ * Resource-tier section of the publish tab's settings panel (AC-61 / AC-06, F055 T067).
  *
  * Two states, and which one an application gets is decided by the server, not
  * here:
@@ -30,6 +30,7 @@ import {
 } from "@/components/bs-ui/select"
 import type { HostedAppTier } from "@/controllers/API/hostedApp"
 import { useTranslation } from "react-i18next"
+import { StatusTag, SubSection } from "./Panel"
 
 export interface TierOption {
   code: string
@@ -96,11 +97,7 @@ export function TierSelectCard({
   const selectable = selectableTiers(options)
 
   return (
-    <section
-      data-testid="tier-select-card"
-      className="rounded-md border bg-background-login p-4"
-    >
-      <h2 className="mb-3 text-sm font-medium">{t("hostedApp.tier.title")}</h2>
+    <SubSection data-testid="tier-select-card" label={t("hostedApp.tier.title")}>
       {canSubmit && selectable.length > 0 ? (
         <div className="flex flex-col gap-2">
           <Select value={value} onValueChange={(next) => onChange?.(next)}>
@@ -125,18 +122,16 @@ export function TierSelectCard({
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-sm bg-muted px-2 py-0.5">
-              {tier?.name || tier?.code || t("hostedApp.tier.unknown")}
-            </span>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span>{tier?.name || tier?.code || t("hostedApp.tier.unknown")}</span>
             {currentSpec && (
               <span className="text-muted-foreground">{currentSpec}</span>
             )}
             {tier?.enabled === false && (
-              <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800 dark:bg-amber-900 dark:text-amber-100">
+              <StatusTag className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                 {t("hostedApp.tier.retiredTag")}
-              </span>
+              </StatusTag>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -149,6 +144,6 @@ export function TierSelectCard({
           )}
         </div>
       )}
-    </section>
+    </SubSection>
   )
 }

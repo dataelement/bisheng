@@ -33,6 +33,7 @@ import { useTable } from "@/util/hook"
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { versionOutcomeI18nKey } from "../types"
+import { formatTimestamp, Panel, StatusTag } from "./Panel"
 
 const PAGE_SIZE = 10
 
@@ -95,28 +96,25 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
   const waiting = loading || !loaded
 
   return (
-    <section className="rounded-md border bg-background-login p-4">
-      <h2 className="mb-1 text-sm font-medium">
-        {t("hostedApp.versionList.title")}
-      </h2>
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t("hostedApp.versionList.readonlyHint")}
-      </p>
+    <Panel
+      title={t("hostedApp.versionList.title")}
+      description={t("hostedApp.versionList.readonlyHint")}
+    >
 
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full min-w-[560px] text-sm">
-          <thead className="bg-background-login text-xs text-muted-foreground">
+          <thead className="bg-muted/50 text-xs text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-left">
+              <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.no")}
               </th>
-              <th className="px-3 py-2 text-left">
+              <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.kind")}
               </th>
-              <th className="px-3 py-2 text-left">
+              <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.submittedAt")}
               </th>
-              <th className="px-3 py-2 text-left">
+              <th className="px-3 py-2 text-left font-normal">
                 {t("hostedApp.versionList.outcome")}
               </th>
             </tr>
@@ -127,9 +125,9 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
                 <td className="px-3 py-2">
                   <span className="mr-2">{`v${version.version_no}`}</span>
                   {version.is_current && (
-                    <span className="rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    <StatusTag className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
                       {t("hostedApp.versionList.current")}
-                    </span>
+                    </StatusTag>
                   )}
                 </td>
                 <td className="px-3 py-2">
@@ -139,7 +137,9 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
                       : "hostedApp.versionList.kindIteration",
                   )}
                 </td>
-                <td className="px-3 py-2">{version.submitted_at || "-"}</td>
+                <td className="px-3 py-2 tabular-nums">
+                  {formatTimestamp(version.submitted_at)}
+                </td>
                 <td className="px-3 py-2">{t(versionOutcomeI18nKey(version))}</td>
               </tr>
             ))}
@@ -170,6 +170,6 @@ export function VersionListCard({ appId, reloadKey = "" }: VersionListCardProps)
           onChange={(next: number) => setPage(next)}
         />
       )}
-    </section>
+    </Panel>
   )
 }

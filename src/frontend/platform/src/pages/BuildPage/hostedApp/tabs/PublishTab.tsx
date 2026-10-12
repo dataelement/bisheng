@@ -7,6 +7,13 @@
  * to F056. They are props rather than inline sections so three features can
  * land without three edits to the same JSX block.
  *
+ * Layout, top to bottom: one overview panel (state, entry, instance — the
+ * three things that used to be three separate boxes saying the state three
+ * times), then two columns — where the release stands (approval) beside what
+ * it runs with (settings), the version record under the approval panel —
+ * then the danger zone. The tab fills the content width like its sibling
+ * tabs; the left column carries two panels so the columns end level.
+ *
  * The entry link — and the QR code, which encodes the very same string — is
  * rendered from `app.entry_url` exactly as the backend sent it. Composing it
  * from `location.origin` would produce `localhost:3001/apps/…` in dev — a link
@@ -29,6 +36,7 @@ import {
   useHostedAppActions,
   type HostedAppActionKind,
 } from "../../useHostedAppActions"
+import { Field, formatTimestamp, Panel, StatusTag } from "../publish/Panel"
 import {
   pendingAwareStateI18nKey,
   phaseI18nKey,
@@ -40,10 +48,15 @@ interface PublishTabProps {
   instance: HostedAppInstance | null
   instanceError?: string
   onChanged: () => void
-  /** F055 — pipeline status / capability declaration / resource tier. */
+  /** F055 — release / approval status; the left column. */
   pipelineSlot?: React.ReactNode
-  /** F056 — visibility scope. */
-  visibilitySlot?: React.ReactNode
+  /**
+   * What the release runs with — resource tier, platform capabilities (F055)
+   * and visibility scope (F056); the right column.
+   */
+  settingsSlot?: React.ReactNode
+  /** F055 — version record, under the approval panel in the left column. */
+  historySlot?: React.ReactNode
   /** F055 — danger zone (delete lives there on this page). */
   dangerZoneSlot?: React.ReactNode
   /**
@@ -62,19 +75,11 @@ interface PublishTabProps {
   pendingReason?: HostedAppPendingReason | null
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="rounded-md border bg-background-login p-4">
-      <h2 className="mb-3 text-sm font-medium">{title}</h2>
-      {children}
-    </section>
-  )
+/** Container health → label; an unknown value is shown as sent. */
+const HEALTH_I18N: Record<string, string> = {
+  healthy: "hostedApp.publish.healthValue.healthy",
+  unhealthy: "hostedApp.publish.healthValue.unhealthy",
+  starting: "hostedApp.publish.healthValue.starting",
 }
 
 export function PublishTab({
@@ -83,7 +88,8 @@ export function PublishTab({
   instanceError = "",
   onChanged,
   pipelineSlot = null,
-  visibilitySlot = null,
+  settingsSlot = null,
+  historySlot = null,
   dangerZoneSlot = null,
   canManualPublish,
   pendingReason = null,
@@ -124,59 +130,48 @@ export function PublishTab({
     })
   }
 
-  return (
-    <div className="flex flex-col gap-4 pb-6">
-      <Section title={t("hostedApp.publish.stateLabel")}>
-        <div className="flex flex-wrap items-center gap-3">
-          <span
-            className={`rounded-sm px-2 py-0.5 text-xs ${stateBadgeClass(app.state)}`}
-          >
-            {t(pendingAwareStateI18nKey(app.state, pendingReason))}
-          </span>
-          {online && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending !== null}
-              onClick={() => runAction("stop", stopApp)}
-            >
-              {pending === "stop" && (
-                <Loader2 className="mr-1 size-3.5 animate-spin" />
-              )}
-              {t("hostedApp.publish.stop")}
-            </Button>
-          )}
-          {stopped && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending !== null}
-              onClick={() => runAction("resume", resumeApp)}
-            >
-              {pending === "resume" && (
-                <Loader2 className="mr-1 size-3.5 animate-spin" />
-              )}
-              {t("hostedApp.publish.resume")}
-            </Button>
-          )}
-          {parked && canManualPublish !== false && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={pending !== null}
-              onClick={() => runAction("manualPublish", manualPublishApp)}
-            >
-              {pending === "manualPublish" && (
-                <Loader2 className="mr-1 size-3.5 animate-spin" />
-              )}
-              {t("hostedApp.publish.manualPublish")}
-            </Button>
-          )}
-        </div>
-      </Section>
+  const actionButton = (
+    kind: HostedAppActionKind,
+    action: (ref: typeof appRef) => Promise<boolean>,
+    label: string,
+  ) => (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={pending !== null}
+      onClick={() => runAction(kind, action)}
+    >
+      {pending === kind && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+      {label}
+    </Button>
+  )
 
-      <Section title={t("hostedApp.publish.entryLabel")}>
-        <div className="flex flex-wrap items-start gap-4">
+  const health = instance?.health
+    ? HEALTH_I18N[instance.health]
+      ? t(HEALTH_I18N[instance.health])
+      : instance.health
+    : "-"
+
+  return (
+    <div className="flex flex-col gap-4 pb-6 pt-1">
+      <Panel
+        title={t("hostedApp.publish.overviewTitle")}
+        actions={
+          <>
+            {online && actionButton("stop", stopApp, t("hostedApp.publish.stop"))}
+            {stopped &&
+              actionButton("resume", resumeApp, t("hostedApp.publish.resume"))}
+            {parked &&
+              canManualPublish !== false &&
+              actionButton(
+                "manualPublish",
+                manualPublishApp,
+                t("hostedApp.publish.manualPublish"),
+              )}
+          </>
+        }
+      >
+        <div className="flex flex-wrap items-start gap-6">
           {/*
             The QR code and the link share one visibility rule (T091): both
             are shown whenever the entry exists, and the "not running" hint
@@ -185,13 +180,13 @@ export function PublishTab({
           */}
           {app.entry_url && (
             <div
-              className="flex shrink-0 flex-col items-center gap-1"
+              className="flex shrink-0 flex-col items-center gap-1.5"
               data-testid="hosted-app-entry-qr"
             >
-              <div className="rounded-md border bg-white p-1.5">
+              <div className="rounded-md border bg-white p-2">
                 <QRCodeSVG
                   value={app.entry_url}
-                  size={96}
+                  size={88}
                   aria-label={t("hostedApp.publish.qrLabel")}
                 />
               </div>
@@ -200,68 +195,85 @@ export function PublishTab({
               </span>
             </div>
           )}
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="max-w-full break-all rounded bg-muted px-2 py-1 text-xs">
-                {app.entry_url}
-              </code>
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                <Copy className="mr-1 size-3.5" />
-                {t("hostedApp.publish.copy")}
-              </Button>
-              <Button variant="outline" size="sm" asChild>
-                <a href={app.entry_url} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-1 size-3.5" />
-                  {t("hostedApp.publish.open")}
-                </a>
-              </Button>
-            </div>
-            {!online && (
+          <div className="flex min-w-0 flex-1 flex-col gap-5">
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.entryInactive")}
+                {t("hostedApp.publish.entryLabel")}
               </p>
-            )}
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <code className="min-w-0 max-w-full break-all rounded bg-muted px-2 py-1 font-mono text-sm">
+                  {app.entry_url}
+                </code>
+                <Button variant="outline" size="sm" onClick={handleCopy}>
+                  <Copy className="mr-1 size-3.5" />
+                  {t("hostedApp.publish.copy")}
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={app.entry_url} target="_blank" rel="noreferrer">
+                    <ExternalLink className="mr-1 size-3.5" />
+                    {t("hostedApp.publish.open")}
+                  </a>
+                </Button>
+              </div>
+              {!online && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {t("hostedApp.publish.entryInactive")}
+                </p>
+              )}
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 xl:grid-cols-5">
+              <Field label={t("hostedApp.publish.stateLabel")}>
+                <StatusTag className={stateBadgeClass(app.state)}>
+                  {t(pendingAwareStateI18nKey(app.state, pendingReason))}
+                </StatusTag>
+              </Field>
+              {instance ? (
+                <>
+                  <Field label={t("hostedApp.publish.instancePhase")}>
+                    {t(phaseI18nKey(instance.phase))}
+                  </Field>
+                  <Field label={t("hostedApp.publish.instanceHealth")}>
+                    {health}
+                  </Field>
+                  <Field label={t("hostedApp.publish.instanceRestart")}>
+                    <span className="tabular-nums">
+                      {instance.restart_count ?? 0}
+                    </span>
+                  </Field>
+                  <Field label={t("hostedApp.publish.instanceStartedAt")}>
+                    <span className="tabular-nums">
+                      {formatTimestamp(instance.started_at)}
+                    </span>
+                  </Field>
+                </>
+              ) : (
+                <div className="col-span-1 sm:col-span-2 xl:col-span-4">
+                  <dt className="text-xs text-muted-foreground">
+                    {t("hostedApp.publish.instanceTitle")}
+                  </dt>
+                  <dd className="mt-1 text-sm text-muted-foreground">
+                    {instanceError || t("hostedApp.publish.instanceUnavailable")}
+                  </dd>
+                </div>
+              )}
+            </dl>
           </div>
         </div>
-      </Section>
+      </Panel>
 
-      <Section title={t("hostedApp.publish.instanceTitle")}>
-        {instance ? (
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm md:grid-cols-4">
-            <div>
-              <dt className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.instancePhase")}
-              </dt>
-              <dd>{t(phaseI18nKey(instance.phase))}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.instanceHealth")}
-              </dt>
-              <dd>{instance.health || "-"}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.instanceRestart")}
-              </dt>
-              <dd>{instance.restart_count ?? 0}</dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">
-                {t("hostedApp.publish.instanceStartedAt")}
-              </dt>
-              <dd>{instance.started_at || "-"}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {instanceError || t("hostedApp.publish.instanceUnavailable")}
-          </p>
-        )}
-      </Section>
+      {/* The last block of each column stretches so the two columns end on
+          one line; ragged bottoms were half of what made the tab look loose. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-4 [&>*:last-child]:flex-1">
+          {pipelineSlot}
+          {historySlot}
+        </div>
+        <div className="flex min-w-0 flex-col gap-4 [&>*:last-child]:flex-1">
+          {settingsSlot}
+        </div>
+      </div>
 
-      {pipelineSlot}
-      {visibilitySlot}
       {dangerZoneSlot}
     </div>
   )

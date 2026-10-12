@@ -2736,8 +2736,8 @@
       "loadFailed": "アプリ情報の読み込みに失敗しました"
     },
     "publish": {
-      "stateLabel": "アプリ状態",
-      "entryLabel": "アクセス入口",
+      "stateLabel": "アプリの状態",
+      "entryLabel": "アクセスURL",
       "copy": "リンクをコピー",
       "copied": "リンクをコピーしました",
       "open": "開く",
@@ -2751,7 +2751,14 @@
       "instanceHealth": "ヘルス",
       "instanceRestart": "再起動回数",
       "instanceStartedAt": "起動時刻",
-      "instanceUnavailable": "実行インスタンスの状態を取得できません"
+      "instanceUnavailable": "実行インスタンスの状態を取得できません",
+      "overviewTitle": "稼働とアクセス",
+      "settingsTitle": "実行設定",
+      "healthValue": {
+        "healthy": "正常",
+        "unhealthy": "異常",
+        "starting": "確認中"
+      }
     },
     "logs": {
       "sincePlaceholder": "開始時刻",
@@ -2840,7 +2847,7 @@
       "loadFailed": "公開状態の読み込みに失敗しました",
       "noPermission": "このアプリの公開状態を閲覧する権限がありません。",
       "submit": "公開を申請",
-      "submitDisabledHint": "このアプリはコマンドラインから取り込まれており、プラットフォーム側に下書きワークスペースがありません。ローカルのプロジェクトで bisheng deploy を実行して新しいバージョンを提出してください。",
+      "submitDisabledHint": "新しいバージョンはローカルプロジェクトで bisheng deploy を実行して提出してください。プラットフォーム上からは提出できません。",
       "tierLabel": "リソース区分",
       "tierSpec": "CPU {{cpu}}m / メモリ {{memory}}MB",
       "approvalNone": "このアプリにはまだ公開承認の記録がありません。",
@@ -2904,7 +2911,8 @@
       "previewBlockedNoImage": "このバージョンはビルドが完了していないため、プレビューできません。",
       "previewBlockedSettled": "このバージョンの審査は終了しているため、プレビューできません。",
       "previewBlockedUnknown": "このバージョンは現在プレビューできません。",
-      "previewActionFailed": "操作に失敗しました。しばらくしてからもう一度お試しください。"
+      "previewActionFailed": "操作に失敗しました。しばらくしてからもう一度お試しください。",
+      "approvalLabel": "承認結果"
     },
     "versionList": {
       "title": "バージョン記録",

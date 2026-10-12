@@ -28,6 +28,7 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { useHostedAppActions } from "../../useHostedAppActions"
 import { isDeleteBlockedByState } from "../types"
+import { Panel } from "./Panel"
 
 interface DangerZoneCardProps {
   app: HostedAppDetail
@@ -58,14 +59,20 @@ export function DangerZoneCard({ app }: DangerZoneCardProps) {
   }
 
   return (
-    <section className="rounded-md border border-red-300 bg-background-login p-4 dark:border-red-800">
-      <h2 className="mb-1 text-sm font-medium text-red-600 dark:text-red-400">
-        {t("hostedApp.dangerZone.title")}
-      </h2>
-      <p className="mb-3 text-xs text-muted-foreground">
-        {t("hostedApp.dangerZone.deleteDesc")}
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
+    <Panel
+      tone="danger"
+      title={t("hostedApp.dangerZone.title")}
+      description={
+        <>
+          {t("hostedApp.dangerZone.deleteDesc")}
+          {blocked && (
+            <span className="mt-1 block">
+              {t("hostedApp.dangerZone.blockedByOnline")}
+            </span>
+          )}
+        </>
+      }
+      actions={
         <Button
           variant="destructive"
           size="sm"
@@ -74,12 +81,7 @@ export function DangerZoneCard({ app }: DangerZoneCardProps) {
         >
           {t("hostedApp.dangerZone.delete")}
         </Button>
-        {blocked && (
-          <span className="text-xs text-muted-foreground">
-            {t("hostedApp.dangerZone.blockedByOnline")}
-          </span>
-        )}
-      </div>
-    </section>
+      }
+    />
   )
 }

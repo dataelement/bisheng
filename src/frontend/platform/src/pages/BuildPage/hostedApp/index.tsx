@@ -26,7 +26,9 @@ import { HostedAppHeader } from "./Header"
 import { useHostedApp } from "./hooks/useHostedApp"
 import { usePublishStatus } from "./hooks/usePublishStatus"
 import { ApprovalStatusCard } from "./publish/ApprovalStatusCard"
+import { CapabilityListCard } from "./publish/CapabilityListCard"
 import { DangerZoneCard } from "./publish/DangerZoneCard"
+import { Panel } from "./publish/Panel"
 import { TierSelectCard } from "./publish/TierSelectCard"
 import { VersionDiff } from "./publish/VersionDiff"
 import { VersionListCard } from "./publish/VersionListCard"
@@ -130,40 +132,54 @@ export function HostedAppDetail() {
             canManualPublish={publishStatus?.can?.manual_publish}
             pendingReason={publishStatus?.pending_reason ?? null}
             pipelineSlot={
-              <>
-                <ApprovalStatusCard
-                  app={app}
-                  status={publishStatus}
-                  loading={publishLoading}
-                  forbidden={publishForbidden}
-                  errorMessage={publishError}
-                  onChanged={() => {
-                    reload()
-                    reloadPublishStatus()
-                  }}
-                />
-                {/*
-                  AC-61 — the tier the release runs on. `can.submit` is the
-                  server's own verdict on whether this application can be
-                  submitted from inside the platform at all; it is false for
-                  every CLI application (AC-06), which makes the card read-only
-                  and its tier list unnecessary.
-                */}
-                <TierSelectCard
-                  tier={publishStatus?.tier ?? null}
-                  canSubmit={publishStatus?.can?.submit}
-                />
-                <VersionListCard
-                  appId={app.app_id}
-                  // Re-read whenever the release moved: a manual publish
-                  // latches the version's outcome server-side, and a list
-                  // loaded once would keep showing "pending online" for a
-                  // version that is already live.
-                  reloadKey={`${app.state}|${app.current_version_id || ""}|${app.pending_version_id || ""}`}
-                />
-              </>
+              <ApprovalStatusCard
+                app={app}
+                status={publishStatus}
+                loading={publishLoading}
+                forbidden={publishForbidden}
+                errorMessage={publishError}
+                onChanged={() => {
+                  reload()
+                  reloadPublishStatus()
+                }}
+              />
             }
-            visibilitySlot={<VisibilityScopeSection app={app} />}
+            settingsSlot={
+              <Panel title={t("hostedApp.publish.settingsTitle")}>
+                <div className="flex flex-col gap-4">
+                  {/*
+                    AC-61 — the tier the release runs on. `can.submit` is the
+                    server's own verdict on whether this application can be
+                    submitted from inside the platform at all; it is false for
+                    every CLI application (AC-06), which makes the section
+                    read-only and its tier list unnecessary.
+                  */}
+                  <TierSelectCard
+                    tier={publishStatus?.tier ?? null}
+                    canSubmit={publishStatus?.can?.submit}
+                  />
+                  {/* AC-61 / AC-63 — what the release asks the platform for,
+                      with anything that no longer resolves marked. Rendered
+                      whenever the read model loaded: an application that
+                      declares nothing says so, because a section that
+                      disappears reads as "the page failed to load it". */}
+                  {!!publishStatus && (
+                    <CapabilityListCard capabilities={publishStatus.capabilities} />
+                  )}
+                  <VisibilityScopeSection app={app} />
+                </div>
+              </Panel>
+            }
+            historySlot={
+              <VersionListCard
+                appId={app.app_id}
+                // Re-read whenever the release moved: a manual publish
+                // latches the version's outcome server-side, and a list
+                // loaded once would keep showing "pending online" for a
+                // version that is already live.
+                reloadKey={`${app.state}|${app.current_version_id || ""}|${app.pending_version_id || ""}`}
+              />
+            }
             dangerZoneSlot={<DangerZoneCard app={app} />}
           />
         </TabsContent>
