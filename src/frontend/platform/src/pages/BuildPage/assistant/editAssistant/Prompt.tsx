@@ -8,6 +8,7 @@ import { Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPromptDialog from "./AutoPromptDialog";
+import { assistantRoleExample } from "./roleExample";
 import { useInitialPromptStream } from "./useInitialPromptStream";
 
 export default function Prompt({ canEdit = false }) {
@@ -46,7 +47,7 @@ export default function Prompt({ canEdit = false }) {
             boxClassName='h-[90%]'
             className="h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"
             value={assistantState.prompt}
-            placeholder={t('prompt')}
+            placeholder={assistantRoleExample()}
             disabled={!canEdit || promptStreaming}
             onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
         ></Textarea>

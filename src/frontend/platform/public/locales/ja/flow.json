@@ -24,7 +24,6 @@
   "templateManagementDescription": "アプリテンプレート管理。テンプレートはすべてのユーザーに表示され、ドラッグアンドドロップで並べ替えや削除が可能",
   "maxNameLengthAssistant": "名前は最大50文字まで",
   "maxNameLengthWorkflow": "ワークフロー名は最大50文字まで",
-  "minDescLengthAssistant": "アシスタントの効果を最大化するため、説明は20文字以上にしてください",
   "edit": "編集",
   "create": "作成",
   "name": "ワークフロー名",

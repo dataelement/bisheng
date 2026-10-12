@@ -24,7 +24,6 @@
   "templateManagementDescription": "Manage application templates. Templates are visible to all users and support drag-and-drop sorting and deletion.",
   "maxNameLengthAssistant": "Name can be up to 50 characters",
   "maxNameLengthWorkflow": "Workflow name cannot exceed 50 characters",
-  "minDescLengthAssistant": "For better assistant performance, the description needs to be more than 20 characters",
   "edit": "Edit",
   "create": "Create",
   "name": "Workflow name",

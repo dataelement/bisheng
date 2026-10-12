@@ -19,6 +19,7 @@ import { AppType, AppTypeToNum } from "@/types/app";
 import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
+import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
 
 type ModalProps = {};
 type ModalRef = {
@@ -40,14 +41,6 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         const { t } = useTranslation('flow');
         const { appConfig } = useContext(locationContext);
         const securityRef = useRef<any>(null);
-
-        // Shown as a placeholder only: a prefilled value was submitted unchanged and became the assistant's prompt
-        const assistantDescExample = `${t('build.example', { ns: 'bs' })}：
-${t('build.exampleOne', { ns: 'bs' })}
-${t('build.exampleTwo', { ns: 'bs' })}
-1. XX
-2. XX
-3. …`;
 
         const [appId, setAppId] = useState<string>('');
         const [errors, setErrors] = useState<any>({});
@@ -103,9 +96,6 @@ ${t('build.exampleTwo', { ns: 'bs' })}
             switch (name) {
                 case 'name':
                     if (value.length > 50) return AppType.ASSISTANT === appType ? t('maxNameLengthAssistant') : t('maxNameLengthWorkflow');
-                    return '';
-                case 'desc':
-                    if (AppType.ASSISTANT === appType && value.length < 20) return t('minDescLengthAssistant');
                     return '';
                 default:
                     return '';
@@ -263,7 +253,7 @@ ${t('build.exampleTwo', { ns: 'bs' })}
                             <Textarea
                                 id="desc"
                                 name="desc"
-                                placeholder={appType === AppType.ASSISTANT ? assistantDescExample : t('enterWorkflowDescription')}
+                                placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')}
                                 maxLength={1000}
                                 className="mt-3 min-h-32 pt-3"
                                 value={formData.desc}
