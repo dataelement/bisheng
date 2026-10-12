@@ -384,7 +384,7 @@ class ApprovalExceptionService:
                     approver_source_type="skipped",
                     node_mode=node_mode,
                     status=ApprovalTaskStatus.SKIPPED,
-                    acted_at=_dt.utcnow(),
+                    acted_at=_dt.now(),
                 )
             )
         await self._resolve_exception(exception, resolved_by_user_id, "skip_node")
