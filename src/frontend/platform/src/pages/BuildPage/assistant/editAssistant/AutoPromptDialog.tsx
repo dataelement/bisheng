@@ -13,6 +13,7 @@ import { t } from "i18next";
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { streamErrorMessage } from "./useInitialPromptStream";
 
 const enum LoadType {
     Prompt = 5,
@@ -57,13 +58,10 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 case 'end':
                     setLoading(--queue)
                     if (parsedData.message) {
-                        // Business errors carry a code: show its localized copy, fall back to the raw message
                         toast({
                             title: t('tip'),
                             variant: 'error',
-                            description: parsedData.code
-                                ? t(`api_errors:${parsedData.code}`, { ...(parsedData.data || {}), defaultValue: parsedData.message })
-                                : parsedData.message
+                            description: streamErrorMessage(parsedData)
                         });
                     }
                     break
