@@ -10,6 +10,7 @@ from bisheng.api.v1.schemas import AssistantCreateReq, AssistantUpdateReq, Strea
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.assistant import Assistant
@@ -171,6 +172,16 @@ async def auto_update_assistant(
             async for message in AssistantService.auto_update_stream(assistant_id, prompt, login_user):
                 yield message
             yield str(StreamData(event="message", data={"type": "end", "data": ""}))
+        except BaseErrorCode as e:
+            # Carry the business code so the page can show the localized copy
+            # (e.g. which model failed) instead of the raw provider error.
+            logger.exception("assistant auto update error")
+            yield str(
+                StreamData(
+                    event="message",
+                    data={"type": "end", "message": e.message, "code": e.code, "data": e.kwargs},
+                )
+            )
         except Exception as e:
             logger.exception("assistant auto update error")
             yield str(StreamData(event="message", data={"type": "end", "message": str(e)}))

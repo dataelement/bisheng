@@ -35,6 +35,7 @@ from bisheng.database.models.assistant import Assistant, AssistantLink, Assistan
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.llm.domain.services import LLMService
+from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
 from bisheng_langchain.gpts.auto_optimization import (
@@ -440,24 +441,36 @@ class AssistantAgent(AssistantUtils):
             | ASSISTANT_PROMPT_OPT
             | self.llm
         )
-        async for one in chain.astream(
-            {
-                "assistant_name": self.assistant.name,
-                "assistant_description": self.assistant.prompt,
-            }
-        ):
-            yield one
+        try:
+            async for one in chain.astream(
+                {
+                    "assistant_name": self.assistant.name,
+                    "assistant_description": self.assistant.prompt,
+                }
+            ):
+                yield one
+        except Exception as e:
+            logger.exception("assistant prompt optimization failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     def sync_optimize_assistant_prompt(self):
         return optimize_assistant_prompt(self.llm, self.assistant.name, self.assistant.desc)
 
     def generate_guide(self, prompt: str):
         """Generate opening dialogue and opening questions"""
-        return generate_opening_dialog(self.llm, prompt)
+        try:
+            return generate_opening_dialog(self.llm, prompt)
+        except Exception as e:
+            logger.exception("assistant guide generation failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     def generate_description(self, prompt: str):
         """Generate description dialog"""
-        return generate_breif_description(self.llm, prompt)
+        try:
+            return generate_breif_description(self.llm, prompt)
+        except Exception as e:
+            logger.exception("assistant description generation failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     def choose_tools(self, tool_list: list[dict[str, str]], prompt: str) -> list[str]:
         """
@@ -466,7 +479,11 @@ class AssistantAgent(AssistantUtils):
         """
         tool_list = [ToolInfo(tool_name=one["name"], tool_description=one["description"]) for one in tool_list]
         tool_selector = ToolSelector(llm=self.llm, tools=tool_list)
-        return tool_selector.select(self.assistant.name, prompt)
+        try:
+            return tool_selector.select(self.assistant.name, prompt)
+        except Exception as e:
+            logger.exception("assistant tool selection failed")
+            raise to_llm_invoke_error(self.llm, e) from e
 
     async def fake_callback(self, callback: Callbacks):
         if not callback:

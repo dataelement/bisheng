@@ -57,10 +57,13 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 case 'end':
                     setLoading(--queue)
                     if (parsedData.message) {
+                        // Business errors carry a code: show its localized copy, fall back to the raw message
                         toast({
                             title: t('tip'),
                             variant: 'error',
-                            description: parsedData.message
+                            description: parsedData.code
+                                ? t(`api_errors:${parsedData.code}`, { ...(parsedData.data || {}), defaultValue: parsedData.message })
+                                : parsedData.message
                         });
                     }
                     break
