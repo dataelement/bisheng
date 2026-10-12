@@ -45,6 +45,21 @@ def test_exec_returns_duration_and_streams(client: TestClient):
     assert body["duration_ms"] >= 0
 
 
+def test_exec_creates_output_and_scratch_dirs(client: TestClient):
+    sid, headers = _session(client)
+    resp = client.post(
+        f"/v1/sessions/{sid}/exec",
+        headers=headers,
+        json={
+            "code": "import os; print(os.path.isdir('output'), os.path.isdir('scratch'))",
+            "lang": "python",
+            "timeout_s": 5,
+        },
+    )
+    assert resp.status_code == 200
+    assert "True True" in resp.json()["stdout"]
+
+
 def test_timeout_kills_process_group_and_skips_copy_out(client: TestClient):
     sid, headers = _session(client)
     resp = client.post(

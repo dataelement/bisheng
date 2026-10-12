@@ -220,6 +220,28 @@ class BaseExecutor(ABC):
         # Set by the linsight tool binder; empty for every other caller, which
         # simply disables the mirror in ``sync_to_workspace``.
         self.workspace_prefix = kwargs.get("workspace_prefix", None)
+        # Request-scoped knowledge-image stage (workstation daily chat); None elsewhere.
+        self._kb_stage: Any = None
+
+    # Executors that run scripts through ``run_with_dir`` can write the stage's images
+    # into the working directory; others (E2B) leave this False and ignore the stage.
+    supports_kb_stage = False
+
+    def attach_stage(self, stage: Any) -> None:
+        if self.supports_kb_stage:
+            self._kb_stage = stage
+
+    def kb_stage_hint(self) -> str:
+        return self._kb_stage.tool_hint() if self._kb_stage is not None else ""
+
+    def stage_kb_images(self, dir_path: str) -> str:
+        """Write this request's retrieved knowledge images into ``dir_path``; return a notice for the model."""
+        if self._kb_stage is None:
+            return ""
+        return self._kb_stage.materialize(dir_path, self._minio_client)
+
+    def kb_stage_failure_advisory(self, code: str) -> str:
+        return self._kb_stage.failure_advisory(code) if self._kb_stage is not None else ""
 
     @abstractmethod
     def run(self, code: str) -> Any:

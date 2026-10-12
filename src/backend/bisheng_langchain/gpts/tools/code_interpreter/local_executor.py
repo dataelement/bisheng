@@ -67,13 +67,15 @@ exists; do NOT run `pip install` (this environment is offline)."""
 
 
 class LocalExecutor(BaseExecutor):
+    supports_kb_stage = True
+
     def __init__(self, minio: dict = None, **kwargs):
         super().__init__(minio, **kwargs)
         self.minio = minio
 
     @property
     def description(self) -> str:
-        return LOCAL_DESCRIPTION
+        return LOCAL_DESCRIPTION + self.kb_stage_hint()
 
     @staticmethod
     def infer_lang(code):
@@ -313,15 +315,22 @@ class LocalExecutor(BaseExecutor):
         code_blocks = self.extract_code(code)
         logs_all = ""
         all_file_list = []
+        stage_notices = ""
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = self.infer_lang(code)
             code = self.insert_set_font_code(code)
+            # Knowledge images are written BEFORE run_with_dir takes its pre-snapshot, so
+            # they count as inputs, never as deliverables to harvest.
             if self.local_sync_path and os.path.exists(self.local_sync_path):
+                notice = self.stage_kb_images(self.local_sync_path)
                 exit_code, logs, file_list = self.run_with_dir(code, dir_path=self.local_sync_path, lang=lang)
             else:
                 with tempfile.TemporaryDirectory() as temp_dir:
+                    notice = self.stage_kb_images(temp_dir)
                     exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
+            if notice and notice not in stage_notices:
+                stage_notices += notice
             logs_all += "\n" + logs
             if exit_code != 0:
                 # The traceback (or the timeout notice) lives in THIS block's log, so it
@@ -335,7 +344,13 @@ class LocalExecutor(BaseExecutor):
                 # failure the read-side notice exists to explain would otherwise
                 # never see it. Appended AFTER ``_tail`` (which keeps the tail) so
                 # the truncation cannot eat it.
-                return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
+                return {
+                    "exitcode": exit_code,
+                    "log": self._tail(logs_all)
+                    + self.absolute_path_advisory(original_code)
+                    + self.kb_stage_failure_advisory(original_code)
+                    + stage_notices,
+                }
             all_file_list += file_list
 
         # Clip BEFORE appending the advisory, same as the failure path above: the
@@ -350,6 +365,7 @@ class LocalExecutor(BaseExecutor):
         advisory = self.absolute_path_advisory(original_code)
         if advisory:
             logs_all += advisory
+        logs_all += stage_notices
         return {"exitcode": 0, "log": logs_all, "file_list": all_file_list}
 
 
