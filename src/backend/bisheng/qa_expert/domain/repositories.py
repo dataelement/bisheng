@@ -651,13 +651,42 @@ class QuestionRepository:
 
             return {"total": total, "unsolved": unsolved, "solved": solved, "closed": closed}
 
-    async def get_answer_count_by_domain(self) -> list[dict]:
+    async def get_answer_count_by_domain(
+        self,
+        *,
+        viewer_user_id: int | None = None,
+        viewer_is_admin: bool = False,
+    ) -> list[dict]:
+        """按业务域统计当前用户可见的问题数.
+
+        可见范围与问题列表一致: 公开题, 自己提的, 以及邀请到自己的定向题.
+        专家库管理员看全部. 字段名 answer_count 沿用现有接口, 值是问题数.
+
+        Args:
+            viewer_user_id: 当前登录用户. 为空时不返回任何域.
+            viewer_is_admin: 为 True 时不做可见性过滤.
+
+        Returns:
+            每项含 business_domain 与 answer_count.
+        """
+        if viewer_user_id is None and not viewer_is_admin:
+            return []
         async with get_async_db_session() as session:
-            # 从统计问题回答数量，按业务域分组改成统计问题数量，按业务域分组
             stmt = select(
                 Question.business_domain,
                 func.count(Question.id).label("question_count"),
-            ).group_by(Question.business_domain)
+            )
+            if viewer_user_id is not None and not viewer_is_admin:
+                invited_ids = select(QuestionInvite.question_id).where(QuestionInvite.user_id == viewer_user_id)
+                stmt = stmt.where(
+                    or_(
+                        Question.question_type == "public",
+                        Question.question_type.is_(None),
+                        Question.user_id == viewer_user_id,
+                        Question.id.in_(invited_ids),
+                    )
+                )
+            stmt = stmt.group_by(Question.business_domain)
             result = (await session.exec(stmt)).all()
             return [{"business_domain": row.business_domain, "answer_count": row.question_count} for row in result]
 

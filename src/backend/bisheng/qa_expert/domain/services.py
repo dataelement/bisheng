@@ -1388,9 +1388,20 @@ class QuestionService:
             tooltip=(answer.content or "")[:50],
         )
 
-    async def get_answer_count_by_domain(self) -> list[dict]:
-        """获取每个业务域的回答数"""
-        return await self.repository.get_answer_count_by_domain()
+    async def get_answer_count_by_domain(self, user) -> list[dict]:
+        """按业务域统计当前用户可见的问题数.
+
+        Args:
+            user: 当前登录用户.
+
+        Returns:
+            每项含 business_domain 与 answer_count. answer_count 是可见问题数.
+        """
+        viewer = self._require_user(user, getattr(user, "user_id", None))
+        return await self.repository.get_answer_count_by_domain(
+            viewer_user_id=int(viewer.user_id),
+            viewer_is_admin=is_expert_library_admin(viewer),
+        )
 
     async def delete_question(
         self,
