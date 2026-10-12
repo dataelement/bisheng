@@ -212,7 +212,13 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
     }
 
     return (
-        <>
+        <span
+            className="contents"
+            // Portal events still bubble through the React component tree.
+            // Keep save-as interactions from triggering the file row preview.
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+        >
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
                 {/* Shared ActionMenu chrome — same panel as the sidebar convo menu
@@ -278,6 +284,6 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
                     onSyncSelect={saveTo}
                 />
             )}
-        </>
+        </span>
     );
 }
