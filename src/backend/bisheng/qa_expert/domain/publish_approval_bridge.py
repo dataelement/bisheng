@@ -301,18 +301,26 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
 
 
 async def refresh_expire_snapshot(request) -> None:
-    """会签截止延后后，把审批实例快照里的 expire_at 对齐 qa_publish_request。"""
+    """会签延期后，把审批实例快照里的截止时间和有效期天数对齐申请。"""
     try:
         instance = await _get_instance(request)
         if instance is None:
             return
         expire_iso = to_beijing_iso(getattr(request, "expire_at", None))
+        duration_days = int(getattr(request, "duration_days", 0) or 0)
         payload = dict(instance.payload_snapshot or {})
         detail = dict(instance.detail_snapshot or {})
-        if payload.get("expire_at") == expire_iso and detail.get("expire_at") == expire_iso:
+        if (
+            payload.get("expire_at") == expire_iso
+            and detail.get("expire_at") == expire_iso
+            and int(payload.get("duration_days") or 0) == duration_days
+            and int(detail.get("duration_days") or 0) == duration_days
+        ):
             return
         payload["expire_at"] = expire_iso
         detail["expire_at"] = expire_iso
+        payload["duration_days"] = duration_days
+        detail["duration_days"] = duration_days
         instance.payload_snapshot = payload
         instance.detail_snapshot = detail
         await ApprovalInstanceRepository.update_instance(instance)

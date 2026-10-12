@@ -233,7 +233,7 @@ class PublishService:
         return await self.request_repo.get_latest_by_question(int(question_id))
 
     async def extend_one_day(self, request_id: int, user, *, now: datetime | None = None) -> PublishRequest:
-        """+1 天延期，累计不超过 3 天。"""
+        """有效期天数和截止时间各 +1 天，累计不超过 3 天。"""
         now = now or now_beijing()
         request = await self._get_live_request(request_id, now=now)
         if request.status != PUBLISH_PENDING:
@@ -243,13 +243,14 @@ class PublishService:
         return await self._bump_expire_one_day(request)
 
     async def _bump_expire_one_day(self, request: PublishRequest) -> PublishRequest:
-        """把 expire_at 往后推 1 天并记 extension_days；调用方已保证未达上限。"""
+        """有效期天数和截止时间各 +1，并记 extension_days；调用方已保证未达上限。"""
         new_ext = int(request.extension_days or 0) + 1
         expire_at = request.expire_at
         if expire_at is None:
             return request
         updated = await self.request_repo.update(
             int(request.id),
+            duration_days=int(getattr(request, "duration_days", 0) or 0) + 1,
             extension_days=new_ext,
             expire_at=expire_at + timedelta(days=1),
             version=int(request.version or 0) + 1,
@@ -257,7 +258,7 @@ class PublishService:
         return updated or request
 
     async def _try_extend_for_late_answerer(self, request: PublishRequest) -> PublishRequest:
-        """中途新会签人：截止 +1 天，累计不超过 3 天；已满则只加人、不改时间。"""
+        """中途新会签人：有效期与截止各 +1 天，累计不超过 3 天；已满则只加人、不改时间。"""
         if str(request.status) != PUBLISH_PENDING:
             return request
         if int(request.extension_days or 0) >= MAX_EXTENSION_DAYS:

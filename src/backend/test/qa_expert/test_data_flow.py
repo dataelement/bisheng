@@ -1199,7 +1199,7 @@ def _receiver_ids(raw) -> set[int]:
 
 
 async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
-    """转公开先通知相关人，待我处理有 pending task；后回答的受邀专家加入会签并把截止延后 1 天。"""
+    """转公开先通知相关人，待我处理有 pending task；每位后回答的受邀专家加入会签，有效期天数和截止各延 1 天。"""
     from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalTask
     from bisheng.qa_expert.domain.publish_service import PublishService
 
@@ -1210,6 +1210,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     env = flow_env
     first = await env.seed_expert(user_id=201, name="专家甲")
     second = await env.seed_expert(user_id=202, name="专家乙")
+    third = await env.seed_expert(user_id=203, name="专家丙")
     env.as_user(env.asker)
     qid = await _create_question(
         env,
@@ -1218,7 +1219,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
             "description": "定向",
             "business_domain": "steel",
             "question_type": "directed",
-            "invited_expert_ids": [first.id, second.id],
+            "invited_expert_ids": [first.id, second.id, third.id],
             "asker_reveal_on_public": True,
         },
     )
@@ -1234,6 +1235,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     approvers = await env.reload_all(PublishApprover, request_id=request.id)
     assert any(int(row.user_id) == env.uid(201) and row.decision == "pending" for row in approvers)
     assert not any(int(row.user_id) == env.uid(202) for row in approvers)
+    assert not any(int(row.user_id) == env.uid(203) for row in approvers)
     instance = await env.reload_row(
         ApprovalInstance,
         business_key=f"qa_publish:{request.id}",
@@ -1244,6 +1246,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     pending_users = {int(row.approver_user_id) for row in tasks if row.status == "pending"}
     assert env.uid(201) in pending_users
     assert env.uid(202) not in pending_users
+    assert env.uid(203) not in pending_users
     title = env.t("df21转公开待办")
     started_msgs = [
         row for row in await _inbox_rows(env, title) if "publish_started" in str(row.get("action_code") or "")
@@ -1252,6 +1255,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     started = started_msgs[-1]
     assert env.uid(201) in _receiver_ids(started["receiver"])
     assert env.uid(202) not in _receiver_ids(started["receiver"])
+    assert env.uid(203) not in _receiver_ids(started["receiver"])
     assert str(instance.id) in str(started["content"])
 
     env.as_user(env.user(202, name="专家乙"))
@@ -1265,21 +1269,40 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     still_pending = await env.reload_row(PublishRequest, id=request.id)
     assert still_pending.status == "pending"
     assert int(still_pending.extension_days or 0) == int(request.extension_days or 0) + 1
+    assert int(still_pending.duration_days or 0) == int(request.duration_days or 0) + 1
     assert still_pending.expire_at - request.expire_at == timedelta(days=1)
     instance_after = await env.reload_row(ApprovalInstance, id=instance.id)
     assert instance_after is not None
     expected_iso = still_pending.expire_at.strftime("%Y-%m-%dT%H:%M:%S") + "+08:00"
     assert (instance_after.payload_snapshot or {}).get("expire_at") == expected_iso
     assert (instance_after.detail_snapshot or {}).get("expire_at") == expected_iso
+    assert int((instance_after.payload_snapshot or {}).get("duration_days") or 0) == int(still_pending.duration_days)
+    assert int((instance_after.detail_snapshot or {}).get("duration_days") or 0) == int(still_pending.duration_days)
     detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
     latest = (detail.get("data") or {}).get("latest_publish_request") or {}
     assert str(latest.get("expire_at") or "") == expected_iso
     assert int(latest.get("extension_days") or 0) == int(still_pending.extension_days)
+    assert int(latest.get("duration_days") or 0) == int(still_pending.duration_days)
     added_msgs = [row for row in await _inbox_rows(env, title) if "approver_added" in str(row.get("action_code") or "")]
     assert added_msgs
     assert env.uid(202) in _receiver_ids(added_msgs[-1]["receiver"])
     still_tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
     assert {int(row.approver_user_id) for row in still_tasks if row.status == "pending"} == pending_after
+
+    env.as_user(env.user(203, name="专家丙"))
+    second_later = await _create_answer(env, qid, "丙后答")
+    assert second_later
+    after_two = await env.reload_row(PublishRequest, id=request.id)
+    assert int(after_two.extension_days or 0) == int(request.extension_days or 0) + 2
+    assert int(after_two.duration_days or 0) == int(request.duration_days or 0) + 2
+    assert after_two.expire_at - request.expire_at == timedelta(days=2)
+    instance_two = await env.reload_row(ApprovalInstance, id=instance.id)
+    assert int((instance_two.detail_snapshot or {}).get("duration_days") or 0) == int(after_two.duration_days)
+    detail_two = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    latest_two = (detail_two.get("data") or {}).get("latest_publish_request") or {}
+    assert int(latest_two.get("duration_days") or 0) == int(after_two.duration_days)
+    tasks_two = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    assert env.uid(203) in {int(row.approver_user_id) for row in tasks_two if row.status == "pending"}
 
 
 async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_env, monkeypatch):
