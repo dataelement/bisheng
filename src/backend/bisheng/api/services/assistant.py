@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from hashlib import sha256
@@ -488,15 +489,17 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.prompt = final_prompt
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
-        # Generate opening remarks and opening questions
-        guide_info = auto_agent.generate_guide(assistant.prompt)
+        # Generate opening remarks and opening questions. The model calls below are
+        # synchronous: run them in a thread so they neither block the event loop
+        # (every other request on this worker) nor hold back the "end" event above.
+        guide_info = await asyncio.to_thread(auto_agent.generate_guide, assistant.prompt)
         yield str(StreamData(event="message", data={"type": "guide_word", "message": guide_info["opening_lines"]}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
         yield str(StreamData(event="message", data={"type": "guide_question", "message": guide_info["questions"]}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
         # Automatic selection of tools and skills
-        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
+        tool_info = await asyncio.to_thread(cls.get_auto_tool_info, assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event="message", data={"type": "tool_list", "message": tool_info}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
@@ -827,7 +830,7 @@ class AssistantService(BaseService, AssistantUtils):
                 }
             )
 
-        flow_list = auto_agent.choose_tools(flow_list, assistant.prompt)
+        flow_list = await asyncio.to_thread(auto_agent.choose_tools, flow_list, assistant.prompt)
         flow_info = []
         for one in flow_list:
             if flow_dict.get(one):
