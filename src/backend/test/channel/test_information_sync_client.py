@@ -52,6 +52,10 @@ async def test_list_all_subscriptions_validates_and_collects_every_page():
 
     assert [item.id for item in result] == ["A", "B"]
     assert http_client.get.await_count == 2
+    assert [call.kwargs["params"] for call in http_client.get.await_args_list] == [
+        {"page": 1, "page_size": 1},
+        {"page": 2, "page_size": 1},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -95,7 +99,8 @@ async def test_single_source_mutations_and_dynamic_key():
     assert second.kwargs["headers"]["X-API-Key"] == "key-two"
 
 
-async def test_get_information_articles_page_is_async_and_preserves_boundary():
+@pytest.mark.parametrize("return_information", [False, True])
+async def test_get_information_articles_page_is_async_and_preserves_boundary(return_information):
     body = _response(
         {
             "information": _subscription("A"),
@@ -118,12 +123,14 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
         get_conf=lambda: IntelligenceCenterConf(base_url="http://information.test", api_key="secret"),
     )
 
-    result = await client.get_information_articles_page("A", min_create_time=123, page=2, page_size=10)
+    result = await client.get_information_articles_page(
+        "A", return_information=return_information, min_create_time=123, page=2, page_size=10
+    )
 
     assert result.total == 1
     assert result.articles[0].id == "article-1"
     assert http_client.get.await_args.kwargs["params"] == {
-        "return_information": False,
+        "return_information": str(return_information).lower(),
         "page": 2,
         "page_size": 10,
         "min_create_time": 123,

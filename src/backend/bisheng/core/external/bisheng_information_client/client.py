@@ -282,7 +282,7 @@ class BishengInformationClient:
             response = await self.http_client.get(
                 endpoint,
                 headers=headers,
-                params={"page": page, "PageSize": page_size},
+                params={"page": page, "page_size": page_size},
                 timeout=timeout,
             )
             body = self._handle_response(response, "Failed to list information subscriptions")
@@ -378,7 +378,7 @@ class BishengInformationClient:
         base_url, headers, timeout = self._build_request_options()
         endpoint = f"{base_url}/information/articles/{information_id}"
         params = {
-            "return_information": return_information,
+            "return_information": str(return_information).lower(),
             "page": page,
             "page_size": page_size,
         }
