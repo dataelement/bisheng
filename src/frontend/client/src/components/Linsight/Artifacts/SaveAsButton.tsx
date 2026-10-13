@@ -213,6 +213,8 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className }
             // clickable file row never treats them as a preview request.
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
+            // Preserve control defaults while isolating portaled keyboard events.
+            onKeyDown={(e) => e.stopPropagation()}
         >
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
