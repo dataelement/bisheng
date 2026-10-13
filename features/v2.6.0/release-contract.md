@@ -102,6 +102,7 @@
 | 199 | filelib_sync | F047 文件同步既有错误码；F066 只在该模块内追加 Token 文件同步配置缺失等运行时错误码 |
 | 250 | portal_course | F062 门户课程管理、媒体校验与播放进度错误码 |
 | 182 | points | F070 积分账户、流水、规则、排行、组织打标与同步 outbox 错误码 |
+| 184 | file_correction | F070 文档纠错。不得复用 182，182 已用于积分调分、规则和公司根 |
 | 120 | workstation（工作台） | 沿用现有 `common/errcode/workstation.py`（12000–12099）；F079 追加标签管理控制台错误码 12046–12049，不得与既有 12040–12045 冲突 |
 
 ---
@@ -123,6 +124,7 @@
 | 2026-08-07 | 登记 F079 标签管理控制台：`Tag` / `ReviewTag` 审核留痕字段写所有权、120 模块错误码段 12046–12049、F013/F063 依赖；**批准 INV-6 定向豁免**——`/api/v1/workstation/tags/console/search` 与 `/review/search` 使用 page/total 分页，理由为可见空间集合一次性解析后下推 `IN`，不做逐行 ReBAC 判定，且属低频管理后台；豁免仅限这两个端点，接口若演化为逐行判权则自动失效 | F079, INV-6 |
 | 2026-08-02 | 登记 F069 Filelib 外部用户上下文：新增 INV-10 与 F004/F044 依赖，明确 Token 资格优先、可选目标用户完整权限、全局唯一匹配失败关闭及无租户部署边界 | F069, F004, F044, User, Knowledge |
 | 2026-08-06 | 登记 F070 积分系统：领域对象、Department.org_level 扩展、INV-11~14、模块编码 182；外部同步不阻塞 MVP | F070, F002, Department, Knowledge, Message |
+| 2026-10-13 | 文档纠错错误码改用 184。182 继续只表示积分调分、规则和公司根 | F070, Knowledge |
 | 2026-08-10 | 登记 F082 部门简称：为 `Department.short_name` 建立字段扩展所有权，明确可空 64 字符、本地维护、同步不覆盖及不改变组织树/搜索/权限边界 | F082, F002, F009, F014, F015 |
 | 2026-08-10 | 登记 F083 门户部门简称统一展示：新增 INV-11 与 F082/F025/F060/F064/F065 依赖；门户动态展示、搜索、排序和路径使用简称回退，正式名称字段、历史快照、部门 ID、权限及同步事实保持不变 | F083, F082, User, Knowledge, Permission, Approval, QAExpert |
 | 2026-08-21 | 登记 F084 Filelib 检索原文件链接：新增 INV-16 与 F069/F017 依赖，明确 `view_file` 可见结果可获得 7 天原文件 Bearer URL，并显式绕过 `download_file`、门户下载额度、审计、水印和分发限制；无权或原对象缺失时不得签发 | F084, F069, F017, DeveloperToken, KnowledgeFile, Permission, MinIO |

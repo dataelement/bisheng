@@ -18266,6 +18266,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if await self._handle_distribution_file_delete(file_record):
             await self.update_folder_update_time(file_record.file_level_path)
             await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+            from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+                cancel_pending_file_corrections,
+            )
+
+            await cancel_pending_file_corrections([int(file_id)])
             return
 
         delete_plan = await self._plan_cascade_version_links_on_delete([file_id])
@@ -18290,6 +18295,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
         self._enqueue_recommendation_deleted_files(expanded_ids)
         enqueue_favorite_change_events(favorite_delete_events)
+        from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+            cancel_pending_file_corrections,
+        )
+
+        await cancel_pending_file_corrections([int(item) for item in expanded_ids])
 
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await self._get_file_for_action(file_id)

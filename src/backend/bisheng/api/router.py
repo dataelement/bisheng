@@ -32,6 +32,7 @@ from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import (
     knowledge_migration_router,
     knowledge_recycle_router,
+    knowledge_file_correction_router,
     knowledge_router,
     knowledge_space_router,
     knowledge_space_tag_library_router,
@@ -77,6 +78,7 @@ router = APIRouter(
 router.include_router(chat_router)
 router.include_router(endpoints_router)
 router.include_router(knowledge_router)
+router.include_router(knowledge_file_correction_router)
 router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
 router.include_router(shougang_portal_router)

@@ -5,6 +5,7 @@
 | 关联 spec | [spec.md](./spec.md) |
 | 产品决议 | [积分系统需求分析-V1.1.md §11](../../../docs/PRD/积分系统/积分系统需求分析-V1.1.md) |
 | 模块 | `bisheng/points`，错误码 **182** |
+| 文档纠错 | [file-correction/design-technical-rfc.md](./file-correction/design-technical-rfc.md)。实现契约见 [file-correction/spec.md](./file-correction/spec.md)。规则 G8。错误码 **184**，不复用 182 |
 | Alembic | revision `f078_points_system`（**勿用 f070/f077**：已被占用） |
 | 设计原则 | Append-only 流水 + 余额缓存 + 幂等键（对齐 Open edX Ledger / Sylius Loyalty / 通用 loyalty LLD）；**本期不做**规则版本状态机、FIFO 过期、兑换核销、延迟入账反作弊（§7 二期预留） |
 
@@ -163,6 +164,7 @@ erDiagram
 | `sharer` | 分享人 | 本次库间 SHARE 审批的发起人 / 分享操作者 |
 | `owner` | 文档所有者 | 与 uploader 同义时可映射为 uploader；若业务有独立 owner 字段则取其 |
 | `answerer` | 被采纳回答者 | G4：`adopted_answer` 的回答专家 user_id |
+| `reporter` | 纠错反馈人 | G8：纠错单的 `applicant_user_id` |
 | `subject` | 事件主体本人 | 月奖 M*：被发放的管理员本人（固定，表单可只读） |
 
 **按规则编码允许的选项（校验写死，防配错）：**
@@ -173,6 +175,7 @@ erDiagram
 | G7 | `uploader` \| `sharer` | `sharer` |
 | G3 | 仅 `uploader`（表单锁定） | `uploader` |
 | G4 | 仅 `answerer`（表单锁定） | `answerer` |
+| G8 | 仅 `reporter`（表单锁定） | `reporter`。展示分值 1、`daily_cap` 空；实发 1 或 2 见 [file-correction/design-technical-rfc.md](./file-correction/design-technical-rfc.md) |
 | R* / MANUAL | 无（扣减/调分目标由操作指定） | NULL |
 | M* | 仅 `subject`（锁定） | `subject` |
 

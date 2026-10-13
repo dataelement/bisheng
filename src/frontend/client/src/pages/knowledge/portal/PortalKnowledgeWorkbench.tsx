@@ -97,7 +97,9 @@ import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
+import { FileCorrectionDialog } from "./components/FileCorrectionDialog";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
+import { canSubmitFileCorrection } from "./fileCorrectionAccess";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
 import { SpaceSidebar } from "./components/SpaceSidebar";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
@@ -281,6 +283,7 @@ export default function PortalKnowledgeWorkbench() {
     const [sortBy, setSortBy] = useState<SortType | undefined>();
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>();
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
+    const [correctionOpen, setCorrectionOpen] = useState(false);
     const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
@@ -841,6 +844,11 @@ export default function PortalKnowledgeWorkbench() {
     const canManageSelectedFilePermission = Boolean(
         selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || effectivePermissionEntryIds.has(selectedFile.id)),
     );
+    const showFileCorrection = canSubmitFileCorrection({
+        space: activeSpace,
+        file: selectedFile,
+        currentUserId: currentUser?.id,
+    });
     const canDownloadSelectedFile = Boolean(
         selectedFile
         && (
@@ -3165,6 +3173,16 @@ export default function PortalKnowledgeWorkbench() {
                 </>
             ) : null}
 
+            {selectedFile && correctionOpen ? (
+                <FileCorrectionDialog
+                    open={correctionOpen}
+                    fileId={selectedFile.id}
+                    fileName={selectedFile.name}
+                    onOpenChange={setCorrectionOpen}
+                    onSubmitted={() => showToast({ message: "已提交, 可在消息中心的「申请」里查看进度", severity: NotificationSeverity.SUCCESS })}
+                    onError={(message) => showToast({ message, severity: NotificationSeverity.ERROR })}
+                />
+            ) : null}
             {selectedFile ? (
                 <PortalPreviewWorkspace
                     activePanel={activePanel}
@@ -3174,6 +3192,8 @@ export default function PortalKnowledgeWorkbench() {
                     canEditTags={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
                     canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
                     canDownload={canDownloadSelectedFile}
+                    showCorrection={showFileCorrection}
+                    onOpenCorrection={() => setCorrectionOpen(true)}
                     downloadPending={downloadPending}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}

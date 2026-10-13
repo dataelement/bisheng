@@ -20,7 +20,10 @@ import { NotificationSeverity } from "~/common/types";
 import useLocalize from "~/hooks/useLocalize";
 import { cn } from "~/utils";
 import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
+import { FILE_CORRECTION_SCENARIO, correctionListTitle } from "~/api/fileCorrection";
 import { getSpaceInfoApi } from "~/api/knowledge";
+import { FileCorrectionDecision } from "./FileCorrectionDecision";
+import { FileCorrectionNotice } from "./FileCorrectionNotice";
 import { FutureApproverList } from "./FutureApproverList";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
@@ -141,6 +144,9 @@ function formatTitle(
   businessName: string | undefined | null,
   localize: ReturnType<typeof useLocalize>,
 ): string {
+  if (scenarioCode === FILE_CORRECTION_SCENARIO) {
+    return correctionListTitle(businessName);
+  }
   if (!businessName) return "--";
   if (scenarioCode === "menu_access_request") {
     return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: `申请访问${businessName}菜单` }) as string;
@@ -416,6 +422,9 @@ function buildBusinessContentRows(
   }
   if (scenarioCode === QA_QUESTION_PUBLISH_SCENARIO) {
     return buildQaQuestionPublishRows(data, localize);
+  }
+  if (scenarioCode === FILE_CORRECTION_SCENARIO) {
+    return [];
   }
   return buildDefaultBusinessContentRows(data, localize);
 }
@@ -874,11 +883,26 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}
                       </button>
+                      {taskDetail?.scenario_code === FILE_CORRECTION_SCENARIO ? (
+                        <FileCorrectionDecision
+                          taskId={selectedTaskId || 0}
+                          correctionId={Number((taskDetail.detail_snapshot ?? taskDetail.payload_snapshot)?.correction_id) || 0}
+                          spaceId={Number((taskDetail.detail_snapshot ?? taskDetail.payload_snapshot)?.space_id) || 0}
+                          disabled={actionLoading}
+                          onDone={() => {
+                            dispatchKnowledgeSpaceFilesRefresh();
+                            void loadTasks(selectedTaskId);
+                            toast(true);
+                          }}
+                          onError={(message) => showToast({ message, severity: NotificationSeverity.ERROR })}
+                        />
+                      ) : (
                       <button type="button" disabled={actionLoading}
                         className="rounded-lg bg-[#165dff] px-5 py-2 text-[14px] text-white hover:bg-[#1350e8] disabled:opacity-60"
                         onClick={() => runTaskDecision("approve")}>
                         {localize("com_approval_action_approve")}
                       </button>
+                      )}
                     </>
                   )}
                   {canWithdrawInstance && (
@@ -1004,6 +1028,15 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
         <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
         <InfoGrid rows={basicRows} />
       </div>
+
+      {detail.scenario_code === FILE_CORRECTION_SCENARIO ? (
+        <FileCorrectionNotice
+          correctionId={Number(liveSnapshot.correction_id) || null}
+          fileName={liveBusinessName}
+          spaceId={liveSnapshot.space_id}
+          fileId={liveSnapshot.file_id}
+        />
+      ) : null}
 
       {showContent && (
         <div>
@@ -1184,6 +1217,15 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
         <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
         <InfoGrid rows={basicRows} />
       </div>
+
+      {detail.scenario_code === FILE_CORRECTION_SCENARIO ? (
+        <FileCorrectionNotice
+          correctionId={Number(liveSnapshot.correction_id) || null}
+          fileName={liveBusinessName}
+          spaceId={liveSnapshot.space_id}
+          fileId={liveSnapshot.file_id}
+        />
+      ) : null}
 
       {detailRows.length > 0 && (
         <div>

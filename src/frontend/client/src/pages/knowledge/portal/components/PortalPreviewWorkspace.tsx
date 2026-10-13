@@ -32,6 +32,8 @@ interface PortalPreviewWorkspaceProps {
     onDownload: () => void;
     onUpdateEncoding: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
     onOpenPermission: () => void;
+    showCorrection?: boolean;
+    onOpenCorrection?: () => void;
     onOpenTags: () => void;
     onOpenEditInfo: () => void;
     onPanelChange: (panel: PanelKey | null) => void;
@@ -62,6 +64,8 @@ export function PortalPreviewWorkspace({
     onDownload,
     onUpdateEncoding,
     onOpenPermission,
+    showCorrection,
+    onOpenCorrection,
     onOpenTags,
     onOpenEditInfo,
     onPanelChange,
@@ -88,6 +92,8 @@ export function PortalPreviewWorkspace({
                         downloadPending={downloadPending}
                         canManagePermission={canManagePermission}
                         onOpenPermission={onOpenPermission}
+                        showCorrection={showCorrection}
+                        onOpenCorrection={onOpenCorrection}
                         onToggleSummary={onToggleSummary}
                     />
                 )}

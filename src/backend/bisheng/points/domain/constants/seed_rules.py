@@ -90,6 +90,16 @@ SEED_RULES = [
         "status": "disabled",
         "sort_order": 7,
     },
+    {
+        "rule_code": "G8",
+        "rule_type": "earn",
+        "name": "文档纠错被采纳",
+        "score_expr": {"mode": "file_correction", "adopt_score": 1, "update_score": 2},
+        "daily_cap": None,
+        "beneficiary": "reporter",
+        "status": "enabled",
+        "sort_order": 8,
+    },
     # --- 扣减 R*（系统默认）---
     {
         "rule_code": "R1",
