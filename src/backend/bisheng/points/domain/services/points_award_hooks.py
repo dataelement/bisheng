@@ -19,6 +19,7 @@ from bisheng.points.domain.repositories.points_repository import PointsRepositor
 from bisheng.points.domain.services.points_award_facade import (
     AnswerAdoptedEvent,
     AwardOutcome,
+    FileCorrectionAdoptedEvent,
     DocumentSharedEvent,
     FavoriteChangedEvent,
     PointsAwardFacade,
@@ -273,6 +274,22 @@ async def _run_payload_sync(payload: dict[str, Any]) -> None:
                     answerer_id=int(payload["answerer_id"]),
                 )
             )
+        if event_type == "file_correction_adopted":
+            space_id = int(payload.get("space_id") or 0)
+            managers = await resolve_space_manager_ids(space_id) if space_id > 0 else frozenset()
+            outcome = await facade.on_file_correction_adopted(
+                FileCorrectionAdoptedEvent(
+                    tenant_id=int(payload["tenant_id"]),
+                    file_id=int(payload["file_id"]),
+                    applicant_user_id=int(payload["applicant_user_id"]),
+                    correction_id=int(payload["correction_id"]),
+                    award_kind=str(payload.get("award_kind") or "adopt"),
+                    delta=int(payload.get("delta") or 0),
+                    space_manager_ids=managers,
+                )
+            )
+            await _mark_file_correction_award(facade.repository.session, outcome, payload)
+            return outcome
         raise ValueError(f"unknown points award event_type={event_type}")
 
     await _run_with_facade(_award)
@@ -377,6 +394,80 @@ async def notify_favorite_changed(
         logger.exception(
             "points.award.hooks favorite_changed_failed file_id=%s",
             source_file_id,
+        )
+
+
+async def _mark_file_correction_award(session, outcome: AwardOutcome, payload: dict[str, Any]) -> None:
+    """把 G8 结果写回名额行. 发放异常时保持待入账, 以便同一幂等键重放."""
+    from sqlmodel import select
+
+    from bisheng.knowledge.domain.models.knowledge_file_correction import (
+        AWARD_AWARDED,
+        AWARD_RESERVED,
+        AWARD_SKIPPED,
+        KnowledgeFileCorrectionAward,
+    )
+
+    if outcome.reason == "error":
+        return
+    correction_id = int(payload.get("correction_id") or 0)
+    if correction_id <= 0:
+        return
+    # 同一文档可以有多条纠错发分, 必须按纠错单回写, 不能取该人该文档的第一行.
+    row = (
+        await session.exec(
+            select(KnowledgeFileCorrectionAward).where(
+                KnowledgeFileCorrectionAward.correction_id == correction_id,
+            )
+        )
+    ).first()
+    if row is None or row.award_state != AWARD_RESERVED:
+        return
+    if outcome.skipped and outcome.reason != "already_awarded":
+        row.award_state = AWARD_SKIPPED
+    else:
+        row.award_state = AWARD_AWARDED
+    session.add(row)
+
+
+async def notify_file_correction_adopted(
+    *,
+    tenant_id: int,
+    file_id: int,
+    applicant_user_id: int,
+    correction_id: int,
+    award_kind: str,
+    delta: int,
+    space_id: int = 0,
+) -> None:
+    """纠错采纳或采纳并更新后触发 G8. 失败只记日志, 名额留在待入账.
+
+    Args:
+        tenant_id: 租户 ID.
+        file_id: 被纠错的知识库文件 ID.
+        applicant_user_id: 反馈人用户 ID.
+        correction_id: 纠错单 ID.
+        award_kind: adopt 或 update.
+        delta: 事件金额. 规则配置了两档分值时, 以规则为准.
+        space_id: 文档所在知识库 ID, 用来判断反馈人是不是该库所有者或管理员.
+    """
+    try:
+        await _dispatch(
+            "file_correction_adopted",
+            {
+                "tenant_id": int(tenant_id),
+                "file_id": int(file_id),
+                "applicant_user_id": int(applicant_user_id),
+                "correction_id": int(correction_id),
+                "award_kind": str(award_kind),
+                "delta": int(delta),
+                "space_id": int(space_id),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "points.award.hooks file_correction_adopted_failed correction_id=%s",
+            correction_id,
         )
 
 

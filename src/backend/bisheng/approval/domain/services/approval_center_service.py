@@ -672,6 +672,7 @@ class ApprovalCenterService:
         operator_tenant_id: int,
         operator_is_admin: bool = False,
         comment: str | None = None,
+        new_file_id: int | None = None,
         ip_address: str | None = None,
     ):
         service = cls(instance_repository=ApprovalInstanceRepository)
@@ -683,6 +684,7 @@ class ApprovalCenterService:
             operator_tenant_id=operator_tenant_id,
             operator_is_admin=operator_is_admin,
             comment=comment,
+            new_file_id=new_file_id,
             ip_address=ip_address,
         )
         task = await ApprovalInstanceRepository.get_task(task_id)
@@ -927,6 +929,20 @@ class ApprovalCenterService:
         instance = await ApprovalInstanceRepository.get_instance(instance_id)
         if instance is None:
             raise ValueError(f"instance not found: {instance_id}")
+        if instance.scenario_code == "knowledge_file_correction":
+            from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+                KnowledgeFileCorrectionService,
+            )
+
+            await KnowledgeFileCorrectionService.withdraw(
+                instance_id=int(instance.id),
+                operator_user_id=int(operator_user_id),
+                operator_user_name=operator_user_name or "",
+            )
+            return await cls.get_instance_detail(
+                instance_id=instance.id,
+                login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
+            )
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
         if instance.scenario_code == _QA_QUESTION_PUBLISH_SCENARIO:
@@ -1198,6 +1214,7 @@ class ApprovalCenterService:
         operator_tenant_id: int,
         operator_is_admin: bool = False,
         comment: str | None = None,
+        new_file_id: int | None = None,
         ip_address: str | None = None,
     ) -> None:
         task = await self.instance_repository.get_task(task_id)
@@ -1208,6 +1225,20 @@ class ApprovalCenterService:
             raise ApprovalRequestNotFoundError()
         if instance.tenant_id != operator_tenant_id:
             raise ApprovalRequestPermissionDeniedError()
+        if instance.scenario_code == "knowledge_file_correction":
+            from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+                KnowledgeFileCorrectionService,
+            )
+
+            await KnowledgeFileCorrectionService.decide_from_approval(
+                task_id=task_id,
+                action=action,
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                comment=comment,
+                new_file_id=new_file_id,
+            )
+            return
         if not operator_is_admin and task.approver_user_id != operator_user_id:
             raise ApprovalRequestPermissionDeniedError()
         if task.status != ApprovalTaskStatus.PENDING:

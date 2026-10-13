@@ -4,6 +4,7 @@ BENEFICIARY_OPTIONS = {
     "G1": ("uploader", "publisher"), "G2": ("uploader", "publisher"),
     "G5": ("uploader", "publisher"), "G6": ("uploader", "publisher"),
     "G7": ("uploader", "sharer"), "G3": ("uploader",), "G4": ("answerer",),
+    "G8": ("reporter",),
 }
 
 

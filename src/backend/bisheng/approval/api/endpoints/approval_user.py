@@ -31,6 +31,7 @@ router = APIRouter(prefix='/approval', tags=['approval'])
 class ApprovalTaskDecisionReq(BaseModel):
     action: str
     comment: str | None = Field(default=None, max_length=2000)
+    new_file_id: int | None = None
 
 
 class ApprovalResubmitReq(BaseModel):
@@ -93,6 +94,7 @@ async def decide_task(
         operator_tenant_id=login_user.tenant_id,
         operator_is_admin=login_user.is_admin(),
         comment=req.comment,
+        new_file_id=req.new_file_id,
         ip_address=get_request_ip(request),
     )
     return resp_200(data)

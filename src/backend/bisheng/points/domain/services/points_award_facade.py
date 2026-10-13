@@ -67,6 +67,22 @@ class AnswerAdoptedEvent:
     answerer_id: int
 
 
+@dataclass(frozen=True)
+class FileCorrectionAdoptedEvent:
+    """一条纠错被采纳或采纳并更新后的 G8 发分上下文.
+
+    幂等键是发分类型加纠错单. 名额行已经占住时才调用.
+    """
+
+    tenant_id: int
+    file_id: int
+    applicant_user_id: int
+    correction_id: int
+    award_kind: str
+    delta: int
+    space_manager_ids: frozenset[int] = field(default_factory=frozenset)
+
+
 @dataclass
 class AwardOutcome:
     """门面调用结果；主业务只关心是否抛异常（不应抛）。"""
@@ -332,6 +348,52 @@ class PointsAwardFacade:
             rule_name=resolve_point_rule_display_name(rule),
         )
 
+    async def on_file_correction_adopted(self, event: FileCorrectionAdoptedEvent) -> AwardOutcome:
+        """按纠错动作发分. 采纳 1 分, 采纳并更新 2 分. 不使用规则上的每日上限."""
+        if not self._is_enabled():
+            return AwardOutcome(skipped=True, reason="points_disabled")
+        rule = await self.repository.get_rule(event.tenant_id, "G8")
+        if not rule or rule.status != "enabled" or rule.rule_type != "earn":
+            return AwardOutcome(skipped=True, reason="rule_disabled")
+        if await self._is_platform_super_admin(event.applicant_user_id):
+            return AwardOutcome(skipped=True, reason="super_admin")
+        payee, role = self._resolve_beneficiary(
+            rule.beneficiary,
+            reporter_id=event.applicant_user_id,
+        )
+        if payee is None:
+            return AwardOutcome(skipped=True, reason="beneficiary_unresolved")
+        # 月奖口径的库所有者/管理员不发 G8. 只看这篇文档所在库, 不看他在其他库的身份.
+        skip = await self._should_skip_payee(payee, event.space_manager_ids)
+        if skip:
+            return AwardOutcome(skipped=True, reason=skip)
+        score = _g8_score(rule.score_expr, event.award_kind, event.delta)
+        if score <= 0:
+            return AwardOutcome(skipped=True, reason="invalid_score")
+        key = f"earn:G8:{event.award_kind}:{event.correction_id}"
+        result = await self.ledger.award(
+            tenant_id=event.tenant_id,
+            user_id=payee,
+            delta=score,
+            title=resolve_point_rule_display_name(rule),
+            rule_code="G8",
+            idempotency_key=key,
+            daily_cap=None,
+            biz_type="file_correction",
+            biz_id=str(event.correction_id),
+            beneficiary_role=role,
+        )
+        if result.skipped_cap:
+            return AwardOutcome(skipped=True, reason="daily_cap", result=result)
+        if result.replayed:
+            return AwardOutcome(skipped=True, reason="already_awarded", result=result)
+        return AwardOutcome.success(
+            result=result,
+            user_id=payee,
+            rule_code="G8",
+            rule_name=resolve_point_rule_display_name(rule),
+        )
+
     async def _should_skip_payee(self, payee: int, manager_ids: frozenset[int]) -> str | None:
         """P7=B：受益人是相关库 OpenFGA owner/manager（或创建人兜底），或平台超管 → skip。"""
         if payee in manager_ids:
@@ -348,6 +410,7 @@ class PointsAwardFacade:
         publisher_id: int | None = None,
         sharer_id: int | None = None,
         answerer_id: int | None = None,
+        reporter_id: int | None = None,
     ) -> tuple[int | None, str | None]:
         """按规则 beneficiary 解析唯一入账用户。
 
@@ -359,11 +422,44 @@ class PointsAwardFacade:
             "publisher": publisher_id,
             "sharer": sharer_id,
             "answerer": answerer_id,
+            "reporter": reporter_id,
         }
         user_id = mapping.get(role)
         if user_id is None:
             return None, None
         return int(user_id), role
+
+
+def _g8_score(score_expr: dict[str, Any] | None, award_kind: str, fallback_delta: int) -> int:
+    """读取 G8 的采纳分或采纳并更新分.
+
+    Args:
+        score_expr: 规则上的分值配置.
+        award_kind: adopt 或 update.
+        fallback_delta: 旧事件没带两档分值时的金额.
+
+    Returns:
+        本次应入账的正分. 配置缺失时回退到事件金额.
+    """
+    expr = score_expr or {}
+    kind = str(award_kind or "")
+    if str(expr.get("mode") or "") == "file_correction":
+        raw = expr.get("update_score") if kind == "update" else expr.get("adopt_score")
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 0
+    if str(expr.get("mode") or "") == "fixed" and kind != "update":
+        try:
+            return int(expr.get("score") or 0)
+        except (TypeError, ValueError):
+            return 0
+    if kind == "update":
+        return 2
+    try:
+        return int(fallback_delta)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _fixed_score(score_expr: dict[str, Any] | None) -> int:

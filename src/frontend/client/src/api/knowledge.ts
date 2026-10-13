@@ -552,6 +552,7 @@ export interface KnowledgeFile {
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
     user_name?: string;           // mapped from user_name — original uploader of this file
+    uploaderUserId?: number;      // mapped from user_id — 文档详情里的上传人
     updater_name?: string;        // mapped from updater_name — last updater of this file
     folderPath?: string;          // mapped from folder_path / file_level_path
     sourcePath?: string;          // mapped from source_path
@@ -1185,6 +1186,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
         user_name: raw?.user_name ?? undefined,
+        uploaderUserId: raw?.user_id != null ? Number(raw.user_id) : undefined,
         updater_name: raw?.updater_name ?? undefined,
         folderPath: raw?.folder_path ?? raw?.file_level_path ?? undefined,
         sourcePath: raw?.source_path ?? undefined,

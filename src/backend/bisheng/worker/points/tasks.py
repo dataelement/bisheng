@@ -33,6 +33,7 @@ async def _process_award_async(payload: dict[str, Any]) -> dict:
         "document_shared",
         "favorite_changed",
         "answer_adopted",
+        "file_correction_adopted",
     }:
         logger.error("points.award.unknown_event_type type=%s", event_type)
         return {"ok": False, "reason": "unknown_event_type", "event_type": event_type}

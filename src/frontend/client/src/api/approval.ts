@@ -182,7 +182,7 @@ export async function getMyApprovalTaskDetailApi(taskId: number): Promise<Approv
 
 export async function decideApprovalTaskApi(
   taskId: number,
-  data: { action: "approve" | "reject"; comment?: string },
+  data: { action: "approve" | "adopt" | "adopt_update" | "reject"; comment?: string; new_file_id?: number },
 ): Promise<ApprovalTaskDetail> {
   const response = await request.post<ApiResponse<ApprovalTaskDetail>>(
     `/api/v1/approval/tasks/${taskId}/decision`,

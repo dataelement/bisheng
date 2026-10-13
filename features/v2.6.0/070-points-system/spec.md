@@ -5,6 +5,7 @@
 **优先级**: P0（激励闭环主能力）  
 **所属版本**: v2.6.0  
 **模块编码**: **182**（`points`，新建 `common/errcode/points.py`）  
+**文档纠错（G8）**: [file-correction/prd.md](./file-correction/prd.md)、[file-correction/design-technical-rfc.md](./file-correction/design-technical-rfc.md)、[file-correction/spec.md](./file-correction/spec.md)、[file-correction/tasks.md](./file-correction/tasks.md)。纠错业务错误码用 **184**，不占用 182。以后凡是加积分或减积分的需求，都在本目录下新建子目录，不另开功能编号。  
 **依赖**: F002 部门树 + F004 ReBAC + F009 组织同步（只读）+ F012 多租户 + 现有 knowledge / approval 发布结果 / qa_expert / message / telemetry 日活；Portal 兄弟仓前端
 
 > **范围边界（产品决议基线）**
@@ -183,6 +184,7 @@
 | G3 | n/a 收藏 | 阶梯 5/10/15 |
 | G4 | n/a 采纳 | +3 |
 | G7 | n/a **知识库间文档分享**（`SHARE` / `knowledge_space_file_share_request` → `share_approved`） | **本期接线**；获益人可配上传人/分享人；幂等 `earn:G7:{share_entry_id}`；**不是**门户外链 |
+| G8 | n/a **文档纠错被采纳** | 种子分值 1，`daily_cap` 空，受益人 `reporter`。实际采纳 1 分、采纳并更新 2 分写死，不读 `score_expr`。幂等 `earn:G8:{award_kind}:{correction_id}`。全文见 [file-correction/prd.md](./file-correction/prd.md) |
 | R1–R3 | 手动 | -100 |
 | M1/M4/M6 | 公共所有者/部门管理员/科室管理员 | 200/100/50；其余 M* 可增 |
 
@@ -196,6 +198,7 @@
 | G3 补差 | `earn:G3:{file_id}:tier:{tier}` |
 | G4 | `earn:G4:{answer_id}` |
 | G7 库间分享 | `earn:G7:{share_entry_id}` |
+| G8 文档纠错 | `earn:G8:{award_kind}:{correction_id}`。`award_kind` 为 `adopt` 或 `update`。账本 `daily_cap` 传空 |
 | 月奖 | `reward:{rule}:{user_id}:{yyyy-mm}` |
 | 手动调分 | `manual:{operator}:{target}:{uuid}` |
 | 前台扣减 | `deduct:{rule}:{operator}:{target}:{biz}:{uuid}` |

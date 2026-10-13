@@ -73,13 +73,22 @@ class PointsRuleService:
 
     @staticmethod
     def validate_score_expr(rule_code: str, score_expr: dict | None) -> None:
-        """校验规则 score_expr 结构（当前仅 G3 阶梯）。"""
+        """校验规则 score_expr 结构. G3 校验阶梯, G8 校验采纳和采纳并更新两档分值."""
         code = (rule_code or "").strip().upper()
-        if code != "G3":
+        if code == "G3":
+            err = validate_g3_tier_score_expr(score_expr)
+            if err:
+                raise PointsRuleConflictError(msg=err)
             return
-        err = validate_g3_tier_score_expr(score_expr)
-        if err:
-            raise PointsRuleConflictError(msg=err)
+        if code != "G8":
+            return
+        expr = score_expr or {}
+        if str(expr.get("mode") or "") != "file_correction":
+            raise PointsRuleConflictError(msg="文档纠错规则须分别配置采纳和采纳并更新分值")
+        for key in ("adopt_score", "update_score"):
+            raw = expr.get(key)
+            if isinstance(raw, bool) or not isinstance(raw, int) or raw <= 0:
+                raise PointsRuleConflictError(msg="文档纠错的两档分值须为正整数")
 
     async def create_rule(self, tenant_id: int, user: UserPayload, body: PointRuleRequest) -> PointRuleResponse:
         """创建规则；rule_code 租户内唯一。"""
