@@ -1670,6 +1670,17 @@
   gap: 18px;
 }
 
+.correctionHistoryCard {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.correctionHistoryCard + .correctionHistoryCard {
+  padding-top: 16px;
+}
+
 .detailItem {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);

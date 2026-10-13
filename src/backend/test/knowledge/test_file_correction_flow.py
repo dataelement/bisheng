@@ -17,7 +17,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -1185,6 +1185,107 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                 await session.execute(
                     text("DELETE FROM knowledge_document_version WHERE knowledge_file_id = :id"),
                     {"id": created_id},
+                )
+            await session.commit()
+        await _cleanup(engine, user_ids=user_ids, space_ids=space_ids, file_ids=file_ids)
+
+
+@pytest.mark.asyncio
+async def test_list_corrections_shows_body_and_status_mysql(flow_env):
+    """能看文档的人能看到每条纠错的反馈人, 说明和状态."""
+    engine = flow_env
+    suffix = uuid.uuid4().hex[:8]
+    user_ids: list[int] = []
+    space_ids: list[int] = []
+    file_ids: list[int] = []
+    document_ids: list[int] = []
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            reader = await _insert_user(session, f"fc-lr-{suffix}")
+            uploader = await _insert_user(session, f"fc-lu-{suffix}")
+            stranger = await _insert_user(session, f"fc-ls-{suffix}")
+            user_ids.extend([reader, uploader, stranger])
+            space_id = await _insert_space(session, name=f"fc-ls-{suffix}", level="department")
+            space_ids.append(space_id)
+            file_id = await _insert_file(session, space_id=space_id, name=f"list-{suffix}", user_id=uploader)
+            file_ids.append(file_id)
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(reader, name=f"fc-lr-{suffix}"))), base_url="http://test") as client:
+            created = _body(await _submit(client, file_id, "列表里的说明"))
+            assert created["status_code"] == 200, created
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(reader))), base_url="http://test") as client:
+            listed = _body(await client.get(f"/api/v1/knowledge/files/{file_id}/corrections"))
+        assert listed["status_code"] == 200, listed
+        assert listed["data"][0]["status"] == "pending"
+        assert listed["data"][0]["content"] == "列表里的说明"
+        assert listed["data"][0]["file_name"] == f"list-{suffix}"
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(uploader))), base_url="http://test") as client:
+            uploader_view = _body(await client.get(f"/api/v1/knowledge/files/{file_id}/corrections"))
+        assert uploader_view["data"][0]["content"] == "列表里的说明"
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(stranger))), base_url="http://test") as client:
+            hidden = _body(await client.get(f"/api/v1/knowledge/files/{file_id}/corrections"))
+        assert hidden["status_code"] == 200, hidden
+        assert hidden["data"][0]["status"] == "pending"
+        assert hidden["data"][0]["content"] == "列表里的说明"
+        assert hidden["data"][0]["applicant_user_name"]
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(stranger))), base_url="http://test") as client:
+            again = _body(await client.get(f"/api/v1/knowledge/files/{file_id}/corrections"))
+        assert again["data"][0]["content"] == "列表里的说明"
+        assert again["data"][0]["status"] == "pending"
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            newer = await _insert_file(session, space_id=space_id, name=f"newer-{suffix}", user_id=uploader)
+            file_ids.append(newer)
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_document (tenant_id, knowledge_id, lifecycle_status)
+                    VALUES (1, :space, 'active')
+                    """
+                ),
+                {"space": space_id},
+            )
+            document_id = int(
+                (
+                    await session.execute(
+                        text("SELECT id FROM knowledge_document WHERE knowledge_id = :space ORDER BY id DESC LIMIT 1"),
+                        {"space": space_id},
+                    )
+                ).scalar_one()
+            )
+            document_ids.append(document_id)
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_document_version
+                      (document_id, knowledge_file_id, version_no, is_primary)
+                    VALUES (:doc, :old, 1, 0), (:doc, :new, 2, 1)
+                    """
+                ),
+                {"doc": document_id, "old": file_id, "new": newer},
+            )
+            await session.commit()
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(stranger))), base_url="http://test") as client:
+            chained = _body(await client.get(f"/api/v1/knowledge/files/{newer}/corrections"))
+        assert chained["status_code"] == 200, chained
+        assert chained["data"][0]["content"] == "列表里的说明"
+        assert chained["data"][0]["file_name"] == f"list-{suffix}"
+        async with AsyncClient(transport=ASGITransport(app=_app(_user(stranger))), base_url="http://test") as client:
+            chained_again = _body(await client.get(f"/api/v1/knowledge/files/{newer}/corrections"))
+        assert len(chained_again["data"]) == 1
+    finally:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            if file_ids:
+                await session.execute(
+                    text("DELETE FROM knowledge_document_version WHERE knowledge_file_id IN :ids").bindparams(
+                        bindparam("ids", expanding=True)
+                    ),
+                    {"ids": file_ids},
+                )
+            if document_ids:
+                await session.execute(
+                    text("DELETE FROM knowledge_document WHERE id IN :ids").bindparams(
+                        bindparam("ids", expanding=True)
+                    ),
+                    {"ids": document_ids},
                 )
             await session.commit()
         await _cleanup(engine, user_ids=user_ids, space_ids=space_ids, file_ids=file_ids)

@@ -14,7 +14,7 @@ interface FileCorrectionDialogProps {
     onError: (message: string) => void;
 }
 
-/** 阅读页纠错弹窗. 只提交说明, 不改文档. */
+/** 阅读页发起纠错. 只提交说明, 不改文档. */
 export function FileCorrectionDialog({
     open,
     fileId,

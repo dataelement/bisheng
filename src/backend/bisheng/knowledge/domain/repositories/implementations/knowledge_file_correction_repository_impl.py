@@ -71,6 +71,36 @@ class KnowledgeFileCorrectionRepositoryImpl(
         )
         return result.first()
 
+    async def list_for_file(self, file_id: int) -> list[KnowledgeFileCorrection]:
+        """按创建时间倒序列出这个文件上的纠错.
+
+        Args:
+            file_id: 知识库文件 ID.
+
+        Returns:
+            纠错单列表. 没有记录时为空列表.
+        """
+        return await self.list_for_files([int(file_id)])
+
+    async def list_for_files(self, file_ids: list[int]) -> list[KnowledgeFileCorrection]:
+        """按创建时间倒序列出这些文件上的纠错.
+
+        Args:
+            file_ids: 同一篇文档各个版本的知识库文件 ID.
+
+        Returns:
+            纠错单列表. 没有记录时为空列表.
+        """
+        ids = sorted({int(item) for item in file_ids if int(item) > 0})
+        if not ids:
+            return []
+        result = await self.session.exec(
+            select(KnowledgeFileCorrection)
+            .where(col(KnowledgeFileCorrection.file_id).in_(ids))
+            .order_by(KnowledgeFileCorrection.id.desc())
+        )
+        return list(result.all())
+
     async def list_pending_for_files(self, file_ids: list[int]) -> list[KnowledgeFileCorrection]:
         """列出这些文档上仍待处理的纠错.
 

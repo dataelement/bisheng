@@ -1,5 +1,5 @@
 import { SpaceLevel } from "~/api/knowledge";
-import { canSubmitFileCorrection } from "./fileCorrectionAccess";
+import { canOpenFileCorrection, canSubmitFileCorrection } from "./fileCorrectionAccess";
 
 describe("canSubmitFileCorrection", () => {
     const space = { spaceLevel: SpaceLevel.DEPARTMENT, isFavorite: false };
@@ -13,6 +13,18 @@ describe("canSubmitFileCorrection", () => {
     });
 
     it("hides the action when the reader is the uploader", () => {
+        expect(canSubmitFileCorrection({
+            space,
+            file: { uploaderUserId: 3 },
+            currentUserId: "3",
+        })).toBe(false);
+    });
+
+    it("lets the uploader open the history without submitting", () => {
+        expect(canOpenFileCorrection({
+            space,
+            file: { uploaderUserId: 3 },
+        })).toBe(true);
         expect(canSubmitFileCorrection({
             space,
             file: { uploaderUserId: 3 },
