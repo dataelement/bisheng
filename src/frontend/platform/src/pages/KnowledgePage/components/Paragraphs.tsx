@@ -957,7 +957,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                         edit={canEditKb}
                         fileId={paragraph.fileId}
                         chunkId={paragraph.chunkId}
-                        isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm'].includes(paragraph.parseType)}
+                        isUns={paragraph.isUns || ['etl4lm', 'un_etl4lm', 'mineru', 'mineru_v4'].includes(paragraph.parseType)}
                         parseType={paragraph.parseType}
                         onClose={() => setParagraph(prev => ({ ...prev, show: false }))}
                         onChange={(value) => refreshData(

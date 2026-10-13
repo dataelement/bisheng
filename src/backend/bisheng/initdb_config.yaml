@@ -1,5 +1,5 @@
 knowledges: # 知识库相关配置
-  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、paddle_ocr三种选项，默认为etl4lm
+  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、mineru_v4、paddle_ocr，默认为etl4lm
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
     url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
@@ -14,6 +14,18 @@ knowledges: # 知识库相关配置
       x-api-key: "11"
     request_kwargs:
       backend: "pipeline"
+  mineru_v4:
+    # V1 API root; keep empty until the administrator explicitly selects mineru_v4.
+    api_url: ""
+    api_key_env: "MINERU_V4_API_KEY"
+    tier: "standard"
+    ocr_mode: "auto"
+    request_kwargs: {}
+    connect_timeout_seconds: 10
+    request_timeout_seconds: 60
+    transfer_timeout_seconds: 300
+    job_timeout_seconds: 1800
+    poll_interval_seconds: 3
   paddle_ocr:
     # 文档地址 https://ai.baidu.com/ai-doc/AISTUDIO/Cmkz2m0ma
     url: "https://xxx.aistudio-app.com/layout-parsing"
