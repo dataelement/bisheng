@@ -8,7 +8,20 @@ const CORRECTION_LEVELS = new Set<SpaceLevel>([
 ]);
 
 /**
- * 阅读页是否显示「纠错」.
+ * 右侧边栏是否显示纠错入口.
+ * 能看这篇文档的人都能打开列表, 包括上传人.
+ */
+export function canOpenFileCorrection(input: {
+    space: Pick<KnowledgeSpace, "spaceLevel" | "isFavorite"> | null | undefined;
+    file: Pick<KnowledgeFile, "uploaderUserId"> | null | undefined;
+}): boolean {
+    const { space, file } = input;
+    if (!space || !file || space.isFavorite) return false;
+    return CORRECTION_LEVELS.has(space.spaceLevel);
+}
+
+/**
+ * 阅读页是否允许发起纠错.
  * 看当前打开文件所属库, 不看从哪个列表进来.
  */
 export function canSubmitFileCorrection(input: {

@@ -27,6 +27,10 @@ class KnowledgeFileCorrectionRepository(BaseRepository[KnowledgeFileCorrection, 
         """锁定纠错单, 供通过, 拒绝和撤回."""
 
     @abstractmethod
+    async def list_for_file(self, file_id: int) -> list[KnowledgeFileCorrection]:
+        """按时间倒序列出这篇文档的纠错."""
+
+    @abstractmethod
     async def list_pending_for_files(self, file_ids: list[int]) -> list[KnowledgeFileCorrection]:
         """列出这些文档上仍待处理的纠错."""
 

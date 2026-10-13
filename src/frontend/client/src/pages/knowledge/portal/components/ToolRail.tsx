@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Clock, FileText, Link2, Lock, PanelRight } from "lucide-react";
+import { BriefcaseBusiness, Clock, FileText, History, Link2, Lock, PanelRight } from "lucide-react";
 import type { PanelKey, PortalToolRailKey } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -23,6 +23,9 @@ const TOOLBAR_ITEMS: Array<{
 interface ToolRailProps {
     activePanel: PanelKey | null;
     aiOpen: boolean;
+    showCorrectionHistory?: boolean;
+    correctionHistoryOpen?: boolean;
+    onOpenCorrectionHistory?: () => void;
     onTogglePanel: () => void;
     onOpenAi: () => void;
     onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
@@ -31,6 +34,9 @@ interface ToolRailProps {
 export function ToolRail({
     activePanel,
     aiOpen,
+    showCorrectionHistory = false,
+    correctionHistoryOpen = false,
+    onOpenCorrectionHistory,
     onTogglePanel,
     onOpenAi,
     onOpenPanel,
@@ -44,7 +50,22 @@ export function ToolRail({
                 const active = item.key === "ai"
                     ? aiOpen
                     : Boolean(item.panelKey && activePanel === item.panelKey);
+                const historyButton = item.key === "ai" && showCorrectionHistory ? (
+                    <button
+                        type="button"
+                        key="correction-history"
+                        className={`${s.toolbarButton} ${correctionHistoryOpen ? s.toolbarButtonActive : ""}`}
+                        title="纠错历史"
+                        aria-label="纠错历史"
+                        aria-pressed={correctionHistoryOpen}
+                        onClick={onOpenCorrectionHistory}
+                    >
+                        <History size={16} />
+                    </button>
+                ) : null;
                 return (
+                    <span key={item.key} className="contents">
+                    {historyButton}
                     <button
                         type="button"
                         key={item.key}
@@ -77,6 +98,7 @@ export function ToolRail({
                             <Icon size={16} />
                         ) : null}
                     </button>
+                    </span>
                 );
             })}
         </aside>

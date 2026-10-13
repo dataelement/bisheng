@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import Integer, String, column, table
 from sqlalchemy import select as sa_select
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
@@ -374,6 +374,113 @@ class KnowledgeFileCorrectionService:
                 "task_id": int(task.id),
                 "status": CORRECTION_PENDING,
             }
+
+    @classmethod
+    async def list_for_file(cls, *, login_user, file_id: int) -> list[dict]:
+        """列出这篇文档的纠错. 能看文档的人都能看到说明和状态.
+
+        Args:
+            login_user: 当前登录用户.
+            file_id: 知识库文件 ID.
+
+        Returns:
+            按创建时间倒序的纠错摘要, 含反馈人, 当时文件名, 说明和状态.
+            范围是当前文件所属文档的全部版本.
+
+        Raises:
+            SpaceFileNotFoundError: 文档不存在.
+            FileCorrectionViewDeniedError: 无权查看该文档.
+            FileCorrectionSpaceNotAllowedError: 库层级不允许纠错.
+        """
+        async with get_async_db_session() as session:
+            file = (
+                await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == int(file_id)))
+            ).first()
+            if file is None:
+                raise SpaceFileNotFoundError()
+            knowledge = (
+                await session.exec(select(Knowledge).where(Knowledge.id == int(file.knowledge_id)))
+            ).first()
+            scope = (
+                await session.exec(
+                    select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == int(file.knowledge_id))
+                )
+            ).first()
+            await cls._require_view(login_user, int(file_id), knowledge, scope)
+            cls._require_space(knowledge, scope)
+            file_ids = await cls._document_version_file_ids(session, file)
+            rows = await KnowledgeFileCorrectionRepositoryImpl(session).list_for_files(file_ids)
+            award_kind_by_correction: dict[int, str] = {}
+            correction_ids = [int(row.id) for row in rows if row.id is not None]
+            if correction_ids:
+                awards = (
+                    await session.exec(
+                        select(KnowledgeFileCorrectionAward).where(
+                            KnowledgeFileCorrectionAward.correction_id.in_(correction_ids)
+                        )
+                    )
+                ).all()
+                award_kind_by_correction = {
+                    int(item.correction_id): str(item.award_kind) for item in awards
+                }
+            items = []
+            for row in rows:
+                created = row.create_time.isoformat(sep=" ", timespec="seconds") if row.create_time else None
+                items.append({
+                    "correction_id": int(row.id),
+                    "status": row.status,
+                    "award_kind": award_kind_by_correction.get(int(row.id)),
+                    "applicant_user_name": row.applicant_user_name,
+                    "file_name": row.file_name,
+                    "create_time": created,
+                    "content": row.content,
+                })
+            return items
+
+    @staticmethod
+    async def _document_version_file_ids(session, file: KnowledgeFile) -> list[int]:
+        """取出当前文件所属文档的全部版本文件编号.
+
+        没有版本行时只返回当前文件. 只保留同一知识库里的文件.
+        一次返回全部版本, 不翻页. 单篇文档版本数到几百时再改成分页.
+
+        Args:
+            session: 当前事务.
+            file: 用户正在打开的知识库文件.
+
+        Returns:
+            去重后的文件 ID, 至少包含当前文件.
+        """
+        current_id = int(file.id)
+        version = (
+            await session.exec(
+                select(KnowledgeDocumentVersion).where(
+                    KnowledgeDocumentVersion.knowledge_file_id == current_id
+                )
+            )
+        ).first()
+        if version is None:
+            return [current_id]
+        siblings = (
+            await session.exec(
+                select(KnowledgeDocumentVersion.knowledge_file_id).where(
+                    KnowledgeDocumentVersion.document_id == int(version.document_id)
+                )
+            )
+        ).all()
+        sibling_ids = {int(item) for item in siblings if item}
+        sibling_ids.add(current_id)
+        same_space = (
+            await session.exec(
+                select(KnowledgeFile.id).where(
+                    col(KnowledgeFile.id).in_(list(sibling_ids)),
+                    KnowledgeFile.knowledge_id == int(file.knowledge_id),
+                )
+            )
+        ).all()
+        ids = {int(item) for item in same_space if item}
+        ids.add(current_id)
+        return sorted(ids)
 
     @classmethod
     async def get_content(cls, *, login_user, correction_id: int) -> dict:

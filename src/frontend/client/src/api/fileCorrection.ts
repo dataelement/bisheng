@@ -25,6 +25,33 @@ function raiseBusinessError(payload: ApiEnvelope<unknown>): never {
     throw error;
 }
 
+export interface FileCorrectionListItem {
+    correction_id: number;
+    status: string;
+    award_kind?: string | null;
+    applicant_user_name?: string;
+    file_name?: string;
+    create_time?: string | null;
+    content?: string | null;
+}
+
+/** 这篇文档的纠错列表. 含反馈人, 说明和状态. */
+export async function listFileCorrections(fileId: string | number): Promise<FileCorrectionListItem[]> {
+    const payload = await request.get(`/api/v1/knowledge/files/${fileId}/corrections`) as ApiEnvelope<FileCorrectionListItem[]>;
+    if (payload?.status_code && payload.status_code !== 200) raiseBusinessError(payload);
+    return payload?.data ?? [];
+}
+
+export function correctionStatusLabel(status: string, awardKind?: string | null): string {
+    if (status === "pending") return "待处理";
+    if (status === "rejected") return "已拒绝";
+    if (status === "withdrawn") return "已撤回";
+    if (status === "cancelled") return "已取消";
+    if (status === "approved" && awardKind === "update") return "已采纳并更新";
+    if (status === "approved") return "已采纳";
+    return status;
+}
+
 /** 提交文档纠错. 失败时抛出带 status_code 的错误. */
 export async function submitFileCorrection(fileId: string | number, content: string): Promise<FileCorrectionRecord> {
     const payload = await request.post(`/api/v1/knowledge/files/${fileId}/corrections`, {

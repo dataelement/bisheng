@@ -24,6 +24,27 @@ class RegisterCorrectionUpdateFileBody(BaseModel):
     file_path: str = Field(min_length=1)
 
 
+@router.get("/files/{file_id}/corrections")
+async def list_file_corrections(
+    file_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """列出这篇文档的纠错和状态.
+
+    Args:
+        file_id: 知识库文件 ID.
+        login_user: 当前登录用户.
+
+    Returns:
+        纠错摘要, 含反馈人, 说明和状态.
+    """
+    data = await KnowledgeFileCorrectionService.list_for_file(
+        login_user=login_user,
+        file_id=file_id,
+    )
+    return resp_200(data)
+
+
 @router.post("/files/{file_id}/corrections")
 async def submit_file_correction(
     file_id: int,

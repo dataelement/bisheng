@@ -284,6 +284,7 @@ export default function PortalKnowledgeWorkbench() {
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>();
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
     const [correctionOpen, setCorrectionOpen] = useState(false);
+    const [correctionHistoryOpen, setCorrectionHistoryOpen] = useState(false);
     const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
@@ -849,6 +850,8 @@ export default function PortalKnowledgeWorkbench() {
         file: selectedFile,
         currentUserId: currentUser?.id,
     });
+    // 纠错历史入口先隐藏. 恢复时改回 canOpenFileCorrection.
+    const showFileCorrectionHistory = false;
     const canDownloadSelectedFile = Boolean(
         selectedFile
         && (
@@ -3194,6 +3197,14 @@ export default function PortalKnowledgeWorkbench() {
                     canDownload={canDownloadSelectedFile}
                     showCorrection={showFileCorrection}
                     onOpenCorrection={() => setCorrectionOpen(true)}
+                    showCorrectionHistory={showFileCorrectionHistory}
+                    correctionHistoryOpen={correctionHistoryOpen}
+                    onOpenCorrectionHistory={() => {
+                        setActivePanel(null);
+                        setAiDrawerOpen(false);
+                        setCorrectionHistoryOpen(true);
+                    }}
+                    onCloseCorrectionHistory={() => setCorrectionHistoryOpen(false)}
                     downloadPending={downloadPending}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}

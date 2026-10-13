@@ -5,6 +5,7 @@ import type { BusinessDomainOptionItem } from "../uploadMetadata";
 import { DocumentPreview } from "./DocumentPreview";
 import { PortalAiDrawer } from "./PortalAiDialog";
 import { PortalInfoDrawer } from "./PortalInfoDrawer";
+import { FileCorrectionHistoryDrawer } from "./FileCorrectionHistoryDrawer";
 import { ToolRail } from "./ToolRail";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -34,6 +35,10 @@ interface PortalPreviewWorkspaceProps {
     onOpenPermission: () => void;
     showCorrection?: boolean;
     onOpenCorrection?: () => void;
+    showCorrectionHistory?: boolean;
+    correctionHistoryOpen?: boolean;
+    onOpenCorrectionHistory?: () => void;
+    onCloseCorrectionHistory?: () => void;
     onOpenTags: () => void;
     onOpenEditInfo: () => void;
     onPanelChange: (panel: PanelKey | null) => void;
@@ -66,6 +71,10 @@ export function PortalPreviewWorkspace({
     onOpenPermission,
     showCorrection,
     onOpenCorrection,
+    showCorrectionHistory,
+    correctionHistoryOpen,
+    onOpenCorrectionHistory,
+    onCloseCorrectionHistory,
     onOpenTags,
     onOpenEditInfo,
     onPanelChange,
@@ -99,7 +108,7 @@ export function PortalPreviewWorkspace({
                 )}
             </div>
 
-            {!contentOverride && !aiDrawerOpen ? (
+            {!contentOverride && !aiDrawerOpen && !correctionHistoryOpen ? (
                 <PortalInfoDrawer
                     activePanel={activePanel}
                     activeSpace={activeSpace}
@@ -113,6 +122,13 @@ export function PortalPreviewWorkspace({
                     onCopyShareLink={onCopyShareLink}
                     onUpdateEncoding={onUpdateEncoding}
                     onPanelChange={onPanelChange}
+                />
+            ) : null}
+
+            {!contentOverride && !aiDrawerOpen && correctionHistoryOpen ? (
+                <FileCorrectionHistoryDrawer
+                    fileId={selectedFile.id}
+                    onClose={() => onCloseCorrectionHistory?.()}
                 />
             ) : null}
 
@@ -130,16 +146,22 @@ export function PortalPreviewWorkspace({
                 <ToolRail
                     activePanel={activePanel}
                     aiOpen={aiDrawerOpen}
+                    showCorrectionHistory={showCorrectionHistory}
+                    correctionHistoryOpen={correctionHistoryOpen}
+                    onOpenCorrectionHistory={onOpenCorrectionHistory}
                     onTogglePanel={() => {
                         onAiDrawerOpenChange(false);
+                        onCloseCorrectionHistory?.();
                         onPanelChange(activePanel ? null : "properties");
                     }}
                     onOpenAi={() => {
                         onPanelChange(null);
+                        onCloseCorrectionHistory?.();
                         onAiDrawerOpenChange(true);
                     }}
                     onOpenPanel={(panel) => {
                         onAiDrawerOpenChange(false);
+                        onCloseCorrectionHistory?.();
                         onPanelChange(panel);
                     }}
                 />
