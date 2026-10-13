@@ -347,6 +347,159 @@ async def direct(monkeypatch):
         await engine.dispose()
 
 
+@pytest.mark.parametrize("route_changed", [False, True])
+async def test_current_uploader_fallback_is_loaded_and_revalidated_before_move(direct, route_changed):
+    backend, _unit, _checkpoint, connection, _, forbidden = direct
+    async with connection() as session:
+        session.add(PersonalTestUserRow(user_id=7, user_name="original", password="test", delete=0))
+        session.add(Department(id=2, name="无绑定科室", dept_id="D2", tenant_id=1, org_level="office", status="active"))
+        session.add(UserDepartment(id=2, user_id=7, department_id=2, is_primary=1))
+        for fid in (101, 106):
+            row = await session.get(KnowledgeFile, fid)
+            row.original_uploader_id = 7
+            session.add(row)
+        await session.commit()
+    snapshot = await backend.load_snapshot(1)
+    plan = m.build_plan(snapshot, 1, ("A", "B"))
+    assert plan["candidate_files"] == 2 and plan["skipped"] == []
+    group = plan["groups"][0]
+    assert group["target_space_id"] == 20
+    assert all(entry["uploader_source"] == "user_id" for entry in group["files"])
+    unit = m.document_units(snapshot, group, plan)[0]
+    unit["folder_id"] = 200
+    if route_changed:
+        async with connection() as session:
+            membership = await session.get(UserDepartment, 2)
+            membership.department_id = 1
+            session.add(membership)
+            await session.commit()
+        with pytest.raises(m.SkipFile, match="上传人主组织、科室或科室库绑定已变化"):
+            await backend.move_unit(unit, lambda: None)
+        assert backend.store.calls == [] and "before" not in unit
+    else:
+        await backend.move_unit(unit, lambda: None)
+    async with connection() as session:
+        for fid in (101, 106):
+            row = await session.get(KnowledgeFile, fid)
+            assert row.knowledge_id == (10 if route_changed else 20)
+            assert row.user_id == 8 and row.original_uploader_id == 7
+    forbidden.assert_not_called()
+
+
+async def setup_department_target(direct):
+    from sqlmodel import select
+
+    _backend, _unit, _checkpoint, connection, _, _ = direct
+    async with connection() as session:
+        session.add(Department(id=2, name="部门", dept_id="D2", tenant_id=1, org_level="dept", status="active"))
+        office = await session.get(Department, 1)
+        office.parent_id = 2
+        session.add(office)
+        binding = await session.get(DepartmentKnowledgeSpace, 1)
+        binding.department_id = 2
+        session.add(binding)
+        scope = (await session.exec(select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == 20))).one()
+        scope.level, scope.owner_type, scope.owner_id = "department", "department", 2
+        session.add(scope)
+        await session.commit()
+
+
+@pytest.mark.parametrize("unversioned", [False, True])
+@pytest.mark.parametrize("failure", [None, "permissions", "refresh"])
+@pytest.mark.parametrize("api_sync_only", [False, True])
+async def test_department_fallback_moves_and_recovers_with_recorded_department(
+    direct, unversioned, failure, api_sync_only
+):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    if unversioned:
+        await setup_unversioned(direct)
+    await setup_department_target(direct)
+    if api_sync_only:
+        await setup_leaf_destination(direct)
+    snapshot = await backend.load_snapshot(1)
+    plan = m.build_plan(snapshot, 1, ("A", "B"), api_sync_only=api_sync_only)
+    assert plan["candidate_files"] == (1 if unversioned else 2)
+    planned = m.document_units(snapshot, plan["groups"][0], plan)[0]
+    unit.update(planned, folder_id=300 if api_sync_only else 200)
+    original_replace = backend.replace_permissions.side_effect
+    if failure == "permissions":
+
+        async def fail_replace(fid, rows):
+            await original_replace(fid, rows)
+            raise RuntimeError("permission response lost")
+
+        backend.replace_permissions.side_effect = fail_replace
+    elif failure == "refresh":
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    if failure:
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.replace_permissions.side_effect = original_replace
+        backend.refresh_metadata.side_effect = None
+        async with connection() as session:
+            membership = await session.get(UserDepartment, 1)
+            membership.is_primary = 0
+            session.add(membership)
+            await session.commit()
+        await backend.move_unit(unit, checkpoint, recover=True)
+    else:
+        await backend.move_unit(unit, checkpoint)
+    restored = failure == "permissions"
+    async with connection() as session:
+        for entry in unit["files"]:
+            row = await session.get(KnowledgeFile, entry["file_id"])
+            assert row.knowledge_id == (10 if restored else 20)
+            assert row.user_id == 8 and row.original_uploader_id == (None if restored else 8)
+            assert row.file_level_path == ("/99/98" if restored else "/300" if api_sync_only else "/199/200")
+    assert unit["status"] == ("restored" if restored else "succeeded")
+    expected_permissions = unit["before"]["permissions"] if restored else unit["desired_permissions"]
+    assert all(permissions[fid] == tuples for fid, tuples in expected_permissions.items())
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("recover", [False, True])
+@pytest.mark.parametrize("change", ["owner", "level", "binding"])
+async def test_department_fallback_rejects_target_changes_before_move_or_recovery(direct, recover, change):
+    from sqlmodel import select
+
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_department_target(direct)
+    snapshot = await backend.load_snapshot(1)
+    plan = m.build_plan(snapshot, 1)
+    unit.update(m.document_units(snapshot, plan["groups"][0], plan)[0], folder_id=200)
+    if recover:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.refresh_metadata.side_effect = None
+    async with connection() as session:
+        if change == "binding":
+            row = await session.get(DepartmentKnowledgeSpace, 1)
+            row.department_id = 1
+        else:
+            row = (await session.exec(select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == 20))).one()
+            if change == "owner":
+                row.owner_id = 1
+            else:
+                row.level, row.owner_type = "team_ks", "user"
+        session.add(row)
+        await session.commit()
+    backend.replace_permissions.reset_mock()
+    calls = len(backend.store.calls)
+    with pytest.raises(ValueError, match=r"目标部门库(范围|绑定)已变化"):
+        await backend.move_unit(unit, checkpoint, recover=recover)
+    backend.replace_permissions.assert_not_awaited()
+    assert len(backend.store.calls) == calls
+
+
+async def test_clinic_plan_cannot_accept_department_target_without_new_preview(direct):
+    backend, unit, checkpoint, _connection, _, _ = direct
+    await setup_department_target(direct)
+    with pytest.raises(ValueError, match="目标科室库范围已变化"):
+        await backend.move_unit(unit, checkpoint)
+    backend.replace_permissions.assert_not_awaited()
+
+
 async def setup_unparsed(direct, status=3, content="empty"):
     backend, _unit, _checkpoint, connection, _, _ = direct
     async with connection() as session:
@@ -365,6 +518,73 @@ async def setup_unparsed(direct, status=3, content="empty"):
         backend.store.data["milvus"] = []
     elif content == "partial":
         backend.store.data["milvus"] = backend.store.data["milvus"][:1]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("failure", [None, "before_commit", "after_commit"])
+async def test_parsed_file_with_failed_projection_requires_opt_in_and_preserves_failure(direct, enabled, failure):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    await setup_unparsed(direct, status=2, content="es_only")
+    async with connection() as session:
+        await session.delete(await session.get(KnowledgeFile, 103))
+        await session.commit()
+    for row in backend.store.data["es"]:
+        row["knowledge_ids"] = [10]
+    if enabled:
+        unit["allow_failed_projection"] = True
+    if failure == "before_commit":
+        backend.store.fail_side = "es"
+    elif failure == "after_commit":
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    if not enabled:
+        with pytest.raises(m.SkipFile, match="共享投影"):
+            await backend.move_unit(unit, checkpoint)
+        backend.replace_permissions.assert_not_awaited()
+        return
+    if failure:
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.refresh_metadata.side_effect = None
+        await backend.move_unit(unit, checkpoint, recover=True)
+    else:
+        await backend.move_unit(unit, checkpoint)
+    restored = failure == "before_commit"
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        assert row.knowledge_id == (10 if restored else 20)
+        assert (row.status, row.projection_status, row.applied_content_generation, row.applied_entry_generation) == (
+            2,
+            "failed",
+            0,
+            0,
+        )
+    assert permissions == (unit["before"]["permissions"] if restored else unit["desired_permissions"])
+    assert unit["status"] == ("restored" if restored else "succeeded")
+    assert backend.store.data["milvus"] == []
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["lease", "processing", "shared_entry", "content_generation"])
+async def test_failed_projection_opt_in_keeps_concurrency_and_shared_entry_guards(direct, change):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_unparsed(direct, status=2)
+    unit["allow_failed_projection"] = True
+    async with connection() as session:
+        if change != "shared_entry":
+            await session.delete(await session.get(KnowledgeFile, 103))
+        row = await session.get(KnowledgeFile, 101)
+        if change == "lease":
+            row.projection_lease_owner = "worker"
+        elif change == "processing":
+            row.projection_status = "processing"
+        elif change == "content_generation":
+            row.desired_content_generation = 999
+        session.add(row)
+        await session.commit()
+    with pytest.raises(m.SkipFile):
+        await backend.move_unit(unit, checkpoint)
+    assert "before" not in unit
+    backend.replace_permissions.assert_not_awaited()
 
 
 @pytest.mark.parametrize("status", [None, 3, 5, 6, 7])
@@ -422,6 +642,211 @@ async def test_unparsed_recovery_keeps_failed_projection(direct, committed):
     assert backend.store.data["milvus"] == []
 
 
+async def setup_without_manager(direct, *, content="empty", reference=False, status=3):
+    _backend, _unit, _checkpoint, connection, _, _ = direct
+    await setup_unparsed(direct, status=status, content=content)
+    async with connection() as session:
+        await session.delete(await session.get(KnowledgeFile, 103))
+        row = await session.get(KnowledgeFile, 101)
+        row.reference_document_id = 400 if reference else None
+        row.entry_type = row.entry_status = None
+        session.add(row)
+        await session.commit()
+
+
+@pytest.mark.parametrize("failure", [None, "permissions", "refresh"])
+@pytest.mark.parametrize("reference", [False, True])
+async def test_versioned_without_manager_move_and_recovery(direct, failure, reference):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    await setup_without_manager(direct, reference=reference)
+    async with connection() as session:
+        original_files = {fid: (await session.get(KnowledgeFile, fid)).model_dump() for fid in (101, 106)}
+        original_versions = [(await session.get(KnowledgeDocumentVersion, vid)).model_dump() for vid in (500, 501)]
+    if failure == "permissions":
+        replace = backend.replace_permissions.side_effect
+
+        async def lose_response(fid, rows):
+            await replace(fid, rows)
+            backend.replace_permissions.side_effect = replace
+            raise RuntimeError("permission response lost")
+
+        backend.replace_permissions.side_effect = lose_response
+    elif failure == "refresh":
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    if failure:
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+        backend.refresh_metadata.side_effect = None
+        await backend.move_unit(unit, checkpoint, recover=True)
+    else:
+        await backend.move_unit(unit, checkpoint)
+    restored = failure == "permissions"
+    assert unit["status"] == ("restored" if restored else "succeeded")
+    async with connection() as session:
+        document = await session.get(KnowledgeDocument, 400)
+        assert (document.knowledge_id, document.file_level_path, document.primary_version_id) == (
+            10 if restored else 20,
+            "/99/98" if restored else "/199/200",
+            501,
+        )
+        for fid in (101, 106):
+            row = await session.get(KnowledgeFile, fid)
+            assert (row.knowledge_id, row.file_level_path) == (document.knowledge_id, document.file_level_path)
+            for key in (
+                "status",
+                "remark",
+                "user_id",
+                "user_name",
+                "object_name",
+                "reference_document_id",
+                "entry_type",
+                "entry_status",
+                "projection_status",
+                "desired_entry_generation",
+                "applied_entry_generation",
+                "desired_content_generation",
+                "applied_content_generation",
+            ):
+                assert getattr(row, key) == original_files[fid][key]
+        assert [
+            (await session.get(KnowledgeDocumentVersion, vid)).model_dump() for vid in (500, 501)
+        ] == original_versions
+    assert permissions == (unit["before"]["permissions"] if restored else unit["desired_permissions"])
+    assert backend.store.calls == []
+    assert backend.store.data == {"es": [], "milvus": []}
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("status", [None, 5, 6, 7])
+async def test_versioned_without_manager_accepts_static_parse_states(direct, status):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_without_manager(direct, status=status)
+    await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        for fid in (101, 106):
+            row = await session.get(KnowledgeFile, fid)
+            assert row.knowledge_id == 20 and row.status == status
+            assert row.entry_type is None
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "primary",
+        "location",
+        "parsed_history",
+        "foreign_reference",
+        "inactive_manager",
+        "share",
+        "lease",
+        "approval",
+        "content",
+        "missing_version_file",
+    ],
+)
+async def test_versioned_without_manager_rejects_invalid_or_busy_state(direct, change):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_without_manager(direct)
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 106)
+        if change == "primary":
+            row = await session.get(KnowledgeDocument, 400)
+            row.primary_version_id = 500
+        elif change == "location":
+            row = await session.get(KnowledgeDocument, 400)
+            row.knowledge_id = 30
+        elif change == "parsed_history":
+            row.status = 2
+        elif change == "foreign_reference":
+            row.reference_document_id = 999
+        elif change == "inactive_manager":
+            row.reference_document_id, row.entry_type, row.entry_status = 400, "manager", "deleted"
+        elif change == "share":
+            session.add(
+                KnowledgeFile(
+                    id=103,
+                    knowledge_id=30,
+                    tenant_id=1,
+                    file_name="share.pdf",
+                    reference_document_id=400,
+                    entry_type="share",
+                    entry_status="active",
+                    status=3,
+                )
+            )
+        elif change == "lease":
+            row.projection_lease_owner = "worker"
+        elif change == "approval":
+            session.add(
+                ApprovalInstance(
+                    tenant_id=1,
+                    scenario_code="file_move",
+                    scenario_name="迁移",
+                    handler_key="file_move",
+                    business_key="test",
+                    business_resource_type="knowledge_file",
+                    business_resource_id="101",
+                    business_name="test",
+                    applicant_user_id=8,
+                    applicant_user_name="test",
+                    status="pending",
+                )
+            )
+        elif change == "content":
+            backend.store.data["es"] = Store().data["es"]
+        elif change == "missing_version_file":
+            await session.delete(row)
+        if change != "missing_version_file":
+            session.add(row)
+        await session.commit()
+    with pytest.raises(ValueError):
+        await backend.move_unit(unit, checkpoint, force_rewrite=True)
+    assert "before" not in unit
+    backend.replace_permissions.assert_not_awaited()
+    assert backend.store.calls == []
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == 10
+
+
+async def test_versioned_without_manager_rejects_new_content_before_commit(direct):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_without_manager(direct)
+    read = backend.store.read
+    calls = 0
+
+    async def new_content(side, ids):
+        nonlocal calls
+        calls += 1
+        if calls == 3:
+            backend.store.data["es"] = Store().data["es"]
+        return await read(side, ids)
+
+    backend.store.read = new_content
+    with pytest.raises(RuntimeError, match="同步后分块或向量发生变化"):
+        await backend.move_unit(unit, checkpoint)
+    assert "before" in unit
+    assert backend.store.calls == []
+    async with connection() as session:
+        assert (await session.get(KnowledgeDocument, 400)).knowledge_id == 10
+
+
+async def test_versioned_without_manager_recovery_refuses_activated_entry(direct):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_without_manager(direct)
+    backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        row.reference_document_id, row.entry_type, row.entry_status = 400, "manager", "active"
+        session.add(row)
+        await session.commit()
+    backend.replace_permissions.reset_mock()
+    with pytest.raises(ValueError, match="入口发生变化"):
+        await backend.move_unit(unit, checkpoint, recover=True)
+    backend.replace_permissions.assert_not_awaited()
+
+
 async def setup_unversioned(direct):
     backend, unit, _checkpoint, connection, _, _ = direct
     await setup_unparsed(direct)
@@ -439,6 +864,161 @@ async def setup_unversioned(direct):
         await session.commit()
     unit.update(document_id=-101, unversioned=True, files=unit["files"][:1])
     backend.store.read = AsyncMock(side_effect=AssertionError("unversioned file has no canonical index"))
+
+
+async def setup_leaf_destination(direct):
+    _backend, unit, _checkpoint, connection, _, _ = direct
+    async with connection() as session:
+        session.add(
+            KnowledgeFile(id=300, knowledge_id=20, tenant_id=1, file_name="B", file_type=0, file_level_path="", level=0)
+        )
+        await session.commit()
+    unit.update(api_sync_only=True, folder_id=300, folder_parts=["B"], folder_name="B")
+    for item in unit["files"]:
+        item.update(folder_parts=["A", "B"], target_folder_parts=["B"])
+
+
+@pytest.mark.parametrize("kind", ["canonical", "without_manager", "unversioned"])
+@pytest.mark.parametrize("stage", ["normal", "source_changed", "recovery_source_changed"])
+async def test_api_sync_scope_is_rechecked_under_lock_and_during_recovery(direct, kind, stage):
+    backend, unit, checkpoint, connection, permissions, forbidden = direct
+    if kind == "without_manager":
+        await setup_without_manager(direct)
+    elif kind == "unversioned":
+        await setup_unversioned(direct)
+    await setup_leaf_destination(direct)
+    if stage == "normal":
+        await backend.move_unit(unit, checkpoint)
+        assert unit["status"] == "succeeded"
+        async with connection() as session:
+            for item in unit["files"]:
+                row = await session.get(KnowledgeFile, item["file_id"])
+                assert row.knowledge_id == 20
+                assert row.file_level_path == "/300" and row.level == 1
+                assert row.user_id == row.original_uploader_id == 8
+                assert row.user_metadata == {"filelib_sync_endpoint": "knowhow"}
+        forbidden.assert_not_called()
+        return
+    if stage == "recovery_source_changed":
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+        with pytest.raises(RuntimeError):
+            await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 101)
+        row.user_metadata = {}
+        session.add(row)
+        await session.commit()
+    saved_permissions = deepcopy(permissions)
+    backend.replace_permissions.reset_mock()
+    with pytest.raises(m.SkipFile, match="不再标记为接口同步"):
+        await backend.move_unit(unit, checkpoint, recover=stage == "recovery_source_changed")
+    backend.replace_permissions.assert_not_awaited()
+    assert permissions == saved_permissions
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == (20 if "recovery" in stage else 10)
+
+
+@pytest.mark.parametrize("kind", ["canonical", "without_manager", "unversioned"])
+@pytest.mark.parametrize("committed", [False, True])
+async def test_api_sync_leaf_destination_recovery_preserves_source_and_target(direct, kind, committed):
+    backend, unit, checkpoint, connection, permissions, _ = direct
+    if kind == "without_manager":
+        await setup_without_manager(direct)
+    elif kind == "unversioned":
+        await setup_unversioned(direct)
+    await setup_leaf_destination(direct)
+    if committed:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    else:
+        replace = backend.replace_permissions.side_effect
+
+        async def lost_response(fid, rows):
+            await replace(fid, rows)
+            backend.replace_permissions.side_effect = replace
+            raise RuntimeError("permission response lost")
+
+        backend.replace_permissions.side_effect = lost_response
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    backend.refresh_metadata.side_effect = None
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == ("succeeded" if committed else "restored")
+    async with connection() as session:
+        for item in unit["files"]:
+            row = await session.get(KnowledgeFile, item["file_id"])
+            assert (row.knowledge_id, row.file_level_path, row.level) == (
+                (20, "/300", 1) if committed else (10, "/99/98", 2)
+            )
+        if kind != "unversioned":
+            document = await session.get(KnowledgeDocument, 400)
+            assert (document.knowledge_id, document.file_level_path, document.level) == (
+                (20, "/300", 1) if committed else (10, "/99/98", 2)
+            )
+    expected_permissions = unit["desired_permissions"] if committed else unit["before"]["permissions"]
+    assert {fid: permissions[fid] for fid in expected_permissions} == expected_permissions
+    assert unit["desired_permissions"]["101"][1]["user"] == "folder:300"
+
+
+@pytest.mark.parametrize("which", ["source", "target"])
+async def test_api_sync_leaf_mode_still_rechecks_full_source_and_target_names(direct, which):
+    backend, unit, checkpoint, connection, _, _ = direct
+    await setup_leaf_destination(direct)
+    async with connection() as session:
+        row = await session.get(KnowledgeFile, 99 if which == "source" else 300)
+        row.file_name = "changed"
+        session.add(row)
+        await session.commit()
+    with pytest.raises(m.SkipFile, match=r"目录.*变化"):
+        await backend.move_unit(unit, checkpoint)
+    backend.replace_permissions.assert_not_awaited()
+
+
+@pytest.mark.parametrize("unversioned", [False, True])
+async def test_api_sync_leaf_destination_never_overwrites_same_name_file(direct, unversioned):
+    backend, unit, checkpoint, connection, _, _ = direct
+    if unversioned:
+        await setup_unversioned(direct)
+    await setup_leaf_destination(direct)
+    async with connection() as session:
+        session.add(
+            KnowledgeFile(
+                id=999,
+                knowledge_id=20,
+                tenant_id=1,
+                file_name="101.pdf",
+                file_level_path="/300",
+                level=1,
+                status=3,
+                object_name="keep-existing",
+            )
+        )
+        await session.commit()
+    if unversioned:
+        with pytest.raises(m.SkipFile, match="同名"):
+            await backend.move_unit(unit, checkpoint)
+    else:
+        await backend.move_unit(unit, checkpoint)
+        assert unit["status"] == "skipped" and unit["reason_code"] == "target_file_conflict"
+    assert "before" not in unit
+    backend.replace_permissions.assert_not_awaited()
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == 10
+        assert (await session.get(KnowledgeFile, 999)).object_name == "keep-existing"
+
+
+async def test_api_sync_legacy_recovery_keeps_full_target_from_report(direct):
+    backend, unit, checkpoint, connection, _, _ = direct
+    unit["api_sync_only"] = True
+    for item in unit["files"]:
+        item["folder_parts"] = ["A", "B"]
+    backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    backend.refresh_metadata.side_effect = None
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == "succeeded"
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).file_level_path == "/199/200"
 
 
 @pytest.mark.parametrize("change", ["parsing", "rebuilding", "lease", "content", "new_chunks"])

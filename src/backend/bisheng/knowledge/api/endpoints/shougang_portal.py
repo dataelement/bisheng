@@ -422,6 +422,14 @@ async def get_shougang_portal_home_stats(
     return resp_200(ShougangPortalHomeStatsResp(**result, total_files=total_files).model_dump(mode="json"))
 
 
+@router.get("/home/favorite-count")
+async def get_shougang_portal_home_favorite_count(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    _ = login_user
+    return resp_200({"favorite_count": await PortalTelemetryEventService.count_dashboard_favorites()})
+
+
 @router.get("/files/{space_id}/{file_id}/preview")
 async def get_shougang_portal_file_preview(
     space_id: int,

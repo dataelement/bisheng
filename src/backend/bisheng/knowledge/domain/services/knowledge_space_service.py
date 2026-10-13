@@ -8104,8 +8104,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file,
             required_capability="can_view",
         )
-        if resolved is not None and not resolved.projection_ready:
-            return {"data": [], "total": 0}
         if resolved is None or resolved.canonical_document_id is None or resolved.canonical_version_id is None:
             raise KnowledgeChunkError()
         from bisheng.core.search.elasticsearch.manager import get_es_connection
@@ -10447,9 +10445,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         KnowledgeFileEntryType.PUBLISH.value,
                         KnowledgeFileEntryType.SHARE.value,
                     }
-                    and file.projection_status == KnowledgeFileProjectionStatus.READY.value
-                    and file.applied_content_generation >= file.desired_content_generation
-                    and file.applied_entry_generation >= file.desired_entry_generation
                 )
             )
         ]
@@ -15859,7 +15854,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "reference_document_id",
             None,
         )
-        distribution_ready = document_id is None or (
+        distribution_active = document_id is None or (
             getattr(file_record, "entry_status", None) == KnowledgeFileEntryStatus.ACTIVE.value
             and getattr(file_record, "entry_type", None)
             in {
@@ -15867,46 +15862,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 KnowledgeFileEntryType.PUBLISH.value,
                 KnowledgeFileEntryType.SHARE.value,
             }
-            and getattr(file_record, "projection_status", None) == KnowledgeFileProjectionStatus.READY.value
-            and KnowledgeSpaceService._coerce_int(
-                getattr(
-                    file_record,
-                    "applied_content_generation",
-                    0,
-                ),
-                0,
-            )
-            >= KnowledgeSpaceService._coerce_int(
-                getattr(
-                    file_record,
-                    "desired_content_generation",
-                    0,
-                ),
-                0,
-            )
-            and KnowledgeSpaceService._coerce_int(
-                getattr(
-                    file_record,
-                    "applied_entry_generation",
-                    0,
-                ),
-                0,
-            )
-            >= KnowledgeSpaceService._coerce_int(
-                getattr(
-                    file_record,
-                    "desired_entry_generation",
-                    0,
-                ),
-                0,
-            )
         )
         return (
             KnowledgeSpaceService._coerce_int(getattr(file_record, "knowledge_id", 0), 0) == int(space_id)
             and KnowledgeSpaceService._coerce_int(getattr(file_record, "file_type", -1), -1) == FileType.FILE.value
             and KnowledgeSpaceService._coerce_int(getattr(file_record, "status", -1), -1)
             == KnowledgeFileStatus.SUCCESS.value
-            and distribution_ready
+            and distribution_active
         )
 
     @staticmethod

@@ -6,7 +6,7 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ### `move_personal_files_to_clinic.py`
 
-扫描指定租户的全部有效个人知识库，将指定完整目录路径（含子目录）中的文件，按上传人的主组织迁入最近科室绑定的科室库。独立单文件脚本，运行依赖当前后端环境。
+扫描指定租户的全部有效个人知识库，将指定完整目录路径（含子目录）中的文件，按上传人的主组织迁入科室库，找不到时兜底部门库。独立单文件脚本，运行依赖当前后端环境。
 
 ```bash
 # 在 src/backend 下执行；默认只读预览并输出 JSON 报告。
@@ -24,18 +24,27 @@ This directory contains manual maintenance and migration scripts for the backend
 # 省略 --folder-path 或传 /：扫描全部个人库文件，包括根目录文件。
 .venv/bin/python scripts/move_personal_files_to_clinic.py --tenant-id 1
 
+# 扫描全部个人库，只迁移接口同步文件；先预览，目标仅保留文件直接所在目录名。
+.venv/bin/python scripts/move_personal_files_to_clinic.py --tenant-id 1 --api-sync-only
+.venv/bin/python scripts/move_personal_files_to_clinic.py \
+  --tenant-id 1 --api-sync-only --operator-id 123 --apply
+
 # 修复中断的索引与权限；使用 recovery 子目录的文件，不同时传 --folder-path。
 .venv/bin/python scripts/move_personal_files_to_clinic.py \
   --tenant-id 1 --operator-id 123 --apply --recover-report migration_reports/personal_to_clinic/recovery/报告.json
 ```
 
-- 目录名称精确匹配，保留相对个人库根目录的完整路径。例如筛选 `A/B`，`A/B/C/文件.pdf` 迁入目标科室库的 `A/B/C/文件.pdf`。目标目录逐层复用或创建，源空目录保留。
-- 优先 `original_uploader_id`，缺失时使用 `user_id`；原始上传人已记录但用户无效时不回退。仅使用唯一主组织，沿父级取最近的 `org_level=office`，不使用兼任组织，也不越过“未绑定科室库”的最近科室寻找更高层科室。
+- 目录名称精确匹配，包含子目录。普通模式保留完整相对路径，例如筛选 `A/B`，`A/B/C/文件.pdf` 迁入目标科室库的 `A/B/C/文件.pdf`。接口同步模式只取文件直接所在目录名，同一文件迁入目标科室库的 `C/文件.pdf`；个人库根目录文件迁入科室库根目录。源空目录保留。
+- 查找顺序：原始上传人 `original_uploader_id` 的科室库 → 当前上传人 `user_id` 的科室库 → 原始上传人的部门库 → 当前上传人的部门库。两人的科室库都匹配失败后才进入部门库兜底；两人相同不重复匹配同类库，全部失败则跳过并记录原因，不改写已有上传人字段。每次仅使用唯一主组织，沿父级取最近的 `org_level=office` 或 `org_level=dept`，不使用兼任组织，也不越过“未绑定对应知识库”的最近科室/部门寻找更高层同类组织。预览和执行前复核使用相同规则，匹配来源或目标变化仍拒绝迁移。
+- `--api-sync-only` 仅选择 `user_metadata.filelib_sync_endpoint` 或 `user_metadata.external_file_id` 非空的文件，与项目“接口同步”判定一致；省略 `--folder-path` 遍历全部个人库目录，也可继续指定完整来源路径缩小范围。目标库根下复用或创建文件直接所在目录；不同完整来源路径的同名直接目录合并到同一目标目录，文件重名仍跳过，不覆盖。非接口文件不记录；版本链含非接口文件则整链跳过，只记录命中的接口文件及原因。来源完整路径和目标目录分别复核；报告仍记录完整来源目录。恢复按报告中已记录的目标路径处理，旧报告不重新改目录；恢复命令无需再次传入开关。普通模式保持不变。
 - 科室库必须有该科室的绑定，范围为 `team_ks` 或兼容旧版 `team`，且 `owner_type=user`；排除未发布库和收藏库。多个有效目标按知识库 ID 升序取第一个，不自动创建知识库。多租户部署必须指定 `--tenant-id`，只处理该租户。
+- 部门库必须有该部门的绑定，范围为 `department`、`owner_type=department`，且 `owner_id` 与绑定部门 ID 一致；同样排除未发布库和收藏库，多个有效库按 ID 升序选首个，不自动创建库。迁移单元记录 `department_id`，执行及恢复时复核范围和绑定；旧科室库报告仍只接受原科室库类型，不会因本规则改投部门库。
 - 原地迁移，保留文件、文档、版本 ID、原对象、上传人、分块及向量，不重新解析、不提交 Celery 解析任务；补齐缺失原始上传归属。其他发布/共享入口保留。文件权限调整为目标库所有者和目标目录（根文件为目标库）父关系，原文件上的其他直接授权被替换；未完成单元的原权限保留在独立恢复文件中。
 - `--use-operator-as-file-owner` 默认关闭，仅在目标库所有者不存在或禁用时，用已校验的 `--operator-id` 接管迁移文件的权限 owner；有效库所有者仍优先使用。不会修改文件上传人或科室库所有者，其他校验不跳过，且与只修复索引的 `--force-rewrite` 独立。恢复自动沿用报告记录的权限所有者，无需再次传此开关，也不随本次 `--operator-id` 更换；原库所有者 ID 已变化或记录的权限所有者失效时拒绝恢复。
 - 支持解析成功、解析失败（3）、等待解析（5）、解析超时（6）、内容违规（7）及空状态的文件，无需新增参数。保留原解析状态、失败原因和投影状态，不重新解析、不把未完成投影标记为成功。正在解析（1）、正在重建（4）或持有投影任务锁的文件暂缓并记录原因，任务结束后重新运行。未知状态仍跳过。
 - 已有规范文档的文件按完整版本链迁移；主版本未解析成功时允许共享索引为空或仅有部分分块，只更新已有分块归属并读回校验，不补建分块。尚无版本链且无文档引用/入口的未解析原始文件只迁移文件归属、目录和权限，不创建文档或索引。成功文件仍严格要求投影和两侧内容完整，已有损坏版本链不会自动补建。
+- 已有版本链但尚无管理入口的未解析文件也可迁移，无需新增参数：要求版本链完整、主版本唯一且与文档位置一致，所有版本均未解析成功、没有发布/共享或失效入口，ES/Milvus 均无共享内容。一起迁移文档及全部版本文件，保留解析/投影状态，不补建管理入口。无管理入口但已有共享内容的异常状态仍记录原因并跳过；`--force-rewrite` 不绕过该检查。
+- `--allow-failed-projection` 默认关闭。仅允许解析成功但投影为 `failed`、且只有一个管理入口的静止文档做归属迁移；保留失败状态及 applied 代次，允许已有共享内容为空或不完整，不补建内容。存在发布/共享入口、执行租约、内容代次异常或解析/投影执行中的文档仍拒绝。选项记录在恢复单元中，不会将旧恢复记录自动放宽。
 - 仍要求共享存储初始化且使用维护窗口。没有上传人、主组织、科室或科室库，版本链不完整/目标不一致，投影正在执行或代次不一致、审批中等均不迁移并记录；同名或相同 MD5 的目标文件不覆盖。预览给出候选及筛选跳过原因；外部索引、权限、审批和即时冲突在正式执行逐文档复核。
 - 报告默认写入 `migration_reports/personal_to_clinic/`，可用 `--report-dir` 指定。主 JSON 只列出“匹配目录但未完成迁移”的文件，每项仅包含 `file_id`（文件 ID）、`file_name`（文件名）、`source_space_id`（来源库）、`source_folder`（原目录）、`reason`（未迁移原因）。成功和未匹配文件不记录，无异常时为 `[]`；预览仅列筛选不通过项，不将仅预览的候选记为失败。无法确认属于指定路径的损坏目录不列入该路径的报告。
 - `recovery/` 子目录仅保存尚未完成迁移的必要恢复状态；成功单元、完整计划和堆栈不落盘。用其文件执行 `--recover-report` 后会更新主报告；恢复到原库的文件仍记录“已恢复至原库，未迁移”，恢复后成功迁入的文件从主报告移除。兼容读取此前的完整恢复报告。主报告和恢复文件权限均为 `0600`。
@@ -2233,3 +2242,16 @@ bash scripts/backfill_space_file_points.sh \
 ```
 
 [完整口径、正式迁移、对账和回退步骤](knowledge_document_statistics_migration.md)。
+
+### `backfill_portal_favorite_statistics.py`
+
+根据真实收藏引用的创建时间补齐收藏日统计。默认只读；仅补指定历史截止日前、来源快照有效且同文件同日没有既有收藏日统计的引用。未知来源和已存在日统计均报告跳过原因，旧成功请求不直接当作新增。记录使用稳定引用 ID，重复执行不会重复计数，既有统计不会被覆盖。
+
+```bash
+# 在 src/backend 执行，只读预览。
+.venv/bin/python scripts/backfill_portal_favorite_statistics.py \
+  --tenant-id 1 --created-before 2026-09-01 --reference-id 103442 \
+  --report /tmp/favorite-backfill-preview.json
+```
+
+审核报告并进入受控维护窗口后才增加 `--apply`。写入必须指定已核对的 `--reference-id`；脚本逐项检查写入并读回验证。回填使用当前来源的分类/组织维度和真实创建日期；无法证明的已删除历史引用不猜测补录。

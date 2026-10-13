@@ -78,6 +78,209 @@ def test_missing_original_uploader_falls_back_to_current(snapshot):
 
 
 @pytest.mark.parametrize(
+    "failure",
+    ["missing_user", "disabled_user", "no_primary", "multiple_primary", "no_office", "cycle", "archived", "no_clinic"],
+)
+def test_original_route_failure_falls_back_to_current_clinic(snapshot, failure):
+    snapshot["departments"].append(NS(id=70, parent_id=None, status="active", org_level="office"))
+    snapshot["memberships"][0].department_id = 70
+    if failure == "missing_user":
+        snapshot["users"] = snapshot["users"][1:]
+    elif failure == "disabled_user":
+        snapshot["users"][0].delete = 1
+    elif failure == "no_primary":
+        snapshot["memberships"][0].is_primary = 0
+    elif failure == "multiple_primary":
+        snapshot["memberships"].append(NS(user_id=7, department_id=6, is_primary=1))
+    elif failure in {"no_office", "cycle"}:
+        snapshot["departments"][-1].org_level = "dept"
+        if failure == "cycle":
+            snapshot["departments"][-1].parent_id = 70
+    elif failure == "archived":
+        snapshot["departments"][-1].status = "archived"
+    plan = m.build_plan(snapshot, 1)
+    assert plan["skipped"] == [] and plan["candidate_files"] == 1
+    entry = plan["groups"][0]["files"][0]
+    assert entry["target_space_id"] == 20
+    assert entry["uploader_id"] == 8 and entry["uploader_source"] == "user_id"
+    assert snapshot["files"][-1].original_uploader_id == 7
+
+
+def test_valid_original_clinic_wins_over_different_current_clinic(snapshot):
+    snapshot["departments"].append(NS(id=70, parent_id=None, status="active", org_level="office"))
+    snapshot["memberships"][0].department_id = 70
+    snapshot["bindings"].append(NS(space_id=21, department_id=70))
+    entry = m.build_plan(snapshot, 1)["groups"][0]["files"][0]
+    assert entry["target_space_id"] == 21 and entry["uploader_id"] == 7
+    assert entry["uploader_source"] == "original_uploader_id"
+
+
+@pytest.mark.parametrize("current_id", [None, 7, 8])
+def test_no_clinic_for_either_uploader_is_still_skipped(snapshot, current_id):
+    snapshot["bindings"] = []
+    snapshot["files"][-1].user_id = current_id
+    plan = m.build_plan(snapshot, 1)
+    assert plan["candidate_files"] == 0
+    assert plan["skipped"][0]["reason_code"] == "missing_clinic"
+    if current_id == 8:
+        assert "当前上传人" in plan["skipped"][0]["reason"]
+
+
+@pytest.fixture
+def department_snapshot(snapshot):
+    snapshot["spaces"].extend(NS(id=i, tenant_id=1, name=str(i)) for i in (30, 31, 32))
+    snapshot["departments"][1].parent_id = 70
+    snapshot["departments"].extend(
+        [
+            NS(id=70, parent_id=None, status="active", org_level="dept"),
+            NS(id=80, parent_id=90, status="active", org_level="office"),
+            NS(id=90, parent_id=None, status="active", org_level="dept"),
+        ]
+    )
+    snapshot["memberships"][1].department_id = 80
+    snapshot["bindings"] = [NS(space_id=20, department_id=5), NS(space_id=21, department_id=80)]
+    for sid, did in ((30, 70), (31, 90), (32, 90)):
+        snapshot["scopes"].append(NS(space_id=sid, level="department", owner_type="department", owner_id=did))
+        snapshot["bindings"].append(NS(space_id=sid, department_id=did))
+    return snapshot
+
+
+@pytest.mark.parametrize("stage,target,uploader", [(0, 20, 7), (1, 21, 8), (2, 30, 7), (3, 31, 8)])
+def test_department_fallback_runs_only_after_both_clinic_routes(department_snapshot, stage, target, uploader):
+    snapshot = department_snapshot
+    removed = {20, 21, 30}
+    snapshot["bindings"] = [b for b in snapshot["bindings"] if b.space_id not in set(sorted(removed)[:stage])]
+    plan = m.build_plan(snapshot, 1)
+    assert plan["candidate_files"] == 1 and plan["skipped"] == []
+    entry = plan["groups"][0]["files"][0]
+    assert entry["target_space_id"] == target and entry["uploader_id"] == uploader
+    assert entry["uploader_source"] == ("original_uploader_id" if uploader == 7 else "user_id")
+    if stage >= 2:
+        assert entry["department_id"] == (70 if uploader == 7 else 90)
+        assert entry["office_id"] is None
+
+
+@pytest.mark.parametrize("invalid", ["binding", "owner_type", "owner_id", "inactive", "missing_space"])
+def test_department_fallback_rejects_invalid_bound_department_space(department_snapshot, invalid):
+    snapshot = department_snapshot
+    snapshot["files"][-1].user_id = None
+    snapshot["bindings"] = [b for b in snapshot["bindings"] if b.space_id == 30]
+    if invalid == "binding":
+        snapshot["bindings"] = []
+    elif invalid in {"owner_type", "owner_id"}:
+        scope = next(s for s in snapshot["scopes"] if s.space_id == 30)
+        setattr(scope, invalid, "user" if invalid == "owner_type" else 90)
+    elif invalid == "inactive":
+        next(d for d in snapshot["departments"] if d.id == 70).status = "archived"
+    else:
+        snapshot["spaces"] = [s for s in snapshot["spaces"] if s.id != 30]
+    plan = m.build_plan(snapshot, 1)
+    assert plan["candidate_files"] == 0 and len(plan["skipped"]) == 1
+    assert "部门库" in plan["skipped"][0]["reason"]
+
+
+def test_department_fallback_can_resolve_primary_department_without_office(department_snapshot):
+    snapshot = department_snapshot
+    snapshot["memberships"][0].department_id = 70
+    snapshot["bindings"] = [b for b in snapshot["bindings"] if b.space_id >= 30]
+    entry = m.build_plan(snapshot, 1)["groups"][0]["files"][0]
+    assert entry["target_space_id"] == 30 and entry["department_id"] == 70
+
+
+def test_department_fallback_never_bypasses_unbound_nearest_department(department_snapshot):
+    snapshot = department_snapshot
+    snapshot["files"][-1].user_id = None
+    next(d for d in snapshot["departments"] if d.id == 5).org_level = "dept"
+    snapshot["bindings"] = [b for b in snapshot["bindings"] if b.space_id >= 30]
+    plan = m.build_plan(snapshot, 1)
+    assert plan["candidate_files"] == 0
+    assert "最近部门未绑定有效部门库" in plan["skipped"][0]["reason"]
+
+
+def test_plan_keeps_versioned_unparsed_file_without_manager(snapshot):
+    row = snapshot["files"][-1]
+    row.status = 3
+    row.entry_type = row.entry_status = None
+    row.reference_document_id = None
+    plan = m.build_plan(snapshot, 1, ("A", "B"))
+    assert plan["candidate_files"] == 1 and plan["skipped"] == []
+    entry = plan["groups"][0]["files"][0]
+    assert entry["document_id"] == 100 and not entry.get("unversioned")
+
+
+@pytest.mark.parametrize("metadata", [{"filelib_sync_endpoint": "sync"}, {"external_file_id": "old-id"}])
+def test_api_sync_filter_uses_portal_source_and_original_uploader(snapshot, metadata):
+    snapshot["files"][-1].user_metadata = metadata
+    snapshot["files"].append(file(102, user_metadata={}))
+    snapshot["versions"].append(NS(document_id=102, knowledge_file_id=102))
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert plan["candidate_files"] == 1 and plan["skipped"] == []
+    group = plan["groups"][0]
+    assert group["folder_parts"] == ["B"]
+    assert group["files"][0]["folder_parts"] == ["A", "B"]
+    assert group["files"][0]["file_id"] == 101
+    assert group["files"][0]["uploader_id"] == 7
+    assert m.document_units(snapshot, group, plan)[0]["api_sync_only"] is True
+    assert m.build_plan(snapshot, 1)["candidate_files"] == 2
+
+
+@pytest.mark.parametrize("metadata", [None, {}, "sync", {"filelib_sync_endpoint": "", "external_file_id": None}])
+def test_api_sync_filter_does_not_report_other_sources(snapshot, metadata):
+    snapshot["files"][-1].user_metadata = metadata
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert plan["candidate_files"] == 0 and plan["skipped"] == []
+
+
+def test_api_sync_filter_never_moves_manual_version_in_same_chain(snapshot):
+    snapshot["files"][-1].user_metadata = {"external_file_id": "api-id"}
+    snapshot["files"].append(file(102, user_metadata={}))
+    snapshot["versions"].append(NS(document_id=100, knowledge_file_id=102))
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert plan["candidate_files"] == 0
+    assert [row["file_id"] for row in plan["skipped"]] == [101]
+    assert plan["skipped"][0]["reason_code"] == "incomplete_version_chain"
+    assert "非接口同步" in plan["skipped"][0]["reason"]
+
+
+def test_api_sync_folders_merge_by_direct_parent_and_keep_source_report(snapshot):
+    snapshot["files"][-1].user_metadata = {"external_file_id": "1"}
+    snapshot["files"].extend(
+        [
+            file(3, file_type=0, file_name="X", file_level_path="", level=0),
+            file(4, file_type=0, file_name="B", file_level_path="/3", level=1),
+            file(102, file_level_path="/3/4", user_metadata={"external_file_id": "2"}),
+        ]
+    )
+    snapshot["versions"].append(NS(document_id=102, knowledge_file_id=102))
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert len(plan["groups"]) == 1 and plan["groups"][0]["folder_parts"] == ["B"]
+    entries = plan["groups"][0]["files"]
+    report = {"plan": plan, "status": "failed", "error": "interrupted"}
+    assert {r["source_folder"] for r in m.unmigrated_files(report)} == {"A/B", "X/B"}
+    assert {tuple(e["target_folder_parts"]) for e in entries} == {("B",)}
+    filtered = m.build_plan(snapshot, 1, ("A", "B"), api_sync_only=True)
+    assert filtered["candidate_files"] == 1
+    assert filtered["groups"][0]["folder_parts"] == ["B"]
+
+
+def test_api_sync_root_file_targets_clinic_root(snapshot):
+    row = snapshot["files"][-1]
+    row.user_metadata = {"external_file_id": "root"}
+    row.file_level_path, row.level = "", 0
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert plan["candidate_files"] == 1
+    assert plan["groups"][0]["folder_parts"] == []
+
+
+def test_api_sync_leaf_folder_conflict_is_checked_at_clinic_root(snapshot):
+    snapshot["files"][-1].user_metadata = {"external_file_id": "1"}
+    snapshot["files"].append(file(200, knowledge_id=20, file_name="B", file_level_path="", level=0))
+    plan = m.build_plan(snapshot, 1, api_sync_only=True)
+    assert plan["candidate_files"] == 0
+    assert plan["skipped"][0]["reason_code"] == "target_folder_conflict"
+
+
+@pytest.mark.parametrize(
     "case,code",
     [
         ("no_user", "unavailable_uploader"),
@@ -95,6 +298,8 @@ def test_missing_original_uploader_falls_back_to_current(snapshot):
     ],
 )
 def test_each_ineligible_file_has_reason(snapshot, case, code):
+    # 单独验证原始上传人的失败原因。
+    snapshot["files"][-1].user_id = None
     if case == "no_user":
         snapshot["files"][-1].original_uploader_id = 999
     elif case == "no_primary":
@@ -145,6 +350,7 @@ def test_unversioned_failed_file_gets_its_own_unit(snapshot):
 
 
 def test_nearest_office_without_binding_does_not_use_higher_office_or_secondary(snapshot):
+    snapshot["files"][-1].user_id = None
     snapshot["departments"][0].org_level = "office"
     snapshot["memberships"].append(NS(user_id=7, department_id=5, is_primary=0))
     plan = m.build_plan(snapshot, 1, ())
@@ -208,6 +414,30 @@ def arguments(apply=False):
     )
 
 
+async def test_api_sync_cli_scans_all_personal_folders_and_keeps_recovery_filter(snapshot, tmp_path):
+    snapshot["files"][-1].user_metadata = {"filelib_sync_endpoint": "sync"}
+    snapshot["files"].append(file(102, user_metadata={}))
+    snapshot["versions"].append(NS(document_id=102, knowledge_file_id=102))
+    args = m.parse_args(["--tenant-id", "1", "--api-sync-only", "--apply", "--operator-id", "1"])
+    assert args.folder_parts == ()
+    backend, path = FakeBackend(snapshot), tmp_path / "sync.json"
+
+    async def fail(unit, checkpoint, **kwargs):
+        unit["before"] = {"files": []}
+        checkpoint()
+        raise RuntimeError("simulated failure")
+
+    backend.move_unit.side_effect = fail
+    assert await m.execute(args, backend, path) == 2
+    assert backend.move_unit.await_count == 1
+    saved = json.loads((tmp_path / "recovery" / "sync.json").read_text())
+    assert saved["units"][0]["api_sync_only"] is True
+    assert saved["units"][0]["folder_parts"] == ["B"]
+    assert backend.ensure_folder.await_args.args[2] == ["B"]
+    assert json.loads(path.read_text())[0]["source_folder"] == "A/B"
+    assert [row["file_id"] for row in json.loads(path.read_text())] == [101]
+
+
 async def test_owner_fallback_flag_is_applied_only_after_operator_validation(snapshot, tmp_path):
     args = arguments(True)
     assert args.use_operator_as_file_owner is False
@@ -266,7 +496,7 @@ async def test_failed_file_does_not_block_other_file_in_same_folder(snapshot, tm
 
 
 async def test_preview_only_lists_matched_ineligible_files(snapshot, tmp_path):
-    snapshot["files"] += [file(102, original_uploader_id=999), file(103, file_level_path="", level=0)]
+    snapshot["files"] += [file(102, original_uploader_id=999, user_id=None), file(103, file_level_path="", level=0)]
     path = tmp_path / "report.json"
     await m.execute(arguments(), FakeBackend(snapshot), path)
     assert json.loads(path.read_text()) == [

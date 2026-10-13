@@ -342,7 +342,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         scope: RetrievalScope,
         canonical_document_ids: Sequence[CanonicalDocumentId],
     ) -> tuple[CanonicalGenerationConstraint, ...]:
-        """Resolve exact current shared projection identities for Top-K candidates."""
+        """生成实际命中必须满足的当前身份；同步回写进度不阻断读取。"""
         self._resolver_settings()
         document_ids = sorted({int(item) for item in canonical_document_ids if int(item) > 0})
         if not document_ids:
@@ -381,8 +381,6 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
             ]
             if not requested_entries:
                 continue
-            for entry in requested_entries:
-                self._require_projection_ready(entry)
             content_generation = int(document.content_generation or 0)
             membership_generation = max(
                 [content_generation]
@@ -468,10 +466,10 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         entry_batch_checker=None,
         strict_explicit: bool = False,
         skip_unready: bool = False,
-        require_projection_ready: bool = True,
+        require_projection_ready: bool = False,
         context=None,
     ) -> Sequence[MappedEntryHit]:
-        """映射并授权；门户可放宽同步进度，实际命中的版本和代次仍须一致。"""
+        """业务读取仅依赖实际身份和权限；同步进度严格检查仅供显式诊断。"""
         self._resolver_settings()
         if not hits:
             return []
@@ -514,7 +512,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         entry_batch_checker=None,
         strict_explicit: bool = False,
-        require_projection_ready: bool = True,
+        require_projection_ready: bool = False,
         context=None,
     ) -> list[Sequence[MappedEntryHit]]:
         """同一次请求的多路命中共用批量读取，各路仍按自己的范围映射。"""
@@ -579,7 +577,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         entry_batch_checker=None,
         strict_explicit: bool = False,
         skip_unready: bool = False,
-        require_projection_ready: bool = True,
+        require_projection_ready: bool = False,
     ) -> Sequence[MappedEntryHit]:
         space_order = {int(space): idx for idx, space in enumerate(scope.requested_space_ids)}
         explicit_entries = {int(entry_id) for ids in scope.explicit_entry_ids_by_space.values() for entry_id in ids}
@@ -735,7 +733,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         *,
         all_entries: list[KnowledgeFile],
         space_ids: dict[int, int],
-        require_projection_ready: bool = True,
+        require_projection_ready: bool = False,
     ) -> list[KnowledgeFile]:
         """Structural F059 checks on document + entry rows.
 
@@ -788,7 +786,7 @@ class SqlKnowledgeRetrievalScopeResolver(KnowledgeRetrievalScopeResolver):
         space_order: dict[int, int],
         explicit_entries: set[int],
         entry_permissions: dict[int, bool] | None = None,
-        require_projection_ready: bool = True,
+        require_projection_ready: bool = False,
     ) -> tuple[MappedEntryHit, KnowledgeFile] | None:
         ranked = sorted(
             candidates,

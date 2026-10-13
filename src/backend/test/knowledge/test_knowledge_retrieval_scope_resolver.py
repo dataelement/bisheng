@@ -524,6 +524,92 @@ async def test_current_generation_constraint_uses_all_active_memberships():
     assert constraints[0].membership_generation == 3
 
 
+async def test_current_generation_constraints_ignore_projection_progress():
+    entry = make_entry(
+        110744, space_id=10, entry_type="manager", projection="pending",
+        applied_content=0, desired_entry=3, applied_entry=0,
+    )
+    resolver, _, _, _ = make_resolver(entries=[entry], documents=[make_document()])
+    constraints = await resolver.resolve_current_generation_constraints(
+        make_scope(space_ids=(10,), explicit={10: (110744,)}), [CanonicalDocumentId(DOC)],
+    )
+    assert [(int(c.canonical_version_id), c.content_generation, c.membership_generation)
+            for c in constraints] == [(V1, 1, 3)]
+    assert (entry.projection_status, entry.applied_content_generation, entry.applied_entry_generation) == (
+        "pending", 0, 0,
+    )
+
+
+@pytest.mark.parametrize(
+    ("mode", "progress"),
+    [
+        pytest.param("single", {"projection": "pending"}, id="single-pending"),
+        pytest.param("batch", {"projection": "processing"}, id="batch-processing"),
+        pytest.param("overfetch", {"projection": "failed"}, id="overfetch-failed"),
+        pytest.param("single", {"applied_content": 0}, id="content-writeback-lag"),
+        pytest.param("batch", {"applied_entry": 0}, id="membership-writeback-lag"),
+        pytest.param("portal_qa", {"projection": "pending"}, id="portal-qa-skip-unready"),
+    ],
+)
+async def test_business_retrieval_accepts_current_hits_despite_projection_progress(mode, progress):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from bisheng.knowledge.domain.services.portal_qa_retrieval_service import UnifiedSharedRetriever
+
+    entry = make_entry(110744, space_id=10, entry_type="manager", **progress)
+    resolver, _, _, _ = make_resolver(entries=[entry], documents=[make_document()])
+    scope = make_scope(space_ids=(10,), explicit={10: (110744,)})
+    if mode == "single":
+        mapped = await resolver.map_and_authorize_hits(scope, [hit()])
+    elif mode == "batch":
+        batches = await resolver.map_and_authorize_hit_batches([(scope, [hit()])])
+        mapped = batches[0]
+    elif mode == "overfetch":
+        mapped = await resolver.map_and_authorize_with_overfetch(
+            scope, top_k=1, fetch_hits=AsyncMock(return_value=[hit()]),
+        )
+    else:
+        dense = SimpleNamespace(next_batch=AsyncMock(side_effect=[[hit()], []]), close=AsyncMock())
+        sparse = SimpleNamespace(next_batch=AsyncMock(return_value=[]), close=AsyncMock())
+        reader = SimpleNamespace(
+            open_milvus_cursor=AsyncMock(return_value=dense),
+            open_es_cursor=AsyncMock(return_value=sparse),
+        )
+        result = await UnifiedSharedRetriever(
+            resolver=resolver, reader=reader, candidate_limit=1, initial_limit=1,
+        ).retrieve(scope=scope, query="总结", vector=[0.1])
+        mapped = result.hits
+    assert [(int(h.entry_file_id), h.text) for h in mapped] == [(110744, "chunk text")]
+
+
+@pytest.mark.parametrize(
+    "invalid", ["version", "content", "membership", "deleted", "inactive", "denied", "out_of_scope"],
+)
+async def test_progress_relaxation_still_rejects_invalid_or_unauthorized_content(invalid):
+    entry = make_entry(110744, space_id=10, entry_type="manager", projection="pending", applied_content=0)
+    document = make_document()
+    raw = hit()
+    scope = make_scope(space_ids=(10,))
+    denied = set()
+    if invalid == "version":
+        raw = hit(version_id=V2)
+    elif invalid == "content":
+        raw = hit(content_generation=2)
+    elif invalid == "membership":
+        raw = hit(membership_generation=2)
+    elif invalid == "deleted":
+        document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
+    elif invalid == "inactive":
+        entry.entry_status = KnowledgeFileEntryStatus.INVALID.value
+    elif invalid == "denied":
+        denied.add(110744)
+    else:
+        scope = make_scope(space_ids=(20,))
+    resolver, _, _, _ = make_resolver(entries=[entry], documents=[document], denied_entries=denied)
+    assert await resolver.map_and_authorize_hits(scope, [raw]) == []
+
+
 async def test_render_milvus_expr_single_and_multi_space():
     single = BackendQueryFilter(
         tenant_id=TenantId(TENANT),
@@ -720,7 +806,7 @@ async def test_soft_deleted_document_drops_hits():
     assert await resolver.map_and_authorize_hits(make_scope(space_ids=(10,)), [hit()]) == []
 
 
-async def test_projection_pending_fails_closed():
+async def test_explicit_projection_diagnostic_rejects_pending():
     entries = [
         make_entry(
             100,
@@ -732,11 +818,13 @@ async def test_projection_pending_fails_closed():
     resolver, _, _ = default_mapping_fixture(entries)
 
     with pytest.raises(SharedStorageContractError) as exc_info:
-        await resolver.map_and_authorize_hits(make_scope(space_ids=(10,)), [hit()])
+        await resolver.map_and_authorize_hits(
+            make_scope(space_ids=(10,)), [hit()], require_projection_ready=True,
+        )
     assert exc_info.value.code == SharedStorageErrorCode.MEMBERSHIP_PROJECTION_NOT_READY
 
 
-async def test_content_generation_lag_fails_closed():
+async def test_explicit_projection_diagnostic_rejects_content_lag():
     entries = [
         make_entry(
             100,
@@ -749,11 +837,13 @@ async def test_content_generation_lag_fails_closed():
     resolver, _, _ = default_mapping_fixture(entries)
 
     with pytest.raises(SharedStorageContractError) as exc_info:
-        await resolver.map_and_authorize_hits(make_scope(space_ids=(10,)), [hit()])
+        await resolver.map_and_authorize_hits(
+            make_scope(space_ids=(10,)), [hit()], require_projection_ready=True,
+        )
     assert exc_info.value.code == SharedStorageErrorCode.CONTENT_PROJECTION_NOT_READY
 
 
-async def test_entry_generation_lag_fails_closed():
+async def test_explicit_projection_diagnostic_rejects_entry_lag():
     entries = [
         make_entry(
             100,
@@ -766,7 +856,9 @@ async def test_entry_generation_lag_fails_closed():
     resolver, _, _ = default_mapping_fixture(entries)
 
     with pytest.raises(SharedStorageContractError) as exc_info:
-        await resolver.map_and_authorize_hits(make_scope(space_ids=(10,)), [hit()])
+        await resolver.map_and_authorize_hits(
+            make_scope(space_ids=(10,)), [hit()], require_projection_ready=True,
+        )
     assert exc_info.value.code == SharedStorageErrorCode.MEMBERSHIP_PROJECTION_NOT_READY
 
 

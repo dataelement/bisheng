@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sys
 from types import ModuleType, SimpleNamespace
@@ -1076,6 +1077,102 @@ async def test_file_publish_target_spaces_follow_source_matrix(monkeypatch, sour
         10,
         "publish_file",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("permission_error", [False, True])
+async def test_file_publish_targets_use_bounded_concurrency_without_changing_visibility(monkeypatch, permission_error):
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+    from bisheng.knowledge.domain.models.knowledge_file import FileType
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    service = ShougangApprovalService()
+    source_file = SimpleNamespace(
+        id=100, knowledge_id=10, file_type=FileType.FILE.value, status=KnowledgeFileStatus.SUCCESS.value
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10),
+                source_file,
+                KnowledgeSpaceLevelEnum.PERSONAL,
+            )
+        ),
+    )
+    spaces = [
+        SimpleNamespace(id=space_id, name=f"目标-{space_id}", tenant_id=1, state=KnowledgeState.PUBLISHED.value)
+        for space_id in range(201, 407)
+    ]
+    spaces.extend(
+        [
+            SimpleNamespace(id=501, name="未发布", tenant_id=1, state=-1),
+            SimpleNamespace(id=502, name="其他租户", tenant_id=2, state=KnowledgeState.PUBLISHED.value),
+            SimpleNamespace(id=503, name="错误层级", tenant_id=1, state=KnowledgeState.PUBLISHED.value),
+        ]
+    )
+    scopes = {
+        space.id: SimpleNamespace(
+            level=(KnowledgeSpaceLevelEnum.TEAM if space.id % 2 else KnowledgeSpaceLevelEnum.TEAM_KS)
+        )
+        for space in spaces
+    }
+    scopes[503].level = KnowledgeSpaceLevelEnum.DEPARTMENT
+    prefix = "bisheng.approval.domain.services.shougang_approval_service."
+    monkeypatch.setattr(
+        prefix + "KnowledgeSpaceScopeDao.aget_space_ids_by_levels", AsyncMock(return_value=list(scopes))
+    )
+    monkeypatch.setattr(prefix + "KnowledgeSpaceScopeDao.aget_map_by_space_ids", AsyncMock(return_value=scopes))
+    monkeypatch.setattr(prefix + "KnowledgeDao.async_get_spaces_by_ids", AsyncMock(return_value=spaces))
+    active = peak = 0
+    checked_ids = []
+
+    async def require_permission(object_type, object_id, permission_id):
+        nonlocal active, peak
+        assert object_type == "knowledge_space"
+        if permission_id == "publish_file":
+            assert object_id == 10
+            return
+        assert permission_id == "view_space"
+        checked_ids.append(object_id)
+        active += 1
+        peak = max(peak, active)
+        try:
+            for _ in range(3 if object_id % 2 else 1):
+                await asyncio.sleep(0)
+            if permission_error and object_id == 202:
+                raise RuntimeError("权限服务故障")
+            if object_id % 3 == 0:
+                raise SpacePermissionDeniedError()
+        finally:
+            active -= 1
+
+    space_service = SimpleNamespace(login_user=_login_user(), _require_permission_id=require_permission)
+    if permission_error:
+        with pytest.raises(RuntimeError, match="权限服务故障"):
+            await service.list_file_publish_target_spaces(
+                source_space_id=10,
+                source_file_id=100,
+                space_service=space_service,
+            )
+        await asyncio.sleep(0)
+        assert active == 0
+        assert set(checked_ids) <= set(range(201, 209))
+    else:
+        result = await service.list_file_publish_target_spaces(
+            source_space_id=10,
+            source_file_id=100,
+            space_service=space_service,
+        )
+        expected_ids = [space.id for space in spaces[:206] if space.id % 3 != 0]
+        assert [item.id for item in result.data] == expected_ids
+        assert result.total == len(expected_ids)
+        assert all(item.can_browse_files for item in result.data)
+        assert set(checked_ids) == set(range(201, 407))
+    assert 1 < peak <= 8
 
 
 @pytest.mark.asyncio

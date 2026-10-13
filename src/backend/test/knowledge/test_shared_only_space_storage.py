@@ -77,7 +77,7 @@ def test_create_space_rejects_missing_route_before_insert(monkeypatch):
     insert.assert_not_called()
 
 
-async def test_keyword_query_maps_shared_content_to_ready_entries(monkeypatch):
+async def test_keyword_query_maps_current_content_despite_pending_projection(monkeypatch):
     from contextlib import asynccontextmanager
 
     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -104,7 +104,7 @@ async def test_keyword_query_maps_shared_content_to_ready_entries(monkeypatch):
     monkeypatch.setattr(subject, "KnowledgeFileRepositoryImpl", lambda _: repo)
     spaces = [SimpleNamespace(id=10, tenant_id=1, type=KnowledgeTypeEnum.SPACE.value)]
 
-    assert await subject.search_shared_space_file_ids(spaces=spaces, keyword="共享正文") == [11]
+    assert await subject.search_shared_space_file_ids(spaces=spaces, keyword="共享正文") == [11, 14]
     request = client.search.await_args.kwargs
     assert request["index"] == "custom_shared_text"
     assert request["query"]["bool"]["filter"] == [{"terms": {"metadata.knowledge_ids": [10]}}]
@@ -148,7 +148,8 @@ async def test_reprojection_loads_original_with_tenant_embedding(monkeypatch):
     assert pipeline.run.call_args.args[0].stop_at == subject.PipelineStage.TRANSFORMER
 
 
-async def test_portal_chunk_preview_reads_canonical_shared_target(monkeypatch):
+@pytest.mark.parametrize("projection_ready", [True, False])
+async def test_portal_chunk_preview_reads_canonical_shared_target(monkeypatch, projection_ready):
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
     owner = object.__new__(KnowledgeSpaceService)
@@ -156,7 +157,7 @@ async def test_portal_chunk_preview_reads_canonical_shared_target(monkeypatch):
     owner._portal_file_access_decision_map = {}
     owner._get_authorized_shougang_portal_file = AsyncMock(return_value=(file, [object()]))
     owner._resolve_shougang_portal_content_entry = AsyncMock(return_value=SimpleNamespace(
-        projection_ready=True, canonical_document_id=100, canonical_version_id=200, content_generation=3,
+        projection_ready=projection_ready, canonical_document_id=100, canonical_version_id=200, content_generation=3,
     ))
     client = SimpleNamespace(search=AsyncMock(return_value={"hits": {
         "total": {"value": 1}, "hits": [{"_source": {"text": "正文", "metadata": {"canonical_document_id": 100}}}],

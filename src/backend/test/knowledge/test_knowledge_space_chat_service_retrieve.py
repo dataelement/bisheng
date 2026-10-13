@@ -866,19 +866,21 @@ async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monke
 
 
 @pytest.mark.parametrize(
-    ("space_permissions", "business_error", "file_permissions", "expected_error"),
+    ("space_permissions", "business_error", "file_permissions", "expected_error", "explicit_file"),
     [
-        pytest.param({"view_space"}, None, {"view_file"}, None, id="business-allows-fga-denies"),
-        pytest.param(set(), None, {"view_file"}, "scope_space_not_visible", id="business-denies-fga-allows"),
-        pytest.param({"view_space"}, SpaceNotFoundError(), {"view_file"}, "scope_space_not_visible", id="space-gone"),
+        pytest.param({"view_space"}, None, {"view_file"}, None, True, id="business-allows-fga-denies"),
+        pytest.param({"view_space"}, None, {"view_file"}, None, False, id="whole-space-pending"),
+        pytest.param(set(), None, {"view_file"}, "scope_space_not_visible", True, id="business-denies-fga-allows"),
+        pytest.param({"view_space"}, SpaceNotFoundError(), {"view_file"}, "scope_space_not_visible", True, id="space-gone"),
         pytest.param(
             {"view_space"},
             RuntimeError("permission unavailable"),
             {"view_file"},
             "permission_service_unavailable",
+            True,
             id="permission-unavailable",
         ),
-        pytest.param({"view_space"}, None, set(), None, id="file-denied"),
+        pytest.param({"view_space"}, None, set(), None, True, id="file-denied"),
     ],
 )
 async def test_shared_retrieval_uses_business_space_permissions(
@@ -887,6 +889,7 @@ async def test_shared_retrieval_uses_business_space_permissions(
     business_error,
     file_permissions,
     expected_error,
+    explicit_file,
 ):
     from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError
     from bisheng.knowledge.domain.contracts.retrieval_scope import CanonicalChunkHit
@@ -904,11 +907,11 @@ async def test_shared_retrieval_uses_business_space_permissions(
         reference_document_id=2520,
         entry_type="manager",
         entry_status="active",
-        projection_status="ready",
+        projection_status="pending",
         desired_content_generation=1,
-        applied_content_generation=1,
+        applied_content_generation=0,
         desired_entry_generation=1,
-        applied_entry_generation=1,
+        applied_entry_generation=0,
     )
     document = KnowledgeDocument(
         id=2520,
@@ -971,7 +974,7 @@ async def test_shared_retrieval_uses_business_space_permissions(
         return await svc._aretrieve_chunks_shared(
             query="总结一下",
             knowledge_base_ids=[3605],
-            kb_filters={3605: {"file_ids": [90615]}},
+            kb_filters={3605: {"file_ids": [90615]}} if explicit_file else None,
             top_k=5,
             max_content=8000,
         )

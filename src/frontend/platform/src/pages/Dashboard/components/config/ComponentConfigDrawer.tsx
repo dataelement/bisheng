@@ -611,9 +611,7 @@ export function ComponentConfigDrawer() {
     )
     // dataConfig.isConfigured = e.isTrusted
 
-    const finalStyleConfig = styleConfig && Object.keys(styleConfig).length > 0
-      ? { ...styleConfig }
-      : { ...FULL_DEFAULT_STYLE_CONFIG }
+    const finalStyleConfig = { ...FULL_DEFAULT_STYLE_CONFIG, ...styleConfig }
     if (
       isCircularChart
       && editingComponent.style_config?.showDataLabel === undefined

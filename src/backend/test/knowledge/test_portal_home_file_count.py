@@ -76,6 +76,18 @@ async def test_portal_file_count_uses_dashboard_es_metric(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_home_favorite_count_endpoint_only_reads_favorites(monkeypatch):
+    async def favorite_count():
+        return 7
+
+    monkeypatch.setattr(shougang_portal.PortalTelemetryEventService, "count_dashboard_favorites", favorite_count)
+    response = await shougang_portal.get_shougang_portal_home_favorite_count(
+        login_user=SimpleNamespace(user_id=1),
+    )
+    assert response.data == {"favorite_count": 7}
+
+
+@pytest.mark.asyncio
 async def test_portal_home_stats_uses_es_file_count(monkeypatch: pytest.MonkeyPatch):
     async def fake_count_home_events():
         return {

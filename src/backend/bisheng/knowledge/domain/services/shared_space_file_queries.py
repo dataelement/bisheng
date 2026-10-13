@@ -6,7 +6,6 @@ from bisheng.knowledge.domain.contracts.errors import SharedStorageContractError
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import KnowledgeFileRepositoryImpl
-from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import KnowledgeDocumentEntryResolver
 from bisheng.knowledge.rag.shared_space_storage import aresolve_space_shared_routing
 
 
@@ -54,7 +53,6 @@ async def search_shared_space_file_ids(*, spaces, keyword: str, filter_file_ids=
                 and int(entry.knowledge_id) in space_ids
                 and entry.status == KnowledgeFileStatus.SUCCESS.value
                 and entry.deleted_at is None
-                and KnowledgeDocumentEntryResolver._projection_ready(entry)
                 and int(entry.desired_content_generation) == generations.get(int(entry.reference_document_id or 0))
                 and (allowed is None or int(entry.id) in allowed)
             )

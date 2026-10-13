@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -138,6 +139,16 @@ async def test_portal_home_event_counts(monkeypatch):
             if kwargs["index"] == "mid_realtime_qa_question_fact":
                 assert "query" not in kwargs["body"]
                 return {"aggregations": {"qa_count": {"value": 8}}}
+            if kwargs["index"] == "mid_knowledge_space_content_stat":
+                assert kwargs["body"] == {
+                    "size": 0,
+                    "query": {"bool": {"filter": [
+                        {"term": {"record_type": "favorite_daily"}},
+                        {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}},
+                    ]}},
+                    "aggs": {"favorite_count": {"sum": {"field": "favorite_count"}}},
+                }
+                return {"aggregations": {"favorite_count": {"value": 6}}}
 
             query = kwargs["body"]["query"]["bool"]
             assert query["filter"] == [
@@ -145,7 +156,6 @@ async def test_portal_home_event_counts(monkeypatch):
                     "terms": {
                         "event_type": [
                             "portal_document_read",
-                            "portal_favorite",
                         ]
                     }
                 }
@@ -158,15 +168,14 @@ async def test_portal_home_event_counts(monkeypatch):
             }
             assert excluded_fields == {
                 "event_data.portal_document_read_content_stat_schema_version",
-                "event_data.portal_favorite_content_stat_schema_version",
             }
-            assert len(must_not) == 2
+            assert len(must_not) == 1
             return {
                 "aggregations": {
                     "by_event_type": {
                         "buckets": [
                             {"key": "portal_document_read", "doc_count": 11},
-                            {"key": "portal_favorite", "doc_count": 3},
+                            {"key": "portal_favorite", "doc_count": 20},
                             {"key": "portal_qa", "doc_count": 5},
                         ]
                     }
@@ -187,7 +196,7 @@ async def test_portal_home_event_counts(monkeypatch):
 
     assert await PortalTelemetryEventService.count_home_events() == {
         "read_count": 11,
-        "favorite_count": 3,
+        "favorite_count": 6,
         "qa_count": 8,
     }
 
@@ -232,8 +241,8 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
         fake_get_statistics_es_connection,
     )
     monkeypatch.setattr(
-        "bisheng.common.telemetry.portal_event_service.telemetry_service.index_name",
-        "base_telemetry_events",
+        "bisheng.common.telemetry.portal_event_service.telemetry_service",
+        SimpleNamespace(index_name="base_telemetry_events"),
     )
 
     assert await PortalTelemetryEventService.list_document_read_counts_by_space_ids(

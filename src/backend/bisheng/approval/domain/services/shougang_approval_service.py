@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from time import perf_counter
 from types import SimpleNamespace
@@ -83,6 +84,7 @@ logger = logging.getLogger(__name__)
 
 class ShougangApprovalService:
     _FILE_PUBLISH_TARGET_LEVELS = FILE_PUBLISH_TARGET_LEVELS
+    _FILE_PUBLISH_TARGET_CHECK_BATCH_SIZE = 8
 
     def __init__(
         self,
@@ -1049,17 +1051,17 @@ class ShougangApprovalService:
             sorted(candidate_ids),
             order_by="name",
         )
-        items: list[ShougangFilePublishTargetSpace] = []
-        for space in spaces:
+
+        async def build_target(space) -> ShougangFilePublishTargetSpace | None:
             if space.state != KnowledgeState.PUBLISHED.value:
-                continue
+                return None
             if int(getattr(space, "tenant_id", space_service.login_user.tenant_id)) != int(
                 space_service.login_user.tenant_id
             ):
-                continue
+                return None
             scope = scope_map.get(int(space.id))
             if scope is None or scope.level not in allowed_levels:
-                continue
+                return None
             try:
                 await space_service._require_permission_id(
                     "knowledge_space",
@@ -1067,19 +1069,31 @@ class ShougangApprovalService:
                     "view_space",
                 )
             except SpacePermissionDeniedError:
-                continue
-            items.append(
-                ShougangFilePublishTargetSpace(
-                    id=int(space.id),
-                    name=space.name,
-                    space_level=scope.level,
-                    owner_name=(
-                        getattr(space, "owner_name", None)
-                        or getattr(space, "user_name", None)
-                    ),
-                    can_browse_files=True,
-                )
+                return None
+            return ShougangFilePublishTargetSpace(
+                id=int(space.id),
+                name=space.name,
+                space_level=scope.level,
+                owner_name=(
+                    getattr(space, "owner_name", None)
+                    or getattr(space, "user_name", None)
+                ),
+                can_browse_files=True,
             )
+
+        items: list[ShougangFilePublishTargetSpace] = []
+        batch_size = self._FILE_PUBLISH_TARGET_CHECK_BATCH_SIZE
+        for offset in range(0, len(spaces), batch_size):
+            # Bound permission-service load and settle the batch before propagating failures.
+            results = await asyncio.gather(
+                *(build_target(space) for space in spaces[offset : offset + batch_size]),
+                return_exceptions=True,
+            )
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+                if result is not None:
+                    items.append(result)
         return ShougangFilePublishTargetSpacesResp(data=items, total=len(items))
 
     async def list_file_publish_target_folders(

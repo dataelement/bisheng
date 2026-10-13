@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # ruff: noqa: RUF001, RUF002, RUF003
-"""按上传人的主组织，将个人库文件原地迁入最近科室绑定的首个科室库。
+"""按上传人的主组织，将个人库文件原地迁入科室库，找不到时兜底部门库。
 
 在 src/backend 下运行：
   .venv/bin/python scripts/move_personal_files_to_clinic.py --tenant-id 1 --folder-path 'A/B'
   .venv/bin/python scripts/move_personal_files_to_clinic.py --tenant-id 1 --folder-path 'A/B' --operator-id 1 --apply
 
-省略 --folder-path 扫描个人库全部文件。完整路径匹配、包含子目录，保留原完整路径。
-原始上传人缺失时回退当前上传人；只从主组织沿父级寻找 org_level=office。
+省略 --folder-path 扫描个人库全部文件。完整路径匹配、包含子目录；普通模式保留原完整路径。
+依次查找原始上传人科室库、当前上传人科室库；均失败再查原始上传人部门库、当前上传人部门库。
+只从唯一主组织沿父级寻找最近 org_level=office 或 dept，不使用兼任组织。
 默认只读预览；--apply 创建缺失目录、移动归属并同步权限和共享索引，不重新解析。
 支持解析失败、等待、超时等静止文件，保留解析状态，不补建缺失分块。
+加 --api-sync-only 仅选择接口同步文件，只取文件直接所在目录名；根目录文件迁入目标库根目录。
 只支持共享存储；正式执行必须处于停止相关写入的维护窗口。
 失败逐项记录，--recover-report 修复中断项，不撤销成功迁移。
 目标库所有者失效时，可显式加 --use-operator-as-file-owner，使用操作人作为文件权限所有者。
@@ -84,6 +86,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--tenant-id", type=positive_int, help="多租户时必填；单租户默认为 1")
     parser.add_argument("--operator-id", type=positive_int, help="正式执行必填，使用真实全局超级管理员身份")
     parser.add_argument("--folder-path", help="相对个人库根目录的完整路径；省略时扫描全部文件，/ 表示根目录")
+    parser.add_argument("--api-sync-only", action="store_true", help="仅迁移接口同步文件，目标仅保留文件直接所在目录名")
+    parser.add_argument(
+        "--allow-failed-projection",
+        action="store_true",
+        help="显式允许仅有管理入口、解析成功但共享投影失败的静止文件迁移，保留失败状态",
+    )
     parser.add_argument("--apply", action="store_true", help="创建目录并执行迁移；默认只预览")
     parser.add_argument(
         "--force-rewrite", action="store_true", help="以数据库为准覆盖索引归属差异；写后校验失败额外重写最多 2 次"
@@ -137,6 +145,17 @@ def validate_parse_state(row: Any) -> None:
         raise SkipFile("parsing_busy", f"文件{label}（status={row.status}），待任务结束后再迁移")
     if row.status not in {None, 2, 3, 5, 6, 7}:
         raise SkipFile("unknown_parse_status", f"未知解析状态（status={row.status}）")
+
+
+def allows_failed_projection(unit: dict[str, Any], manager: Any, entries: list[Any]) -> bool:
+    # 单独管理入口的静止失败可以迁移归属，不放宽已有发布/共享图谱的完整性要求。
+    return bool(
+        unit.get("allow_failed_projection")
+        and manager.status == 2
+        and manager.projection_status == "failed"
+        and len(entries) == 1
+        and entries[0].id == manager.id
+    )
 
 
 def parse_folder_path(value: str | None) -> tuple[str, ...]:
@@ -197,15 +216,41 @@ class Routing:
             if row.level in {"team", "team_ks"} and row.owner_type == "user" and row.space_id in self.spaces
         }
         self.targets: dict[int, set[int]] = defaultdict(set)
+        department_spaces = {
+            int(row.space_id): int(row.owner_id)
+            for row in snapshot["scopes"]
+            if row.level == "department" and row.owner_type == "department" and row.space_id in self.spaces
+        }
+        self.department_targets: dict[int, set[int]] = defaultdict(set)
         for row in snapshot["bindings"]:
             if row.space_id in clinics:
                 self.targets[int(row.department_id)].add(int(row.space_id))
+            if department_spaces.get(int(row.space_id)) == int(row.department_id):
+                self.department_targets[int(row.department_id)].add(int(row.space_id))
 
     def resolve(self, file: Any) -> dict[str, Any]:
-        uploader = file.original_uploader_id or file.user_id
-        origin = "original_uploader_id" if file.original_uploader_id else "user_id"
-        if not uploader:
+        candidates: list[tuple[int, str]] = []
+        for uploader, origin in ((file.original_uploader_id, "original_uploader_id"), (file.user_id, "user_id")):
+            if uploader and all(int(uploader) != previous[0] for previous in candidates):
+                candidates.append((int(uploader), origin))
+        if not candidates:
             raise SkipFile("missing_uploader", "原始上传人和当前上传人均缺失")
+        failures: dict[tuple[int, str, str], tuple[SkipFile, str]] = {}
+        for department_fallback in (False, True):
+            label = "部门库" if department_fallback else "科室库"
+            for uploader, origin in candidates:
+                try:
+                    return self._resolve_uploader(uploader, origin, department_fallback=department_fallback)
+                except SkipFile as exc:
+                    # 用户或组织的同一失败不因尝试不同库类型而重复记录。
+                    key = (uploader, exc.code, str(exc))
+                    user_label = "原始上传人" if origin == "original_uploader_id" else "当前上传人"
+                    failures.setdefault(key, (exc, f"{user_label}{label}匹配失败：{exc}"))
+        first_error = next(iter(failures.values()))[0]
+        reason = str(first_error) if len(failures) == 1 else "；".join(message for _, message in failures.values())
+        raise SkipFile(first_error.code, reason) from first_error
+
+    def _resolve_uploader(self, uploader: int, origin: str, *, department_fallback: bool = False) -> dict[str, Any]:
         user = self.users.get(int(uploader))
         if user is None or user.delete:
             raise SkipFile("unavailable_uploader", "上传人不存在或已停用")
@@ -222,22 +267,38 @@ class Routing:
             department = self.departments.get(department_id)
             if department is None or department.status != "active":
                 raise SkipFile("unavailable_department", "主组织或父级组织不存在或已停用")
-            if department.org_level == "office":
-                targets = sorted(self.targets.get(department_id, set()))
+            if department.org_level == ("dept" if department_fallback else "office"):
+                target_map = self.department_targets if department_fallback else self.targets
+                targets = sorted(target_map.get(department_id, set()))
                 if not targets:
+                    if department_fallback:
+                        raise SkipFile("missing_department_space", "最近部门未绑定有效部门库")
                     raise SkipFile("missing_clinic", "最近科室未绑定有效科室库")
                 return {
                     "uploader_id": int(uploader),
                     "uploader_source": origin,
                     "primary_department_id": departments[0],
-                    "office_id": department_id,
+                    "office_id": None if department_fallback else department_id,
                     "target_space_id": targets[0],
+                    **({"department_id": department_id} if department_fallback else {}),
                 }
             department_id = department.parent_id
+        if department_fallback:
+            raise SkipFile("missing_department_label", "主组织及其父级没有部门标签")
         raise SkipFile("missing_office", "主组织及其父级没有科室标签")
 
 
-def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, ...] = ()) -> dict[str, Any]:
+def is_api_sync_file(row: Any) -> bool:
+    """与页面和现有维护脚本的“接口同步”来源判定保持一致。"""
+    metadata = getattr(row, "user_metadata", None)
+    return isinstance(metadata, dict) and bool(
+        metadata.get("filelib_sync_endpoint") or metadata.get("external_file_id")
+    )
+
+
+def build_plan(
+    snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, ...] = (), *, api_sync_only: bool = False
+) -> dict[str, Any]:
     routing = Routing(snapshot)
     spaces = routing.spaces
     sources = {
@@ -259,6 +320,8 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
     for row in sorted(snapshot["files"], key=lambda item: (item.knowledge_id, item.id)):
         if row.knowledge_id not in sources or row.file_type == 0 or row.deleted_at is not None:
             continue
+        if api_sync_only and not is_api_sync_file(row):
+            continue
         entry = {
             "file_id": int(row.id),
             "space_id": int(row.knowledge_id),
@@ -274,6 +337,9 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
                 continue
             matched.add(row.knowledge_id)
             entry.update(folder_parts=list(parts), folder_name="/".join(parts))
+            destination_parts = parts[-1:] if api_sync_only else parts
+            if api_sync_only:
+                entry["target_folder_parts"] = list(destination_parts)
             prefix = ""
             for folder_id in (row.file_level_path or "").split("/")[1:]:
                 folder = by_id[int(folder_id)]
@@ -301,13 +367,13 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
             if unversioned:
                 entry["unversioned"] = True
             parent_path, missing = "", False
-            for name in parts:
+            for name in destination_parts:
                 matches = by_location.get((entry["target_space_id"], parent_path, name), []) if not missing else []
                 if len(matches) > 1 or (matches and matches[0].file_type != 0):
                     raise SkipFile("target_folder_conflict", "目标路径存在重名目录或同名文件")
                 if matches:
                     folder = matches[0]
-                    if folder_parts_for(folder, by_id) != parts[: folder.level]:
+                    if folder_parts_for(folder, by_id) != destination_parts[: folder.level]:
                         raise SkipFile("target_folder_conflict", "目标目录结构异常")
                     parent_path = target_path(folder)
                 else:
@@ -320,24 +386,29 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
         routes = {
             (
                 selected[i]["target_space_id"],
-                tuple(selected[i]["folder_parts"]),
+                tuple(selected[i].get("target_folder_parts", selected[i]["folder_parts"])),
                 selected[i]["space_id"],
                 selected[i]["source_path"],
             )
             for i in present
         }
         if present and (not ids <= selected.keys() or len(routes) != 1):
+            reason = (
+                "版本链包含非接口同步文件，整条版本链未迁移"
+                if api_sync_only and any(i in by_id and not is_api_sync_file(by_id[i]) for i in ids)
+                else "版本链不完整、跨来源范围或迁移目标不一致"
+            )
             for file_id in sorted(present):
                 skipped.append(
                     {
                         **selected.pop(file_id),
                         "reason_code": "incomplete_version_chain",
-                        "reason": "版本链不完整、跨来源范围或迁移目标不一致",
+                        "reason": reason,
                     }
                 )
     groups: dict[tuple, dict[str, Any]] = {}
     for entry in selected.values():
-        key = entry["target_space_id"], tuple(entry["folder_parts"])
+        key = entry["target_space_id"], tuple(entry.get("target_folder_parts", entry["folder_parts"]))
         group = groups.setdefault(
             key,
             {
@@ -352,6 +423,7 @@ def build_plan(snapshot: dict[str, Any], tenant_id: int, requested: tuple[str, .
         group["files"].append(entry)
     return {
         "tenant_id": tenant_id,
+        "api_sync_only": api_sync_only,
         "requested_path": "/".join(requested),
         "source_spaces": [{"id": sid, "name": spaces[sid].name} for sid in sorted(sources)],
         "candidate_files": len(selected),
@@ -412,15 +484,33 @@ def validate_document(
     managers = [e for e in entries if e.entry_type == "manager" and e.entry_status == "active" and e.deleted_at is None]
     primary = [v for v in versions if v.is_primary]
     if (
-        len(managers) != 1
-        or len(primary) != 1
+        len(primary) != 1
         or primary[0].id != document.primary_version_id
-        or primary[0].knowledge_file_id != managers[0].id
-        or managers[0].id not in {f.id for f in files}
+        or primary[0].knowledge_file_id not in {f.id for f in files}
     ):
-        raise SkipFile("invalid_primary_version", "规范文档主版本或管理入口异常")
+        raise SkipFile("invalid_primary_version", "规范文档缺少唯一有效主版本或主版本文件")
+    primary_file = next(f for f in files if f.id == primary[0].knowledge_file_id)
+    if managers:
+        if len(managers) != 1 or managers[0].id != primary_file.id:
+            raise SkipFile("invalid_primary_version", "规范文档管理入口与主版本文件不一致")
+        anchor = managers[0]
+    else:
+        # 只接纳尚未激活入口的未解析原始版本，不把失效入口当成普通文件迁移。
+        if any(
+            f.status == 2
+            or f.entry_type not in {None, ""}
+            or f.entry_status not in {None, ""}
+            or f.reference_document_id not in {None, document.id}
+            for f in files
+        ) or any(e.id not in {f.id for f in files} for e in entries):
+            raise SkipFile("missing_manager", "缺少管理入口，且存在已解析版本或异常文档入口/引用")
+        anchor = primary_file
     for entry in entries:
-        incomplete = managers[0].status != 2 and entry.status != 2
+        if not managers:
+            continue
+        incomplete = (managers[0].status != 2 and entry.status != 2) or allows_failed_projection(
+            unit, managers[0], entries
+        )
         if (
             entry.entry_status != "active"
             or entry.deleted_at is not None
@@ -448,11 +538,11 @@ def validate_document(
     if not source and not (unit.get("before") and target):
         raise SkipFile("source_changed", "版本文件归属或来源目录已变化")
     if (
-        document.knowledge_id != managers[0].knowledge_id
-        or (document.file_level_path or "") != (managers[0].file_level_path or "")
-        or document.level != managers[0].level
+        document.knowledge_id != anchor.knowledge_id
+        or (document.file_level_path or "") != (anchor.file_level_path or "")
+        or document.level != anchor.level
     ):
-        raise SkipFile("document_location_mismatch", "文档和管理入口归属不一致")
+        raise SkipFile("document_location_mismatch", "文档和主版本文件归属不一致")
     if any(f.deleted_at is not None or f.file_type != 1 for f in files):
         raise SkipFile("file_not_ready", "版本文件已删除或类型异常")
     for file in [*files, *entries]:
@@ -661,7 +751,7 @@ class Backend:
             selected_files = [f for f in files if f.knowledge_id in sources]
             files = selected_files.copy()
             user_ids = {
-                int(f.original_uploader_id or f.user_id) for f in selected_files if f.original_uploader_id or f.user_id
+                int(uploader) for f in selected_files for uploader in (f.original_uploader_id, f.user_id) if uploader
             }
             result.update(await self.routing_snapshot(session, user_ids, include_catalog=False))
             routing, targets = Routing(result), set()
@@ -805,6 +895,7 @@ class Backend:
         from sqlmodel import col, select
 
         from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
         from bisheng.knowledge.domain.models.knowledge import Knowledge
         from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
         from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
@@ -824,12 +915,29 @@ class Backend:
             )
             target = next((s for s in spaces if s.id == unit["target_space_id"]), None)
             if target is None or target.type != 3 or target.state != 1 or target.is_favorite:
-                raise ValueError("目标科室知识库不可用")
+                raise ValueError("目标知识库不可用")
             scopes = list(
                 (await session.exec(select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == target.id))).all()
             )
-            if len(scopes) != 1 or scopes[0].level not in {"team", "team_ks"} or scopes[0].owner_type != "user":
-                raise ValueError("目标科室库范围已变化")
+            if len(scopes) != 1:
+                raise ValueError("目标知识库范围已变化")
+            scope = scopes[0]
+            department_ids = {entry.get("department_id") for entry in unit["files"]}
+            if department_ids == {None}:
+                if scope.level not in {"team", "team_ks"} or scope.owner_type != "user":
+                    raise ValueError("目标科室库范围已变化")
+            else:
+                if (
+                    len(department_ids) != 1
+                    or None in department_ids
+                    or scope.level != "department"
+                    or scope.owner_type != "department"
+                    or scope.owner_id not in department_ids
+                ):
+                    raise ValueError("目标部门库范围已变化")
+                bindings = await rows(DepartmentKnowledgeSpace, DepartmentKnowledgeSpace.space_id == target.id)
+                if len(bindings) != 1 or bindings[0].department_id != scope.owner_id:
+                    raise ValueError("目标部门库绑定已变化")
             owner = await self.resolve_file_owner(session, target, unit)
             document = None
             if unit.get("unversioned"):
@@ -903,20 +1011,29 @@ class Backend:
         by_id = {row.id: row for row in directories}
         if folder and (*folder_parts_for(folder, by_id), folder.file_name) != tuple(unit["folder_parts"]):
             raise SkipFile("target_folder_changed", "目标完整目录路径已变化")
+        expected = {f["file_id"]: f for f in unit["files"]}
         for file in files:
-            if folder_parts_for(file, by_id) != tuple(unit["folder_parts"]):
+            if unit.get("api_sync_only") and not is_api_sync_file(file):
+                raise SkipFile("api_sync_source_changed", "文件已不再标记为接口同步来源，请重新预览")
+            # 来源完整路径与目标目录各自校验；旧报告沿用已记录的目标，不重新选目录。
+            parts = (
+                unit["folder_parts"]
+                if unit.get("before") and file.knowledge_id == unit["target_space_id"]
+                else expected[file.id].get("folder_parts", unit["folder_parts"])
+            )
+            if folder_parts_for(file, by_id) != tuple(parts):
                 raise SkipFile("source_changed", "来源完整目录路径已变化")
         # 恢复以报告和数据库已提交状态为准，不根据新的组织关系重新选目标。
         if unit.get("before"):
             return
-        snapshot = await self.routing_snapshot(session, {int(f.original_uploader_id or f.user_id) for f in files})
+        user_ids = {int(uploader) for f in files for uploader in (f.original_uploader_id, f.user_id) if uploader}
+        snapshot = await self.routing_snapshot(session, user_ids)
         routing = Routing(snapshot)
         personal = {
             s.space_id
             for s in snapshot["scopes"]
             if s.level == "personal" and s.owner_type == "user" and s.space_id in routing.spaces
         }
-        expected = {f["file_id"]: f for f in unit["files"]}
         for file in files:
             if file.knowledge_id not in personal:
                 raise SkipFile("source_changed", "来源不再是有效个人知识库")
@@ -1034,7 +1151,7 @@ class Backend:
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
         async with self.locked_document(unit) as (session, document, versions, files, entries, folder, target, owner):
-            manager = next(e for e in entries if e.entry_type == "manager" and e.entry_status == "active")
+            manager = next((e for e in entries if e.entry_type == "manager" and e.entry_status == "active"), None)
             active = [
                 e
                 for e in entries
@@ -1088,7 +1205,12 @@ class Backend:
             observed = {
                 side: (await self.store.read(side, [document.id])).get(document.id, []) for side in ("es", "milvus")
             }
-            allow_incomplete = manager.status != 2
+            if manager is None and any(observed.values()):
+                raise SkipFile("content_without_manager", "文档缺少管理入口但已有共享索引内容，需先核对入口与索引归属")
+            # 无管理入口时不创建检索成员；两侧必须为空且在提交前再次确认。
+            allow_incomplete = (
+                manager is None or manager.status != 2 or allows_failed_projection(unit, manager, entries)
+            )
             fingerprints = validate_chunks(
                 observed, unit, document, primary, self.store.embedding_model_id, allow_incomplete=allow_incomplete
             )
@@ -1166,11 +1288,12 @@ class Backend:
                 session.add(document)
                 in_target = True
             desired = unit["desired_permissions"] if in_target else unit["before"]["permissions"]
-            manager.desired_entry_generation = next_generation
-            # 未完成解析的投影不能因迁移变成已应用，保留后续解析/重试所需状态。
-            if not allow_incomplete:
-                manager.applied_entry_generation = next_generation
-            session.add(manager)
+            if manager is not None:
+                manager.desired_entry_generation = next_generation
+                # 未完成解析的投影不能因迁移变成已应用，保留后续解析/重试所需状态。
+                if not allow_incomplete:
+                    manager.applied_entry_generation = next_generation
+                session.add(manager)
             await session.flush()
             ids = tuple(sorted({int(e.knowledge_id) for e in active}))
             snapshot = DocumentSnapshot(
@@ -1435,6 +1558,8 @@ def document_units(snapshot: dict[str, Any], group: dict[str, Any], plan: dict[s
                 "folder_parts": group["folder_parts"],
                 "status": "candidate",
                 **({"unversioned": True} if file.get("unversioned") else {}),
+                **({"api_sync_only": True} if plan.get("api_sync_only") else {}),
+                **({"allow_failed_projection": True} if plan.get("allow_failed_projection") else {}),
             },
         )
         unit["files"].append(file)
@@ -1596,7 +1721,8 @@ async def execute(args: argparse.Namespace, backend: Any, path: Path) -> int:
             return finish("recovered")
         async with phase("扫描全部个人知识库"):
             snapshot = await backend.load_snapshot(args.tenant_id)
-        plan = build_plan(snapshot, args.tenant_id, args.folder_parts)
+        plan = build_plan(snapshot, args.tenant_id, args.folder_parts, api_sync_only=args.api_sync_only)
+        plan["allow_failed_projection"] = args.allow_failed_projection
         report["plan"], report["status"] = plan, "planned"
         checkpoint()
         print(
@@ -1623,7 +1749,9 @@ async def execute(args: argparse.Namespace, backend: Any, path: Path) -> int:
                             fresh_snapshot = await backend.load_snapshot(
                                 args.tenant_id, file_ids={f["file_id"] for f in unit["files"]}
                             )
-                        fresh = build_plan(fresh_snapshot, args.tenant_id, args.folder_parts)
+                        fresh = build_plan(
+                            fresh_snapshot, args.tenant_id, args.folder_parts, api_sync_only=args.api_sync_only
+                        )
                         current_files = sorted(
                             [f for g in fresh["groups"] for f in g["files"] if f["document_id"] == unit["document_id"]],
                             key=lambda f: f["file_id"],

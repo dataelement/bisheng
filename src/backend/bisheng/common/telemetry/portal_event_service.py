@@ -27,7 +27,6 @@ PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE = 10000
 
 PORTAL_HOME_EVENT_TYPES = (
     BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
-    BaseTelemetryTypeEnum.PORTAL_FAVORITE,
 )
 
 
@@ -233,7 +232,7 @@ class PortalTelemetryEventService:
     async def count_home_events() -> dict[str, int]:
         """首页阅读/收藏/问答计数.
 
-        阅读、收藏沿用原始事件口径；问答使用看板事实表的历史累计总量。
+        阅读沿用原始事件口径; 收藏和问答使用看板统计的历史累计总量。
         """
         event_values = [event_type.value for event_type in PORTAL_HOME_EVENT_TYPES]
         body = {
@@ -258,18 +257,6 @@ class PortalTelemetryEventService:
                                 ]
                             }
                         },
-                        {
-                            "bool": {
-                                "filter": [
-                                    {
-                                        "term": {
-                                            "event_type": BaseTelemetryTypeEnum.PORTAL_FAVORITE.value,
-                                        }
-                                    },
-                                    {"exists": {"field": ("event_data.portal_favorite_content_stat_schema_version")}},
-                                ]
-                            }
-                        },
                     ],
                 }
             },
@@ -291,15 +278,38 @@ class PortalTelemetryEventService:
             if key in counts:
                 counts[key] = int(bucket.get("doc_count") or 0)
         qa_count = await PortalTelemetryEventService.count_dashboard_qa()
+        favorite_count = await PortalTelemetryEventService.count_dashboard_favorites()
         return {
             "read_count": counts[BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value],
-            "favorite_count": counts[BaseTelemetryTypeEnum.PORTAL_FAVORITE.value],
+            "favorite_count": favorite_count,
             "qa_count": qa_count,
         }
 
     @staticmethod
+    async def count_dashboard_favorites() -> int:
+        """按看板空间范围汇总成功新增收藏日统计, 取消收藏不回减。"""
+        es_client = await get_statistics_es_connection()
+        response = await es_client.search(
+            index=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"record_type": "favorite_daily"}},
+                            {"terms": {"space_level": list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS)}},
+                        ]
+                    }
+                },
+                "aggs": {"favorite_count": {"sum": {"field": "favorite_count"}}},
+            },
+            filter_path="aggregations.favorite_count.value",
+        )
+        return int(response["aggregations"]["favorite_count"]["value"] or 0)
+
+    @staticmethod
     async def count_dashboard_qa() -> int:
-        """使用看板的 ES 连接，按 question_id 统计全部历史问答记录。"""
+        """使用看板的 ES 连接, 按 question_id 统计全部历史问答记录。"""
         es_client = await get_es_connection()
         response = await es_client.search(
             index=REALTIME_QA_QUESTION_FACT_INDEX,

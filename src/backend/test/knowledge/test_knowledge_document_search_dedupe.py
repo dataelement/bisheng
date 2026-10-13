@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
     KnowledgeDocumentEntryCapabilities,
@@ -85,7 +87,8 @@ def _chunk(
     )
 
 
-async def test_search_filters_stale_projection_and_dedupes_before_scoring() -> None:
+@pytest.mark.parametrize("projection", ["ready", "pending"])
+async def test_search_filters_stale_content_and_dedupes_despite_progress(projection) -> None:
     publish = _entry(
         file_id=101,
         space_id=10,
@@ -103,6 +106,11 @@ async def test_search_filters_stale_projection_and_dedupes_before_scoring() -> N
         desired_content_generation=4,
         applied_content_generation=4,
     )
+    for entry in (publish, manager, stale_share):
+        entry.projection_status = projection
+        if projection == "pending":
+            entry.applied_content_generation = 0
+            entry.applied_entry_generation = 0
     service = KnowledgeSpaceService(
         request=MagicMock(),
         login_user=UserPayload(
@@ -112,7 +120,7 @@ async def test_search_filters_stale_projection_and_dedupes_before_scoring() -> N
         ),
     )
     service._filter_shougang_portal_visible_files = AsyncMock(
-        return_value=[publish, manager, stale_share]
+        side_effect=lambda files, **kwargs: files,
     )
     service.doc_repo = SimpleNamespace(
         find_by_ids=AsyncMock(

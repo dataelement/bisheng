@@ -9,6 +9,24 @@
 
 ## 实际偏差记录
 
+- [x] T12 两人的科室库均不可用时，按原始/当前上传人顺序兜底最近部门绑定库，复用目录、权限、索引及恢复流程，验证四级优先级和目标类型/绑定保护。
+  _Requirements: REQ-2_ _Acceptance: AC-2_ _Verification: 2026-10-13 脚本回归 235 项通过及静态检查_ _Depends: T11_ _Boundary: 本地修改、不部署或运行真实迁移_
+
+- [x] T11 原始上传人无法匹配科室库时使用当前上传人兜底，同步预览与执行前批量查询，验证优先级、失败原因、上传人字段保留和路由变化拒绝。
+  _Requirements: REQ-2_ _Acceptance: AC-2_ _Verification: 2026-10-13 脚本回归 205 项通过及静态检查_ _Boundary: 本地修改、不部署或运行真实迁移_
+
+- [x] T10 准备固定范围后台执行，支持仅有管理入口的静止失败投影，验证默认拒绝、状态保留、恢复和范围/维护/审计边界。
+  _Requirements: REQ-3, REQ-4, REQ-6_ _Verification: 2026-10-12 生产只读预检及 197 项本地回归_ _Boundary: 本地准备完成，实际部署和 apply 等待维护窗口确认_
+
+- [x] T9 按用户修正，将接口同步模式目标改为文件直接所在目录名，来源筛选及报告保留完整路径，验证根目录、同名目录、冲突及新旧报告恢复。
+  _Requirements: REQ-8_ _Acceptance: AC-8_ _Verification: 2026-10-12 目录映射及脚本回归_ _Depends: T8_ _Boundary: 普通模式保留完整路径、不运行真实迁移_
+
+- [x] T8 增加接口同步来源筛选开关，支持所有个人库目录，复用原始上传人科室路由并验证锁内及恢复复核、混合来源版本链拒绝。
+  _Requirements: REQ-8_ _Acceptance: AC-8_ _Verification: 2026-10-12 来源筛选及脚本回归_ _Depends: T7_ _Boundary: 保留普通模式、不运行真实迁移_
+
+- [x] T7 支持已有版本链但无管理入口的静止未解析文件，保留版本及解析/投影状态，验证正常迁移、异常拒绝及提交前后恢复。
+  _Requirements: REQ-7_ _Acceptance: AC-7_ _Verification: 2026-10-12 定向及脚本回归_ _Depends: T6_ _Boundary: 无共享内容、不补建管理入口、不运行真实迁移_
+
 - [x] T6 支持未解析成功文件及未建立版本链的原始文件迁移，保留解析状态和已有内容，验证空/部分索引、并发拒绝与恢复。
   _Requirements: REQ-6_ _Acceptance: AC-6_ _Verification: 2026-09-30 定向及脚本回归_ _Depends: T5_ _Boundary: 不重解析、不补建分块、不运行真实迁移_
 

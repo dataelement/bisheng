@@ -9,7 +9,6 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
-    KnowledgeFileProjectionStatus,
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
@@ -132,7 +131,8 @@ def test_capacity_queries_exclude_logic_entries():
         assert "'publish','share','projection_tombstone'" in sql
 
 
-def test_qa_scope_requires_distribution_projection_ready():
+@pytest.mark.parametrize("projection", ["ready", "pending", "processing", "failed"])
+def test_qa_scope_ignores_projection_progress_but_requires_active_entry(projection):
     base = {
         "knowledge_id": 1,
         "file_type": FileType.FILE.value,
@@ -141,18 +141,18 @@ def test_qa_scope_requires_distribution_projection_ready():
         "entry_status": KnowledgeFileEntryStatus.ACTIVE.value,
         "entry_type": KnowledgeFileEntryType.SHARE.value,
         "desired_content_generation": 2,
-        "applied_content_generation": 2,
+        "applied_content_generation": 0,
         "desired_entry_generation": 1,
-        "applied_entry_generation": 1,
+        "applied_entry_generation": 0,
     }
-    pending = SimpleNamespace(
+    active = SimpleNamespace(
         **base,
-        projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+        projection_status=projection,
     )
-    ready = SimpleNamespace(
-        **base,
-        projection_status=KnowledgeFileProjectionStatus.READY.value,
+    inactive = SimpleNamespace(
+        **{**base, "entry_status": KnowledgeFileEntryStatus.INVALID.value},
+        projection_status=projection,
     )
 
-    assert KnowledgeSpaceService._is_qa_scope_file(pending, 1) is False
-    assert KnowledgeSpaceService._is_qa_scope_file(ready, 1) is True
+    assert KnowledgeSpaceService._is_qa_scope_file(active, 1) is True
+    assert KnowledgeSpaceService._is_qa_scope_file(inactive, 1) is False
