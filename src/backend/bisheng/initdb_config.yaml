@@ -6,6 +6,8 @@ knowledges: # 知识库相关配置
     timeout: 600
     # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
     ocr_sdk_url: ""
+    # 额外的 ETL4LM JSON 请求字段；同名字段覆盖 Loader 默认值。
+    request_kwargs: {}
   mineru:
     # 文档地址 https://opendatalab.github.io/MinerU/zh/reference/output_files/#_15
     url: "http://192.168.106.20:8033/file_parse"

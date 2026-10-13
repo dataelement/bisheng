@@ -614,6 +614,7 @@ class Etl4lmConf(BaseModel):
     url: str = Field(default="", description="etl4lmService Address")
     timeout: int = Field(default=600, description="etl4lmService Request Timeout (sec)")
     ocr_sdk_url: str = Field(default="", description="etl4lm ocr sdkService Address")
+    request_kwargs: dict = Field(default_factory=dict, description="etl4lmService Request Arguments")
 
 
 class MineruConf(BaseModel):
