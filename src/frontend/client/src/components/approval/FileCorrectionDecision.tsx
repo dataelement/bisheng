@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { FileStatus, uploadFileToServerApi } from "~/api/knowledge";
+import { uploadFileToServerApi } from "~/api/knowledge";
 import { decideApprovalTaskApi } from "~/api/approval";
 import { registerCorrectionUpdateFile } from "~/api/fileCorrection";
 
@@ -22,7 +22,6 @@ export function FileCorrectionDecision({
     onError,
 }: FileCorrectionDecisionProps) {
     const inputRef = useRef<HTMLInputElement>(null);
-    const [pendingFileId, setPendingFileId] = useState<number | null>(null);
     const [busy, setBusy] = useState(false);
 
     async function handleAdopt() {
@@ -38,24 +37,12 @@ export function FileCorrectionDecision({
         }
     }
 
-    async function finishUpdate(fileId: number) {
-        await decideApprovalTaskApi(taskId, { action: "adopt_update", new_file_id: fileId });
-        setPendingFileId(null);
-        onDone();
-    }
-
     async function handlePickedFile(file: File) {
         setBusy(true);
         try {
             const uploaded = await uploadFileToServerApi(String(spaceId), file);
-            const created = await registerCorrectionUpdateFile(correctionId, uploaded.file_path);
-            const fileId = Number(created.id);
-            if (created.status !== 2 && created.status !== FileStatus.SUCCESS) {
-                setPendingFileId(fileId);
-                onError("新文件还在解析, 解析完成后再点一次「采纳并更新」");
-                return;
-            }
-            await finishUpdate(fileId);
+            await registerCorrectionUpdateFile(correctionId, uploaded.file_path);
+            onDone();
         } catch (error) {
             onError(error instanceof Error ? error.message : "采纳并更新失败");
         } finally {
@@ -79,16 +66,7 @@ export function FileCorrectionDecision({
                 type="button"
                 disabled={disabled || busy}
                 className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f6ff] disabled:opacity-60"
-                onClick={() => {
-                    if (pendingFileId) {
-                        setBusy(true);
-                        void finishUpdate(pendingFileId)
-                            .catch((error) => onError(error instanceof Error ? error.message : "采纳并更新失败"))
-                            .finally(() => setBusy(false));
-                        return;
-                    }
-                    inputRef.current?.click();
-                }}
+                onClick={() => inputRef.current?.click()}
             >
                 采纳并更新
             </button>
