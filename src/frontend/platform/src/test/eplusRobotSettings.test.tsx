@@ -4,6 +4,7 @@ import {
   listEPlusBindableSpacesApi,
   saveEPlusBotConfigApi,
 } from "@/controllers/API/eplus";
+import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { EPlusRobotSettings } from "@/pages/BuildPage/assistant/editAssistant/EPlusRobotSettings";
 import { getRobotDebugStatus } from "@/controllers/API/eplusDebug";
@@ -21,6 +22,10 @@ vi.mock("@/controllers/API/eplus", () => ({
   getEPlusBotConfigApi: vi.fn(),
   listEPlusBindableSpacesApi: vi.fn(),
   saveEPlusBotConfigApi: vi.fn(),
+}));
+
+vi.mock("@/controllers/API/knowledgeSpace", () => ({
+  getSelectableKnowledgeSpacesApi: vi.fn(),
 }));
 
 vi.mock("@/controllers/request", () => ({
@@ -41,6 +46,7 @@ vi.mock("@/components/bs-ui/select/multi", () => ({
     <div>
       <span>{placeholder}</span>
       <span data-testid="selected-spaces">{value.join(",")}</span>
+      {options.map((item) => <span key={item.value}>{item.label}</span>)}
       <button type="button" onClick={() => onChange(options.map((item) => item.value))}>
         select-spaces
       </button>
@@ -74,6 +80,9 @@ describe("EPlusRobotSettings", () => {
     );
     vi.mocked(getEPlusBotConfigApi).mockResolvedValue(existingConfig);
     vi.mocked(listEPlusBindableSpacesApi).mockResolvedValue([
+      { id: 30, name: "Nonselectable Space" },
+    ]);
+    vi.mocked(getSelectableKnowledgeSpacesApi).mockResolvedValue([
       { id: 10, name: "Space A" },
       { id: 20, name: "Space B" },
     ]);
@@ -84,6 +93,44 @@ describe("EPlusRobotSettings", () => {
     });
     vi.mocked(deleteEPlusBotConfigApi).mockResolvedValue(true);
     vi.mocked(getRobotDebugStatus).mockResolvedValue(false);
+  });
+
+  it("shows only the same permission-filtered spaces as the assistant knowledge picker", async () => {
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    expect(await screen.findByText("Space A")).toBeInTheDocument();
+    expect(screen.getByText("Space B")).toBeInTheDocument();
+    expect(screen.queryByText("Nonselectable Space")).not.toBeInTheDocument();
+    expect(listEPlusBindableSpacesApi).not.toHaveBeenCalled();
+  });
+
+  it("preserves an existing binding that is absent from the selectable list on save", async () => {
+    vi.mocked(getEPlusBotConfigApi).mockResolvedValue({ ...existingConfig, space_ids: [30] });
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    await screen.findByDisplayValue("bot-1");
+    expect(screen.getByTestId("selected-spaces")).toHaveTextContent("30");
+    expect(screen.queryByText("Nonselectable Space")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
+
+    await waitFor(() => expect(saveEPlusBotConfigApi).toHaveBeenCalledWith(
+      "assistant-1",
+      expect.objectContaining({ space_ids: [30] }),
+    ));
+  });
+
+  it("does not clear existing bindings when there are no selectable spaces", async () => {
+    vi.mocked(getSelectableKnowledgeSpacesApi).mockResolvedValue([]);
+    render(<EPlusRobotSettings assistantId="assistant-1" />);
+
+    await screen.findByDisplayValue("bot-1");
+    expect(screen.getByTestId("selected-spaces")).toHaveTextContent("10");
+    fireEvent.click(screen.getByRole("button", { name: "build.eplusSave" }));
+
+    await waitFor(() => expect(saveEPlusBotConfigApi).toHaveBeenCalledWith(
+      "assistant-1",
+      expect.objectContaining({ space_ids: [10] }),
+    ));
   });
 
   it("hides the debug entry when authorization or deployment is unavailable", async () => {

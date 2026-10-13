@@ -7,9 +7,9 @@ import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
   deleteEPlusBotConfigApi,
   getEPlusBotConfigApi,
-  listEPlusBindableSpacesApi,
   saveEPlusBotConfigApi,
 } from "@/controllers/API/eplus";
+import { getSelectableKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { getRobotDebugStatus } from "@/controllers/API/eplusDebug";
 import type {
@@ -91,7 +91,7 @@ export function EPlusRobotSettings({ assistantId }: EPlusRobotSettingsProps) {
     void captureAndAlertRequestErrorHoc(
       Promise.all([
         getEPlusBotConfigApi(assistantId),
-        listEPlusBindableSpacesApi(assistantId),
+        getSelectableKnowledgeSpacesApi(),
       ]),
     ).then((result) => {
       if (!active) return;
