@@ -410,10 +410,9 @@ class KnowledgeFileCorrectionService:
     async def register_update_file(cls, *, login_user, request, correction_id: int, file_path: str) -> dict:
         """把采纳并更新的新文件登记进原知识库, 不记入库分.
 
-        分类、业务域、二级分类以及非自动标签从旧文件复制. 同一条纠错先在本进程排队, 再锁这一行.
-        上传本身不占着行锁, 避免挡住同一条纠错的采纳或撤回, 也不锁整库.
-        同一临时路径若已经登记过, 直接返回那份文件. 多进程抢同一路径时, 后拿到锁的请求也返回先写上的文件;
-        多出来的那份留在库里, 没有入库分. 换一个不同的临时路径会再登记一份, 指针改指向新的.
+        分类、业务域、二级分类以及非自动标签从旧文件复制. 文件写入知识库后立刻结束待办,
+        并给反馈人发采纳并更新的积分. 当前版本要等这份新文件解析成功后再换.
+        解析失败时旧文件仍是当前版本, 积分不退, 这条待办不能再登记第二份文件.
 
         Args:
             login_user: 当前登录用户, 必须是冻结上传人.
@@ -457,8 +456,9 @@ class KnowledgeFileCorrectionService:
         Returns:
             新文件的 id、解析状态和文件名.
         """
+        created_new = False
         async with get_async_db_session() as session:
-            # 行锁只包住检查. 上传放在锁外, 避免一次解析占住连接并挡住这条纠错的采纳.
+            # 行锁只包住检查. 上传放在锁外, 避免一次解析占住连接.
             repo = KnowledgeFileCorrectionRepositoryImpl(session)
             correction = await repo.lock_by_id(int(correction_id))
             if correction is None:
@@ -467,9 +467,7 @@ class KnowledgeFileCorrectionService:
                 raise FileCorrectionUploaderOnlyError()
             if correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
-            reused = await cls._reuse_pending_update_file(session, correction, file_path)
-            if reused is not None:
-                return reused
+            new_id = await cls._existing_pending_update_file_id(session, correction)
             old_file = (
                 await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == int(correction.file_id)))
             ).first()
@@ -481,62 +479,71 @@ class KnowledgeFileCorrectionService:
             subcategory_source = old_file.file_subcategory_source
             old_id = int(old_file.id)
             knowledge_id = int(correction.knowledge_id)
-        created = await _add_correction_file(
-            request,
-            login_user,
-            knowledge_id=knowledge_id,
-            file_path=[file_path],
-            file_category_code=category,
-            file_subcategory_code=subcategory,
-            business_domain_code=domain,
-            award_points=False,
-        )
-        new_file = next((item for item in created or [] if getattr(item, "id", None)), None)
-        if new_file is None:
-            raise FileCorrectionUpdateFileInvalidError()
-        new_id = int(new_file.id)
+        if new_id is None:
+            created = await _add_correction_file(
+                request,
+                login_user,
+                knowledge_id=knowledge_id,
+                file_path=[file_path],
+                file_category_code=category,
+                file_subcategory_code=subcategory,
+                business_domain_code=domain,
+                award_points=False,
+            )
+            new_file = next((item for item in created or [] if getattr(item, "id", None)), None)
+            if new_file is None:
+                raise FileCorrectionUpdateFileInvalidError()
+            new_id = int(new_file.id)
+            created_new = True
+        award_payload = None
+        notify_payload = None
         async with get_async_db_session() as session:
-            # 新会话才能看见刚才提交的文件. 再锁一次, 确认没有别的请求先写上同一路径.
+            # 新会话才能看见刚才提交的文件. 再锁一次, 避免两笔请求各结束一次.
             correction = await KnowledgeFileCorrectionRepositoryImpl(session).lock_by_id(int(correction_id))
             if correction is None:
                 raise FileCorrectionUpdateFileInvalidError()
             if correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
-            reused = await cls._reuse_pending_update_file(session, correction, file_path)
-            if reused is not None:
-                return reused
+            already_id = await cls._existing_pending_update_file_id(session, correction)
+            if already_id is not None:
+                new_id = already_id
+                created_new = False
             row = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == new_id))).first()
             if row is None:
                 raise FileCorrectionUpdateFileInvalidError()
-            metadata = dict(row.user_metadata or {})
-            metadata[_UPDATE_SOURCE_KEY] = file_path
-            row.user_metadata = metadata
-            if subcategory_source:
-                row.file_subcategory_source = subcategory_source
-            session.add(row)
-            await cls._copy_non_ai_tags(
-                session,
-                old_id=old_id,
-                new_id=new_id,
-                user_id=int(login_user.user_id),
-            )
+            if created_new:
+                metadata = dict(row.user_metadata or {})
+                metadata[_UPDATE_SOURCE_KEY] = file_path
+                row.user_metadata = metadata
+                if subcategory_source:
+                    row.file_subcategory_source = subcategory_source
+                session.add(row)
+                await cls._copy_non_ai_tags(
+                    session,
+                    old_id=old_id,
+                    new_id=new_id,
+                    user_id=int(login_user.user_id),
+                )
             correction.pending_update_file_id = new_id
-            correction.update_time = datetime.now()
-            session.add(correction)
+            award_payload, notify_payload = await cls._accept_registered_update(session, correction, login_user)
             await session.commit()
-            return {"id": new_id, "status": int(row.status or 0), "file_name": row.file_name}
+            result = {"id": new_id, "status": int(row.status or 0), "file_name": row.file_name}
+        if notify_payload is not None:
+            await cls._notify(**notify_payload)
+        if award_payload is not None:
+            await cls._dispatch_award(award_payload)
+        return result
 
     @staticmethod
-    async def _reuse_pending_update_file(session, correction: KnowledgeFileCorrection, file_path: str) -> dict | None:
-        """同一临时路径重复登记时返回已经记下的新文件.
+    async def _existing_pending_update_file_id(session, correction: KnowledgeFileCorrection) -> int | None:
+        """这条纠错如果已经登记过新文件, 返回那个文件 ID.
 
         Args:
             session: 持有纠错行锁的会话.
             correction: 待处理纠错.
-            file_path: 本次临时路径.
 
         Returns:
-            已登记文件的 id 和状态. 没有可复用文件时返回 None.
+            仍在同一知识库中的新文件 ID. 没有可复用文件时返回 None.
         """
         pending_id = int(correction.pending_update_file_id or 0)
         if pending_id <= 0:
@@ -544,10 +551,116 @@ class KnowledgeFileCorrectionService:
         row = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == pending_id))).first()
         if row is None or int(row.knowledge_id) != int(correction.knowledge_id):
             return None
-        source = str((row.user_metadata or {}).get(_UPDATE_SOURCE_KEY) or "")
-        if source != file_path:
-            return None
-        return {"id": int(row.id), "status": int(row.status or 0), "file_name": row.file_name}
+        return int(row.id)
+
+    @classmethod
+    async def _accept_registered_update(cls, session, correction: KnowledgeFileCorrection, login_user):
+        """上传登记成功后结束待办并生成发分载荷. 不替换当前版本.
+
+        Args:
+            session: 持有纠错行锁的会话.
+            correction: 仍待处理的纠错. pending_update_file_id 已指向新文件.
+            login_user: 冻结上传人.
+
+        Returns:
+            发分载荷和审批通知参数. 不需要发分时第一项为 None.
+
+        Raises:
+            ApprovalRequestNotFoundError: 审批实例不存在.
+        """
+        instance = (
+            await session.exec(
+                select(ApprovalInstance)
+                .where(ApprovalInstance.id == int(correction.approval_instance_id or 0))
+                .with_for_update()
+            )
+        ).first()
+        if instance is None:
+            raise ApprovalRequestNotFoundError()
+        task = (
+            await session.exec(
+                select(ApprovalTask)
+                .where(
+                    ApprovalTask.instance_id == int(instance.id),
+                    ApprovalTask.status == ApprovalTaskStatus.PENDING,
+                )
+                .with_for_update()
+            )
+        ).first()
+        now = datetime.now()
+        if task is not None:
+            task.status = ApprovalTaskStatus.APPROVED
+            task.acted_at = now
+            task.update_time = now
+            session.add(task)
+        correction.status = CORRECTION_APPROVED
+        correction.update_time = now
+        instance.status = ApprovalInstanceStatus.APPROVED
+        instance.latest_approver_user_id = int(login_user.user_id)
+        instance.current_node_name = None
+        instance.update_time = now
+        session.add(correction)
+        session.add(instance)
+        award_payload = await cls._create_award(
+            session,
+            correction,
+            award_kind=AWARD_KIND_UPDATE,
+            delta=UPDATE_POINTS,
+            pay=True,
+        )
+        await cls._delete_open_slot(session, correction)
+        session.add(
+            ApprovalActionLog(
+                tenant_id=int(correction.tenant_id),
+                instance_id=int(instance.id),
+                action="approved",
+                operator_user_id=int(login_user.user_id),
+                operator_user_name=str(getattr(login_user, "user_name", "") or correction.uploader_user_name or ""),
+                detail={"comment": "", "correction_id": int(correction.id), "new_file_id": int(correction.pending_update_file_id or 0)},
+                create_time=now,
+                update_time=now,
+            )
+        )
+        notify_payload = {
+            "sender": int(login_user.user_id),
+            "receivers": [int(correction.applicant_user_id)],
+            "action_code": "approval_instance_approved",
+            "business_name": instance.business_name,
+            "instance_id": int(instance.id),
+            "reason": None,
+        }
+        return award_payload, notify_payload
+
+    @classmethod
+    async def promote_parsed_update_file(cls, file_id: int) -> None:
+        """解析成功后, 把采纳并更新登记的新文件收成当前版本.
+
+        待办和积分在上传成功时已经结束. 解析失败不会调用本方法, 旧文件保持当前版本.
+
+        Args:
+            file_id: 刚解析成功的知识库文件 ID.
+        """
+        async with get_async_db_session() as session:
+            correction = (
+                await session.exec(
+                    select(KnowledgeFileCorrection).where(
+                        KnowledgeFileCorrection.pending_update_file_id == int(file_id),
+                        KnowledgeFileCorrection.status == CORRECTION_APPROVED,
+                    )
+                )
+            ).first()
+            if correction is None:
+                return
+            new_file = (
+                await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == int(file_id)))
+            ).first()
+            if new_file is None or int(new_file.status or 0) != int(KnowledgeFileStatus.SUCCESS.value):
+                return
+            await cls._promote_new_version(session, correction, int(file_id))
+            correction.pending_update_file_id = None
+            correction.update_time = datetime.now()
+            session.add(correction)
+            await session.commit()
 
     @staticmethod
     async def _copy_non_ai_tags(session, *, old_id: int, new_id: int, user_id: int) -> None:
@@ -1099,6 +1212,17 @@ class KnowledgeFileCorrectionService:
             )
         except Exception:
             logger.exception("file correction notify failed instance_id=%s", instance_id)
+
+
+def promote_parsed_update_file_sync(file_id: int) -> None:
+    """在解析进程里把已登记的新文件收成当前版本.
+
+    Args:
+        file_id: 刚解析成功的知识库文件 ID.
+    """
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    run_async_task(lambda: KnowledgeFileCorrectionService.promote_parsed_update_file(int(file_id)))
 
 
 async def cancel_pending_file_corrections(file_ids: list[int]) -> None:

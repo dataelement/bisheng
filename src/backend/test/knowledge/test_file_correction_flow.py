@@ -1063,9 +1063,10 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                 )
 
         first, second = await asyncio.gather(_once(), _once())
-        assert first["status_code"] == 200, first
-        assert second["status_code"] == 200, second
-        assert first["data"]["id"] == second["data"]["id"]
+        bodies = [first, second]
+        success = next(item for item in bodies if item["status_code"] == 200)
+        rejected = next(item for item in bodies if item["status_code"] != 200)
+        assert rejected["status_code"] == 18102, rejected
         assert len(calls) == 1
         assert calls[0]["award_points"] is False
         assert calls[0]["file_category_code"] == "STD"
@@ -1081,7 +1082,7 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                         WHERE l.resource_id = :id
                         """
                     ),
-                    {"id": str(first["data"]["id"])},
+                    {"id": str(success["data"]["id"])},
                 )
             ).all()
             kinds = {str(item[0]) for item in copied}
@@ -1093,6 +1094,23 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                     {"id": correction_id},
                 )
             ).scalar_one()
+            correction_status = (
+                await session.execute(
+                    text("SELECT status FROM knowledge_file_correction WHERE id = :id"),
+                    {"id": correction_id},
+                )
+            ).scalar_one()
+            awarded = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(delta), 0) FROM user_point_log
+                        WHERE user_id = :id AND rule_code = 'G8'
+                        """
+                    ),
+                    {"id": reader},
+                )
+            ).scalar_one()
             stored = (
                 await session.execute(
                     text(
@@ -1101,15 +1119,59 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                         FROM knowledgefile WHERE id = :id
                         """
                     ),
-                    {"id": int(first["data"]["id"])},
+                    {"id": int(success["data"]["id"])},
                 )
             ).one()
             metadata = stored[0]
             if isinstance(metadata, str):
                 metadata = json.loads(metadata)
-            assert int(pointer) == int(first["data"]["id"])
+            assert str(correction_status) == "approved"
+            assert int(awarded) == 2
+            assert int(pointer) == int(success["data"]["id"])
             assert (metadata or {}).get("correction_update_source") == "tmp/same.pdf"
             assert str(stored[1]) == "manual"
+            primary_before = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT COUNT(*) FROM knowledge_document_version
+                        WHERE knowledge_file_id = :id AND is_primary = 1
+                        """
+                    ),
+                    {"id": int(success["data"]["id"])},
+                )
+            ).scalar_one()
+            assert int(primary_before) == 0
+            await session.execute(
+                text("UPDATE knowledgefile SET status = 2 WHERE id = :id"),
+                {"id": int(success["data"]["id"])},
+            )
+            await session.commit()
+        from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+            KnowledgeFileCorrectionService,
+        )
+
+        await KnowledgeFileCorrectionService.promote_parsed_update_file(int(success["data"]["id"]))
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            primary_after = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT knowledge_file_id FROM knowledge_document_version
+                        WHERE knowledge_file_id = :id AND is_primary = 1
+                        """
+                    ),
+                    {"id": int(success["data"]["id"])},
+                )
+            ).scalar_one()
+            cleared = (
+                await session.execute(
+                    text("SELECT pending_update_file_id FROM knowledge_file_correction WHERE id = :id"),
+                    {"id": correction_id},
+                )
+            ).scalar_one()
+            assert int(primary_after) == int(success["data"]["id"])
+            assert cleared is None
     finally:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             await session.execute(text("DELETE FROM taglink WHERE resource_id = :id"), {"id": str(origin)})
@@ -1119,5 +1181,10 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                     {"id": str(created_id)},
                 )
             await session.execute(text("DELETE FROM tag WHERE name IN ('手工标签', '自动标签')"))
+            for created_id in file_ids:
+                await session.execute(
+                    text("DELETE FROM knowledge_document_version WHERE knowledge_file_id = :id"),
+                    {"id": created_id},
+                )
             await session.commit()
         await _cleanup(engine, user_ids=user_ids, space_ids=space_ids, file_ids=file_ids)

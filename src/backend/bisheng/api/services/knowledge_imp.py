@@ -426,6 +426,18 @@ def addEmbedding(
             logger.info(f"process_file_end file_id={db_file.id} file_name={db_file.file_name}")
             persist_parse_result_with_fulltext_intent(db_file)
             if db_file.status == KnowledgeFileStatus.SUCCESS.value:
+                try:
+                    from bisheng.knowledge.domain.services.knowledge_file_correction_service import (
+                        promote_parsed_update_file_sync,
+                    )
+
+                    # 采纳并更新的积分和待办已在上传时结束. 这里只在解析成功后替换当前版本.
+                    promote_parsed_update_file_sync(db_file.id)
+                except Exception:
+                    logger.exception(
+                        "file correction version promote failed file_id={}",
+                        db_file.id,
+                    )
                 KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
                 try:
                     from bisheng.worker.knowledge.file_worker import (
