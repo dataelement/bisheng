@@ -94,6 +94,8 @@ export interface SelectableSkill {
     name: string;
     display_name: string;
     description: string;
+    /** Admin-preselected: starts out selected when the user enters task mode. */
+    default_checked?: boolean;
 }
 
 export function getSelectableSkills(): Promise<SelectableSkill[]> {

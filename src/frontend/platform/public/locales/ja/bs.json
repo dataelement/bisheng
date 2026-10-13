@@ -2207,6 +2207,7 @@
       "displayName": "表示名",
       "description": "説明",
       "status": "状態",
+      "defaultChecked": "デフォルト選択",
       "updateTime": "更新日時",
       "actions": "操作"
     },
@@ -2218,6 +2219,9 @@
     "deleteConfirm": "削除するとエンドユーザーは選択できなくなり、復元できません。「{{name}}」を削除しますか？",
     "enabledToast": "有効化しました。エンドユーザーの選択リストに即時表示されます",
     "disabledToast": "無効化しました。エンドユーザーの選択リストから削除されました",
+    "defaultCheckedTip": "オンにすると、新しい会話を始めるたびにこのスキルが選択済みになります。ユーザーは選択を外せます。スキルが無効の間は適用されません。",
+    "defaultCheckedOnToast": "デフォルト選択に設定しました。新しい会話から適用されます",
+    "defaultCheckedOffToast": "デフォルト選択を解除しました",
     "deleted": "削除しました",
     "saved": "保存しました",
     "count": "全 {{count}} 件",

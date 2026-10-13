@@ -17,6 +17,7 @@ import { useRecoilValue, useRecoilState } from "recoil";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
 import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
+import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
@@ -313,6 +314,7 @@ const AiChatInput = memo(
         // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
         // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
         const showAddSkill = !!bsConfig?.skillEntry?.enabled;
+        useDefaultCheckedSkills({ taskMode, skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
 
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
