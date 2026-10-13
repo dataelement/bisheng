@@ -64,3 +64,8 @@ class LoginParticipationDataError(BaseErrorCode):
 class DocumentStatisticsNotReadyError(BaseErrorCode):
     Code: int = 17018
     Msg: str = '知识空间文档统计尚未就绪，请先完成索引迁移与校验'
+
+
+class DocumentCategoryConflictError(BaseErrorCode):
+    Code: int = 17021
+    Msg: str = '文档分类存在冲突, 请联系管理员核对分类来源和统计投影'

@@ -122,3 +122,64 @@ async def test_dynamic_filter_uses_china_day_boundaries(setup):
     start, end = query._document_bounds
     assert datetime.fromtimestamp(start / 1000, CHINA).strftime("%H:%M:%S") == "00:00:00"
     assert datetime.fromtimestamp(end / 1000, CHINA).strftime("%H:%M:%S") == "23:59:59"
+
+
+@pytest.mark.parametrize("category_mode", [None, "dimension", "stack", "columns", "filter"])
+async def test_category_conflict_isolated_from_unrelated_queries_and_exports(setup, category_mode):
+    stats, load = setup
+    records = [dict(row) for row in stats.records]
+    records[0].update(file_category_code="POL", file_category_name="政策")
+    records[1].update(file_category_code="STD", file_category_name="标准")
+    load.return_value = DocumentStatistics(records, stats.called_at)
+    options = {"metrics": [{"fieldId": "total_file_count"}]}
+    filters = []
+    if category_mode == "dimension":
+        options["dimensions"] = [{"fieldId": "file_category_name"}]
+    elif category_mode == "stack":
+        options["stackDimension"] = {"fieldId": "file_category_name"}
+    elif category_mode == "columns":
+        options["stackDimensions"] = [{"fieldId": "file_category_name"}]
+    elif category_mode == "filter":
+        filters = [DimensionQueryFilter(fieldId="file_category_name", values=["政策", "标准"])]
+    config = ComponentDataConfig(**options)
+    query = component.DataQueryService(dataset_code=INDEX, data_config=config, dimension_filters=filters)
+    if category_mode:
+        from bisheng.common.errcode.telemetry import DocumentCategoryConflictError
+
+        with pytest.raises(DocumentCategoryConflictError) as error:
+            await query.query_telemetry_data()
+        assert error.value.Code == 17021
+        with pytest.raises(DocumentCategoryConflictError):
+            await dashboard_export_detail.query_detail_rows(
+                dataset_code=INDEX,
+                data_config=config,
+                dimension_filters=filters,
+                row_limit=100,
+            )
+    else:
+        result = await query.query_telemetry_data()
+        assert result.value == [[2]]
+        detail = await dashboard_export_detail.query_detail_rows(dataset_code=INDEX, data_config=config, row_limit=100)
+        assert len(detail.rows) == 2
+
+
+def test_category_dependency_checks_nested_filters_not_filter_values():
+    from bisheng.telemetry_search.domain.schemas.query_builder import FilterExpression, TermOp
+    from bisheng.telemetry_search.domain.services.knowledge_document_statistics import uses_category_fields
+
+    nested = FilterExpression(
+        bool_operator="must",
+        filters=[
+            FilterExpression(bool_operator="should", filters=[TermOp(field="file_subcategory_code", value="POL-01")]),
+        ],
+    )
+    assert uses_category_fields([], [nested])
+    assert not uses_category_fields(
+        [],
+        [
+            FilterExpression(
+                bool_operator="must",
+                filters=[TermOp(field="file_name", value="file_category_code")],
+            )
+        ],
+    )

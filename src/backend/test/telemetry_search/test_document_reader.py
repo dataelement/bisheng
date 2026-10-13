@@ -2,8 +2,11 @@
 """按真实查询条件筛选分页样本，验证库存和调用范围不会相互污染。"""
 
 from unittest.mock import AsyncMock
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from elastic_transport import ApiResponseMeta, HttpHeaders, NodeConfig
+from elasticsearch import AsyncElasticsearch
 
 from bisheng.telemetry_search.domain.schemas.query_builder import FilterExpression, RangeOp, RangeValue, TermOp
 from bisheng.telemetry_search.domain.services import knowledge_document_reader as module
@@ -42,7 +45,6 @@ class ES:
                 bucket["first"] = {"value": min(row["timestamp"] * 1000 for row in rows)}
             buckets.append(bucket)
         return {
-            "pit_id": "updated",
             "aggregations": {
                 "items": {
                     "buckets": buckets,
@@ -88,38 +90,76 @@ async def test_pages_scope_external_calls_and_exact_zero(monkeypatch):
         lambda ids: {1: "document:1", 9: "document:1", 2: "document:2", 10: "document:2"},
     )
     client = ES(rows)
-    reader = module.DocumentReader(client, "initial")
+    reader = module.DocumentReader(client, "mid_knowledge_space_content_stat")
     result = await reader.load([{"term": {"org": "A"}}, {"term": {"tenant_id": 1}}], include_usage=True)
     assert result.aggregate([], "total_file_count") == [[2]]
     assert result.aggregate([], "called_document_count") == [[1]]
     assert result.aggregate([], "document_usage_ratio") == [[0.5]]
     assert result.called_at == {"document:1": 10000}
     assert len(client.calls) == 5
-    assert client.calls[1]["pit"]["id"] == "updated"
+    assert client.calls[1]["aggs"]["items"]["composite"]["after"] == {"key": "1"}
+    assert all(call["index"] == "mid_knowledge_space_content_stat" and "pit" not in call for call in client.calls)
 
 
-@pytest.mark.parametrize("response", [{"timed_out": True}, {"_shards": {"failed": 1}}])
+@pytest.mark.parametrize("response", [{"timed_out": True}, {"terminated_early": True}, {"_shards": {"failed": 1}}])
 async def test_partial_responses_are_errors(response):
     client = type("ES", (), {"search": AsyncMock(return_value=response)})()
     with pytest.raises(RuntimeError, match="不完整"):
         await module.DocumentReader(client, "pit").load([], include_usage=False)
+    assert client.search.await_args.kwargs["allow_partial_search_results"] is False
 
 
-async def test_fixed_index_without_version_metadata_and_pit_close_on_failure(monkeypatch):
+async def test_index_query_uses_real_client_without_pit(monkeypatch):
+    client = AsyncElasticsearch("http://localhost:9200")
+    requests = []
+
+    async def perform_request(method, target, **kwargs):
+        requests.append((method, target, kwargs.get("body")))
+        path = urlsplit(target)
+        params = parse_qs(path.query)
+        status = 200
+        if path.path == "/mid_knowledge_space_content_stat/_search" and method == "POST":
+            assert params["allow_partial_search_results"] == ["false"]
+            assert "pit" not in kwargs["body"]
+            body = {"aggregations": {"items": {"buckets": []}}}
+        else:
+            status = 400
+            body = {"error": {"type": "illegal_argument_exception", "reason": "PIT must not be used"}}
+        return ApiResponseMeta(
+            status=status,
+            http_version="1.1",
+            headers=HttpHeaders({"x-elastic-product": "Elasticsearch"}),
+            duration=0,
+            node=NodeConfig("http", "localhost", 9200),
+        ), body
+
+    monkeypatch.setattr(client.transport, "perform_request", AsyncMock(side_effect=perform_request))
+    monkeypatch.setattr(module, "get_es_connection", AsyncMock(return_value=client))
+    try:
+        async with module.document_reader("mid_knowledge_space_content_stat") as reader:
+            result = await reader.load([], include_usage=False)
+        assert result.aggregate([], "total_file_count") == [[0]]
+        assert requests[0][:2] == (
+            "POST",
+            "/mid_knowledge_space_content_stat/_search?allow_partial_search_results=false",
+        )
+        assert len(requests) == 1
+    finally:
+        await client.close()
+
+
+async def test_fixed_index_without_snapshot_propagates_query_failure(monkeypatch):
     client = type("ES", (), {})()
     client.indices = type("Indices", (), {"get_mapping": AsyncMock(return_value={"i": {"mappings": {}}})})()
     client.open_point_in_time = AsyncMock(return_value={"id": "pit"})
     client.close_point_in_time = AsyncMock()
     monkeypatch.setattr(module, "get_es_connection", AsyncMock(return_value=client))
-    with pytest.raises(RuntimeError):
-        async with module.document_reader("mid_knowledge_space_content_stat") as reader:
-            reader.pit_id = "latest"
+    with pytest.raises(RuntimeError, match="query failed"):
+        async with module.document_reader("mid_knowledge_space_content_stat"):
             raise RuntimeError("query failed")
     client.indices.get_mapping.assert_not_awaited()
-    client.open_point_in_time.assert_awaited_once_with(
-        index="mid_knowledge_space_content_stat", keep_alive="2m", allow_partial_search_results=False
-    )
-    client.close_point_in_time.assert_awaited_once_with(id="latest")
+    client.open_point_in_time.assert_not_awaited()
+    client.close_point_in_time.assert_not_awaited()
 
 
 @pytest.mark.parametrize("include_usage", [False, True])

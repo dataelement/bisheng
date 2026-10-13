@@ -4,6 +4,21 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `audit_knowledge_document_categories.py`
+
+只读审计数据看板的文档分类冲突。指定租户，并按知识库或文档 ID 限定范围；123、91 为示例 ID。比对 ES 文件快照与数据库当前入口、主版本和管理入口，输出分类来源、身份差异及安全的定向刷新建议。不会修改数据库/ES、派发刷新或内容解析任务，没有 `--apply` 模式。
+
+```bash
+# 在 src/backend 执行；默认最多 2000 个文件，数据库每批 200 个。
+.venv/bin/python scripts/audit_knowledge_document_categories.py --tenant-id 1 --space-id 123
+.venv/bin/python scripts/audit_knowledge_document_categories.py \
+  --tenant-id 1 --document-id 91 --output category-audit.json
+```
+
+- 可以重复 `--space-id` 或 `--document-id`，两种范围互斥；最多 400 个范围 ID。`--limit` 上限 10000，`--batch-size` 上限 400；报告 `truncated=true` 表示范围没有全部读取，不能当作全量审计。
+- 报告区分 ES 漂移、数据库分类冲突、身份不一致、权威入口缺失/多义、空分类冲突等情况；不记录文档正文。源数据不明确时刷新建议为空，不猜分类。数据库版本记录的租户归属通过父文档和文件核验，不依赖版本表不存在的租户字段。
+- 输出文件使用 `0600` 权限且必须不存在；失败不会生成成功报告。`source_fingerprint` 只供来源核对，不是写入授权或并发保护令牌。线上修复必须先审阅实际范围与来源，单独确认后执行，并重新核对来源、定向刷新和读回；不能直接清空索引或改写分类。
+
 ### `move_personal_files_to_clinic.py`
 
 扫描指定租户的全部有效个人知识库，将指定完整目录路径（含子目录）中的文件，按上传人的主组织迁入科室库，找不到时兜底部门库。独立单文件脚本，运行依赖当前后端环境。

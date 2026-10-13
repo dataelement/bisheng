@@ -289,38 +289,51 @@ async def test_query_keeps_history_and_applies_the_current_period(monkeypatch):
     assert "gte" not in str(calls[0][1])
 
 
-@pytest.mark.parametrize("failure", [None, "timeout", "shards", "incomplete", "cursor"])
-async def test_pit_pagination_is_complete_and_always_closed(monkeypatch, failure):
+@pytest.mark.parametrize(
+    "failure",
+    [None, "timeout", "shards", "terminated", "missing_cursor", "cursor", "backward", "grow", "shrink"],
+)
+async def test_index_pagination_without_pit_checks_errors_and_accepts_refresh_changes(monkeypatch, failure):
     page = {
-        "pit_id": "new-pit",
         "hits": {
-            "total": {"value": 2, "relation": "eq"},
+            "total": {"value": 1 if failure == "grow" else 3 if failure == "shrink" else 2, "relation": "eq"},
             "hits": [
-                {"sort": [1], "_source": RECORDS[0]},
+                {"sort": [1, 1, "1"], "_source": RECORDS[0]},
             ],
         },
     }
-    second = {"hits": {"hits": [{"sort": [2], "_source": RECORDS[1]}]}}
+    second = {"hits": {"hits": [{"sort": [1, 1, "2"], "_source": RECORDS[1]}]}}
     if failure == "timeout":
         second["timed_out"] = True
     if failure == "shards":
         second["_shards"] = {"failed": 1}
-    if failure == "incomplete":
-        second["hits"]["hits"] = []
+    if failure == "terminated":
+        second["terminated_early"] = True
+    if failure == "missing_cursor":
+        second["hits"]["hits"][0].pop("sort")
     if failure == "cursor":
-        second["hits"]["hits"][0]["sort"] = [1]
+        second["hits"]["hits"][0]["sort"] = [1, 1, "1"]
+    if failure == "backward":
+        second["hits"]["hits"][0]["sort"] = [0, 1, "2"]
     client = AsyncMock()
     client.open_point_in_time.return_value = {"id": "pit"}
     client.search.side_effect = [page, second, {"hits": {"hits": []}}]
     monkeypatch.setattr(module, "get_es_connection", AsyncMock(return_value=client))
-    if failure:
+    if failure not in {None, "grow", "shrink"}:
         with pytest.raises(LoginParticipationDataError):
             [row async for row in read_login_records("users", {}, {"user_id"})]
     else:
         rows = [row async for row in read_login_records("users", {}, {"user_id"})]
         assert len(rows) == 2
-        assert client.search.call_args_list[1].kwargs["body"]["search_after"] == [1]
-    client.close_point_in_time.assert_awaited_once_with(body={"id": "new-pit"})
+        assert client.search.call_args_list[1].kwargs["body"]["search_after"] == [1, 1, "1"]
+    for call in client.search.await_args_list:
+        assert call.kwargs["index"] == "users"
+        assert call.kwargs["allow_partial_search_results"] is False
+        assert "pit" not in call.kwargs["body"]
+        assert call.kwargs["body"]["sort"] == [{"timestamp": "asc"}, {"tenant_id": "asc"}, {"user_id": "asc"}]
+        assert call.kwargs["body"]["track_total_hits"] is False
+    client.open_point_in_time.assert_not_awaited()
+    client.close_point_in_time.assert_not_awaited()
 
 
 @pytest.mark.parametrize("code", ["mid_user_increment", "mid_user_daily_participation"])

@@ -264,7 +264,7 @@ async def query_detail_rows(
         return DetailRows(columns=[], rows=[])
 
     metric_config = _metric_config_for(data_config, metric_map)
-    from .knowledge_document_statistics import DOCUMENT_METRICS
+    from .knowledge_document_statistics import DOCUMENT_METRICS, uses_category_fields
 
     if dataset_code == "mid_knowledge_space_content_stat" and metric_config and metric_config.field in DOCUMENT_METRICS:
         from bisheng.core.context.tenant import get_current_tenant_id
@@ -279,6 +279,9 @@ async def query_detail_rows(
             statistics = await reader.load(
                 clauses, include_usage=metric_config.field in {"called_document_count", "document_usage_ratio"},
             )
+        fields = [dimension.field_id for dimension in [*data_config.dimensions, *data_config.get_stack_dimensions()]]
+        if uses_category_fields(fields, filters):
+            statistics.validate_categories()
         rows = statistics.detail(metric_config.field, start=start, end=end)
         columns = _ordered_unique([
             DetailColumn(field="knowledge_identity", label="文档唯一标识"),

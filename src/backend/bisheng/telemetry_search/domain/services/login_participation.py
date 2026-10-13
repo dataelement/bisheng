@@ -249,50 +249,40 @@ class LoginPopulation:
 
 
 async def read_login_records(index: str, query: dict, fields: set[str]):
-    """PIT 分页完整读取, 禁止超时或部分分片结果冒充完整累计人数。"""
+    """普通索引分页读取登录事实, 允许刷新偏差但拒绝失败或无效游标。"""
     client = await get_es_connection()
-    opened = await client.open_point_in_time(index=index, keep_alive="2m")
-    pit_id = opened["id"]
-    cursor, total, count = None, None, 0
-    try:
-        if opened.get("_shards", {}).get("failed", 0):
+    cursor = None
+    while True:
+        body = {
+            "size": 1000,
+            "sort": [{"timestamp": "asc"}, {"tenant_id": "asc"}, {"user_id": "asc"}],
+            "query": query,
+            "_source": sorted(fields),
+            "track_total_hits": False,
+        }
+        if cursor is not None:
+            body["search_after"] = cursor
+        response = await client.search(index=index, body=body, allow_partial_search_results=False)
+        if (
+            response.get("timed_out")
+            or response.get("terminated_early")
+            or response.get("_shards", {}).get("failed", 0)
+        ):
             raise LoginParticipationDataError()
-        while True:
-            body = {
-                "size": 1000,
-                "pit": {"id": pit_id, "keep_alive": "2m"},
-                "sort": [{"_shard_doc": "asc"}],
-                "query": query,
-                "_source": sorted(fields),
-                "track_total_hits": total is None,
-            }
-            if cursor is not None:
-                body["search_after"] = cursor
-            response = await client.search(body=body, allow_partial_search_results=False)
-            pit_id = response.get("pit_id", pit_id)
-            if response.get("timed_out") or response.get("_shards", {}).get("failed", 0):
+        hits = response["hits"]["hits"]
+        if not hits:
+            return
+        next_cursor = hits[-1].get("sort")
+        if not isinstance(next_cursor, list) or len(next_cursor) != 3:
+            raise LoginParticipationDataError()
+        try:
+            if cursor is not None and next_cursor <= cursor:
                 raise LoginParticipationDataError()
-            if total is None:
-                totals = response["hits"]["total"]
-                if totals.get("relation") != "eq":
-                    raise LoginParticipationDataError()
-                total = totals["value"]
-            hits = response["hits"]["hits"]
-            if not hits:
-                if count != total:
-                    raise LoginParticipationDataError()
-                break
-            next_cursor = hits[-1].get("sort")
-            if next_cursor is None or next_cursor == cursor:
-                raise LoginParticipationDataError()
-            cursor = next_cursor
-            for hit in hits:
-                count += 1
-                if count > total:
-                    raise LoginParticipationDataError()
-                yield hit["_source"]
-    finally:
-        await client.close_point_in_time(body={"id": pit_id})
+        except TypeError as exc:
+            raise LoginParticipationDataError() from exc
+        cursor = next_cursor
+        for hit in hits:
+            yield hit["_source"]
 
 
 async def load_login_population(

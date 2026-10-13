@@ -17997,13 +17997,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     normalized_file_subcategory_code or "",
                 ),
             )
-        if encoding_changed or subcategory_changed:
+        if distribution_metadata_changed:
             affected_file_ids = (
                 list(metadata_result.active_entry_ids)
                 if resolved is not None and distribution_metadata_changed
                 else [file_id]
             )
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(affected_file_ids)
+        if encoding_changed or subcategory_changed:
             if len(affected_file_ids) > 1:
                 self._enqueue_recommendation_files_refresh(affected_file_ids)
             else:

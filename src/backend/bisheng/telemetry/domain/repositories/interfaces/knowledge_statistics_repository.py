@@ -16,3 +16,9 @@ class KnowledgeStatisticsRepository(BaseRepository[KnowledgeFile, int], ABC):
     @abstractmethod
     def identities(file_ids: list[int]) -> dict[int, str]:
         raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def category_audit_sources(file_ids: list[int], document_ids: list[int]) -> dict:
+        """有界读取当前入口、版本和有效管理来源, 不修改任何元数据。"""
+        raise NotImplementedError

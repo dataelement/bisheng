@@ -177,7 +177,7 @@ class DataQueryService(BaseModel):
         from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
         from bisheng.core.context.tenant import get_current_tenant_id
         from .knowledge_document_reader import document_reader, split_time_filters
-        from .knowledge_document_statistics import DOCUMENT_METRICS
+        from .knowledge_document_statistics import DOCUMENT_METRICS, uses_category_fields
 
         self._document_statistics = None
         if self.dataset_code == KNOWLEDGE_SPACE_CONTENT_STAT_INDEX and any(
@@ -193,6 +193,11 @@ class DataQueryService(BaseModel):
                     document_filters,
                     include_usage=any(metric.field_id in {"called_document_count", "document_usage_ratio"} for metric in self.data_config.metrics),
                 )
+            fields = [dimension.field for dimension in dimensions]
+            if stack_dimension is not None:
+                fields.append(stack_dimension.field)
+            if uses_category_fields(fields, filters):
+                self._document_statistics.validate_categories()
             self._document_bounds = (start, end)
         for metric_index, metric in enumerate(self.data_config.metrics):
             metric_config = metric_map.get(metric.field_id)

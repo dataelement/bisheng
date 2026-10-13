@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from bisheng.common.errcode.telemetry import DocumentCategoryConflictError
+from bisheng.knowledge.domain.constants import normalize_file_category_code
+from bisheng.telemetry_search.domain.schemas.query_builder import BaseOp, FilterExpression
 
 CHINA = ZoneInfo("Asia/Shanghai")
 DOCUMENT_METRICS = frozenset(
@@ -18,6 +23,22 @@ DOCUMENT_METRICS = frozenset(
         "document_usage_ratio",
     }
 )
+CATEGORY_FIELDS = frozenset(
+    {"file_category_code", "file_category_name", "file_subcategory_code", "file_subcategory_name"}
+)
+
+
+def uses_category_fields(fields: Iterable[str], filters: Iterable[FilterExpression | BaseOp] | None = None) -> bool:
+    """从字段和筛选语法树识别分类依赖, 不检查筛选值的文本。"""
+    if any(str(field).split(".", 1)[0] in CATEGORY_FIELDS for field in fields):
+        return True
+    for expr in filters or []:
+        if isinstance(expr, FilterExpression):
+            if uses_category_fields([], expr.filters):
+                return True
+        elif str(expr.field).split(".", 1)[0] in CATEGORY_FIELDS:
+            return True
+    return False
 
 
 def milliseconds(value: Any) -> int:
@@ -72,13 +93,47 @@ class DocumentStatistics:
     def __init__(self, records: list[dict], called_at: dict[str, int]):
         if any(not row.get("knowledge_identity") for row in records):
             raise ValueError("文件统计缺少文档身份，请先完成知识空间统计索引重建")
-        categories: dict[str, set[str]] = defaultdict(set)
+        self.records = []
+        grouped = defaultdict(list)
         for row in records:
-            categories[row["knowledge_identity"]].add(row.get("file_category_code") or "")
-        if any(len(values) > 1 for values in categories.values()):
-            raise ValueError("同一文档的知识分类冲突，请修正引用分类后重新同步")
-        self.records = records
+            copied = dict(row)
+            raw = row.get("file_category_code")
+            copied["file_category_code"] = normalize_file_category_code(raw) or (
+                str(raw).strip().upper() if raw else None
+            )
+            self.records.append(copied)
+            grouped[row["knowledge_identity"]].append(copied)
+        self.category_conflicts = {}
+        for identity, rows in grouped.items():
+            categories = {row.get("file_category_code") or "" for row in rows}
+            names = {str(row.get("file_category_name") or "") for row in rows}
+            if len(categories) > 1 or len(names) > 1:
+                self.category_conflicts[identity] = rows
         self.called_at = called_at
+
+    def conflict_samples(self, limit: int = 5) -> list[dict]:
+        result = []
+        for identity in sorted(self.category_conflicts)[:limit]:
+            rows = self.category_conflicts[identity]
+            result.append(
+                {
+                    "knowledge_identity": identity,
+                    "category_codes": sorted({row.get("file_category_code") or "" for row in rows})[:10],
+                    "category_names": sorted({str(row.get("file_category_name") or "")[:120] for row in rows})[:10],
+                    "file_ids": sorted({int(row["file_id"]) for row in rows if str(row.get("file_id", "")).isdigit()})[
+                        :20
+                    ],
+                    "space_ids": sorted(
+                        {int(row["space_id"]) for row in rows if str(row.get("space_id", "")).isdigit()}
+                    )[:20],
+                    "entry_count": len(rows),
+                }
+            )
+        return result
+
+    def validate_categories(self) -> None:
+        if self.category_conflicts:
+            raise DocumentCategoryConflictError(conflict_count=len(self.category_conflicts))
 
     def aggregate(
         self,
@@ -90,6 +145,8 @@ class DocumentStatistics:
     ) -> list[list]:
         if metric not in DOCUMENT_METRICS:
             raise ValueError("不支持的文档统计指标")
+        if uses_category_fields(field for field, _ in dimensions):
+            self.validate_categories()
         end = validated_end(metric, end)
         if start is not None and start > end:
             return []

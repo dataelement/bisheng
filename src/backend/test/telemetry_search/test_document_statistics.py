@@ -43,14 +43,30 @@ def test_category_conflict_including_missing_category_is_not_silently_split():
     import pytest
 
     for second in (None, "STD"):
-        with pytest.raises(ValueError, match="分类冲突"):
-            DocumentStatistics(
-                [
-                    {"knowledge_identity": "document:1", "file_category_code": "POL"},
-                    {"knowledge_identity": "document:1", "file_category_code": second},
-                ],
-                {},
-            )
+        stats = DocumentStatistics(
+            [
+                {"knowledge_identity": "document:1", "file_id": 1, "timestamp": 1, "file_category_code": "POL"},
+                {"knowledge_identity": "document:1", "file_id": 2, "timestamp": 1, "file_category_code": second},
+            ],
+            {},
+        )
+        assert stats.aggregate([], "total_file_count") == [[1]]
+        assert len(stats.detail("total_file_count", start=None, end=None)) == 1
+        from bisheng.common.errcode.telemetry import DocumentCategoryConflictError
+
+        with pytest.raises(DocumentCategoryConflictError):
+            stats.aggregate([("file_category_code", None)], "total_file_count")
+        assert stats.conflict_samples()[0]["file_ids"] == [1, 2]
+
+
+def test_category_codes_are_normalized_without_mutating_input():
+    records = [
+        {"knowledge_identity": "document:1", "timestamp": 1, "file_category_code": " pol "},
+        {"knowledge_identity": "document:1", "timestamp": 1, "file_category_code": "POL"},
+    ]
+    stats = DocumentStatistics(records, {})
+    assert stats.aggregate([("file_category_code", None)], "total_file_count") == [["POL", 1]]
+    assert records[0]["file_category_code"] == " pol "
 
 
 def test_time_boundaries_contribution_and_call_union():

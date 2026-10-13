@@ -1,5 +1,5 @@
 # ruff: noqa: RUF001, RUF002
-"""一致 ES 视图内完整读取文件候选及非个人入口调用，任何部分失败均中止。"""
+"""普通索引分页读取文件候选及非个人入口调用，查询失败时中止统计。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,9 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
+from loguru import logger
+
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.telemetry.domain.repositories.implementations.knowledge_statistics_repository_impl import (
     KnowledgeStatisticsRepositoryImpl as KnowledgeStatisticsRepository,
@@ -71,8 +74,8 @@ def split_time_filters(filters: list[FilterExpression]) -> tuple[list[dict], int
 
 
 class DocumentReader:
-    def __init__(self, client: Any, pit_id: str):
-        self.client, self.pit_id = client, pit_id
+    def __init__(self, client: Any, index: str):
+        self.client, self.index = client, index
 
     async def buckets(self, query: dict, field: str, aggregations: dict):
         after = None
@@ -81,13 +84,12 @@ class DocumentReader:
             if after is not None:
                 composite["after"] = after
             response = await self.client.search(
-                pit={"id": self.pit_id, "keep_alive": "2m"},
+                index=self.index,
                 size=0,
                 allow_partial_search_results=False,
                 query=query,
                 aggs={"items": {"composite": composite, "aggs": aggregations}},
             )
-            self.pit_id = response.get("pit_id", self.pit_id)
             if (
                 response.get("timed_out")
                 or response.get("terminated_early")
@@ -131,6 +133,14 @@ class DocumentReader:
                     raise ValueError(f"文件统计无法关联文档身份，请检查库存同步：file_id={row['file_id']}")
                 row["knowledge_identity"] = identity
         stats = DocumentStatistics(records, {})
+        if stats.category_conflicts:
+            logger.warning(
+                "document_category_conflicts tenant={} index={} documents={} samples={}",
+                get_current_tenant_id() or 1,
+                self.index,
+                len(stats.category_conflicts),
+                stats.conflict_samples(),
+            )
         if not include_usage:
             return stats
         identities = {row["knowledge_identity"] for row in records}
@@ -181,9 +191,4 @@ class DocumentReader:
 @asynccontextmanager
 async def document_reader(index: str):
     client = await get_es_connection()
-    response = await client.open_point_in_time(index=index, keep_alive="2m", allow_partial_search_results=False)
-    reader = DocumentReader(client, response["id"])
-    try:
-        yield reader
-    finally:
-        await client.close_point_in_time(id=reader.pit_id)
+    yield DocumentReader(client, index)
