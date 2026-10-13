@@ -63,6 +63,7 @@ from bisheng.eplus.infrastructure.connection_supervisor import (
     RedisConfigNotificationSource,
 )
 from bisheng.eplus.infrastructure.credential_store import PlatformCredentialStore
+from bisheng.eplus.infrastructure.latency_diagnostics import EPlusLoopLagMonitor
 from bisheng.eplus.infrastructure.media_store import (
     DailyChatImageTextExtractor,
     MinioEPlusMediaStore,
@@ -215,7 +216,9 @@ class EPlusWorker:
     async def run(self) -> None:
         initialized = False
         runtime: EPlusWorkerRuntime | None = None
+        loop_monitor = EPlusLoopLagMonitor()
         try:
+            loop_monitor.start()
             await self._initialize_context(self._settings, instance_role="eplus_worker")
             initialized = True
             runtime = await self._build_runtime()
@@ -223,6 +226,7 @@ class EPlusWorker:
             logger.info("E+ connection worker started")
             await self._stop_event.wait()
         finally:
+            await loop_monitor.stop()
             if runtime is not None:
                 try:
                     async with asyncio.timeout(self._shutdown_timeout):
@@ -605,9 +609,14 @@ class WorkerConnection:
             with _tenant_scope(self._ref.tenant_id):
                 reservation = await self._robot.reserve_message(context, callback)
         logger.info(
-            "E+ callback admitted tenant_id={} msgid_hash={} elapsed_ms={:.1f}",
+            "E+ callback admitted tenant_id={} bot_config_id={} msgid_hash={} req_hash={} "
+            "server_unix_ms={} mono_ms={:.1f} elapsed_ms={:.1f}",
             self._ref.tenant_id,
+            self._ref.bot_config_id,
             hashlib.sha256(callback.msg_id.encode()).hexdigest()[:12],
+            hashlib.sha256(callback.req_id.encode()).hexdigest()[:12],
+            int(time.time() * 1000),
+            time.monotonic() * 1000,
             (time.monotonic() - admission_started) * 1000,
         )
         with _tenant_scope(self._ref.tenant_id):

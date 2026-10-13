@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import inspect
 import json
+import os
 import secrets
 import ssl
 import time
@@ -93,6 +95,8 @@ class EPlusConnectionClient:
         self._message_tasks: set[asyncio.Task[None]] = set()
         self._authenticated = asyncio.Event()
         self._taken_over = False
+        self._connection_id = secrets.token_hex(6)
+        self._send_seq = 0
         self._ssl_context = self._build_ssl_context()
 
     async def wait_authenticated(self) -> None:
@@ -102,6 +106,8 @@ class EPlusConnectionClient:
         """Connect, authenticate, serve callbacks, and return one exit reason."""
 
         parsed = urlsplit(self.config.url)
+        self._connection_id = secrets.token_hex(6)
+        self._send_seq = 0
         self._taken_over = False
         self._authenticated.clear()
         self._emit(
@@ -130,9 +136,7 @@ class EPlusConnectionClient:
                 req_id = _new_req_id("aibot_subscribe")
                 ack = await self.send_with_ack(build_subscribe_frame(self.config.bot_id, self.config.secret, req_id))
                 if _ack_error(ack):
-                    raise EPlusSubscriptionError(
-                        f"E+ subscription rejected with errcode={ack.get('errcode')}"
-                    )
+                    raise EPlusSubscriptionError(f"E+ subscription rejected with errcode={ack.get('errcode')}")
                 self._authenticated.set()
                 self._emit("subscription.authenticated", req_id=req_id, bot_id=self.config.bot_id)
 
@@ -168,6 +172,9 @@ class EPlusConnectionClient:
         if websocket is None:
             raise ConnectionError("E+ WebSocket is not connected")
         req_id = _frame_req_id(frame)
+        requested_at = time.monotonic()
+        metadata = _frame_log_fields(frame)
+        self._emit("frame.send_requested", **metadata)
         gate = self._request_gates.setdefault(req_id, _RequestGate(asyncio.Lock()))
         gate.users += 1
         try:
@@ -176,10 +183,44 @@ class EPlusConnectionClient:
                     raise EPlusProtocolError(f"an ACK is already pending for req_id={req_id}")
                 future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
                 self._pending_acks[req_id] = future
+                self._send_seq += 1
+                send_seq = self._send_seq
+                send_started = time.monotonic()
                 try:
-                    self._emit("frame.outbound", cmd=frame.get("cmd"), req_id=req_id)
+                    self._emit(
+                        "frame.outbound",
+                        **metadata,
+                        send_seq=send_seq,
+                        queue_ms=round((send_started - requested_at) * 1000, 1),
+                    )
                     await websocket.send(json.dumps(frame, ensure_ascii=False, separators=(",", ":")))
-                    return await asyncio.wait_for(future, timeout=self.config.ack_timeout_seconds)
+                    written_at = time.monotonic()
+                    self._emit(
+                        "frame.written",
+                        **metadata,
+                        send_seq=send_seq,
+                        write_ms=round((written_at - send_started) * 1000, 1),
+                    )
+                    ack = await asyncio.wait_for(future, timeout=self.config.ack_timeout_seconds)
+                    acknowledged_at = time.monotonic()
+                    self._emit(
+                        "frame.acknowledged",
+                        **metadata,
+                        send_seq=send_seq,
+                        errcode=ack.get("errcode"),
+                        ack_wait_ms=round((acknowledged_at - written_at) * 1000, 1),
+                        elapsed_ms=round((acknowledged_at - requested_at) * 1000, 1),
+                    )
+                    return ack
+                except Exception as exc:
+                    self._emit(
+                        "frame.send_failed",
+                        **metadata,
+                        send_seq=send_seq,
+                        error_type=type(exc).__name__,
+                        elapsed_ms=round((time.monotonic() - requested_at) * 1000, 1),
+                    )
+                    raise
                 finally:
                     self._pending_acks.pop(req_id, None)
         finally:
@@ -189,11 +230,12 @@ class EPlusConnectionClient:
 
     async def _receive_loop(self, websocket: ClientConnection) -> None:
         async for raw_frame in websocket:
+            read_at = time.monotonic()
             frame = _decode_frame(raw_frame)
             self._emit(
                 "frame.inbound",
-                cmd=frame.get("cmd"),
-                req_id=_optional_req_id(frame),
+                **_frame_log_fields(frame),
+                read_mono_ms=round(read_at * 1000, 1),
                 errcode=frame.get("errcode"),
             )
             cmd = frame.get("cmd")
@@ -298,10 +340,39 @@ class EPlusConnectionClient:
         return ssl.create_default_context(cadata=ca_text)
 
     def _emit(self, event: str, **fields: Any) -> None:
+        fields = {
+            "pid": os.getpid(),
+            "connection_id": self._connection_id,
+            "bot_hash": _id_hash(self.config.bot_id),
+            "server_unix_ms": int(time.time() * 1000),
+            "mono_ms": round(time.monotonic() * 1000, 1),
+            **fields,
+        }
         safe_fields = sanitize_for_log(fields, secrets=(self.config.secret,))
         if self._event_sink is not None:
             self._event_sink(event, safe_fields)
-        logger.bind(eplus_event=event, **safe_fields).info("E+ connection event")
+        # Keep fields visible with the production plain-text logger format too.
+        logger.bind(eplus_event=event, **safe_fields).info("E+ connection event={} fields={}", event, safe_fields)
+
+
+def _id_hash(value: Any) -> str | None:
+    return hashlib.sha256(value.encode()).hexdigest()[:12] if isinstance(value, str) and value else None
+
+
+def _frame_log_fields(frame: Mapping[str, Any]) -> dict[str, Any]:
+    """Allowlist correlation metadata; never log callback or subscription bodies."""
+    req_id = _optional_req_id(frame)
+    fields = {"cmd": frame.get("cmd"), "req_id": req_id, "req_hash": _id_hash(req_id)}
+    body = frame.get("body")
+    if isinstance(body, Mapping):
+        fields["msgid_hash"] = _id_hash(body.get("msgid"))
+        stream = body.get("stream")
+        if isinstance(stream, Mapping):
+            fields["stream_hash"] = _id_hash(stream.get("id"))
+            fields["finish"] = stream.get("finish")
+            content = stream.get("content")
+            fields["content_bytes"] = len(content.encode("utf-8")) if isinstance(content, str) else 0
+    return fields
 
 
 def _decode_frame(raw_frame: str | bytes) -> dict[str, Any]:

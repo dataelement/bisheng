@@ -124,3 +124,20 @@ pytest -q src/backend/test/e2e/test_e2e_eplus_robot_assistant.py -v
 - 双数据库、双 Worker、跨进程 MinIO 和真实 E+ 链路留下可追溯日志；
 - 923 环境如有降级，已确认 revision 和业务数据；
 - 生产机器人没有其他长连接客户端，回滚镜像和数据库备份可用。
+
+## 6. 「处理中」偶发延迟诊断（2026-10-13）
+
+本次验证：E+ 专项 `pytest test/eplus -q` 为 **286 passed**（10 条依赖弃用警告），含 5 项新增计时/脱敏/调度监测用例和启动失败时的监测清理用例；Ruff、逐文件架构守卫及 `git diff --check` 通过。真实客户延迟尚未复现验证。全库测试尝试后中止，结果 **176 failed / 2833 passed / 147 skipped / 146 errors**，不视为全库通过：包含 `test_e2e_conversation_export` 等未启动目标服务的连接失败、WebSocket/HTTP 本机监听限制，以及 `test_v2_filelib_unified` 等其他模块失败；本次不扩大范围修复。
+
+新日志需要更新 E+ Worker 代码并重启进程才生效，不需要数据库迁移，不改变检索和回复策略。启动确认 `event_loop.started`，持续运行后应每分钟有 `event_loop.summary`；不能只凭没有告警判断监测正常。
+
+排查时保留问题发生前后至少两分钟的 Worker 日志，并记录 Pod 名、重启次数、镜像、机器人、客户端发送/展示时间截图及客户端设备时钟。可用 `kubectl logs -n bisheng <eplus-worker-pod> --since=10m --timestamps` 收集；容器有重启时另取 `--previous` 日志。日志含租户及脱敏关联标识，按内部诊断资料保存。
+
+按同一消息的 `msgid_hash` / `req_hash` 找 `frame.inbound`、`callback admitted`，再按 `req_hash` / `stream_hash` 找首次 `aibot_respond_msg` 的 `frame.send_requested`、`frame.outbound`、`frame.written` 和 `frame.acknowledged`。`content_bytes=9, finish=False` 通常是「处理中」，排队等其他初始回复字节数不同，不记录正文。多帧用 `connection_id + send_seq` 区分，不能把后续答案帧当成首帧。
+
+- 入站到首帧发送慢：检查准入、恢复等待、发送额度、当前连接及业务准备过程；`queue_ms` 仅表示同请求发送锁等待，不是助手排队时间。
+- 写入慢：看 `write_ms`；ACK 慢：看 `ack_wait_ms`，并检查 `frame.send_failed`、重连和订阅事件。`elapsed_ms` 覆盖连接层发送请求到 ACK 的总时长。
+- 入站前可能卡住：按同一 Pod/进程的 `read_mono_ms` 与 `event_loop.lag` 的单调时间窗口对照。长调度滞后可能来自同步调用、CPU 限额/调度、进程暂停等，不能仅凭告警定位具体阻塞操作。
+- 后端读取和 ACK 都快、监测摘要也正常：再结合 E+ 平台接收/投递/下发时间和客户端展示日志判断链路。Python 读帧不是网卡到包，ACK 也不是客户端展示；缺这两端证据时只报告后端已测区间，不能宣称客户链路已定责。
+
+耗时以单调时钟为准；`server_unix_ms` 用于外部对时，但不假定客户端与服务器同步，也不跨 Pod 直接相减单调时间。

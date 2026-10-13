@@ -4,7 +4,9 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
+from loguru import logger
 
 from bisheng.eplus.domain.schemas.protocol import EPlusCallback, EPlusContentBlock, EPlusContentKind
 
@@ -53,6 +55,28 @@ class FailingSupervisor(FakeSupervisor):
     async def stop(self) -> None:
         self.events.append("supervisor.stop")
         raise RuntimeError("stop failed")
+
+
+async def test_worker_stops_diagnostics_when_context_initialization_fails() -> None:
+    from bisheng.eplus.worker import EPlusWorker
+
+    records = []
+    sink_id = logger.add(lambda message: records.append(message.record))
+
+    async def initialize(settings, *, instance_role):
+        raise RuntimeError("startup failed")
+
+    try:
+        worker = EPlusWorker(settings=object(), initialize_context=initialize)
+        with pytest.raises(RuntimeError, match="startup failed"):
+            await worker.run()
+    finally:
+        logger.remove(sink_id)
+
+    events = [record["extra"].get("eplus_event") for record in records]
+    assert "event_loop.started" in events
+    assert "event_loop.stopped" in events
+    assert all(task.get_name() != "eplus-loop-lag" for task in asyncio.all_tasks())
 
 
 async def test_worker_initializes_full_context_and_closes_runtime_in_order() -> None:
