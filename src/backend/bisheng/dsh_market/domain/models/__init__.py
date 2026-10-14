@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Column, UniqueConstraint, false, true
+from sqlalchemy import Boolean, Column, UniqueConstraint, false
 from sqlmodel import Field, SQLModel
 
 from bisheng.core.database.dialect_helpers import JsonType
@@ -86,8 +86,8 @@ class MarketInstallPolicy(SQLModel, table=True):
     __tablename__ = "dsh_market_install_policy"
     tenant_id: int = Field(primary_key=True)
     allow_third_party_plugins: bool = Field(
-        default=True, sa_column=Column(Boolean, nullable=False, server_default=true())
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
     )
     allow_third_party_workbenches: bool = Field(
-        default=True, sa_column=Column(Boolean, nullable=False, server_default=true())
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
     )

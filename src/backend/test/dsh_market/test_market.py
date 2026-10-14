@@ -275,26 +275,26 @@ def test_install_policy_is_tenant_scoped_and_exposed_to_desktop(service):
     assert client.get(url).json()["status_code"] == 26204
     response = client.get("/api/v1/dsh/market/capabilities")
     assert response.headers["Cache-Control"] == "no-store"
-    assert response.json()["data"]["allow_third_party_plugins"] is True
+    assert response.json()["data"]["allow_third_party_plugins"] is False
 
     app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
-    assert client.get(url).json()["data"]["allow_third_party_workbenches"] is True
-    changed = client.patch(url, json={"field": "allow_third_party_plugins", "allowed": False}).json()["data"]
+    assert client.get(url).json()["data"]["allow_third_party_workbenches"] is False
+    changed = client.patch(url, json={"field": "allow_third_party_plugins", "allowed": True}).json()["data"]
     assert changed == {
         "tenant_id": 2,
-        "allow_third_party_plugins": False,
-        "allow_third_party_workbenches": True,
+        "allow_third_party_plugins": True,
+        "allow_third_party_workbenches": False,
     }
-    client.patch(url, json={"field": "allow_third_party_workbenches", "allowed": False})
+    client.patch(url, json={"field": "allow_third_party_workbenches", "allowed": True})
     caps = client.get("/api/v1/dsh/market/capabilities").json()["data"]
-    assert caps["allow_third_party_plugins"] is False
-    assert caps["allow_third_party_workbenches"] is False
+    assert caps["allow_third_party_plugins"] is True
+    assert caps["allow_third_party_workbenches"] is True
     assert client.patch(url, json={"field": "unknown", "allowed": False}).status_code == 422
 
     app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30)
     app.dependency_overrides[market_admin] = lambda: MarketActor(3, 30)
-    assert client.get(url).json()["data"]["allow_third_party_plugins"] is True
-    assert client.get("/api/v1/dsh/market/capabilities").json()["data"]["allow_third_party_workbenches"] is True
+    assert client.get(url).json()["data"]["allow_third_party_plugins"] is False
+    assert client.get("/api/v1/dsh/market/capabilities").json()["data"]["allow_third_party_workbenches"] is False
 
 
 def test_reimport_restores_legacy_unpublished_and_preserves_present_version(service):

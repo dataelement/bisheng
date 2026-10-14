@@ -25,8 +25,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(previewMarketBundle).mockResolvedValue({ name: "company-demo", display_name: "Company Demo", current_version: "1.0.0", incoming_version: "1.1.0", allowed: true, reason: "", duplicate: false });
     vi.mocked(getMarketContext).mockResolvedValue({ tenant_id: 2 });
-    vi.mocked(getMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: true, allow_third_party_workbenches: true });
-    vi.mocked(setMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: false, allow_third_party_workbenches: true });
+    vi.mocked(getMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: false, allow_third_party_workbenches: false });
+    vi.mocked(setMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: true, allow_third_party_workbenches: false });
     vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 1 });
     vi.mocked(listMarketImports).mockResolvedValue([]);
     vi.mocked(getMarketPlugin).mockResolvedValue(plugin);
@@ -39,12 +39,12 @@ describe("DSH market administration", () => {
         render(view());
         const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });
         const workbenches = screen.getByRole("switch", { name: "allow_third_party_workbenches" });
-        expect(plugins).toBeChecked();
-        expect(workbenches).toBeChecked();
+        expect(plugins).not.toBeChecked();
+        expect(workbenches).not.toBeChecked();
         fireEvent.click(plugins);
-        await waitFor(() => expect(setMarketInstallPolicy).toHaveBeenCalledWith(2, "allow_third_party_plugins", false));
-        await waitFor(() => expect(plugins).not.toBeChecked());
-        expect(workbenches).toBeChecked();
+        await waitFor(() => expect(setMarketInstallPolicy).toHaveBeenCalledWith(2, "allow_third_party_plugins", true));
+        await waitFor(() => expect(plugins).toBeChecked());
+        expect(workbenches).not.toBeChecked();
     });
     it("keeps the saved setting when an update fails", async () => {
         vi.mocked(setMarketInstallPolicy).mockRejectedValueOnce(new Error("offline"));
@@ -52,7 +52,7 @@ describe("DSH market administration", () => {
         const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });
         fireEvent.click(plugins);
         await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" })));
-        expect(plugins).toBeChecked();
+        expect(plugins).not.toBeChecked();
         await waitFor(() => expect(getMarketInstallPolicy).toHaveBeenCalledTimes(2));
     });
     it("guards direct navigation before reading administrative data", () => {

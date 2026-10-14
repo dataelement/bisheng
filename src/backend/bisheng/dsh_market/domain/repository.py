@@ -23,7 +23,7 @@ class MarketRepository:
     @staticmethod
     def _install_policy_data(row, tenant):
         if row is None:
-            return {"tenant_id": tenant, "allow_third_party_plugins": True, "allow_third_party_workbenches": True}
+            return {"tenant_id": tenant, "allow_third_party_plugins": False, "allow_third_party_workbenches": False}
         return row.model_dump()
 
     def set_install_policy(self, tenant, field, allowed):
