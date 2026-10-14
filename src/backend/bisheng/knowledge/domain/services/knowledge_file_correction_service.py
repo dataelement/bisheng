@@ -86,8 +86,6 @@ from bisheng.knowledge.domain.services.knowledge_file_correction_update import (
     parent_id_from_file_level_path,
     should_pay_update,
 )
-from bisheng.permission.domain.services.permission_service import PermissionService
-
 # 只读上传人是否停用. 不引用 user 领域模型, 避免测试桩把 User 换成 MagicMock.
 _USER_TABLE = table(
     "user",
@@ -308,7 +306,7 @@ class KnowledgeFileCorrectionService:
                     select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == int(file.knowledge_id))
                 )
             ).first()
-            await cls._require_view(login_user, int(file_id), knowledge, scope)
+            await cls._require_view(login_user, file, knowledge, scope)
             cls._require_space(knowledge, scope)
             two_part = original_error is not None or corrected_content is not None
             if two_part:
@@ -460,7 +458,7 @@ class KnowledgeFileCorrectionService:
                     select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == int(file.knowledge_id))
                 )
             ).first()
-            await cls._require_view(login_user, int(file_id), knowledge, scope)
+            await cls._require_view(login_user, file, knowledge, scope)
             cls._require_space(knowledge, scope)
             file_ids = await cls._document_version_file_ids(session, file)
             rows = await KnowledgeFileCorrectionRepositoryImpl(session).list_for_files(file_ids)
@@ -1164,32 +1162,23 @@ class KnowledgeFileCorrectionService:
             await session.commit()
 
     @staticmethod
-    async def _require_view(login_user, file_id: int, knowledge, scope) -> None:
-        """判断当前用户能否查看这份文件.
-
-        公共库读者的查看权来自库层级, 阅读页用有效权限加上 viewer, 不要求文件上有
-        OpenFGA view_file. PermissionService.check 看不到这层, 会把已经打开公共库
-        文档的人拒成 18405.
+    async def _require_view(login_user, file, knowledge, scope) -> None:
+        """沿用阅读页的打开判定, 不再单独要求文件上的 view_file.
 
         Args:
             login_user: 当前登录用户.
-            file_id: 知识库文件 ID.
+            file: 知识库文件.
             knowledge: 文件所在知识库.
-            scope: 知识库层级. 没有层级时不能按公共库放行.
+            scope: 知识库层级.
 
         Raises:
-            FileCorrectionViewDeniedError: 当前用户不能查看该文件.
+            FileCorrectionViewDeniedError: 当前用户不能打开并预览该文件.
         """
-        if _public_library_grants_view(knowledge, scope):
-            return
-        allowed = await PermissionService.check(
-            int(login_user.user_id),
-            "view_file",
-            "knowledge_file",
-            str(int(file_id)),
-            login_user,
+        from bisheng.knowledge.domain.services.knowledge_file_correction_preview_access import (
+            user_may_preview_file,
         )
-        if not allowed:
+
+        if not await user_may_preview_file(login_user, file, knowledge, scope):
             raise FileCorrectionViewDeniedError()
 
     @staticmethod

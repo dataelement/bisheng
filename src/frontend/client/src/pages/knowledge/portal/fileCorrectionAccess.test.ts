@@ -9,6 +9,7 @@ describe("canSubmitFileCorrection", () => {
             space,
             file: { uploaderUserId: 8 },
             currentUserId: 3,
+            previewReady: true,
         })).toBe(true);
     });
 
@@ -17,6 +18,7 @@ describe("canSubmitFileCorrection", () => {
             space,
             file: { uploaderUserId: 3 },
             currentUserId: "3",
+            previewReady: true,
         })).toBe(false);
     });
 
@@ -29,6 +31,7 @@ describe("canSubmitFileCorrection", () => {
             space,
             file: { uploaderUserId: 3 },
             currentUserId: "3",
+            previewReady: true,
         })).toBe(false);
     });
 
@@ -37,11 +40,19 @@ describe("canSubmitFileCorrection", () => {
             space: { spaceLevel: SpaceLevel.PERSONAL, isFavorite: false },
             file: { uploaderUserId: 8 },
             currentUserId: 3,
+            previewReady: true,
         })).toBe(false);
         expect(canSubmitFileCorrection({
             space: { spaceLevel: SpaceLevel.PUBLIC, isFavorite: true },
             file: { uploaderUserId: 8 },
             currentUserId: 3,
+            previewReady: true,
+        })).toBe(false);
+        expect(canSubmitFileCorrection({
+            space,
+            file: { uploaderUserId: 8 },
+            currentUserId: 3,
+            previewReady: false,
         })).toBe(false);
     });
 });
