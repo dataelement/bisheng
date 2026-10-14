@@ -352,13 +352,25 @@ function approverSourceLabelKey(sourceType: string, scenarioCode?: string | null
   return APPROVER_SOURCE_LABEL_KEYS[sourceType] ?? `approvalPage.approverSource.${sourceType}`;
 }
 
+const CORRECTION_SOURCE_LABELS: Record<string, string> = {
+  file_uploader: "上传人",
+  knowledge_space_owner: "知识库所有者",
+  knowledge_space_manager: "知识库管理员",
+};
+
 function approverSourceLabel(
   sourceType: string,
   t: TFn,
   scenarioCode?: string | null,
   fallback?: string,
 ): string {
-  return t(approverSourceLabelKey(sourceType, scenarioCode), { defaultValue: fallback ?? sourceType });
+  // 文案文件还没带上新键时, 不要把 file_uploader 这类编码直接显示出来.
+  const codedFallback = !fallback || fallback === sourceType;
+  const readableFallback = codedFallback
+    ? (scenarioCode === "knowledge_file_correction" ? CORRECTION_SOURCE_LABELS[sourceType] : undefined)
+      ?? (sourceType === "file_uploader" ? "上传人" : sourceType)
+    : fallback;
+  return t(approverSourceLabelKey(sourceType, scenarioCode), { defaultValue: readableFallback });
 }
 
 type TFn = (key: string, opts?: Record<string, string>) => string;
