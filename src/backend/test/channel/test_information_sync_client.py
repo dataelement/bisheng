@@ -99,6 +99,7 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
     body = _response(
         {
             "information": _subscription("A"),
+            "snapshot_max_create_time": 456,
             "articles": [
                 {
                     "id": "article-1",
@@ -118,13 +119,43 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
         get_conf=lambda: IntelligenceCenterConf(base_url="http://information.test", api_key="secret"),
     )
 
-    result = await client.get_information_articles_page("A", min_create_time=123, page=2, page_size=10)
+    result = await client.get_information_articles_page(
+        "A",
+        min_create_time=123,
+        max_create_time=456,
+        page=2,
+        page_size=10,
+    )
 
     assert result.total == 1
     assert result.articles[0].id == "article-1"
+    assert result.snapshot_max_create_time == 456
     assert http_client.get.await_args.kwargs["params"] == {
         "return_information": False,
         "page": 2,
         "page_size": 10,
         "min_create_time": 123,
+        "max_create_time": 456,
     }
+
+
+async def test_get_information_articles_bootstrap_uses_dedicated_endpoint():
+    body = _response(
+        {
+            "articles": [],
+            "snapshot_max_create_time": 789,
+        },
+        total=0,
+    )
+    http_client = SimpleNamespace(get=AsyncMock(return_value=body))
+    client = BishengInformationClient(
+        http_client=http_client,
+        get_conf=lambda: IntelligenceCenterConf(base_url="http://information.test", api_key="secret"),
+    )
+
+    result = await client.get_information_articles_bootstrap("A", limit=36)
+
+    assert result.snapshot_max_create_time == 789
+    request = http_client.get.await_args
+    assert request.args[0] == "http://information.test/information/articles/A/bootstrap"
+    assert request.kwargs["params"] == {"limit": 36}

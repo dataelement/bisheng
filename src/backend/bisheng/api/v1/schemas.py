@@ -266,7 +266,8 @@ class CustomComponentCode(BaseModel):
 
 class AssistantCreateReq(BaseModel):
     name: str = Field(max_length=50, description="The assistant name.")
-    prompt: str = Field(min_length=20, max_length=1000, description="Helper Prompt")
+    # Optional: an empty prompt is written later in the config page, without auto-generation
+    prompt: str = Field("", max_length=1000, description="Helper Prompt")
     logo: str = Field(description="logoRelative address of the file")
 
 

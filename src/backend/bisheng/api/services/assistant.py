@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from hashlib import sha256
@@ -366,8 +367,8 @@ class AssistantService(BaseService, AssistantUtils):
                     assistant.model_name = str(one.model_id)
                     break
 
-        # Autogenerate Descriptions
-        assistant, _, _ = await cls.get_auto_info(assistant, login_user)
+        # The description is generated afterwards by the config page (description_stream),
+        # so a slow or unreachable model neither delays nor fails creation.
         assistant = AssistantDao.create_assistant(assistant)
 
         # RecordTelemetryJournal
@@ -488,15 +489,17 @@ class AssistantService(BaseService, AssistantUtils):
         assistant.prompt = final_prompt
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
-        # Generate opening remarks and opening questions
-        guide_info = auto_agent.generate_guide(assistant.prompt)
+        # Generate opening remarks and opening questions. The model calls below are
+        # synchronous: run them in a thread so they neither block the event loop
+        # (every other request on this worker) nor hold back the "end" event above.
+        guide_info = await asyncio.to_thread(auto_agent.generate_guide, assistant.prompt)
         yield str(StreamData(event="message", data={"type": "guide_word", "message": guide_info["opening_lines"]}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
         yield str(StreamData(event="message", data={"type": "guide_question", "message": guide_info["questions"]}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
 
         # Automatic selection of tools and skills
-        tool_info = cls.get_auto_tool_info(assistant, auto_agent)
+        tool_info = await asyncio.to_thread(cls.get_auto_tool_info, assistant, auto_agent)
         tool_info = [one.model_dump() for one in tool_info]
         yield str(StreamData(event="message", data={"type": "tool_list", "message": tool_info}))
         yield str(StreamData(event="message", data={"type": "end", "message": ""}))
@@ -716,19 +719,34 @@ class AssistantService(BaseService, AssistantUtils):
         return False
 
     @classmethod
-    async def get_auto_info(cls, assistant: Assistant, login_user: UserPayload) -> (Assistant, list[int], list[int]):
-        """
-        Auto Generate Assistant'sprompt, Automatically select tools and skills
-        return: Assistant Information, ToolsIDList, SkillsIDVertical
-        """
-        # Inisialisasiagent
+    async def description_stream(cls, assistant_id: str, login_user: UserPayload):
+        """Stream an auto-generated description, then store it if the assistant still has none."""
+        assistant = await AssistantDao.aget_one_assistant(assistant_id)
+        if not assistant:
+            raise AssistantNotExistsError()
+        await cls.check_update_permission_async(assistant, login_user)
+        if assistant.desc or not assistant.prompt:
+            return
+
         auto_agent = AssistantAgent(assistant, "", login_user.user_id)
         await auto_agent.init_auto_update_llm()
 
-        # Autogenerate Descriptions
-        assistant.desc = auto_agent.generate_description(assistant.prompt)
+        desc = ""
+        async for chunk in auto_agent.astream_description(assistant.prompt):
+            if not chunk:
+                continue
+            desc += chunk
+            yield str(StreamData(event="message", data={"type": "description", "message": chunk}))
 
-        return assistant, [], []
+        desc = desc.strip()
+        if not desc:
+            return
+        current = await AssistantDao.aget_one_assistant(assistant_id)
+        # A save while streaming stores a prefix of this text, which is completed here;
+        # any other value is the owner's own description and is left alone.
+        if current and desc.startswith((current.desc or "").strip()):
+            current.desc = desc
+            AssistantDao.update_assistant(current)
 
     @classmethod
     def get_auto_tool_info(cls, assistant: Assistant, auto_agent: AssistantAgent) -> list[GptsTools]:
@@ -812,7 +830,7 @@ class AssistantService(BaseService, AssistantUtils):
                 }
             )
 
-        flow_list = auto_agent.choose_tools(flow_list, assistant.prompt)
+        flow_list = await asyncio.to_thread(auto_agent.choose_tools, flow_list, assistant.prompt)
         flow_info = []
         for one in flow_list:
             if flow_dict.get(one):

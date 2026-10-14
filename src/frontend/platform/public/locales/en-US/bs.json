@@ -1021,6 +1021,7 @@
     "assistantConfiguration": "Assistant Configuration",
     "assistantPortrait": "Assistant Portrait",
     "portraitOptimization": "Assistant portrait optimization",
+    "portraitGenerating": "Generating the assistant portrait from the role and tasks you entered. You can edit it when it is done.",
     "automaticOptimization": "Automatic optimization",
     "searchApp": "Search for the app you need",
     "establishAssistant": "Create Assistant",

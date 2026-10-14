@@ -1320,7 +1320,7 @@ export async function getSourceChunksApi(chatId: string, messageId: number, keys
                 if (other.chunk_bboxes) {
                     suffix = 'pdf'
                 }
-            } else if (['etl4lm', 'un_etl4lm'].includes(other.parse_type)) {
+            } else if (['etl4lm', 'un_etl4lm', 'mineru', 'mineru_v4'].includes(other.parse_type)) {
                 fileUrl = previewUrl || originUrl
                 isNew = true
             }

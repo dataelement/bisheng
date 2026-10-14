@@ -10,6 +10,7 @@ from bisheng.api.v1.schemas import AssistantCreateReq, AssistantUpdateReq, Strea
 from bisheng.common.chat.manager import ChatManager
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.database.models.assistant import Assistant
@@ -173,9 +174,38 @@ async def auto_update_assistant(
             yield str(StreamData(event="message", data={"type": "end", "data": ""}))
         except Exception as e:
             logger.exception("assistant auto update error")
-            yield str(StreamData(event="message", data={"type": "end", "message": str(e)}))
+            yield _stream_error_event(e)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# Stream an auto-generated description for a newly created assistant
+@router.get("/auto/description", response_class=StreamingResponse)
+async def auto_generate_description(
+    *,
+    assistant_id: str = Query(description="Assistant UniqueID"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    async def event_stream():
+        try:
+            async for message in AssistantService.description_stream(assistant_id, login_user):
+                yield message
+            yield str(StreamData(event="message", data={"type": "end", "message": ""}))
+        except Exception as e:
+            logger.exception("assistant description generation error")
+            yield _stream_error_event(e)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _stream_error_event(e: Exception) -> str:
+    if isinstance(e, BaseErrorCode):
+        # Carry the business code so the page can show the localized copy
+        # (e.g. which model failed) instead of the raw provider error.
+        data = {"type": "end", "message": e.message, "code": e.code, "data": e.kwargs}
+    else:
+        data = {"type": "end", "message": str(e)}
+    return str(StreamData(event="message", data=data))
 
 
 # Update assistant prompts

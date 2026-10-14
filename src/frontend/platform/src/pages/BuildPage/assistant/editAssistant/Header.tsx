@@ -49,7 +49,7 @@ export default function Header({ loca, onSave, onLine, onTabChange, canEdit: can
     const [tabType, setTabType] = useState('edit')
     return <div className="flex justify-between bg-background-login items-center border-b px-4">
         <div className="flex items-center gap-2 py-4">
-            <Button variant="outline" size="icon" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/build/apps')}><ChevronLeft className="h-4 w-4" /></Button>
             <AppAvator id={assistantState.name} url={assistantState.viewLogo || assistantState.logo} flowType={5} className="ml-4"></AppAvator>
             <span id="app-title" className="bisheng-title">{assistantState.name}</span>
             {/* edit dialog */}
