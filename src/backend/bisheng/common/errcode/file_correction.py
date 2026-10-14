@@ -76,6 +76,20 @@ class FileCorrectionUpdateFileInvalidError(BaseErrorCode):
     Msg: str = "请上传同一知识库中的另一份新文件"
 
 
+class FileCorrectionUpdateInProgressError(BaseErrorCode):
+    """采纳并更新的新文件还在解析, 不能做其他处理."""
+
+    Code: int = 18411
+    Msg: str = "新文件正在解析, 请等待完成后再处理"
+
+
+class FileCorrectionUpdateRetryNotAllowedError(BaseErrorCode):
+    """当前没有解析失败的更新文件, 不能重新解析."""
+
+    Code: int = 18412
+    Msg: str = "当前没有解析失败的更新文件, 无法重新解析"
+
+
 class FileCorrectionUploaderOnlyError(BaseErrorCode):
     """只有冻结的上传人可以处理这条纠错."""
 

@@ -103,6 +103,27 @@ async def register_correction_update_file(
     return resp_200(data)
 
 
+@router.post("/file-corrections/{correction_id}/retry-update-file")
+async def retry_correction_update_file(
+    correction_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """对解析失败的采纳并更新文件重新入队.
+
+    Args:
+        correction_id: 待处理纠错单 ID.
+        login_user: 当前登录用户, 必须是冻结上传人.
+
+    Returns:
+        原更新文件 id、解析状态和更新阶段.
+    """
+    data = await KnowledgeFileCorrectionService.retry_update_file(
+        login_user=login_user,
+        correction_id=int(correction_id),
+    )
+    return resp_200(data)
+
+
 @router.get("/file-corrections/{correction_id}")
 async def get_file_correction(
     correction_id: int,

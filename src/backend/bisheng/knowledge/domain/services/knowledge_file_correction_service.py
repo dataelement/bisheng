@@ -35,6 +35,8 @@ from bisheng.common.errcode.file_correction import (
     FileCorrectionSpaceNotAllowedError,
     FileCorrectionUpdateFileInvalidError,
     FileCorrectionUpdateFileNotReadyError,
+    FileCorrectionUpdateInProgressError,
+    FileCorrectionUpdateRetryNotAllowedError,
     FileCorrectionUploaderOnlyError,
     FileCorrectionUploaderUnavailableError,
     FileCorrectionViewDeniedError,
@@ -68,6 +70,15 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_correction_repository_impl import (
     KnowledgeFileCorrectionRepositoryImpl,
 )
+from bisheng.knowledge.domain.services.knowledge_file_correction_update import (
+    UPDATE_PHASE_IDLE,
+    UPDATE_PHASE_UPDATING,
+    UPDATE_POINTS,
+    classify_update_phase,
+    is_update_failed,
+    is_update_in_progress,
+    should_pay_update,
+)
 from bisheng.permission.domain.services.permission_service import PermissionService
 
 # 只读上传人是否停用. 不引用 user 领域模型, 避免测试桩把 User 换成 MagicMock.
@@ -86,7 +97,6 @@ _register_guard = asyncio.Lock()
 # 按纠错单缓存, 用完不删. 删掉正在等待的锁会让两个请求各拿一把, 同时登记.
 _register_locks: dict[int, asyncio.Lock] = {}
 ADOPT_POINTS = 1
-UPDATE_POINTS = 2
 AWARD_KIND_ADOPT = "adopt"
 AWARD_KIND_UPDATE = "update"
 
@@ -525,6 +535,7 @@ class KnowledgeFileCorrectionService:
             user_id = int(login_user.user_id)
             if row is None or user_id not in {int(row.applicant_user_id), int(row.uploader_user_id)}:
                 raise FileCorrectionContentForbiddenError()
+            update_file_status, update_phase = await cls._update_phase(session, row)
             return {
                 "correction_id": int(row.id),
                 "file_id": int(row.file_id),
@@ -536,15 +547,18 @@ class KnowledgeFileCorrectionService:
                 "status": row.status,
                 "applicant_user_id": int(row.applicant_user_id),
                 "uploader_user_id": int(row.uploader_user_id),
+                "pending_update_file_id": int(row.pending_update_file_id) if row.pending_update_file_id else None,
+                "update_file_status": update_file_status,
+                "update_phase": update_phase,
             }
 
     @classmethod
     async def register_update_file(cls, *, login_user, request, correction_id: int, file_path: str) -> dict:
         """把采纳并更新的新文件登记进原知识库, 不记入库分.
 
-        分类、业务域、二级分类以及非自动标签从旧文件复制. 文件写入知识库后立刻结束待办,
-        并给反馈人发采纳并更新的积分. 当前版本要等这份新文件解析成功后再换.
-        解析失败时旧文件仍是当前版本, 积分不退, 这条待办不能再登记第二份文件.
+        分类、业务域、二级分类以及非自动标签从旧文件复制. 文件写入知识库后不关待办、不发分.
+        指针文件仍在解析时拒绝再次登记. 失败后再次登记视为重新上传, 会删掉上一份失败文件.
+        当前版本要等这份新文件解析成功后再换.
 
         Args:
             login_user: 当前登录用户, 必须是冻结上传人.
@@ -599,7 +613,14 @@ class KnowledgeFileCorrectionService:
                 raise FileCorrectionUploaderOnlyError()
             if correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
-            new_id = await cls._existing_pending_update_file_id(session, correction)
+            existing_id = await cls._existing_pending_update_file_id(session, correction)
+            if existing_id is not None:
+                phase = (await cls._update_phase(session, correction))[1]
+                if is_update_in_progress(phase):
+                    raise FileCorrectionUpdateInProgressError()
+                if is_update_failed(phase):
+                    existing_id = None
+            new_id = existing_id
             old_file = (
                 await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == int(correction.file_id)))
             ).first()
@@ -630,16 +651,20 @@ class KnowledgeFileCorrectionService:
         award_payload = None
         notify_payload = None
         async with get_async_db_session() as session:
-            # 新会话才能看见刚才提交的文件. 再锁一次, 避免两笔请求各结束一次.
+            # 新会话才能看见刚才提交的文件. 再锁一次, 避免两笔请求各写一个指针.
             correction = await KnowledgeFileCorrectionRepositoryImpl(session).lock_by_id(int(correction_id))
             if correction is None:
                 raise FileCorrectionUpdateFileInvalidError()
             if correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
             already_id = await cls._existing_pending_update_file_id(session, correction)
-            if already_id is not None:
+            phase = (await cls._update_phase(session, correction))[1]
+            if already_id is not None and is_update_in_progress(phase) and int(already_id) != int(new_id):
+                raise FileCorrectionUpdateInProgressError()
+            if already_id is not None and is_update_failed(phase) and created_new:
+                await cls._discard_pending_update_file(session, correction)
+            elif already_id is not None and not created_new:
                 new_id = already_id
-                created_new = False
             row = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == new_id))).first()
             if row is None:
                 raise FileCorrectionUpdateFileInvalidError()
@@ -657,9 +682,17 @@ class KnowledgeFileCorrectionService:
                     user_id=int(login_user.user_id),
                 )
             correction.pending_update_file_id = new_id
-            award_payload, notify_payload = await cls._accept_registered_update(session, correction, login_user)
+            session.add(correction)
+            if int(row.status or 0) == int(KnowledgeFileStatus.SUCCESS.value):
+                await cls._promote_new_version(session, correction, int(new_id))
+                award_payload, notify_payload = await cls._finalize_update(session, correction)
             await session.commit()
-            result = {"id": new_id, "status": int(row.status or 0), "file_name": row.file_name}
+            result = {
+                "id": new_id,
+                "status": int(row.status or 0),
+                "file_name": row.file_name,
+                "update_phase": classify_update_phase(new_id, int(row.status or 0)),
+            }
         if notify_payload is not None:
             await cls._notify(**notify_payload)
         if award_payload is not None:
@@ -686,16 +719,15 @@ class KnowledgeFileCorrectionService:
         return int(row.id)
 
     @classmethod
-    async def _accept_registered_update(cls, session, correction: KnowledgeFileCorrection, login_user):
-        """上传登记成功后结束待办并生成发分载荷. 不替换当前版本.
+    async def _finalize_update(cls, session, correction: KnowledgeFileCorrection):
+        """解析成功并收成当前版本后结束待办. 按当天 10 分封顶决定是否发分.
 
         Args:
             session: 持有纠错行锁的会话.
-            correction: 仍待处理的纠错. pending_update_file_id 已指向新文件.
-            login_user: 冻结上传人.
+            correction: 仍待处理的纠错. 新文件此时已是主版本.
 
         Returns:
-            发分载荷和审批通知参数. 不需要发分时第一项为 None.
+            发分载荷和审批通知参数. 超限时第一项为 None.
 
         Raises:
             ApprovalRequestNotFoundError: 审批实例不存在.
@@ -725,20 +757,23 @@ class KnowledgeFileCorrectionService:
             task.acted_at = now
             task.update_time = now
             session.add(task)
+        new_file_id = int(correction.pending_update_file_id or 0)
         correction.status = CORRECTION_APPROVED
+        correction.pending_update_file_id = None
         correction.update_time = now
         instance.status = ApprovalInstanceStatus.APPROVED
-        instance.latest_approver_user_id = int(login_user.user_id)
+        instance.latest_approver_user_id = int(correction.uploader_user_id)
         instance.current_node_name = None
         instance.update_time = now
         session.add(correction)
         session.add(instance)
+        pay = await should_pay_update(session, applicant_user_id=int(correction.applicant_user_id))
         award_payload = await cls._create_award(
             session,
             correction,
             award_kind=AWARD_KIND_UPDATE,
             delta=UPDATE_POINTS,
-            pay=True,
+            pay=pay,
         )
         await cls._delete_open_slot(session, correction)
         session.add(
@@ -746,15 +781,15 @@ class KnowledgeFileCorrectionService:
                 tenant_id=int(correction.tenant_id),
                 instance_id=int(instance.id),
                 action="approved",
-                operator_user_id=int(login_user.user_id),
-                operator_user_name=str(getattr(login_user, "user_name", "") or correction.uploader_user_name or ""),
-                detail={"comment": "", "correction_id": int(correction.id), "new_file_id": int(correction.pending_update_file_id or 0)},
+                operator_user_id=int(correction.uploader_user_id),
+                operator_user_name=str(correction.uploader_user_name or ""),
+                detail={"comment": "", "correction_id": int(correction.id), "new_file_id": new_file_id},
                 create_time=now,
                 update_time=now,
             )
         )
         notify_payload = {
-            "sender": int(login_user.user_id),
+            "sender": int(correction.uploader_user_id),
             "receivers": [int(correction.applicant_user_id)],
             "action_code": "approval_instance_approved",
             "business_name": instance.business_name,
@@ -767,17 +802,18 @@ class KnowledgeFileCorrectionService:
     async def promote_parsed_update_file(cls, file_id: int) -> None:
         """解析成功后, 把采纳并更新登记的新文件收成当前版本.
 
-        待办和积分在上传成功时已经结束. 解析失败不会调用本方法, 旧文件保持当前版本.
+        仍待处理的单在这里关待办并发分. 旧路径若登记时已经关单, 这里只换版本.
 
         Args:
             file_id: 刚解析成功的知识库文件 ID.
         """
+        award_payload = None
+        notify_payload = None
         async with get_async_db_session() as session:
             correction = (
                 await session.exec(
                     select(KnowledgeFileCorrection).where(
                         KnowledgeFileCorrection.pending_update_file_id == int(file_id),
-                        KnowledgeFileCorrection.status == CORRECTION_APPROVED,
                     )
                 )
             ).first()
@@ -789,10 +825,17 @@ class KnowledgeFileCorrectionService:
             if new_file is None or int(new_file.status or 0) != int(KnowledgeFileStatus.SUCCESS.value):
                 return
             await cls._promote_new_version(session, correction, int(file_id))
-            correction.pending_update_file_id = None
-            correction.update_time = datetime.now()
-            session.add(correction)
+            if correction.status == CORRECTION_PENDING:
+                award_payload, notify_payload = await cls._finalize_update(session, correction)
+            else:
+                correction.pending_update_file_id = None
+                correction.update_time = datetime.now()
+                session.add(correction)
             await session.commit()
+        if notify_payload is not None:
+            await cls._notify(**notify_payload)
+        if award_payload is not None:
+            await cls._dispatch_award(award_payload)
 
     @staticmethod
     async def _copy_non_ai_tags(session, *, old_id: int, new_id: int, user_id: int) -> None:
@@ -878,6 +921,11 @@ class KnowledgeFileCorrectionService:
                 raise FileCorrectionUploaderOnlyError()
             if task.status != ApprovalTaskStatus.PENDING or correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
+            phase = (await cls._update_phase(session, correction))[1]
+            if is_update_in_progress(phase):
+                raise FileCorrectionUpdateInProgressError()
+            if is_update_failed(phase):
+                await cls._discard_pending_update_file(session, correction)
             now = datetime.now()
             if normalized == "reject":
                 task.status = ApprovalTaskStatus.REJECTED
@@ -890,7 +938,9 @@ class KnowledgeFileCorrectionService:
                     await cls._promote_new_version(session, correction, int(new_file_id))
                     award_kind = AWARD_KIND_UPDATE
                     delta = UPDATE_POINTS
-                    pay = True
+                    pay = await should_pay_update(
+                        session, applicant_user_id=int(correction.applicant_user_id)
+                    )
                 else:
                     award_kind = AWARD_KIND_ADOPT
                     delta = ADOPT_POINTS
@@ -973,6 +1023,10 @@ class KnowledgeFileCorrectionService:
             correction = await repo.lock_by_id(correction_id)
             if correction is None or correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
+            if is_update_in_progress((await cls._update_phase(session, correction))[1]):
+                raise FileCorrectionUpdateInProgressError()
+            if is_update_failed((await cls._update_phase(session, correction))[1]):
+                await cls._discard_pending_update_file(session, correction)
             now = datetime.now()
             tasks = (
                 await session.exec(select(ApprovalTask).where(ApprovalTask.instance_id == int(instance.id)))
@@ -1026,12 +1080,29 @@ class KnowledgeFileCorrectionService:
             file_ids: 被删除的知识库文件 ID.
         """
         async with get_async_db_session() as session:
+            deleted_ids = {int(item) for item in file_ids if int(item) > 0}
+            if deleted_ids:
+                pointer_rows = (
+                    await session.exec(
+                        select(KnowledgeFileCorrection).where(
+                            col(KnowledgeFileCorrection.pending_update_file_id).in_(list(deleted_ids)),
+                            KnowledgeFileCorrection.status == CORRECTION_PENDING,
+                        )
+                    )
+                ).all()
+                for correction in pointer_rows:
+                    # 删的是更新文件时只清指针, 原文档上的待办还在.
+                    if int(correction.file_id) not in deleted_ids:
+                        correction.pending_update_file_id = None
+                        session.add(correction)
             repo = KnowledgeFileCorrectionRepositoryImpl(session)
             rows = await repo.list_pending_for_files(file_ids)
             if not rows:
+                await session.commit()
                 return
             now = datetime.now()
             for correction in rows:
+                await cls._discard_pending_update_file(session, correction)
                 correction.status = CORRECTION_CANCELLED
                 correction.pending_update_file_id = None
                 correction.update_time = now
@@ -1110,6 +1181,117 @@ class KnowledgeFileCorrectionService:
         if uploader is None or int(uploader.delete or 0) == 1:
             raise FileCorrectionUploaderUnavailableError()
         return uploader
+
+    @classmethod
+    async def retry_update_file(cls, *, login_user, correction_id: int) -> dict:
+        """对解析失败的更新文件重新入队, 不换文件号.
+
+        Args:
+            login_user: 当前登录用户, 必须是冻结上传人.
+            correction_id: 仍待处理的纠错单 ID.
+
+        Returns:
+            原更新文件的 id、解析状态和更新阶段.
+
+        Raises:
+            ApprovalRequestNotFoundError: 纠错单不存在.
+            FileCorrectionUploaderOnlyError: 当前用户不是冻结上传人.
+            ApprovalRequestAlreadyProcessedError: 纠错已不在待处理.
+            FileCorrectionUpdateRetryNotAllowedError: 没有失败的更新文件.
+        """
+        register_lock = await _lock_for_correction(int(correction_id))
+        async with register_lock:
+            async with get_async_db_session() as session:
+                correction = await KnowledgeFileCorrectionRepositoryImpl(session).lock_by_id(int(correction_id))
+                if correction is None:
+                    raise ApprovalRequestNotFoundError()
+                if int(correction.uploader_user_id) != int(login_user.user_id):
+                    raise FileCorrectionUploaderOnlyError()
+                if correction.status != CORRECTION_PENDING:
+                    raise ApprovalRequestAlreadyProcessedError()
+                _file_status, phase = await cls._update_phase(session, correction)
+                if not is_update_failed(phase):
+                    raise FileCorrectionUpdateRetryNotAllowedError()
+                pending_id = int(correction.pending_update_file_id or 0)
+                row = (
+                    await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == pending_id))
+                ).first()
+                if row is None:
+                    raise FileCorrectionUpdateRetryNotAllowedError()
+                row.status = int(KnowledgeFileStatus.WAITING.value)
+                session.add(row)
+                await session.commit()
+                file_name = row.file_name
+            from bisheng.knowledge.domain.services.knowledge_parse_dispatch_service import (
+                KnowledgeParseAttemptKind,
+                dispatch_knowledge_parse_task,
+            )
+            from bisheng.knowledge.domain.services.knowledge_pdf_artifact_service import (
+                request_pdf_artifact_generation,
+            )
+
+            await request_pdf_artifact_generation(row)
+            await dispatch_knowledge_parse_task(
+                attempt_kind=KnowledgeParseAttemptKind.RETRY,
+                file_id=pending_id,
+                operator_user_id=int(login_user.user_id),
+                operator_is_global_super=bool(getattr(login_user, "is_global_super", False)),
+            )
+            return {
+                "id": pending_id,
+                "status": int(KnowledgeFileStatus.WAITING.value),
+                "file_name": file_name,
+                "update_phase": UPDATE_PHASE_UPDATING,
+            }
+
+    @staticmethod
+    async def _update_phase(session, correction: KnowledgeFileCorrection) -> tuple[int | None, str]:
+        """读取指针文件状态并推导更新阶段.
+
+        Args:
+            session: 当前会话.
+            correction: 纠错单.
+
+        Returns:
+            文件解析状态和 idle/updating/failed. 指针文件不存在时当作 idle.
+        """
+        pending_id = int(correction.pending_update_file_id or 0)
+        if pending_id <= 0:
+            return None, UPDATE_PHASE_IDLE
+        row = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == pending_id))).first()
+        if row is None:
+            return None, UPDATE_PHASE_IDLE
+        status = int(row.status or 0)
+        return status, classify_update_phase(pending_id, status)
+
+    @staticmethod
+    async def _discard_pending_update_file(session, correction: KnowledgeFileCorrection) -> None:
+        """删掉尚未成为当前版本的更新文件, 并清空指针.
+
+        已经是主版本的文件不删. 对象存储里的孤儿文件这版不清理.
+
+        Args:
+            session: 当前事务.
+            correction: 仍指向更新文件的纠错单.
+        """
+        pending_id = int(correction.pending_update_file_id or 0)
+        correction.pending_update_file_id = None
+        session.add(correction)
+        if pending_id <= 0:
+            return
+        primary = (
+            await session.exec(
+                select(KnowledgeDocumentVersion).where(
+                    KnowledgeDocumentVersion.knowledge_file_id == pending_id,
+                    KnowledgeDocumentVersion.is_primary == True,  # noqa: E712
+                )
+            )
+        ).first()
+        if primary is not None:
+            return
+        row = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == pending_id))).first()
+        if row is not None:
+            await session.delete(row)
 
     @staticmethod
     async def _delete_open_slot(session, correction: KnowledgeFileCorrection) -> None:

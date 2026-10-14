@@ -1066,7 +1066,7 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
         bodies = [first, second]
         success = next(item for item in bodies if item["status_code"] == 200)
         rejected = next(item for item in bodies if item["status_code"] != 200)
-        assert rejected["status_code"] == 18102, rejected
+        assert rejected["status_code"] == 18411, rejected
         assert len(calls) == 1
         assert calls[0]["award_points"] is False
         assert calls[0]["file_category_code"] == "STD"
@@ -1125,8 +1125,8 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
             metadata = stored[0]
             if isinstance(metadata, str):
                 metadata = json.loads(metadata)
-            assert str(correction_status) == "approved"
-            assert int(awarded) == 2
+            assert str(correction_status) == "pending"
+            assert int(awarded) == 0
             assert int(pointer) == int(success["data"]["id"])
             assert (metadata or {}).get("correction_update_source") == "tmp/same.pdf"
             assert str(stored[1]) == "manual"
@@ -1170,8 +1170,27 @@ async def test_update_file_skips_ingest_points_and_copies_labels_mysql(flow_env,
                     {"id": correction_id},
                 )
             ).scalar_one()
+            status_after = (
+                await session.execute(
+                    text("SELECT status FROM knowledge_file_correction WHERE id = :id"),
+                    {"id": correction_id},
+                )
+            ).scalar_one()
+            awarded_after = (
+                await session.execute(
+                    text(
+                        """
+                        SELECT COALESCE(SUM(delta), 0) FROM user_point_log
+                        WHERE user_id = :id AND rule_code = 'G8'
+                        """
+                    ),
+                    {"id": reader},
+                )
+            ).scalar_one()
             assert int(primary_after) == int(success["data"]["id"])
             assert cleared is None
+            assert str(status_after) == "approved"
+            assert int(awarded_after) == 2
     finally:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             await session.execute(text("DELETE FROM taglink WHERE resource_id = :id"), {"id": str(origin)})

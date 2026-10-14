@@ -1,6 +1,6 @@
 # 知识库文档纠错 · 技术方案
 
-> 本文不再作为设计权威。设计用 [design-technical-rfc.md](./design-technical-rfc.md)。实现契约用 [spec.md](./spec.md)。
+> 本文不再作为设计权威。设计用 [design-technical-rfc.md](./design-technical-rfc.md)，2026-10-14 补充见该文第 13 节。实现契约用 [spec.md](./spec.md)。
 
 | 项 | 内容 |
 |---|---|

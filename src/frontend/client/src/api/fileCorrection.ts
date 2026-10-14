@@ -4,6 +4,8 @@ export const FILE_CORRECTION_SCENARIO = "knowledge_file_correction";
 
 const CONTENT_LIMIT = 500;
 
+export type FileCorrectionUpdatePhase = "idle" | "updating" | "failed";
+
 export interface FileCorrectionRecord {
     correction_id: number;
     file_id: number;
@@ -13,6 +15,9 @@ export interface FileCorrectionRecord {
     original_error?: string | null;
     corrected_content?: string | null;
     status: string;
+    pending_update_file_id?: number | null;
+    update_file_status?: number | null;
+    update_phase?: FileCorrectionUpdatePhase | null;
 }
 
 export interface SubmitFileCorrectionInput {
@@ -77,12 +82,25 @@ export async function submitFileCorrection(
 export async function registerCorrectionUpdateFile(
     correctionId: number,
     filePath: string,
-): Promise<{ id: number; status: number; file_name?: string }> {
+): Promise<{ id: number; status: number; file_name?: string; update_phase?: FileCorrectionUpdatePhase }> {
     const payload = await request.post(`/api/v1/knowledge/file-corrections/${correctionId}/update-file`, {
         file_path: filePath,
-    }) as ApiEnvelope<{ id: number; status: number; file_name?: string }>;
+    }) as ApiEnvelope<{ id: number; status: number; file_name?: string; update_phase?: FileCorrectionUpdatePhase }>;
     if (payload?.status_code && payload.status_code !== 200) raiseBusinessError(payload);
     if (!payload?.data?.id) throw new Error("新文件没有写入知识库");
+    return payload.data;
+}
+
+/** 对解析失败的更新文件重新入队. */
+export async function retryCorrectionUpdateFile(
+    correctionId: number,
+): Promise<{ id: number; status: number; file_name?: string; update_phase?: FileCorrectionUpdatePhase }> {
+    const payload = await request.post(
+        `/api/v1/knowledge/file-corrections/${correctionId}/retry-update-file`,
+        {},
+    ) as ApiEnvelope<{ id: number; status: number; file_name?: string; update_phase?: FileCorrectionUpdatePhase }>;
+    if (payload?.status_code && payload.status_code !== 200) raiseBusinessError(payload);
+    if (!payload?.data?.id) throw new Error("重新解析失败");
     return payload.data;
 }
 
