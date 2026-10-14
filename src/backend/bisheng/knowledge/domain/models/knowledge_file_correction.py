@@ -45,7 +45,9 @@ class KnowledgeFileCorrection(SQLModelSerializable, table=True):
         default="",
         sa_column=Column(String(255), nullable=False, server_default=text("''"), comment="反馈人姓名快照"),
     )
-    uploader_user_id: int = Field(sa_column=Column(Integer, nullable=False, index=True, comment="提交时冻结的上传人用户ID"))
+    uploader_user_id: int = Field(
+        sa_column=Column(Integer, nullable=False, index=True, comment="提交时冻结的上传人用户ID")
+    )
     uploader_user_name: str = Field(
         default="",
         sa_column=Column(String(255), nullable=False, server_default=text("''"), comment="上传人姓名快照"),
@@ -55,9 +57,19 @@ class KnowledgeFileCorrection(SQLModelSerializable, table=True):
         sa_column=Column(String(255), nullable=False, server_default=text("''"), comment="文档名快照"),
     )
     content: str = Field(sa_column=Column(String(500), nullable=False, comment="纠错说明, 最多500字"))
+    original_error: str | None = Field(
+        default=None,
+        sa_column=Column(String(500), nullable=True, comment="用户认为原文中错误的地方, 最多500字"),
+    )
+    corrected_content: str | None = Field(
+        default=None,
+        sa_column=Column(String(500), nullable=True, comment="用户纠正后的内容, 最多500字"),
+    )
     status: str = Field(
         default=CORRECTION_PENDING,
-        sa_column=Column(String(16), nullable=False, index=True, comment="状态: pending/approved/rejected/withdrawn/cancelled"),
+        sa_column=Column(
+            String(16), nullable=False, index=True, comment="状态: pending/approved/rejected/withdrawn/cancelled"
+        ),
     )
     approval_instance_id: int | None = Field(
         default=None,
@@ -107,7 +119,9 @@ class KnowledgeFileCorrectionAward(SQLModelSerializable, table=True):
     )
     file_id: int = Field(sa_column=Column(Integer, nullable=False, index=True, comment="被纠错的知识库文件ID"))
     applicant_user_id: int = Field(sa_column=Column(Integer, nullable=False, index=True, comment="反馈人用户ID"))
-    correction_id: int = Field(sa_column=Column(Integer, nullable=False, unique=True, comment="纠错单ID, 一条纠错只发一次"))
+    correction_id: int = Field(
+        sa_column=Column(Integer, nullable=False, unique=True, comment="纠错单ID, 一条纠错只发一次")
+    )
     award_kind: str = Field(sa_column=Column(String(16), nullable=False, comment="发分类型: adopt/update"))
     award_state: str = Field(
         default=AWARD_RESERVED,

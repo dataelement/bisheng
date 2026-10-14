@@ -21,7 +21,7 @@ export function canOpenFileCorrection(input: {
 }
 
 /**
- * 阅读页是否允许发起纠错.
+ * 右侧边栏是否显示发起纠错按钮.
  * 看当前打开文件所属库, 不看从哪个列表进来.
  */
 export function canSubmitFileCorrection(input: {

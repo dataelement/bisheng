@@ -10,7 +10,14 @@ export interface FileCorrectionRecord {
     file_name: string;
     space_id: number;
     content: string;
+    original_error?: string | null;
+    corrected_content?: string | null;
     status: string;
+}
+
+export interface SubmitFileCorrectionInput {
+    originalError: string;
+    correctedContent: string;
 }
 
 interface ApiEnvelope<T> {
@@ -53,9 +60,13 @@ export function correctionStatusLabel(status: string, awardKind?: string | null)
 }
 
 /** 提交文档纠错. 失败时抛出带 status_code 的错误. */
-export async function submitFileCorrection(fileId: string | number, content: string): Promise<FileCorrectionRecord> {
+export async function submitFileCorrection(
+    fileId: string | number,
+    input: SubmitFileCorrectionInput,
+): Promise<FileCorrectionRecord> {
     const payload = await request.post(`/api/v1/knowledge/files/${fileId}/corrections`, {
-        content,
+        original_error: input.originalError,
+        corrected_content: input.correctedContent,
     }) as ApiEnvelope<FileCorrectionRecord>;
     if (payload?.status_code && payload.status_code !== 200) raiseBusinessError(payload);
     if (!payload?.data) throw new Error("提交失败");

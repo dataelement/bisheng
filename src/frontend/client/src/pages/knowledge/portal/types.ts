@@ -8,7 +8,7 @@ import type {
 
 export type SpaceGroupKey = "public" | "department" | "team" | "personal";
 export type PanelKey = "properties" | "time" | "source" | "usage" | "permission" | "share";
-export type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission" | "ai";
+export type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission" | "correction" | "ai";
 
 export interface SpaceGroup {
     key: SpaceGroupKey;
