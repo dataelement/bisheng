@@ -9,6 +9,7 @@ vector hits cannot escape that turn's configured scope.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
@@ -92,6 +93,38 @@ class RobotSpaceRetrievalPolicy:
         self.invoke_user_id = int(invoke_user_id)
         self.document_state_reader = document_state_reader or DatabaseRobotDocumentStateReader()
         self.retrieval_backend = retrieval_backend or DatabaseRobotRetrievalBackend()
+        # One policy is built for each assistant turn. Parallel tool calls on
+        # that executor share slots; sync ReAct calls may use fresh event loops.
+        self._space_slots: dict[asyncio.AbstractEventLoop, asyncio.Semaphore] = {}
+
+    async def _retrieve_spaces(
+        self,
+        requests: Sequence[tuple[int, tuple[int, ...] | None]],
+        *,
+        query: str,
+        max_content: int,
+        sort_by_source_and_index: bool,
+    ) -> list[tuple[int, list[Document]]]:
+        loop = asyncio.get_running_loop()
+        slots = self._space_slots.setdefault(loop, asyncio.Semaphore(6))
+
+        async def retrieve_one(space_id, file_ids):
+            async with slots:
+                return await self.retrieval_backend.retrieve_space(
+                    space_id=space_id,
+                    tenant_id=self.tenant_id,
+                    query=query,
+                    invoke_user_id=self.invoke_user_id,
+                    max_content=max_content,
+                    sort_by_source_and_index=sort_by_source_and_index,
+                    file_ids=file_ids,
+                )
+
+        # Structured lifetime: failures/cancellation stop and await siblings.
+        # Consume in request order, never in completion order, for stable ranks.
+        async with asyncio.TaskGroup() as group:
+            tasks = [(sid, group.create_task(retrieve_one(sid, ids))) for sid, ids in requests]
+        return [(sid, task.result()) for sid, task in tasks]
 
     async def retrieve(
         self,
@@ -131,6 +164,7 @@ class RobotSpaceRetrievalPolicy:
 
         candidates: list[Document] = []
         recalled = {}
+        requests = []
         for space_id in space_ids:
             selected_ids = (
                 None
@@ -139,15 +173,10 @@ class RobotSpaceRetrievalPolicy:
             )
             if selected_ids == ():
                 continue
-            documents = await self.retrieval_backend.retrieve_space(
-                space_id=space_id,
-                tenant_id=self.tenant_id,
-                query=query,
-                invoke_user_id=self.invoke_user_id,
-                max_content=max_content,
-                sort_by_source_and_index=sort_by_source_and_index,
-                file_ids=selected_ids,
-            )
+            requests.append((space_id, selected_ids))
+        for space_id, documents in await self._retrieve_spaces(
+            requests, query=query, max_content=max_content, sort_by_source_and_index=sort_by_source_and_index
+        ):
             recalled[space_id] = len(documents)
             for rank, doc in enumerate(documents, 1):
                 candidates.append(
@@ -173,28 +202,23 @@ class RobotSpaceRetrievalPolicy:
             if _document_id(doc) in sources and robot_document_body(doc.page_content)
         }
         missing_ids = set(filename_matches) & set(sources) - body_ids
-        supplemented = False
+        supplement_requests = []
         for space_id in space_ids:
             selected_ids = tuple(sorted(fid for fid in missing_ids if sources[fid].space_id == space_id))
             if not selected_ids:
                 continue
-            documents = await self.retrieval_backend.retrieve_space(
-                space_id=space_id,
-                tenant_id=self.tenant_id,
-                query=query,
-                invoke_user_id=self.invoke_user_id,
-                max_content=max_content,
-                sort_by_source_and_index=False,
-                file_ids=selected_ids,
-            )
-            supplemented = True
+            supplement_requests.append((space_id, selected_ids))
+        for space_id, documents in await self._retrieve_spaces(
+            supplement_requests, query=query, max_content=max_content, sort_by_source_and_index=False
+        ):
+            selected_ids = {fid for fid in missing_ids if sources[fid].space_id == space_id}
             recalled[space_id] = recalled.get(space_id, 0) + len(documents)
             for rank, doc in enumerate(documents, 1):
                 if _document_id(doc) in selected_ids:
                     candidates.append(
                         Document(page_content=doc.page_content, metadata={"robot_recall_rank": rank, **doc.metadata})
                     )
-        if supplemented:
+        if supplement_requests:
             # A file can be deleted/moved while its supplemental query runs.
             sources = await self.document_state_reader.file_sources(**source_options)
 

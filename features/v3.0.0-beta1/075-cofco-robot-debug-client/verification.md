@@ -407,3 +407,12 @@ FAILED test/workstation/test_conversation_export_service.py::test_load_happy_pat
 - 最终相关回归：297 passed；Ruff、架构守卫及 diff 检查通过。只读评审无阻塞问题，建议的取消验证已补齐。
 - 完整后端回归：6614 passed、297 failed、22 errors、67 skipped、6 deselected；与 `/private/tmp/robot-body-supplement-full.xml` 的319项失败/错误身份双向差集为空，失败名称同本文既有基线清单。全量运行开始后补充的取消用例由上述最终相关回归覆盖，不声明整体后端通过。
 - 全量证据：`/private/tmp/robot-debug-diag-full.log`、`/private/tmp/robot-debug-diag-full.xml`。现场E2E 4 skipped（未配置测试环境参数）；未调用真实模型、未部署105、未提交或推送；无前端测试/构建。
+
+## 2026-10-14 机器人知识空间有界并行
+
+基于当前 `d8a46bb76`，仅把机器人空间召回与缺正文补查改为每轮执行器最多6个空间并行。同一工具实例/事件循环的并行调用共享6个槽位，同步执行器跨循环复用兼容；其他会话有独立限额，不是环境全局限流。任务组负责异常/取消时取消并等待同组本地任务，错误不吞掉；结果仍按稳定请求顺序合并，范围、文件过滤、真实来源复核、去重、融合排序、正文预算不变。不修改空间内两路索引顺序、普通助手、MCP、消息排队或数据库。
+
+- TDD：原串行实现的5项新增调度验证因无法启动并发任务按预期失败；实现后并发上限、正文/补查、并行工具共享限额、租户上下文、错误/取消清理通过，另覆盖反向完成时去重来源稳定及跨循环复用，共7项新增用例。
+- 最终机器人及原助手相关回归321 passed；Ruff、架构守卫、diff检查通过。只读评审无阻塞问题；文档串行描述已修正，弱引用映射已简化为每轮的显式循环映射，并重跑相关及全量回归。
+- 最终完整后端：6639 passed、297 failed、22 errors、67 skipped、6 deselected；与 `/private/tmp/robot-debug-diag-full.xml` 的319项失败/错误身份双向差集为空，失败名称同本文既有基线清单，不声明整体后端通过。
+- 最终证据：`/private/tmp/robot-parallel-recall-final.log`、`/private/tmp/robot-parallel-recall-final.xml`。现场E2E 4 skipped（未配置环境参数），已补验收清单；无前端测试/构建、无真实模型调用、未部署或提交推送。真实耗时改善、Milvus/ES负载需部署后测量，不以本地确定性调度测试代替现场性能验收。
