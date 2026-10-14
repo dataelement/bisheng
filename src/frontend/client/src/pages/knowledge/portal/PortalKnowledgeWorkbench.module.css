@@ -1588,6 +1588,36 @@
   padding: 18px 20px;
 }
 
+.drawerFooter {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  border-top: 1px solid #edf1f7;
+}
+
+.correctionFileName {
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+  color: #4e5969;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.correctionField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.correctionCounter {
+  color: #86909c;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: right;
+}
+
 .aiDrawer {
   width: 560px;
   max-width: min(560px, calc(100vw - 44px));

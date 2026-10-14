@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Clock, FileText, History, Link2, Lock, PanelRight } from "lucide-react";
+import { BriefcaseBusiness, Clock, FileText, History, Link2, MessageSquareWarning, PanelRight } from "lucide-react";
 import type { PanelKey, PortalToolRailKey } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -17,12 +17,16 @@ const TOOLBAR_ITEMS: Array<{
         { key: "source", title: "来源", icon: Link2, panelKey: "source" },
         { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
         // { key: "permission", title: "权限", icon: Lock, panelKey: "permission" },
+        { key: "correction", title: "纠错", icon: MessageSquareWarning },
         { key: "ai", title: "AI 对话" },
     ];
 
 interface ToolRailProps {
     activePanel: PanelKey | null;
     aiOpen: boolean;
+    showCorrection?: boolean;
+    correctionOpen?: boolean;
+    onOpenCorrection?: () => void;
     showCorrectionHistory?: boolean;
     correctionHistoryOpen?: boolean;
     onOpenCorrectionHistory?: () => void;
@@ -31,9 +35,13 @@ interface ToolRailProps {
     onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
 }
 
+/** 阅读页右侧固定工具栏. 纠错入口放这里, 避免随文档预览滚动被顶出视口. */
 export function ToolRail({
     activePanel,
     aiOpen,
+    showCorrection = false,
+    correctionOpen = false,
+    onOpenCorrection,
     showCorrectionHistory = false,
     correctionHistoryOpen = false,
     onOpenCorrectionHistory,
@@ -46,10 +54,13 @@ export function ToolRail({
     return (
         <aside className={s.toolRail} data-testid="portal-tool-rail">
             {toolbarItems.map((item) => {
+                if (item.key === "correction" && !showCorrection) return null;
                 const Icon = item.icon;
                 const active = item.key === "ai"
                     ? aiOpen
-                    : Boolean(item.panelKey && activePanel === item.panelKey);
+                    : item.key === "correction"
+                        ? correctionOpen
+                        : Boolean(item.panelKey && activePanel === item.panelKey);
                 const historyButton = item.key === "ai" && showCorrectionHistory ? (
                     <button
                         type="button"
@@ -80,6 +91,10 @@ export function ToolRail({
                             }
                             if (item.key === "ai") {
                                 onOpenAi();
+                                return;
+                            }
+                            if (item.key === "correction") {
+                                onOpenCorrection?.();
                                 return;
                             }
                             if (item.panelKey) {

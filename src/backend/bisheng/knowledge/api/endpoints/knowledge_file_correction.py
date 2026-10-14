@@ -13,9 +13,14 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge_file_correction"])
 
 
 class SubmitFileCorrectionBody(BaseModel):
-    """提交纠错的请求体. 字数由服务端按字符校验."""
+    """提交纠错的请求体. 字数由服务端按字符校验.
+
+    新表单传 original_error 和 corrected_content. 只传 content 仍按旧的一段说明处理.
+    """
 
     content: str = ""
+    original_error: str | None = None
+    corrected_content: str | None = None
 
 
 class RegisterCorrectionUpdateFileBody(BaseModel):
@@ -55,7 +60,7 @@ async def submit_file_correction(
 
     Args:
         file_id: 知识库文件 ID.
-        body: 纠错说明.
+        body: 原文错误处和纠正后内容, 或旧的一段说明.
         login_user: 当前登录用户.
 
     Returns:
@@ -65,6 +70,8 @@ async def submit_file_correction(
         login_user=login_user,
         file_id=file_id,
         content=body.content,
+        original_error=body.original_error,
+        corrected_content=body.corrected_content,
     )
     return resp_200(data)
 

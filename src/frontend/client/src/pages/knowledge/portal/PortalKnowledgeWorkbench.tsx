@@ -97,7 +97,6 @@ import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
-import { FileCorrectionDialog } from "./components/FileCorrectionDialog";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
 import { canSubmitFileCorrection } from "./fileCorrectionAccess";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
@@ -852,6 +851,9 @@ export default function PortalKnowledgeWorkbench() {
     });
     // 纠错历史入口先隐藏. 恢复时改回 canOpenFileCorrection.
     const showFileCorrectionHistory = false;
+    useEffect(() => {
+        setCorrectionOpen(false);
+    }, [selectedFile?.id]);
     const canDownloadSelectedFile = Boolean(
         selectedFile
         && (
@@ -2219,6 +2221,7 @@ export default function PortalKnowledgeWorkbench() {
                 setSelectedFile(null);
                 setActivePanel(null);
                 setAiDrawerOpen(false);
+                setCorrectionOpen(false);
                 setSummaryExpanded(false);
                 return;
             }
@@ -2228,6 +2231,7 @@ export default function PortalKnowledgeWorkbench() {
             setSelectedFile(file);
             setActivePanel(null);
             setAiDrawerOpen(true);
+            setCorrectionOpen(false);
             setSummaryExpanded(false);
         },
         [currentFolderId, searchMode, searchTagIds, searchText],
@@ -2394,6 +2398,7 @@ export default function PortalKnowledgeWorkbench() {
             setSelectedFile(null);
             setActivePanel(null);
             setAiDrawerOpen(false);
+            setCorrectionOpen(false);
             setCurrentFolderId(source.folderId);
             setSearchMode(source.mode);
             setSearchText(source.keyword);
@@ -2412,6 +2417,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
+        setCorrectionOpen(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
         // Deep-link open used to leave searchMode with a single-file result set.
@@ -3176,16 +3182,6 @@ export default function PortalKnowledgeWorkbench() {
                 </>
             ) : null}
 
-            {selectedFile && correctionOpen ? (
-                <FileCorrectionDialog
-                    open={correctionOpen}
-                    fileId={selectedFile.id}
-                    fileName={selectedFile.name}
-                    onOpenChange={setCorrectionOpen}
-                    onSubmitted={() => showToast({ message: "已提交, 可在消息中心的「申请」里查看进度", severity: NotificationSeverity.SUCCESS })}
-                    onError={(message) => showToast({ message, severity: NotificationSeverity.ERROR })}
-                />
-            ) : null}
             {selectedFile ? (
                 <PortalPreviewWorkspace
                     activePanel={activePanel}
@@ -3196,12 +3192,22 @@ export default function PortalKnowledgeWorkbench() {
                     canManagePermission={canManageSelectedFilePermission && !isActiveSpaceFavorite}
                     canDownload={canDownloadSelectedFile}
                     showCorrection={showFileCorrection}
-                    onOpenCorrection={() => setCorrectionOpen(true)}
+                    correctionOpen={correctionOpen}
+                    onOpenCorrection={() => {
+                        setActivePanel(null);
+                        setAiDrawerOpen(false);
+                        setCorrectionHistoryOpen(false);
+                        setCorrectionOpen(true);
+                    }}
+                    onCloseCorrection={() => setCorrectionOpen(false)}
+                    onCorrectionSubmitted={() => showToast({ message: "已提交, 可在消息中心的「申请」里查看进度", severity: NotificationSeverity.SUCCESS })}
+                    onCorrectionError={(message) => showToast({ message, severity: NotificationSeverity.ERROR })}
                     showCorrectionHistory={showFileCorrectionHistory}
                     correctionHistoryOpen={correctionHistoryOpen}
                     onOpenCorrectionHistory={() => {
                         setActivePanel(null);
                         setAiDrawerOpen(false);
+                        setCorrectionOpen(false);
                         setCorrectionHistoryOpen(true);
                     }}
                     onCloseCorrectionHistory={() => setCorrectionHistoryOpen(false)}

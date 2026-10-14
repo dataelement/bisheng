@@ -232,13 +232,23 @@ class KnowledgeFileCorrectionService:
     """纠错单写在本服务的事务里. 积分在通过提交之后另投."""
 
     @classmethod
-    async def submit(cls, *, login_user, file_id: int, content: str) -> dict:
+    async def submit(
+        cls,
+        *,
+        login_user,
+        file_id: int,
+        content: str = "",
+        original_error: str | None = None,
+        corrected_content: str | None = None,
+    ) -> dict:
         """提交一条纠错并给上传人创建待办.
 
         Args:
             login_user: 当前登录用户.
             file_id: 知识库文件 ID.
-            content: 纠错说明.
+            content: 旧的一段说明. 两段都没传时才用.
+            original_error: 用户认为原文中错误的地方.
+            corrected_content: 用户纠正后的内容.
 
         Returns:
             纠错单编号, 审批实例编号和待处理状态.
@@ -268,7 +278,16 @@ class KnowledgeFileCorrectionService:
             ).first()
             await cls._require_view(login_user, int(file_id), knowledge, scope)
             cls._require_space(knowledge, scope)
-            text = normalize_correction_content(content)
+            two_part = original_error is not None or corrected_content is not None
+            if two_part:
+                # 两段都必填, 各最多 500 字. content 仍写入原文错误处, 给只读旧字段的调用方.
+                original_text = normalize_correction_content(original_error)
+                corrected_text = normalize_correction_content(corrected_content)
+                text = original_text
+            else:
+                original_text = None
+                corrected_text = None
+                text = normalize_correction_content(content)
             applicant_id = int(login_user.user_id)
             uploader_id = int(file.user_id) if file.user_id is not None else None
             if uploader_id is not None and uploader_id == applicant_id:
@@ -293,6 +312,8 @@ class KnowledgeFileCorrectionService:
                 uploader_user_name=str(uploader.user_name or file.user_name or ""),
                 file_name=str(file.file_name or ""),
                 content=text,
+                original_error=original_text,
+                corrected_content=corrected_text,
                 status=CORRECTION_PENDING,
                 create_time=now,
                 update_time=now,
@@ -434,6 +455,8 @@ class KnowledgeFileCorrectionService:
                     "file_name": row.file_name,
                     "create_time": created,
                     "content": row.content,
+                    "original_error": row.original_error,
+                    "corrected_content": row.corrected_content,
                 })
             return items
 
@@ -491,7 +514,7 @@ class KnowledgeFileCorrectionService:
             correction_id: 纠错单 ID.
 
         Returns:
-            纠错单编号, 文档信息, 说明和状态.
+            纠错单编号, 文档信息, 说明, 两段正文和状态.
 
         Raises:
             FileCorrectionContentForbiddenError: 当前用户不能看, 或记录不存在.
@@ -508,6 +531,8 @@ class KnowledgeFileCorrectionService:
                 "file_name": row.file_name,
                 "space_id": int(row.knowledge_id),
                 "content": row.content,
+                "original_error": row.original_error,
+                "corrected_content": row.corrected_content,
                 "status": row.status,
                 "applicant_user_id": int(row.applicant_user_id),
                 "uploader_user_id": int(row.uploader_user_id),

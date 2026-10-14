@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Download, FileText, Loader2, MessageSquareWarning, Pencil, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronUp, Download, FileText, Loader2, Pencil, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -45,8 +45,6 @@ interface DocumentPreviewProps {
     downloadPending: boolean;
     canManagePermission: boolean;
     onOpenPermission: () => void;
-    showCorrection?: boolean;
-    onOpenCorrection?: () => void;
     onToggleSummary: () => void;
 }
 
@@ -64,8 +62,6 @@ export function DocumentPreview({
     downloadPending,
     canManagePermission,
     onOpenPermission,
-    showCorrection = false,
-    onOpenCorrection,
     onToggleSummary,
 }: DocumentPreviewProps) {
     const isRichPreview = isRichPreviewData(preview.previewData);
@@ -109,11 +105,6 @@ export function DocumentPreview({
                                     {downloadPending
                                         ? <Loader2 className="animate-spin" size={16} />
                                         : <Download size={16} />}
-                                </button>
-                            ) : null}
-                            {showCorrection ? (
-                                <button type="button" className={s.iconAction} title="纠错" aria-label="纠错" onClick={onOpenCorrection}>
-                                    <MessageSquareWarning size={16} />
                                 </button>
                             ) : null}
                             {canManagePermission ? (

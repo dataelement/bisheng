@@ -5,6 +5,7 @@ import type { BusinessDomainOptionItem } from "../uploadMetadata";
 import { DocumentPreview } from "./DocumentPreview";
 import { PortalAiDrawer } from "./PortalAiDialog";
 import { PortalInfoDrawer } from "./PortalInfoDrawer";
+import { FileCorrectionDrawer } from "./FileCorrectionDrawer";
 import { FileCorrectionHistoryDrawer } from "./FileCorrectionHistoryDrawer";
 import { ToolRail } from "./ToolRail";
 import s from "../PortalKnowledgeWorkbench.module.css";
@@ -34,7 +35,11 @@ interface PortalPreviewWorkspaceProps {
     onUpdateEncoding: (newEncoding: string, fileSubcategoryCode?: string | null) => void | Promise<void>;
     onOpenPermission: () => void;
     showCorrection?: boolean;
+    correctionOpen?: boolean;
     onOpenCorrection?: () => void;
+    onCloseCorrection?: () => void;
+    onCorrectionSubmitted?: () => void;
+    onCorrectionError?: (message: string) => void;
     showCorrectionHistory?: boolean;
     correctionHistoryOpen?: boolean;
     onOpenCorrectionHistory?: () => void;
@@ -70,7 +75,11 @@ export function PortalPreviewWorkspace({
     onUpdateEncoding,
     onOpenPermission,
     showCorrection,
+    correctionOpen,
     onOpenCorrection,
+    onCloseCorrection,
+    onCorrectionSubmitted,
+    onCorrectionError,
     showCorrectionHistory,
     correctionHistoryOpen,
     onOpenCorrectionHistory,
@@ -101,14 +110,12 @@ export function PortalPreviewWorkspace({
                         downloadPending={downloadPending}
                         canManagePermission={canManagePermission}
                         onOpenPermission={onOpenPermission}
-                        showCorrection={showCorrection}
-                        onOpenCorrection={onOpenCorrection}
                         onToggleSummary={onToggleSummary}
                     />
                 )}
             </div>
 
-            {!contentOverride && !aiDrawerOpen && !correctionHistoryOpen ? (
+            {!contentOverride && !aiDrawerOpen && !correctionHistoryOpen && !correctionOpen ? (
                 <PortalInfoDrawer
                     activePanel={activePanel}
                     activeSpace={activeSpace}
@@ -125,10 +132,20 @@ export function PortalPreviewWorkspace({
                 />
             ) : null}
 
-            {!contentOverride && !aiDrawerOpen && correctionHistoryOpen ? (
+            {!contentOverride && !aiDrawerOpen && !correctionOpen && correctionHistoryOpen ? (
                 <FileCorrectionHistoryDrawer
                     fileId={selectedFile.id}
                     onClose={() => onCloseCorrectionHistory?.()}
+                />
+            ) : null}
+
+            {!contentOverride && !aiDrawerOpen && correctionOpen ? (
+                <FileCorrectionDrawer
+                    fileId={selectedFile.id}
+                    fileName={selectedFile.name}
+                    onClose={() => onCloseCorrection?.()}
+                    onSubmitted={() => onCorrectionSubmitted?.()}
+                    onError={(message) => onCorrectionError?.(message)}
                 />
             ) : null}
 
@@ -138,7 +155,10 @@ export function PortalPreviewWorkspace({
                     activeSpace={activeSpace}
                     selectedFile={selectedFile}
                     documentPath={documentPath}
-                    onOpenChange={onAiDrawerOpenChange}
+                    onOpenChange={(open) => {
+                        if (open) onCloseCorrection?.();
+                        onAiDrawerOpenChange(open);
+                    }}
                 />
             ) : null}
 
@@ -146,21 +166,27 @@ export function PortalPreviewWorkspace({
                 <ToolRail
                     activePanel={activePanel}
                     aiOpen={aiDrawerOpen}
+                    showCorrection={showCorrection}
+                    correctionOpen={correctionOpen}
+                    onOpenCorrection={onOpenCorrection}
                     showCorrectionHistory={showCorrectionHistory}
                     correctionHistoryOpen={correctionHistoryOpen}
                     onOpenCorrectionHistory={onOpenCorrectionHistory}
                     onTogglePanel={() => {
                         onAiDrawerOpenChange(false);
+                        onCloseCorrection?.();
                         onCloseCorrectionHistory?.();
                         onPanelChange(activePanel ? null : "properties");
                     }}
                     onOpenAi={() => {
                         onPanelChange(null);
+                        onCloseCorrection?.();
                         onCloseCorrectionHistory?.();
                         onAiDrawerOpenChange(true);
                     }}
                     onOpenPanel={(panel) => {
                         onAiDrawerOpenChange(false);
+                        onCloseCorrection?.();
                         onCloseCorrectionHistory?.();
                         onPanelChange(panel);
                     }}
