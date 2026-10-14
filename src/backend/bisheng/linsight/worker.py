@@ -25,6 +25,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
 )
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 from bisheng.linsight.domain.utils import announce_stranded_session_failure
+from bisheng_langchain.gpts.tools.code_interpreter.local_isolation import sweep_on_startup
 
 logger = logging.getLogger(__name__)
 
@@ -498,6 +499,10 @@ class ScheduleCenterProcess(Process):
             fga_manager=None,
         )
         self.heartbeat_task = loop.create_task(self.node_manager.start_heartbeat())
+
+        # Disk-side counterpart of the incomplete-task sweep: run dirs and uids a
+        # crashed worker of this host left behind. Sibling workers keep theirs.
+        sweep_on_startup()
 
         # 启动主逻辑
         for _ in range(10000):  # 你的原始逻辑

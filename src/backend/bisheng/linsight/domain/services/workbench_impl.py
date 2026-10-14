@@ -2249,6 +2249,9 @@ class LinsightWorkbenchImpl:
         if "local" not in code_config["config"]:
             code_config["config"]["local"] = {}
         code_config["config"]["local"]["local_sync_path"] = file_dir
+        # With local isolation on, keep one run dir for the whole task; released by
+        # the task's _cleanup_resources before file_dir is deleted.
+        code_config["config"]["local"]["keep_run_dir"] = True
         if "container" not in code_config["config"]:
             code_config["config"]["container"] = {}
         code_config["config"]["container"]["local_sync_path"] = file_dir
