@@ -19,11 +19,16 @@ from bisheng.common.errcode.approval import (
     ApprovalFixedScenarioStructureLockedError,
 )
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.knowledge.domain.models.knowledge_file_correction import FILE_CORRECTION_SCENARIO
+from bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy import (
+    ensure_default_scenario,
+    normalize_correction_nodes,
+)
 
 
 class ApprovalScenarioAdminService:
-    SYSTEM_SCENARIO_CODES = frozenset({"department_file_view_request"})
-    FIXED_SCENARIO_CODES = frozenset()
+    SYSTEM_SCENARIO_CODES = frozenset({"department_file_view_request", FILE_CORRECTION_SCENARIO})
+    FIXED_SCENARIO_CODES = frozenset({FILE_CORRECTION_SCENARIO})
     # 流程管理不展示：业务自建流程，管理员不可配置。运行时仍走 registry / repository。
     ADMIN_CONFIG_HIDDEN_SCENARIO_CODES = frozenset({"qa_question_publish"})
 
@@ -93,12 +98,15 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def list_scenarios(cls, *, tenant_id: int):
+        # 打开流程管理时补齐文档纠错场景, 已有审批人配置不覆盖.
+        await ensure_default_scenario(int(tenant_id))
         rows = await ApprovalScenarioRepository.list_scenarios(tenant_id)
         return [
             {
                 **row.model_dump(),
                 "system_managed": (getattr(row, "scenario_code", None) in cls.SYSTEM_SCENARIO_CODES),
                 "structure_locked": cls._is_fixed_scenario(row),
+                "approver_sources_editable": getattr(row, "scenario_code", None) == FILE_CORRECTION_SCENARIO,
             }
             for row in rows
             if not cls._is_admin_config_hidden(row)
@@ -482,10 +490,18 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
         ip_address: str | None = None,
     ):
-        flow = await cls._assert_flow_structure_mutable(
-            tenant_id=tenant_id,
-            flow_definition_id=flow_definition_id,
-        )
+        flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
+        if flow is None or flow.tenant_id != tenant_id:
+            raise ValueError(f"flow not found: {flow_definition_id}")
+        scenario = await ApprovalScenarioRepository.get_scenario(flow.scenario_id)
+        if scenario is not None and scenario.scenario_code == FILE_CORRECTION_SCENARIO:
+            # 结构锁住, 只接受审批人来源变更. 上传人来源由 normalize 强制保留.
+            nodes_payload = normalize_correction_nodes(nodes_payload)
+        else:
+            flow = await cls._assert_flow_structure_mutable(
+                tenant_id=tenant_id,
+                flow_definition_id=flow_definition_id,
+            )
         (
             flow,
             new_version,

@@ -312,9 +312,20 @@ const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
     'approvalPage.approverSource.target_knowledge_space_manager_department_admin',
   department_file_approvers:
     'approvalPage.approverSource.department_file_approvers',
+  file_uploader: 'approvalPage.approverSource.file_uploader',
 };
 
 function approverSourceLabelKey(sourceType: string, scenarioCode?: string | null): string {
+  if (scenarioCode === 'knowledge_file_correction') {
+    const correctionSourceLabelKeys: Record<string, string> = {
+      file_uploader: 'approvalPage.approverSource.file_uploader',
+      knowledge_space_owner: 'approvalPage.approverSource.correctionKnowledgeSpaceOwner',
+      knowledge_space_manager: 'approvalPage.approverSource.correctionKnowledgeSpaceManager',
+    };
+    if (correctionSourceLabelKeys[sourceType]) {
+      return correctionSourceLabelKeys[sourceType];
+    }
+  }
   if (scenarioCode === 'department_file_view_request') {
     const departmentFileSourceLabelKeys: Record<string, string> = {
       target_knowledge_space_owner:
@@ -1095,6 +1106,7 @@ function FlowDialog({
 
 // i18n keys for all known approver source options
 const APPROVER_SOURCE_OPTIONS = [
+  { value: "file_uploader",           labelKey: "approvalPage.approverSource.file_uploader" },
   { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
   { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
   { value: "role_user",               labelKey: "approvalPage.approverSource.role_user" },
@@ -1129,6 +1141,7 @@ function NodeDialog({
   initial,
   allowedSourceTypes,
   scenarioCode,
+  sourcesOnly = false,
   onClose,
   onConfirm,
 }: {
@@ -1136,6 +1149,8 @@ function NodeDialog({
   initial: Partial<ApprovalNodeItem>;
   allowedSourceTypes?: string[];
   scenarioCode?: string | null;
+  /** 文档纠错只改审批人来源, 上传人不能从芯片上拿掉. */
+  sourcesOnly?: boolean;
   onClose: () => void;
   onConfirm: (data: {
     node_name: string;
@@ -1187,18 +1202,20 @@ function NodeDialog({
         role_names?: string[];
         label?: string;
       }[] | undefined) ?? [];
-      setSources(
-        rawSources.map((s) => ({
-          type: s.type,
-          label: getApproverLabel(s.type),
-          userIds: s.user_ids,
-          userNames: s.user_names,
-          roleIds: s.role_ids,
-          roleNames: s.role_names,
-        })),
-      );
+      const nextSources = rawSources.map((s) => ({
+        type: s.type,
+        label: getApproverLabel(s.type),
+        userIds: s.user_ids,
+        userNames: s.user_names,
+        roleIds: s.role_ids,
+        roleNames: s.role_names,
+      }));
+      if (sourcesOnly && !nextSources.some((s) => s.type === "file_uploader")) {
+        nextSources.unshift({ type: "file_uploader", label: getApproverLabel("file_uploader") });
+      }
+      setSources(nextSources);
     }
-  }, [open, initial, scenarioCode]);
+  }, [open, initial, scenarioCode, sourcesOnly]);
 
   const PAGE_SIZE = 50;
 
@@ -1306,6 +1323,7 @@ function NodeDialog({
   };
 
   const removeSource = (type: string) => {
+    if (sourcesOnly && type === "file_uploader") return;
     setSources((prev) => prev.filter((s) => s.type !== type));
   };
 
@@ -1317,6 +1335,7 @@ function NodeDialog({
           <DialogTitle>{initial.id ? t("approvalPage.editNode") : t("approvalPage.addNode")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {!sourcesOnly && (
           <label className="block text-sm text-text-secondary">
             {t("approvalPage.nodeNameLabel")}
             <input
@@ -1326,6 +1345,7 @@ function NodeDialog({
               className="mt-1 block h-10 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
             />
           </label>
+          )}
           <div className="text-sm text-text-secondary">
             {t("approvalPage.approverSourceSectionLabel")}
             <div className="mt-1 flex flex-wrap gap-2">
@@ -1353,6 +1373,7 @@ function NodeDialog({
                   ) : (
                     s.label
                   )}
+                  {!(sourcesOnly && s.type === "file_uploader") && (
                   <button
                     type="button"
                     onClick={() => removeSource(s.type)}
@@ -1360,6 +1381,7 @@ function NodeDialog({
                   >
                     ×
                   </button>
+                  )}
                 </span>
               ))}
               <select
@@ -1378,6 +1400,7 @@ function NodeDialog({
               </select>
             </div>
           </div>
+          {!sourcesOnly && (
           <label className="block text-sm text-text-secondary">
             {t("approvalPage.nodeModeLabel")}
             <select
@@ -1389,6 +1412,7 @@ function NodeDialog({
               <option value="and">{t("approvalPage.nodeModeAndFull")}</option>
             </select>
           </label>
+          )}
         </div>
         <DialogFooter>
           <button
@@ -1400,11 +1424,11 @@ function NodeDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim()}
+            disabled={!sourcesOnly && !name.trim()}
             onClick={() =>
               onConfirm({
-                node_name: name.trim(),
-                node_mode: mode,
+                node_name: (sourcesOnly ? (initial.node_name || name) : name).trim(),
+                node_mode: sourcesOnly ? "or" : mode,
                 approver_config: {
                   sources: sources.map((s) =>
                     s.type === "direct_user"
@@ -1866,6 +1890,7 @@ export default function ApprovalPage() {
     [flows, selectedFlowId],
   );
   const selectedScenarioLocked = Boolean(selectedScenario?.structure_locked);
+  const approverOnlyEdit = selectedScenarioLocked && Boolean(selectedScenario?.approver_sources_editable);
   // condition fields available for the selected scenario (from the preset registry)
   const activeConditionFields = useMemo(() => {
     // applicant_role is universal — every scenario supports identity-based routing.
@@ -2570,9 +2595,28 @@ export default function ApprovalPage() {
                         ))}
                       </select>
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
-                      {!selectedScenarioLocked && (
+                      {(approverOnlyEdit || !selectedScenarioLocked) && (
                         <div className="ml-auto flex items-center gap-2">
-                        {isNodeEditMode ? (
+                        {approverOnlyEdit ? (
+                          isNodeEditMode ? (
+                            <>
+                              <ActionBtn variant="outline" onClick={cancelNodeEditMode}>
+                                {t("approvalPage.cancelEditBtn", { defaultValue: "取消编辑" })}
+                              </ActionBtn>
+                              <ActionBtn
+                                variant="primary"
+                                onClick={() => void saveNodeChanges()}
+                                className={isNodeDirty ? "" : "opacity-70"}
+                              >
+                                {t("approvalPage.saveChangesBtn", { defaultValue: "保存更改" })}
+                              </ActionBtn>
+                            </>
+                          ) : (
+                            <ActionBtn variant="outline" onClick={enterNodeEditMode}>
+                              <Pencil size={12} /> {t("approvalPage.editApproversBtn", { defaultValue: "编辑审批人" })}
+                            </ActionBtn>
+                          )
+                        ) : isNodeEditMode ? (
                           <>
                             <ActionBtn
                               variant="outline"
@@ -2676,6 +2720,8 @@ export default function ApprovalPage() {
                                   </div>
                                 </div>
                                 <div className={`shrink-0 flex items-center gap-1.5 ${!isNodeEditMode ? "pointer-events-none opacity-40" : ""}`}>
+                                  {!approverOnlyEdit && (
+                                    <>
                                   <ActionBtn onClick={() => void moveNode(idx, "up")}>
                                     <ChevronUp size={14} />
                                   </ActionBtn>
@@ -2695,12 +2741,16 @@ export default function ApprovalPage() {
                                     <option value="or">{t("approvalPage.nodeModeOr")}</option>
                                     <option value="and">{t("approvalPage.nodeModeAnd")}</option>
                                   </select>
+                                    </>
+                                  )}
                                   <ActionBtn onClick={() => setNodeDialog({ open: true, initial: node })}>
                                     <Pencil size={13} />
                                   </ActionBtn>
+                                  {!approverOnlyEdit && (
                                   <ActionBtn onClick={() => handleDeleteNode(node)}>
                                     <Trash2 size={13} className="text-gray-400 hover:text-red-500" />
                                   </ActionBtn>
+                                  )}
                                 </div>
                               </div>
                               {/* approver chips */}
@@ -2989,6 +3039,7 @@ export default function ApprovalPage() {
         initial={nodeDialog.initial}
         allowedSourceTypes={activeSourceTypes}
         scenarioCode={selectedScenario?.scenario_code}
+        sourcesOnly={approverOnlyEdit}
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />

@@ -2863,7 +2863,10 @@
       "departmentFileKnowledgeSpaceManager": "ファイル所属ナレッジスペースのマネージャー",
       "departmentFileKnowledgeSpaceOwnerDepartmentAdmin": "ファイル所属ナレッジスペースオーナーの部署管理者",
       "departmentFileKnowledgeSpaceManagerDepartmentAdmin": "ファイル所属ナレッジスペースマネージャーの部署管理者",
-      "department_file_approvers": "ファイル所属ナレッジスペースの部署管理者"
+      "department_file_approvers": "ファイル所属ナレッジスペースの部署管理者",
+      "file_uploader": "アップロード者",
+      "correctionKnowledgeSpaceOwner": "ナレッジベースの所有者",
+      "correctionKnowledgeSpaceManager": "ナレッジベースの管理者"
     },
     "roleValue": {
       "admin": "システム管理者",

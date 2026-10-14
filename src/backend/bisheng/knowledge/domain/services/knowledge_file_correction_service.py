@@ -25,6 +25,7 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestAlreadyProcessedError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
+    ApprovalScenarioDisabledError,
 )
 from bisheng.common.errcode.file_correction import (
     FileCorrectionContentForbiddenError,
@@ -69,6 +70,10 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_correction_repository_impl import (
     KnowledgeFileCorrectionRepositoryImpl,
+)
+from bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy import (
+    assert_submit_allowed,
+    operator_can_handle,
 )
 from bisheng.knowledge.domain.services.knowledge_file_correction_update import (
     UPDATE_PHASE_IDLE,
@@ -288,6 +293,7 @@ class KnowledgeFileCorrectionService:
             FileCorrectionSelfSubmitError: 当前用户就是上传人.
             FileCorrectionUploaderUnavailableError: 没有可处理的上传人.
             FileCorrectionPendingExistsError: 已有待处理纠错.
+            ApprovalScenarioDisabledError: 文档纠错场景已停用.
         """
         async with get_async_db_session() as session:
             repo = KnowledgeFileCorrectionRepositoryImpl(session)
@@ -320,6 +326,7 @@ class KnowledgeFileCorrectionService:
                 raise FileCorrectionSelfSubmitError()
             uploader = await cls._require_uploader(session, uploader_id)
             tenant_id = int(getattr(file, "tenant_id", None) or getattr(login_user, "tenant_id", None) or 1)
+            await assert_submit_allowed(session)
             existing = await repo.lock_open_slot(
                 tenant_id=tenant_id,
                 file_id=int(file.id),
@@ -533,7 +540,7 @@ class KnowledgeFileCorrectionService:
 
     @classmethod
     async def get_content(cls, *, login_user, correction_id: int) -> dict:
-        """读取纠错说明. 只有反馈人和冻结上传人可以看.
+        """读取纠错说明. 反馈人, 以及当前能处理这条纠错的人可以看.
 
         Args:
             login_user: 当前登录用户.
@@ -549,7 +556,10 @@ class KnowledgeFileCorrectionService:
             repo = KnowledgeFileCorrectionRepositoryImpl(session)
             row = await repo.get_by_id(int(correction_id))
             user_id = int(login_user.user_id)
-            if row is None or user_id not in {int(row.applicant_user_id), int(row.uploader_user_id)}:
+            if row is None:
+                raise FileCorrectionContentForbiddenError()
+            # 反馈人始终能看自己提交的说明. 库管理员只有来源勾上且现任成员才可以看.
+            if user_id != int(row.applicant_user_id) and not await operator_can_handle(session, row, user_id):
                 raise FileCorrectionContentForbiddenError()
             update_file_status, update_phase = await cls._update_phase(session, row)
             return {
@@ -577,7 +587,7 @@ class KnowledgeFileCorrectionService:
         当前版本要等这份新文件解析成功后再换.
 
         Args:
-            login_user: 当前登录用户, 必须是冻结上传人.
+            login_user: 当前登录用户, 必须是当前能处理这条纠错的人.
             request: 当前 HTTP 请求, 供知识库上传服务读取.
             correction_id: 待处理纠错单 ID.
             file_path: 已经上传到临时目录的文件路径.
@@ -588,7 +598,7 @@ class KnowledgeFileCorrectionService:
         Raises:
             FileCorrectionUpdateFileInvalidError: 没有临时路径, 或登记没有产生文件.
             ApprovalRequestNotFoundError: 纠错单不存在.
-            FileCorrectionUploaderOnlyError: 当前用户不是冻结上传人.
+            FileCorrectionUploaderOnlyError: 当前用户不能处理这条纠错.
             ApprovalRequestAlreadyProcessedError: 纠错已不在待处理.
             SpaceFileNotFoundError: 旧文件不存在.
         """
@@ -625,7 +635,7 @@ class KnowledgeFileCorrectionService:
             correction = await repo.lock_by_id(int(correction_id))
             if correction is None:
                 raise ApprovalRequestNotFoundError()
-            if int(correction.uploader_user_id) != int(login_user.user_id):
+            if not await operator_can_handle(session, correction, int(login_user.user_id)):
                 raise FileCorrectionUploaderOnlyError()
             if correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
@@ -903,7 +913,7 @@ class KnowledgeFileCorrectionService:
 
         Raises:
             ApprovalRequestNotFoundError: 任务不存在.
-            FileCorrectionUploaderOnlyError: 操作人不是冻结上传人.
+            FileCorrectionUploaderOnlyError: 操作人当前不能处理这条纠错.
             ApprovalRejectReasonRequiredError: 拒绝未填原因.
             ApprovalRequestAlreadyProcessedError: 任务已处理.
             FileCorrectionUpdateFileNotReadyError: 新文件尚未解析完成.
@@ -937,9 +947,7 @@ class KnowledgeFileCorrectionService:
             correction = await repo.lock_by_id(correction_id)
             if correction is None:
                 raise ApprovalRequestNotFoundError()
-            if int(task.approver_user_id) != int(operator_user_id) or int(correction.uploader_user_id) != int(
-                operator_user_id
-            ):
+            if not await operator_can_handle(session, correction, int(operator_user_id)):
                 raise FileCorrectionUploaderOnlyError()
             if task.status != ApprovalTaskStatus.PENDING or correction.status != CORRECTION_PENDING:
                 raise ApprovalRequestAlreadyProcessedError()
@@ -1209,7 +1217,7 @@ class KnowledgeFileCorrectionService:
         """对解析失败的更新文件重新入队, 不换文件号.
 
         Args:
-            login_user: 当前登录用户, 必须是冻结上传人.
+            login_user: 当前登录用户, 必须是当前能处理这条纠错的人.
             correction_id: 仍待处理的纠错单 ID.
 
         Returns:
@@ -1217,7 +1225,7 @@ class KnowledgeFileCorrectionService:
 
         Raises:
             ApprovalRequestNotFoundError: 纠错单不存在.
-            FileCorrectionUploaderOnlyError: 当前用户不是冻结上传人.
+            FileCorrectionUploaderOnlyError: 当前用户不能处理这条纠错.
             ApprovalRequestAlreadyProcessedError: 纠错已不在待处理.
             FileCorrectionUpdateRetryNotAllowedError: 没有失败的更新文件.
         """
@@ -1227,7 +1235,7 @@ class KnowledgeFileCorrectionService:
                 correction = await KnowledgeFileCorrectionRepositoryImpl(session).lock_by_id(int(correction_id))
                 if correction is None:
                     raise ApprovalRequestNotFoundError()
-                if int(correction.uploader_user_id) != int(login_user.user_id):
+                if not await operator_can_handle(session, correction, int(login_user.user_id)):
                     raise FileCorrectionUploaderOnlyError()
                 if correction.status != CORRECTION_PENDING:
                     raise ApprovalRequestAlreadyProcessedError()

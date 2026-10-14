@@ -647,6 +647,10 @@ async def test_approval_center_exposes_department_grant_revoked_state(
         AsyncMock(return_value=[task]),
     )
     monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy.list_live_role_tasks",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
         ApprovalInstanceRepository,
         "get_instances_by_ids",
         AsyncMock(return_value=[instance]),

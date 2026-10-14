@@ -371,7 +371,17 @@ class ApprovalCenterService:
 
     @classmethod
     async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
-        tasks = await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id)
+        tasks = list(await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id))
+        # 纠错的库管理员不写在任务行上. 按当前场景配置和现任库成员补进待办.
+        from bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy import (
+            list_live_role_tasks,
+        )
+
+        seen_task_ids = {int(task.id) for task in tasks}
+        for task in await list_live_role_tasks(tenant_id, approver_user_id):
+            if int(task.id) not in seen_task_ids:
+                tasks.append(task)
+                seen_task_ids.add(int(task.id))
         if not tasks:
             return {"data": [], "total": 0}
 

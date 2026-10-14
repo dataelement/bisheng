@@ -1424,5 +1424,6 @@ def test_registry_exposes_default_presets():
         "knowledge_space_file_share_request",
         "department_file_view_request",
         "qa_question_publish",
+        "knowledge_file_correction",
     }
     assert presets["menu_access_request"].handler_key == "menu_access_request"

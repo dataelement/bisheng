@@ -45,9 +45,15 @@ async def test_admin_scenario_list_hides_qa_question_publish_but_keeps_row() -> 
     """库内仍有 qa_question_publish 行时，流程管理列表不返回。"""
     visible = _row("menu_access_request", scenario_id=1, name="菜单权限申请")
     hidden = _row("qa_question_publish", scenario_id=88, name="专家问答转公开")
-    with patch(
-        "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.list_scenarios",
-        new=AsyncMock(return_value=[visible, hidden]),
+    with (
+        patch(
+            "bisheng.approval.domain.services.approval_scenario_admin_service.ensure_default_scenario",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.list_scenarios",
+            new=AsyncMock(return_value=[visible, hidden]),
+        ),
     ):
         listed = await ApprovalScenarioAdminService.list_scenarios(tenant_id=1)
 

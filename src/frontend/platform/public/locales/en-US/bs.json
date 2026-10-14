@@ -2915,7 +2915,10 @@
       "departmentFileKnowledgeSpaceManager": "File Knowledge Space Manager",
       "departmentFileKnowledgeSpaceOwnerDepartmentAdmin": "File Knowledge Space Owner's Dept Admin",
       "departmentFileKnowledgeSpaceManagerDepartmentAdmin": "File Knowledge Space Manager's Dept Admin",
-      "department_file_approvers": "File Knowledge Space Department Admin"
+      "department_file_approvers": "File Knowledge Space Department Admin",
+      "file_uploader": "Uploader",
+      "correctionKnowledgeSpaceOwner": "Knowledge Base Owner",
+      "correctionKnowledgeSpaceManager": "Knowledge Base Manager"
     },
     "roleValue": {
       "admin": "System Admin",
