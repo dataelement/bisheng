@@ -889,14 +889,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                     </div>
                   )}
                   <div className="flex items-center justify-end gap-3">
+                  {isTaskPending && fileCorrectionPhase === "failed" && (
+                    <div className="text-[13px] text-[#ff7d00]">新文件解析失败，可重新解析或重新上传</div>
+                  )}
                   <button type="button"
                     className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
                     onClick={() => onOpenChange(false)}>
                     {localize("com_ui_close")}
                   </button>
-                  {isTaskPending && fileCorrectionPhase === "failed" && (
-                    <div className="text-[13px] text-[#ff7d00]">新文件解析失败，可重新解析或重新上传</div>
-                  )}
                   {isTaskPending && (
                     <>
                       {!fileCorrectionUpdating && (
