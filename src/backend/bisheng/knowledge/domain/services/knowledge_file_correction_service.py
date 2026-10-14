@@ -74,9 +74,11 @@ from bisheng.knowledge.domain.services.knowledge_file_correction_update import (
     UPDATE_PHASE_IDLE,
     UPDATE_PHASE_UPDATING,
     UPDATE_POINTS,
+    adopt_update_after_promote,
     classify_update_phase,
     is_update_failed,
     is_update_in_progress,
+    parent_id_from_file_level_path,
     should_pay_update,
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
@@ -164,7 +166,7 @@ def _split_rule_value(split_rule, key: str) -> str | None:
 
 
 async def _copy_tag_links(session, tag_model, link_model, *, old_id: int, new_id: int, user_id: int, review: bool) -> None:
-    """复制一类标签关联. 自动标签不复制.
+    """复制一类标签关联. 自动标签不复制. 新旧同一文件或目标已有相同标签时跳过.
 
     Args:
         session: 当前事务.
@@ -185,8 +187,22 @@ async def _copy_tag_links(session, tag_model, link_model, *, old_id: int, new_id
     )
     if review:
         statement = statement.where(link_model.is_deleted == False, tag_model.is_deleted == False)  # noqa: E712
+    if int(old_id) == int(new_id):
+        return
     rows = (await session.execute(statement)).all()
+    if not rows:
+        return
+    existing = (
+        await session.execute(
+            select(link_model.tag_id, link_model.resource_type).where(link_model.resource_id == str(new_id))
+        )
+    ).all()
+    seen = {(int(tag_id), int(resource_type)) for tag_id, resource_type in existing}
     for tag_id, resource_type, tenant_id in rows:
+        key = (int(tag_id), int(resource_type))
+        if key in seen:
+            continue
+        seen.add(key)
         session.add(
             link_model(
                 tag_id=int(tag_id),
@@ -632,21 +648,27 @@ class KnowledgeFileCorrectionService:
             subcategory_source = old_file.file_subcategory_source
             old_id = int(old_file.id)
             knowledge_id = int(correction.knowledge_id)
+            old_file_level_path = old_file.file_level_path
         if new_id is None:
             created = await _add_correction_file(
                 request,
                 login_user,
                 knowledge_id=knowledge_id,
                 file_path=[file_path],
+                parent_id=parent_id_from_file_level_path(old_file_level_path),
                 file_category_code=category,
                 file_subcategory_code=subcategory,
                 business_domain_code=domain,
+                allow_duplicate_name=True,
+                allow_duplicate_content=True,
                 award_points=False,
             )
             new_file = next((item for item in created or [] if getattr(item, "id", None)), None)
             if new_file is None:
                 raise FileCorrectionUpdateFileInvalidError()
             new_id = int(new_file.id)
+            if new_id == old_id:
+                raise FileCorrectionUpdateFileInvalidError()
             created_new = True
         award_payload = None
         notify_payload = None
@@ -1437,7 +1459,11 @@ class KnowledgeFileCorrectionService:
                 )
             )
         ).first()
+        leftover_document_id = None
+        if incoming is None and int(new_file.reference_document_id or 0) not in (0, int(document.id)):
+            leftover_document_id = int(new_file.reference_document_id)
         if incoming is not None and int(incoming.document_id) != int(document.id):
+            leftover_document_id = int(incoming.document_id)
             siblings = (
                 await session.exec(
                     select(KnowledgeDocumentVersion).where(
@@ -1482,6 +1508,13 @@ class KnowledgeFileCorrectionService:
         document.primary_version_id = saved_id
         document.update_time = now
         session.add(document)
+        await adopt_update_after_promote(
+            session,
+            old_file_id=int(correction.file_id),
+            new_file=new_file,
+            target_document=document,
+            leftover_document_id=leftover_document_id,
+        )
 
     @staticmethod
     async def _dispatch_award(payload: dict) -> None:
