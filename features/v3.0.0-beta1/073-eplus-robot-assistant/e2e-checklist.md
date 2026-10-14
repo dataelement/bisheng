@@ -4,6 +4,10 @@
 
 **图片联调更新（2026-10-08）**：客户确认图片下载响应带 `Content-Encoding: gzip`，旧下载器未解压就传入 AES，导致 `image decrypt failed`。已修正 HTTP 自动解压，并将 OCR 能力判断改为读取有效的 `get_knowledge()` 配置。真实 HTTP/AES 与 OCR 配置回归 7 项通过，连同 E+、引用及相关助手回归共 206 项通过；客户实际图片完整链路待新版本部署后验证。
 
+**连接释放修复（2026-10-14）**：生产机器人偶发 `image download peer address is unavailable`；快速响应可能在读取对端地址前释放 aiohttp 连接，并非 DNS/TCP 不可达或 OCR 失败。下载器在建连后、发送请求前保存实际对端 IP，保留 DNS 地址匹配、TLS、跳转和大小校验。客户已反馈单文件热补后未再出现该错误；正式镜像升级时须移除 `media-store-hotfix` 对 `media_store.py` 的临时覆盖，避免后续镜像代码被旧补丁遮蔽。
+
+本次验证：修复前快速响应 4 例复现同样报错；修复后 E+ 全套 `301 passed`（含快速/流式、gzip/普通、保活/关闭、缺失对端地址拒绝及解压体积限制），lint、架构守卫及独立复审通过。后端全套入口 `pytest test/ -q --maxfail=1` 在 `test/approval/test_approval_api.py::test_admin_approval_endpoints` 因 `ApprovalScenarioAdminService.create_node` 缺失停止（66 passed、1 failed）；本次未改审批模块，不宣称全后端通过。
+
 **当前结论**：PARTIAL。代码级自动化与客户 E+ 协议验证通过；数据库、双 Worker、跨进程图片、真实身份和知识隔离仍需在客户测试环境验收。
 
 ## 1. 已完成验证
@@ -86,6 +90,7 @@ pytest -q src/backend/test/e2e/test_e2e_eplus_robot_assistant.py -v
 - [ ] 视觉模型能理解一般图片；仅 OCR 时只验图片文字；无能力时明确告知看不了，不得编造。
 - [ ] 图片 URL 格式错误、超时、下载/解密失败或图片过大时返回明确失败，日志不泄密；空历史白名单不阻断正常 E+ 图片。
 - [ ] 图片下载响应带 `Content-Encoding: gzip` 时先解压再解密；纯文本模型走已配置的 Paddle OCR，机器人能回答图片中的文字，不再出现解密或配置属性错误。
+- [ ] 快速返回的小图片、服务端关闭连接及 gzip 响应均正常；连接已释放也可使用建连时采集的实际对端 IP，拿不到真实地址或地址不匹配时仍拒绝处理。
 - [ ] 重投同一 `msgid` 不重复执行、不重复业务回复。
 - [ ] 同一会话连续发送 3 条，后两条排队并自动续跑；第 4 条回复「消息处理中，请稍后再试」。
 - [ ] 身份、去重和在途校验通过后，媒体准备前看到「处理中」或「排队中」；正式回答使用同一流，不重复初始提示。排队计入 300 秒回复时限。

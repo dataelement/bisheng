@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from types import SimpleNamespace
 
 import pytest
+from aiohttp import connector as aiohttp_connector
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -29,13 +30,20 @@ class _MemoryStore:
 
 
 @asynccontextmanager
-async def _media_response(body: bytes, *, compressed: bool):
+async def _media_response(body: bytes, *, compressed: bool, streaming: bool = True, close_connection: bool = False):
     async def handler(request):
         headers = {"Content-Encoding": "gzip"} if compressed else {}
+        if not streaming:
+            response = web.Response(body=body, headers=headers)
+            if close_connection:
+                response.force_close()
+            return response
         response = web.StreamResponse(headers=headers)
+        if close_connection:
+            response.force_close()
         await response.prepare(request)
         await response.write(body)
-        # Keep the streaming response open while the client captures its peer.
+        # Exercise both a live streaming transport and an already-buffered body.
         await asyncio.sleep(0.01)
         await response.write_eof()
         return response
@@ -47,7 +55,11 @@ async def _media_response(body: bytes, *, compressed: bool):
 
 
 @pytest.mark.parametrize("compressed", [False, True])
-async def test_downloaded_media_is_decrypted_and_persisted_with_or_without_http_gzip(compressed):
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("close_connection", [False, True])
+async def test_downloaded_media_is_decrypted_and_persisted_with_or_without_http_gzip(
+    compressed, streaming, close_connection
+):
     key = bytes(range(32))
     padding = 32 - len(PNG) % 32
     encryptor = Cipher(algorithms.AES(key), modes.CBC(key[:16])).encryptor()
@@ -56,7 +68,9 @@ async def test_downloaded_media_is_decrypted_and_persisted_with_or_without_http_
     store = _MemoryStore()
     service = EPlusMediaService(downloader=SecureEPlusMediaDownloader(), store=store)
 
-    async with _media_response(body, compressed=compressed) as url:
+    async with _media_response(
+        body, compressed=compressed, streaming=streaming, close_connection=close_connection
+    ) as url:
         ref = await service.ingest_image(
             tenant_id=9,
             url=url,
@@ -70,10 +84,19 @@ async def test_downloaded_media_is_decrypted_and_persisted_with_or_without_http_
     assert store.objects[ref.object_key] == PNG
 
 
-async def test_gzip_expansion_cannot_bypass_download_size_limit():
+async def test_missing_socket_peer_still_rejects_a_buffered_response(monkeypatch):
+    # Hide only the socket metadata; keep the real HTTP exchange and response.
+    monkeypatch.setattr(aiohttp_connector.Connection, "transport", property(lambda self: None))
+    async with _media_response(b"encrypted", compressed=False, streaming=False) as url:
+        with pytest.raises(MediaIngestionError, match="peer address is unavailable"):
+            await SecureEPlusMediaDownloader().download(url, ca_pem=None, timeout_seconds=5, max_bytes=512)
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_gzip_expansion_cannot_bypass_download_size_limit(streaming):
     body = gzip.compress(b"x" * 1024)
     assert len(body) < 512
-    async with _media_response(body, compressed=True) as url:
+    async with _media_response(body, compressed=True, streaming=streaming) as url:
         with pytest.raises(MediaIngestionError, match="too large"):
             await SecureEPlusMediaDownloader().download(url, ca_pem=None, timeout_seconds=5, max_bytes=512)
 

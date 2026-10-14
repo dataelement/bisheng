@@ -45,6 +45,20 @@ class _PinnedResolver(aiohttp.abc.AbstractResolver):
         return None
 
 
+class _PeerCapturingConnector(aiohttp.TCPConnector):
+    """Snapshot the socket peer before a buffered response releases it."""
+
+    peer_ip: str | None = None
+
+    async def connect(self, *args: Any, **kwargs: Any) -> Any:
+        self.peer_ip = None
+        connection = await super().connect(*args, **kwargs)
+        transport = connection.transport
+        peer = transport.get_extra_info("peername") if transport is not None else None
+        self.peer_ip = str(peer[0]) if peer else None
+        return connection
+
+
 class SecureEPlusMediaDownloader:
     async def download(
         self,
@@ -70,7 +84,7 @@ class SecureEPlusMediaDownloader:
                 except (UnicodeDecodeError, ssl.SSLError) as exc:
                     raise MediaIngestionError("configured image download CA is invalid") from exc
 
-        connector = aiohttp.TCPConnector(
+        connector = _PeerCapturingConnector(
             resolver=_PinnedResolver(host, addresses),
             ssl=ssl_context,
             use_dns_cache=False,
@@ -87,7 +101,7 @@ class SecureEPlusMediaDownloader:
                 content_length = response.content_length
                 if content_length is not None and content_length > max_bytes:
                     raise MediaIngestionError("encrypted image is too large")
-                peer_ip = _response_peer_ip(response)
+                peer_ip = connector.peer_ip or _response_peer_ip(response)
                 chunks: list[bytes] = []
                 size = 0
                 async for chunk in response.content.iter_chunked(64 * 1024):
