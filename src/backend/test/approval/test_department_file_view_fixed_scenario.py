@@ -129,6 +129,10 @@ async def test_system_scenario_list_flags_and_update() -> None:
 
     with (
         patch(
+            "bisheng.approval.domain.services.approval_scenario_admin_service.ensure_default_scenario",
+            new=AsyncMock(),
+        ),
+        patch(
             "bisheng.approval.domain.services.approval_scenario_admin_service."
             "ApprovalScenarioRepository.list_scenarios",
             new=AsyncMock(return_value=[scenario]),

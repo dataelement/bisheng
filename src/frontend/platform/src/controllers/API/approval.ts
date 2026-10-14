@@ -45,6 +45,7 @@ export interface ApprovalScenarioItem {
   enabled?: boolean;
   system_managed?: boolean;
   structure_locked?: boolean;
+  approver_sources_editable?: boolean;
 }
 
 export interface ApprovalRouteMatchCondition {

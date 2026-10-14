@@ -2865,7 +2865,10 @@
       "departmentFileKnowledgeSpaceManager": "文件所属知识空间 Manager",
       "departmentFileKnowledgeSpaceOwnerDepartmentAdmin": "文件所属知识空间 Owner 的部门管理员",
       "departmentFileKnowledgeSpaceManagerDepartmentAdmin": "文件所属知识空间 Manager 的部门管理员",
-      "department_file_approvers": "文件所属知识空间的部门管理员"
+      "department_file_approvers": "文件所属知识空间的部门管理员",
+      "file_uploader": "上传人",
+      "correctionKnowledgeSpaceOwner": "知识库所有者",
+      "correctionKnowledgeSpaceManager": "知识库管理员"
     },
     "roleValue": {
       "admin": "系统管理员",

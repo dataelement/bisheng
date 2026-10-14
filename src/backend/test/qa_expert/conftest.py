@@ -208,6 +208,10 @@ async def flow_env(monkeypatch):
         patched_session,
     )
     monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy.get_async_db_session",
+        patched_session,
+    )
+    monkeypatch.setattr(
         "bisheng.approval.domain.services.approval_center_service.UserDao.aget_user_by_ids",
         AsyncMock(return_value=[]),
     )

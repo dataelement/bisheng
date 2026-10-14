@@ -159,6 +159,7 @@ _APPROVER_SOURCE_OPTIONS: dict[str, ApprovalPresetApproverSource] = {
         source_type="department_file_approvers",
         label="文件所属知识空间的部门管理员",
     ),
+    "file_uploader": ApprovalPresetApproverSource(source_type="file_uploader", label="上传人"),
 }
 
 
@@ -290,6 +291,19 @@ class ApprovalRegistry:
                 handler_key="qa_question_publish",
                 condition_fields=["applicant_role"],
                 approver_source_types=["direct_user"],
+            )
+        )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code="knowledge_file_correction",
+                scenario_name="文档纠错",
+                handler_key="knowledge_file_correction",
+                condition_fields=[],
+                approver_source_types=[
+                    "file_uploader",
+                    "knowledge_space_owner",
+                    "knowledge_space_manager",
+                ],
             )
         )
         return registry

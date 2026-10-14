@@ -209,6 +209,10 @@ async def test_list_my_tasks_aggregates_instance_summary(monkeypatch: pytest.Mon
         AsyncMock(return_value=[task]),
     )
     monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy.list_live_role_tasks",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
         ApprovalInstanceRepository,
         "get_instance",
         AsyncMock(return_value=instance),
@@ -418,6 +422,10 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         detail={},
     )
 
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_scenario_admin_service.ensure_default_scenario",
+        AsyncMock(),
+    )
     monkeypatch.setattr(ApprovalScenarioRepository, "list_scenarios", AsyncMock(return_value=[scenario]))
     monkeypatch.setattr(ApprovalScenarioRepository, "get_scenario_by_code", AsyncMock(return_value=scenario))
     monkeypatch.setattr(ApprovalScenarioRepository, "get_scenario", AsyncMock(return_value=scenario))

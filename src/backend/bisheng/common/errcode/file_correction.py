@@ -91,7 +91,14 @@ class FileCorrectionUpdateRetryNotAllowedError(BaseErrorCode):
 
 
 class FileCorrectionUploaderOnlyError(BaseErrorCode):
-    """只有冻结的上传人可以处理这条纠错."""
+    """当前用户不在这条纠错的审批人里."""
 
     Code: int = 18408
-    Msg: str = "只有文档上传人可以处理这条纠错"
+    Msg: str = "当前不能处理这条纠错"
+
+
+class FileCorrectionApproverConfigInvalidError(BaseErrorCode):
+    """文档纠错的审批人来源不合法. 上传人必须保留."""
+
+    Code: int = 18413
+    Msg: str = "文档纠错必须保留上传人, 只能再加知识库所有者和库管理员"
