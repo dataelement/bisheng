@@ -25,7 +25,7 @@ from bisheng.developer_token.domain.schemas import (
 )
 from bisheng.developer_token.domain.services.developer_token_service import DeveloperTokenService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
 KNOWLEDGE_SERVICE_MOD = "bisheng.knowledge.domain.services.knowledge_space_service"
 
@@ -108,6 +108,7 @@ def test_options_route_requires_bound_user_and_uses_cursor_contract() -> None:
                         "name": "安全库",
                         "selectable": False,
                         "has_children": True,
+                        "business_domain_codes": [],
                     }
                 ],
             }
@@ -209,6 +210,7 @@ async def test_options_use_bound_user_target_permissions_not_operator_permission
                     space_type="department",
                     selectable=False,
                     has_children=True,
+                    business_domain_codes=[],
                 )
             ],
             has_more=False,
@@ -342,10 +344,11 @@ async def test_token_list_resolves_target_displays_once_for_the_page(monkeypatch
 @pytest.mark.asyncio
 async def test_target_spaces_use_only_bound_user_root_or_folder_permissions(monkeypatch) -> None:
     space = SimpleNamespace(id=118, name="Safety")
-    deep_folder = SimpleNamespace(id=30, knowledge_id=118, file_level_path="/10/20")
+    deep_folder = SimpleNamespace(id=30, knowledge_id=118, file_type=0, file_level_path="/10/20")
     knowledge_repository = SimpleNamespace(find_file_sync_spaces=AsyncMock(return_value=[(space, "department")]))
     file_repository = SimpleNamespace(
         find_file_sync_folders_by_ids=AsyncMock(return_value=[deep_folder]),
+        find_file_sync_folder_candidates=AsyncMock(return_value=[deep_folder]),
         find_file_sync_space_ids_with_folders=AsyncMock(return_value={118}),
     )
 
@@ -353,8 +356,8 @@ async def test_target_spaces_use_only_bound_user_root_or_folder_permissions(monk
     async def session_context():
         yield object()
 
-    async def list_ids(_user_id, _permission, object_type, **_kwargs):
-        return [] if object_type == "knowledge_space" else ["30"]
+    async def permissions(_user, object_type, object_id, **_kwargs):
+        return {"upload_file_to_folder"} if object_type == "folder" and object_id == 30 else set()
 
     monkeypatch.setattr(f"{KNOWLEDGE_SERVICE_MOD}.get_async_db_session", session_context)
     monkeypatch.setattr(
@@ -366,9 +369,9 @@ async def test_target_spaces_use_only_bound_user_root_or_folder_permissions(monk
         lambda _session: file_repository,
     )
     monkeypatch.setattr(
-        PermissionService,
-        "list_accessible_ids",
-        AsyncMock(side_effect=list_ids),
+        FineGrainedPermissionService,
+        "get_effective_permission_ids_async",
+        AsyncMock(side_effect=permissions),
     )
 
     page = await KnowledgeSpaceService.list_file_sync_target_spaces(
@@ -387,7 +390,7 @@ async def test_target_spaces_use_only_bound_user_root_or_folder_permissions(monk
 @pytest.mark.asyncio
 async def test_folder_page_exposes_required_ancestor_as_navigation_only(monkeypatch) -> None:
     space = SimpleNamespace(id=118, name="Safety")
-    deep_folder = SimpleNamespace(id=30, knowledge_id=118, file_level_path="/10/20")
+    deep_folder = SimpleNamespace(id=30, knowledge_id=118, file_type=0, file_level_path="/10/20")
     root_ancestor = SimpleNamespace(
         id=10,
         knowledge_id=118,
@@ -397,6 +400,7 @@ async def test_folder_page_exposes_required_ancestor_as_navigation_only(monkeypa
     knowledge_repository = SimpleNamespace(find_file_sync_spaces_by_ids=AsyncMock(return_value=[(space, "department")]))
     file_repository = SimpleNamespace(
         find_file_sync_folders_by_ids=AsyncMock(return_value=[deep_folder]),
+        find_file_sync_folder_candidates=AsyncMock(return_value=[deep_folder]),
         list_file_sync_direct_children=AsyncMock(return_value=[root_ancestor]),
         find_file_sync_parent_paths_with_children=AsyncMock(return_value={"/10"}),
     )
@@ -405,8 +409,8 @@ async def test_folder_page_exposes_required_ancestor_as_navigation_only(monkeypa
     async def session_context():
         yield object()
 
-    async def list_ids(_user_id, _permission, object_type, **_kwargs):
-        return [] if object_type == "knowledge_space" else ["30"]
+    async def permissions(_user, object_type, object_id, **_kwargs):
+        return {"upload_file_to_folder"} if object_type == "folder" and object_id == 30 else set()
 
     monkeypatch.setattr(f"{KNOWLEDGE_SERVICE_MOD}.get_async_db_session", session_context)
     monkeypatch.setattr(
@@ -418,9 +422,9 @@ async def test_folder_page_exposes_required_ancestor_as_navigation_only(monkeypa
         lambda _session: file_repository,
     )
     monkeypatch.setattr(
-        PermissionService,
-        "list_accessible_ids",
-        AsyncMock(side_effect=list_ids),
+        FineGrainedPermissionService,
+        "get_effective_permission_ids_async",
+        AsyncMock(side_effect=permissions),
     )
 
     page = await KnowledgeSpaceService.list_file_sync_target_folders(

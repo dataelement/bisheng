@@ -109,6 +109,11 @@ async def test_async_factory_owns_client_and_keeps_fresh_routing(monkeypatch):
     try:
         first, reader = await storage.abuild_shared_space_components_for_tenant(1)
         second, _ = await storage.abuild_shared_space_components_for_tenant(1)
+        runtime_calls = async_retrieval_runtime.get_async_retrieval_runtime.await_count
+        es_reader = await storage.abuild_shared_space_reader_for_tenant(1)
+        assert es_reader.es_client is client
+        assert es_reader.expected_routing_version == 3
+        assert async_retrieval_runtime.get_async_retrieval_runtime.await_count == runtime_calls
         assert first.es_client is second.es_client is client
         assert first._native_async_es is True
         assert first._async_write_runtime is runtime

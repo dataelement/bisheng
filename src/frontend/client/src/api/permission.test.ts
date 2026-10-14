@@ -1,5 +1,5 @@
 import request from "~/api/request";
-import { authorizeResource, checkPermission, getGrantableRelationModels } from "./permission";
+import { __clearPermissionCheckCacheForTests, authorizeResource, checkPermission, getGrantableRelationModels } from "./permission";
 
 jest.mock("~/api/request", () => ({
   __esModule: true,
@@ -46,6 +46,25 @@ describe("permission API", () => {
       expect.objectContaining({ object_id: "162", object_type: "knowledge_space", relation: "manager" }),
       expect.anything(),
     );
+  });
+
+  it.each(["cached", "in-flight"])("目录查询的 %s 结果不能跨账号复用", async (mode) => {
+    __clearPermissionCheckCacheForTests();
+    let finish!: (value: unknown) => void;
+    const pending = new Promise((resolve) => { finish = resolve; });
+    mockPost.mockReturnValueOnce(pending).mockResolvedValueOnce({ status_code: 200, data: { allowed: false } });
+    const first = checkPermission("folder", "200", "can_edit", "upload_file_to_folder", { cacheScope: "user-7" });
+    if (mode === "cached") {
+      finish({ status_code: 200, data: { allowed: true } });
+      await first;
+    }
+    const second = checkPermission("folder", "200", "can_edit", "upload_file_to_folder", { cacheScope: "user-8" });
+    finish({ status_code: 200, data: { allowed: true } });
+    await expect(second).resolves.toEqual({ allowed: false });
+    await first;
+    await expect(checkPermission("folder", "200", "can_edit", "upload_file_to_folder", { cacheScope: "user-8" })).resolves.toEqual({ allowed: false });
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost).toHaveBeenLastCalledWith("/api/v1/permissions/check", expect.not.objectContaining({ cacheScope: expect.anything() }), expect.not.objectContaining({ cacheScope: expect.anything() }));
   });
 
   it("dedupes/caches grantable requests for the same object (文件列表逐行不重复请求)", async () => {

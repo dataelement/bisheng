@@ -42,7 +42,7 @@ from bisheng.knowledge.domain.contracts.identifiers import (
 from bisheng.knowledge.domain.contracts.metadata_schema import (
     SHARED_SPACE_CONTENT_METADATA_SCHEMA,
 )
-from bisheng.knowledge.domain.contracts.retrieval_scope import CanonicalChunkHit
+from bisheng.knowledge.domain.contracts.retrieval_scope import CanonicalChunkHit, CanonicalMetadataHit
 from bisheng.knowledge.domain.contracts.shared_space_storage import (
     ContentDeleteRequest,
     ContentProjectionIdentity,
@@ -1195,29 +1195,54 @@ def verify_shared_space_storage_ready(tenant_id: int) -> None:
         writer.es_client.close()
 
 
-async def abuild_shared_space_components_for_tenant(tenant_id: int):
-    """异步加载路由和客户端，SDK 结构检查保留线程边界。"""
+async def _aget_shared_es_connection() -> Any:
+    """复用业务 ES 连接, 共享检索不依赖统计 ES 的配置。"""
     from bisheng.common.services.config_service import settings
     from bisheng.core.context.manager import app_context
     from bisheng.core.search.elasticsearch.manager import EsConnManager
-    from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
 
-    snapshot = require_initialized_shared_routing(
-        tenant_id, await aload_tenant_routing_snapshot(tenant_id),
-    )
     context_name = "shared_storage_elasticsearch"
     try:
         connection = await app_context.async_get_instance(context_name)
     except KeyError:
         vectors = settings.get_vectors_conf()
         es_conf = vectors.elasticsearch
-        app_context.register_context(EsConnManager(
-            es_hosts=es_conf.elasticsearch_url, name=context_name, **es_conf.ssl_verify,
-        ))
+        app_context.register_context(
+            EsConnManager(
+                es_hosts=es_conf.elasticsearch_url,
+                name=context_name,
+                **es_conf.ssl_verify,
+            )
+        )
         connection = await app_context.async_get_instance(context_name)
+    return connection.es_connection
+
+
+async def abuild_shared_space_reader_for_tenant(tenant_id: int) -> SharedSpaceStorageReader:
+    """只初始化 ES 读取客户端, 不连接 Milvus 或创建写入器。"""
+    snapshot = require_initialized_shared_routing(
+        tenant_id,
+        await aload_tenant_routing_snapshot(tenant_id),
+    )
+    return SharedSpaceStorageReader(
+        tenant_id=tenant_id,
+        collection_name=snapshot.collection_name,
+        expected_routing_version=snapshot.routing_version,
+        es_client=await _aget_shared_es_connection(),
+    )
+
+
+async def abuild_shared_space_components_for_tenant(tenant_id: int):
+    """异步加载路由和客户端，SDK 结构检查保留线程边界。"""
+    from bisheng.knowledge.rag.async_retrieval_runtime import get_async_retrieval_runtime
+
+    snapshot = require_initialized_shared_routing(
+        tenant_id, await aload_tenant_routing_snapshot(tenant_id),
+    )
+    es_client = await _aget_shared_es_connection()
     writer, reader = await asyncio.to_thread(
         build_shared_space_components_for_tenant, tenant_id,
-        routing_provider=lambda _: snapshot, es_client=connection.es_connection,
+        routing_provider=lambda _: snapshot, es_client=es_client,
     )
     writer._async_routing_provider = aload_tenant_routing_snapshot
     writer._native_async_es = True
@@ -1587,6 +1612,73 @@ class SharedSpaceStorageReader:
         rows = results[0] if results else []
         return self._to_hits(rows)
 
+    async def search_metadata(
+        self,
+        filter_: Any,
+        *,
+        matches: Sequence[tuple[str, str, str]],
+        limit: int,
+    ) -> list[CanonicalMetadataHit]:
+        """按当前规范身份匹配元数据, 返回每个文档的命名匹配结果。"""
+        if int(filter_.tenant_id) != self.tenant_id:
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
+                "metadata filter belongs to another tenant",
+                tenant_id=self.tenant_id,
+            )
+        if not matches or not filter_.generation_constraints:
+            return []
+        snapshot = await self._assert_readable()
+        if int(filter_.routing_version) != int(snapshot.routing_version):
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.ROUTING_VERSION_MISMATCH,
+                "metadata filter routing version is stale",
+                tenant_id=self.tenant_id,
+            )
+        body = {
+            "query": {
+                "bool": {
+                    "filter": self._es_bool_filter(filter_),
+                    "should": [{"match": {field: {"query": query, "_name": name}}} for name, field, query in matches],
+                    "minimum_should_match": 1,
+                }
+            },
+            "collapse": {"field": "metadata.canonical_document_id"},
+            "size": min(max(int(limit), 1), 50),
+            "_source": [f"metadata.{field}" for field in _READER_OUTPUT_FIELDS if field != "text"],
+        }
+        kwargs = {"index": snapshot.index_name, "body": body, "allow_partial_search_results": False}
+        if (self.conf or get_shared_storage_conf()).es_routing_enabled and filter_.canonical_document_ids:
+            kwargs["routing"] = ",".join(es_routing_value(self.tenant_id, doc) for doc in filter_.canonical_document_ids)
+        response = await (await self._get_es_client()).search(**kwargs)
+        if (
+            response.get("timed_out")
+            or response.get("terminated_early")
+            or (response.get("_shards") or {}).get("failed", 0)
+        ):
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE,
+                "shared metadata search returned incomplete results",
+                tenant_id=self.tenant_id,
+            )
+        results = []
+        for row in (response.get("hits") or {}).get("hits", []):
+            metadata = (row.get("_source") or {}).get("metadata") or {}
+            results.append(
+                CanonicalMetadataHit(
+                    chunk=CanonicalChunkHit(
+                        canonical_document_id=CanonicalDocumentId(int(metadata["canonical_document_id"])),
+                        canonical_version_id=CanonicalVersionId(int(metadata["canonical_version_id"])),
+                        chunk_index=int(metadata.get("chunk_index", 0) or 0),
+                        score=float(row.get("_score") or 0),
+                        content_generation=int(metadata["content_generation"]),
+                        membership_generation=int(metadata["membership_generation"]),
+                    ),
+                    matched_queries=tuple(row.get("matched_queries") or ()),
+                )
+            )
+        return results
+
     async def search_es(
         self,
         filter_: Any,
@@ -1671,6 +1763,7 @@ __all__ = [
     "build_shared_es_index_body",
     "build_shared_field_schemas",
     "build_shared_space_components_for_tenant",
+    "abuild_shared_space_reader_for_tenant",
     "ensure_shared_es_index",
     "es_routing_value",
     "get_shared_storage_conf",

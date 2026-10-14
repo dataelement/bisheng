@@ -101,6 +101,11 @@ interface PermissionRequestConfig {
   signal?: AbortSignal;
 }
 
+interface PermissionCheckConfig extends PermissionRequestConfig {
+  /** 仅用于客户端缓存隔离，不发送到后端。 */
+  cacheScope?: string;
+}
+
 const PERMISSION_CHECK_CACHE_TTL_MS = 5_000;
 const permissionCheckCache = new Map<string, {
   expiresAt: number;
@@ -226,8 +231,8 @@ export async function checkPermission(
   objectType: string,
   objectId: string,
   relation: string,
-  permissionIdOrConfig?: string | PermissionRequestConfig,
-  config?: PermissionRequestConfig
+  permissionIdOrConfig?: string | PermissionCheckConfig,
+  config?: PermissionCheckConfig
 ): Promise<{ allowed: boolean }> {
   const permissionId =
     typeof permissionIdOrConfig === "string" ? permissionIdOrConfig : undefined;
@@ -236,7 +241,10 @@ export async function checkPermission(
   if (requestConfig?.signal?.aborted) {
     throw createAbortError();
   }
-  const key = permissionCheckKey(objectType, objectId, relation, permissionId);
+  const resourceKey = permissionCheckKey(objectType, objectId, relation, permissionId);
+  const key = requestConfig?.cacheScope
+    ? `${resourceKey}:scope:${JSON.stringify(requestConfig.cacheScope)}`
+    : resourceKey;
   const cached = permissionCheckCache.get(key);
 
   if (cached && cached.expiresAt > Date.now()) {

@@ -211,12 +211,19 @@ class MineruLoader(BaseBishengLoader):
 
         # 从 MinerU API 响应中正确提取数据
         # MinerU 返回的数据结构：{"results": {"file_name": {...}}}
+        from bisheng.common.errcode.attachment import attachment_context
+        if attachment_context.get() is not None and (not isinstance(result, dict) or not isinstance(result.get("results", {}), dict)):
+            from bisheng.utils.exceptions import EtlException
+            raise EtlException("MinerU returned invalid response", operation="response")
         results = result.get("results", {})
         if not results:
             raise KnowledgeFileEmptyError()
 
         # 获取第一个结果（通常只有一个文件）
         first_result = next(iter(results.values()))
+        if attachment_context.get() is not None and not isinstance(first_result, dict):
+            from bisheng.utils.exceptions import EtlException
+            raise EtlException("MinerU returned invalid result", operation="response")
         conten_list = first_result.get("content_list", "")
         middle_json = first_result.get("middle_json", "")
         images_data = first_result.get("images", {})

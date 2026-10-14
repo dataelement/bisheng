@@ -27,7 +27,9 @@ class FileParseException(Exception):
 
 
 class EtlException(Exception):
-    def __init__(self, message):
+    def __init__(self, message, *, http_status=None, operation=None):
+        self.http_status = http_status
+        self.operation = operation
         self.message = message
         super().__init__(self.message)
 

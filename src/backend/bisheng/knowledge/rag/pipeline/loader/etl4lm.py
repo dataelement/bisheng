@@ -9,6 +9,7 @@ from langchain_core.documents import Document
 from loguru import logger
 from PIL import Image
 
+from bisheng.common.errcode.attachment import attachment_context
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.utils.pdf_image_extractor import PdfImageExtractor
 from bisheng.knowledge.rag.pipeline.types import TextBbox
@@ -80,25 +81,34 @@ class Etl4lmLoader(BaseBishengLoader):
             )
         except requests.Timeout as e:
             logger.error(f"Request to etl4lm API timed out: {e}")
-            raise EtlException("etl4lm server timeout")
+            raise EtlException("etl4lm server timeout", operation="timeout") from e
         except Exception as e:
             if str(e).find("Timeout") != -1:
                 logger.error(f"Request to etl4lm API timed out: {e}")
-                raise EtlException("etl4lm server timeout")
+                raise EtlException("etl4lm server timeout", operation="timeout") from e
             raise e
         if resp.status_code != 200:
             raise EtlException(
-                f"file partition {self.file_name} failed resp={resp.text}"
+                f"file partition {self.file_name} failed resp={resp.text}", http_status=resp.status_code
             )
 
-        resp = resp.json()
+        try:
+            resp = resp.json()
+        except ValueError as exc:
+            if attachment_context.get() is None:
+                raise
+            raise EtlException("etl4lm returned invalid JSON", operation="response") from exc
+        if attachment_context.get() is not None and not isinstance(resp, dict):
+            raise EtlException("etl4lm returned invalid response", operation="response")
         if 200 != resp.get("status_code"):
             logger.info(
                 f"file partition {self.file_name} error resp={resp}"
             )
             raise EtlException(
-                f"file partition error {self.file_name} error resp={resp}"
+                f"file partition error {self.file_name} error resp={resp}", operation="task"
             )
+        if attachment_context.get() is not None and not isinstance(resp.get("partitions"), list):
+            raise EtlException("etl4lm returned invalid partitions", operation="response")
         partitions = resp["partitions"]
         if partitions:
             logger.info("content_from_partitions")

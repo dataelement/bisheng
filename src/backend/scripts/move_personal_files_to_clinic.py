@@ -15,6 +15,8 @@
 只支持共享存储；正式执行必须处于停止相关写入的维护窗口。
 失败逐项记录，--recover-report 修复中断项，不撤销成功迁移。
 目标库所有者失效时，可显式加 --use-operator-as-file-owner，使用操作人作为文件权限所有者。
+加 --rename-conflicts 时，同名且 MD5 非空不同的主文件改名迁移；同内容仍跳过，不覆盖目标。
+加 --overwrite-same-content 时，相同 MD5 的独立单版本目标进入回收站，源文件原地迁入。
 """
 
 from __future__ import annotations
@@ -29,8 +31,10 @@ import sys
 import time
 import traceback
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager, suppress
-from datetime import datetime
+from datetime import datetime, timedelta
+from numbers import Integral, Real
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -87,6 +91,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--operator-id", type=positive_int, help="正式执行必填，使用真实全局超级管理员身份")
     parser.add_argument("--folder-path", help="相对个人库根目录的完整路径；省略时扫描全部文件，/ 表示根目录")
     parser.add_argument("--api-sync-only", action="store_true", help="仅迁移接口同步文件，目标仅保留文件直接所在目录名")
+    parser.add_argument(
+        "--rename-conflicts", action="store_true", help="同名但 MD5 非空不同的文件改名迁移，同内容或缺少 MD5 仍跳过"
+    )
+    parser.add_argument(
+        "--overwrite-same-content",
+        action="store_true",
+        help="仅覆盖同目录 MD5 相同的独立单版本文件：旧目标进入回收站，源文件原地迁入；不永久删除",
+    )
     parser.add_argument(
         "--allow-failed-projection",
         action="store_true",
@@ -453,6 +465,129 @@ def identity_fingerprint(document: Any, versions: list[Any], files: list[Any], e
         "entries": [e.model_dump(mode="json", exclude=ignored if e.id in movable else set()) for e in entries],
     }
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def persisted_datetime_matches(actual: str | None, recorded: str | None) -> bool:
+    """仅兼容旧报告的微秒被数据库截断或舍入为整秒，其他变化仍拒绝。"""
+    if actual == recorded:
+        return True
+    if not actual or not recorded:
+        return False
+    current, expected = datetime.fromisoformat(actual), datetime.fromisoformat(recorded)
+    floor = expected.replace(microsecond=0)
+    rounded = floor + timedelta(seconds=int(expected.microsecond >= 500_000))
+    return current.microsecond == 0 and expected.microsecond != 0 and current in {floor, rounded}
+
+
+def overwrite_identity_matches(
+    record: dict[str, Any], document: Any, versions: list[Any], file: Any, entries: list[Any], *, in_target: bool
+) -> bool:
+    expected = record["after_identity"] if in_target else record["before_identity"]
+    if identity_fingerprint(document or file, versions, [file], entries) == expected:
+        return True
+    if not in_target:
+        return False
+    recorded = record["recycle_item"]["deleted_at"]
+    actual = file.model_dump(mode="json")["deleted_at"]
+    if not persisted_datetime_matches(actual, recorded):
+        return False
+    # 不放宽指纹字段：还原报告中的时间精度后，完整身份仍必须匹配。
+    shadow = file.model_copy(update={"deleted_at": datetime.fromisoformat(recorded)})
+    shadow_entries = [shadow if entry.id == file.id else entry for entry in entries]
+    if identity_fingerprint(document or shadow, versions, [shadow], shadow_entries) == expected:
+        return True
+    before = record["before_file"]
+    if (
+        before.get("entry_type") == "manager"
+        and file.entry_status == "invalid"
+        and document is not None
+        and document.lifecycle_status == "recycled"
+        and file.projection_status == "ready"
+        and file.projection_lease_owner is None
+        and file.projection_lease_until is None
+        and file.desired_entry_generation == int(before["desired_entry_generation"]) + 1
+        and file.applied_entry_generation == file.desired_entry_generation
+        and file.applied_content_generation == file.desired_content_generation
+    ):
+        # 同一回收代次的后台清理完成可与迁移并行；仅归一化 pending -> ready。
+        shadow.projection_status = "pending"
+        return identity_fingerprint(document, versions, [shadow], shadow_entries) == expected
+    return False
+
+
+def recovery_identity_fingerprint(
+    unit: dict[str, Any], document: Any, versions: list[Any], files: list[Any], entries: list[Any]
+) -> str:
+    # 相似候选清理可把提示位从 1 清为 0；仅还原该位用于旧报告身份核对。
+    before_files = {row["id"]: row for row in unit.get("before", {}).get("files", [])}
+
+    def normalize_similarity(row: Any) -> Any:
+        if before_files.get(row.id, {}).get("similar_status") == 1 and row.similar_status == 0:
+            return row.model_copy(update={"similar_status": 1})
+        return row
+
+    file_ids = {file.id for file in files}
+    files = [normalize_similarity(file) for file in files]
+    entries = [normalize_similarity(entry) if entry.id in file_ids else entry for entry in entries]
+    if document.id in file_ids and "similar_status" in type(document).model_fields:
+        document = normalize_similarity(document)
+    rename = unit.get("rename")
+    if not rename:
+        return identity_fingerprint(document, versions, files, entries)
+    file = next((f for f in files if f.id == rename["file_id"]), None)
+    before = next((f for f in unit["before"]["files"] if f["id"] == rename["file_id"]), None)
+    if file is None or before is None or before["file_name"] != rename["old_name"]:
+        raise ValueError("改名文件与恢复报告不一致")
+    expected_name = rename["new_name"] if file.knowledge_id == unit["target_space_id"] else rename["old_name"]
+    if file.file_name != expected_name:
+        raise ValueError("文件名发生本次迁移之外的变化，拒绝恢复")
+
+    # 仅还原报告记录且已逐项核对的改名，其他文件名和内容仍参与完整指纹校验。
+    def original_name(row):
+        return row.model_copy(update={"file_name": rename["old_name"]}) if row.id == file.id else row
+
+    return identity_fingerprint(
+        original_name(document) if unit.get("unversioned") else document,
+        versions,
+        [original_name(f) for f in files],
+        [original_name(e) for e in entries],
+    )
+
+
+def migration_filename(file_name: str, file_id: int, attempt: int = 1) -> str:
+    suffix = Path(file_name).suffix
+    stem = file_name[: -len(suffix)] if suffix else file_name
+    marker = f"_迁移_{file_id}" + (f"_{attempt}" if attempt > 1 else "")
+    available = 200 - len(marker) - len(suffix)
+    if available < 1:
+        raise SkipFile("target_file_conflict", "文件扩展名过长，无法生成安全的迁移文件名")
+    return f"{stem[:available]}{marker}{suffix}"
+
+
+def plain_index_value(value: Any) -> Any:
+    """把 SDK 的数组和数字转换成可落盘的数据, 不丢弃未知字段。"""
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        return float(value)
+    if isinstance(value, Mapping):
+        return {str(key): plain_index_value(item) for key, item in value.items()}
+    if isinstance(value, Iterable) and not isinstance(value, (bytes, bytearray)):
+        return [plain_index_value(item) for item in value]
+    raise TypeError(f"恢复报告不支持索引字段类型：{type(value).__name__}")
+
+
+def validate_overwrite_subset(before: list[dict[str, Any]], current: list[dict[str, Any]]) -> None:
+    def payload(row):
+        values = {key: value for key, value in row.items() if not key.startswith("_") and key != "pk"}
+        # 恢复报告会把稀疏向量的整数键转为字符串, 用相同 JSON 形态比较。
+        return plain_index_value(values)
+
+    original = {int(row["chunk_index"]): payload(row) for row in before}
+    if any(payload(row) != original.get(int(row["chunk_index"])) for row in current):
+        raise ValueError("被覆盖目标的共享内容或元数据已变化，拒绝清理或恢复")
 
 
 def validate_document(
@@ -1067,16 +1202,470 @@ class Backend:
         if sorted(await self.read_permissions(file_id), key=str) != sorted(desired, key=str):
             raise RuntimeError(f"文件 {file_id} 权限写入未确认")
 
-    async def move_unversioned(self, unit: dict[str, Any], checkpoint: Any, *, recover: bool = False) -> None:
-        from sqlmodel import or_, select
+    async def prepare_conflict_rename(
+        self, session: Any, unit: dict[str, Any], file: Any, files: list[Any], folder: Any
+    ) -> None:
+        from sqlmodel import col, func, or_, select
 
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
+        destination = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == unit["target_space_id"],
+            KnowledgeFile.file_level_path == target_path(folder)
+            if folder
+            else or_(KnowledgeFile.file_level_path == "", KnowledgeFile.file_level_path.is_(None)),
+            KnowledgeFile.deleted_at.is_(None),
+            col(KnowledgeFile.id).notin_([f.id for f in files]),
+        )
+        md5 = normalize(file.md5).lower()
+        conflicts = list(
+            (
+                await session.exec(
+                    destination.where(
+                        or_(
+                            KnowledgeFile.file_name == file.file_name,
+                            func.lower(KnowledgeFile.md5) == md5 if md5 else False,
+                        )
+                    ).with_for_update()
+                )
+            ).all()
+        )
+        if not conflicts:
+            return
+        unit["conflict_ids"] = [f.id for f in conflicts]
+        same = [f for f in conflicts if md5 and normalize(f.md5).lower() == md5]
+        if same and unit.get("overwrite_same_content"):
+            if len(same) != 1:
+                raise SkipFile("overwrite_target_ambiguous", "同内容目标不唯一，不能自动覆盖")
+            unit["overwrite_ids"] = [f.id for f in same]
+            conflicts = [f for f in conflicts if f.id not in unit["overwrite_ids"]]
+            if not conflicts:
+                return
+        if (
+            not unit.get("rename_conflicts")
+            or not md5
+            or any(not normalize(f.md5) or normalize(f.md5).lower() == md5 for f in conflicts)
+        ):
+            raise SkipFile("target_file_conflict", "目标目录存在同名或相同内容文件；未开启改名、内容相同或缺少 MD5")
+        for attempt in range(1, 101):
+            name = migration_filename(file.file_name, file.id, attempt)
+            if (
+                await session.exec(
+                    destination.where(
+                        KnowledgeFile.file_name == name,
+                        col(KnowledgeFile.id).notin_(unit.get("overwrite_ids", [])),
+                    )
+                )
+            ).first() is None:
+                unit["rename"] = {"file_id": file.id, "old_name": file.file_name, "new_name": name}
+                return
+        raise SkipFile("target_file_conflict", "迁移改名连续 100 个候选名称被占用，暂缓处理")
+
+    async def overwrite_graph(self, session: Any, file_id: int):
+        from sqlmodel import select
+
+        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+        from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+        file = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id == file_id).with_for_update())).one()
+        links = list(
+            (
+                await session.exec(
+                    select(KnowledgeDocumentVersion)
+                    .where(
+                        KnowledgeDocumentVersion.knowledge_file_id == file_id,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+        )
+        if len(links) > 1:
+            raise SkipFile("overwrite_target_invalid", "覆盖目标属于多个版本链")
+        document, versions, entries = None, [], []
+        if links:
+            document = (
+                await session.exec(
+                    select(KnowledgeDocument)
+                    .where(
+                        KnowledgeDocument.id == links[0].document_id,
+                    )
+                    .with_for_update()
+                )
+            ).one()
+            versions = list(
+                (
+                    await session.exec(
+                        select(KnowledgeDocumentVersion)
+                        .where(
+                            KnowledgeDocumentVersion.document_id == document.id,
+                        )
+                        .order_by(KnowledgeDocumentVersion.id)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            entries = list(
+                (
+                    await session.exec(
+                        select(KnowledgeFile)
+                        .where(
+                            KnowledgeFile.reference_document_id == document.id,
+                        )
+                        .order_by(KnowledgeFile.id)
+                        .with_for_update()
+                    )
+                ).all()
+            )
+        return file, document, versions, entries
+
+    async def prepare_overwrites(self, session: Any, unit: dict[str, Any], *, recover: bool, in_target: bool):
+        from sqlmodel import col, or_, select
+
+        from bisheng.approval.domain.models.approval_instance import ApprovalInstance
+        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+        from bisheng.knowledge.domain.models.knowledge_recycle_item import KnowledgeRecycleItem
+
+        graphs = []
+        records = unit.get("overwrites", []) if recover else [{"file_id": fid} for fid in unit.get("overwrite_ids", [])]
+        for record in records:
+            file, document, versions, entries = await self.overwrite_graph(session, record["file_id"])
+            identity = identity_fingerprint(document or file, versions, [file], entries)
+            items = list(
+                (
+                    await session.exec(
+                        select(KnowledgeRecycleItem)
+                        .where(
+                            KnowledgeRecycleItem.file_id == file.id,
+                        )
+                        .with_for_update()
+                    )
+                ).all()
+            )
+            if recover:
+                if not overwrite_identity_matches(record, document, versions, file, entries, in_target=in_target):
+                    raise ValueError("被覆盖目标的内容、版本或回收状态已变化，拒绝恢复")
+                if (in_target and (len(items) != 1 or items[0].id != record.get("recycle_item_id"))) or (
+                    not in_target and items
+                ):
+                    raise ValueError("被覆盖目标的回收条目已变化，拒绝恢复")
+                if in_target:
+                    actual = items[0].model_dump(mode="json", exclude={"update_time"})
+                    expected = {key: value for key, value in record["recycle_item"].items() if key != "update_time"}
+                    # 旧版 flush 未读回服务端默认 create_time, 报告可能缺少该字段。
+                    if "create_time" not in expected:
+                        actual.pop("create_time", None)
+                    for key in ("deleted_at", "expire_at"):
+                        if persisted_datetime_matches(actual.get(key), expected.get(key)):
+                            actual[key] = expected[key]
+                    if actual != expected:
+                        raise ValueError("被覆盖目标的回收快照已变化，拒绝恢复")
+            else:
+                validate_parse_state(file)
+                if (
+                    file.id in {f["file_id"] for f in unit["files"]}
+                    or file.file_type != 1
+                    or file.deleted_at is not None
+                    or int(file.tenant_id or 1) != unit["tenant_id"]
+                    or file.knowledge_id != unit["target_space_id"]
+                    or file.predecessor_logic_file_id
+                    or file.share_source_file_id
+                    or file.entry_type not in {None, "", "manager"}
+                    or file.entry_status not in {None, "", "active"}
+                    or ((file.entry_type == "manager") != (file.entry_status == "active"))
+                    or file.projection_lease_owner
+                    or file.projection_lease_until
+                    or file.projection_status == "processing"
+                    or any(e.id != file.id for e in entries)
+                    or items
+                ):
+                    raise SkipFile("overwrite_target_protected", "覆盖目标有发布、共享、引用或执行中的任务，暂缓覆盖")
+                if document:
+                    if (
+                        document.id == unit["document_id"]
+                        or document.lifecycle_status != "active"
+                        or document.predecessor_logic_file_id
+                        or document.tenant_id != unit["tenant_id"]
+                        or document.knowledge_id != file.knowledge_id
+                        or (document.file_level_path or "") != (file.file_level_path or "")
+                        or document.level != file.level
+                        or len(versions) != 1
+                        or not versions[0].is_primary
+                        or document.primary_version_id != versions[0].id
+                        or versions[0].knowledge_file_id != file.id
+                        or file.reference_document_id not in {None, document.id}
+                        or (file.entry_type == "manager" and (not entries or file.reference_document_id != document.id))
+                        or (file.status == 2 and file.entry_type != "manager")
+                    ):
+                        raise SkipFile("overwrite_target_protected", "覆盖目标不是独立完整的单版本文档")
+                    if file.entry_type == "manager":
+                        incomplete_projection = file.status != 2 or allows_failed_projection(unit, file, entries)
+                        if (
+                            file.desired_content_generation != document.content_generation
+                            or file.projection_status
+                            not in ({None, "pending", "failed", "ready"} if incomplete_projection else {"ready"})
+                            or (
+                                not incomplete_projection
+                                and file.applied_content_generation != document.content_generation
+                            )
+                            or (
+                                not incomplete_projection
+                                and file.applied_entry_generation != file.desired_entry_generation
+                            )
+                        ):
+                            raise SkipFile("overwrite_target_protected", "覆盖目标的投影状态或代次不一致")
+                elif file.reference_document_id or file.entry_type or file.entry_status or file.status == 2:
+                    raise SkipFile("overwrite_target_protected", "无版本链覆盖目标已解析或存在文档入口")
+                references = (
+                    await session.exec(
+                        select(KnowledgeFile.id).where(
+                            or_(
+                                KnowledgeFile.predecessor_logic_file_id == file.id,
+                                KnowledgeFile.share_source_file_id == file.id,
+                            )
+                        )
+                    )
+                ).first()
+                predecessors = (
+                    await session.exec(
+                        select(KnowledgeDocument.id).where(
+                            KnowledgeDocument.predecessor_logic_file_id == file.id,
+                        )
+                    )
+                ).first()
+                if references is not None or predecessors is not None:
+                    raise SkipFile("overwrite_target_protected", "覆盖目标被其他文档或文件作为前序引用")
+                approvals = (
+                    await session.exec(
+                        select(ApprovalInstance).where(
+                            col(ApprovalInstance.status).in_(["pending", "exception", "execute_failed"]),
+                        )
+                    )
+                ).all()
+                protected = {str(file.id)} | ({str(document.id)} if document else set())
+                if any(
+                    str(a.business_resource_id or "").split(":", 1)[0] in protected
+                    and ("file" in a.business_resource_type or "file" in a.scenario_code)
+                    for a in approvals
+                ):
+                    raise SkipFile("overwrite_target_protected", "覆盖目标存在未结束的审批")
+                record.update(
+                    before_identity=identity,
+                    before_document=document.model_dump(mode="json") if document else None,
+                    before_file=file.model_dump(mode="json"),
+                )
+            if document:
+                observed = {
+                    side: plain_index_value((await self.store.read(side, [document.id])).get(document.id, []))
+                    for side in ("es", "milvus")
+                }
+                if file.entry_type != "manager" and any(observed.values()):
+                    raise SkipFile("overwrite_target_protected", "覆盖目标缺少管理入口但有共享内容")
+                incomplete = (
+                    file.status != 2 or file.entry_type != "manager" or allows_failed_projection(unit, file, entries)
+                )
+                fingerprints = validate_chunks(
+                    observed,
+                    unit,
+                    document,
+                    versions[0],
+                    self.store.embedding_model_id,
+                    allow_incomplete=True if recover else incomplete,
+                )
+                if recover:
+                    for side, rows in observed.items():
+                        validate_overwrite_subset(record["rows"][side], rows)
+                if not recover:
+                    active_ids = tuple(sorted({e.knowledge_id for e in entries if e.entry_status == "active"}))
+                    if any(
+                        tuple(sorted(set(r.get("knowledge_ids", [])))) != active_ids
+                        for rows in observed.values()
+                        for r in rows
+                    ):
+                        raise SkipFile("overwrite_target_index_drift", "被覆盖目标索引归属与有效入口不一致，暂缓覆盖")
+                    # 回收最后一个入口需要清理投影; 写前保留原分块和向量, 回滚时只恢复缺失行。
+                    record.update(
+                        chunks=fingerprints,
+                        before_knowledge_ids=list(active_ids),
+                        rows=observed,
+                        allow_incomplete=incomplete,
+                    )
+            else:
+                observed = {}
+            graphs.append((record, file, document, versions, entries, observed))
+        if not recover:
+            unit["overwrites"] = records
+        return graphs
+
+    async def recycle_overwrites(self, session: Any, unit: dict[str, Any], graphs: list[Any], checkpoint: Any):
+        from bisheng.knowledge.domain.models.knowledge_recycle_item import KnowledgeRecycleItem
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_document_recycle_repository_impl import (
+            KnowledgeDocumentRecycleRepositoryImpl,
+        )
+
+        if graphs and self.operator_id is None:
+            raise ValueError("尚未校验覆盖操作人")
+        repository = KnowledgeDocumentRecycleRepositoryImpl(session)
+        for record, file, document, versions, entries, _observed in graphs:
+            days, spaces, scopes, folders = await repository.snapshot_context([file])
+            now = datetime.now().replace(microsecond=0)
+            parts = [int(part) for part in (file.file_level_path or "").split("/") if part]
+            item = KnowledgeRecycleItem(
+                tenant_id=unit["tenant_id"],
+                file_id=file.id,
+                knowledge_id=file.knowledge_id,
+                file_type=1,
+                is_list_entry=True,
+                display_name=file.file_name,
+                file_encoding=file.file_encoding,
+                file_subcategory_code=file.file_subcategory_code,
+                file_size=file.file_size,
+                md5=file.md5,
+                space_level=scopes.get(file.knowledge_id),
+                original_knowledge_id=file.knowledge_id,
+                original_parent_id=parts[-1] if parts else None,
+                original_path="/"
+                + "/".join(
+                    [spaces[file.knowledge_id].name, *[folders[pid].file_name for pid in parts], file.file_name]
+                ),
+                original_file_level_path=file.file_level_path or "",
+                original_path_fingerprint=hashlib.sha256((file.file_level_path or "").encode()).hexdigest()[:32],
+                deleted_by=self.operator_id,
+                deleted_by_name="migration",
+                deleted_at=now,
+                expire_at=now + timedelta(days=days),
+                recycle_batch_id=uuid4().hex,
+                recycle_root_id=file.id,
+                document_id=document.id if document else None,
+                version_file_ids=[file.id] if document else None,
+            )
+            session.add(item)
+            file.deleted_at = now
+            if file.entry_type == "manager":
+                file.entry_status = "invalid"
+                file.desired_entry_generation += 1
+                file.projection_status = "pending"
+            session.add(file)
+            if document:
+                document.lifecycle_status = "recycled"
+                session.add(document)
+            await session.flush()
+            # 快照使用持久化后的字段，避免数据库精度或默认值造成写后误报。
+            await session.refresh(file)
+            await session.refresh(item)
+            if document:
+                await session.refresh(document)
+            record["recycle_item_id"] = item.id
+            record["recycle_item"] = item.model_dump(mode="json")
+            record["after_identity"] = identity_fingerprint(document or file, versions, [file], entries)
+        checkpoint()
+
+    async def sync_overwrites(self, unit: dict[str, Any], graphs: list[Any], *, in_target: bool):
+        for record, _file, document, versions, _entries, _observed in graphs:
+            if document is None:
+                continue
+            current = {
+                side: plain_index_value((await self.store.read(side, [document.id])).get(document.id, []))
+                for side in ("es", "milvus")
+            }
+            incomplete = record["allow_incomplete"]
+            validate_chunks(current, unit, document, versions[0], self.store.embedding_model_id, allow_incomplete=True)
+            for side, rows in current.items():
+                validate_overwrite_subset(record["rows"][side], rows)
+                await self.update_overwrite_content(side, record["rows"][side], rows, remove=in_target)
+            for attempt in range(3):
+                actual = {
+                    side: plain_index_value((await self.store.read(side, [document.id])).get(document.id, []))
+                    for side in ("es", "milvus")
+                }
+                for side, rows in actual.items():
+                    validate_overwrite_subset(record["rows"][side], rows)
+                confirmed = (
+                    not any(actual.values())
+                    if in_target
+                    else validate_chunks(
+                        actual, unit, document, versions[0], self.store.embedding_model_id, allow_incomplete=True
+                    )
+                    == record["chunks"]
+                )
+                if confirmed or attempt == 2:
+                    break
+                action = "删除" if in_target else "恢复"
+                log_progress(f"被覆盖文档 {document.id} 的索引{action}尚未读回确认，第 {attempt + 1}/2 次等待后复核")
+                await asyncio.sleep(attempt + 1)
+            if in_target and any(actual.values()):
+                counts = {side: len(rows) for side, rows in actual.items()}
+                raise RuntimeError(f"被覆盖目标的索引写后校验失败：文档 {document.id}，残留 {counts}")
+            if not in_target:
+                if not confirmed:
+                    raise RuntimeError("被覆盖目标的分块恢复读回校验失败")
+                for side, rows in actual.items():
+                    validate_overwrite_subset(record["rows"][side], rows)
+                if (
+                    validate_chunks(
+                        actual, unit, document, versions[0], self.store.embedding_model_id, allow_incomplete=incomplete
+                    )
+                    != record["chunks"]
+                ):
+                    raise RuntimeError("被覆盖目标的分块恢复读回校验失败")
+
+    async def update_overwrite_content(self, side: str, before: list[Any], current: list[Any], *, remove: bool):
+        present = {int(row["chunk_index"]) for row in current}
+        missing = [row for row in before if int(row["chunk_index"]) not in present]
+        if not (current if remove else missing):
+            return
+        await self.store._check()
+        if side == "es":
+            client = await self.store._es()
+            for row in current if remove else missing:
+                await self.store._check()
+                options = {"index": self.store.snapshot.index_name, "id": row["_id"], "refresh": "wait_for"}
+                if row.get("_routing") is not None:
+                    options["routing"] = row["_routing"]
+                if remove:
+                    await asyncio.to_thread(
+                        client.delete, **options, if_seq_no=row["_seq_no"], if_primary_term=row["_primary_term"]
+                    )
+                else:
+                    source = {
+                        "text": row["text"],
+                        "metadata": {
+                            key: value for key, value in row.items() if key != "text" and not key.startswith("_")
+                        },
+                    }
+                    await asyncio.to_thread(client.index, **options, document=source, op_type="create")
+        else:
+            writer = await self.store._writer()
+            rows = current if remove else missing
+            for offset in range(0, len(rows), 500):
+                await self.store._check()
+                batch = rows[offset : offset + 500]
+                if remove:
+                    await asyncio.to_thread(
+                        writer.collection.delete, expr=f"pk in {[int(row['pk']) for row in batch]}", timeout=30
+                    )
+                else:
+                    values = [{key: value for key, value in row.items() if key != "pk"} for row in batch]
+                    for value in values:
+                        if isinstance(value.get("sparse_vector"), dict):
+                            value["sparse_vector"] = {
+                                int(key): weight for key, weight in value["sparse_vector"].items()
+                            }
+                    result = await asyncio.to_thread(writer.collection.insert, values, timeout=30)
+                    if int(result.insert_count) != len(values):
+                        raise RuntimeError("被覆盖目标的向量恢复写入不完整")
+
+    async def move_unversioned(self, unit: dict[str, Any], checkpoint: Any, *, recover: bool = False) -> None:
         async with self.locked_document(unit) as (session, _, _, files, _, folder, target, owner):
             file = files[0]
             fid = str(file.id)
             in_target = file.knowledge_id == target.id
-            identity = identity_fingerprint(file, [], files, [])
+            identity = (
+                recovery_identity_fingerprint(unit, file, [], files, [])
+                if recover
+                else identity_fingerprint(file, [], files, [])
+            )
             if recover:
                 if identity != unit["before"]["identity"] or int(owner.user_id) != unit["target_owner_id"]:
                     raise ValueError("原始文件内容、状态或权限所有者已变化，拒绝恢复")
@@ -1086,24 +1675,8 @@ class Backend:
             else:
                 if unit.get("before") or in_target:
                     raise ValueError("文件已迁入或存在未完成记录，请核对报告")
-                conflicts = (
-                    await session.exec(
-                        select(KnowledgeFile).where(
-                            KnowledgeFile.knowledge_id == target.id,
-                            KnowledgeFile.file_level_path == target_path(folder)
-                            if folder
-                            else or_(KnowledgeFile.file_level_path == "", KnowledgeFile.file_level_path.is_(None)),
-                            KnowledgeFile.deleted_at.is_(None),
-                            KnowledgeFile.id != file.id,
-                            or_(
-                                KnowledgeFile.file_name == file.file_name,
-                                KnowledgeFile.md5 == file.md5 if file.md5 else False,
-                            ),
-                        )
-                    )
-                ).all()
-                if conflicts:
-                    raise SkipFile("target_file_conflict", "目标目录存在同名或相同内容文件")
+                await self.prepare_conflict_rename(session, unit, file, files, folder)
+                overwrite_graphs = await self.prepare_overwrites(session, unit, recover=False, in_target=False)
                 unit["target_owner_id"] = int(owner.user_id)
                 unit["before"] = {
                     "identity": identity,
@@ -1122,16 +1695,22 @@ class Backend:
                 }
                 unit["status"] = "prepared"
                 checkpoint()
+                await self.recycle_overwrites(session, unit, overwrite_graphs, checkpoint)
                 file.original_knowledge_id = file.original_knowledge_id or file.knowledge_id
                 file.original_uploader_id = file.original_uploader_id or file.user_id
                 file.knowledge_id = target.id
                 file.file_level_path, file.level = target_path(folder), len(unit["folder_parts"])
+                if unit.get("rename"):
+                    file.file_name = unit["rename"]["new_name"]
                 session.add(file)
                 in_target = True
+            if recover:
+                overwrite_graphs = await self.prepare_overwrites(session, unit, recover=True, in_target=in_target)
             desired = unit["desired_permissions"] if in_target else unit["before"]["permissions"]
             unit.update(status="syncing", destination="target" if in_target else "source")
             checkpoint()
             await self.replace_permissions(file.id, desired[fid])
+            await self.sync_overwrites(unit, overwrite_graphs, in_target=in_target)
             unit["status"] = "committing"
             checkpoint()
             await session.commit()
@@ -1145,10 +1724,7 @@ class Backend:
         if unit.get("unversioned"):
             await self.move_unversioned(unit, checkpoint, recover=recover)
             return
-        from sqlmodel import col, or_, select
-
         from bisheng.knowledge.domain.contracts.shared_storage_reconcile import DocumentSnapshot, MetadataRepair
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
         async with self.locked_document(unit) as (session, document, versions, files, entries, folder, target, owner):
             manager = next((e for e in entries if e.entry_type == "manager" and e.entry_status == "active"), None)
@@ -1165,34 +1741,17 @@ class Backend:
                     raise ValueError("文件已迁入或存在未完成记录，请核对报告")
                 primary = next(v for v in versions if v.id == document.primary_version_id)
                 primary_file = next(f for f in files if f.id == primary.knowledge_file_id)
-                conflicts = list(
-                    (
-                        await session.exec(
-                            select(KnowledgeFile).where(
-                                KnowledgeFile.knowledge_id == target.id,
-                                (KnowledgeFile.file_level_path == target_path(folder))
-                                if folder
-                                else or_(KnowledgeFile.file_level_path == "", KnowledgeFile.file_level_path.is_(None)),
-                                KnowledgeFile.deleted_at.is_(None),
-                                or_(
-                                    KnowledgeFile.file_name == primary_file.file_name,
-                                    KnowledgeFile.md5 == primary_file.md5 if primary_file.md5 else False,
-                                ),
-                                col(KnowledgeFile.id).notin_([f.id for f in files]),
-                            )
-                        )
-                    ).all()
-                )
-                if conflicts:
+                try:
+                    await self.prepare_conflict_rename(session, unit, primary_file, files, folder)
+                except SkipFile as exc:
                     unit.update(
                         status="skipped",
-                        reason_code="target_file_conflict",
-                        reason="目标目录存在同名或相同内容文件",
-                        conflict_ids=[f.id for f in conflicts],
+                        reason_code=exc.code,
+                        reason=str(exc),
                     )
                     checkpoint()
                     return
-            elif identity_fingerprint(document, versions, files, entries) != unit["before"]["identity"]:
+            elif recovery_identity_fingerprint(unit, document, versions, files, entries) != unit["before"]["identity"]:
                 raise ValueError("文档内容、版本或入口发生变化，拒绝使用旧报告恢复")
             if recover:
                 if int(owner.user_id) != unit["target_owner_id"]:
@@ -1201,6 +1760,7 @@ class Backend:
                     allowed = unit["before"]["permissions"][str(file.id)] + unit["desired_permissions"][str(file.id)]
                     if any(row not in allowed for row in await self.read_permissions(int(file.id))):
                         raise ValueError("文件权限存在本次迁移之外的修改，拒绝覆盖")
+            overwrite_graphs = await self.prepare_overwrites(session, unit, recover=recover, in_target=in_target)
             primary = next(v for v in versions if v.id == document.primary_version_id)
             observed = {
                 side: (await self.store.read(side, [document.id])).get(document.id, []) for side in ("es", "milvus")
@@ -1271,6 +1831,7 @@ class Backend:
                 }
                 unit["status"] = "prepared"
                 checkpoint()  # 首次外部写入前必须落盘。
+                await self.recycle_overwrites(session, unit, overwrite_graphs, checkpoint)
                 for file in files:
                     file.original_knowledge_id = file.original_knowledge_id or file.knowledge_id
                     file.original_uploader_id = file.original_uploader_id or file.user_id
@@ -1279,6 +1840,8 @@ class Backend:
                         target_path(folder),
                         (folder.level + 1 if folder else 0),
                     )
+                    if unit.get("rename") and file.id == unit["rename"]["file_id"]:
+                        file.file_name = unit["rename"]["new_name"]
                     session.add(file)
                 document.knowledge_id, document.file_level_path, document.level = (
                     target.id,
@@ -1307,6 +1870,7 @@ class Backend:
             checkpoint()
             for file in files:
                 await self.replace_permissions(int(file.id), desired[str(file.id)])
+            await self.sync_overwrites(unit, overwrite_graphs, in_target=in_target)
             pending_sides = {side for side, rows in observed.items() if rows}
             max_rewrites = 2 if force_rewrite else 0
             for attempt in range(max_rewrites + 1):
@@ -1437,6 +2001,8 @@ class Backend:
                                 "source_path",
                             )
                         }
+                        if unit.get("rename") and file_id == unit["rename"]["file_id"]:
+                            values["file_name"] = source.file_name
                         await client.update(
                             index=constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS,
                             id=str(file_id),
@@ -1451,6 +2017,48 @@ class Backend:
                 )
                 if not await service.refresh_file(file_id, projection_version=int(time.time() * 1_000_000)):
                     raise RuntimeError("推荐目录元数据刷新未确认")
+                await session.commit()
+
+        if unit.get("destination") != "target":
+            return
+        from elasticsearch import NotFoundError
+
+        for record in unit.get("overwrites", []):
+            file_id = record["file_id"]
+            async with get_async_db_session() as session:
+                file, document, versions, entries = await self.overwrite_graph(session, file_id)
+                if not overwrite_identity_matches(record, document, versions, file, entries, in_target=True):
+                    raise ValueError("被覆盖目标在提交后发生变化，拒绝清理元数据")
+                if await client.indices.exists(index=constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS):
+                    result = await client.mget(index=constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS, ids=[str(file_id)])
+                    docs = result.get("docs", [])
+                    if len(docs) != 1 or docs[0].get("error"):
+                        raise RuntimeError("被覆盖目标全文索引查询失败")
+                    row = docs[0]
+                    if row.get("found"):
+                        try:
+                            await client.delete(
+                                index=constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS,
+                                id=str(file_id),
+                                if_seq_no=row["_seq_no"],
+                                if_primary_term=row["_primary_term"],
+                                refresh="wait_for",
+                            )
+                        except NotFoundError:
+                            # 并发清理已删除同一回收文件, 无需重复删除。
+                            pass
+                    result = await client.mget(index=constants.KNOWLEDGE_FULLTEXT_INDEX_ALIAS, ids=[str(file_id)])
+                    docs = result.get("docs", [])
+                    if len(docs) != 1 or docs[0].get("found") or docs[0].get("error"):
+                        raise RuntimeError("被覆盖目标全文索引清理未确认")
+                service = PortalRecommendationProjectionService(
+                    source_repository=PortalRecommendationSourceRepositoryImpl(session),
+                    projection_repository=PortalRecommendationRepositoryImpl(session),
+                )
+                if not await service.refresh_file(
+                    file_id, projection_version=int(time.time() * 1_000_000), deleted=True
+                ):
+                    raise RuntimeError("被覆盖目标推荐目录清理未确认")
                 await session.commit()
 
     @asynccontextmanager
@@ -1560,6 +2168,8 @@ def document_units(snapshot: dict[str, Any], group: dict[str, Any], plan: dict[s
                 **({"unversioned": True} if file.get("unversioned") else {}),
                 **({"api_sync_only": True} if plan.get("api_sync_only") else {}),
                 **({"allow_failed_projection": True} if plan.get("allow_failed_projection") else {}),
+                **({"rename_conflicts": True} if plan.get("rename_conflicts") else {}),
+                **({"overwrite_same_content": True} if plan.get("overwrite_same_content") else {}),
             },
         )
         unit["files"].append(file)
@@ -1723,6 +2333,8 @@ async def execute(args: argparse.Namespace, backend: Any, path: Path) -> int:
             snapshot = await backend.load_snapshot(args.tenant_id)
         plan = build_plan(snapshot, args.tenant_id, args.folder_parts, api_sync_only=args.api_sync_only)
         plan["allow_failed_projection"] = args.allow_failed_projection
+        plan["rename_conflicts"] = args.rename_conflicts
+        plan["overwrite_same_content"] = args.overwrite_same_content
         report["plan"], report["status"] = plan, "planned"
         checkpoint()
         print(

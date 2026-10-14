@@ -45,6 +45,26 @@ export function FileShareDialog({
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [revokingId, setRevokingId] = useState<number | null>(null);
+    const hasPendingCleanup = entries.some((entry) => entry.entry_status === "deleting");
+
+    useEffect(() => {
+        if (!open || !file || file.entryType !== "manager" || !hasPendingCleanup) return;
+        let cancelled = false;
+        let timer: ReturnType<typeof setTimeout>;
+        const refresh = async () => {
+            try {
+                const result = await listShougangFileShareEntriesApi(file.id);
+                if (!cancelled) setEntries(result.data || []);
+            } catch {
+                // 状态刷新失败保留已有展示，后续刷新继续重试。
+                console.warn("Failed to refresh share cleanup status");
+            } finally {
+                if (!cancelled) timer = setTimeout(refresh, 10_000);
+            }
+        };
+        timer = setTimeout(refresh, 10_000);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [open, file?.id, file?.entryType, hasPendingCleanup]);
 
     useEffect(() => {
         if (!open || !activeSpace || !file) {
@@ -159,9 +179,9 @@ export function FileShareDialog({
             if (activeSpace && String(activeSpace.id) !== String(entry.target_space_id)) {
                 dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             }
-            setEntries((current) => current.filter(
-                (item) => item.entry_id !== entry.entry_id,
-            ));
+            setEntries((current) => current.map((item) => item.entry_id === entry.entry_id
+                ? { ...item, entry_status: "deleting", cleanup_status: "pending" }
+                : item));
             showToast({
                 message: "分享已撤回",
                 severity: NotificationSeverity.SUCCESS,
@@ -247,9 +267,12 @@ export function FileShareDialog({
                                     <div>
                                         <div>{entry.target_space_name || entry.target_space_id}</div>
                                         <div className="text-xs text-[#86909c]">
-                                            {entry.allow_download ? "允许水印下载" : "仅查看"}
+                                            {entry.entry_status === "deleting"
+                                                ? entry.cleanup_status === "failed" ? "已撤回 · 清理失败" : "已撤回 · 后台清理中"
+                                                : entry.allow_download ? "允许水印下载" : "仅查看"}
                                         </div>
                                     </div>
+                                    {entry.entry_status === "active" && (
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -258,6 +281,7 @@ export function FileShareDialog({
                                     >
                                         {revokingId === entry.entry_id ? "撤回中" : "撤回"}
                                     </Button>
+                                    )}
                                 </div>
                             ))}
                         </div>

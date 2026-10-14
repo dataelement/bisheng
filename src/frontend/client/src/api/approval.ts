@@ -29,6 +29,7 @@ export interface ApprovalTaskItem {
   status?: string;
   instance_status?: string;
   grant_revoked?: boolean;
+  share_revoked?: boolean;
   current_node_name?: string | null;
   applicant_user_name?: string;
   applicant_department_id?: number | null;
@@ -54,6 +55,7 @@ export interface ApprovalInstanceItem {
   business_name?: string;
   status?: string;
   grant_revoked?: boolean;
+  share_revoked?: boolean;
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
@@ -549,6 +551,7 @@ export interface ShougangFileShareEntry {
   target_space_name?: string | null;
   allow_download: boolean;
   entry_status: string;
+  cleanup_status?: "active" | "pending" | "failed";
   create_time?: string | null;
 }
 

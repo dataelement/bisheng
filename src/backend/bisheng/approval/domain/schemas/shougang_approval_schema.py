@@ -146,6 +146,7 @@ class ShougangFileShareEntry(BaseModel):
     target_space_name: str | None = None
     allow_download: bool
     entry_status: str
+    cleanup_status: str = "active"
     create_time: str | None = None
 
 

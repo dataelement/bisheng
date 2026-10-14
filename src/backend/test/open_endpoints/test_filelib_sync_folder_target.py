@@ -186,8 +186,15 @@ async def test_folder_permission_failure_cleans_up_staged_upload() -> None:
     service._require_upload_permission = AsyncMock(side_effect=FilelibSyncPermissionDeniedError())
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
     service._cleanup_failed_sync = AsyncMock()
+    service._resolve_folder_display_label = AsyncMock(return_value="管理制度")
 
-    with pytest.raises(FilelibSyncPermissionDeniedError):
+    with (
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.FilelibSyncAuditWriter.write_upload_failed",
+            new=AsyncMock(),
+        ),
+        pytest.raises(FilelibSyncPermissionDeniedError),
+    ):
         await service.sync(
             raw_params=json.dumps({"external_file_id": "ext-1", "file_name": "a.pdf"}),
             upload_file=UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7),
@@ -240,6 +247,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
     service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
+    service._resolve_folder_display_label = AsyncMock(return_value="管理制度")
 
     with (
         patch.object(
@@ -250,6 +258,10 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
         patch(
             "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
             side_effect=lambda value: value,
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.FilelibSyncAuditWriter.write_upload_success",
+            new=AsyncMock(),
         ),
     ):
         result = await service.sync(
@@ -267,4 +279,5 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
         "status",
         "version_link_pending",
         "replaced_file_id",
+        "tags",
     }

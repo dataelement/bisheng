@@ -1,25 +1,29 @@
 """单文件迁移只改归属; 数据库回滚及提交响应不确定时按报告恢复。"""
 
+import json
 import sys
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import ModuleType
+from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy import Column, DefaultClause, Integer, MetaData, Table, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.approval.domain.models.approval_instance import ApprovalInstance
+from bisheng.common.models.config import Config
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_recycle_item import KnowledgeRecycleItem
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
 from scripts import move_personal_files_to_clinic as m
 
@@ -58,17 +62,18 @@ class Store:
             ]
 
     async def read(self, side, ids):
-        return {400: deepcopy(self.data[side])}
+        return {did: deepcopy([r for r in self.data[side] if r["canonical_document_id"] == did]) for did in ids}
 
     async def repair(self, side, plans):
         self.calls.append(side)
         plan = plans[0]
         for row in self.data[side]:
-            row.update(plan.snapshot.expected_metadata)
+            if row["canonical_document_id"] == plan.snapshot.document_id:
+                row.update(plan.snapshot.expected_metadata)
         if self.fail_side == side:
             self.fail_side = None
             raise RuntimeError(f"{side} response lost")
-        return {400: None}
+        return {plan.snapshot.document_id: None}
 
 
 async def setup_owner_fallback(direct, owner_state, *, enabled=True):
@@ -191,6 +196,8 @@ async def direct(monkeypatch):
         Department,
         UserDepartment,
         DepartmentKnowledgeSpace,
+        Config,
+        KnowledgeRecycleItem,
     ]
     metadata = MetaData()
     Table("user", metadata, Column("user_id", Integer, primary_key=True))
@@ -1356,6 +1363,645 @@ async def test_name_conflict_skips_without_modifying_existing_file(direct):
     await assert_state(connection, 10, 7)
 
 
+async def setup_rename_conflict(direct, kind):
+    backend, unit, _checkpoint, connection, _, _ = direct
+    if kind == "unversioned":
+        await setup_unversioned(direct)
+    unit["rename_conflicts"] = True
+    async with connection() as session:
+        session.add(
+            KnowledgeFile(
+                id=300,
+                knowledge_id=20,
+                tenant_id=1,
+                file_name="101.pdf",
+                file_level_path="/199/200",
+                md5="different-content",
+                object_name="target/300.pdf",
+            )
+        )
+        await session.commit()
+    return backend, unit
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+async def test_different_content_conflict_is_renamed_and_moved_atomically(direct, kind):
+    backend, unit = await setup_rename_conflict(direct, kind)
+    _, _, _, connection, _, forbidden = direct
+    prepared = []
+
+    def checkpoint():
+        if unit["status"] == "prepared":
+            prepared.append(deepcopy(unit))
+
+    await backend.move_unit(unit, checkpoint)
+    assert unit["status"] == "succeeded"
+    assert unit["rename"]["new_name"] == "101_迁移_101.pdf"
+    assert prepared[0]["rename"] == unit["rename"]
+    assert next(f for f in prepared[0]["before"]["files"] if f["id"] == 101)["file_name"] == "101.pdf"
+    async with connection() as session:
+        source = await session.get(KnowledgeFile, 101)
+        assert (source.knowledge_id, source.file_name) == (20, "101_迁移_101.pdf")
+        assert (source.md5, source.object_name, source.user_id) == ("hash-101", "original/101.pdf", 8)
+        target = await session.get(KnowledgeFile, 300)
+        assert (target.file_name, target.md5, target.object_name) == ("101.pdf", "different-content", "target/300.pdf")
+        if kind == "canonical":
+            assert (await session.get(KnowledgeFile, 106)).file_name == "106.pdf"
+            assert (await session.get(KnowledgeFile, 103)).file_name == "103.pdf"
+            assert (await session.get(KnowledgeDocument, 400)).content_generation == 4
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize("committed", [False, True])
+async def test_renamed_migration_recovers_source_or_committed_target(direct, kind, committed):
+    backend, unit = await setup_rename_conflict(direct, kind)
+    _, _, checkpoint, connection, permissions, _ = direct
+    if committed:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    elif kind == "canonical":
+        backend.store.fail_side = "es"
+    else:
+        original_replace = backend.replace_permissions.side_effect
+
+        async def failed(fid, rows):
+            await original_replace(fid, rows)
+            raise RuntimeError("permission response lost")
+
+        backend.replace_permissions.side_effect = failed
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        source = await session.get(KnowledgeFile, 101)
+        assert (source.knowledge_id, source.file_name) == ((20, "101_迁移_101.pdf") if committed else (10, "101.pdf"))
+    if not committed and kind == "unversioned":
+        backend.replace_permissions.side_effect = original_replace
+    backend.refresh_metadata.side_effect = None
+    # 恢复只使用写前落盘的数据, 不依赖本次命令开关。
+    unit = json.loads(json.dumps(unit))
+    unit.pop("rename_conflicts")
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == ("succeeded" if committed else "restored")
+    expected = unit["desired_permissions"] if committed else unit["before"]["permissions"]
+    assert {fid: permissions[fid] for fid in expected} == expected
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize(
+    "conflict", ["same_content", "missing_md5", "source_missing_md5", "mixed", "renamed_name_taken", "flag_disabled"]
+)
+async def test_conflict_rename_keeps_content_checks_and_avoids_second_name_collision(direct, kind, conflict):
+    backend, unit = await setup_rename_conflict(direct, kind)
+    _, _, checkpoint, connection, _, _ = direct
+    if conflict == "flag_disabled":
+        unit.pop("rename_conflicts")
+    async with connection() as session:
+        target = await session.get(KnowledgeFile, 300)
+        if conflict == "same_content":
+            target.md5 = "hash-101"
+        elif conflict == "missing_md5":
+            target.md5 = None
+        elif conflict == "source_missing_md5":
+            source = await session.get(KnowledgeFile, 101)
+            source.md5 = None
+            session.add(source)
+        elif conflict in {"mixed", "renamed_name_taken"}:
+            session.add(
+                KnowledgeFile(
+                    id=301,
+                    knowledge_id=20,
+                    tenant_id=1,
+                    file_level_path="/199/200",
+                    file_name="101_迁移_101.pdf" if conflict == "renamed_name_taken" else "other.pdf",
+                    md5="other-content" if conflict == "renamed_name_taken" else "hash-101",
+                )
+            )
+        session.add(target)
+        await session.commit()
+    if kind == "unversioned" and conflict != "renamed_name_taken":
+        with pytest.raises(m.SkipFile):
+            await backend.move_unit(unit, checkpoint)
+    else:
+        await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        source = await session.get(KnowledgeFile, 101)
+        if conflict == "renamed_name_taken":
+            assert unit["status"] == "succeeded"
+            assert (source.knowledge_id, source.file_name) == (20, "101_迁移_101_2.pdf")
+        else:
+            assert "before" not in unit
+            assert (source.knowledge_id, source.file_name) == (10, "101.pdf")
+            backend.replace_permissions.assert_not_awaited()
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+async def test_rename_recovery_refuses_later_external_rename(direct, kind):
+    backend, unit = await setup_rename_conflict(direct, kind)
+    _, _, checkpoint, connection, _, _ = direct
+    backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        file = await session.get(KnowledgeFile, 101)
+        file.file_name = "external.pdf"
+        session.add(file)
+        await session.commit()
+    backend.replace_permissions.reset_mock()
+    with pytest.raises(ValueError, match="文件名"):
+        await backend.move_unit(unit, checkpoint, recover=True)
+    backend.replace_permissions.assert_not_awaited()
+
+
+async def setup_same_content_overwrite(direct, kind, target_kind):
+    backend, unit, _, connection, _, _ = direct
+    if kind == "unversioned":
+        await setup_unversioned(direct)
+        backend.store.read = Store.read.__get__(backend.store)
+    unit["overwrite_same_content"] = True
+    backend.operator_id = 8
+    async with connection() as session:
+        target = KnowledgeFile(
+            id=300,
+            knowledge_id=20,
+            tenant_id=1,
+            file_name="101.pdf",
+            user_id=9,
+            file_level_path="/199/200",
+            level=2,
+            md5="hash-101",
+            object_name="target/300.pdf",
+            status=3 if target_kind != "canonical" else 2,
+        )
+        if target_kind != "legacy":
+            session.add(
+                KnowledgeDocument(
+                    id=800,
+                    knowledge_id=20,
+                    tenant_id=1,
+                    file_level_path="/199/200",
+                    level=2,
+                    primary_version_id=801,
+                    content_generation=2,
+                )
+            )
+            session.add(
+                KnowledgeDocumentVersion(
+                    id=801,
+                    document_id=800,
+                    knowledge_file_id=300,
+                    version_no=1,
+                    is_primary=True,
+                )
+            )
+        if target_kind == "canonical":
+            target.reference_document_id, target.entry_type, target.entry_status = 800, "manager", "active"
+            target.projection_status = "ready"
+            target.desired_content_generation = target.applied_content_generation = 2
+            target.desired_entry_generation = target.applied_entry_generation = 2
+            for side in ("es", "milvus"):
+                for row in deepcopy(Store().data[side]):
+                    row.update(
+                        canonical_document_id=800,
+                        canonical_version_id=801,
+                        content_file_id=300,
+                        content_generation=2,
+                        knowledge_ids=[20],
+                    )
+                    if side == "milvus":
+                        row["sparse_vector"] = {2: 0.5, 10: 0.25}
+                    row.update(
+                        {"_id": f"target-{row['chunk_index']}", "_seq_no": 1, "_primary_term": 1}
+                        if side == "es"
+                        else {"pk": 3000 + row["chunk_index"]}
+                    )
+                    backend.store.data[side].append(row)
+        session.add(target)
+        await session.commit()
+    store = backend.store
+    store._check = AsyncMock()
+    store.snapshot = NS(index_name="shared")
+
+    def fail(side):
+        if store.fail_side == side:
+            store.fail_side = None
+            raise RuntimeError(f"{side} response lost")
+
+    def delete_es(**kwargs):
+        assert kwargs["if_seq_no"] == kwargs["if_primary_term"] == 1
+        store.data["es"] = [r for r in store.data["es"] if r.get("_id") != kwargs["id"]]
+        fail("es")
+
+    def index_es(**kwargs):
+        assert kwargs["op_type"] == "create"
+        assert not any(r.get("_id") == kwargs["id"] for r in store.data["es"])
+        store.data["es"].append(
+            {
+                **kwargs["document"]["metadata"],
+                "text": kwargs["document"]["text"],
+                "_id": kwargs["id"],
+                "_seq_no": 1,
+                "_primary_term": 1,
+            }
+        )
+
+    def delete_milvus(**kwargs):
+        ids = json.loads(kwargs["expr"].removeprefix("pk in "))
+        assert all(3000 <= pk < 10000 for pk in ids)
+        store.data["milvus"] = [r for r in store.data["milvus"] if r.get("pk") not in ids]
+        fail("milvus")
+
+    def insert_milvus(values, **_kwargs):
+        for row in values:
+            store.data["milvus"].append({**row, "pk": 4000 + row["chunk_index"]})
+        return NS(insert_count=len(values))
+
+    store._es = AsyncMock(return_value=NS(delete=Mock(side_effect=delete_es), index=Mock(side_effect=index_es)))
+    store._writer = AsyncMock(
+        return_value=NS(
+            collection=NS(
+                delete=Mock(side_effect=delete_milvus),
+                insert=Mock(side_effect=insert_milvus),
+            )
+        )
+    )
+    return backend, unit
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize("target_kind", ["canonical", "unparsed", "legacy"])
+async def test_same_content_overwrite_moves_source_and_recycles_target_atomically(direct, kind, target_kind):
+    backend, unit = await setup_same_content_overwrite(direct, kind, target_kind)
+    _, _, checkpoint, connection, _, forbidden = direct
+    await backend.move_unit(unit, checkpoint)
+    assert unit["status"] == "succeeded"
+    async with connection() as session:
+        source, target = await session.get(KnowledgeFile, 101), await session.get(KnowledgeFile, 300)
+        assert (source.knowledge_id, source.file_name, source.user_id, source.object_name) == (
+            20,
+            "101.pdf",
+            8,
+            "original/101.pdf",
+        )
+        assert target.deleted_at is not None
+        assert target.object_name == "target/300.pdf" and target.md5 == source.md5
+        items = (await session.exec(select(KnowledgeRecycleItem))).all()
+        assert len(items) == 1 and items[0].file_id == 300 and items[0].is_list_entry
+        if target_kind != "legacy":
+            assert (await session.get(KnowledgeDocument, 800)).lifecycle_status == "recycled"
+            assert (await session.get(KnowledgeDocumentVersion, 801)).knowledge_file_id == 300
+            assert items[0].document_id == 800 and items[0].version_file_ids == [300]
+    if target_kind == "canonical":
+        for side in ("es", "milvus"):
+            assert not [r for r in backend.store.data[side] if r["canonical_document_id"] == 800]
+    forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize("stage", ["es", "milvus", "refresh"])
+async def test_same_content_overwrite_recovers_both_documents(direct, kind, stage):
+    backend, unit = await setup_same_content_overwrite(direct, kind, "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    committed = stage == "refresh"
+    if committed:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    else:
+        backend.store.fail_side = stage
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    backend.refresh_metadata.side_effect = None
+    unit = json.loads(json.dumps(unit))
+    unit.pop("overwrite_same_content")
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == ("succeeded" if committed else "restored")
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == (20 if committed else 10)
+        assert ((await session.get(KnowledgeFile, 300)).deleted_at is not None) is committed
+        assert len((await session.exec(select(KnowledgeRecycleItem))).all()) == int(committed)
+    for side in ("es", "milvus"):
+        target_rows = [r for r in backend.store.data[side] if r["canonical_document_id"] == 800]
+        assert len(target_rows) == (0 if committed else 2)
+        assert all(r["knowledge_ids"] == [20] for r in target_rows)
+        if not committed and side == "milvus":
+            assert all(r["sparse_vector"] == {2: 0.5, 10: 0.25} for r in target_rows)
+
+
+@pytest.mark.parametrize(
+    "change", ["different_content", "history", "share", "lease", "approval", "referenced", "ambiguous"]
+)
+async def test_same_content_overwrite_preserves_protected_or_different_targets(direct, change):
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    async with connection() as session:
+        file = await session.get(KnowledgeFile, 300)
+        if change == "different_content":
+            file.md5 = "different"
+        elif change == "history":
+            session.add(KnowledgeFile(id=301, tenant_id=1, knowledge_id=20, file_name="old.pdf", status=2))
+            session.add(KnowledgeDocumentVersion(id=802, document_id=800, knowledge_file_id=301, version_no=2))
+        elif change in {"share", "referenced", "ambiguous"}:
+            session.add(
+                KnowledgeFile(
+                    id=301,
+                    tenant_id=1,
+                    knowledge_id=20,
+                    file_name="other.pdf",
+                    status=2,
+                    file_level_path="/199/200",
+                    md5="hash-101" if change == "ambiguous" else "other",
+                    reference_document_id=800 if change == "share" else None,
+                    entry_type="share" if change == "share" else None,
+                    entry_status="active" if change == "share" else None,
+                    share_source_file_id=300 if change == "referenced" else None,
+                )
+            )
+        elif change == "lease":
+            file.projection_lease_owner = "worker"
+        else:
+            session.add(
+                ApprovalInstance(
+                    tenant_id=1,
+                    scenario_code="file_move",
+                    scenario_name="迁移",
+                    handler_key="file_move",
+                    business_key="target",
+                    business_resource_type="knowledge_file",
+                    business_resource_id="300",
+                    business_name="target",
+                    applicant_user_id=8,
+                    applicant_user_name="test",
+                    status="pending",
+                )
+            )
+        session.add(file)
+        await session.commit()
+    try:
+        await backend.move_unit(unit, checkpoint)
+    except m.SkipFile:
+        pass
+    assert "before" not in unit
+    backend.replace_permissions.assert_not_awaited()
+    backend.store._es.assert_not_awaited()
+    backend.store._writer.assert_not_awaited()
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == 10
+        assert (await session.get(KnowledgeFile, 300)).deleted_at is None
+        assert not (await session.exec(select(KnowledgeRecycleItem))).all()
+
+
+@pytest.mark.parametrize(
+    "changed", ["file", "content", "recycle_snapshot", "deleted_time", "expiry_time", "created_time", "unfinished"]
+)
+async def test_same_content_overwrite_recovery_rejects_external_target_changes(direct, changed):
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    if changed == "content":
+        backend.store.fail_side = "milvus"
+    else:
+        backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    if changed == "content":
+        row = deepcopy(unit["overwrites"][0]["rows"]["es"][0])
+        row["text"] = "external change"
+        backend.store.data["es"].append(row)
+    else:
+        async with connection() as session:
+            if changed in {"file", "deleted_time", "unfinished"}:
+                row = await session.get(KnowledgeFile, 300)
+                if changed == "file":
+                    row.md5 = "external change"
+                elif changed == "deleted_time":
+                    row.deleted_at += timedelta(seconds=1)
+                else:
+                    row.projection_status = "ready"
+            else:
+                row = (await session.exec(select(KnowledgeRecycleItem))).one()
+                if changed == "expiry_time":
+                    row.expire_at += timedelta(seconds=1)
+                elif changed == "created_time":
+                    row.create_time += timedelta(days=1)
+                else:
+                    row.original_knowledge_id = 30
+            session.add(row)
+            await session.commit()
+    backend.replace_permissions.reset_mock()
+    backend.store._es.reset_mock()
+    backend.store._writer.reset_mock()
+    with pytest.raises(ValueError, match="变化"):
+        await backend.move_unit(unit, checkpoint, recover=True)
+    backend.replace_permissions.assert_not_awaited()
+    backend.store._es.assert_not_awaited()
+    backend.store._writer.assert_not_awaited()
+
+
+@pytest.mark.parametrize("target_kind", ["canonical", "unparsed", "legacy"])
+@pytest.mark.parametrize("worker_finished", [False, True])
+@pytest.mark.parametrize("round_seconds", [False, True])
+async def test_overwrite_recovery_accepts_only_database_datetime_precision_loss(
+    direct, target_kind, worker_finished, round_seconds
+):
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", target_kind)
+    _, _, checkpoint, connection, _, _ = direct
+    backend.refresh_metadata.side_effect = RuntimeError("refresh failed")
+    with pytest.raises(RuntimeError, match="refresh failed"):
+        await backend.move_unit(unit, checkpoint)
+    # 模拟旧版报告记录微秒, 而 MySQL DATETIME 持久化为整秒。
+    record = unit["overwrites"][0]
+    async with connection() as session:
+        file, document, versions, entries = await backend.overwrite_graph(session, 300)
+        precise = file.deleted_at.replace(microsecond=897000 if round_seconds else 123456)
+        file.deleted_at = precise
+        record["after_identity"] = m.identity_fingerprint(document or file, versions, [file], entries)
+        item = await session.get(KnowledgeRecycleItem, record["recycle_item_id"])
+        item.deleted_at = precise
+        item.expire_at = item.expire_at.replace(microsecond=precise.microsecond)
+        item.create_time = precise.replace(microsecond=0) + timedelta(seconds=2)
+        record["recycle_item"] = item.model_dump(mode="json")
+        record["recycle_item"].pop("create_time", None)
+        shift = timedelta(seconds=int(round_seconds))
+        file.deleted_at = precise.replace(microsecond=0) + shift
+        if worker_finished and target_kind == "canonical":
+            file.projection_status = "ready"
+            file.applied_entry_generation = file.desired_entry_generation
+        item.deleted_at = item.deleted_at.replace(microsecond=0) + shift
+        item.expire_at = item.expire_at.replace(microsecond=0) + shift
+        session.add(file)
+        session.add(item)
+        await session.commit()
+    backend.refresh_metadata.side_effect = None
+    await backend.move_unit(json.loads(json.dumps(unit)), checkpoint, recover=True)
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).knowledge_id == 20
+        assert (await session.get(KnowledgeFile, 300)).deleted_at is not None
+
+
+@pytest.mark.parametrize("kind", ["canonical", "unversioned"])
+@pytest.mark.parametrize("content_changed", [False, True])
+async def test_overwrite_recovery_preserves_similarity_cleanup_and_content_guard(direct, kind, content_changed):
+    backend, unit = await setup_same_content_overwrite(direct, kind, "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    async with connection() as session:
+        source = await session.get(KnowledgeFile, 101)
+        source.similar_status = 1
+        session.add(source)
+        await session.commit()
+    backend.store.fail_side = "milvus"
+    with pytest.raises(RuntimeError, match="response lost"):
+        await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        source = await session.get(KnowledgeFile, 101)
+        source.similar_status = 0
+        if content_changed:
+            source.md5 = "external-content"
+        session.add(source)
+        await session.commit()
+    if content_changed:
+        with pytest.raises(ValueError, match="变化"):
+            await backend.move_unit(unit, checkpoint, recover=True)
+    else:
+        await backend.move_unit(unit, checkpoint, recover=True)
+        assert unit["status"] == "restored"
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).similar_status == 0
+
+
+@pytest.mark.parametrize("visible_after_retry", [True, False])
+@pytest.mark.parametrize("recover", [False, True])
+async def test_overwrite_cleanup_confirms_deletion_after_visibility_delay(
+    direct, monkeypatch, visible_after_retry, recover
+):
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    stale = deepcopy([r for r in backend.store.data["milvus"] if r["canonical_document_id"] == 800])
+    if recover:
+        backend.store.fail_side = "milvus"
+        with pytest.raises(RuntimeError, match="response lost"):
+            await backend.move_unit(unit, checkpoint)
+    read = backend.store.read
+    after_delete_reads = 0
+
+    async def delayed_read(side, ids):
+        nonlocal after_delete_reads
+        rows = await read(side, ids)
+        if side == "milvus" and ids == [800] and (bool(rows[800]) if recover else not rows[800]):
+            after_delete_reads += 1
+            if after_delete_reads == 1 or not visible_after_retry:
+                return {800: [] if recover else deepcopy(stale)}
+        return rows
+
+    backend.store.read = delayed_read
+    monkeypatch.setattr(m.asyncio, "sleep", AsyncMock())
+    if visible_after_retry:
+        await backend.move_unit(unit, checkpoint, recover=recover)
+        assert unit["status"] == ("restored" if recover else "succeeded")
+    else:
+        with pytest.raises(RuntimeError, match="分块恢复读回校验失败" if recover else "索引写后校验失败"):
+            await backend.move_unit(unit, checkpoint, recover=recover)
+        async with connection() as session:
+            assert (await session.get(KnowledgeFile, 101)).knowledge_id == 10
+            assert (await session.get(KnowledgeFile, 300)).deleted_at is None
+    collection = (await backend.store._writer()).collection
+    collection.delete.assert_called_once()
+    if recover:
+        collection.insert.assert_called_once()
+
+
+async def test_same_content_and_different_name_conflicts_are_processed_independently(direct):
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, connection, _, _ = direct
+    unit["rename_conflicts"] = True
+    async with connection() as session:
+        session.add(
+            KnowledgeFile(
+                id=301,
+                tenant_id=1,
+                knowledge_id=20,
+                file_name="101.pdf",
+                status=3,
+                file_level_path="/199/200",
+                md5="different",
+            )
+        )
+        await session.commit()
+    await backend.move_unit(unit, checkpoint)
+    async with connection() as session:
+        assert (await session.get(KnowledgeFile, 101)).file_name == "101_迁移_101.pdf"
+        assert (await session.get(KnowledgeFile, 300)).deleted_at is not None
+        assert (await session.get(KnowledgeFile, 301)).deleted_at is None
+
+
+async def test_overwrite_fulltext_cleanup_response_lost_is_recoverable(direct, monkeypatch):
+    from bisheng.core.search.elasticsearch import manager
+    from bisheng.knowledge.domain.repositories.implementations import (
+        knowledge_fulltext_source_repository_impl as source_module,
+    )
+    from bisheng.knowledge.domain.services import portal_recommendation_projection_service as projection_module
+
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, _, _, _ = direct
+    source = NS(
+        knowledge_id=20,
+        knowledge_name="target",
+        knowledge_level="team_ks",
+        knowledge_business_domain_codes=[],
+        folder_path="A/B",
+        source_path="target/A/B/101.pdf",
+    )
+    monkeypatch.setattr(
+        source_module,
+        "KnowledgeFulltextSourceRepositoryImpl",
+        Mock(return_value=NS(get_current_snapshot=AsyncMock(return_value=source))),
+    )
+    deleted = set()
+
+    async def mget(**kwargs):
+        return {"docs": [{"found": kwargs["ids"][0] not in deleted, "_seq_no": 1, "_primary_term": 2}]}
+
+    async def delete(**kwargs):
+        assert kwargs["id"] == "300" and kwargs["if_seq_no"] == 1 and kwargs["if_primary_term"] == 2
+        deleted.add(kwargs["id"])
+        raise RuntimeError("fulltext delete response lost")
+
+    client = NS(
+        indices=NS(exists=AsyncMock(return_value=True)),
+        mget=AsyncMock(side_effect=mget),
+        update=AsyncMock(),
+        delete=AsyncMock(side_effect=delete),
+    )
+    monkeypatch.setattr(manager, "get_es_connection", AsyncMock(return_value=client))
+    projection = NS(refresh_file=AsyncMock(return_value=True))
+    monkeypatch.setattr(projection_module, "PortalRecommendationProjectionService", Mock(return_value=projection))
+    backend.refresh_metadata = m.Backend.refresh_metadata.__get__(backend)
+    with pytest.raises(RuntimeError, match="fulltext delete response lost"):
+        await backend.move_unit(unit, checkpoint)
+    assert deleted == {"300"}
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == "succeeded"
+    client.delete.assert_awaited_once()
+    assert any(call.args == (300,) and call.kwargs.get("deleted") for call in projection.refresh_file.await_args_list)
+    assert all("content" not in call.kwargs["doc"] for call in client.update.await_args_list)
+
+
+async def test_overwrite_backup_supports_real_protobuf_array_and_recovery(direct):
+    from google.protobuf.descriptor_pb2 import FileDescriptorProto
+
+    backend, unit = await setup_same_content_overwrite(direct, "canonical", "canonical")
+    _, _, checkpoint, _, _, _ = direct
+    for row in backend.store.data["milvus"]:
+        if row["canonical_document_id"] == 800:
+            message = FileDescriptorProto()
+            message.public_dependency.extend(row["knowledge_ids"])
+            row["knowledge_ids"] = message.public_dependency
+    backend.store.fail_side = "milvus"
+    with pytest.raises(RuntimeError):
+        await backend.move_unit(unit, checkpoint)
+    unit = json.loads(json.dumps(unit))
+    assert unit["overwrites"][0]["rows"]["milvus"][0]["knowledge_ids"] == [20]
+    await backend.move_unit(unit, checkpoint, recover=True)
+    assert unit["status"] == "restored"
+    assert all(r["knowledge_ids"] == [20] for r in backend.store.data["milvus"] if r["canonical_document_id"] == 800)
+
+
 async def test_recovery_rejects_content_changed_after_failure(direct):
     backend, unit, checkpoint, connection, _, _ = direct
     backend.store.fail_side = "es"
@@ -1456,7 +2102,8 @@ async def test_recovery_refuses_new_external_grants(direct):
     await assert_state(connection, 10, 7)
 
 
-async def test_refresh_metadata_only_updates_ownership_fields_without_body(monkeypatch):
+@pytest.mark.parametrize("renamed", [False, True])
+async def test_refresh_metadata_updates_location_and_recorded_name_without_body(monkeypatch, renamed):
     from types import SimpleNamespace as NS
 
     from bisheng.core import database
@@ -1474,6 +2121,9 @@ async def test_refresh_metadata_only_updates_ownership_fields_without_body(monke
         folder_path="炼钢",
         source_path="技术诀窍/炼钢/101.pdf",
     )
+    if renamed:
+        source.file_name = "101_迁移_101.pdf"
+        source.source_path = "技术诀窍/炼钢/101_迁移_101.pdf"
     source_repository = Mock(return_value=NS(get_current_snapshot=AsyncMock(return_value=source)))
     monkeypatch.setattr(source_module, "KnowledgeFulltextSourceRepositoryImpl", source_repository)
     client = NS(
@@ -1491,7 +2141,10 @@ async def test_refresh_metadata_only_updates_ownership_fields_without_body(monke
 
     monkeypatch.setattr(database, "get_async_db_session", connection)
     backend = m.Backend()
-    await backend.refresh_metadata({"files": [{"file_id": 101}]})
+    unit = {"files": [{"file_id": 101}]}
+    if renamed:
+        unit["rename"] = {"file_id": 101, "old_name": "101.pdf", "new_name": source.file_name}
+    await backend.refresh_metadata(unit)
     call = client.update.await_args.kwargs
     assert call["doc"] == vars(source)
     assert call["if_seq_no"] == 1 and call["if_primary_term"] == 2

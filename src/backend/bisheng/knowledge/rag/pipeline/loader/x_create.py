@@ -45,6 +45,8 @@ class XinChuangFormatterLoader(BaseBishengLoader):
 
         converted_path = self._convert_with_libreoffice(target_ext)
         delegated_loader = self._build_delegate_loader(converted_path, target_ext, loader_type)
+        from bisheng.common.errcode.attachment import mark_attachment_loader
+        mark_attachment_loader(delegated_loader)
         documents = delegated_loader.load()
 
         self.local_image_dir = delegated_loader.local_image_dir

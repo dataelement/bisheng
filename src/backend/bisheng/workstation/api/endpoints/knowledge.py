@@ -2,7 +2,8 @@ from datetime import datetime
 from urllib.parse import unquote
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, File, Form, Request, UploadFile
+from loguru import logger
 
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
@@ -59,6 +60,7 @@ async def upload_file(
     request: Request,
     file: UploadFile = File(...),
     file_id: str = Body(..., description='Doc.ID'),
+    portal_context: bool = Form(False),
     login_user=LoginUserDep,
 ):
     try:
@@ -85,6 +87,26 @@ async def upload_file(
             }
         )
     except Exception as exc:
+        if portal_context:
+            from bisheng.common.errcode.attachment import AttachmentQuestionError, attachment_error
+            logger.exception('Portal attachment upload failed')
+            reason = '文件上传处理失败，未能识别具体原因。'
+            storage_errors = {
+                'NoSuchBucket': '文件存储服务的临时存储位置不存在。',
+                'AccessDenied': '文件存储服务拒绝保存该附件。',
+                'InvalidAccessKeyId': '文件存储服务认证失败。',
+                'SignatureDoesNotMatch': '文件存储服务认证签名校验失败。',
+            }
+            if getattr(exc, 'code', None) in storage_errors:
+                reason = storage_errors[exc.code]
+            elif isinstance(exc, UnicodeError):
+                reason = '文本编码转换失败，请另存为 UTF-8 编码后重新上传。'
+            if isinstance(exc, TimeoutError) or 'timeout' in type(exc).__name__.lower():
+                reason = '文件上传处理超时，未完成上传。'
+            raise AttachmentQuestionError([attachment_error(
+                {'filename': file.filename, 'provider': 'attachment_upload', 'stage': 'upload'},
+                code='UPLOAD_FAILED', reason=reason, suggestion='请稍后重新上传；持续失败请联系管理员。'
+            )]) from exc
         raise ServerError(msg=f'File upload failed: {str(exc)}', exception=exc)
     finally:
         await file.close()

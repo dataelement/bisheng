@@ -17,6 +17,7 @@ from bisheng.api.v1.schema.chat_schema import APIChatCompletion
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
+from bisheng.common.errcode.attachment import (AttachmentQuestionError, attachment_context, attachment_error)
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
@@ -78,7 +79,16 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         result = await pipeline.arun()
         raw_texts = [doc.page_content for doc in result.documents]
     except KnowledgeFileNotSupportedError:
+        if attachment_context.get() is not None:
+            raise
         raw_texts = []
+    state = attachment_context.get()
+    if state is not None and not any(text.strip() for text in raw_texts):
+        if state.get("parsed_text_nonempty") is False:
+            state = {**state, "provider": state.get("parser_provider", state["provider"]), "stage": "parse"}
+        raise AttachmentQuestionError([attachment_error(state, code="PARSER_CONTENT_EMPTY",
+            reason="未提取到可用于问答的文本，该附件未用于回答。",
+            suggestion="请检查文件正文或更换文件后重新上传。")])
     return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
 
 
@@ -1241,7 +1251,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
     return ws_config, conversation, message, bisheng_llm, model_info, is_new_conversation
 
 
-async def _process_agent_files(data: APIChatCompletion, model_info, login_user, ws_config):
+async def _process_agent_files_legacy(data: APIChatCompletion, model_info, login_user, ws_config):
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens)."""
     if not data.files:
@@ -1281,6 +1291,56 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         f' file_context_len={len(file_context)} max_token={max_token}'
     )
     return file_context, list(visual_results)
+
+
+async def _process_agent_files(data, model_info, login_user, ws_config, *, portal_context=False, attachment_states=None):
+    if not portal_context:
+        return await _process_agent_files_legacy(data, model_info, login_user, ws_config)
+    states = attachment_states if attachment_states is not None else []
+    for item in data.files or []:
+        states.append({**(item if isinstance(item, dict) else {}), "provider": "attachment_reference",
+                       "stage": "parse", "status": "pending"})
+
+    async def process(state):
+        token = attachment_context.set(state)
+        try:
+            state["status"] = "processing"
+            if not state.get("filepath"):
+                raise AttachmentQuestionError([attachment_error(state, code="REFERENCE_INVALID",
+                    reason="附件缺少有效文件引用，该附件已跳过。", suggestion="请重新上传附件。")])
+            state.update(provider="attachment_download", stage="download")
+            path, name = await async_file_download(state["filepath"])
+            state.update(provider="unknown", stage="parse")
+            if getattr(model_info, "visual", False) and name.rsplit('.', 1)[-1].lower() in VISUAL_MODEL_FILE_TYPES:
+                state.update(provider="visual_image", stage="parse")
+                image = await read_image_as_data_url(filepath=path, filename=name)
+                if not image or image.endswith(";base64,"):
+                    raise AttachmentQuestionError([attachment_error(state, code="IMAGE_EMPTY",
+                        reason="图片内容为空，该附件未用于回答。", suggestion="请更换图片后重新上传。")])
+                state["status"] = "success"
+                return "", image
+            text = await get_file_content(filepath_local=path, file_name=name, invoke_user_id=login_user.user_id)
+            if not text.strip():
+                raise AttachmentQuestionError([attachment_error(state, code="PARSER_CONTENT_EMPTY",
+                    reason="未提取到可用于问答的文本，该附件未用于回答。", suggestion="请检查正文或更换文件。")])
+            state["status"] = "success"
+            return text, None
+        except Exception as exc:
+            logger.exception("Portal attachment processing failed")
+            state["status"] = "failed"
+            errors = exc.attachment_errors if isinstance(exc, AttachmentQuestionError) else [attachment_error(state, exc)]
+            state["errors"] = errors
+            return errors
+        finally:
+            attachment_context.reset(token)
+
+    results = await asyncio.gather(*(process(state) for state in states))
+    errors = [error for state in states for error in state.get("errors", [])]
+    if errors:
+        raise AttachmentQuestionError(errors)
+    text = "\n".join(result[0] for result in results if result[0])
+    images = [result[1] for result in results if result[1]]
+    return text[:getattr(ws_config, 'maxTokens', 15000) or 15000], images
 
 
 async def _agent_stream_chat_completion(
@@ -1335,6 +1395,7 @@ async def _agent_stream_chat_completion(
         )
 
     stream_stage = {'value': 'retrieval', 'had_output': False, 'deadline': None}
+    attachment_states = []
 
     async def _agent_event_stream_impl():
         try:
@@ -1488,6 +1549,7 @@ async def _agent_stream_chat_completion(
                 logger.info('portal_qa_document_started file_count={}', len(data.files))
             file_context, image_bases64 = await _process_agent_files(
                 data, model_info, login_user, ws_config,
+                portal_context=portal_context, attachment_states=attachment_states,
             )
             document_elapsed = time.monotonic() - document_started
             # 附件处理只受问答总期限约束。保留知识检索的剩余预算。
@@ -1993,7 +2055,16 @@ async def _agent_stream_chat_completion(
         except asyncio.TimeoutError:
             logger.warning('portal_qa_timeout stage={} elapsed_ms={}',
                            stream_stage['value'], int((time.monotonic() - request_started) * 1000))
-            yield stream_error_sse(RuntimeError('question budget exhausted'),
+            timeout_error = RuntimeError('question budget exhausted')
+            if stream_stage['value'] == 'document' and data.files:
+                errors = []
+                for state in attachment_states:
+                    if state.get('status') == 'success':
+                        continue
+                    errors.extend(state.get('errors', []) or [attachment_error(state, code='QUESTION_TIMEOUT',
+                        reason='问答总时限已到，该附件处理尚未完成。', suggestion='请重试或拆分文件后重新上传。')])
+                timeout_error = AttachmentQuestionError(errors)
+            yield stream_error_sse(timeout_error,
                                    stage=stream_stage['value'], had_output=stream_stage['had_output'])
         finally:
             logger.info('portal_qa_total elapsed_ms={} stage={}',

@@ -136,6 +136,8 @@ class BaseFilePipeline(BasePipeline):
             transformers_func = file_process_config.get("transformers")
             loader = getattr(self, loader_func)()
             self.loader = loader
+            from bisheng.common.errcode.attachment import mark_attachment_loader
+            mark_attachment_loader(loader)
             transformers = getattr(self, transformers_func)() if transformers_func else []
             self.transformers = transformers
             pipeline = NormalPipeline(loader=loader, transformers=transformers, vector_store=self.vector_store)
@@ -249,6 +251,8 @@ class BaseFilePipeline(BasePipeline):
     def _init_image_loader(self) -> BaseBishengLoader:
         pdf_loader = self._init_pdf_loader()
         if isinstance(pdf_loader, LocalPdfLoader):
+            from bisheng.common.errcode.attachment import mark_attachment_loader
+            mark_attachment_loader(pdf_loader)
             raise KnowledgeFileNotSupportedError()
         return pdf_loader
 

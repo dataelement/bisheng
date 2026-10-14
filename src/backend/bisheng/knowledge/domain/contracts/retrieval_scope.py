@@ -42,6 +42,7 @@ __all__ = [
     "CanonicalGenerationConstraint",
     "BackendQueryFilter",
     "CanonicalChunkHit",
+    "CanonicalMetadataHit",
     "MappedEntryHit",
     "KnowledgeRetrievalScopeResolver",
 ]
@@ -116,6 +117,14 @@ class CanonicalChunkHit:
     text: str | None = None
     content_generation: int | None = None
     membership_generation: int | None = None
+
+
+@dataclass(frozen=True)
+class CanonicalMetadataHit:
+    """共享元数据匹配结果, 不携带正文或原始成员信息。"""
+
+    chunk: CanonicalChunkHit
+    matched_queries: tuple[str, ...]
 
 
 @dataclass(frozen=True)

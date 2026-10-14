@@ -32,40 +32,37 @@ export function PortalHeaderActions({
 }: PortalHeaderActionsProps) {
     return (
         <div className={`${s.fileActions} ${s.portalHeaderFileActions}`} data-testid="portal-file-actions">
-            <button
+            {canUpload && <button
                 type="button"
                 className={s.folderAction}
                 onClick={onOpenUploadDialog}
-                disabled={!canUpload}
-                title={canUpload ? "上传" : "无上传权限"}
+                title="上传"
                 aria-label="上传"
             >
                 {/* <Upload size={14} /> */}
                 <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/upload.svg`} alt="" className="size-[16px]" />
-            </button>
-            <button
+            </button>}
+            {canUpload && <button
                 type="button"
                 className={s.folderAction}
                 onClick={onOpenWebLinkDialog}
-                disabled={!canUpload}
-                title={canUpload ? "网页链接" : "无上传权限"}
+                title="网页链接"
                 aria-label="网页链接"
             >
                 {/* <Globe2 size={14} /> */}
                 <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/web-link.svg`} alt="" className="size-[16px]" />
-            </button>
-            <button
+            </button>}
+            {canCreateFolder && <button
                 type="button"
                 className={s.folderAction}
                 onClick={onCreateFolder}
-                disabled={!canCreateFolder}
-                title={canCreateFolder ? "新建文件夹" : "无创建权限"}
+                title="新建文件夹"
                 aria-label="新建文件夹"
             >
                 
                 <img src={`${__APP_ENV__.BASE_URL}/assets/knowledge-portal/new-folder.svg`} alt="" className="size-[16px]" />
                 {/* <FolderPlus size={14} /> */}
-            </button>
+            </button>}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <button

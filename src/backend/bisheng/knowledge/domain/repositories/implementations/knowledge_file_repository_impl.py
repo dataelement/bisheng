@@ -369,6 +369,8 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         self,
         document_id: int,
         knowledge_id: int,
+        *,
+        ignore_deleting_shares: bool = False,
     ) -> KnowledgeFile | None:
         stmt = (
             select(KnowledgeFile)
@@ -387,6 +389,12 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             .with_for_update()
             .execution_options(populate_existing=True)
         )
+        if ignore_deleting_shares:
+            stmt = stmt.where(or_(
+                KnowledgeFile.entry_type.is_(None),
+                KnowledgeFile.entry_type != KnowledgeFileEntryType.SHARE.value,
+                KnowledgeFile.entry_status != KnowledgeFileEntryStatus.DELETING.value,
+            ))
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
@@ -966,6 +974,21 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(
             select(KnowledgeFile).where(
                 col(KnowledgeFile.id).in_(folder_ids),
+                KnowledgeFile.file_type == FileType.DIR.value,
+            )
+        )
+        return list(result.scalars().all())
+
+    async def find_file_sync_folder_candidates(
+        self,
+        *,
+        space_ids: set[int],
+    ) -> list[KnowledgeFile]:
+        if not space_ids:
+            return []
+        result = await self.session.execute(
+            select(KnowledgeFile).where(
+                col(KnowledgeFile.knowledge_id).in_(space_ids),
                 KnowledgeFile.file_type == FileType.DIR.value,
             )
         )

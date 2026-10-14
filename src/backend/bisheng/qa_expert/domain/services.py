@@ -11,7 +11,7 @@ Expert QA Services - 业务逻辑层
 import asyncio
 import inspect
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 
 from loguru import logger
@@ -339,6 +339,33 @@ class ExpertService:
             )
             experts_all = (populated + empty)[skip : skip + limit]
         return experts_all, total
+
+    async def find_filter_expert_ids(
+        self,
+        department_id: str | None = None,
+        major: str | None = None,
+        position: str | None = None,
+        job_family: str | None = None,
+        job_category: str | None = None,
+    ) -> list[int]:
+        """复用专家管理口径，取同时满足人员条件的全部档案 ID。"""
+        department_filter = {}
+        if department_id and department_id.strip():
+            sources = await self.repository.list_department_sources()
+            departments = await self._load_expert_display_departments(sources)
+            department_filter["expert_ids"] = [
+                eid
+                for eid, department in departments.items()
+                if department is not None and str(department.id) == department_id.strip()
+            ]
+        filters = await self._expand_career_filters(
+            major=major,
+            position=position,
+            job_family=job_family,
+            job_category=job_category,
+        )
+        experts, _ = await self.repository.list_all(**filters, **department_filter, limit=None)
+        return [int(expert.id) for expert in experts if expert.id is not None]
 
     async def list_filter_options(self) -> dict[str, object]:
         """获取专家管理页部门及四个职业维度的筛选项。"""
@@ -1054,6 +1081,14 @@ class QuestionService:
         list_filter: str | None = None,
         display_status: str | None = None,
         keyword: str | None = None,
+        invited_expert_id: int | None = None,
+        department_id: str | None = None,
+        major: str | None = None,
+        position: str | None = None,
+        job_family: str | None = None,
+        job_category: str | None = None,
+        asked_from: date | None = None,
+        asked_to: date | None = None,
     ) -> tuple[list[Question], int]:
         """列表：filter=mine|invited_me 与 display_status；status=3/4 不当待采纳。"""
         viewer = self._require_user(user, user_id)
@@ -1066,6 +1101,21 @@ class QuestionService:
                 if not expert:
                     return [], 0
                 expert_id = expert.id
+        invited_ids = None
+        if any(str(value or "").strip() for value in (department_id, major, position, job_family, job_category)):
+            filter_service = ExpertService()
+            filter_service.repository = self.expert_repo
+            invited_ids = await filter_service.find_filter_expert_ids(
+                department_id=department_id,
+                major=major,
+                position=position,
+                job_family=job_family,
+                job_category=job_category,
+            )
+        if invited_expert_id is not None:
+            invited_ids = (
+                [invited_expert_id] if invited_ids is None else [eid for eid in invited_ids if eid == invited_expert_id]
+            )
         questions, repo_total = await self.repository.list_all(
             business_domain=business_domain,
             status=status,
@@ -1077,6 +1127,9 @@ class QuestionService:
             list_filter=normalized_filter,
             display_status=display_status,
             keyword=keyword,
+            invited_expert_ids=invited_ids,
+            asked_from=asked_from,
+            asked_to=asked_to,
             viewer_user_id=viewer_id,
             viewer_is_admin=is_expert_library_admin(viewer),
         )

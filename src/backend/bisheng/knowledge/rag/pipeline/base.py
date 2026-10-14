@@ -49,8 +49,15 @@ class NormalPipeline(BasePipeline):
         if config.stop_at == PipelineStage.LOAD:
             return self._make_result(stage=PipelineStage.LOAD, start=start)
 
+        # 门户附件上下文只记录真实执行阶段，其它管线行为保持。
+        from bisheng.common.errcode.attachment import attachment_context, mark_attachment_source
+        state = attachment_context.get()
+        if state is not None:
+            state["parser_provider"] = state.get("provider", "unknown")
+            state["parsed_text_nonempty"] = any(doc.page_content.strip() for doc in docs)
         # transformer
         for transformer in self.transformers:
+            mark_attachment_source("text_chunking", "chunk")
             docs = transformer.transform_documents(docs)
         if config.stop_at == PipelineStage.TRANSFORMER:
             return self._make_result(stage=PipelineStage.TRANSFORMER, docs=docs, start=start)

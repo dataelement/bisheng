@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FileShareDialog } from "./FileShareDialog";
 
 const mockGetTargets = jest.fn();
@@ -55,6 +55,45 @@ describe("FileShareDialog", () => {
         mockSubmit.mockResolvedValue({ decision: "pending" });
         mockRevoke.mockResolvedValue({});
         mockGetTargetFolders.mockResolvedValue({ data: [], total: 0 });
+    });
+
+    test.each(["pending", "failed"])("已撤回 %s 记录仍允许再次分享", async (cleanupStatus) => {
+        mockListEntries.mockResolvedValue({ data: [{ entry_id: 301, target_space_id: 20,
+            target_space_name: "生产部知识库", allow_download: false, entry_status: "deleting", cleanup_status: cleanupStatus }], total: 1 });
+        render(<FileShareDialog open activeSpace={activeSpace} file={managerFile} onOpenChange={jest.fn()} />);
+        await screen.findByText(cleanupStatus === "failed" ? "已撤回 · 清理失败" : "已撤回 · 后台清理中");
+        expect(screen.queryByRole("button", { name: "撤回" })).not.toBeInTheDocument();
+        fireEvent.change(screen.getByPlaceholderText("请输入分享原因"), { target: { value: "再次分享" } });
+        fireEvent.click(screen.getByRole("button", { name: "提交审批" }));
+        await waitFor(() => expect(mockSubmit).toHaveBeenCalledWith(expect.objectContaining({ reason: "再次分享" })));
+    });
+
+    test("后台清理结束自动刷新且关闭弹窗停止查询", async () => {
+        jest.useFakeTimers();
+        try {
+            mockListEntries.mockResolvedValue({ data: [{ entry_id: 301, target_space_id: 20,
+                target_space_name: "生产部知识库", allow_download: false, entry_status: "deleting", cleanup_status: "pending" }], total: 1 });
+            const view = render(<FileShareDialog open activeSpace={activeSpace} file={managerFile} onOpenChange={jest.fn()} />);
+            await screen.findByText("已撤回 · 后台清理中");
+            mockListEntries.mockResolvedValue({ data: [], total: 0 });
+            await act(async () => { jest.advanceTimersByTime(10_000); });
+            expect(screen.queryByText("已撤回 · 后台清理中")).not.toBeInTheDocument();
+            const calls = mockListEntries.mock.calls.length;
+            view.unmount();
+            await act(async () => { jest.advanceTimersByTime(30_000); });
+            expect(mockListEntries).toHaveBeenCalledTimes(calls);
+        } finally { jest.useRealTimers(); }
+    });
+
+    test("撤回失败保留有效分享并显示错误", async () => {
+        mockListEntries.mockResolvedValue({ data: [{ entry_id: 301, target_space_id: 20,
+            target_space_name: "生产部知识库", allow_download: false, entry_status: "active" }], total: 1 });
+        mockRevoke.mockRejectedValue(new Error("撤回失败测试"));
+        render(<FileShareDialog open activeSpace={activeSpace} file={managerFile} onOpenChange={jest.fn()} />);
+        fireEvent.click(await screen.findByRole("button", { name: "撤回" }));
+        await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "撤回失败测试" })));
+        expect(screen.getByText("仅查看")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "撤回" })).toBeEnabled();
     });
 
     test("提交同级部门分享原因和水印下载策略", async () => {
@@ -169,7 +208,8 @@ describe("FileShareDialog", () => {
             });
         });
         await waitFor(() => {
-            expect(screen.queryByText("仅查看")).not.toBeInTheDocument();
+            expect(screen.getByText("已撤回 · 后台清理中")).toBeInTheDocument();
+            expect(screen.queryByRole("button", { name: "撤回" })).not.toBeInTheDocument();
         });
         expect(mockRefresh).toHaveBeenCalledWith(20);
         expect(mockRefresh).toHaveBeenCalledWith("10");

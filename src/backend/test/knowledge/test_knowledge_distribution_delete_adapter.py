@@ -102,6 +102,8 @@ async def test_share_direct_delete_routes_to_distribution_lifecycle() -> None:
         document_id=91,
         share_entry_id=101,
         actor_entry_id=101,
+        operator_user_id=11,
+        operator_user_name="tester",
     )
     service.document_distribution_service.delete_manager.assert_not_awaited()
     service._enqueue_document_distribution_projection.assert_awaited_once_with(
@@ -352,6 +354,7 @@ async def test_manager_can_list_and_revoke_share_entries() -> None:
                 "target_space_name": "接收部门知识库",
                 "allow_download": True,
                 "entry_status": KnowledgeFileEntryStatus.ACTIVE.value,
+                "cleanup_status": "active",
                 "create_time": None,
             }
         ],
@@ -363,6 +366,8 @@ async def test_manager_can_list_and_revoke_share_entries() -> None:
         document_id=91,
         share_entry_id=101,
         actor_entry_id=100,
+        operator_user_id=11,
+        operator_user_name="tester",
     )
 
 

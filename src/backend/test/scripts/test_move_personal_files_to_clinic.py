@@ -414,11 +414,17 @@ def arguments(apply=False):
     )
 
 
-async def test_api_sync_cli_scans_all_personal_folders_and_keeps_recovery_filter(snapshot, tmp_path):
+@pytest.mark.parametrize("rename_conflicts", [False, True])
+async def test_api_sync_cli_scans_all_personal_folders_and_keeps_recovery_filter(snapshot, tmp_path, rename_conflicts):
     snapshot["files"][-1].user_metadata = {"filelib_sync_endpoint": "sync"}
     snapshot["files"].append(file(102, user_metadata={}))
     snapshot["versions"].append(NS(document_id=102, knowledge_file_id=102))
-    args = m.parse_args(["--tenant-id", "1", "--api-sync-only", "--apply", "--operator-id", "1"])
+    args = m.parse_args(
+        ["--tenant-id", "1", "--api-sync-only", "--apply", "--operator-id", "1"]
+        + (["--rename-conflicts", "--overwrite-same-content"] if rename_conflicts else [])
+    )
+    assert args.rename_conflicts is rename_conflicts
+    assert args.overwrite_same_content is rename_conflicts
     assert args.folder_parts == ()
     backend, path = FakeBackend(snapshot), tmp_path / "sync.json"
 
@@ -432,10 +438,20 @@ async def test_api_sync_cli_scans_all_personal_folders_and_keeps_recovery_filter
     assert backend.move_unit.await_count == 1
     saved = json.loads((tmp_path / "recovery" / "sync.json").read_text())
     assert saved["units"][0]["api_sync_only"] is True
+    assert bool(saved["units"][0].get("rename_conflicts")) is rename_conflicts
+    assert bool(saved["units"][0].get("overwrite_same_content")) is rename_conflicts
     assert saved["units"][0]["folder_parts"] == ["B"]
     assert backend.ensure_folder.await_args.args[2] == ["B"]
     assert json.loads(path.read_text())[0]["source_folder"] == "A/B"
     assert [row["file_id"] for row in json.loads(path.read_text())] == [101]
+
+
+@pytest.mark.parametrize("name", ["报告" * 98 + ".pdf", "无扩展名" * 50, "archive.tar.gz"])
+def test_migration_filename_respects_column_limit_and_extension(name):
+    renamed = m.migration_filename(name, 101)
+    assert len(renamed) <= 200
+    assert renamed.endswith("_迁移_101" + m.Path(name).suffix)
+    assert m.Path(renamed).suffix == m.Path(name).suffix
 
 
 async def test_owner_fallback_flag_is_applied_only_after_operator_validation(snapshot, tmp_path):
@@ -453,9 +469,13 @@ async def test_owner_fallback_flag_is_applied_only_after_operator_validation(sna
     assert backend.operator_id == 1 and backend.use_operator_as_file_owner is True
 
 
-async def test_dry_run_no_business_writes(snapshot, tmp_path):
+@pytest.mark.parametrize("rename_conflicts", [False, True])
+async def test_dry_run_no_business_writes(snapshot, tmp_path, rename_conflicts):
     backend, path = FakeBackend(snapshot), tmp_path / "report.json"
-    assert await m.execute(arguments(), backend, path) == 0
+    args = arguments()
+    args.rename_conflicts = rename_conflicts
+    args.overwrite_same_content = rename_conflicts
+    assert await m.execute(args, backend, path) == 0
     backend.operator.assert_not_awaited()
     backend.ensure_folder.assert_not_awaited()
     backend.move_unit.assert_not_awaited()

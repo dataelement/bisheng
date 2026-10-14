@@ -17,6 +17,7 @@ jest.mock("~/hooks/useLocalize", () => ({
   __esModule: true,
   default: () => (key: string) => {
     const map: Record<string, string> = {
+      com_approval_status_withdrawn: "已撤回",
       com_approval_field_business_type: "业务类型",
       com_approval_field_space_name_create: "知识库名称",
       com_approval_field_space_level: "知识库层级",
@@ -61,6 +62,7 @@ const mockShowToast = jest.fn();
 const mockRefresh = jest.fn();
 jest.mock("~/pages/knowledge/knowledgeFileRefresh", () => ({
   dispatchKnowledgeSpaceFilesRefresh: (...args: any[]) => mockRefresh(...args),
+  subscribeKnowledgeSpaceFilesRefresh: jest.fn(() => () => {}),
 }));
 
 jest.mock("~/Providers", () => ({
@@ -89,6 +91,18 @@ describe("ApprovalCenterDialog", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(getSpaceInfoApi).mockRejectedValue(new Error("skip live space lookup"));
+  });
+
+  it.each(["my_tasks", "my_requests"])("%s 保留已撤回的分享历史与详情", async (tab) => {
+    const item = { task_id: 42, instance_id: 142, business_name: "旧分享记录", status: "approved", instance_status: "executed",
+      scenario_code: "knowledge_space_file_share_request", share_revoked: true };
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({ data: [item], total: 1 } as any);
+    jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({ data: [{ ...item, status: "executed" }], total: 1 } as any);
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue(item as any);
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue({ ...item, status: "executed" } as any);
+    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} target={tab === "my_tasks" ? { tab: "my_tasks", taskId: 42 } : { tab: "my_requests", instanceId: 142 }} />);
+    expect((await screen.findAllByText("旧分享记录")).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getAllByText("已撤回")).toHaveLength(2));
   });
 
   it("撤回发布审批后通知知识库重新获取锁定状态", async () => {

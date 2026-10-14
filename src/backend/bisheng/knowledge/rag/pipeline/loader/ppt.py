@@ -49,6 +49,8 @@ class BishengPptLoader(BaseBishengLoader):
         if pdf_file_path and os.path.exists(pdf_file_path):
             self.preview_file_path = pdf_file_path
 
+        from bisheng.common.errcode.attachment import mark_attachment_source
+        mark_attachment_source("local_ppt")
         with open(md_file_path, encoding="utf-8") as f:
             content = f.read()
         content = self.rewrite_local_image_refs(content)

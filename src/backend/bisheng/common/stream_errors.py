@@ -142,6 +142,12 @@ def stream_error_payload(
     stage: str = "system",
     had_output: bool = False,
 ) -> dict[str, Any]:
+    from bisheng.common.errcode.attachment import AttachmentQuestionError
+
+    if isinstance(error, AttachmentQuestionError):
+        return {"status_code": error.Code, "status_message": error.Msg, "data": {},
+                "kind": "document", "title": error.Msg, "reason": "请处理问题附件后重新提问。",
+                "retryable": False, "attachment_errors": error.attachment_errors}
     info = classify_stream_error(error, stage=stage)
     return {
         "status_code": info.status_code,

@@ -967,6 +967,15 @@ class KnowledgeSpaceFileShareApprovalHandler:
             KnowledgeDocumentPermissionActivationService,
         )
 
+        from bisheng.approval.domain.services.knowledge_file_share_history_service import KnowledgeFileShareHistoryService
+
+        async with get_async_db_session() as history_session:
+            revoked = await KnowledgeFileShareHistoryService(history_session).revoked(
+                tenant_id=int(payload_snapshot["tenant_id"]), instance_id=instance_id,
+            )
+            if revoked is not None:
+                return {**revoked.detail, "share_revoked": True, "idempotent": True}
+
         target_file_level_path, target_level = (
             await self._resolve_target_location(payload_snapshot)
         )

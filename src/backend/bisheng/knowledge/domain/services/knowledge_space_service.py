@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
@@ -348,6 +349,7 @@ from bisheng.permission.domain.services.fine_grained_permission_service import (
     FineGrainedPermissionService,
 )
 from bisheng.permission.domain.services.owner_service import OwnerService
+from bisheng.permission.domain.services.permission_read_context import PermissionReadContext
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
@@ -871,6 +873,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     document_id=int(file_record.reference_document_id),
                     share_entry_id=int(file_record.id),
                     actor_entry_id=int(file_record.id),
+                    operator_user_id=int(self.login_user.user_id),
+                    operator_user_name=str(self.login_user.user_name),
                 )
                 await self._enqueue_document_distribution_projection(
                     tenant_id=int(file_record.tenant_id),
@@ -1102,6 +1106,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "target_space_name": space_names.get(int(entry.knowledge_id)),
                 "allow_download": bool(entry.allow_download),
                 "entry_status": str(entry.entry_status),
+                "cleanup_status": (
+                    "active" if entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+                    else "failed" if entry.projection_status == KnowledgeFileProjectionStatus.FAILED.value
+                    else "pending"
+                ),
                 "create_time": (entry.create_time.isoformat() if entry.create_time is not None else None),
             }
             for entry in shares
@@ -1135,6 +1144,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 document_id=int(source.reference_document_id),
                 share_entry_id=int(share_entry_id),
                 actor_entry_id=int(source.id),
+                operator_user_id=int(self.login_user.user_id),
+                operator_user_name=str(self.login_user.user_name),
             )
         except KnowledgeDocumentDistributionError as exc:
             raise KnowledgeDocumentStateConflictError() from exc
@@ -1421,42 +1432,108 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return selectable_ids, visible_ids, space_ids
 
     @classmethod
+    async def _file_sync_upload_allowed(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: int,
+        *,
+        lineage: list[tuple[str, int]],
+        read_context: PermissionReadContext | None = None,
+    ) -> bool:
+        is_folder = object_type == "folder"
+        permissions = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            object_type,
+            object_id,
+            lineage=lineage,
+            nearest_binding_wins=is_folder,
+            use_permission_level_fallback=not is_folder,
+            read_context=read_context,
+        )
+        upload_permission = _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID if is_folder else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
+        return upload_permission in permissions
+
+    @classmethod
+    async def _file_sync_uploadable_ids(
+        cls,
+        *,
+        login_user: UserPayload,
+        object_type: str,
+        lineages: dict[int, list[tuple[str, int]]],
+        read_context: PermissionReadContext,
+    ) -> set[int]:
+        allowed_ids: set[int] = set()
+        ids = list(lineages)
+        for start in range(0, len(ids), 16):
+            batch = ids[start:start + 16]
+            tasks = [asyncio.create_task(cls._file_sync_upload_allowed(
+                login_user, object_type, object_id,
+                lineage=lineages[object_id], read_context=read_context,
+            )) for object_id in batch]
+            try:
+                decisions = await asyncio.gather(*tasks)
+                allowed_ids.update(object_id for object_id, allowed in zip(batch, decisions, strict=True) if allowed)
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                # 主异常继续传播, 这里仅回收同批任务。
+                await asyncio.gather(*tasks, return_exceptions=True)
+        return allowed_ids
+
+    @classmethod
     async def _load_file_sync_target_access(
         cls,
         *,
         login_user: UserPayload,
+        knowledge_repository: KnowledgeRepositoryImpl,
         file_repository: KnowledgeFileRepositoryImpl,
+        candidate_spaces: list[tuple[Knowledge, str]] | None = None,
+        keyword: str | None = None,
     ) -> FileSyncTargetAccess:
-        root_values, folder_values = await asyncio.gather(
-            PermissionService.list_accessible_ids(
-                int(login_user.user_id),
-                _UPLOAD_FILE_TO_SPACE_PERMISSION_ID,
-                "knowledge_space",
-                login_user=login_user,
-            ),
-            PermissionService.list_accessible_ids(
-                int(login_user.user_id),
-                _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID,
-                "folder",
-                login_user=login_user,
-            ),
-        )
-        root_space_ids = cls._coerce_file_sync_permission_ids(root_values)
-        folder_ids = cls._coerce_file_sync_permission_ids(folder_values)
-        if folder_ids is None:
-            return FileSyncTargetAccess(
-                root_space_ids=root_space_ids,
-                selectable_folder_ids=None,
-                visible_folder_ids=None,
-                folder_space_ids=None,
+        if candidate_spaces is None:
+            candidate_spaces = []
+            after = None
+            while True:
+                rows = await knowledge_repository.find_file_sync_spaces(
+                    allowed_space_ids=None, keyword=keyword, after=after, limit=200,
+                )
+                candidate_spaces.extend(rows)
+                if len(rows) < 200:
+                    break
+                last_space, last_level = rows[-1]
+                after = (0 if last_level == "public" else 1, str(last_space.name or ""), int(last_space.id))
+        space_ids = {int(space.id) for space, _ in candidate_spaces}
+        if not space_ids:
+            return FileSyncTargetAccess(set(), set(), set(), set())
+
+        folders = await file_repository.find_file_sync_folder_candidates(space_ids=space_ids)
+        context = PermissionReadContext(tenant_id=login_user.tenant_id, user_id=login_user.user_id)
+        context.spaces = {int(space.id): space for space, _ in candidate_spaces}
+        context.scopes = {int(space.id): SimpleNamespace(level=level) for space, level in candidate_spaces}
+        context.files = {int(folder.id): folder for folder in folders}
+        try:
+            root_space_ids = await cls._file_sync_uploadable_ids(
+                login_user=login_user, object_type="knowledge_space",
+                lineages={space_id: [("knowledge_space", space_id)] for space_id in space_ids},
+                read_context=context,
             )
-        folders = await file_repository.find_file_sync_folders_by_ids(folder_ids)
-        selectable_ids, visible_ids, space_ids = cls._expand_file_sync_folder_visibility(folders)
+            folder_ids = await cls._file_sync_uploadable_ids(
+                login_user=login_user, object_type="folder",
+                lineages={int(folder.id): cls._build_item_lineage(folder, int(folder.knowledge_id)) for folder in folders},
+                read_context=context,
+            )
+        finally:
+            await context.close()
+        selectable_ids, visible_ids, folder_space_ids = cls._expand_file_sync_folder_visibility(
+            [folder for folder in folders if int(folder.id) in folder_ids],
+        )
         return FileSyncTargetAccess(
             root_space_ids=root_space_ids,
             selectable_folder_ids=selectable_ids,
             visible_folder_ids=visible_ids,
-            folder_space_ids=space_ids,
+            folder_space_ids=folder_space_ids,
         )
 
     @classmethod
@@ -1489,7 +1566,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_repository = KnowledgeFileRepositoryImpl(session)
             access = await cls._load_file_sync_target_access(
                 login_user=login_user,
+                knowledge_repository=knowledge_repository,
                 file_repository=file_repository,
+                keyword=keyword,
             )
             if access.root_space_ids is None or access.folder_space_ids is None:
                 allowed_space_ids = None
@@ -1573,7 +1652,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 raise SpaceNotFoundError()
             access = await cls._load_file_sync_target_access(
                 login_user=login_user,
+                knowledge_repository=knowledge_repository,
                 file_repository=file_repository,
+                candidate_spaces=list(spaces),
             )
             parent_path = ""
             if parent_id is not None:
@@ -1650,6 +1731,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceNotFoundError()
             object_type = "knowledge_space"
             object_id = knowledge_id
+            lineage = [("knowledge_space", knowledge_id)]
             if folder_id is not None:
                 folders = await file_repository.find_file_sync_folders_by_ids({folder_id})
                 folder = folders[0] if folders else None
@@ -1657,15 +1739,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceFolderNotFoundError()
                 object_type = "folder"
                 object_id = folder_id
-        upload_permission_id = (
-            _UPLOAD_FILE_TO_FOLDER_PERMISSION_ID if object_type == "folder" else _UPLOAD_FILE_TO_SPACE_PERMISSION_ID
-        )
-        allowed = await PermissionService.check(
-            int(login_user.user_id),
-            upload_permission_id,
-            object_type,
-            str(object_id),
-            login_user=login_user,
+                lineage = cls._build_item_lineage(folder, knowledge_id)
+        allowed = await cls._file_sync_upload_allowed(
+            login_user, object_type, object_id, lineage=lineage,
         )
         if not allowed:
             raise SpacePermissionDeniedError()

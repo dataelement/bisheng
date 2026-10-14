@@ -635,7 +635,7 @@ class DeveloperTokenService:
                     tenant_id=tenant_id,
                     user_id=user_id,
                     knowledge_id=int(normalized.target_space.knowledge_id),
-                    folder_id=None,
+                    folder_id=normalized.target_space.folder_id,
                 )
                 if fixed_space is None:
                     raise DeveloperTokenInvalidFileSyncRuleError(msg="target knowledge space is unavailable")

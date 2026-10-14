@@ -2189,6 +2189,7 @@ class KnowledgeDocumentDistributionService:
         existing_target = await self.file_repository.find_entry_in_space_for_update(
             command.document_id,
             command.target_space_id,
+            ignore_deleting_shares=True,
         )
         if existing_target is not None:
             raise KnowledgeDocumentDistributionError("canonical document already has an entry in target space")
@@ -2201,6 +2202,12 @@ class KnowledgeDocumentDistributionService:
         self,
         command: ShareKnowledgeDocumentCommand,
     ) -> ShareKnowledgeDocumentResult:
+        from bisheng.approval.domain.services.knowledge_file_share_history_service import KnowledgeFileShareHistoryService
+
+        if await KnowledgeFileShareHistoryService(self.session).revoked(
+            tenant_id=command.tenant_id, instance_id=command.approval_instance_id,
+        ):
+            raise KnowledgeDocumentDistributionError("share approval has been revoked")
         source_entry = await self.file_repository.find_by_id(command.source_entry_id)
         if source_entry is None:
             raise KnowledgeDocumentDistributionError("share source state no longer exists")
@@ -2274,6 +2281,8 @@ class KnowledgeDocumentDistributionService:
         document_id: int,
         share_entry_id: int,
         actor_entry_id: int,
+        operator_user_id: int | None = None,
+        operator_user_name: str | None = None,
     ) -> RemoveShareEntryResult:
         document = await self.document_repository.find_by_id_for_update(document_id)
         locked = await self.file_repository.find_by_ids_for_update([actor_entry_id, share_entry_id])
@@ -2301,17 +2310,25 @@ class KnowledgeDocumentDistributionService:
         )
         if not actor_is_recipient and not actor_is_manager:
             raise KnowledgeDocumentDistributionError("only the recipient entry or current manager can remove a share")
-        if share.entry_status == KnowledgeFileEntryStatus.DELETING.value:
-            return RemoveShareEntryResult(
-                document_id=document_id,
-                share_entry_id=share_entry_id,
-                idempotent=True,
-            )
-        if share.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
+        already_deleting = share.entry_status == KnowledgeFileEntryStatus.DELETING.value
+        if not already_deleting and share.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentDistributionError("share entry is not active")
-        if not await self.file_repository.mark_entry_deleting(share_entry_id):
-            raise KnowledgeDocumentDistributionError("share entry state changed concurrently")
-        await self._commit()
+        from bisheng.approval.domain.services.knowledge_file_share_history_service import KnowledgeFileShareHistoryService
+
+        try:
+            await KnowledgeFileShareHistoryService(self.session).record(
+                tenant_id=tenant_id, instance_id=share.approval_instance_id, document_id=document_id,
+                share_entry_id=share_entry_id, target_space_id=int(share.knowledge_id), actor_entry_id=actor_entry_id,
+                operator_user_id=operator_user_id, operator_user_name=operator_user_name,
+            )
+            if not already_deleting and not await self.file_repository.mark_entry_deleting(share_entry_id):
+                raise KnowledgeDocumentDistributionError("share entry state changed concurrently")
+            await self._commit()
+        except Exception:
+            await self.session.rollback()
+            raise
+        if already_deleting:
+            return RemoveShareEntryResult(document_id=document_id, share_entry_id=share_entry_id, idempotent=True)
 
         try:
             explicit_snapshot = list(await self.permission_snapshot_loader(share_entry_id))

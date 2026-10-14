@@ -1,6 +1,7 @@
 # ruff: noqa: RUF002
 """T023：问题 API TestClient。"""
 
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -41,6 +42,34 @@ def _app(question_service, user):
     app.dependency_overrides[UserPayload.get_login_user] = lambda: user
     app.dependency_overrides[endpoints.get_question_service] = lambda: question_service
     return app
+
+
+def test_search_filters_forward_and_reject_invalid_date_range():
+    svc = SimpleNamespace(list_questions=AsyncMock(return_value=([], 0)))
+    client = TestClient(_app(svc, _user()))
+    response = client.get(
+        "/api/v1/qa_experts/questions",
+        params={
+            "keyword": "振动",
+            "invited_expert_id": 7,
+            "department_id": "100",
+            "major": "rolling",
+            "position": "engineer",
+            "job_family": "family",
+            "job_category": "category",
+            "asked_from": "2026-10-01",
+            "asked_to": "2026-10-14",
+            "display_status": "unanswered",
+        },
+    )
+    assert response.status_code == 200
+    args = svc.list_questions.await_args.kwargs
+    assert args["invited_expert_id"] == 7 and args["major"] == "rolling"
+    assert args["asked_from"] == date(2026, 10, 1) and args["asked_to"] == date(2026, 10, 14)
+    svc.list_questions.reset_mock()
+    response = client.get("/api/v1/qa_experts/questions", params={"asked_from": "2026-10-15", "asked_to": "2026-10-14"})
+    assert response.status_code == 422
+    svc.list_questions.assert_not_awaited()
 
 
 def test_create_and_get_question_related_docs_accessible_fields():

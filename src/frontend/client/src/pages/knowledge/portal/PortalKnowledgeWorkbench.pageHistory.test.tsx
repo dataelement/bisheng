@@ -7,6 +7,7 @@ import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import { getSpaceChildrenApi, searchSpaceChildrenApi, getSpacesByLevelApi, getSpaceInfoApi, getCreateSpaceOptionsApi, getSpaceFolderStatsApi, getFolderParentPathApi, getFilePreviewApi } from "~/api/knowledge";
 import store from "~/store";
 import translations from "~/locales/zh-Hans/translation.json";
+import { checkPermission } from "~/api/permission";
 
 const mockToast = jest.fn();
 const mockUpload = { creatingFolder: null, uploadingFiles: [], handleDeleteFile: jest.fn(), handleRenameFile: jest.fn() };
@@ -19,7 +20,7 @@ jest.mock("~/hooks", () => ({
     },
 }));
 jest.mock("~/hooks/queries/endpoints/queries", () => ({ useGetBsConfig: () => ({ data: {} }), useGetPortalMetadataConfig: () => ({ data: {} }) }));
-jest.mock("~/api/permission", () => ({ checkPermission: jest.fn(async () => ({ allowed: true })), canOpenPermissionDialog: jest.fn() }));
+jest.mock("~/api/permission", () => ({ checkPermission: jest.fn(async () => ({ allowed: true })), canOpenPermissionDialog: jest.fn(async () => false) }));
 jest.mock("~/api/knowledge", () => ({
     ...jest.requireActual("~/api/knowledge"),
     getSpaceChildrenApi: jest.fn(), searchSpaceChildrenApi: jest.fn(), getSpacesByLevelApi: jest.fn(), getSpaceInfoApi: jest.fn(),
@@ -35,13 +36,13 @@ jest.mock("../hooks/useAiSplitPane", () => ({ useAiSplitPane: () => ({ showAiAss
 jest.mock("./components/PortalDialogs", () => ({ PortalDialogs: () => null }));
 jest.mock("./components/PortalFileInfoEditModal", () => ({ PortalFileInfoEditModal: () => null }));
 jest.mock("./components/PortalUploadedFilesDrawer", () => ({ PortalUploadedFilesDrawer: () => null }));
-jest.mock("./components/PortalHeaderActions", () => ({ PortalHeaderActions: () => null }));
 jest.mock("./components/PortalFavoritesPanel", () => () => null);
 jest.mock("../SpaceDetail/AiChat/KnowledgeAiPanel", () => ({ KnowledgeAiPanel: () => null }));
 jest.mock("./components/PortalPreviewWorkspace", () => ({ PortalPreviewWorkspace: ({ onBackToFileList, selectedFile }: any) => <div><span>预览：{selectedFile.name}</span><button onClick={onBackToFileList}>返回列表</button></div> }));
 jest.mock("./components/SpaceSidebar", () => ({ SpaceSidebar: ({ groups, onSelectSpace }: any) => <aside>{groups.flatMap((group: any) => group.spaces).map((space: any) => <button key={space.id} onClick={() => onSelectSpace(space)}>{space.name}</button>)}</aside> }));
 jest.mock("../SpaceDetail", () => ({
-    KnowledgeSpaceContent: ({ files, paginationFooter, onNavigateFolder, onSearch, onPreviewFile, onDeleteFile, loading, listError }: any) => <section>
+    KnowledgeSpaceContent: ({ files, paginationFooter, onNavigateFolder, onSearch, onPreviewFile, onDeleteFile, loading, listError, afterSearchActions }: any) => <section>
+        {afterSearchActions}
         <button onClick={() => onNavigateFolder()}>根目录</button>
         <button onClick={() => onDeleteFile(files[0]?.id)}>删除当前</button>
         <button onClick={() => onSearch({ keyword: "查找", tagIds: [], scope: "current" })}>搜索</button>
@@ -55,9 +56,9 @@ jest.mock("../SpaceDetail", () => ({
 const space = (id: string) => ({ id, name: `知识库${id}`, role: "creator", spaceLevel: "personal", tags: [] });
 const row = (id: string, name = `文档${id}`, extra = {}) => ({ id, name, type: "md", tags: [], spaceId: "1", status: "success", createdAt: "", updatedAt: "", ...extra });
 const reply = (data: unknown[], next: string | null = null) => ({ data, has_more: Boolean(next), next_cursor: next, can_reorder_folders: false, page_size: 20 });
-function openWorkbench() {
+function openWorkbench(initialEntry = "/") {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, cacheTime: 0 } } });
-    return render(<QueryClientProvider client={client}><MemoryRouter><RecoilRoot initializeState={({ set }) => set(store.user, { id: "user", role: "user" } as any)}><PortalKnowledgeWorkbench /></RecoilRoot></MemoryRouter></QueryClientProvider>);
+    return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[initialEntry]}><RecoilRoot initializeState={({ set }) => set(store.user, { id: "user", role: "user" } as any)}><PortalKnowledgeWorkbench /></RecoilRoot></MemoryRouter></QueryClientProvider>);
 }
 const next = () => fireEvent.click(screen.getByRole("button", { name: "下一页" }));
 beforeEach(() => {
@@ -166,4 +167,28 @@ it("目录内搜索预览后返回原搜索页，深链接同步不覆盖浏览�
     fireEvent.click(screen.getByText("返回列表")); await screen.findByText("文档s2");
     expect(screen.getByText(/第 2 页，已浏览到第 2 页/)).toBeInTheDocument();
     expect(screen.queryByText("文档f1")).toBeNull();
+});
+
+it("知识库编辑者进入查看者目录后隐藏上传、网页链接及新建文件夹", async () => {
+    const teamSpace = { ...space("1"), role: "member", spaceLevel: "team" };
+    jest.mocked(getSpacesByLevelApi).mockImplementation(async level => level === "team" ? [teamSpace] as any : []);
+    jest.mocked(getSpaceInfoApi).mockResolvedValue(teamSpace as any);
+    let finish!: (value: { allowed: boolean }) => void;
+    const pending = new Promise<{ allowed: boolean }>((resolve) => { finish = resolve; });
+    jest.mocked(checkPermission).mockImplementation(async (type, id, _relation, permission) => {
+        if (type === "folder" && id === "10" && ["upload_file_to_folder", "create_folder"].includes(permission || "")) {
+            return pending;
+        }
+        return { allowed: true };
+    });
+    openWorkbench("/knowledge-spaces?spaceId=1");
+    await screen.findByRole("button", { name: "上传" });
+    fireEvent.click(await screen.findByText("目录"));
+    for (const name of ["上传", "网页链接", "新建文件夹"]) {
+        expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    await act(async () => finish({ allowed: false }));
+    await screen.findByText("文档f1");
+    expect(screen.queryByRole("button", { name: "上传" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "筛选" })).toBeEnabled();
 });

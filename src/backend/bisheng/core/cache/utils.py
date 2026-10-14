@@ -18,6 +18,7 @@ from uuid import uuid4
 import aiofiles
 import cchardet
 import requests
+from loguru import logger
 from appdirs import user_cache_dir
 from fastapi import UploadFile
 from urllib3 import BaseHTTPResponse
@@ -506,7 +507,9 @@ async def async_file_download(file_path: str):
         else:
             r = await http_client.get(url=file_path, data_type="binary")
             if r.status_code != 200:
-                raise ValueError('Check the url of your file; returned status code %s' % r.status_code)
+                error = ValueError('Check the url of your file; returned status code %s' % r.status_code)
+                error.http_status = r.status_code
+                raise error
             content_disposition = r.headers.get('Content-Disposition') if r.headers else None
             if content_disposition:
                 filename = unquote(content_disposition).split('filename=')[-1].strip("\"'")
@@ -534,8 +537,9 @@ async def async_file_download(file_path: str):
                 file_path = save_download_file(file_content, 'bisheng', filename)
                 return file_path, filename
         except Exception as e:
-            # If parsing or downloading fails, log or drop it below ValueError
-            print(f"Error handling relative MinIO path: {e}")
+            # 保留底层原因且保持公开异常类型与消息。
+            logger.exception("Relative MinIO attachment download failed")
+            raise ValueError(f'File path {file_path} is not a valid file or url') from e
 
     raise ValueError('File path %s is not a valid file or url' % file_path)
 

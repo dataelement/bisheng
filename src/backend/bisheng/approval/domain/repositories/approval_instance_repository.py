@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Sequence
 
-from sqlalchemy import or_
+from sqlalchemy import exists, or_
 from sqlmodel import select
 
 from bisheng.approval.domain.models.approval_instance import (
@@ -38,6 +38,16 @@ class FixedOrNodeDecisionResult:
 class ApprovalInstanceRepository:
     _DUPLICATE_ACTIVE_STATUSES = ("pending", "exception", "execute_failed")
 
+    @staticmethod
+    def _exclude_revoked_share(statement, scenario_code: str):
+        if scenario_code == "knowledge_space_file_share_request":
+            # 已撤回是业务终态。原审批执行状态尚未收敛也不能阻止新申请。
+            statement = statement.where(~exists(select(ApprovalActionLog.id).where(
+                ApprovalActionLog.instance_id == ApprovalInstance.id,
+                ApprovalActionLog.action == "share_revoked",
+            )))
+        return statement
+
     @classmethod
     async def create_instance(
         cls,
@@ -61,7 +71,14 @@ class ApprovalInstanceRepository:
         instance_id: int,
         *,
         session=None,
+        for_update: bool = False,
     ) -> ApprovalInstance | None:
+        if for_update:
+            statement = select(ApprovalInstance).where(ApprovalInstance.id == instance_id).with_for_update()
+            if session is not None:
+                return (await session.exec(statement)).first()
+            async with get_async_db_session() as session:
+                return (await session.exec(statement)).first()
         if session is not None:
             return await session.get(ApprovalInstance, instance_id)
         async with get_async_db_session() as session:
@@ -132,6 +149,7 @@ class ApprovalInstanceRepository:
             )
             .order_by(ApprovalInstance.id.desc())
         )
+        statement = cls._exclude_revoked_share(statement, scenario_code)
         if session is not None:
             return (await session.exec(statement)).first()
         async with get_async_db_session() as session:
@@ -177,6 +195,7 @@ class ApprovalInstanceRepository:
         )
         if exclude_applicant_user_id is not None:
             statement = statement.where(ApprovalInstance.applicant_user_id == exclude_applicant_user_id)
+        statement = cls._exclude_revoked_share(statement, scenario_code)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
@@ -414,6 +433,16 @@ class ApprovalInstanceRepository:
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def find_action_log(cls, instance_id: int, action: str, *, session=None) -> ApprovalActionLog | None:
+        statement = select(ApprovalActionLog).where(
+            ApprovalActionLog.instance_id == instance_id, ApprovalActionLog.action == action,
+        ).order_by(ApprovalActionLog.id.asc())
+        if session is not None:
+            return (await session.exec(statement)).first()
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
 
     @classmethod
     async def get_instance_ids_with_action(

@@ -19,11 +19,11 @@ export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): v
 }
 
 export function subscribeKnowledgeSpaceFilesRefresh(
-    spaceId: number | string,
+    spaceId: number | string | undefined,
     onRefresh: () => void,
 ): () => void {
     const receive = (detail: KnowledgeSpaceFilesRefreshEventDetail | undefined) => {
-        if (detail?.spaceId != null && String(detail.spaceId) !== String(spaceId)) return;
+        if (spaceId != null && detail?.spaceId != null && String(detail.spaceId) !== String(spaceId)) return;
         onRefresh();
     };
     const handleEvent = (event: Event) => receive((event as CustomEvent).detail);

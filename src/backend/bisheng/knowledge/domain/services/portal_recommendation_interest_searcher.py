@@ -1,4 +1,4 @@
-"""Production content search used to derive per-user recommendation interests."""
+"""基于共享存储生成租户内的用户兴趣推荐候选。"""
 
 from __future__ import annotations
 
@@ -6,10 +6,19 @@ import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from bisheng.core.context.tenant import get_current_tenant_id
+from bisheng.core.context.tenant import get_current_tenant_id, strict_tenant_filter
 from bisheng.core.database import get_async_db_session
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.contracts.retrieval_scope import EntryRef
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+    KnowledgeDocumentRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+    KnowledgeDocumentVersionRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.portal_recommendation_repository_impl import (
     PortalRecommendationRepositoryImpl,
 )
@@ -17,28 +26,24 @@ from bisheng.knowledge.domain.repositories.interfaces.portal_recommendation_tele
     PortalInterestHit,
     PortalSearchQuerySignal,
 )
+from bisheng.knowledge.domain.services.knowledge_retrieval_scope_resolver import (
+    RetrievalScopeResolverSettings,
+    SqlKnowledgeRetrievalScopeResolver,
+)
 from bisheng.knowledge.domain.services.portal_recommendation_behavior_service import normalize_search_query
+from bisheng.knowledge.rag.shared_space_storage import abuild_shared_space_reader_for_tenant
 
 ProjectionLoader = Callable[[], Awaitable[Sequence[Any]] | Sequence[Any]]
-SpaceLoader = Callable[[Sequence[int]], Awaitable[Sequence[Any]] | Sequence[Any]]
-EsSearcher = Callable[[Sequence[str], dict], Awaitable[dict] | dict]
 
 
 class PortalRecommendationContentSearcher:
-    """Search only current-tenant, projection-eligible files across space ES indexes."""
+    """仅检索有效推荐入口; 用户展示权限仍由推荐接口校验。"""
 
     MAX_PROJECTION_CANDIDATES = 10_000
+    CANDIDATE_BATCH_SIZE = 200
 
-    def __init__(
-        self,
-        *,
-        projection_loader: ProjectionLoader | None = None,
-        space_loader: SpaceLoader | None = None,
-        es_searcher: EsSearcher | None = None,
-    ):
+    def __init__(self, *, projection_loader: ProjectionLoader | None = None) -> None:
         self._projection_loader = projection_loader
-        self._space_loader = space_loader
-        self._es_searcher = es_searcher
 
     async def _load_projections(self) -> Sequence[Any]:
         if self._projection_loader is not None:
@@ -50,18 +55,23 @@ class PortalRecommendationContentSearcher:
                 limit=self.MAX_PROJECTION_CANDIDATES,
             )
 
-    async def _load_spaces(self, space_ids: Sequence[int]) -> Sequence[Any]:
-        if self._space_loader is not None:
-            result = self._space_loader(space_ids)
-            return await result if inspect.isawaitable(result) else result
-        return await KnowledgeDao.aget_list_by_ids(list(space_ids))
-
-    async def _search_es(self, index_names: Sequence[str], body: dict, first_space: Any) -> dict:
-        if self._es_searcher is not None:
-            result = self._es_searcher(index_names, body)
-            return await result if inspect.isawaitable(result) else result
-        vector_store = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=first_space)
-        return await vector_store.client.search(index=list(index_names), body=body)
+    @staticmethod
+    def _field_scores(names: Sequence[str], queries: Sequence[str]) -> dict[str, tuple[float, float, float]]:
+        scores = {}
+        field_indexes = {"title": 0, "tag": 1, "summary": 2}
+        for name in names:
+            try:
+                token, field = str(name).split(":", 1)
+                if not token.startswith("q"):
+                    continue
+                index = int(token[1:])
+                if not 0 <= index < len(queries) or field not in field_indexes:
+                    continue
+                values = scores.setdefault(queries[index], [0.0, 0.0, 0.0])
+                values[field_indexes[field]] = 1.0
+            except (TypeError, ValueError):
+                continue
+        return {query: tuple(values) for query, values in scores.items()}
 
     async def search(
         self,
@@ -72,91 +82,133 @@ class PortalRecommendationContentSearcher:
         current_tenant_id = get_current_tenant_id()
         if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
             raise PermissionError("interest search tenant does not match current context")
-        normalized_queries = [normalize_search_query(signal.query) for signal in queries]
-        normalized_queries = list(dict.fromkeys(query for query in normalized_queries if query))[:20]
-        if not normalized_queries:
+        normalized = list(dict.fromkeys(normalize_search_query(signal.query) for signal in queries))
+        normalized = [query for query in normalized if query][:20]
+        if not normalized:
             return []
-
-        projections = list(await self._load_projections())
-        file_to_space = {
+        projections = list(await self._load_projections())[: self.MAX_PROJECTION_CANDIDATES]
+        eligible = {
             int(record.file_id): int(record.space_id)
             for record in projections
-            if bool(record.recommendable)
+            if record.recommendable and int(record.tenant_id or 0) == int(tenant_id)
         }
-        if not file_to_space:
+        if not eligible:
             return []
-        spaces = list(await self._load_spaces(sorted(set(file_to_space.values()))))
-        spaces = [space for space in spaces if getattr(space, "index_name", None)]
-        if not spaces:
-            return []
-
-        should: list[dict] = []
         fields = (
             ("title", "metadata.document_name"),
             ("tag", "metadata.tags"),
             ("tag", "metadata.user_metadata.tags"),
             ("summary", "metadata.abstract"),
         )
-        for query_index, query in enumerate(normalized_queries):
-            for field_name, es_field in fields:
-                should.append(
-                    {
-                        "match": {
-                            es_field: {
-                                "query": query,
-                                "_name": f"q{query_index}:{field_name}",
-                            }
-                        }
-                    }
-                )
-        body = {
-            "query": {
-                "bool": {
-                    "filter": [{"terms": {"metadata.document_id": sorted(file_to_space)}}],
-                    "should": should,
-                    "minimum_should_match": 1,
-                }
-            },
-            "collapse": {"field": "metadata.document_id"},
-            "size": min(max(int(limit), 1), 50),
-            "_source": ["metadata.document_id"],
-        }
-        response = await self._search_es(
-            [str(space.index_name) for space in spaces],
-            body,
-            spaces[0],
-        )
-        hits: list[PortalInterestHit] = []
-        for hit in (response.get("hits") or {}).get("hits", []):
-            metadata = (hit.get("_source") or {}).get("metadata") or {}
-            raw_file_id = metadata.get("document_id")
-            if not str(raw_file_id or "").isdigit():
-                continue
-            file_id = int(raw_file_id)
-            space_id = file_to_space.get(file_id)
-            if space_id is None:
-                continue
-            scores: dict[str, list[float]] = {}
-            for matched_name in hit.get("matched_queries") or []:
-                try:
-                    query_token, field_name = str(matched_name).split(":", 1)
-                    query_index = int(query_token.removeprefix("q"))
-                    query = normalized_queries[query_index]
-                except (IndexError, TypeError, ValueError):
-                    continue
-                values = scores.setdefault(query, [0.0, 0.0, 0.0])
-                if field_name == "title":
-                    values[0] = 1.0
-                elif field_name == "tag":
-                    values[1] = 1.0
-                elif field_name == "summary":
-                    values[2] = 1.0
-            if scores:
-                hits.append(
-                    PortalInterestHit(
-                        space_id=space_id,
-                        file_id=file_id,
-                        query_field_scores={key: tuple(value) for key, value in scores.items()},
+        matches = [
+            (f"q{index}:{name}", field, query) for index, query in enumerate(normalized) for name, field in fields
+        ]
+        reader = await abuild_shared_space_reader_for_tenant(tenant_id)
+        result_limit = min(max(int(limit), 1), 50)
+        by_document: dict[int, tuple[tuple[float, int, int], PortalInterestHit]] = {}
+        file_ids = sorted(eligible)
+        # 每批独立读取数据库当前状态, 限制 SQL 参数和共享身份过滤长度。
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                files = KnowledgeFileRepositoryImpl(session)
+                documents = KnowledgeDocumentRepositoryImpl(session)
+                versions = KnowledgeDocumentVersionRepositoryImpl(session)
+                for offset in range(0, len(file_ids), self.CANDIDATE_BATCH_SIZE):
+                    batch_ids = file_ids[offset : offset + self.CANDIDATE_BATCH_SIZE]
+                    entries = await files.find_by_ids(batch_ids)
+                    candidates = [
+                        entry
+                        for entry in entries
+                        if int(entry.id) in batch_ids
+                        and (
+                            SqlKnowledgeRetrievalScopeResolver._is_resolvable_explicit_entry(
+                                entry,
+                                tenant_id=int(tenant_id),
+                                expected_space_id=eligible[int(entry.id)],
+                            )
+                            and entry.file_type == FileType.FILE.value
+                            and entry.status == KnowledgeFileStatus.SUCCESS.value
+                            and entry.deleted_at is None
+                            and entry.reference_document_id
+                        )
+                    ]
+                    if not candidates:
+                        continue
+                    allowed = {(int(entry.knowledge_id), int(entry.id)) for entry in candidates}
+                    spaces = sorted({space for space, _entry in allowed})
+
+                    async def space_checker(
+                        _tenant: int,
+                        _user: str,
+                        space: int,
+                        spaces: frozenset[int] = frozenset(spaces),
+                    ) -> bool:
+                        return int(_tenant) == int(tenant_id) and int(space) in spaces
+
+                    async def entry_checker(
+                        _tenant: int,
+                        _user: str,
+                        space: int,
+                        file_id: int,
+                        allowed: frozenset[tuple[int, int]] = frozenset(allowed),
+                    ) -> bool:
+                        # 推荐资格仅用于内部候选范围, 不能替代最终用户权限。
+                        return int(_tenant) == int(tenant_id) and (int(space), int(file_id)) in allowed
+
+                    resolver = SqlKnowledgeRetrievalScopeResolver(
+                        file_repository=files,
+                        document_repository=documents,
+                        version_repository=versions,
+                        space_read_checker=space_checker,
+                        entry_view_checker=entry_checker,
+                        settings_provider=lambda: RetrievalScopeResolverSettings(
+                            routing_version=reader.expected_routing_version,
+                        ),
                     )
-                )
-        return hits[: min(max(int(limit), 1), 50)]
+                    scope = await resolver.resolve_request(
+                        user_id="portal-recommendation-candidates",
+                        tenant_id=tenant_id,
+                        space_ids=spaces,
+                        entry_refs=[
+                            EntryRef(space_id=entry.knowledge_id, entry_file_id=entry.id) for entry in candidates
+                        ],
+                    )
+                    constraints = await resolver.resolve_current_generation_constraints(
+                        scope,
+                        sorted({int(entry.reference_document_id) for entry in candidates}),
+                    )
+                    if not constraints:
+                        continue
+                    filter_ = resolver.build_backend_filter(
+                        scope,
+                        canonical_document_ids=[item.canonical_document_id for item in constraints],
+                        canonical_version_ids=[item.canonical_version_id for item in constraints],
+                        generation_constraints=constraints,
+                    )
+                    raw_hits = await reader.search_metadata(filter_, matches=matches, limit=result_limit)
+                    mapped = await resolver.map_and_authorize_hits(
+                        scope,
+                        [item.chunk for item in raw_hits],
+                        strict_explicit=True,
+                    )
+                    names = {
+                        (int(item.chunk.canonical_document_id), int(item.chunk.chunk_index)): item.matched_queries
+                        for item in raw_hits
+                    }
+                    for hit in mapped:
+                        scores = self._field_scores(
+                            names[(int(hit.canonical_document_id), hit.chunk_index)], normalized
+                        )
+                        if not scores:
+                            continue
+                        candidate = PortalInterestHit(
+                            space_id=int(hit.space_id),
+                            file_id=int(hit.entry_file_id),
+                            query_field_scores=scores,
+                        )
+                        key = int(hit.canonical_document_id)
+                        previous = by_document.get(key)
+                        rank = (-hit.score, candidate.space_id, candidate.file_id)
+                        if previous is None or rank < previous[0]:
+                            by_document[key] = (rank, candidate)
+        return [candidate for _rank, candidate in sorted(by_document.values(), key=lambda item: item[0])][:result_limit]

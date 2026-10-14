@@ -22,6 +22,7 @@ import {
 } from "~/components/ui";
 import { buildDeleteImpactDescription, mergeDeleteImpacts } from "../utils/deleteImpact";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { useKnowledgeContainerWritePermissions } from "../hooks/useKnowledgeContainerWritePermissions";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 import {
     MAX_FOLDER_UPLOAD_COUNT,
@@ -451,8 +452,11 @@ export function KnowledgeSpaceContent({
         space.id,
         "share_space",
     );
-    const [canCreateFolder, setCanCreateFolder] = useState(false);
-    const [canUploadFile, setCanUploadFile] = useState(false);
+    const { canCreateFolder, canUploadFile } = useKnowledgeContainerWritePermissions({
+        spaceId: space.id,
+        folderId: currentFolderId,
+        isSpaceAdmin: isAdmin,
+    });
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -601,57 +605,6 @@ export function KnowledgeSpaceContent({
     const { showToast } = useToastContext();
     const confirm = useConfirm();
 
-    useEffect(() => {
-        if (isAdmin) {
-            setCanCreateFolder(true);
-            setCanUploadFile(true);
-            return;
-        }
-
-        let cancelled = false;
-        const controller = new AbortController();
-
-        const objectType = currentFolderId ? "folder" : "knowledge_space";
-        const objectId = currentFolderId || space.id;
-        const uploadPermissionId = currentFolderId
-            ? "upload_file_to_folder"
-            : "upload_file_to_space";
-
-        Promise.allSettled([
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                "create_folder",
-                { signal: controller.signal },
-            ),
-            checkPermission(
-                objectType,
-                objectId,
-                "can_edit",
-                uploadPermissionId,
-                { signal: controller.signal },
-            ),
-        ]).then(([createFolderResult, uploadFileResult]) => {
-            if (cancelled) return;
-            setCanCreateFolder(
-                createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
-            );
-            setCanUploadFile(
-                uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
-            );
-        }).catch(() => {
-            if (!cancelled) {
-                setCanCreateFolder(false);
-                setCanUploadFile(false);
-            }
-        });
-
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [currentFolderId, isAdmin, space.id]);
 
     useEffect(() => {
         if (hasExternalFileActionPermissions) return;

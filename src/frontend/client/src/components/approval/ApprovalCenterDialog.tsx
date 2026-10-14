@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { dispatchKnowledgeSpaceFilesRefresh } from "~/pages/knowledge/knowledgeFileRefresh";
+import { dispatchKnowledgeSpaceFilesRefresh, subscribeKnowledgeSpaceFilesRefresh } from "~/pages/knowledge/knowledgeFileRefresh";
 import {
   decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
@@ -26,6 +26,7 @@ import { FileCorrectionDecision } from "./FileCorrectionDecision";
 import { FileCorrectionNotice } from "./FileCorrectionNotice";
 import { useFileCorrectionUpdatePhase } from "./useFileCorrectionUpdatePhase";
 import { FutureApproverList } from "./FutureApproverList";
+import { ShareRevokedBadge } from "./ShareRevokedBadge";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
 type ApprovalCenterTarget = {
@@ -98,7 +99,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
 }) {
   const a = String(action || "").toLowerCase();
   const dotCls = a === "approved" ? "bg-[#00b42a] text-white" : a === "rejected" ? "bg-[#f53f3f] text-white" :
-    a === "withdrawn" ? "bg-[#86909c] text-white" :
+    a === "withdrawn" || a === "share_revoked" ? "bg-[#86909c] text-white" :
     a === "revoke_grant" ? "bg-[#ff7d00] text-white" : "bg-[#165dff] text-white";
   const icon = a === "approved" ? "✓" : a === "rejected" ? "✗" :
     a === "revoke_grant" ? "⊘" : "●";
@@ -106,7 +107,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
     a === "resubmitted" ? localize("com_approval_action_resubmitted") :
     a === "approved" ? localize("com_approval_action_approved") :
     a === "rejected" ? localize("com_approval_action_rejected") :
-    a === "withdrawn" ? localize("com_approval_action_withdrawn") :
+    a === "withdrawn" || a === "share_revoked" ? localize("com_approval_action_withdrawn") :
     a === "revoke_grant" ? localize("com_approval_action_revoke_grant_short") :
     (localize(`com_approval_action_${a}` as any, { defaultValue: a }) as string);
   const desc = a === "submitted" ? localize("com_approval_step_submitted_desc") : operatorName ?? null;
@@ -517,11 +518,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       setTaskItems(resp.data);
       const allIds = new Set(resp.data.map((t) => getId(t, "task")));
       const preferredByInstance = target?.instanceId
-        ? resp.data.find((t) => Number(t.instance_id) === Number(target.instanceId) && (taskFilter !== "pending_me" || t.status === "pending"))
+        ? resp.data.find((t) => Number(t.instance_id) === Number(target.instanceId))
         : null;
       const resolvedPreferred = preferredId ?? getId(preferredByInstance, "task");
       const validPreferred = resolvedPreferred && allIds.has(resolvedPreferred) ? resolvedPreferred : null;
-      const visibleItems = taskFilter === "pending_me"
+      const preferredTask = resp.data.find((t) => getId(t, "task") === validPreferred);
+      const targetFilter: TaskFilter = preferredTask ? preferredTask.status === "pending" ? "pending_me" : "processed" : taskFilter;
+      if (targetFilter !== taskFilter) setTaskFilter(targetFilter);
+      const visibleItems = targetFilter === "pending_me"
         ? resp.data.filter((t) => t.status === "pending")
         : resp.data.filter((t) => t.status !== "pending");
       const nextId = validPreferred ?? getId(visibleItems[0], "task");
@@ -577,6 +581,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   }, [open, activeTab]);
 
   // Auto-select first visible item when sub-filter changes
+  useEffect(() => {
+    if (!open) return;
+    return subscribeKnowledgeSpaceFilesRefresh(undefined, () => {
+      if (activeTab === "my_tasks") void loadTasks(selectedTaskId);
+      else void loadRequests(selectedInstanceId);
+    });
+  }, [open, activeTab, selectedTaskId, selectedInstanceId]);
+
   const autoSelectTask = (items: ApprovalTaskItem[]) => {
     const first = getId(items[0], "task");
     setDecisionComment("");
@@ -592,7 +604,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     else setRequestDetail(null);
   };
 
-  useEffect(() => { if (activeTab === "my_tasks") autoSelectTask(filteredTaskItems); }, [taskFilter]);
+  useEffect(() => {
+    if (activeTab !== "my_tasks") return;
+    if (selectedTaskId && filteredTaskItems.some((item) => getId(item, "task") === selectedTaskId)) return;
+    autoSelectTask(filteredTaskItems);
+  }, [taskFilter]);
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
@@ -792,6 +808,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
+                                <ShareRevokedBadge revoked={item.share_revoked} />
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
                                     {localize("com_approval_grant_revoked")}
@@ -822,6 +839,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
+                                <ShareRevokedBadge revoked={item.share_revoked} />
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
                                     {localize("com_approval_grant_revoked")}
@@ -1050,6 +1068,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
     <div className="space-y-5">
       <DetailHeader title={formatTitle(detail.scenario_code, liveBusinessName, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+      <ShareRevokedBadge revoked={detail.share_revoked} />
 
       <div>
         <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
@@ -1239,6 +1258,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     <div className="space-y-5">
       <DetailHeader title={formatTitle(detail.scenario_code, liveBusinessName, localize)} status={detail.status} scope="instance" serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+      <ShareRevokedBadge revoked={detail.share_revoked} />
 
       <div>
         <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>

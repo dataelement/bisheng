@@ -347,6 +347,7 @@ class ShougangApprovalService:
             ).find_entry_in_space_for_update(
                 int(canonical_source.document_id),
                 int(target_space_id),
+                ignore_deleting_shares=True,
             )
         if existing is not None:
             raise HTTPException(

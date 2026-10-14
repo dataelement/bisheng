@@ -7,6 +7,7 @@ import requests
 from langchain_core.documents import Document
 from loguru import logger
 
+from bisheng.common.errcode.attachment import attachment_context
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import html_table_to_md
 from bisheng.knowledge.rag.pipeline.types import TextBbox
@@ -96,9 +97,13 @@ class PaddleOcrLoader(BaseBishengLoader):
 
     def _validate_response(self, result: dict) -> dict:
         """Validate API response and return result dict."""
+        if attachment_context.get() is not None and (not isinstance(result, dict) or not isinstance(result.get("result", {}), dict)):
+            raise EtlException("PaddleOCR API returned invalid response", operation="response")
         if result.get("errorCode", 0) != 0:
             logger.error(f"PaddleOCR API error: {result}")
-            raise EtlException(f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}")
+            raise EtlException(f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}", operation="task")
+        if attachment_context.get() is not None and ("result" not in result or not isinstance(result["result"].get("layoutParsingResults"), list)):
+            raise EtlException("PaddleOCR API returned invalid result", operation="response")
         return result.get("result", {})
 
     def _call_api_sync(self, b64_data: str) -> dict:
@@ -113,20 +118,24 @@ class PaddleOcrLoader(BaseBishengLoader):
             )
         except requests.Timeout as e:
             logger.error(f"PaddleOCR API request timed out: {e}")
-            raise EtlException("PaddleOCR API timeout")
+            raise EtlException("PaddleOCR API timeout", operation="timeout") from e
+        except TypeError as e:
+            if attachment_context.get() is not None:
+                raise EtlException("PaddleOCR request build failed", operation="request") from e
+            raise
         except Exception as e:
             if "Timeout" in str(e):
                 logger.error(f"PaddleOCR API request timed out: {e}")
-                raise EtlException("PaddleOCR API timeout")
+                raise EtlException("PaddleOCR API timeout", operation="timeout") from e
             raise e
 
         if resp.status_code != 200:
-            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
+            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}", http_status=resp.status_code)
         try:
             resp_json = resp.json()
         except (ValueError, requests.exceptions.JSONDecodeError) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException("PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response", operation="response") from e
         return self._validate_response(resp_json)
 
     async def _call_api_async(self, b64_data: str) -> dict:
@@ -141,20 +150,24 @@ class PaddleOcrLoader(BaseBishengLoader):
                 )
         except httpx.TimeoutException as e:
             logger.error(f"PaddleOCR API request timed out: {e}")
-            raise EtlException("PaddleOCR API timeout")
+            raise EtlException("PaddleOCR API timeout", operation="timeout") from e
+        except TypeError as e:
+            if attachment_context.get() is not None:
+                raise EtlException("PaddleOCR request build failed", operation="request") from e
+            raise
         except Exception as e:
             if "Timeout" in str(e):
                 logger.error(f"PaddleOCR API request timed out: {e}")
-                raise EtlException("PaddleOCR API timeout")
+                raise EtlException("PaddleOCR API timeout", operation="timeout") from e
             raise e
 
         if resp.status_code != 200:
-            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
+            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}", http_status=resp.status_code)
         try:
             resp_json = resp.json()
         except (ValueError, Exception) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException("PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response", operation="response") from e
         return self._validate_response(resp_json)
 
     def _map_block_type(self, block_label: str) -> str:

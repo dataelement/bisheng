@@ -24,6 +24,9 @@ from bisheng.core.config.settings import KnowledgeRetrievalRuntimeConf
         "success",
         "plain_chat",
         "uploaded_file",
+        "attachment_empty",
+        "attachment_missing_path",
+        "attachment_download_failed",
         "slow_uploaded_file",
         "document_deadline",
         "retrieval_after_document_deadline",
@@ -37,7 +40,9 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
 
     config = KnowledgeRetrievalRuntimeConf()
     document_cases = {"uploaded_file", "slow_uploaded_file", "document_deadline", "retrieval_after_document_deadline"}
-    if case in document_cases - {"uploaded_file"}:
+    feedback_cases = {"attachment_empty", "attachment_missing_path", "attachment_download_failed"}
+    document_cases |= feedback_cases
+    if case in document_cases - {"uploaded_file"} - feedback_cases:
         config.total_timeout_seconds = 0.05
         config.portal_qa_request_timeout_seconds = 0.08 if case == "document_deadline" else 2
         config.portal_qa_heartbeat_seconds = 0.005
@@ -100,10 +105,14 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
     if case in document_cases:
         monkeypatch.setattr(chat_service, "async_file_download", AsyncMock(return_value=("/tmp/attachment.pdf", "attachment.pdf")))
         async def parse_pdf(**kwargs):
-            if case != "uploaded_file":
+            if case == "attachment_empty":
+                return "   "
+            if case not in {"uploaded_file"} | feedback_cases:
                 await asyncio.sleep(0.15)
             return "合同约定交货日期为十月一日。"
 
+        if case == "attachment_download_failed":
+            chat_service.async_file_download.side_effect = FileNotFoundError("private-storage-path")
         monkeypatch.setattr(chat_service, "get_file_content", AsyncMock(side_effect=parse_pdf))
         from bisheng.knowledge.domain.services import portal_qa_retrieval_service
 
@@ -132,7 +141,7 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
         APIChatCompletion(
             clientTimestamp="2026-09-17T13:40:00", model="1", text="question",
             **({
-                "files": [{"filepath": "/tmp/attachment.pdf", "filename": "attachment.pdf"}],
+                "files": [{"filepath": "" if case == "attachment_missing_path" else "/tmp/attachment.pdf", "filename": "attachment.pdf"}],
                 "use_knowledge_base": {"knowledge_space_ids": [], "knowledge_scope": {"mode": "none"}},
             } if case in document_cases else {}),
         ),
@@ -159,6 +168,11 @@ async def test_portal_requires_shared_strategy_and_errors_do_not_reach_model(mon
         return
     assert "event: error" in body
     llm.astream.assert_not_called()
+    if case in feedback_cases:
+        assert "attachment_errors" in body
+        assert "attachment.pdf" in body
+        assert "private-storage-path" not in body
+        return
     if case == "document_deadline":
         assert '"kind": "document"' in body
         portal_qa_retrieval_service.retrieve_portal_qa.assert_not_awaited()

@@ -370,6 +370,9 @@ async def list_questions(
 ):
     """问题列表"""
 
+    if query.asked_from and query.asked_to and query.asked_from > query.asked_to:
+        raise HTTPException(status_code=422, detail="开始日期不能晚于结束日期")
+
     questions, total = await service.list_questions(
         business_domain=query.domain,
         status=query.status,
@@ -381,6 +384,14 @@ async def list_questions(
         list_filter=query.filter,
         display_status=query.display_status,
         keyword=query.keyword,
+        invited_expert_id=query.invited_expert_id,
+        department_id=query.department_id,
+        major=query.major,
+        position=query.position,
+        job_family=query.job_family,
+        job_category=query.job_category,
+        asked_from=query.asked_from,
+        asked_to=query.asked_to,
     )
 
     return resp_200(

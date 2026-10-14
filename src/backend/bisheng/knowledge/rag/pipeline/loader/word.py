@@ -54,6 +54,8 @@ class BishengWordLoader(BaseBishengLoader):
         content = self.rewrite_local_image_refs(content)
 
         self._build_pdf_preview()
+        from bisheng.common.errcode.attachment import mark_attachment_source
+        mark_attachment_source("local_word")
 
         return [Document(page_content=content, metadata=self.file_metadata.copy())]
 

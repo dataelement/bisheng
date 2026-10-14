@@ -435,6 +435,10 @@ class ApprovalCenterService:
                     "update_time": task.update_time,
                 }
             )
+        share_ids = [inst.id for inst in instances if inst.scenario_code == _FILE_SHARE_SCENARIO]
+        share_revoked_ids = await ApprovalInstanceRepository.get_instance_ids_with_action(share_ids, "share_revoked")
+        for item in data:
+            item["share_revoked"] = item["instance_id"] in share_revoked_ids
         await cls._overlay_qa_publish_identities(
             instances=list(instance_map.values()),
             payloads=data,
@@ -613,6 +617,9 @@ class ApprovalCenterService:
             "status": task.status,
             "instance_status": instance.status,
             "grant_revoked": grant_revoked,
+            "share_revoked": instance.scenario_code == _FILE_SHARE_SCENARIO and any(
+                log.action == "share_revoked" for log in action_logs
+            ),
             "current_node_name": task.node_name,
             "comment": task.comment,
             "detail_snapshot": cls._with_department_display_name(
@@ -786,6 +793,10 @@ class ApprovalCenterService:
                 }
             )
         fallback_names: dict[int, str] = {}
+        share_ids = [row.id for row in rows if row.scenario_code == _FILE_SHARE_SCENARIO]
+        share_revoked_ids = await ApprovalInstanceRepository.get_instance_ids_with_action(share_ids, "share_revoked")
+        for item in data:
+            item["share_revoked"] = item["instance_id"] in share_revoked_ids
         for row in rows:
             fallback_names[int(row.applicant_user_id)] = str(row.applicant_user_name or "")
         extra_user_ids = {int(inst_id): list(uids) for inst_id, uids in pending_by_instance.items()}
@@ -868,6 +879,9 @@ class ApprovalCenterService:
             "business_name": instance.business_name,
             "status": instance.status,
             "grant_revoked": grant_revoked,
+            "share_revoked": instance.scenario_code == _FILE_SHARE_SCENARIO and any(
+                log.action == "share_revoked" for log in action_logs
+            ),
             "reason": instance.reason,
             "payload_snapshot": cls._with_department_display_name(
                 instance.payload_snapshot,

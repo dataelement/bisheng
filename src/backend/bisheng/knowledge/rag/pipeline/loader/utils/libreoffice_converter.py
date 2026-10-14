@@ -34,6 +34,10 @@ def get_libreoffice_path():
 
 
 def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None, timeout=1800):
+    from bisheng.common.errcode.attachment import attachment_context, mark_attachment_source
+    state = attachment_context.get()
+    previous = dict(state) if state is not None else None
+    mark_attachment_source("libreoffice", "convert")
     if not os.path.isabs(input_path):
         input_path = os.path.abspath(input_path)
     if not os.path.exists(input_path):
@@ -54,6 +58,8 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
     # Check if libreoffice_exec is in PATH if it's not a full path
     soffice_path = get_libreoffice_path()
     if not soffice_path:
+        if state is not None:
+            state["operation"] = "tool_missing"
         logger.debug(
             "Error: LibreOffice (soffice) command not found. Please install LibreOffice and ensure it's in your PATH, or adjust 'get_libreoffice_path()'."
         )
@@ -89,6 +95,8 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
         if os.path.exists(output_path):
             # If output_docx_path is different (it shouldn't be with this logic, but for safety)
             logger.debug(f"Successfully converted '{input_path}' to '{output_path}'")
+            if state is not None:
+                state.update(provider=previous["provider"], stage=previous["stage"])
             return output_path
         else:
             # This case should ideally not happen if subprocess.run didn't raise an error
@@ -114,6 +122,8 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
         logger.debug(f"STDERR: {e.stderr}")
         return None
     except subprocess.TimeoutExpired:
+        if state is not None:
+            state["operation"] = "timeout"
         logger.debug(f"Error: LibreOffice conversion for '{input_path}' timed out.")
         return None
     except Exception as e:

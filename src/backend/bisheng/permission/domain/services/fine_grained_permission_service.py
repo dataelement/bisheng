@@ -663,10 +663,18 @@ class FineGrainedPermissionService:
         required_permissions = set(permission_ids)
         if not required_permissions:
             return False
+        lineage_options = {}
+        if object_type in {'folder', 'knowledge_file'}:
+            # 子资源的独立授权覆盖上级并与知识库业务写接口保持一致
+            lineage_options = {
+                'nearest_binding_wins': True,
+                'use_permission_level_fallback': False,
+            }
         effective_permissions = await cls.get_effective_permission_ids_async(
             login_user,
             object_type,
             object_id,
+            **lineage_options,
         )
         return bool(required_permissions & effective_permissions)
 

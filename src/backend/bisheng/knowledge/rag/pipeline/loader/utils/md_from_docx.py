@@ -85,6 +85,8 @@ def convert_doc_to_md_pandoc_high_quality(
         *extra_args,
     ]
 
+    from bisheng.common.errcode.attachment import mark_attachment_source
+    mark_attachment_source("pandoc", "convert")
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
         _, stderr = proc.communicate(timeout=CONVERT_TIMEOUT_SECONDS)
@@ -137,6 +139,8 @@ def handler(cache_dir, file_name):
         output_md_str=md_file_name,
         image_dir_name=local_image_dir,
     )
+    from bisheng.common.errcode.attachment import mark_attachment_source
+    mark_attachment_source("local_word")
     return md_file_name, f"{local_image_dir}/media", doc_id
 
 

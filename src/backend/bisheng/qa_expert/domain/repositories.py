@@ -1,14 +1,17 @@
 # ruff: noqa: RUF001, RUF002, RUF003
 """Expert QA Repositories - 数据访问层"""
 
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import NamedTuple
 
 from sqlalchemy import Integer, case, cast, desc, func, update
-from sqlmodel import and_, or_, select
+from sqlalchemy.sql import Select
+from sqlmodel import SQLModel, and_, or_, select
 
 from bisheng.common.utils.beijing_time import now_beijing
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
+from bisheng.core.database.tenant_filter import build_tenant_filter_clause
 from bisheng.database.models.department import Department
 from bisheng.database.models.qa_expert import (
     ANSWER_STATUS_DELETED,
@@ -28,6 +31,15 @@ from bisheng.database.models.qa_expert import (
 )
 
 RESOLUTION_RATE_PRECISION = 4
+
+
+def _tenant_scoped(stmt: Select, *models: type[SQLModel]) -> Select:
+    """子查询复用统一租户条件，防止外层计数隐藏内部表。"""
+    for model in models:
+        clause = build_tenant_filter_clause(model.tenant_id)
+        if clause is not None:
+            stmt = stmt.where(clause)
+    return stmt
 
 
 class ExpertDepartmentSource(NamedTuple):
@@ -502,16 +514,80 @@ class QuestionRepository:
         keyword: str | None = None,
         viewer_user_id: int | None = None,
         viewer_is_admin: bool = False,
+        invited_expert_ids: list[int] | None = None,
+        asked_from: date | None = None,
+        asked_to: date | None = None,
     ) -> tuple[list[Question], int]:
         """列表查询问题"""
         async with get_async_db_session() as session:
-            stmt = select(Question)
+            stmt = _tenant_scoped(select(Question), Question)
 
             if business_domain:
                 stmt = stmt.where(Question.business_domain == business_domain)
 
             if keyword:
-                stmt = stmt.where(Question.title.like(f"%{keyword.strip()}%"))
+                normalized = keyword.strip()
+                pattern = "%" + normalized.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
+                expert_tenant = build_tenant_filter_clause(Expert.tenant_id)
+                expert_join = Answer.expert_id == Expert.id
+                if expert_tenant is not None:
+                    expert_join = and_(expert_join, expert_tenant)
+                name_visible = or_(
+                    func.coalesce(Answer.anonymous, 0) == 0,
+                    and_(Question.question_type == "public", Answer.reveal_on_public == 1),
+                )
+                answer_name = or_(
+                    Answer.expert_name.ilike(pattern, escape="!"), Expert.expert_name.ilike(pattern, escape="!")
+                )
+                if not viewer_is_admin:
+                    answer_name = and_(name_visible, answer_name)
+                answers = _tenant_scoped(
+                    select(Answer.id)
+                    .outerjoin(Expert, expert_join)
+                    .where(
+                        Answer.question_id == Question.id,
+                        Answer.status != ANSWER_STATUS_DELETED,
+                        or_(Answer.content.ilike(pattern, escape="!"), answer_name),
+                    )
+                    .correlate(Question),
+                    Answer,
+                )
+                invitations = _tenant_scoped(
+                    select(QuestionInvite.id)
+                    .join(Expert, QuestionInvite.expert_id == Expert.id)
+                    .where(
+                        QuestionInvite.question_id == Question.id,
+                        Expert.expert_name.ilike(pattern, escape="!"),
+                    )
+                    .correlate(Question),
+                    QuestionInvite,
+                    Expert,
+                )
+                if normalized:
+                    stmt = stmt.where(
+                        or_(
+                            Question.title.ilike(pattern, escape="!"),
+                            Question.description.ilike(pattern, escape="!"),
+                            answers.exists(),
+                            invitations.exists(),
+                        )
+                    )
+
+            if invited_expert_ids is not None:
+                invited = _tenant_scoped(
+                    select(QuestionInvite.question_id).where(
+                        QuestionInvite.expert_id.in_(invited_expert_ids),
+                    ),
+                    QuestionInvite,
+                )
+                stmt = stmt.where(Question.id.in_(invited))
+            if asked_from:
+                stmt = stmt.where(Question.created_at >= datetime.combine(asked_from, time.min))
+            if asked_to:
+                if asked_to == date.max:
+                    stmt = stmt.where(Question.created_at <= datetime.max)
+                else:
+                    stmt = stmt.where(Question.created_at < datetime.combine(asked_to + timedelta(days=1), time.min))
 
             if list_filter == "mine" and (viewer_user_id or user_id) is not None:
                 stmt = stmt.where(Question.user_id == (viewer_user_id or user_id))
@@ -579,7 +655,7 @@ class QuestionRepository:
             else:
                 stmt = stmt.order_by(desc(Question.created_at))
 
-            stmt = stmt.offset(skip).limit(limit)
+            stmt = stmt.order_by(desc(Question.id)).offset(skip).limit(limit)
 
             result = await session.exec(stmt)
             return result.all(), total

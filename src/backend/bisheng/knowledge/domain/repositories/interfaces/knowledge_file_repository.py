@@ -110,6 +110,8 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         self,
         document_id: int,
         knowledge_id: int,
+        *,
+        ignore_deleting_shares: bool = False,
     ) -> KnowledgeFile | None:
         """Lock the active/preparing entry for a document in one space."""
         ...
@@ -264,6 +266,12 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
     async def find_file_sync_folders_by_ids(
         self,
         folder_ids: set[int],
+    ) -> list[KnowledgeFile]: ...
+
+    async def find_file_sync_folder_candidates(
+        self,
+        *,
+        space_ids: set[int],
     ) -> list[KnowledgeFile]: ...
 
     async def list_file_sync_direct_children(

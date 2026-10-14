@@ -62,6 +62,13 @@ async def _seed_document(
     *,
     source_type: str = KnowledgeFileEntryType.MANAGER.value,
 ) -> None:
+    from sqlmodel import SQLModel
+    from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalActionLog
+
+    async with session.bind.begin() as connection:
+        await connection.run_sync(lambda bind: SQLModel.metadata.create_all(
+            bind, tables=[ApprovalInstance.__table__, ApprovalActionLog.__table__],
+        ))
     session.add_all(
         [
             *[
@@ -297,7 +304,7 @@ async def test_recipient_delete_hides_only_selected_share(
 
 
 @pytest.mark.asyncio
-async def test_deleting_share_blocks_recreation_until_cleanup_finishes(
+async def test_deleting_share_allows_independent_new_approval(
     async_db_session: AsyncSession,
 ):
     await _seed_document(async_db_session)
@@ -310,19 +317,16 @@ async def test_deleting_share_blocks_recreation_until_cleanup_finishes(
         actor_entry_id=share.share_entry_id,
     )
 
-    with pytest.raises(
-        KnowledgeDocumentDistributionError,
-        match="already has an entry",
-    ):
-        await service.share_approved(
-            ShareKnowledgeDocumentCommand(
-                tenant_id=7,
-                approval_instance_id=8002,
-                document_id=91,
-                source_entry_id=100,
-                target_space_id=30,
-            )
+    recreated = await service.share_approved(
+        ShareKnowledgeDocumentCommand(
+            tenant_id=7,
+            approval_instance_id=8002,
+            document_id=91,
+            source_entry_id=100,
+            target_space_id=30,
         )
+    )
+    assert recreated.share_entry_id != share.share_entry_id
 
 
 @pytest.mark.asyncio

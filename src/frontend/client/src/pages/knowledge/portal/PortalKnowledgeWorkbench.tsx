@@ -105,6 +105,7 @@ import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
 import { resolvePortalDeepLinkTarget, usePortalDeepLink } from "./hooks/usePortalDeepLink";
 import { getSpacesLevelQueryKey, usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
+import { useKnowledgeContainerWritePermissions } from "../hooks/useKnowledgeContainerWritePermissions";
 import {
     BUSINESS_DOMAIN_OPTIONS,
     filterBusinessDomainOptionsByCodes,
@@ -295,8 +296,6 @@ export default function PortalKnowledgeWorkbench() {
     });
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
-    const [canCreateFolder, setCanCreateFolder] = useState(false);
-    const [canUploadFile, setCanUploadFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [canReorderFoldersByParent, setCanReorderFoldersByParent] = useState<Record<string, boolean>>({});
     const [restoringDeepLinkKey, setRestoringDeepLinkKey] = useState<string | null>(
@@ -1440,8 +1439,13 @@ export default function PortalKnowledgeWorkbench() {
     const canBatchRetry = Boolean(isActiveSpaceAdmin && retryableSelectedFiles.length > 0);
     const uploadTargetSpace = activeSpace ?? selectableSpaces[0] ?? null;
     const isUploadTargetAdmin = uploadTargetSpace?.role === SpaceRole.CREATOR || uploadTargetSpace?.role === SpaceRole.ADMIN;
-    const canUploadInPortal = Boolean(uploadTargetSpace && (isUploadTargetAdmin || canUploadFile));
-    const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
+    const { canUploadFile, canCreateFolder } = useKnowledgeContainerWritePermissions({
+        spaceId: uploadTargetSpace?.id,
+        folderId: currentFolderId,
+        isSpaceAdmin: isUploadTargetAdmin,
+    });
+    const canUploadInPortal = Boolean(uploadTargetSpace && canUploadFile);
+    const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && canCreateFolder);
     const fileCategoryOptions = useMemo(() => {
         if (portalMetaConfig?.document_types?.length) {
             return normalizePortalFileCategoryOptions(portalMetaConfig.document_types);
@@ -1661,8 +1665,6 @@ export default function PortalKnowledgeWorkbench() {
             if (!openingDeepLinkedFileHere) {
                 setCurrentFolderId(undefined);
             }
-            setCanCreateFolder(false);
-            setCanUploadFile(false);
             const savedFolder = lastFolderBySpaceRef.current.get(activeSpace.id);
             if (savedFolder && !openingDeepLinkedFileHere) void navigateFolderRef.current?.(savedFolder.id, savedFolder.name);
             else void loadRootTreeRef.current(undefined, false, activeSpace.id);
@@ -1781,39 +1783,6 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [currentFolderId, treeNodes]);
 
-    useEffect(() => {
-        if (isActiveSpaceAdmin) {
-            setCanCreateFolder(Boolean(activeSpace));
-            setCanUploadFile(Boolean(activeSpace));
-            return;
-        }
-        if (!activeSpace) {
-            setCanCreateFolder(false);
-            setCanUploadFile(false);
-            return;
-        }
-        const spaceId = activeSpace.id;
-        const targetFolderId = currentFolderId;
-        const objectType = targetFolderId ? "folder" : "knowledge_space";
-        const objectId = targetFolderId || spaceId;
-        const uploadPermissionId = targetFolderId
-            ? "upload_file_to_folder"
-            : "upload_file_to_space";
-        let cancelled = false;
-        const controller = new AbortController();
-        Promise.allSettled([
-            checkPermission(objectType, objectId, "can_edit", "create_folder", { signal: controller.signal }),
-            checkPermission(objectType, objectId, "can_edit", uploadPermissionId, { signal: controller.signal }),
-        ]).then(([createFolderResult, uploadFileResult]) => {
-            if (cancelled || activeSpace?.id !== spaceId || currentFolderId !== targetFolderId) return;
-            setCanCreateFolder(createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed));
-            setCanUploadFile(uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed));
-        });
-        return () => {
-            cancelled = true;
-            controller.abort();
-        };
-    }, [activeSpace?.id, currentFolderId, isActiveSpaceAdmin]);
 
     const permissionProbeKey = useMemo(
         () => displayedFiles
