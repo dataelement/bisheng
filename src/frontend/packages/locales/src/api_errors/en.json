@@ -471,6 +471,8 @@
   "28004": "A file exceeded the size limit and was skipped. The file name is in the logs.",
   "28005": "The code node's return value cannot be used as a node output.",
   "28006": "The isolation environment returned a result this platform cannot use.",
+  "28007": "The code node's return value is larger than 4 MB. Return less data.",
+  "28008": "The code node ran but returned no result. Check that main returns normally instead of exiting the process.",
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
   "personIdAlreadyExists": "Person ID already exists",

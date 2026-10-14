@@ -237,7 +237,7 @@ subprocess.Popen(
 
 ### 输出读取
 
-用 `selectors` 同时读 stdout 和 stderr，不用 `communicate()`。每个流只保留开头 512 KiB 和结尾 512 KiB，中间丢弃并插入一行提示；失败日志取 stderr 末尾（traceback 在末尾）。两个流合计超过 256 MiB 立即杀掉并报错。
+用 `selectors` 同时读 stdout 和 stderr，不用 `communicate()`。每个流保留开头 4 MiB 和结尾 512 KiB，两者之和以内的内容原样拼回，超出的中间部分丢弃并插入一行提示。开头取 4 MiB 是为了让代码节点的一条结果（JSON 上限 4 MiB，再加很短的前缀）整行留下；结尾留 512 KiB，因为失败日志取 stderr 末尾（traceback 在末尾）。两个流合计超过 256 MiB 立即杀掉并报错。
 
 ## uid 池
 
@@ -403,7 +403,7 @@ subprocess.Popen(
 
 ## 与其他路径的关系
 
-- **代码节点**：本分支的代码节点在 `type=local` 时走 `LocalExecutor.execute_code(work_dir=<临时目录>)`（`code_parse.py:260`），同样被这套隔离覆盖，用临时模式。代码节点的结果通道、结果上限和超时另见 [代码节点执行约定加固](./代码节点执行约定加固.md)：其结果上限按本文"输出读取"每个流保留的量取值。
+- **代码节点**：本分支的代码节点在 `type=local` 时走 `LocalExecutor.execute_code(work_dir=<临时目录>)`（`code_parse.py:260`），同样被这套隔离覆盖，用临时模式。代码节点的结果通道和结果上限另见 [代码节点执行约定加固](./代码节点执行约定加固.md)：结果上限是 4 MiB。代码解释器和代码节点共用本文的输出窗口（开头 4 MiB、结尾 512 KiB），一条 4 MiB 的结果行落在窗口内，不再按调用方单独放宽。代码节点不单设超时，沿用执行器现有的超时。
 - **知识库图片暂存**：暂存在 `run` 里、`run_with_dir` 之前写进 W，由复制进来带入 R。暂存代码不用改，父进程也不会再往用户可控的目录里写。
 - **灵思**：W 就是 `local_sync_path`，用保留模式。任务结束时 `_cleanup_resources` 会 `rmtree(W)`，同一处先调用 `release_local_run(W)` 释放 R 和 uid。工具实例上的 `close()` 不负责释放。
 - **`sync_to_workspace` / `sync_files_to_local`**：看到的是收回后的 W，行为不变。

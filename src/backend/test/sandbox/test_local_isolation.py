@@ -99,6 +99,18 @@ def test_head_tail_untouched_when_small() -> None:
     assert buf.text() == "hello"
 
 
+def test_default_window_keeps_a_4mib_result_line() -> None:
+    # A code-node result is one stdout line: a short prefix plus up to 4 MiB of JSON.
+    # Head is 4 MiB and tail is 512 KiB, so that line is reconstructed with no gap.
+    line = b"n" * 32 + b":ok:" + b"x" * (4 * 1024 * 1024) + b"\n"
+    buf = local_isolation._HeadTail()
+    view = memoryview(line)
+    for start in range(0, len(line), 65536):
+        buf.feed(bytes(view[start : start + 65536]))
+    assert "output omitted" not in buf.text()
+    assert buf.text().encode() == line
+
+
 # --- environment -----------------------------------------------------------
 
 

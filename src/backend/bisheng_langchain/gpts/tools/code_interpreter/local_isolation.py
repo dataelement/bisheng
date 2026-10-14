@@ -34,7 +34,9 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter import local_run_registry, local_uid_pool, workspace_copy
 
 DATA_DIR = "/app/data"
-STREAM_HEAD_BYTES = 512 * 1024
+# Head holds a code-node result line (4 MiB of JSON plus a short prefix).
+# Tail stays smaller: a traceback states its cause on the last lines.
+STREAM_HEAD_BYTES = 4 * 1024 * 1024
 STREAM_TAIL_BYTES = 512 * 1024
 OUTPUT_HARD_LIMIT_BYTES = 256 * 1024 * 1024
 DISK_CHECK_INTERVAL_S = 5.0
