@@ -284,7 +284,6 @@ class KnowledgeFileCorrectionService:
 
         Raises:
             SpaceFileNotFoundError: 当前租户看不到该文档.
-            FileCorrectionViewDeniedError: 无权查看该文档.
             FileCorrectionSpaceNotAllowedError: 库层级不允许纠错.
             FileCorrectionContentRequiredError: 说明为空.
             FileCorrectionContentTooLongError: 说明超过 500 字.
@@ -306,7 +305,7 @@ class KnowledgeFileCorrectionService:
                     select(KnowledgeSpaceScope).where(KnowledgeSpaceScope.space_id == int(file.knowledge_id))
                 )
             ).first()
-            await cls._require_view(login_user, file, knowledge, scope)
+            # 阅读页已经预览成功才显示纠错按钮. 提交不再重做查看权限校验.
             cls._require_space(knowledge, scope)
             two_part = original_error is not None or corrected_content is not None
             if two_part:

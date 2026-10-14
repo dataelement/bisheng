@@ -407,7 +407,7 @@ async def test_submit_approve_points_and_second_pass_mysql(flow_env):
 
 @pytest.mark.asyncio
 async def test_submit_rejections_mysql(flow_env):
-    """FC-03/04/05/15/16: 本人, 停用上传人, 字数, 无权查看, 个人库和收藏库都拒绝且不留单."""
+    """FC-03/04/05/15/16: 本人, 停用上传人, 字数, 个人库和收藏库都拒绝且不留单."""
     engine = flow_env
     suffix = uuid.uuid4().hex[:8]
     user_ids: list[int] = []
@@ -442,7 +442,10 @@ async def test_submit_rejections_mysql(flow_env):
             assert _body(await _submit(client, ok, "错" * 501))["status_code"] == 18401
             created = _body(await _submit(client, ok, "错" * 500))
             assert created["status_code"] == 200
-            assert _body(await _submit(client, hidden))["status_code"] == 18405
+            # 提交不再按查看权限拒绝. hidden 不在 allowed_files 里, 仍能写入.
+            hidden_created = _body(await _submit(client, hidden, "无查看权也能纠"))
+            assert hidden_created["status_code"] == 200, hidden_created
+            assert _body(await _submit(client, hidden, "再交一次"))["status_code"] == 18406
             assert _body(await _submit(client, per))["status_code"] == 18404
             assert _body(await _submit(client, fav))["status_code"] == 18404
             # 公共库没有文件级 view_file 时, 登录读者仍可提交. pub 不在 allowed_files 里.
@@ -458,6 +461,13 @@ async def test_submit_rejections_mysql(flow_env):
                 )
             ).scalar_one()
             assert int(count) == 1
+            hidden_count = (
+                await session.execute(
+                    text("SELECT COUNT(*) FROM knowledge_file_correction WHERE file_id = :id"),
+                    {"id": hidden},
+                )
+            ).scalar_one()
+            assert int(hidden_count) == 1
     finally:
         await _cleanup(engine, user_ids=user_ids, space_ids=space_ids, file_ids=file_ids)
 

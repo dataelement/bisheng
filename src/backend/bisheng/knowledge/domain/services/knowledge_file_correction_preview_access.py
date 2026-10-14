@@ -1,5 +1,7 @@
 """纠错提交使用的打开判定, 与阅读页预览放行对齐."""
 
+import logging
+
 from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
@@ -17,7 +19,12 @@ from bisheng.knowledge.domain.services.knowledge_file_correction_service import 
 from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation,
 )
+from bisheng.permission.domain.services.fine_grained_permission_service import (
+    FineGrainedPermissionService,
+)
 from bisheng.permission.domain.services.permission_service import PermissionService
+
+logger = logging.getLogger(__name__)
 
 # 和知识库成员角色到关系的映射一致. 成员的查看权在成员表, 不在文件级 view_file.
 _MEMBER_ROLE_RELATION = {
@@ -49,8 +56,8 @@ async def user_may_preview_file(login_user, file, knowledge, scope) -> bool:
         return False
     if await _has_view_file(login_user, int(file_id)):
         return True
-    space_id = getattr(file, "knowledge_id", None)
-    if space_id is not None and await _space_membership_can_view(login_user, int(space_id)):
+    # 部门库预览走沿目录到知识库的有效权限, 不只看文件上的 view_file.
+    if await _effective_preview_allows(login_user, file):
         return True
     return await _department_or_clinic_can_open(login_user, file)
 
@@ -65,6 +72,39 @@ async def _has_view_file(login_user, file_id: int) -> bool:
             login_user,
         )
     )
+
+
+async def _effective_preview_allows(login_user, file) -> bool:
+    """阅读页 get_file_preview 使用的有效 view_file.
+
+    Args:
+        login_user: 当前登录用户.
+        file: 知识库文件.
+
+    Returns:
+        有效权限里有 view_file, 或没有更近的授权绑定时库成员可查看.
+    """
+    try:
+        result = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            "knowledge_file",
+            int(file.id),
+            nearest_binding_wins=True,
+            return_match_metadata=True,
+            use_permission_level_fallback=False,
+        )
+    except Exception:
+        logger.exception("file correction effective preview lookup failed file_id=%s", getattr(file, "id", None))
+        return False
+    permissions, matched = result if isinstance(result, tuple) else (result, False)
+    if "view_file" in set(permissions or ()):
+        return True
+    if matched:
+        return False
+    space_id = getattr(file, "knowledge_id", None)
+    if space_id is None:
+        return False
+    return await _space_membership_can_view(login_user, int(space_id))
 
 
 async def _space_membership_can_view(login_user, space_id: int) -> bool:

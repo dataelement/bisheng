@@ -28,7 +28,7 @@ def _scope(level: str):
 async def test_department_open_grant_allows_without_view_file(monkeypatch):
     monkeypatch.setattr(PermissionService, "check", AsyncMock(return_value=False))
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._space_membership_can_view",
+        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._effective_preview_allows",
         AsyncMock(return_value=False),
     )
     monkeypatch.setattr(
@@ -46,10 +46,31 @@ async def test_department_open_grant_allows_without_view_file(monkeypatch):
     assert allowed is True
 
 
+async def test_effective_preview_permission_allows_without_view_file_tuple(monkeypatch):
+    monkeypatch.setattr(PermissionService, "check", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._effective_preview_allows",
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._department_or_clinic_can_open",
+        AsyncMock(return_value=False),
+    )
+
+    allowed = await user_may_preview_file(
+        SimpleNamespace(user_id=4),
+        _file(),
+        _knowledge(),
+        _scope(KnowledgeSpaceLevelEnum.DEPARTMENT.value),
+    )
+
+    assert allowed is True
+
+
 async def test_view_denied_when_preview_gates_all_fail(monkeypatch):
     monkeypatch.setattr(PermissionService, "check", AsyncMock(return_value=False))
     monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._space_membership_can_view",
+        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access._effective_preview_allows",
         AsyncMock(return_value=False),
     )
     monkeypatch.setattr(
