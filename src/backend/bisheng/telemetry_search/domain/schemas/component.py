@@ -187,6 +187,7 @@ class ComponentDataConfig(BaseModel):
 
 
 class DataQueryResult(BaseModel):
+    dimension_labels: Dict[str, Dict[str, str]] = Field(default_factory=dict, description="组织维度原值对应的展示名称")
     rollups: List[dict] = Field(default_factory=list, description="按文档重新去重的服务端合计，非单元格相加")
     value: List[List] = Field(default_factory=list, description="metrics value list", examples=[[1], [2], [3]])
     dimensions: List[List] = Field(default_factory=list, description="metrics dimensions list",

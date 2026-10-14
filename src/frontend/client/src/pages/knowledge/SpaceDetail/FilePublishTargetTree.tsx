@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Folder, FolderOpen, Library } from "lucide-react";
 import type { ShougangFilePublishTargetSpace } from "~/api/approval";
 import { listKnowledgeFolders } from "~/api/knowledge";
@@ -7,7 +7,7 @@ import { useToastContext } from "~/Providers";
 
 type PublishTargetLevel = "public" | "department" | "team" | "personal";
 
-type TargetFolderNode = {
+export type TargetFolderNode = {
     id: string;
     name: string;
     children: TargetFolderNode[];
@@ -16,7 +16,7 @@ type TargetFolderNode = {
     loaded: boolean;
 };
 
-type SpaceFolderTreeState = {
+export type SpaceFolderTreeState = {
     expanded: boolean;
     loading: boolean;
     loaded: boolean;
@@ -43,6 +43,7 @@ interface FilePublishTargetTreeProps {
     onSelectFolder: (spaceId: string | number, folderId: string | number) => void;
     loadFolders?: TargetFolderLoader;
     emptyText?: string;
+    initialFolderTrees?: Record<string, SpaceFolderTreeState>;
 }
 
 const TARGET_LEVEL_LABELS: Record<PublishTargetLevel, string> = {
@@ -101,9 +102,17 @@ export function FilePublishTargetTree({
     onSelectFolder,
     loadFolders,
     emptyText = "暂无可发布目标",
+    initialFolderTrees,
 }: FilePublishTargetTreeProps) {
     const { showToast } = useToastContext();
     const [targetFolderTrees, setTargetFolderTrees] = useState<Record<string, SpaceFolderTreeState>>({});
+    const selectedTargetRef = useRef<HTMLButtonElement | null>(null);
+    useEffect(() => {
+        if (initialFolderTrees) setTargetFolderTrees(initialFolderTrees);
+    }, [initialFolderTrees]);
+    useEffect(() => {
+        selectedTargetRef.current?.scrollIntoView?.({ block: "nearest" });
+    }, [targetSpaceId, targetFolderId, targetFolderTrees]);
     // Collapse state for top-level groups (公共/部门/团队/个人). Groups default to expanded.
     const [collapsedGroups, setCollapsedGroups] = useState<Record<PublishTargetLevel, boolean>>({
         public: false,
@@ -268,6 +277,8 @@ export function FilePublishTargetTree({
                         <button
                             type="button"
                             aria-label={`选择目录${folder.name}`}
+                            aria-pressed={selected}
+                            ref={selected ? selectedTargetRef : undefined}
                             className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded px-2 text-left text-sm ${
                                 selected ? "bg-[#e8f3ff] text-[#165dff]" : "text-[#1d2129] hover:bg-[#f7f8fa]"
                             }`}
@@ -338,6 +349,8 @@ export function FilePublishTargetTree({
                                     <button
                                         type="button"
                                         aria-label={`选择${space.name}根目录`}
+                                        aria-pressed={rootSelected}
+                                        ref={rootSelected ? selectedTargetRef : undefined}
                                         className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded px-2 text-left text-sm ${
                                             rootSelected ? "bg-[#e8f3ff] text-[#165dff]" : "text-[#1d2129] hover:bg-[#f7f8fa]"
                                         }`}

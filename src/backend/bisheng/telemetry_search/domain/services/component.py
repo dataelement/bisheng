@@ -43,6 +43,7 @@ from ..schemas.query_builder import (
     TermOp,
     TermsOp,
 )
+from .department_label_resolver import resolve_dimension_labels
 from .login_participation import CHINA, LOGIN_FIELDS, load_login_population, query_login_participation
 from .search_engine_service import SearchEngineService, SearchParameters
 
@@ -138,6 +139,10 @@ class DataQueryService(BaseModel):
                                                             timestamp_dimension, time_range)
         if self._document_statistics is not None:
             res.rollups = await self.document_rollups(query_dimensions, stack_dimension)
+        all_dimensions = [*query_dimensions, *([stack_dimension] if stack_dimension else [])]
+        res.dimension_labels = await resolve_dimension_labels(
+            [dimension.field for dimension in all_dimensions], res.dimensions,
+        )
         return res
 
     async def document_rollups(self, dimensions, stack_dimension) -> list[dict]:

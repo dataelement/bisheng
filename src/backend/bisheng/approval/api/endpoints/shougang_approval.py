@@ -86,6 +86,21 @@ async def list_file_publish_target_folders(
     return resp_200(data)
 
 
+@router.get("/file-publish/last-target")
+async def get_file_publish_last_target(
+    source_space_id: int = Query(..., gt=0),
+    source_file_id: int = Query(..., gt=0),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    space_service=Depends(get_knowledge_space_service),
+):
+    service = ShougangApprovalService()
+    data = await service.get_file_publish_last_target(
+        source_space_id=source_space_id, source_file_id=source_file_id,
+        login_user=login_user, space_service=space_service,
+    )
+    return resp_200(data)
+
+
 @router.get("/file-publish/similar-candidates")
 async def list_file_publish_similar_candidates(
     source_file_id: int,

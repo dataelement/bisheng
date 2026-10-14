@@ -14,6 +14,10 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 @pytest.fixture(autouse=True)
 def _patch_pending_space_approval_check(monkeypatch):
     monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgePublishTargetPreferenceService.save",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_service.ApprovalInstanceRepository.find_pending_instance_by_business_resource_id",
         AsyncMock(return_value=None),
     )

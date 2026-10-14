@@ -79,6 +79,13 @@ class ShougangFilePublishTargetFoldersResp(BaseModel):
     total: int = 0
 
 
+class ShougangFilePublishLastTargetResp(BaseModel):
+    target_space_id: int | None = None
+    target_folder_id: int | None = None
+    folder_path: list[int] = Field(default_factory=list)
+    fallback_reason: str | None = None
+
+
 class ShougangFilePublishSimilarCandidatesResp(BaseModel):
     data: list[SimilarCandidateEntry] = Field(default_factory=list)
     total: int = 0

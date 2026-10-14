@@ -358,6 +358,7 @@ export interface ShougangApprovalSubmitResult {
   task_ids?: number[];
   space?: KnowledgeSpace;
   exception_type?: string | null;
+  target_preference_saved?: boolean;
 }
 
 export interface ShougangFilePublishTargetSpace {
@@ -372,6 +373,24 @@ export interface ShougangFilePublishTargetFolder {
   id: number | string;
   name: string;
   level: number;
+}
+
+export interface ShougangFilePublishLastTarget {
+  target_space_id?: number | null;
+  target_folder_id?: number | null;
+  folder_path?: number[];
+  fallback_reason?: string | null;
+}
+
+export async function getShougangFilePublishLastTargetApi(
+  sourceSpaceId: string | number,
+  sourceFileId: string | number,
+): Promise<ShougangFilePublishLastTarget> {
+  const response = await request.get<ApiResponse<ShougangFilePublishLastTarget>>(
+    "/api/v1/approval/shougang/file-publish/last-target",
+    { params: { source_space_id: sourceSpaceId, source_file_id: sourceFileId }, timeout: 5000 },
+  );
+  return unwrapPayload(response);
 }
 
 export interface ShougangFilePublishDocumentEntry {
@@ -444,6 +463,7 @@ export async function getShougangFilePublishTargetFoldersApi(
   sourceFileId: string | number,
   targetSpaceId: string | number,
   parentId: string | number | null,
+  options?: { timeout: number },
 ): Promise<{ data: ShougangFilePublishTargetFolder[]; total: number }> {
   const response = await request.get<ApiResponse<{
     data: ShougangFilePublishTargetFolder[];
@@ -451,6 +471,7 @@ export async function getShougangFilePublishTargetFoldersApi(
   }>>(
     "/api/v1/approval/shougang/file-publish/target-folders",
     {
+      ...(options ?? {}),
       params: {
         source_space_id: sourceSpaceId,
         source_file_id: sourceFileId,

@@ -50,6 +50,7 @@ def setup(monkeypatch):
         yield None
 
     monkeypatch.setattr(knowledge_document_reader, "document_reader", reader)
+    monkeypatch.setattr(component, "resolve_dimension_labels", AsyncMock(return_value={}))
     for module in (component, dashboard_export_detail):
         monkeypatch.setattr(module, "get_async_db_session", session)
         monkeypatch.setattr(

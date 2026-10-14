@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { FilePublishDialog } from "./FilePublishDialog";
 
 const mockGetTargetSpaces = jest.fn();
+const mockGetLastTarget = jest.fn();
+let mockCurrentUserId = "7";
 const mockGetSimilarCandidates = jest.fn();
 const mockSearchDocuments = jest.fn();
 const mockSubmitApproval = jest.fn();
@@ -14,11 +16,16 @@ jest.mock("../knowledgeFileRefresh", () => ({
 }));
 
 jest.mock("~/api/approval", () => ({
+    getShougangFilePublishLastTargetApi: (...args: any[]) => mockGetLastTarget(...args),
     getShougangFilePublishTargetSpacesApi: (...args: any[]) => mockGetTargetSpaces(...args),
     getShougangFilePublishTargetFoldersApi: (...args: any[]) => mockGetTargetFolders(...args),
     getShougangFilePublishSimilarCandidatesApi: (...args: any[]) => mockGetSimilarCandidates(...args),
     searchShougangFilePublishDocumentsApi: (...args: any[]) => mockSearchDocuments(...args),
     submitShougangFilePublishApprovalApi: (...args: any[]) => mockSubmitApproval(...args),
+}));
+
+jest.mock("~/hooks", () => ({
+    useAuthContext: () => ({ user: { id: mockCurrentUserId } }),
 }));
 
 jest.mock("~/Providers", () => ({
@@ -56,6 +63,8 @@ const file = { id: 100, name: "制度.pdf" } as any;
 describe("FilePublishDialog", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockCurrentUserId = "7";
+        mockGetLastTarget.mockResolvedValue({});
         mockGetTargetSpaces.mockResolvedValue({
             data: [
                 { id: 20, name: "公共空间", space_level: "public", can_browse_files: true },
@@ -66,6 +75,102 @@ describe("FilePublishDialog", () => {
         mockListKnowledgeFolders.mockResolvedValue({ items: [], total: 0 });
         mockSearchDocuments.mockResolvedValue({ data: [] });
         mockSubmitApproval.mockResolvedValue({});
+    });
+
+    test.each([null, 202])("独立打开弹窗恢复服务端目标和目录 %s，并提交正确位置", async (folderId) => {
+        mockGetLastTarget.mockResolvedValue({ target_space_id: 21, target_folder_id: folderId, folder_path: folderId ? [201, 202] : [] });
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        mockGetTargetFolders.mockImplementation(async (_source, _file, _space, parent) => ({
+            data: parent === null ? [{ id: 201, name: "一级目录" }, { id: 299, name: "其他目录" }] : [{ id: 202, name: "二级目录" }],
+        }));
+        const first = render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={jest.fn()} />);
+        const label = folderId ? "选择目录二级目录" : "选择部门空间根目录";
+        await waitFor(() => expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true"));
+        first.unmount();
+        render(<FilePublishDialog open activeSpace={activeSpace} file={{ ...file, id: 101 }} onOpenChange={jest.fn()} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-pressed", "true"));
+        expect(mockGetLastTarget).toHaveBeenLastCalledWith(10, 101);
+        expect(screen.getByLabelText("版本管理")).toHaveValue("");
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(mockSubmitApproval).toHaveBeenCalledWith(expect.objectContaining({
+            target_space_id: "21", target_folder_id: folderId, target_document_id: null, target_file_id: null,
+        })));
+    });
+
+    test.each(["space", "folder", "offline"])("上次位置 %s 失效时提示并允许手动发布", async (failure) => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        if (failure === "offline") mockGetLastTarget.mockRejectedValue(new Error("offline"));
+        else mockGetLastTarget.mockResolvedValue({ target_space_id: failure === "space" ? 999 : 21, target_folder_id: 202, folder_path: [201, 202] });
+        render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={jest.fn()} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        const expectedRoot = failure === "folder" ? "部门空间" : "公共空间";
+        expect(screen.getByRole("button", { name: `选择${expectedRoot}根目录` })).toHaveAttribute("aria-pressed", "true");
+        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ severity: "warning" }));
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(mockSubmitApproval).toHaveBeenCalledWith(expect.objectContaining({ target_folder_id: null })));
+    });
+
+    test.each(["file", "user", "reopen"])("%s 变化后旧恢复响应不能覆盖新选择", async (change) => {
+        const oldPreference = deferred<any>();
+        mockGetLastTarget.mockReturnValueOnce(oldPreference.promise).mockResolvedValue({ target_space_id: 21, target_folder_id: null });
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        const props = { activeSpace, file, onOpenChange: jest.fn() };
+        const view = render(<FilePublishDialog open {...props} />);
+        await waitFor(() => expect(mockGetLastTarget).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole("button", { name: "提交申请" })).toBeDisabled();
+        if (change === "user") mockCurrentUserId = "8";
+        if (change === "reopen") view.rerender(<FilePublishDialog open={false} {...props} />);
+        view.rerender(<FilePublishDialog open {...props} file={change === "file" ? { ...file, id: 101 } : file} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "选择部门空间根目录" })).toHaveAttribute("aria-pressed", "true"));
+        oldPreference.resolve({ target_space_id: 20, target_folder_id: 999, folder_path: [999] });
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        expect(screen.getByRole("button", { name: "选择部门空间根目录" })).toHaveAttribute("aria-pressed", "true");
+        expect(mockGetTargetFolders).not.toHaveBeenCalled();
+    });
+
+    test("偏好保存失败仍提示申请已提交并关闭弹窗", async () => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        mockSubmitApproval.mockResolvedValue({ decision: "pending", target_preference_saved: false });
+        const close = jest.fn();
+        render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={close} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(close).toHaveBeenCalledWith(false));
+        expect(mockShowToast).toHaveBeenCalledWith({ message: "发布申请已提交，但上次发布路径保存失败", severity: "warning" });
+    });
+
+    test("旧提交响应不能关闭下一份文件的发布弹窗", async () => {
+        const submission = deferred<any>();
+        mockSubmitApproval.mockReturnValueOnce(submission.promise);
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        const close = jest.fn();
+        const view = render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={close} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+        await waitFor(() => expect(mockSubmitApproval).toHaveBeenCalledTimes(1));
+        view.rerender(<FilePublishDialog open activeSpace={activeSpace} file={{ ...file, id: 101 }} onOpenChange={close} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        submission.resolve({ decision: "pending" });
+        await waitFor(() => expect(mockRefresh).toHaveBeenCalledWith(10));
+        expect(close).not.toHaveBeenCalled();
+        expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled();
+    });
+
+    test("切换文件后旧版本搜索结果不能进入新发布申请", async () => {
+        const oldSearch = deferred<any>();
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        mockSearchDocuments.mockReturnValueOnce(oldSearch.promise).mockResolvedValue({ data: [], has_more: false });
+        const view = render(<FilePublishDialog open activeSpace={activeSpace} file={file} onOpenChange={jest.fn()} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.change(screen.getByPlaceholderText("搜索目标空间文档..."), { target: { value: "旧搜索" } });
+        await waitFor(() => expect(mockSearchDocuments).toHaveBeenCalledWith(100, "20", "旧搜索", 0));
+        view.rerender(<FilePublishDialog open activeSpace={activeSpace} file={{ ...file, id: 101 }} onOpenChange={jest.fn()} />);
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        oldSearch.resolve({ data: [{ target_file_id: 999, title: "旧文件搜索结果" }], has_more: false });
+        fireEvent.change(screen.getByPlaceholderText("搜索目标空间文档..."), { target: { value: "新搜索" } });
+        await waitFor(() => expect(mockSearchDocuments).toHaveBeenCalledWith(101, "20", "新搜索", 0));
+        expect(screen.queryByText("旧文件搜索结果")).not.toBeInTheDocument();
+        expect(screen.getByLabelText("版本管理")).toHaveValue("");
     });
 
     test.each(["pending", "executed"])("发布返回 %s 后通知源和目标知识库刷新", async (decision) => {
@@ -335,7 +440,7 @@ describe("FilePublishDialog", () => {
 
         await waitFor(() => expect(mockGetTargetSpaces).toHaveBeenCalledWith(10, 100));
         expect(screen.queryByRole("button", { name: "选择部门空间根目录" })).not.toBeInTheDocument();
-        expect(screen.getByText("暂无可发布目标")).toBeInTheDocument();
+        expect(await screen.findByText("暂无可发布目标")).toBeInTheDocument();
         expect(screen.queryByText("无目标库读取权限，仅可选择发布目录")).not.toBeInTheDocument();
         expect(screen.getByRole("button", { name: "提交申请" })).toBeDisabled();
         expect(screen.getByLabelText("版本管理")).toBeDisabled();

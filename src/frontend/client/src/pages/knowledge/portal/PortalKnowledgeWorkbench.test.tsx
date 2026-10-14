@@ -7,6 +7,7 @@ import { NotificationSeverity } from "~/common";
 import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import {
     getShougangFilePublishSimilarCandidatesApi,
+    getShougangFilePublishLastTargetApi,
     getShougangFilePublishTargetFoldersApi,
     getShougangFilePublishTargetSpacesApi,
     applyDepartmentFileViewApi,
@@ -387,6 +388,7 @@ jest.mock("~/api/approval", () => ({
     submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
     getShougangFilePublishTargetFoldersApi: jest.fn(),
     getShougangFilePublishTargetSpacesApi: jest.fn(),
+    getShougangFilePublishLastTargetApi: jest.fn(),
     getShougangFilePublishSimilarCandidatesApi: jest.fn(),
     searchShougangFilePublishDocumentsApi: jest.fn(),
     submitShougangFilePublishApprovalApi: jest.fn(),
@@ -759,6 +761,7 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [{ id: "public-target", name: "公共发布库", space_level: SpaceLevel.PUBLIC }],
             total: 1,
         } as any);
+        jest.mocked(getShougangFilePublishLastTargetApi).mockResolvedValue({});
         jest.mocked(getShougangFilePublishTargetFoldersApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(getShougangFilePublishSimilarCandidatesApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(searchShougangFilePublishDocumentsApi).mockResolvedValue({ data: [], total: 0 } as any);

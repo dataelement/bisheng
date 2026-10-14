@@ -23,6 +23,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
 from bisheng.approval.domain.schemas.shougang_approval_schema import (
     ShougangFilePublishDocumentEntry,
     ShougangFilePublishDocumentSearchResp,
+    ShougangFilePublishLastTargetResp,
     ShougangFilePublishSimilarCandidatesResp,
     ShougangFilePublishSubmitReq,
     ShougangFilePublishTargetFolder,
@@ -76,6 +77,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
     PUBLISH_DUPLICATE_CONTENT_MESSAGE,
 )
+from bisheng.knowledge.domain.services.knowledge_publish_target_preference_service import (
+    KnowledgePublishTargetPreferenceService,
+)
 from bisheng.tenant.domain.services.tenant_service import TenantService
 from bisheng.user.domain.models.user import UserDao
 
@@ -92,10 +96,14 @@ class ShougangApprovalService:
         approval_gate: ApprovalGate | Any | None = None,
         message_service: Any | None = None,
         notification_service: Any | None = None,
+        publish_target_preference_service: Any | None = None,
     ) -> None:
         self.approval_gate = approval_gate or self._build_gate()
         self.message_service = message_service
         self.notification_service = notification_service
+        self.publish_target_preference_service = (
+            publish_target_preference_service or KnowledgePublishTargetPreferenceService()
+        )
 
     @staticmethod
     def _build_gate() -> ApprovalGate:
@@ -1096,6 +1104,71 @@ class ShougangApprovalService:
                     items.append(result)
         return ShougangFilePublishTargetSpacesResp(data=items, total=len(items))
 
+    async def get_file_publish_last_target(
+        self,
+        *,
+        source_space_id: int,
+        source_file_id: int,
+        login_user: Any,
+        space_service: Any,
+    ) -> ShougangFilePublishLastTargetResp:
+        _, source_file, source_level = await self._load_publish_source(source_space_id, source_file_id)
+        await self._ensure_can_publish_file(
+            source_file=source_file,
+            source_level=source_level,
+            space_service=space_service,
+        )
+        try:
+            preference = await self.publish_target_preference_service.get(
+                user_id=int(login_user.user_id),
+                source_level=source_level,
+            )
+        except Exception:
+            # 偏好是可选便捷功能, 读取故障不能阻止手动选择发布目标。
+            logger.exception("file publish preference read failed user_id=%s", login_user.user_id)
+            return ShougangFilePublishLastTargetResp(fallback_reason="preference_unavailable")
+        if preference is None:
+            return ShougangFilePublishLastTargetResp()
+        try:
+            await self._ensure_publish_target_space(
+                preference.target_space_id,
+                source_level=source_level,
+                space_service=space_service,
+                require_view_space=True,
+            )
+        except (HTTPException, SpacePermissionDeniedError) as exc:
+            if isinstance(exc, HTTPException) and exc.status_code not in {400, 403, 404}:
+                raise
+            return ShougangFilePublishLastTargetResp(fallback_reason="target_unavailable")
+        response = ShougangFilePublishLastTargetResp(target_space_id=preference.target_space_id)
+        if preference.target_folder_id is None:
+            return response
+        try:
+            folder = await self._ensure_publish_target_folder(
+                preference.target_space_id, preference.target_folder_id,
+            )
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            response.fallback_reason = "folder_unavailable"
+            return response
+        path = str(folder.file_level_path or "").strip("/")
+        parts = path.split("/") if path else []
+        if (
+            getattr(folder, "deleted_at", None) is not None
+            or any(not part.isdecimal() or int(part) <= 0 for part in parts)
+            or len(parts) != int(folder.level or 0)
+        ):
+            response.fallback_reason = "folder_unavailable"
+            return response
+        folder_path = [int(part) for part in parts] + [int(folder.id)]
+        if len(set(folder_path)) != len(folder_path):
+            response.fallback_reason = "folder_unavailable"
+            return response
+        response.target_folder_id = int(folder.id)
+        response.folder_path = folder_path
+        return response
+
     async def list_file_publish_target_folders(
         self,
         *,
@@ -1483,4 +1556,20 @@ class ShougangApprovalService:
         performance['notification_enqueue_ms'] = (perf_counter() - stage_started_at) * 1000
         data = self._gate_result_to_dict(result)
         data['created'] = False
+        if result.decision in {ApprovalGateDecision.PENDING, ApprovalGateDecision.PASS}:
+            try:
+                await self.publish_target_preference_service.save(
+                    user_id=int(login_user.user_id),
+                    source_level=source_level,
+                    target_space_id=int(req.target_space_id),
+                    target_folder_id=req.target_folder_id,
+                )
+            except Exception:
+                # 申请已经受理, 偏好失败不能误报发布失败并诱发重复申请。
+                logger.exception(
+                    "file publish preference save failed user_id=%s instance_id=%s",
+                    login_user.user_id,
+                    result.instance_id,
+                )
+                data['target_preference_saved'] = False
         return data

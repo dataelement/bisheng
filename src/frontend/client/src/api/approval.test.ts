@@ -7,6 +7,7 @@ import {
   getMyApprovalTaskDetailApi,
   getDepartmentFileViewStatusApi,
   getShougangFilePublishTargetFoldersApi,
+  getShougangFilePublishLastTargetApi,
   getShougangFilePublishTargetSpacesApi,
   getShougangFileShareTargetFoldersApi,
   listApprovalRequestsApi,
@@ -34,6 +35,16 @@ describe("approval api", () => {
   beforeEach(() => {
     mockGet.mockReset();
     mockPost.mockReset();
+  });
+
+  it("reads last publish target using source context without client account or tenant", async () => {
+    const target = { target_space_id: 20, target_folder_id: 201, folder_path: [201], fallback_reason: null };
+    mockGet.mockResolvedValue({ status_code: 200, data: target });
+    expect(await getShougangFilePublishLastTargetApi(10, 100)).toEqual(target);
+    expect(mockGet).toHaveBeenCalledWith("/api/v1/approval/shougang/file-publish/last-target", {
+      params: { source_space_id: 10, source_file_id: 100 },
+      timeout: 5000,
+    });
   });
 
   it("uses repeated query params for legacy approval request status arrays", async () => {

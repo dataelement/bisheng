@@ -23,6 +23,7 @@ export interface PivotTableRow {
 }
 
 export interface PivotTableDataResponse {
+  rowLabels?: Record<string, string[]>
   rowHeaders: string[]
   columnHeader: string
   columnHeaders?: string[]

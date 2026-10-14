@@ -30,6 +30,7 @@
 | Knowledge / KnowledgeFile / KnowledgeDocument / KnowledgeDocumentVersion / KnowledgeSpaceScope | knowledge 模块 | F056 读取文件、空间、版本和状态并由写入事件触发投影刷新；F057 只通过既有知识文件清理边界删除已确认的部门重复文档；F059 通过 knowledge 模块领域服务扩展逻辑入口/清理字段、文档内容代次和入口级投影状态，转移管理归属并维护版本链，不取得这些模型的所有权；F061 只读取 `KnowledgeSpaceScope.portal_discovery_enabled` 形成门户发现范围 |
 | PermissionTuple / AuthorizationModel | permission 模块（F004） | F056 的最终文件权限检查统一调用既有权限服务；F057 只通过权限模块既有清理能力移除目标部门文件 tuple；F059 只通过 Permission Service 校验及迁移入口授权，复用既有 `share_file`；F061 仅在首页统计、带特殊标记的搜索展示和推荐展示中跳过文件权限读取，预览、下载和审批继续走 Permission Service |
 | Config | config 模块 | 通过既有首钢门户聚合配置 Service 读写，不新建第二配置事实源 |
+| UserLink | 用户关联存储（既有） | F073 仅通过 knowledge 偏好服务读写当前账号的 publish_target_personal/team/department 三类最近发布目标；不改变收藏、置顶类型或表结构，不按租户拆分偏好；资源恢复及发布仍执行原权限校验 |
 | BaseTelemetryEvent | telemetry 模块 | ES 继续保存原始浏览和搜索事件；F056 只扩展门户事件类型和派生状态 |
 | ApprovalScenario / ApprovalInstance / ApprovalTask | approval 模块 | F059 复用既有发布审批，并通过 approval 模块注册固定两节点的部门文件分享审批，不旁路写审批状态 |
 | ShareLink | share_link 模块 | F059 禁止创建新的知识文件链接/邀请码分享；既有记录保持原失效和撤销规则，访问时通过 knowledge 模块动态解析当前入口 |

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import {
     getShougangFilePublishSimilarCandidatesApi,
+    getShougangFilePublishLastTargetApi,
     getShougangFilePublishTargetFoldersApi,
     getShougangFilePublishTargetSpacesApi,
     searchShougangFilePublishDocumentsApi,
@@ -12,8 +13,10 @@ import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useDebounce } from "~/hooks/Input";
+import { useAuthContext } from "~/hooks";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
-import { FilePublishTargetTree } from "./FilePublishTargetTree";
+import { FilePublishTargetTree, type SpaceFolderTreeState } from "./FilePublishTargetTree";
+import { restoreFilePublishTarget } from "./filePublishTargetPreference";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../knowledgeFileRefresh";
 
 type VersionTarget = {
@@ -55,6 +58,10 @@ export function FilePublishDialog({
     versionManagementEnabled = true,
 }: FilePublishDialogProps) {
     const { showToast } = useToastContext();
+    const { user } = useAuthContext();
+    const [initialFolderTrees, setInitialFolderTrees] = useState<Record<string, SpaceFolderTreeState>>();
+    const searchRequestId = useRef(0);
+    const dialogSessionId = useRef(0);
     const [targetSpaces, setTargetSpaces] = useState<ShougangFilePublishTargetSpace[]>([]);
     const [targetSpaceKeyword, setTargetSpaceKeyword] = useState("");
     const [targetSpaceId, setTargetSpaceId] = useState("");
@@ -85,7 +92,13 @@ export function FilePublishDialog({
     const canUseVersionManagement = versionManagementEnabled && canBrowseTargetFiles;
 
     useEffect(() => {
+        dialogSessionId.current += 1;
+        searchRequestId.current += 1;
+        setSubmitting(false);
+        setInitialFolderTrees(undefined);
+        setTargetSpaceKeyword("");
         if (!open) {
+            setLoading(false);
             setTargetSpaces([]);
             setTargetSpaceKeyword("");
             setTargetSpaceId("");
@@ -104,6 +117,7 @@ export function FilePublishDialog({
         }
 
         if (!activeSpace?.id || !file?.id) {
+            setLoading(false);
             setTargetSpaces([]);
             setTargetSpaceId("");
             setTargetFolderId(null);
@@ -112,16 +126,39 @@ export function FilePublishDialog({
 
         let cancelled = false;
         setLoading(true);
-        getShougangFilePublishTargetSpacesApi(activeSpace.id, file.id)
-            .then((res) => {
+        setTargetSpaces([]);
+        setTargetSpaceId("");
+        setTargetFolderId(null);
+        setReason("");
+        setVersionTarget(null);
+        setSearchKeyword("");
+        setSearchResults([]);
+        setSearchLoading(false);
+        setSearchHasMore(false);
+        setNextSearchCursor(null);
+        Promise.all([
+            getShougangFilePublishTargetSpacesApi(activeSpace.id, file.id),
+            getShougangFilePublishLastTargetApi(activeSpace.id, file.id)
+                .catch(() => ({ fallback_reason: "preference_unavailable" })),
+        ])
+            .then(async ([res, preference]) => {
                 if (cancelled) return;
                 const visibleTargetSpaces = (res.data || []).filter(
                     (space) => space.can_browse_files !== false,
                 );
+                const restored = await restoreFilePublishTarget(
+                    preference, visibleTargetSpaces,
+                    async (spaceId, parentId) => (await getShougangFilePublishTargetFoldersApi(
+                        activeSpace.id, file.id, spaceId, parentId, { timeout: 5000 },
+                    )).data || [],
+                    () => cancelled,
+                );
+                if (cancelled || !restored) return;
                 setTargetSpaces(visibleTargetSpaces);
-                const first = visibleTargetSpaces[0]?.id;
-                setTargetSpaceId(first !== undefined ? String(first) : "");
-                setTargetFolderId(null);
+                setTargetSpaceId(restored.spaceId);
+                setTargetFolderId(restored.folderId);
+                setInitialFolderTrees(restored.folderTrees);
+                if (restored.notice) showToast({ message: restored.notice, severity: NotificationSeverity.WARNING });
             })
             .catch(() => {
                 if (!cancelled) {
@@ -135,7 +172,7 @@ export function FilePublishDialog({
         return () => {
             cancelled = true;
         };
-    }, [activeSpace?.id, file?.id, open, showToast]);
+    }, [activeSpace?.id, file?.id, user?.id, open, showToast]);
 
     useEffect(() => {
         if (!targetSpaceId || filteredTargetSpaces.some(
@@ -184,7 +221,7 @@ export function FilePublishDialog({
         return () => {
             cancelled = true;
         };
-    }, [canUseVersionManagement, file?.id, open, targetSpaceId]);
+    }, [canUseVersionManagement, file?.id, user?.id, open, targetSpaceId]);
 
     useEffect(() => {
         if (canUseVersionManagement) return;
@@ -200,6 +237,7 @@ export function FilePublishDialog({
 
     const loadSearchPage = useCallback(async (cursor: number, append: boolean) => {
         if (!file || !targetSpaceId || !canUseVersionManagement) return;
+        const requestId = ++searchRequestId.current;
         setSearchLoading(true);
         try {
             const res = await searchShougangFilePublishDocumentsApi(
@@ -208,24 +246,27 @@ export function FilePublishDialog({
                 debouncedSearchKeyword,
                 cursor,
             );
+            if (requestId !== searchRequestId.current) return;
             setSearchResults((previous) => append ? [...previous, ...(res.data || [])] : (res.data || []));
             setSearchHasMore(res.has_more);
             setNextSearchCursor(res.next_cursor ?? null);
         } catch {
-            showToast({ message: "搜索目标文档失败", severity: NotificationSeverity.ERROR });
+            if (requestId === searchRequestId.current) showToast({ message: "搜索目标文档失败", severity: NotificationSeverity.ERROR });
         } finally {
-            setSearchLoading(false);
+            if (requestId === searchRequestId.current) setSearchLoading(false);
         }
     }, [canUseVersionManagement, debouncedSearchKeyword, file, showToast, targetSpaceId]);
 
     useEffect(() => {
         if (!open || !file || !targetSpaceId || !canUseVersionManagement || !debouncedSearchKeyword.trim()) {
+            searchRequestId.current += 1;
             setSearchResults([]);
             setSearchHasMore(false);
             setNextSearchCursor(null);
             return;
         }
         void loadSearchPage(0, false);
+        return () => { searchRequestId.current += 1; };
     }, [canUseVersionManagement, debouncedSearchKeyword, file, loadSearchPage, open, targetSpaceId]);
 
     const loadTargetFolders = useCallback(async (
@@ -251,6 +292,7 @@ export function FilePublishDialog({
     };
 
     const clearTargetVersionState = () => {
+        searchRequestId.current += 1;
         setVersionTarget(null);
         setCandidates([]);
         setCandidateError(false);
@@ -272,7 +314,7 @@ export function FilePublishDialog({
     };
 
     const handleSubmit = async () => {
-        if (!activeSpace || !file || !targetSpaceId) return;
+        if (!activeSpace || !file || !targetSpaceId || loading) return;
         if (file.capabilities && !file.capabilities.canPublish) {
             showToast({
                 message: "当前入口不能发布文件",
@@ -281,6 +323,7 @@ export function FilePublishDialog({
             return;
         }
         setSubmitting(true);
+        const submissionSession = dialogSessionId.current;
         try {
             const result = await submitShougangFilePublishApprovalApi({
                 source_space_id: activeSpace.id,
@@ -292,6 +335,7 @@ export function FilePublishDialog({
                 reason: reason.trim() || undefined,
             });
             if (result?.decision === "exception") {
+                if (submissionSession !== dialogSessionId.current) return;
                 showToast({
                     message: result.exception_type === "route_missing"
                         ? "审批配置未匹配，请联系管理员处理后重试"
@@ -302,13 +346,18 @@ export function FilePublishDialog({
             }
             dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             if (String(activeSpace.id) !== targetSpaceId) dispatchKnowledgeSpaceFilesRefresh(targetSpaceId);
-            showToast({ message: "已提交发布申请", severity: NotificationSeverity.SUCCESS });
+            if (submissionSession !== dialogSessionId.current) return;
+            showToast({
+                message: result?.target_preference_saved === false ? "发布申请已提交，但上次发布路径保存失败" : "已提交发布申请",
+                severity: result?.target_preference_saved === false ? NotificationSeverity.WARNING : NotificationSeverity.SUCCESS,
+            });
             onOpenChange(false);
         } catch (error) {
+            if (submissionSession !== dialogSessionId.current) return;
             const message = getPublishErrorMessage(error);
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
-            setSubmitting(false);
+            if (submissionSession === dialogSessionId.current) setSubmitting(false);
         }
     };
 
@@ -397,6 +446,8 @@ export function FilePublishDialog({
                         />
                         <div className="max-h-64 overflow-y-auto rounded-md border border-[#dcdfe6] bg-white p-2">
                             <FilePublishTargetTree
+                                key={`${activeSpace?.id}:${file?.id}:${user?.id}:${open}`}
+                                initialFolderTrees={initialFolderTrees}
                                 loading={loading}
                                 targetSpaces={filteredTargetSpaces}
                                 targetSpaceId={targetSpaceId}
@@ -504,7 +555,7 @@ export function FilePublishDialog({
                     <Button variant="outline" className="h-8" onClick={() => onOpenChange(false)}>
                         取消
                     </Button>
-                    <Button className="h-8" disabled={!targetSpaceId || submitting} onClick={() => void handleSubmit()}>
+                    <Button className="h-8" disabled={!targetSpaceId || loading || submitting} onClick={() => void handleSubmit()}>
                         {submitting ? "提交中..." : "提交申请"}
                     </Button>
                 </DialogFooter>

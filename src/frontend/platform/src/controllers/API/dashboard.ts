@@ -300,11 +300,21 @@ export function transformPivotData(
     const mergedRowHeaders = (config.dimensions || [])
         .filter((_dimension, index) => !personDedup || index !== personDedup.deptIndex)
         .map(dimension => dimension.displayName || dimension.fieldName || dimension.fieldId);
+    const dimensionLabels: Record<string, Record<string, string>> = resData.dimension_labels || {};
+    const displayRowKeys = pivotRows.map(row => row.key.map((value, index) =>
+        dimensionLabels[rawRowFieldIds[index]]?.[value] ?? value
+    ));
     if (personDedup) {
         pivotRows.forEach(row => {
             row.key = mergePersonDedupValues(row.key, personDedup.personIndex, personDedup.deptIndex);
         });
     }
+    const rowLabels: Record<string, string[]> = {};
+    pivotRows.forEach((row, index) => {
+        rowLabels[JSON.stringify(row.key)] = personDedup
+            ? mergePersonDedupValues(displayRowKeys[index], personDedup.personIndex, personDedup.deptIndex)
+            : displayRowKeys[index];
+    });
     // Index of the merged "name(dept)" column in the FINAL (post-removal) key/header
     // arrays — shifts left by one if the removed department column came before it.
     const personDedupIndex = personDedup
@@ -313,11 +323,12 @@ export function transformPivotData(
 
     const displayColumnPaths = columnPaths.map(path => path.map((value, index) => {
         const dimension = stackDimensions[index];
-        return resolvePivotColumnLabels({
+        const alias = resolvePivotColumnLabels({
             columns: [value],
             stackDimension: dimension,
             aliasConfig: config.pivotColumnAliases,
         })[0];
+        return alias === value ? (dimensionLabels[dimension?.fieldId]?.[value] ?? value) : alias;
     }));
     const columnHeaders = stackDimensions.map(
         dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
@@ -355,6 +366,7 @@ export function transformPivotData(
         columnPaths: displayColumnPaths,
         originalColumnPaths: columnPaths,
         rows: pivotRows,
+        rowLabels,
         columnTotals,
         grandTotal: exactTotal ? exactTotal([], []) : columnTotals.reduce((sum, value) => sum + value, 0),
         groupTotals: exactTotal ? groupTotals : undefined,

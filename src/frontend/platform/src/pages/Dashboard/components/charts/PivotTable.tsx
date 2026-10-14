@@ -199,6 +199,7 @@ export const PivotTable = memo(function PivotTable({
               const gdi = groupDimensionIndex as number
               const remainingDimCount = Math.max(0, data.rowHeaders.length - (gdi + 1))
               const fieldId = data.rowFieldIds?.[gdi]
+              const displayLabel = data.rowLabels?.[JSON.stringify(group.childRows[0]?.key)]?.[gdi] ?? group.groupLabel
               const isClickable = canExportDetail && fieldId && group.groupLabel
               const exporting = fieldId ? isExportingDetail(fieldId, group.groupLabel) : false
               return (
@@ -216,11 +217,11 @@ export const PivotTable = memo(function PivotTable({
                       isClickable ? "cursor-pointer hover:underline hover:text-primary" : ""
                     }`}
                     style={{ left: `${64 + gdi * 128}px`, paddingLeft: `${12 + gdi * 12}px` }}
-                    title={isClickable ? `${group.groupLabel}（点击导出该分类明细）` : group.groupLabel}
+                    title={isClickable ? `${displayLabel}（点击导出该分类明细）` : displayLabel}
                     onClick={isClickable ? () => void exportDetail(fieldId, group.groupLabel) : undefined}
                   >
                     <span className="block max-w-28 truncate">
-                      {exporting ? "导出中…" : group.groupLabel}
+                      {exporting ? "导出中…" : displayLabel}
                     </span>
                   </th>
                   {remainingDimCount > 0 && (
@@ -267,6 +268,7 @@ export const PivotTable = memo(function PivotTable({
                   // F058 AC-09/AC-11: the merged "name(dept)" cell has no single raw value
                   // to filter on, so it never becomes a drill-down export target.
                   const fieldId = data.rowFieldIds?.[dimensionIndex]
+                  const displayLabel = data.rowLabels?.[JSON.stringify(row.key)]?.[dimensionIndex] ?? label
                   const isDedupMergedCell = dimensionIndex === data.personDedupIndex
                   const isClickable = canExportDetail && fieldId && !isDedupMergedCell && label
                   const exporting = fieldId ? isExportingDetail(fieldId, label) : false
@@ -281,11 +283,11 @@ export const PivotTable = memo(function PivotTable({
                         left: `${64 + dimensionIndex * 128}px`,
                         paddingLeft: `${12 + dimensionIndex * 12}px`,
                       }}
-                      title={isClickable ? `${label}（点击导出该分类明细）` : label}
+                      title={isClickable ? `${displayLabel}（点击导出该分类明细）` : displayLabel}
                       onClick={isClickable ? () => void exportDetail(fieldId, label) : undefined}
                     >
                       <span className="block max-w-28 truncate">
-                        {exporting ? "导出中…" : (label || "未分类")}
+                        {exporting ? "导出中…" : (displayLabel || "未分类")}
                       </span>
                     </th>
                   )
