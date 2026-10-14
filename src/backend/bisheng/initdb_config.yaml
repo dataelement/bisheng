@@ -150,6 +150,8 @@ linsight:
   retry_temperature: 1
 
 information_conf:
+  information_initial_article_limit: 36
+  information_business_timezone: Asia/Shanghai
   # 情报订阅服务的接口地址
   base_url: ""
   # 情报订阅服务的api_key

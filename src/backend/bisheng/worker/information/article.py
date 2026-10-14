@@ -1,16 +1,40 @@
 import asyncio
-from datetime import datetime
 
 from loguru import logger
 from sqlmodel import select
 
+from bisheng.channel.domain.models.channel import Channel
+from bisheng.channel.domain.models.channel_knowledge_sync import (
+    ChannelKnowledgeSync,
+    ChannelKnowledgeSyncDao,
+)
+from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import (
+    ChannelInfoSourceRepositoryImpl,
+)
+from bisheng.channel.domain.repositories.implementations.information_article_sync_state_repository_impl import (
+    InformationArticleSyncStateRepositoryImpl,
+)
+from bisheng.channel.domain.schemas.channel_manager_schema import (
+    AddArticlesToKnowledgeSpaceRequest,
+)
+from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.channel_service import ChannelService
+from bisheng.channel.domain.services.information_article_sync_service import InformationArticleSyncService
 from bisheng.core.context.tenant import (
     DEFAULT_TENANT_ID,
     current_tenant_id,
     set_current_tenant_id,
 )
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import json_array_contains
+from bisheng.core.external.bisheng_information_client.bisheng_information_manager import (
+    get_bisheng_information_client,
+)
+from bisheng.core.logger import trace_id_var
+from bisheng.utils import generate_uuid
 from bisheng.worker._asyncio_utils import run_async_task
+from bisheng.worker.information.redis_lock import InformationRedisLock
+from bisheng.worker.main import bisheng_celery
 
 
 def _db_dialect() -> str:
@@ -22,32 +46,8 @@ def _db_dialect() -> str:
         return "mysql"
 
 
-from bisheng.channel.domain.models.channel import Channel
-from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
-from bisheng.channel.domain.models.channel_knowledge_sync import (
-    ChannelKnowledgeSync,
-    ChannelKnowledgeSyncDao,
-)
-from bisheng.channel.domain.repositories.implementations.channel_info_source_repository_impl import (
-    ChannelInfoSourceRepositoryImpl,
-)
-from bisheng.channel.domain.schemas.article_schema import ArticleDocument
-from bisheng.channel.domain.schemas.channel_manager_schema import (
-    AddArticlesToKnowledgeSpaceRequest,
-)
-from bisheng.channel.domain.services.article_es_service import ArticleEsService
-from bisheng.channel.domain.services.channel_service import ChannelService
-from bisheng.core.database import get_sync_db_session
-from bisheng.core.external.bisheng_information_client.bisheng_information_manager import (
-    get_bisheng_information_client_sync,
-)
-from bisheng.core.logger import trace_id_var
-from bisheng.utils import generate_uuid
-from bisheng.worker.main import bisheng_celery
-
-
 @bisheng_celery.task
-def sync_information_article(information_id: str = None):
+def sync_information_article(information_id: str | None = None):
     trace_id_var.set(f"sync_all_information_articles_{generate_uuid()}")
     # Celery Beat fires this once with no request/tenant context. The
     # information-source tables are tenant-aware, so iterate every active tenant
@@ -81,57 +81,75 @@ def _active_tenant_ids_sync() -> list[int]:
     return [ROOT_TENANT_ID, *child_ids]
 
 
-def _sync_information_article_for_tenant(information_id: str = None):
-    logger.debug(f"Starting to sync information articles for {information_id}.")
+def _sync_information_article_for_tenant(information_id: str | None = None):
     article_service = ArticleEsService()
-    article_service.ensure_index_sync()
-    need_update_informations = []
-    # v2.5 Module D: record article ids indexed during THIS worker run so the
-    # knowledge-space sync hook below can push just the fresh ones.
-    indexed_by_source: dict[str, list[str]] = {}
-    with get_sync_db_session() as session:
-        channel_info_repository = ChannelInfoSourceRepositoryImpl(session)
-        page, page_size = 1, 1000
-        while True:
-            information_list = channel_info_repository.get_by_page(information_id, page, page_size)
-            if not information_list:
-                break
-            for one in information_list:
-                try:
-                    logger.debug(f"Syncing information for {one.id} - {one.source_name}")
-                    if (one.update_time.strftime("%Y-%m-%d") == datetime.now().strftime("%Y-%m-%d")) and (
-                        one.update_time.strftime("%Y-%m-%d %H:%M") != one.create_time.strftime("%Y-%m-%d %H:%M")
-                    ):
-                        logger.debug(
-                            f"Skip information for {one.id} - {one.source_name}, because it has already been updated today."
-                        )
-                        continue
-                    need_update_informations.append(one.id)
-
-                    new_ids = _sync_one_information_article(one, article_service)
-                    if new_ids:
-                        indexed_by_source.setdefault(str(one.id), []).extend(new_ids)
-                    one.update_time = datetime.now()
-                    channel_info_repository.update_sync(one)
-                except Exception as e:
-                    logger.exception(f"Failed to sync information article for source {one.id}: {e}")
-
-            page += 1
-    logger.debug("Finished syncing information articles")
-
-    # Update latest_article_update_time for channels
-    if need_update_informations:
-        # Update only channels that use this information source
-        logger.debug(f"Updating latest_article_update_time for channels using information_id={information_id}.")
-        _update_channels_by_source_id(need_update_informations)
-
-    # v2.5 Module D: push freshly-indexed articles into bound knowledge spaces.
-    # The hook short-circuits internally when indexed_by_source is empty.
+    indexed_by_source, updated_sources = run_async_task(
+        lambda: _sync_tenant_sources_async(information_id, article_service)
+    )
+    for source_id in updated_sources:
+        _update_channels_by_source_id([source_id])
     _sync_new_articles_to_knowledge_spaces(
         indexed_by_source,
         information_id=information_id,
         article_service=article_service,
     )
+
+
+def _new_source_lock(source_id: str) -> InformationRedisLock:
+    from bisheng.core.cache.redis_manager import get_redis_client_sync
+
+    return InformationRedisLock(
+        get_redis_client_sync().connection,
+        f"information:article-sync:{source_id}",
+        ttl_seconds=7200,
+    )
+
+
+async def _sync_tenant_sources_async(
+    information_id: str | None,
+    article_service: ArticleEsService,
+) -> tuple[dict[str, list[str]], list[str]]:
+    client = await get_bisheng_information_client()
+    # A failed or incomplete snapshot must not mark any local source as processed.
+    subscriptions = {item.id: item for item in await client.list_all_subscriptions()}
+    async with get_async_db_session() as session:
+        repository = ChannelInfoSourceRepositoryImpl(session)
+        sources = await repository.find_by_ids([information_id]) if information_id else await repository.find_all()
+    indexed_by_source: dict[str, list[str]] = {}
+    updated_sources: list[str] = []
+
+    def dispatch(source_id: str, article_ids: list[str], detected_at: int) -> None:
+        # Keep the target branch's existing knowledge-space delivery hook.
+        indexed_by_source.setdefault(source_id, []).extend(article_ids)
+
+    for source in sources:
+        subscription = subscriptions.get(source.id)
+        if subscription is None:
+            logger.warning("information article source is not subscribed source_id={}", source.id)
+            continue
+        lock = _new_source_lock(source.id)
+        if not lock.acquire():
+            logger.warning(
+                "information article source skipped source_id={} redis_available={}",
+                source.id,
+                lock.redis_available,
+            )
+            continue
+        try:
+            async with get_async_db_session() as session:
+                service = InformationArticleSyncService(
+                    client,
+                    InformationArticleSyncStateRepositoryImpl(session),
+                    article_service,
+                )
+                result = await service.sync_source(subscription, lock, dispatch)
+            if result["written"] or indexed_by_source.get(source.id):
+                updated_sources.append(source.id)
+        except Exception:
+            logger.exception("information article worker source failed source_id={}", source.id)
+        finally:
+            lock.release()
+    return indexed_by_source, updated_sources
 
 
 def _update_channels_by_source_id(source_ids: list[str]):
@@ -150,61 +168,6 @@ def _update_channels_by_source_id(source_ids: list[str]):
         logger.debug(f"Found {len(channels)} channels using source_ids={source_ids}.")
         updated_count = ChannelService.update_channels_latest_article_time_sync(list(channels))
         logger.debug(f"Updated latest_article_update_time for {updated_count} channels.")
-
-
-def _sync_one_information_article(information: ChannelInfoSource, article_service: ArticleEsService):
-    latest_create_time = article_service.get_source_latest_article_time_sync(source_id=information.id)
-    if latest_create_time:
-        latest_create_time = datetime.fromisoformat(latest_create_time).timestamp()
-
-    information_client = get_bisheng_information_client_sync()
-
-    page, page_size, current = 1, 10, 0
-    all_new_ids: list[str] = []
-    while True:
-        resp = information_client.get_information_articles(
-            information.id, False, min_create_time=latest_create_time, page=page, page_size=page_size
-        )
-        articles = []
-        doc_ids = []
-        for article in resp.articles:
-            articles.append(
-                ArticleDocument(
-                    source_type=0 if information.source_type == "wechat" else 1,
-                    source_id=information.id,
-                    title=article.title,
-                    content=article.markdown_content,
-                    content_html=article.html_content,
-                    cover_image=article.icon,
-                    publish_time=datetime.fromisoformat(article.publish_date),
-                    source_url=article.original_url,
-                    create_time=datetime.fromisoformat(article.create_time),
-                    update_time=datetime.fromisoformat(article.update_time),
-                )
-            )
-            doc_ids.append(article.id)
-        try:
-            article_service.bulk_index_articles_sync(articles, doc_ids)
-        except Exception:
-            # if es timeout or over memory change to one by one
-            for tmp_index, tmp_one in enumerate(articles):
-                article_service.index_article(tmp_one, doc_ids[tmp_index])
-        all_new_ids.extend(doc_ids)
-
-        current += len(resp.articles)
-        # get all articles
-        if current >= resp.total or not resp.articles:
-            logger.debug(f"sync all articles {information.id}.")
-            break
-        if not latest_create_time and current >= 36:
-            logger.debug(f"sync more than 36 articles {information.id}.")
-            break
-        if latest_create_time and latest_create_time > articles[-1].create_time.timestamp():
-            logger.debug(f"already get some articles {information.id}.")
-            break
-        page += 1
-    logger.debug(f"Finished syncing information for {information.id}. article nums: {current}")
-    return all_new_ids
 
 
 # --------------------------------------------------------------------------- #
@@ -310,7 +273,7 @@ def _drop_dead_target_configs(
 
 def _sync_new_articles_to_knowledge_spaces(
     indexed_by_source: dict[str, list[str]],
-    information_id: str = None,
+    information_id: str | None = None,
     article_service: ArticleEsService | None = None,
 ) -> None:
     if not indexed_by_source:

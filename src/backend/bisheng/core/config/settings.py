@@ -675,6 +675,8 @@ class IntelligenceCenterConf(BaseModel):
     base_url: str = Field(default="", description="Intelligence Center Service Address")
     api_key: str = Field(default="", description="Intelligence Center Service API Key")
     kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
+    information_initial_article_limit: int = Field(default=36, ge=1, le=100)
+    information_business_timezone: str = Field(default="Asia/Shanghai")
 
 
 class McpConf(BaseModel):
