@@ -1394,6 +1394,7 @@
     "joined": "已加入",
     "joined_by_me": "我加入的",
     "joined_count_label": "加入人数：",
+    "department_private_disabled": "部门知识空间不支持设为私有",
     "department_spaces": "部门知识空间",
     "department_badge": "部门",
     "go_to_parent_folder": "返回上一级",

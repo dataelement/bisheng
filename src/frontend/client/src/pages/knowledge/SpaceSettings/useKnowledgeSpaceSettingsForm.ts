@@ -102,9 +102,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [isDepartmentSpace, setIsDepartmentSpace] = useState(false);
   const [canEdit, setCanEdit] = useState(mode === "create");
   const [canManagePermissions, setCanManagePermissions] = useState(false);
-  const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
+  const [relationModels, setRelationModels] = useState<
+    GrantablePermissionModel[]
+  >([]);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
   const creationRequestIdRef = useRef(generateUUID(32));
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
@@ -179,6 +182,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
+    setIsDepartmentSpace(false);
 
     const load = async () => {
       if (mode === "create") {
@@ -219,6 +223,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           throw new Error("Knowledge space settings access denied");
         }
         setCanEdit(canEditSpace);
+        setIsDepartmentSpace(
+          space.departmentId != null || space.spaceKind === "department",
+        );
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -294,20 +301,21 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         const grants =
           form.visibility === VisibilityType.PRIVATE
             ? []
-            : permissionRows
-                .map((row) => ({
-                  model_key: row.modelKey,
-                  subject: {
-                    type: row.subjectType,
-                    id: String(row.subjectId),
-                    ...(row.subjectType === "department"
-                      ? {
-                          userset_relation: row.includeChildren ? "subtree_member" : null,
-                          include_children: Boolean(row.includeChildren),
-                        }
-                      : {}),
-                  },
-                }));
+            : permissionRows.map((row) => ({
+                model_key: row.modelKey,
+                subject: {
+                  type: row.subjectType,
+                  id: String(row.subjectId),
+                  ...(row.subjectType === "department"
+                    ? {
+                        userset_relation: row.includeChildren
+                          ? "subtree_member"
+                          : null,
+                        include_children: Boolean(row.includeChildren),
+                      }
+                    : {}),
+                },
+              }));
         const result = await createSpaceApi({
           ...payload,
           creationRequestId: creationRequestIdRef.current,
@@ -370,7 +378,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     if (!createdSpace || permissionRows.length === 0) return false;
     setPermissionRetryStatus("retrying");
     try {
-      const context = await getResourcePermissionContext("knowledge_space", createdSpace.id);
+      const context = await getResourcePermissionContext(
+        "knowledge_space",
+        createdSpace.id,
+      );
       await mutateResourceGrants("knowledge_space", createdSpace.id, {
         idempotency_key: generateUUID(32),
         expected_resource_version: context.resource_version,
@@ -393,6 +404,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     submitting,
     loadError,
     canEdit,
+    isDepartmentSpace,
     canManagePermissions,
     relationModels,
     canAddNonUserSubjects: relationModels.length > 0,
