@@ -1466,6 +1466,7 @@
     "joined": "Joined",
     "joined_by_me": "Joined by me",
     "joined_count_label": "Joined count:",
+    "department_private_disabled": "Department knowledge spaces cannot be private",
     "department_spaces": "Department Spaces",
     "department_badge": "Dept",
     "go_to_parent_folder": "Back to parent",

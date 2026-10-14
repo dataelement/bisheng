@@ -575,6 +575,7 @@ export default function MainLayout() {
           name={cacheKey}
           id={cacheKey}
           saveScroll={true}
+          autoFreeze={cacheKey !== 'knowledge_tab'}
         >
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}

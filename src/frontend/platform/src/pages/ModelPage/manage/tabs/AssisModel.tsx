@@ -24,7 +24,7 @@ import { LoadingIcon } from "@/components/bs-icons/loading";
 const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
     const { t } = useTranslation('model')
 
-    return <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 76px 90px 40px" }}>
+    return <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 80px 110px 76px 90px 40px" }}>
         <div className="pr-2">
             <ModelSelect
                 label={''}
@@ -48,6 +48,19 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
         </div>
         <div className="pr-2">
             <Select value={item.streaming ? "1" : "0"} onValueChange={(val) => updateField(index, 'streaming', val === "1")}>
+                <SelectTrigger>
+                    <SelectValue placeholder="" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                        <SelectItem value="1">{t('model.yes')}</SelectItem>
+                        <SelectItem value="0">{t('model.no')}</SelectItem>
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
+        </div>
+        <div className="pr-2">
+            <Select value={item.visual ? "1" : "0"} onValueChange={(val) => updateField(index, 'visual', val === "1")}>
                 <SelectTrigger>
                     <SelectValue placeholder="" />
                 </SelectTrigger>
@@ -99,7 +112,8 @@ const defaultValue = {
         knowledge_max_content: 15000,
         knowledge_sort_index: false,
         default: true,
-        streaming: false
+        streaming: false,
+        visual: false
     }],
     auto_llm: {
         model_id: null,
@@ -153,7 +167,8 @@ export default function AssisModel({ llmOptions, onBack }) {
             knowledge_max_content: 15000,
             knowledge_sort_index: false,
             default: !form.llm_list.length,
-            streaming: true
+            streaming: true,
+            visual: false
         };
         setForm({
             ...form,
@@ -213,13 +228,17 @@ export default function AssisModel({ llmOptions, onBack }) {
                     <InheritedBadge visible={inheritedFromRoot} />
                 </span>
                 <div className="mt-2 border p-4 rounded-md bg-muted">
-                    <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 110px 68px 90px 40px" }}>
+                    <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "repeat(2, 1fr) 80px 80px 110px 68px 90px 40px" }}>
                         <Label className="bisheng-label">{t('model.model')}<span className="text-red-500 text-xs">*</span></Label>
                         <Label className="bisheng-label">
                             <span>{t('model.assistantExecutionMode')}</span>
                             <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantExecutionModeTooltip')} />
                         </Label>
                         <Label className="bisheng-label">{t('model.streamingOutput')}</Label>
+                        <Label className="bisheng-label">
+                            <span>{t('model.assistantVision')}</span>
+                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantVisionTooltip')} />
+                        </Label>
                         <Label className="bisheng-label">
                             <span>{t('model.assistantKnowledgeBaseMaxCharacters')}</span>
                             <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.assistantKnowledgeBaseMaxCharactersTooltip')} />

@@ -1,3 +1,5 @@
+# This optional office overlay intentionally leaves backend_eplus_worker from
+# docker-compose.yml unchanged: E+ media and CA bytes use MinIO, not /app/data.
 services:
   office:
     container_name: bisheng-office
@@ -11,4 +13,3 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/office/bisheng:/var/www/onlyoffice/documentserver/sdkjs-plugins/bisheng
     command: bash -c "supervisorctl restart all"
     restart: on-failure
-

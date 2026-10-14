@@ -130,7 +130,9 @@ export default function FilePreviewPage({
                 setFileUrl(resolveKnowledgePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
-            .catch((err) => console.error("Failed to load preview URL:", err))
+            .catch((err: unknown) => {
+                console.error("Failed to load preview URL:", err);
+            })
             .finally(() => setLoading(false));
     }, [fileId, spaceId]);
 

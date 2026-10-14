@@ -103,6 +103,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [isDepartmentSpace, setIsDepartmentSpace] = useState(false);
   const [canEdit, setCanEdit] = useState(mode === "create");
   // In a department space, the configured responsible user is the user-facing
   // creator. The audit creator must stay hidden, especially while no responsible
@@ -110,7 +111,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [departmentCreator, setDepartmentCreator] =
     useState<DepartmentSpaceCreator | null>(null);
   const [canManagePermissions, setCanManagePermissions] = useState(false);
-  const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
+  const [relationModels, setRelationModels] = useState<
+    GrantablePermissionModel[]
+  >([]);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
   const creationRequestIdRef = useRef(generateUUID(32));
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
@@ -185,6 +188,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   useEffect(() => {
     let cancelled = false;
     setLoadError(null);
+    setIsDepartmentSpace(false);
 
     const load = async () => {
       if (mode === "create") {
@@ -230,6 +234,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           space.spaceKind === "department" && creatorId > 0
             ? { id: creatorId, name: space.adminUserName || String(creatorId) }
             : null,
+        );
+        setIsDepartmentSpace(
+          space.departmentId != null || space.spaceKind === "department",
         );
         setForm({
           name: space.name,
@@ -306,20 +313,21 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         const grants =
           form.visibility === VisibilityType.PRIVATE
             ? []
-            : permissionRows
-                .map((row) => ({
-                  model_key: row.modelKey,
-                  subject: {
-                    type: row.subjectType,
-                    id: String(row.subjectId),
-                    ...(row.subjectType === "department"
-                      ? {
-                          userset_relation: row.includeChildren ? "subtree_member" : null,
-                          include_children: Boolean(row.includeChildren),
-                        }
-                      : {}),
-                  },
-                }));
+            : permissionRows.map((row) => ({
+                model_key: row.modelKey,
+                subject: {
+                  type: row.subjectType,
+                  id: String(row.subjectId),
+                  ...(row.subjectType === "department"
+                    ? {
+                        userset_relation: row.includeChildren
+                          ? "subtree_member"
+                          : null,
+                        include_children: Boolean(row.includeChildren),
+                      }
+                    : {}),
+                },
+              }));
         const result = await createSpaceApi({
           ...payload,
           creationRequestId: creationRequestIdRef.current,
@@ -345,7 +353,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         canManagePermissions &&
         permissionHasChanges
       ) {
-        const latestContext = await getResourcePermissionContext("knowledge_space", spaceId);
+        const latestContext = await getResourcePermissionContext(
+          "knowledge_space",
+          spaceId,
+        );
         await mutateResourceGrants("knowledge_space", spaceId, {
           idempotency_key: generateUUID(32),
           expected_resource_version: latestContext.resource_version,
@@ -382,7 +393,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     if (!createdSpace || permissionRows.length === 0) return false;
     setPermissionRetryStatus("retrying");
     try {
-      const context = await getResourcePermissionContext("knowledge_space", createdSpace.id);
+      const context = await getResourcePermissionContext(
+        "knowledge_space",
+        createdSpace.id,
+      );
       await mutateResourceGrants("knowledge_space", createdSpace.id, {
         idempotency_key: generateUUID(32),
         expected_resource_version: context.resource_version,
@@ -405,6 +419,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     submitting,
     loadError,
     canEdit,
+    isDepartmentSpace,
     canManagePermissions,
     departmentCreator,
     relationModels,

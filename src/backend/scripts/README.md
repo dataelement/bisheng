@@ -2,6 +2,35 @@
 
 This directory contains manual maintenance and migration scripts for the backend.
 
+## E+ Maintenance
+
+### `clear_eplus_history.py`
+
+Export and then delete all E+ conversation turns to reset model context. Preserve
+robot configuration, space bindings, conversation mappings/sequence counters and
+inbound deduplication records. Internal assistant history is not touched.
+Run with the live backend `config`; no schema migrations or Redis cleanup.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/clear_eplus_history.py \
+  --all-tenants --backup /data/eplus-history.json
+# First drain requests and stop every E+ worker. Copy and verify the backup
+# outside the Pod before deletion. The file must match the current DB exactly.
+PYTHONPATH=./ .venv/bin/python scripts/clear_eplus_history.py \
+  --all-tenants --backup /data/eplus-history.json \
+  --apply --workers-stopped --confirm CLEAR_ALL_EPLUS_HISTORY
+```
+
+Use `--tenant-id 1` instead of `--all-tenants` to restrict the scope. Never
+overwrite the backup. Non-terminal turns and changed snapshots block deletion;
+errors roll back the transaction. The default deadline is 180 seconds.
+The backup stores all columns with tagged datetime/date/decimal/bytes values;
+recovery requires decoding these tags and inserting the original rows into
+`eplus_turn` after stopping workers and checking IDs for conflicts.
+K8s instructions: [clear_eplus_history_agent.md](clear_eplus_history_agent.md).
+SQLite safety tests cover the cleanup logic; DM/MySQL live execution is an
+operator verification step, not a claimed local integration test.
+
 ## Approval Scripts
 
 ### `recover_approval_decision_events.py`

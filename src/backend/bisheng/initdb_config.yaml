@@ -82,6 +82,10 @@ env:
   # 工作台「无菜单权限」占位页（/menu-unavailable）展示的纯文案，可在系统配置中修改；不配置则使用前端默认文案
   workbench_menu_unavailable_message: "暂无使用过的应用，可以前往应用广场探索更多应用"
 
+# Employee AI-access entries only; API capabilities and existing keys are unchanged.
+open_api:
+  ai_access_ui_enabled: false
+
 workflow:
   # 节点运行最大步数
   max_steps: 50

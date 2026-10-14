@@ -6,6 +6,53 @@
     "description": "HTTP and WebSocket endpoints authenticated with a Bearer API key."
   },
   "paths": {
+    "/api/v2/filelib/answer": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Answer Knowledge",
+        "operationId": "answer_knowledge_api_v2_filelib_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeAnswerReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnifiedResponseModel_KnowledgeAnswerResp_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
     "/api/v2/auth/whoami": {
       "get": {
         "tags": [
@@ -2172,6 +2219,187 @@
   },
   "components": {
     "schemas": {
+      "UnifiedResponseModel_KnowledgeAnswerResp_": {
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code"
+          },
+          "status_message": {
+            "type": "string",
+            "title": "Status Message"
+          },
+          "data": {
+            "$ref": "#/components/schemas/KnowledgeAnswerResp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status_code",
+          "status_message"
+        ],
+        "title": "UnifiedResponseModel[KnowledgeAnswerResp]"
+      },
+      "KnowledgeAnswerResp": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "has_context": {
+            "type": "boolean",
+            "title": "Has Context"
+          },
+          "model_id": {
+            "type": "integer",
+            "title": "Model Id"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeAnswerReference"
+            },
+            "type": "array",
+            "title": "References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer",
+          "has_context",
+          "model_id",
+          "references"
+        ],
+        "title": "KnowledgeAnswerResp"
+      },
+      "KnowledgeAnswerReference": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "document_id": {
+            "type": "integer",
+            "title": "Document Id"
+          },
+          "document_name": {
+            "type": "string",
+            "title": "Document Name"
+          },
+          "document_update_time": {
+            "type": "string",
+            "title": "Document Update Time",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id",
+          "document_id",
+          "document_name"
+        ],
+        "title": "KnowledgeAnswerReference"
+      },
+      "KnowledgeAnswerReq": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "knowledge_base_ids": {
+            "items": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Knowledge Base Ids"
+          },
+          "model_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "title": "Model Id"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnswerFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 50,
+            "minimum": 1,
+            "title": "Top K",
+            "default": 10
+          },
+          "max_content": {
+            "type": "integer",
+            "maximum": 60000,
+            "minimum": 1,
+            "title": "Max Content",
+            "default": 15000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query",
+          "knowledge_base_ids",
+          "model_id"
+        ],
+        "title": "KnowledgeAnswerReq"
+      },
+      "AnswerFilters": {
+        "properties": {
+          "knowledge_base_filters": {
+            "items": {
+              "$ref": "#/components/schemas/AnswerSpaceFilter"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Knowledge Base Filters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AnswerFilters"
+      },
+      "AnswerSpaceFilter": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "title": "Knowledge Base Id"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Tags"
+          },
+          "tag_match_mode": {
+            "type": "string",
+            "const": "ANY",
+            "title": "Tag Match Mode",
+            "default": "ANY"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "knowledge_base_id"
+        ],
+        "title": "AnswerSpaceFilter"
+      },
       "APIAddQAParam": {
         "properties": {
           "question": {

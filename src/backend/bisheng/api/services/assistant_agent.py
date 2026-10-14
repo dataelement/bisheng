@@ -15,9 +15,13 @@ from loguru import logger
 from pydantic import Field, SkipValidation
 
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.assistant.domain.schemas.execution import (
+    AssistantEntryPoint,
+    AssistantExecutionContext,
+    AssistantMessageContent,
+)
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
-    CITATION_PROMPT_RULES,
     CitationRegistryCollector,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
@@ -25,7 +29,6 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
-    prompt_has_citation_rules,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.assistant import (
@@ -103,12 +106,18 @@ class AssistantCitationToolWrapper(BaseTool):
 
     def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
+        if getattr(self.tool, "robot_scope_enforced", False):
+            # E+ replies are text-only; robot-bound sources have no internal
+            # citation resolve contract and must not enter that registry.
+            return self._dump_robot_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
 
     async def _aformat_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
+        if getattr(self.tool, "robot_scope_enforced", False):
+            return self._dump_robot_knowledge_chunks(source_documents)
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
         return self._dump_knowledge_chunks(source_documents)
@@ -125,6 +134,11 @@ class AssistantCitationToolWrapper(BaseTool):
             kb_name = self.kb_name_by_id.get(kb_id, "")
             results.append(KnowledgeUtils.format_retrieved_chunk(doc, kb_name))
         return json.dumps(results, ensure_ascii=False)
+
+    def _dump_robot_knowledge_chunks(self, source_documents: list) -> str:
+        from bisheng.eplus.domain.services.knowledge_result import format_robot_knowledge_result
+
+        return format_robot_knowledge_result(source_documents, self.kb_name_by_id)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         cache_citation_registry_items_sync(items)
@@ -149,7 +163,12 @@ class AssistantCitationToolWrapper(BaseTool):
         # the chat per search — named after the retriever instead of the
         # knowledge base, so it read "知识库已被删除", carrying the raw Document
         # dump as its output.
-        retrieval_result = self.tool.knowledge_retriever_tool._run(query)
+        retrieval_options = (
+            {key: kwargs.get(key) for key in ("file_name", "file_name_query")}
+            if getattr(self.tool, "robot_scope_enforced", False)
+            else {}
+        )
+        retrieval_result = self.tool.knowledge_retriever_tool._run(query, **retrieval_options)
         return self._format_knowledge_results(retrieval_result)
 
     async def _arun(self, query: str, **kwargs: Any) -> Any:
@@ -160,7 +179,12 @@ class AssistantCitationToolWrapper(BaseTool):
         if not self._has_knowledge_rag_tool():
             return await self.tool.ainvoke({"query": query}, config=kwargs.get("config"))
 
-        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query)
+        retrieval_options = (
+            {key: kwargs.get(key) for key in ("file_name", "file_name_query")}
+            if getattr(self.tool, "robot_scope_enforced", False)
+            else {}
+        )
+        retrieval_result = await self.tool.knowledge_retriever_tool._arun(query, **retrieval_options)
         return await self._aformat_knowledge_results(retrieval_result)
 
 
@@ -199,14 +223,21 @@ class AssistantAgent(AssistantUtils):
         }
         self.current_agent_executor = None
         self.llm: BaseLanguageModel | None = None
+        self.supports_vision = False
         self.llm_agent_executor = None
         # Knowledge Base Retrieval Related Parameters
         self.knowledge_retriever = {"max_content": 15000, "sort_by_source_and_index": False}
         self.citation_registry_collector = CitationRegistryCollector()
+        self.execution_context: AssistantExecutionContext | None = None
 
-    async def init_assistant(self, callbacks: Callbacks = None):
+    async def init_assistant(
+        self,
+        callbacks: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
+        self.execution_context = context
         await self.init_llm()
-        await self.init_tools(callbacks)
+        await self.init_tools(callbacks, context=context)
         await self.init_agent()
 
     async def init_llm(self):
@@ -225,6 +256,7 @@ class AssistantAgent(AssistantUtils):
             raise AssistantModelNotConfigError()
 
         self.llm_agent_executor = default_llm.agent_executor_type
+        self.supports_vision = bool(default_llm.visual)
         self.knowledge_retriever = {
             "max_content": default_llm.knowledge_max_content,
             "sort_by_source_and_index": default_llm.knowledge_sort_index,
@@ -257,10 +289,20 @@ class AssistantAgent(AssistantUtils):
             user_id=self.invoke_user_id,
         )
 
-    async def init_tools(self, callbacks: Callbacks = None):
+    async def init_tools(
+        self,
+        callbacks: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """Get by nametool Vertical
         tools_name_param:: {name: params}
         """
+        is_eplus = context is not None and context.entry_point == AssistantEntryPoint.EPLUS
+        if is_eplus and context.robot_scope is None:
+            from bisheng.eplus.domain.services.robot_space_retrieval import RobotToolScopeViolation
+
+            raise RobotToolScopeViolation("E+ assistant execution requires a robot scope")
+
         links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(assistant_id=self.assistant.id)
         # tool
         tools: list[BaseTool] = []
@@ -279,9 +321,58 @@ class AssistantAgent(AssistantUtils):
                 app_type=ApplicationTypeEnum.ASSISTANT,
                 user_id=self.invoke_user_id,
                 skip_unauthorized=True,
+                enforce_user_permission=not is_eplus,
                 llm=self.llm,
                 callbacks=callbacks,
             )
+
+        if is_eplus:
+            from bisheng.database.models.flow import FlowDao
+            from bisheng.eplus.domain.services.robot_space_retrieval import (
+                RobotSpaceRetrievalPolicy,
+                RobotToolScopeViolation,
+                assert_eplus_tool_scope,
+                flow_uses_bisheng_knowledge,
+            )
+
+            # Admitted robot users can use the assistant's configured tools
+            # without personal tool grants. Tool loading keeps tenant/deletion
+            # filters; this guard still rejects knowledge-scope bypasses.
+            tools = [assert_eplus_tool_scope(tool) for tool in tools]
+
+            # Assistant flow links are not executable tools in this legacy
+            # runtime. Still inspect knowledge-bearing links so they fail closed
+            # instead of becoming an accidental bypass when flow loading lands.
+            flow_ids = [str(link.flow_id) for link in flow_links if getattr(link, "flow_id", None)]
+            if flow_ids:
+                for flow in await FlowDao.aget_flow_by_ids(flow_ids):
+                    if flow_uses_bisheng_knowledge(flow.data):
+                        raise RobotToolScopeViolation(
+                            "E+ assistant flow contains a BiSheng knowledge node without robot scope injection"
+                        )
+
+            bound_space_ids = tuple(sorted({int(space_id) for space_id in context.robot_scope.space_ids}))
+            if bound_space_ids:
+                policy = RobotSpaceRetrievalPolicy(
+                    tenant_id=int(self.assistant.tenant_id),
+                    bot_config_id=context.robot_scope.bot_config_id,
+                    invoke_user_id=self.invoke_user_id,
+                )
+                tools.append(
+                    await policy.build_tool(
+                        llm=self.llm,
+                        expected_scope=context.robot_scope,
+                        max_content=self.knowledge_retriever.get("max_content", 15000),
+                        sort_by_source_and_index=self.knowledge_retriever.get("sort_by_source_and_index", False),
+                    )
+                )
+
+            self.tools = [self.wrap_citation_tool(tool) for tool in tools]
+            kb_name_by_id = self._resolve_kb_name_by_id(list(bound_space_ids))
+            for tool in self.tools:
+                if isinstance(tool, AssistantCitationToolWrapper) and tool._has_knowledge_rag_tool():
+                    tool.kb_name_by_id = kb_name_by_id
+            return
 
         # F041: split knowledge spaces (type=3) from document / QA KBs by row.type.
         link_knowledge_ids = [link.knowledge_id for link in flow_links if link.knowledge_id]
@@ -515,65 +606,97 @@ class AssistantAgent(AssistantUtils):
             total_count = 0
             for one in new_messages:
                 if isinstance(one, HumanMessage):
-                    total_count += len(enc.encode(one.content))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
                 elif isinstance(one, AIMessage):
-                    total_count += len(enc.encode(one.content))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
                     if "tool_calls" in one.additional_kwargs:
                         total_count += len(
                             enc.encode(json.dumps(one.additional_kwargs["tool_calls"], ensure_ascii=False))
                         )
                 else:
-                    total_count += len(enc.encode(str(one.content)))
+                    total_count += len(enc.encode(self.message_content_for_tokens(one.content)))
             if total_count > self.assistant.max_token:
                 return get_finally_message(new_messages[1:])
             return new_messages
 
         return get_finally_message(messages)
 
-    async def run(self, query: str, chat_history: list = None, callback: Callbacks = None) -> list[BaseMessage]:
+    @staticmethod
+    def message_content_for_tokens(content: Any) -> str:
+        if isinstance(content, str):
+            return content
+        return json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def build_input_messages(
+        *,
+        query: str,
+        chat_history: list[BaseMessage] | None,
+        context: AssistantExecutionContext | None,
+    ) -> list[BaseMessage]:
+        content: AssistantMessageContent = context.content if context is not None else query
+        user_message = HumanMessage(content=content)
+        if chat_history:
+            chat_history.append(user_message)
+            return chat_history
+        return [user_message]
+
+    @staticmethod
+    async def _raise_if_cancelled(context: AssistantExecutionContext | None) -> None:
+        if context is not None:
+            await context.raise_if_cancelled()
+
+    async def run(
+        self,
+        query: str,
+        chat_history: list | None = None,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ) -> list[BaseMessage]:
         """
         Run Agent Conversation
         """
+        await self._raise_if_cancelled(context)
         await self.fake_callback(callback)
 
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
+        inputs = self.build_input_messages(query=query, chat_history=chat_history, context=context)
 
         # trim message
         inputs = await self.trim_messages(inputs)
 
         if self.current_agent_executor == "ReAct":
-            result = await self.react_run(inputs, callback)
+            result = await self.react_run(inputs, callback, context=context)
         else:
             result = await self.agent.ainvoke({"messages": inputs}, config=RunnableConfig(callbacks=callback))
             result = result["messages"]
+        await self._raise_if_cancelled(context)
 
         # Record Chat History
         await self.record_chat_history([one.to_json() for one in result])
 
         return result
 
-    async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
+    async def astream(
+        self,
+        query: str,
+        chat_history: list | None = None,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """
         Run Agent Conversation - Streaming version
         """
+        await self._raise_if_cancelled(context)
         await self.fake_callback(callback)
 
-        if chat_history:
-            chat_history.append(HumanMessage(content=query))
-            inputs = chat_history
-        else:
-            inputs = [HumanMessage(content=query)]
+        inputs = self.build_input_messages(query=query, chat_history=chat_history, context=context)
 
         # trim message
         inputs = await self.trim_messages(inputs)
 
         if self.current_agent_executor == "ReAct":
             # ReActMode temporarily does not support streaming, downgrade to non streaming
-            result = await self.react_run(inputs, callback)
+            result = await self.react_run(inputs, callback, context=context)
             # Record Chat History
             await self.record_chat_history([one.to_json() for one in result])
             yield result
@@ -589,12 +712,13 @@ class AssistantAgent(AssistantUtils):
             try:
                 # UsemessagesPatternedLangGraph streamingattaintokenLevel of Streaming Output
                 async for chunk in self.agent.astream({"messages": inputs}, config=config, stream_mode="messages"):
+                    await self._raise_if_cancelled(context)
                     chunk_count += 1
 
                     # stream_mode="messages" Return (message, metadata) Meta Group
                     message = None
                     if isinstance(chunk, tuple) and len(chunk) >= 2:
-                        message, metadata = chunk[:2]
+                        message, _metadata = chunk[:2]
                     elif hasattr(chunk, "content"):
                         # Directly to the message object
                         message = chunk
@@ -604,9 +728,10 @@ class AssistantAgent(AssistantUtils):
                         final_messages = [message]  # Save message for history
                         yield [message]
 
-            except Exception as astream_error:
-                logger.exception(f"Error in astream async for loop: {astream_error!s}")
-                raise astream_error
+            except Exception:
+                # Provider exceptions may embed request content; keep it out of logs.
+                logger.exception("assistant astream failed")
+                raise
 
             logger.info(f"Function calling astream completed, total chunks: {chunk_count}")
 
@@ -617,8 +742,14 @@ class AssistantAgent(AssistantUtils):
             if final_messages:
                 await self.record_chat_history([one.to_json() for one in final_messages])
 
-    async def react_run(self, inputs: list, callback: Callbacks = None):
+    async def react_run(
+        self,
+        inputs: list,
+        callback: Callbacks = None,
+        context: AssistantExecutionContext | None = None,
+    ):
         """react Mode input and execution"""
+        await self._raise_if_cancelled(context)
         result = await self.agent.ainvoke(
             {
                 "input": inputs[-1].content,
@@ -626,11 +757,13 @@ class AssistantAgent(AssistantUtils):
             },
             config=RunnableConfig(callbacks=callback),
         )
-        logger.debug(f"react_run result: {result}")
+        result_count = len(result)
+        logger.debug("react_run completed with {} messages", result_count)
         output = result["agent_outcome"].return_values["output"]
         if isinstance(output, dict):
-            output = list(output.values())[0]
+            output = next(iter(output.values()))
         for one in result["intermediate_steps"]:
+            await self._raise_if_cancelled(context)
             inputs.append(one[0])
         inputs.append(AIMessage(content=output))
         return inputs

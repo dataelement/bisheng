@@ -148,6 +148,7 @@ class KnowledgeLLMConfig(BaseModel):
 
 class AssistantLLMItem(BaseModel):
     model_id: int | None = Field(None, description="Model'sID")
+    visual: bool = Field(default=False, description="Whether this assistant model accepts image input")
     agent_executor_type: str | None = Field(default="function call", description="Execution modefunction call or ReAct")
     knowledge_max_content: int | None = Field(
         default=15000, description="Maximum number of strings for knowledge base retrieval"

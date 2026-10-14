@@ -1391,6 +1391,7 @@
     "joined": "参加済み",
     "joined_by_me": "私が参加",
     "joined_count_label": "参加人数:",
+    "department_private_disabled": "部門ナレッジスペースは非公開に設定できません",
     "department_spaces": "部門ナレッジスペース",
     "department_badge": "部門",
     "go_to_parent_folder": "上の階層に戻る",

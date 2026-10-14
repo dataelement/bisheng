@@ -30,6 +30,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
+import { EPlusRobotSettings } from "./EPlusRobotSettings";
 
 export default function Setting() {
   const { t } = useTranslation();
@@ -139,6 +140,19 @@ export default function Setting() {
         </AccordionItem>
         {/* Content security review */}
         {appConfig.isPro && <AssistantSetting id={assistantState.id} type={3} />}
+      </Accordion>
+      <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
+        {t("build.externalAccess")}
+      </h1>
+      <Accordion type="multiple" className="w-full">
+        <AccordionItem value="eplus-robot">
+          <AccordionTrigger>
+            <span>{t("build.eplusRobot")}</span>
+          </AccordionTrigger>
+          <AccordionContent className="py-2">
+            {assistantState.id && <EPlusRobotSettings assistantId={assistantState.id} />}
+          </AccordionContent>
+        </AccordionItem>
       </Accordion>
       <h1 className="border-b bg-background-login indent-4 text-sm leading-8 text-muted-foreground">
         {t("build.knowledge")}

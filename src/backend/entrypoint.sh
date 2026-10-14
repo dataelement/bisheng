@@ -72,6 +72,9 @@ elif [ "$start_mode" = "default" ]; then
 elif [ "$start_mode" = "linsight" ]; then
     echo "Starting LinSight worker..."
     start_linsight
+elif [ "$start_mode" = "eplus" ]; then
+    echo "Starting E+ connection worker..."
+    python -m bisheng.eplus.worker
 elif [ "$start_mode" = "worker" ]; then
     echo "Starting All worker..."
     # 处理知识库相关任务的worker
@@ -87,6 +90,6 @@ elif [ "$start_mode" = "worker" ]; then
 
     echo "All workers started successfully."
 else
-    echo "Invalid start mode. Use api、worker、knowledge、knowledge_ocr、workflow、beat、default、linsight."
+    echo "Invalid start mode. Use api、worker、knowledge、knowledge_ocr、workflow、beat、default、linsight、eplus."
     exit 1
 fi

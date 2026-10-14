@@ -77,6 +77,8 @@
     "assistantExecutionMode": "助手执行模式",
     "assistantExecutionModeTooltip": "模型支持OpenAI function call 格式接口协议时，建议选择 function call 模式",
     "streamingOutput": "流式输出",
+    "assistantVision": "视觉输入",
+    "assistantVisionTooltip": "仅在该模型端点已确认支持图片输入时开启。E+ 机器人会把图片直接交给已开启视觉能力的助手模型，否则使用已配置的图片文字提取能力。",
     "assistantKnowledgeBaseMaxCharacters": "助手知识库检索最大字符数",
     "assistantKnowledgeBaseMaxCharactersTooltip": "传给模型的最大字符数，超过会自动截断，可根据模型最大上下文长度灵活调整",
     "reorderAfterRetrieval": "检索后是否重排",

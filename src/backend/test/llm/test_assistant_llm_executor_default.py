@@ -7,6 +7,10 @@ class TestAssistantExecutorTypeFallback(unittest.TestCase):
     def test_default_is_function_call(self):
         self.assertEqual(AssistantLLMItem().agent_executor_type, "function call")
 
+    def test_visual_capability_is_explicit_and_defaults_off(self):
+        self.assertFalse(AssistantLLMItem().visual)
+        self.assertTrue(AssistantLLMItem(visual=True).visual)
+
     def test_blank_or_unknown_values_fall_back_to_function_call(self):
         for value in ("", None, "React", "unknown"):
             with self.subTest(value=value):

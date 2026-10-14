@@ -75,6 +75,10 @@
 **防护**:守卫测试 `src/backend/test/cofco/test_cofco_config_customizations.py`,
 加上 §3 第 ⓪ 步的全量比对。
 
+新增独立Worker时也须对齐目标分支既有后端的环境变量；不要把来源分支的示例
+`BS_SSO_SYNC__GATEWAY_HMAC_SECRET` 单独留在E+ Worker上，覆盖配置文件中的实际值。
+`test/eplus/test_eplus_worker_lifecycle.py` 会检查独立Worker与API的环境一致性。
+
 **前端代码同理,而且不一定发生在合并里。** 普通提交也会顺手「整文件取主线」:2026-09-18 发现
 知识空间 AI dock 的引用条(勾选文件 → 输入框上方灰条、勾选即问答范围)被一个后端 fix 连带换成了
 主线版本,主线从没有这段,等于直接删掉。
@@ -98,6 +102,8 @@
 | F045 部门空间显示管理员而非创建者 | `grep -c "never surfaces on a" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
 | F045 无管理员时拦住申请加入 | `grep -c "ensure_space_not_pending_admin(space.id)" src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py` |
 | 技能说明气泡限高(字号-大 的 110% 缩放) | `grep -c "bs-dvh" src/frontend/client/src/components/Linsight/Input/SkillSelector.tsx` |
+| F074 知识空间问答开放入口 | `grep -c "include_router(knowledge_answer_router_rpc)" src/backend/bisheng/api/router.py`；并运行 `test/open_api/test_knowledge_answer_auth.py` 的生产路由/scope登记守卫，避免同时丢掉路由和权限登记时旧矩阵静默通过 |
+| F075 机器人调试入口与独立进程 | `rg -c 'robot-debug' src/frontend/platform/src/routes/index.tsx`；保留 `bisheng/eplus/debug_app.py` 和前后端显式启用开关；运行 `test/eplus/test_eplus_debug_app.py` 验证默认关闭、独立进程仅挂载调试路由、权限发现禁止 bootstrap，不能为了合并方便注册进正式 API |
 
 守卫测试:`src/backend/test/cofco/test_cofco_department_space_admin.py`(这两处调用)、
 `src/backend/test/cofco/test_cofco_config_customizations.py`(配置)。
@@ -110,7 +116,9 @@
 **原因**:中粮线上的 merge revision 只合并了当时的两个 head,主线之后新增的迁移会再次分叉。
 
 **处理**:新建一个空的 merge revision,`down_revision` 填当前两个 head 组成的元组;
-不要修改已有的 merge revision。目前最新的是 `f061_merge_cofco_909_f066_heads`。
+不要修改已有的 merge revision。909 当前 head 是 `f061_merge_cofco_909_f066_heads`；923
+已用 `f062_merge_cofco_923_f068_heads` 合入 F068，并接续 `cofco_923_information_cursor`；
+909 合进923后须保留该后续链，不能退回909的迁移头。
 
 ### 2.5 授权模型版本号与 checksum(主线改了模型就会冲突)
 
@@ -156,7 +164,15 @@ git diff --name-only <合并前的中粮tip> -- 'src/frontend/**' \
 **⚠️ 必查同名命名空间**:两条线可能各自新建了同名的顶层块,合并后 JSON 只保留后一块,
 **另一块的 key 会静默变成空**。这时 JSON 仍然合法,`pnpm check-i18n` 也照样通过。检查方法见 §3 第 ④ 步。
 
-### 2.8 知识空间问答服务 `knowledge_space_chat_service.py`(主线一动这条链路就冲突)
+### 2.8 部门空间设置页与表单 hook
+
+923 的部门管理员展示与909的部门空间禁选私有会改同一段详情加载逻辑。
+必须同时保留 `departmentCreator`（`adminUserId/adminUserName`）与 `isDepartmentSpace`
+（`departmentId/spaceKind`）的赋值、切换空间时重置和返回值；不能整段取一侧。
+页面沿用 `KnowledgeSpaceAccessMode` 封装，保留923的权限行装饰及返回路径，
+移除已迁入封装组件的旧确认调用，并复核600行上限。
+
+### 2.9 知识空间问答服务 `knowledge_space_chat_service.py`(主线一动这条链路就冲突)
 
 **原因**:中粮线为模型限流恢复重写了整条问答链路。主线的 `space_rag` 把检索、prompt、流式、
 落库、结束事件全部内联在一个方法里;中粮线把渲染抽到 `_render_rag_response`,`space_rag` 只做
@@ -181,7 +197,7 @@ grep -n "messages\[1\]\.id" src/backend/bisheng/knowledge/domain/services/knowle
 
 ## 3. 合并后检查清单
 
-按顺序执行,每一项都不能省。
+按顺序执行；前端本地验证按第③步的用户约定交给镜像构建阶段，其余项不能省。
 
 **⓪ 查被静默删掉的中粮定制(§2.3)**:这一步要放在跑测试之前,因为测试发现不了。
 
@@ -212,8 +228,8 @@ cd src/backend && uv run alembic heads                            # 只能有一
 uv run pytest -q test/cofco test/celery test/database/test_alembic_single_head.py
 ```
 
-**③ 前端:必须真跑一次构建**。带 `@ts-strict-ignore` 的文件会被 tsc 跳过,
-所以 lint 和 typecheck 都抓不到重复声明,只有 vite build 能报出来。
+**③ 前端:默认交给镜像构建阶段验证（用户于2026-10-09明确）**。本地开发与合并不重复跑前端测试和构建；只有用户明确要求才执行下面的本地命令。CI质量门禁不变，未执行不能记为通过。带 `@ts-strict-ignore` 的文件会被 tsc 跳过,
+所以 lint 和 typecheck 都抓不到重复声明,镜像构建阶段仍须验证 vite build。
 
 ```bash
 cd src/frontend && pnpm lint

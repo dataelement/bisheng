@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const source = readFileSync(
-  join(process.cwd(), "src/pages/knowledge/SpaceSettings/useKnowledgeSpaceSettingsForm.ts"),
+  join(
+    process.cwd(),
+    "src/pages/knowledge/SpaceSettings/useKnowledgeSpaceSettingsForm.ts",
+  ),
   "utf8",
 );
 
@@ -16,7 +19,8 @@ describe("F050 knowledge settings orchestration contract", () => {
       "auto_tag_custom_tags",
       "auth_type",
       "is_released",
-    ]) expect(source).toContain(field);
+    ])
+      expect(source).toContain(field);
     expect(source).toContain('getCreationPermissionContext("knowledge_space")');
     expect(source).toContain("expected_catalog_release_id: catalogReleaseId");
     expect(source).toContain("creationRequestId: creationRequestIdRef.current");
@@ -27,8 +31,12 @@ describe("F050 knowledge settings orchestration contract", () => {
       source.indexOf('mutateResourceGrants("knowledge_space"'),
     );
     expect(source).toContain("changes: permissionDiff.changes");
-    expect(source).toContain('const latestContext = await getResourcePermissionContext("knowledge_space", spaceId)');
-    expect(source).toContain("expected_resource_version: latestContext.resource_version");
+    expect(source).toMatch(
+      /const latestContext = await getResourcePermissionContext\(\s*"knowledge_space",\s*spaceId,?\s*\)/,
+    );
+    expect(source).toContain(
+      "expected_resource_version: latestContext.resource_version",
+    );
     expect(source).not.toContain("authorizeResource");
     expect(source).not.toContain("manage_space_relation");
   });

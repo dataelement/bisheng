@@ -64,6 +64,7 @@ export function FilePreviewDrawer({
     return (
         <Sheet open={open && !!(fileId || changeRequestId)} onOpenChange={onOpenChange}>
             <SheetContent
+                data-preview-file-drawer
                 side="right"
                 hideClose
                 className={cn(
