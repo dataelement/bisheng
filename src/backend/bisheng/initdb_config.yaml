@@ -1,11 +1,13 @@
 knowledges: # 知识库相关配置
-  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、paddle_ocr三种选项，默认为etl4lm
+  loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、mineru_v4、paddle_ocr，默认为etl4lm
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
     url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict
     timeout: 600
     # OCR SDK服务地址，默认为空则使用ETL4LM自带的轻量OCR模型（速度快，对于困难场景效果一般），若填写OCR SDK服务地址则使用高精度的OCR模型。
     ocr_sdk_url: ""
+    # 额外的 ETL4LM JSON 请求字段；同名字段覆盖 Loader 默认值。
+    request_kwargs: {}
   mineru:
     # 文档地址 https://opendatalab.github.io/MinerU/zh/reference/output_files/#_15
     url: "http://192.168.106.20:8033/file_parse"
@@ -14,11 +16,26 @@ knowledges: # 知识库相关配置
       x-api-key: "11"
     request_kwargs:
       backend: "pipeline"
+  mineru_v4:
+    # V1 API root; keep empty until the administrator explicitly selects mineru_v4.
+    api_url: ""
+    api_key_env: "MINERU_V4_API_KEY"
+    tier: "standard"
+    ocr_mode: "auto"
+    request_kwargs: {}
+    connect_timeout_seconds: 10
+    request_timeout_seconds: 60
+    transfer_timeout_seconds: 300
+    job_timeout_seconds: 1800
+    poll_interval_seconds: 3
   paddle_ocr:
     # 文档地址 https://ai.baidu.com/ai-doc/AISTUDIO/Cmkz2m0ma
     url: "https://xxx.aistudio-app.com/layout-parsing"
     auth_token: ''
     timeout: 60
+    # 瞬时拥塞（如队列已满、限流、503）采用指数退避重试
+    max_retries: 3
+    retry_backoff: 1
     headers:
       x-api-key: "11"
     request_kwargs:
@@ -170,7 +187,7 @@ information_conf:
   api_key: ""
   kwargs: # 发送给情报订阅服务额外参数
     timeout: 3600  # 请求情报订阅服务的超时时间，单位秒
-  information_initial_article_limit: 20
+  information_initial_article_limit: 36
   information_sync_jitter_seconds: 600
   information_subscription_auto_unsubscribe_enabled: true
   information_knowledge_delivery_enabled: true

@@ -23,7 +23,7 @@ class ConfigKeyEnum(Enum):
     WORKSTATION_KNOWLEDGE_SPACE = "workstation_knowledge_space"  # Knowledge Space Configuration
 
     LINSIGHT_LLM = "linsight_llm"  # workstation Default Model Configuration
-    JWT_SECRET = "jwt_secret"  # Generated JWT signing secret (F068); only used when config.yaml leaves it unset
+    JWT_SECRET = "jwt_secret"  # Generated JWT signing secret (F072); only used when config.yaml leaves it unset
 
 
 class ConfigBase(SQLModelSerializable):

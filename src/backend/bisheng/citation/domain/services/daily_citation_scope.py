@@ -1,4 +1,4 @@
-"""Per-turn citation state for the workbench daily chat (F072).
+"""Per-turn citation state for the workbench daily chat (F075).
 
 One ``DailyCitationScope`` lives for one daily-chat turn. It mirrors the
 session handle table that the task mode also writes

@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import time
 from datetime import datetime
@@ -9,6 +10,8 @@ from langchain_core.outputs import ChatGenerationChunk, ChatResult, GenerationCh
 from loguru import logger
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum
+from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.server import LlmInvokeError
 from bisheng.common.schemas.telemetry.event_data_schema import ModelInvokeEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.metric_log import emit_metric
@@ -331,6 +334,13 @@ def wrapper_bisheng_model_limit_check_async(func):
                     kwargs["run_manager"].handlers.append(telemetry_callback)
             result = await func(*args, **kwargs)
             return result
+        except asyncio.CancelledError:
+            # The caller gave up (a probe timeout, a closed request). The call did
+            # not succeed, but nothing says the model is broken either: record a
+            # failed invocation and leave the model status to the caller.
+            status = None
+            telemetry_status = StatusEnum.FAILED
+            raise
         except Exception as e:
             status = LLMModelStatus.ERROR.value
             remark = str(e)
@@ -340,7 +350,8 @@ def wrapper_bisheng_model_limit_check_async(func):
             end_time = time.time()
             first_token_cost_time = telemetry_callback.first_token_time if telemetry_callback else 0
             upload_telemetry_log(self, start_time, end_time, first_token_cost_time, telemetry_status, result=result)
-            await args[0].update_model_status(status, remark)
+            if status is not None:
+                await args[0].update_model_status(status, remark)
 
     return wrapper
 
@@ -489,3 +500,51 @@ def wrapper_bisheng_llm_info_async(key_prefix: str):
         return wrapper
 
     return decorator
+
+
+_INVOKE_ERROR_REASON_LIMIT = 200
+
+
+def _provider_error_reason(exc: Exception) -> str:
+    """Pick the short, human-readable part of a provider exception.
+
+    OpenAI-compatible SDKs put the provider's own message in ``body`` and wrap it
+    in a long ``Error code: 401 - {...}`` repr; everything else falls back to
+    ``str(exc)``. The full exception is still logged by the caller.
+    """
+    message = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = str(error.get("message") or "")
+        elif isinstance(error, str):
+            message = error
+        message = message or str(body.get("message") or "")
+    message = message or str(exc) or type(exc).__name__
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int) and str(status_code) not in message:
+        message = f"HTTP {status_code}: {message}"
+    if len(message) > _INVOKE_ERROR_REASON_LIMIT:
+        message = message[:_INVOKE_ERROR_REASON_LIMIT] + "..."
+    return message
+
+
+def to_llm_invoke_error(model: Any, exc: Exception) -> Exception:
+    """Translate a failed model call into ``LlmInvokeError``.
+
+    Use it where a model call runs inside a plain request/response endpoint, so
+    the user is told which model failed instead of a bare HTTP 500. Business
+    errors (offline model, missing config, quota) already carry their own code
+    and are returned unchanged.
+    """
+    if isinstance(exc, BaseErrorCode):
+        return exc
+    model_info = getattr(model, "model_info", None)
+    server_info = getattr(model, "server_info", None)
+    return LlmInvokeError(
+        exception=exc,
+        model_name=getattr(model_info, "model_name", None) or "",
+        server_name=getattr(server_info, "name", None) or "",
+        reason=_provider_error_reason(exc),
+    )

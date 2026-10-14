@@ -1,5 +1,5 @@
 # ruff: noqa: RUF001 - the admin prompt under test deliberately carries full-width CJK punctuation
-"""Daily-chat citation rules: the system prompt handed to the model (F072).
+"""Daily-chat citation rules: the system prompt handed to the model (F075).
 
 ``_agent_stream_chat_completion`` builds the daily-chat system prompt as
 ``replace_legacy_citation_rules(<admin prompt with {cur_date} replaced>)``: the

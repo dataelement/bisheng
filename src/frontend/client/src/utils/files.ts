@@ -242,7 +242,7 @@ export const validateFiles = ({
   if (oversizeFiles.length > 0) {
     showToast({
       message: localize('com_file_size_exceed_limit', { name: oversizeFiles.map(f => f.name).join(', '), size: size }),
-      status: 'error'
+      status: 'warning'
     })
     fileList = fileList.filter((file) => file.size <= maxSize)
     return false;

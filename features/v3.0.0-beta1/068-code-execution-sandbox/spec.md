@@ -115,19 +115,19 @@
 | 评审投影 / 给未读 SDD 的人（结论 + 图 + 会上确认项） | [沙箱架构设计说明书.md](./沙箱架构设计说明书.md) |
 | 为什么这么实现（决策 + 备选 + 何时该推翻） | design.md §3 方案对比 |
 | 关键约束（部署形态 / 容量 / 隔离口径 / 错误码段） | design.md §2 |
-| 五条业务路径各走哪个 worker、拷什么文件 | design.md §4.1 |
-| HTTP tar copy-in / copy-out 步骤 | design.md §4.2 |
+| 五条业务路径各走哪个 worker、拷什么文件、调用点锚点 | design.md §4.1 |
+| HTTP tar copy-in / copy-out；何时整目录打 tar | design.md §4.2 |
 | 沙箱镜像装什么、不装什么 | design.md §4.4 |
 | runner 内会话数据如何加固；两 session 如何互不可读 | design.md §4.5 · 决策 11–13 |
 | session 异常回收（超时 / OOM / worker 崩溃 / TTL） | design.md §4.5 |
 | 领租约时如何发现副本（流程图 · 时序图） | design.md §4.5 · 决策 12 |
 | 今天的数据流、模块职责、字段 / 协议约定 | design.md §4.1–§4.3 |
-| 后续若正式支持 E2B 怎么接 | design.md §4.8 · 决策 10 |
-| compose / K8s 如何发现副本（对照表 + 两条时序） | design.md §4.6 · 决策 12 |
+| 后续若正式支持 E2B 怎么接；三层协议与 5MB 阈值 | design.md §4.8 · 决策 10 |
+| compose / K8s 如何发现副本；配置无编排类型枚举 | design.md §4.6 · 决策 12 |
 | 代码里看不出的坑、反直觉事实 | design.md §5 |
 | 对外契约、改了会破坏谁、依赖谁 | design.md §6 |
 | 性能 / 安全 / 可观测非功能指标 | design.md §2 + §7 |
-| 任务拆解、文件清单、执行顺序、踩坑落档 | tasks.md |
+| 任务拆解、文件清单、执行顺序、踩坑落档 | [tasks.md](./tasks.md) |
 
 ---
 
@@ -135,7 +135,7 @@
 
 - 讨论用: [沙箱架构设计说明书.md](./沙箱架构设计说明书.md)
 - 设计真相: [design.md](./design.md)（接手第一入口）
-- 执行与落档: tasks.md（尚未编写）
+- 执行与落档: [tasks.md](./tasks.md)（29 任务 / 10 Wave，待实现）
 - 版本契约: [features/v3.0.0-beta1/release-contract.md](../release-contract.md)
 - 架构文档: `docs/architecture/`、`docs/constitution.md`
 - 选型调研: `docs/PRD/2.6 灵思 deepagents 迁移 PRD/灵思代码执行沙箱选型调研（私有化场景）.md`

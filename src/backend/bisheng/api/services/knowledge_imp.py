@@ -45,6 +45,7 @@ from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.knowledge_chunks_pipeline import KnowledgeChunksPipeline
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
 from bisheng.llm.domain.services import LLMService
+from bisheng.llm.domain.utils import to_llm_invoke_error
 from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
 from bisheng.utils.exceptions import EtlException
 
@@ -649,7 +650,11 @@ def recommend_question(
         raise KnowledgeSimilarError.http_exception()
 
     llm_chain = LLMChain(llm=llm, prompt=PromptTemplate.from_template(prompt))
-    gen_question = llm_chain.predict(question=question, answer=answer, number=number)
+    try:
+        gen_question = llm_chain.predict(question=question, answer=answer, number=number)
+    except Exception as e:
+        logger.exception("recommend_question llm call failed")
+        raise to_llm_invoke_error(llm, e) from e
     try:
         code_ret = extract_code_blocks(gen_question)
         if code_ret:

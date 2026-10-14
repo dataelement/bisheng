@@ -1,4 +1,4 @@
-"""F072 — daily chat citation rules and the run-time swap of the legacy section.
+"""F075 — daily chat citation rules and the run-time swap of the legacy section.
 
 Tenants saved the shipped default system prompt, whose "# 引用规则" section
 teaches the model to copy ``<chunk_id>`` ids between private-use markers. Under
@@ -6,7 +6,7 @@ the handle contract that section is swapped for the handle rules at run time,
 without touching the stored prompt.
 
 The synthetic fixtures below mirror the section layout of the templates that
-shipped before F072 (the saved copies in tenants' configs); the last test runs
+shipped before F075 (the saved copies in tenants' configs); the last test runs
 the swap over the live platform locale files as well. The trap it pins: the
 "## 其他信息" sub-section under the legacy heading carries ``{cur_date}`` and
 must survive the swap.

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from bisheng.core.config.dsh import DshSettings
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
-from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
+from bisheng.core.config.open_platform import OpenApiConf, OpenMcpConf, OpenPlatformConf
 from bisheng.core.config.openfga import OpenFGAConf
 from bisheng.core.config.reconcile import ReconcileConf
 from bisheng.core.config.sso_sync import SSOSyncConf
@@ -614,6 +614,7 @@ class Etl4lmConf(BaseModel):
     url: str = Field(default="", description="etl4lmService Address")
     timeout: int = Field(default=600, description="etl4lmService Request Timeout (sec)")
     ocr_sdk_url: str = Field(default="", description="etl4lm ocr sdkService Address")
+    request_kwargs: dict = Field(default_factory=dict, description="etl4lmService Request Arguments")
 
 
 class MineruConf(BaseModel):
@@ -623,11 +624,48 @@ class MineruConf(BaseModel):
     request_kwargs: dict = Field(default_factory=dict, description="MineruService Request Arguments")
 
 
+class MineruV4Conf(BaseModel):
+    api_url: str = Field(default="", description="MinerU V1 API root URL")
+    api_key_env: str = Field(default="", description="Environment variable containing the API key")
+    tier: str = Field(default="standard", min_length=1, description="Requested parse tier")
+    ocr_mode: str = Field(default="auto", description="auto, txt, or ocr")
+    request_kwargs: dict = Field(default_factory=dict, description="Extra parse-job JSON fields")
+    connect_timeout_seconds: float = Field(default=10, gt=0)
+    request_timeout_seconds: float = Field(default=60, gt=0)
+    transfer_timeout_seconds: float = Field(default=300, gt=0)
+    job_timeout_seconds: float = Field(default=1800, gt=0)
+    poll_interval_seconds: float = Field(default=3, gt=0)
+
+    @field_validator("ocr_mode")
+    @classmethod
+    def validate_ocr_mode(cls, value: str) -> str:
+        if value not in {"auto", "txt", "ocr"}:
+            raise ValueError("MinerU V1 ocr_mode must be auto, txt, or ocr")
+        return value
+
+    @field_validator("request_kwargs")
+    @classmethod
+    def validate_request_kwargs(cls, value: dict) -> dict:
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("MinerU V1 request_kwargs keys must be strings")
+        reserved = {"files", "tier", "ocr_mode", "output_formats"}
+        conflicts = reserved.intersection(value)
+        if conflicts:
+            raise ValueError(f"MinerU V1 request_kwargs contains managed fields: {', '.join(sorted(conflicts))}")
+        try:
+            json.dumps(value, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("MinerU V1 request_kwargs must be JSON serializable") from exc
+        return value
+
+
 class PaddleOcrConf(BaseModel):
     """PaddleOcr Configure"""
 
     url: str = Field(default="", description="PaddleOcrService Address")
     timeout: int = Field(default=60, description="PaddleOcrService Request Timeout (sec)")
+    max_retries: int = Field(default=3, ge=0, description="Retries for transient PaddleOcrService errors")
+    retry_backoff: float = Field(default=1.0, ge=0, description="Initial PaddleOcrService retry delay (sec)")
     auth_token: str = Field(default="", description="PaddleOcrService Authentication Token")
     headers: dict = Field(default_factory=dict, description="PaddleOcrService Headers")
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
@@ -651,6 +689,7 @@ class KnowledgeConf(BaseModel):
     loader_provider: str = Field(default="etl4lm", description="Knowledge Config Provide Settings")
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description="Etl4lm Configure")
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
+    mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V1 API Configure")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
@@ -662,15 +701,17 @@ class KnowledgeConf(BaseModel):
         """Whether the active loader_provider can parse images (and richer PDFs).
 
         Mirrors the loader-selection logic in `knowledge/rag/base_file_pipeline.py`:
-        an external OCR/ETL service is used only when `loader_provider` matches a
-        provider whose `url` is configured. Otherwise the pipeline falls back to
-        the local PDF loader, which does not support images.
+        an external OCR/ETL service is available only when `loader_provider`
+        matches a configured provider. Legacy providers fall back to local PDF
+        parsing when their URL is missing; explicit mineru_v4 selection fails.
         """
         provider = (self.loader_provider or "").strip()
         if provider == "etl4lm":
             return bool(self.etl4lm.url)
         if provider == "mineru":
             return bool(self.mineru.url)
+        if provider == "mineru_v4":
+            return bool(self.mineru_v4.api_url)
         if provider == "paddle_ocr":
             return bool(self.paddle_ocr.url)
         return False
@@ -682,7 +723,7 @@ class IntelligenceCenterConf(BaseModel):
     base_url: str = Field(default="", description="Intelligence Center Service Address")
     api_key: str = Field(default="", description="Intelligence Center Service API Key")
     kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
-    information_initial_article_limit: int = Field(default=20, ge=1, le=100)
+    information_initial_article_limit: int = Field(default=36, ge=1, le=100)
     information_sync_jitter_seconds: int = Field(default=600, ge=0)
     information_subscription_auto_unsubscribe_enabled: bool = Field(default=True)
     information_knowledge_delivery_enabled: bool = Field(default=True)
@@ -827,6 +868,75 @@ class MetricLogConf(BaseModel):
     )
 
 
+class SandboxConf(BaseModel):
+    """Isolation-environment (sandbox) access settings on worker/backend.
+
+    Session capacity, idle TTL and uid isolation live on the runner
+    (``SANDBOX_MAX_SESSIONS`` / ``SANDBOX_LEASE_TTL_S`` /
+    ``SANDBOX_ENABLE_UID_ISOLATION``), not here.
+
+    Env overlay uses ``BS_SANDBOX_CONF__<FIELD>`` (double underscore), e.g.
+    ``BS_SANDBOX_CONF__DISCOVER_HOST_PATTERN``. There is no ``deploy_mode`` /
+    ``orchestrator`` field — replica discovery is the hostname pattern only.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    endpoints: list[str] = Field(
+        default_factory=list, description="Explicit runner URLs; non-empty skips DNS discovery"
+    )
+    discover_host_pattern: str = Field(default="code-runner-{n}", description="Hostname pattern with {n} placeholder")
+    discover_index_start: int = Field(default=1, description="First replica index (compose=1, k8s=0)")
+    discover_max: int = Field(default=32, description="Stop scanning after this many consecutive indices")
+    discover_ttl_s: int = Field(
+        default=60, description="Background refresh interval for discovered runner URLs (seconds)"
+    )
+    discover_port: int = Field(default=8080, description="Runner HTTP port used with discovered hostnames")
+    token: str = Field(default="", description="Shared runner auth token; override via BS_SANDBOX_CONF__TOKEN")
+    pool_acquire_timeout_s: int = Field(default=30, description="How long a worker waits for a free replica")
+    default_timeout_s: int = Field(default=600, description="Default exec timeout in seconds")
+    max_copy_in_bytes: int = Field(default=50 * 1024 * 1024, description="Skip a copy-in file above this size")
+    kb_image_stage_max_files: int = Field(
+        default=100,
+        description="Max knowledge-base images written into the code interpreter workspace per run",
+    )
+    kb_image_stage_max_total_bytes: int = Field(
+        default=0,
+        description="Total bytes of knowledge-base images written per run; 0 means 5 x max_copy_in_bytes",
+    )
+    code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
+
+    @model_validator(mode="after")
+    def overlay_env(self):
+        prefix = "BS_SANDBOX_CONF__"
+        for name, field in type(self).model_fields.items():
+            raw = os.getenv(f"{prefix}{name.upper()}")
+            if raw is None:
+                continue
+            object.__setattr__(self, name, _coerce_sandbox_env(field.annotation, raw))
+        return self
+
+
+def _coerce_sandbox_env(annotation, raw: str):
+    origin = getattr(annotation, "__origin__", annotation)
+    args = getattr(annotation, "__args__", ())
+    if origin is list or (args and origin is list):
+        text = raw.strip()
+        if text.startswith("["):
+            parsed = json.loads(text)
+            if not isinstance(parsed, list):
+                raise ValueError("sandbox_conf list env must be a JSON array")
+            return [str(item) for item in parsed]
+        if not text:
+            return []
+        return [item.strip() for item in text.split(",") if item.strip()]
+    if annotation is bool or origin is bool:
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    if annotation is int or origin is int:
+        return int(raw)
+    return raw
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -866,7 +976,7 @@ class Settings(BaseModel):
     remove_api_keys: bool = False
     bisheng_rt: dict = {}
     default_llm: dict = {}
-    # F068: no shipped default. Empty means "generate once and keep in the config
+    # F072: no shipped default. Empty means "generate once and keep in the config
     # table" — see ``bisheng.user.domain.services.jwt_secret``.
     jwt_secret: str = ""
     gpts: dict = {}
@@ -892,6 +1002,7 @@ class Settings(BaseModel):
     multi_tenant: MultiTenantConf = MultiTenantConf()
     open_platform: OpenPlatformConf = OpenPlatformConf()
     open_api: OpenApiConf = OpenApiConf()
+    open_mcp: OpenMcpConf = OpenMcpConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()
@@ -900,6 +1011,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    sandbox_conf: SandboxConf = Field(default_factory=SandboxConf)
 
     @field_validator("database_url")
     @classmethod

@@ -1,4 +1,4 @@
-"""F068: hiding the "new app" button is not a permission check.
+"""F072: hiding the "new app" button is not a permission check.
 
 ``create_app`` in ``web_menu`` gated the button only; ``POST /workflow/create``
 and ``POST /assistant`` accepted any logged-in user, which is the first hop of

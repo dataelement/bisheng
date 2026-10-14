@@ -1,0 +1,17 @@
+{{- if not .Values.config.existingConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bisheng.fullname" . }}-config
+  labels:
+    {{- include "bisheng.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+{{- if .Values.config.yaml }}
+{{ .Values.config.yaml | nindent 4 }}
+{{- else if .Values.config.file }}
+{{ .Files.Get .Values.config.file | nindent 4 }}
+{{- else }}
+{{ .Files.Get "files/config.yaml" | nindent 4 }}
+{{- end }}
+{{- end }}

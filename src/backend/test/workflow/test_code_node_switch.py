@@ -1,9 +1,8 @@
 """The Code node is off unless an operator turns it on (issue #2189).
 
-The node runs user-supplied Python with the backend's own privileges and there
-is no execution sandbox yet, so a deployment must not be exposed by default.
-The gate sits where the node is *built*: parsing the code already executes it,
-so a check in the run path would fire after the code had run.
+The node runs user-supplied Python through the configured code interpreter, so
+a deployment must not be exposed by default. The gate sits where the node is
+*built*, before any executor lookup.
 """
 
 from unittest.mock import MagicMock, patch
@@ -67,7 +66,7 @@ def test_building_a_node_is_refused_while_the_switch_is_off(bare_base_node):
 
 
 def test_the_gate_runs_before_the_code_is_parsed(bare_base_node):
-    with _with_conf(False), patch.object(code_node, "CodeParser") as parser:
+    with _with_conf(False), patch.object(code_node, "make_code_parser") as parser:
         with pytest.raises(IgnoreException):
             code_node.CodeNode()
 

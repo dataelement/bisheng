@@ -1,5 +1,5 @@
 /**
- * F072 AC-15 / AC-20: copying a daily chat answer drops [Sn] handles the
+ * F075 AC-15 / AC-20: copying a daily chat answer drops [Sn] handles the
  * backend could not resolve (recognised ones are already hidden markers, which
  * copyText strips). Knowledge-space and channel docks do not opt in, so their
  * copy text keeps any bracketed text as written.

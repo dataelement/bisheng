@@ -88,6 +88,24 @@ async def test_sync_is_idempotent_for_already_prefetched_files(tmp_path):
     assert task._baseline_files == {}
 
 
+async def test_large_tool_results_synced_from_workspace_and_baselined(tmp_path):
+    """Offloaded tool dumps must reach cwd so open('large_tool_results/<id>') works."""
+    objects = {
+        f"workspace/{SVID}/large_tool_results/call_a1da40c8e46349058bc993": b'{"ok":true}',
+    }
+    task = _task(str(tmp_path))
+
+    with patch(
+        "bisheng.linsight.domain.task_exec.get_minio_storage",
+        AsyncMock(return_value=_minio(objects)),
+    ):
+        await task._sync_workspace_originals(SimpleNamespace(id=SVID))
+
+    local = tmp_path / "large_tool_results" / "call_a1da40c8e46349058bc993"
+    assert local.read_bytes() == b'{"ok":true}'
+    assert str(local) in {os.path.normpath(p) for p in task._baseline_files}
+
+
 async def test_sync_failure_never_blocks_the_turn(tmp_path):
     """Best-effort: losing the precise-data track must not fail the task."""
     task = _task(str(tmp_path))

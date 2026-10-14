@@ -14,7 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 
-# F068: ``order_field_text`` lands in ``ORDER BY`` as raw SQL text. The space
+# F072: ``order_field_text`` lands in ``ORDER BY`` as raw SQL text. The space
 # children/search endpoints type their query params with these aliases (FastAPI
 # answers 422 for anything else) and the DAO re-checks below so no other caller
 # can smuggle an expression such as ``if(1=1,sleep(5),1)`` in.

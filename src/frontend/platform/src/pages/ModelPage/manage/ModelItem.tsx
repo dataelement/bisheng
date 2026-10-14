@@ -15,7 +15,9 @@ import { useTranslation } from "react-i18next";
 export interface ModelItemConfig {
     enable_web_search?: boolean;
     max_tokens?: number;
-    user_kwargs?: string;
+    // Saved by this UI as a JSON string; models created through the API or
+    // older versions may store a plain object instead. The backend accepts both.
+    user_kwargs?: string | Record<string, unknown>;
     voice?: string;
     [key: string]: unknown;
 }
@@ -66,6 +68,13 @@ function maxTokensParamName(provider: string): string {
     return 'max_tokens';
 }
 
+// Normalize `user_kwargs` to the JSON text shown in the editor.
+function userKwargsToText(value: unknown): string {
+    if (value === undefined || value === null) return '';
+    if (typeof value === 'string') return value.trim();
+    return JSON.stringify(value, null, 2);
+}
+
 function parseParamsObject(text: string): Record<string, unknown> | null {
     try {
         const parsed: unknown = JSON.parse(text);
@@ -89,7 +98,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
     const webSearchTipKey = modelType === 'llm' ? WEB_SEARCH_TIP_KEYS[type] : undefined;
     const paramName = maxTokensParamName(type);
 
-    const savedParams = (config.user_kwargs ?? '').trim();
+    const savedParams = userKwargsToText(config.user_kwargs);
     const savedParamCount = savedParams ? Object.keys(parseParamsObject(savedParams) ?? {}).length : 0;
     const paramsTemplate = hasAdvancedParams
         ? templateToJsonString(getAdvancedParamsTemplate(type, modelType as 'llm' | 'embedding'))

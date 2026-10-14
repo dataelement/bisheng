@@ -13,6 +13,7 @@ from bisheng.open_api.domain.scopes import get_open_api_scope_marker
 from bisheng.open_api.domain.services.call_audit_service import open_api_call_audit_service
 
 OPEN_API_V2_PREFIX = "/api/v2"
+OPEN_MCP_PATH = "/api/v2/mcp"
 
 
 class OpenApiAuditMiddleware:
@@ -20,9 +21,12 @@ class OpenApiAuditMiddleware:
         self.app = app
 
     async def __call__(self, scope: dict[str, Any], receive, send) -> None:
-        if scope.get("type") not in {"http", "websocket"} or not str(
-            scope.get("path", "")
-        ).startswith(OPEN_API_V2_PREFIX):
+        path = str(scope.get("path", ""))
+        if (
+            scope.get("type") not in {"http", "websocket"}
+            or not path.startswith(OPEN_API_V2_PREFIX)
+            or path.rstrip("/") == OPEN_MCP_PATH
+        ):
             await self.app(scope, receive, send)
             return
 
@@ -157,4 +161,4 @@ class OpenApiAuditMiddleware:
         )
 
 
-__all__ = ["OPEN_API_V2_PREFIX", "OpenApiAuditMiddleware"]
+__all__ = ["OPEN_API_V2_PREFIX", "OPEN_MCP_PATH", "OpenApiAuditMiddleware"]

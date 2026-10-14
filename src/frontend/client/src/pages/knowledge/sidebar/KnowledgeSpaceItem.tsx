@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
-import { useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace } from "~/api/knowledge";
@@ -9,6 +9,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
+import { ActionMenuLoadingRow } from "~/components/ActionMenu";
 import {
     SidebarListMoreMenuContent,
     sidebarListMoreMenuDangerIconClassName,
@@ -36,6 +37,9 @@ interface KnowledgeSpaceItemProps {
     onSettings?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
+    /** True while the lazy permission lookup is in flight — the menu shows a
+     *  loading row instead of the fail-closed item set so items don't pop in. */
+    permissionsLoading?: boolean;
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
@@ -57,6 +61,7 @@ export default function KnowledgeSpaceItem({
     onPin,
     onSettings,
     onMenuOpen,
+    permissionsLoading = false,
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
@@ -89,6 +94,17 @@ export default function KnowledgeSpaceItem({
     // active styling, so the space row stays highlighted even inside a sub-folder.
     const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
 
+    // The URL points into a folder of this space (e.g. back from space settings,
+    // after the list remounted collapsed): expand so the selected folder shows.
+    // Keyed on the folder id, so a manual collapse sticks until the folder changes.
+    // Matched on the URL's space, not `isActive`: jumping to another space's folder
+    // updates the URL before the active space follows, and `isActive` would expand
+    // the previous space for that instant.
+    const urlFolderInThisSpace = !!urlFolderId && spaceId === String(space.id);
+    useEffect(() => {
+        if (urlFolderInThisSpace) setExpanded(true);
+    }, [urlFolderInThisSpace, urlFolderId]);
+
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {
             navigate(`/knowledge/space/${space.id}/folder/${folder.id}`);
@@ -99,7 +115,11 @@ export default function KnowledgeSpaceItem({
     };
 
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    // While permissions are still resolving, show a single loading row so the menu
+    // doesn't open with one item and then grow to three once the lookup returns.
+    const moreMenuItems = permissionsLoading ? (
+        <ActionMenuLoadingRow />
+    ) : (
         <>
             {(canEditSpace || canManageMembers) && (
                 <DropdownMenuItem
@@ -260,6 +280,9 @@ export default function KnowledgeSpaceItem({
                     fully visible instead of being hidden under the button. Only the 20px button
                     itself carries an opaque bg (matching the row state) to cover text it floats
                     over; the 12px right gap stays transparent.
+                      • Hit area: a transparent ::before extends the clickable/hoverable zone to a
+                        square as tall as the row (28px normal / 36px compact) without changing
+                        the 20px visual box, its hover bg, or the dropdown anchor rect.
                       • w-8 (32px border box) + pr-3 (12px) → 20px button + 12px transparent gap;
                         justify-start keeps the button on the left.
                       • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
@@ -271,7 +294,8 @@ export default function KnowledgeSpaceItem({
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    flex size-5 items-center justify-center rounded-md outline-none
+                                    relative flex size-5 items-center justify-center rounded-md outline-none
+                                    before:absolute before:content-[''] ${compact ? "before:-inset-2" : "before:-inset-1"}
                                     ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
                                     ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}

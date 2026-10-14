@@ -159,7 +159,7 @@ interface PreviewBodyProps {
     onArtifactPreview?: (file: ArtifactFile) => void;
     /** Sources actually cited in the report — same payload as output_result.citations */
     citations?: ChatCitation[] | null;
-    /** F071: open a cited document beside the report instead of in a floating drawer. */
+    /** F074: open a cited document beside the report instead of in a floating drawer. */
     onOpenSource?: (preview: CitationDocumentPreviewState) => void;
     messageId?: string;
 }
@@ -226,7 +226,7 @@ export function PreviewBody({ file, versionId, fileList, onArtifactPreview, cita
             await downloadArtifactFile(file, versionId);
         } catch (e) {
             console.error('artifact download failed:', e);
-            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });
+            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.WARNING });
         }
     };
 

@@ -71,12 +71,14 @@ def generate_opening_dialog(
     chain = OPENDIALOG_PROMPT | llm
     time = 0
     while time <= 3:
+        # Only malformed output is retried; a failed model call propagates to the
+        # caller instead of tripping over the unset chain_output below.
+        chain_output = chain.invoke(
+            {
+                'description': description,
+            }
+        )
         try:
-            chain_output = chain.invoke(
-                {
-                    'description': description,
-                }
-            )
             output = parse_json(chain_output.content)
             output = json.loads(output)
             opening_lines = output[0]['开场白']

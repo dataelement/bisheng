@@ -59,7 +59,7 @@ const InputFormSkill = forwardRef(({ flow, logo }, ref) => {
             return res
         }, [])
         if (errors.length) {
-            showToast({ message: errors.join('\n'), status: 'error' });
+            showToast({ message: errors.join('\n'), status: 'warning' });
         }
 
         // 组装数据，抛出

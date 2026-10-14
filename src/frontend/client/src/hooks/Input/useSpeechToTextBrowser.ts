@@ -72,7 +72,7 @@ const useSpeechToTextBrowser = (
     if (!browserSupportsSpeechRecognition) {
       showToast({
         message: 'Browser does not support SpeechRecognition',
-        status: 'error',
+        status: 'warning',
       });
       return;
     }
@@ -80,7 +80,7 @@ const useSpeechToTextBrowser = (
     if (!isMicrophoneAvailable) {
       showToast({
         message: 'Microphone is not available',
-        status: 'error',
+        status: 'warning',
       });
       return;
     }

@@ -9,13 +9,13 @@
  *  - open === false           → panel hidden, header shows the entry button
  *  - open && !previewFile      → file-list view (fig. workspace)
  *  - open && previewFile       → in-place preview view (fig. preview)
- *  - … && sourcePreview        → F071 compare view: the report beside the cited
+ *  - … && sourcePreview        → F074 compare view: the report beside the cited
  *                                source file (the chat column gives up its width)
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { CitationDocumentPreviewState } from '~/components/Chat/Messages/Content/CitationDocumentPreviewDrawer';
 
-/** F071: a cited source plus which report badge (DOM-order position) opened it.
+/** F074: a cited source plus which report badge (DOM-order position) opened it.
  *  Kept here, not in the panel, so the docked / fullscreen / narrow instances
  *  all agree on the citation being checked. */
 export type SourcePreview = CitationDocumentPreviewState & { badgeIndex?: number };
@@ -25,7 +25,7 @@ export function useWorkspacePanel(versionId: string) {
     const [open, setOpen] = useState(false);
     const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
     const [fullscreen, setFullscreen] = useState(false);
-    // F071: the cited source shown beside the report. It belongs to the report
+    // F074: the cited source shown beside the report. It belongs to the report
     // being read, so every path that leaves that report also drops it.
     const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
 
@@ -80,9 +80,9 @@ export function useWorkspacePanel(versionId: string) {
 
     const toggleFullscreen = () => setFullscreen((v) => !v);
 
-    /** F071: show a cited source beside the report; a new citation replaces it. */
+    /** F074: show a cited source beside the report; a new citation replaces it. */
     const openSource = useCallback((preview: SourcePreview) => setSourcePreview(preview), []);
-    /** F071: collapse only the source (its own button / Esc); the report stays. */
+    /** F074: collapse only the source (its own button / Esc); the report stays. */
     const closeSource = useCallback(() => setSourcePreview(null), []);
 
     return {

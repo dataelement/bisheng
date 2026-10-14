@@ -1,4 +1,4 @@
-"""F072 — the daily chat shares the F069 session handle table.
+"""F075 — the daily chat shares the F069 session handle table.
 
 AC-01: one source keeps one number across daily turns and task turns of the
 same conversation. The trap pinned here (design §5 #1): the allocator pins the

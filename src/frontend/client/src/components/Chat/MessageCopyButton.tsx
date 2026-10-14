@@ -6,7 +6,7 @@ import { copyText } from "~/utils";
 
 interface CopyButtonProps {
     text: string;
-    /** F072: also drop unresolved [Sn] citation handles (daily chat answers).
+    /** F075: also drop unresolved [Sn] citation handles (daily chat answers).
         copyText always strips the private-use citation markers. */
     stripHandles?: boolean;
 }
