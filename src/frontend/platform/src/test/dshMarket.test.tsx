@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
 import { PluginMarketPage } from "@/pages/BuildPage/dsh/PluginMarketPage";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins } from "@/controllers/API/dshMarket";
+import { toast } from "@/components/bs-ui/toast/use-toast";
+import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketInstallPolicy, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, setMarketInstallPolicy } from "@/controllers/API/dshMarket";
 import type { MarketPlugin } from "@/controllers/API/dshMarket";
 
-vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn() }));
+vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketInstallPolicy: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn(), setMarketInstallPolicy: vi.fn() }));
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }));
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({ toast: vi.fn() }));
 
@@ -24,6 +25,8 @@ beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(previewMarketBundle).mockResolvedValue({ name: "company-demo", display_name: "Company Demo", current_version: "1.0.0", incoming_version: "1.1.0", allowed: true, reason: "", duplicate: false });
     vi.mocked(getMarketContext).mockResolvedValue({ tenant_id: 2 });
+    vi.mocked(getMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: true, allow_third_party_workbenches: true });
+    vi.mocked(setMarketInstallPolicy).mockResolvedValue({ tenant_id: 2, allow_third_party_plugins: false, allow_third_party_workbenches: true });
     vi.mocked(listMarketPlugins).mockResolvedValue({ data: [plugin], total: 1 });
     vi.mocked(listMarketImports).mockResolvedValue([]);
     vi.mocked(getMarketPlugin).mockResolvedValue(plugin);
@@ -32,6 +35,26 @@ beforeEach(() => {
 });
 
 describe("DSH market administration", () => {
+    it("saves each installation setting for the current tenant", async () => {
+        render(view());
+        const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });
+        const workbenches = screen.getByRole("switch", { name: "allow_third_party_workbenches" });
+        expect(plugins).toBeChecked();
+        expect(workbenches).toBeChecked();
+        fireEvent.click(plugins);
+        await waitFor(() => expect(setMarketInstallPolicy).toHaveBeenCalledWith(2, "allow_third_party_plugins", false));
+        await waitFor(() => expect(plugins).not.toBeChecked());
+        expect(workbenches).toBeChecked();
+    });
+    it("keeps the saved setting when an update fails", async () => {
+        vi.mocked(setMarketInstallPolicy).mockRejectedValueOnce(new Error("offline"));
+        render(view());
+        const plugins = await screen.findByRole("switch", { name: "allow_third_party_plugins" });
+        fireEvent.click(plugins);
+        await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: "error" })));
+        expect(plugins).toBeChecked();
+        await waitFor(() => expect(getMarketInstallPolicy).toHaveBeenCalledTimes(2));
+    });
     it("guards direct navigation before reading administrative data", () => {
         render(view(false)); expect(screen.getByText("forbidden")).toBeInTheDocument();
         expect(getMarketContext).not.toHaveBeenCalled(); expect(listMarketPlugins).not.toHaveBeenCalled();

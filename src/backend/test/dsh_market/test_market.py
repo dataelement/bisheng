@@ -260,6 +260,43 @@ def test_api_contract_and_admin_boundary(service):
     assert client.get("/api/v1/dsh/market/catalog").json()["data"]["total"] == 0
 
 
+def test_install_policy_is_tenant_scoped_and_exposed_to_desktop(service):
+    app = FastAPI()
+    app.include_router(router, prefix="/api/v1")
+
+    @app.exception_handler(BaseErrorCode)
+    async def error_handler(request, error):
+        return JSONResponse(error.to_dict())
+
+    app.dependency_overrides[get_market_service] = lambda: service
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+    client = TestClient(app)
+    url = "/api/v1/dsh/market/admin/install-policy"
+    assert client.get(url).json()["status_code"] == 26204
+    response = client.get("/api/v1/dsh/market/capabilities")
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.json()["data"]["allow_third_party_plugins"] is True
+
+    app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
+    assert client.get(url).json()["data"]["allow_third_party_workbenches"] is True
+    changed = client.patch(url, json={"field": "allow_third_party_plugins", "allowed": False}).json()["data"]
+    assert changed == {
+        "tenant_id": 2,
+        "allow_third_party_plugins": False,
+        "allow_third_party_workbenches": True,
+    }
+    client.patch(url, json={"field": "allow_third_party_workbenches", "allowed": False})
+    caps = client.get("/api/v1/dsh/market/capabilities").json()["data"]
+    assert caps["allow_third_party_plugins"] is False
+    assert caps["allow_third_party_workbenches"] is False
+    assert client.patch(url, json={"field": "unknown", "allowed": False}).status_code == 422
+
+    app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30)
+    app.dependency_overrides[market_admin] = lambda: MarketActor(3, 30)
+    assert client.get(url).json()["data"]["allow_third_party_plugins"] is True
+    assert client.get("/api/v1/dsh/market/capabilities").json()["data"]["allow_third_party_workbenches"] is True
+
+
 def test_reimport_restores_legacy_unpublished_and_preserves_present_version(service):
     plugin = published(service)
     service.change(2, 20, plugin["id"], plugin["revision"], "unpublish")
@@ -290,7 +327,7 @@ def test_legacy_disabled_plugins_use_unpublished_state_and_remain_revoked(servic
     assert service.repository.policies(2)[0]["disabled"]
 
 
-def test_policy_is_signed_by_deployment_key(monkeypatch):
+def test_policy_is_signed_by_deployment_key(monkeypatch, service):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 
@@ -307,6 +344,7 @@ def test_policy_is_signed_by_deployment_key(monkeypatch):
 
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[get_market_service] = lambda: service
     app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
     with TestClient(app) as client:
         capabilities = client.get("/api/v1/dsh/market/capabilities").json()["data"]

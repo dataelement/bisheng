@@ -9,6 +9,7 @@ import type { MarketPreview, MarketImport, MarketPlugin } from "@/controllers/AP
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { InstallPolicySettings } from "./InstallPolicySettings";
 
 const MAX_UPLOAD = 512 * 1024 * 1024;
 
@@ -134,6 +135,7 @@ function TenantPluginMarket() {
             </div>
             <Button className="shrink-0" disabled={tenant === null || busy} onClick={() => setUploadOpen(true)}>{t("import")}</Button>
         </header>
+        {tenant !== null && <InstallPolicySettings tenant={tenant} />}
         {error && <div role="alert" className="text-red-600 flex items-center gap-3">{t("loadFailed")}<Button variant="outline" onClick={reload}>{t("retry")}</Button></div>}
         {loading ? <p role="status">{t("loading")}</p> : <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm text-left"><thead className="bg-muted"><tr>

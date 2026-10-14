@@ -1,6 +1,11 @@
 {
   "title": "企业插件市场",
   "intro": "管理员导入插件，校验通过后员工即可从客户端安装。",
+  "installPolicy": "安装设置",
+  "allow_third_party_plugins": "允许安装第三方插件",
+  "allow_third_party_workbenches": "允许安装第三方工作台",
+  "policyLoadFailed": "安装设置加载失败，点击重试",
+  "policySaveFailed": "安装设置保存失败，请重试",
   "import": "导入插件",
   "name": "插件名称",
   "version": "版本",

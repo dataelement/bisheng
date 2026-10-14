@@ -46,9 +46,18 @@ class DeviceReport(BaseModel):
     plugins: list[InstalledPlugin] = Field(max_length=500)
 
 
+class InstallPolicyChange(BaseModel):
+    field: Literal["allow_third_party_plugins", "allow_third_party_workbenches"]
+    allowed: bool
+
+
 @router.get("/capabilities")
-async def capabilities(actor: MarketActor = Depends(market_actor)):
+async def capabilities(
+    response: Response, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
+):
+    response.headers["Cache-Control"] = "no-store"
     enabled = bool(os.environ.get("BISHENG_DSH_MARKET_SIGNING_KEY"))
+    policy = await call(service.install_policy, actor.tenant_id)
     return resp_200(
         {
             "enabled": enabled,
@@ -58,8 +67,22 @@ async def capabilities(actor: MarketActor = Depends(market_actor)):
             "max_upload_bytes": MAX_UPLOAD_BYTES,
             "lease_seconds": 3600,
             "sync_seconds": 60,
+            "allow_third_party_plugins": policy["allow_third_party_plugins"],
+            "allow_third_party_workbenches": policy["allow_third_party_workbenches"],
         }
     )
+
+
+@router.get("/admin/install-policy")
+async def read_install_policy(actor: MarketActor = Depends(market_admin), service=Depends(get_market_service)):
+    return resp_200(await call(service.install_policy, actor.tenant_id))
+
+
+@router.patch("/admin/install-policy")
+async def change_install_policy(
+    body: InstallPolicyChange, actor: MarketActor = Depends(market_admin), service=Depends(get_market_service)
+):
+    return resp_200(await call(service.set_install_policy, actor.tenant_id, body.field, body.allowed))
 
 
 @router.get("/catalog")
