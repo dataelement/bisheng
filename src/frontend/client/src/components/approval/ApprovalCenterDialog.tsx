@@ -24,6 +24,7 @@ import { FILE_CORRECTION_SCENARIO, correctionListTitle } from "~/api/fileCorrect
 import { getSpaceInfoApi } from "~/api/knowledge";
 import { FileCorrectionDecision } from "./FileCorrectionDecision";
 import { FileCorrectionNotice } from "./FileCorrectionNotice";
+import { useFileCorrectionUpdatePhase } from "./useFileCorrectionUpdatePhase";
 import { FutureApproverList } from "./FutureApproverList";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
@@ -678,8 +679,25 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
+  const fileCorrectionSnapshot = (taskDetail?.detail_snapshot ?? taskDetail?.payload_snapshot ?? requestDetail?.detail_snapshot ?? requestDetail?.payload_snapshot) as
+    | { correction_id?: number }
+    | undefined;
+  const fileCorrectionId = Number(fileCorrectionSnapshot?.correction_id) || 0;
+  const isFileCorrectionScene =
+    String((activeTab === "my_tasks" ? taskDetail?.scenario_code : requestDetail?.scenario_code) ?? "") === FILE_CORRECTION_SCENARIO;
+  const { phase: fileCorrectionPhase, status: fileCorrectionStatus, reload: reloadFileCorrectionPhase } =
+    useFileCorrectionUpdatePhase(fileCorrectionId, isFileCorrectionScene && fileCorrectionId > 0);
+  const fileCorrectionUpdating = isFileCorrectionScene && fileCorrectionPhase === "updating";
+
+  useEffect(() => {
+    if (!isFileCorrectionScene || fileCorrectionStatus !== "approved" || !isTaskPending) return;
+    dispatchKnowledgeSpaceFilesRefresh();
+    void loadTasks(selectedTaskId);
+  }, [fileCorrectionStatus]);
+
   const canWithdrawInstance =
     isInstancePending &&
+    !fileCorrectionUpdating &&
     String(requestDetail?.scenario_code ?? "").toLowerCase() !== QA_QUESTION_PUBLISH_SCENARIO;
   // 只向当前任务审批人展示撤销入口；服务端会再次按实时部门绑定校验权限。
   const revokableScenario = String(taskDetail?.scenario_code ?? "").toLowerCase();
@@ -846,7 +864,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               {/* Fixed footer buttons */}
               {(isTaskPending || canWithdrawInstance || canRevoke) && (
                 <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
-                  {isTaskPending && (
+                  {isTaskPending && !fileCorrectionUpdating && (
                     <div>
                       <textarea
                         value={decisionComment}
@@ -876,19 +894,26 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                     onClick={() => onOpenChange(false)}>
                     {localize("com_ui_close")}
                   </button>
+                  {isTaskPending && fileCorrectionPhase === "failed" && (
+                    <div className="text-[13px] text-[#ff7d00]">新文件解析失败，可重新解析或重新上传</div>
+                  )}
                   {isTaskPending && (
                     <>
+                      {!fileCorrectionUpdating && (
                       <button type="button" disabled={actionLoading}
                         className="rounded-lg border border-[#f53f3f] px-4 py-2 text-[14px] text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60"
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}
                       </button>
+                      )}
                       {taskDetail?.scenario_code === FILE_CORRECTION_SCENARIO ? (
                         <FileCorrectionDecision
                           taskId={selectedTaskId || 0}
-                          correctionId={Number((taskDetail.detail_snapshot ?? taskDetail.payload_snapshot)?.correction_id) || 0}
+                          correctionId={fileCorrectionId}
                           spaceId={Number((taskDetail.detail_snapshot ?? taskDetail.payload_snapshot)?.space_id) || 0}
                           disabled={actionLoading}
+                          updatePhase={fileCorrectionPhase}
+                          onPhaseReload={reloadFileCorrectionPhase}
                           onDone={() => {
                             dispatchKnowledgeSpaceFilesRefresh();
                             void loadTasks(selectedTaskId);

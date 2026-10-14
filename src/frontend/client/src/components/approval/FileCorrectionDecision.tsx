@@ -1,13 +1,19 @@
 import { useRef, useState } from "react";
 import { uploadFileToServerApi } from "~/api/knowledge";
 import { decideApprovalTaskApi } from "~/api/approval";
-import { registerCorrectionUpdateFile } from "~/api/fileCorrection";
+import {
+    registerCorrectionUpdateFile,
+    retryCorrectionUpdateFile,
+    type FileCorrectionUpdatePhase,
+} from "~/api/fileCorrection";
 
 interface FileCorrectionDecisionProps {
     taskId: number;
     correctionId: number;
     spaceId: number | string;
     disabled: boolean;
+    updatePhase: FileCorrectionUpdatePhase;
+    onPhaseReload: () => void;
     onDone: () => void;
     onError: (message: string) => void;
 }
@@ -18,14 +24,17 @@ export function FileCorrectionDecision({
     correctionId,
     spaceId,
     disabled,
+    updatePhase,
+    onPhaseReload,
     onDone,
     onError,
 }: FileCorrectionDecisionProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [busy, setBusy] = useState(false);
+    const locked = disabled || busy || updatePhase === "updating";
 
     async function handleAdopt() {
-        if (busy || disabled) return;
+        if (locked) return;
         setBusy(true);
         try {
             await decideApprovalTaskApi(taskId, { action: "adopt" });
@@ -42,12 +51,37 @@ export function FileCorrectionDecision({
         try {
             const uploaded = await uploadFileToServerApi(String(spaceId), file);
             await registerCorrectionUpdateFile(correctionId, uploaded.file_path);
-            onDone();
+            onPhaseReload();
         } catch (error) {
             onError(error instanceof Error ? error.message : "采纳并更新失败");
         } finally {
             setBusy(false);
         }
+    }
+
+    async function handleRetry() {
+        if (locked) return;
+        setBusy(true);
+        try {
+            await retryCorrectionUpdateFile(correctionId);
+            onPhaseReload();
+        } catch (error) {
+            onError(error instanceof Error ? error.message : "重新解析失败");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    if (updatePhase === "updating") {
+        return (
+            <button
+                type="button"
+                disabled
+                className="rounded-lg border border-[#c9cdd4] px-4 py-2 text-[14px] text-[#86909c] disabled:opacity-60"
+            >
+                更新中
+            </button>
+        );
     }
 
     return (
@@ -62,17 +96,38 @@ export function FileCorrectionDecision({
                     if (file) void handlePickedFile(file);
                 }}
             />
+            {updatePhase === "failed" ? (
+                <>
+                    <button
+                        type="button"
+                        disabled={locked}
+                        className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f6ff] disabled:opacity-60"
+                        onClick={() => void handleRetry()}
+                    >
+                        重新解析
+                    </button>
+                    <button
+                        type="button"
+                        disabled={locked}
+                        className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f6ff] disabled:opacity-60"
+                        onClick={() => inputRef.current?.click()}
+                    >
+                        重新上传
+                    </button>
+                </>
+            ) : (
+                <button
+                    type="button"
+                    disabled={locked}
+                    className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f6ff] disabled:opacity-60"
+                    onClick={() => inputRef.current?.click()}
+                >
+                    采纳并更新
+                </button>
+            )}
             <button
                 type="button"
-                disabled={disabled || busy}
-                className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f6ff] disabled:opacity-60"
-                onClick={() => inputRef.current?.click()}
-            >
-                采纳并更新
-            </button>
-            <button
-                type="button"
-                disabled={disabled || busy}
+                disabled={locked}
                 className="rounded-lg bg-[#165dff] px-5 py-2 text-[14px] text-white hover:bg-[#1350e8] disabled:opacity-60"
                 onClick={() => void handleAdopt()}
             >

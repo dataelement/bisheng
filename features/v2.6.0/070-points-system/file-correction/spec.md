@@ -23,7 +23,7 @@
 |---|---|---|
 | 设计权威 | [design-technical-rfc.md](./design-technical-rfc.md) 方案 A | 2026-10-13 保留该文档，不另写一份取舍 |
 | 决策入口 | 现有 `POST /api/v1/approval/tasks/{task_id}/decision` | 不新建审批产品 |
-| 金额 | 事件内 1 或 2，账本 `daily_cap` 传空 | 见 RFC 第 6 节。本文不改这一条 |
+| 金额 | 事件内 1 或 2，账本 `daily_cap` 传空；更新另按人按日最高 10 分 | 见 RFC 第 6、13 节 |
 | 错误码 | 18400–18410 | 182 已被积分占用 |
 | 响应包络 | 现有 `status_code` / `status_message` / `data` | 不新定义一套 HTTP 状态语义 |
 
@@ -44,7 +44,7 @@
 
 ### 2.3 Module Interactions
 
-提交在一个数据库事务里写纠错单、审批实例、审批任务和待处理占位。采纳并更新在决策事务里改版本、把纠错标成 `approved`、插入 `reserved` 发分行，然后提交。积分门面在提交之后调用。失败时纠错停在哪，以 RFC 第 8 节为准。
+提交在一个数据库事务里写纠错单、审批实例、审批任务和待处理占位。采纳并更新登记时只写 `pending_update_file_id`，纠错仍 `pending`。解析成功后的事务里改版本、把纠错标成 `approved`、按当天剩余额度插入 `reserved` 或 `skipped` 发分行，然后提交。积分门面在提交之后调用。失败时纠错停在哪，以 RFC 第 8、13 节为准。
 
 ### 2.4 File Structure
 
@@ -100,7 +100,8 @@ src/frontend/client/src/
 | Method | Path | Description | Auth | Request | Response `data` |
 |---|---|---|---|---|---|
 | POST | `/knowledge/files/{file_id}/corrections` | 提交 | 登录 | `{ "content": string }` | `correction_id` `instance_id` `task_id` `status=pending` |
-| GET | `/knowledge/file-corrections/{correction_id}` | 读正文 | 登录，且是反馈人或冻结上传人 | 无 | `correction_id` `file_id` `file_name` `space_id` `content` `status` `applicant_user_id` `uploader_user_id` |
+| GET | `/knowledge/file-corrections/{correction_id}` | 读正文 | 登录，且是反馈人或冻结上传人 | 无 | `correction_id` `file_id` `file_name` `space_id` `content` `status` `applicant_user_id` `uploader_user_id` `pending_update_file_id` `update_file_status` `update_phase` |
+| POST | `/knowledge/file-corrections/{correction_id}/retry-update-file` | 失败文件重新解析 | 登录冻结上传人 | 无 | `id` `status` `file_name` `update_phase` |
 | POST | `/approval/tasks/{task_id}/decision` | 处理 | 登录，且是该任务冻结上传人 | 见 4.2 | 现有决策结果：`task_id` `instance_id` `status` `instance_status` `comment` |
 | POST | `/approval/instances/{instance_id}/withdraw` | 撤回 | 登录反馈人，且仍为 pending | 现有撤回体，`reason` 可空 | 现有撤回结果 |
 
@@ -146,7 +147,7 @@ src/frontend/client/src/
 
 采纳：版本不动。若当天没有 `award_kind=adopt` 且 `award_state=awarded` 的发分行，则 `reserved` 并在提交后投递 `delta=1`。已有则发分行直接 `skipped`，不投递。
 
-采纳并更新：新文件存在、`knowledge_id` 相同、`status=2`、文件号不同。否则 18410 或 18409，事务不提交。通过后写主版本，投递 `delta=2`。
+采纳并更新登记：写入指针，不关单。指针文件仍在解析时，其他动作 18411。解析成功后写主版本；当天该反馈人 `award_kind=update` 且 `reserved`/`awarded` 的分数加 2 不超过 10 则投递 `delta=2`，否则发分行 `skipped`。旧决策在新文件已是 `status=2` 时可当场关单，同样走 10 分封顶。
 
 拒绝：原因为空则 18103，不写终态。通过后 `rejected`，不写发分行。
 
@@ -193,6 +194,8 @@ src/frontend/client/src/
 | 18408 | 操作人不是冻结上传人 | 只有文档上传人可以处理这条纠错 |
 | 18409 | 新文件未解析成功 | 新文件还在解析, 解析完成后再采纳并更新 |
 | 18410 | 新文件不能成为这一篇的新版本 | 请上传同一知识库中的另一份新文件 |
+| 18411 | 更新文件仍在解析 | 新文件正在解析, 请等待完成后再处理 |
+| 18412 | 没有失败的更新文件却重解析 | 当前没有解析失败的更新文件, 无法重新解析 |
 | 18103 | 拒绝未填原因 | 沿用审批模块现有文案 |
 | 18102 | 纠错已处理，或动作无法识别 | 沿用审批模块现有文案 |
 | 18020 | 文件不存在 | 沿用知识库现有文案 |
@@ -201,7 +204,7 @@ src/frontend/client/src/
 
 积分投递失败不自动把纠错打回待处理。同一幂等键可以再投。Celery 任务 `process_points_award_event` 没有失败后的自动重试配置。队列确认过的失败不会自己再来。
 
-客户端在采纳并更新时，若文件未解析成功，保存 `new_file_id`，用户再次点击时重试决策。
+客户端在登记成功后按 `update_phase` 显示更新中, 并轮询 GET 纠错. 不要把登记成功当成已关单.
 
 ### 6.3 Failure Modes
 

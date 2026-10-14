@@ -431,7 +431,7 @@ def addEmbedding(
                         promote_parsed_update_file_sync,
                     )
 
-                    # 采纳并更新的积分和待办已在上传时结束. 这里只在解析成功后替换当前版本.
+                    # 仍待处理的采纳并更新在这里收成当前版本、关待办并发分.
                     promote_parsed_update_file_sync(db_file.id)
                 except Exception:
                     logger.exception(
