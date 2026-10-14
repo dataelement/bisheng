@@ -1076,12 +1076,8 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
       </div>
 
       {detail.scenario_code === FILE_CORRECTION_SCENARIO ? (
-        <FileCorrectionNotice
-          correctionId={Number(liveSnapshot.correction_id) || null}
-          fileName={liveBusinessName}
-          spaceId={liveSnapshot.space_id}
-          fileId={liveSnapshot.file_id}
-        />
+        // 待办详情不提供打开文件, 只展示纠错说明.
+        <FileCorrectionNotice correctionId={Number(liveSnapshot.correction_id) || null} />
       ) : null}
 
       {showContent && (

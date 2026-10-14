@@ -86,6 +86,8 @@ async def flow_env(monkeypatch):
 
     for target in (
         "bisheng.knowledge.domain.services.knowledge_file_correction_service.get_async_db_session",
+        "bisheng.knowledge.domain.services.knowledge_file_correction_preview_access.get_async_db_session",
+        "bisheng.common.models.space_channel_member.get_async_db_session",
         "bisheng.knowledge.domain.services.knowledge_file_correction_approver_policy.get_async_db_session",
         "bisheng.points.domain.services.points_award_hooks.get_async_db_session",
         "bisheng.approval.domain.repositories.approval_instance_repository.get_async_db_session",

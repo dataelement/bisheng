@@ -843,10 +843,18 @@ export default function PortalKnowledgeWorkbench() {
     const canManageSelectedFilePermission = Boolean(
         selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || effectivePermissionEntryIds.has(selectedFile.id)),
     );
+    const correctionPreviewReady = Boolean(
+        selectedFile
+        && !isFolder(selectedFile)
+        && !preview.loading
+        && !preview.error
+        && preview.fileUrl,
+    );
     const showFileCorrection = canSubmitFileCorrection({
         space: activeSpace,
         file: selectedFile,
         currentUserId: currentUser?.id,
+        previewReady: correctionPreviewReady,
     });
     // 纠错历史入口先隐藏. 恢复时改回 canOpenFileCorrection.
     const showFileCorrectionHistory = false;

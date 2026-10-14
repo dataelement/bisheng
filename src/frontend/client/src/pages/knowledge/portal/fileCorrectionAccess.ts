@@ -22,14 +22,16 @@ export function canOpenFileCorrection(input: {
 
 /**
  * 右侧边栏是否显示发起纠错按钮.
- * 看当前打开文件所属库, 不看从哪个列表进来.
+ * 预览成功后才显示. 看当前打开文件所属库, 不看从哪个列表进来.
  */
 export function canSubmitFileCorrection(input: {
     space: Pick<KnowledgeSpace, "spaceLevel" | "isFavorite"> | null | undefined;
     file: Pick<KnowledgeFile, "uploaderUserId"> | null | undefined;
     currentUserId: string | number | null | undefined;
+    previewReady?: boolean;
 }): boolean {
     const { space, file } = input;
+    if (!input.previewReady) return false;
     if (!space || !file || space.isFavorite) return false;
     if (!CORRECTION_LEVELS.has(space.spaceLevel)) return false;
     if (file.uploaderUserId == null) return true;
