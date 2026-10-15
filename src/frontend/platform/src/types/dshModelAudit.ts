@@ -31,6 +31,7 @@ export type AuditModeSnapshot = {
   content_available?: boolean;
 };
 export type AuditUserOption = { user_id: number; user_name: string };
+export type AuditModelOption = { id: number; name: string };
 export type AuditUserPage = { data: AuditUserOption[]; total: number };
 export type ModelAuditRecord = {
   request_id: string;
@@ -66,6 +67,7 @@ export type ModelAuditQuery = {
   user_keyword?: string;
   request_id?: string;
   conversation_id?: string;
+  model_id?: number;
   model_name?: string;
   provider_name?: string;
   start_at?: string;

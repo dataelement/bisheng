@@ -103,6 +103,64 @@ function renderPanel(globalAdmin = true, tenantId = 1) {
 }
 
 describe("audit tenant selection", () => {
+  it("defaults global administrators to the default tenant, not their own tenant or the first result", async () => {
+    api.tenants.mockResolvedValue({
+      data: [
+        { id: 2, tenant_name: "Second tenant", tenant_code: "second" },
+        { id: 1, tenant_name: "First tenant", tenant_code: "first" },
+      ],
+      total: 2,
+    });
+    renderPanel(true, 2);
+    await screen.findByText("First tenant (first)");
+    await waitFor(() =>
+      expect(api.page).toHaveBeenCalledWith(
+        { tenant_id: 1, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(api.mode).toHaveBeenCalledWith(1, expect.any(AbortSignal));
+    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(true);
+  });
+
+  it("defaults global administrators to the default tenant even without a personal tenant", async () => {
+    renderPanel(true, 0);
+    await screen.findByText("First tenant (first)");
+    await waitFor(() =>
+      expect(api.page).toHaveBeenCalledWith(
+        { tenant_id: 1, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it("uses a tenant administrator's managed tenant when identity finishes loading", async () => {
+    const view = renderPanel(false, 0);
+    expect(api.page).not.toHaveBeenCalled();
+    expect(api.mode).not.toHaveBeenCalled();
+    const value = {
+      user: {
+        tenant_id: 2,
+        role: "user",
+        is_child_admin: true,
+        is_global_super: false,
+      },
+    } as unknown as ContextType<typeof userContext>;
+    view.rerender(
+      <userContext.Provider value={value}>
+        <ModelAuditPanel />
+      </userContext.Provider>,
+    );
+    await screen.findByText("Synthetic");
+    expect(api.page).toHaveBeenCalledWith(
+      { tenant_id: 2, limit: 20 },
+      expect.any(AbortSignal),
+    );
+    expect(api.mode).toHaveBeenCalledWith(2, expect.any(AbortSignal));
+    expect(api.tenants).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
+  });
+
   it("selects existing tenants by name and clears the previous tenant's originals", async () => {
     renderPanel();
     await screen.findByText("First tenant (first)");

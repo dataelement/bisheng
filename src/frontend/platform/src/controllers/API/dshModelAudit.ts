@@ -1,4 +1,5 @@
 import request from "@/controllers/request";
+import { createDshOperationId } from "@/util/dshOperationId";
 import { requestStream } from "@/controllers/requestStream";
 import type {
   AuditBodyFrame,
@@ -9,6 +10,7 @@ import type {
   MissingModelAudit,
   ModelAuditRecord,
   AuditUserPage,
+  AuditModelOption,
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
@@ -20,7 +22,7 @@ export async function getAuditModels(
     keyword?: string;
   },
   signal?: AbortSignal,
-): Promise<{ data: string[]; total: number }> {
+): Promise<{ data: AuditModelOption[]; total: number }> {
   return await request.get(base + "/models", { params: query, signal });
 }
 
@@ -78,7 +80,7 @@ export async function saveAuditMode(
   mode: AuditMode,
 ): Promise<AuditModeSnapshot> {
   return await request.put(base + "/settings/" + tenantId, {
-    operation_id: crypto.randomUUID(),
+    operation_id: createDshOperationId(),
     expected_version: snapshot.version,
     mode,
   });

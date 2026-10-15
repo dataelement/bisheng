@@ -25,6 +25,8 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
     __table_args__ = (
         Index("ix_dma_request_conversation", "tenant_id", "user_id", "conversation_key", "started_at", "request_id"),
         Index("ix_dma_request_time", "tenant_id", "started_at", "request_id"),
+        Index("ix_dma_request_model", "tenant_id", "model_id", "started_at", "request_id"),
+        Index("ix_dma_request_name", "tenant_id", "model_name_digest", "started_at", "request_id"),
         CheckConstraint("effective_mode IN ('METADATA','CONTENT')", name="ck_dma_request_mode"),
     )
     request_id: str = Field(sa_column=Column(String(36), primary_key=True))
@@ -43,6 +45,7 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
     session_id: str = Field(default="", sa_column=Column(String(128), nullable=False))
     model_id: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     model_name: str = Field(default="", sa_column=Column(String(2048), nullable=False))
+    model_name_digest: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
     provider_name: str = Field(default="", sa_column=Column(String(2048), nullable=False))
     conversation_id: str | None = Field(default=None, sa_column=Column(String(1024), nullable=True))
     conversation_key: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))

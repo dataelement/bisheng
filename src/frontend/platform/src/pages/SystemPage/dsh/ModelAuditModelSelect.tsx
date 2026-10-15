@@ -12,17 +12,20 @@ import {
   PopoverTrigger,
 } from "@/components/bs-ui/popover";
 import { getAuditModels } from "@/controllers/API/dshModelAudit";
+import type { AuditModelOption } from "@/types/dshModelAudit";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface ModelAuditModelSelectProps {
   tenantId?: number;
+  modelId?: number;
   value?: string;
-  onChange: (name: string | undefined) => void;
+  onChange: (filter: { model_id?: number; model_name?: string }) => void;
 }
 
 export function ModelAuditModelSelect({
   tenantId,
+  modelId,
   value,
   onChange,
 }: ModelAuditModelSelectProps) {
@@ -30,7 +33,8 @@ export function ModelAuditModelSelect({
   const [open, setOpen] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [page, setPage] = useState(1);
-  const [names, setNames] = useState<string[]>([]);
+  const [models, setModels] = useState<AuditModelOption[]>([]);
+  const [selectedName, setSelectedName] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -54,10 +58,19 @@ export function ModelAuditModelSelect({
           .then((result) => {
             if (abort.signal.aborted) return;
             const valid = result.data.filter(
-              (name) => typeof name === "string" && name.trim() !== "",
+              (model) =>
+                Number.isSafeInteger(model?.id) &&
+                model.id > 0 &&
+                typeof model.name === "string" &&
+                model.name.trim() !== "",
             );
-            setNames((old) => [
-              ...new Set(page === 1 ? valid : [...old, ...valid]),
+            setModels((old) => [
+              ...new Map(
+                (page === 1 ? valid : [...old, ...valid]).map((model) => [
+                  model.id,
+                  model,
+                ]),
+              ).values(),
             ]);
             setHasMore(result.data.length > 0 && page * 20 < result.total);
           })
@@ -86,9 +99,14 @@ export function ModelAuditModelSelect({
           id="audit-model_name"
           aria-label={t("dsh.modelAuditView.filters.model_name")}
           aria-describedby="audit-model-hint"
-          value={value || ""}
+          value={modelId === undefined ? value || "" : selectedName}
           maxLength={2048}
-          onChange={(event) => onChange(event.target.value || undefined)}
+          onChange={(event) =>
+            onChange({
+              model_id: undefined,
+              model_name: event.target.value || undefined,
+            })
+          }
         />
         <Popover
           open={open}
@@ -97,7 +115,7 @@ export function ModelAuditModelSelect({
             setOpen(next);
             setKeyword("");
             setPage(1);
-            setNames([]);
+            setModels([]);
             setHasMore(false);
             setLoading(next);
             setFailed(false);
@@ -124,7 +142,7 @@ export function ModelAuditModelSelect({
                 onValueChange={(next) => {
                   setKeyword(next);
                   setPage(1);
-                  setNames([]);
+                  setModels([]);
                   setHasMore(false);
                   setLoading(true);
                   setFailed(false);
@@ -137,22 +155,23 @@ export function ModelAuditModelSelect({
                 <CommandItem
                   value="all-models"
                   onSelect={() => {
-                    onChange(undefined);
+                    onChange({ model_id: undefined, model_name: undefined });
                     setOpen(false);
                   }}
                 >
                   {t("dsh.modelAuditView.allModels")}
                 </CommandItem>
-                {names.map((name) => (
+                {models.map((model) => (
                   <CommandItem
-                    key={name}
-                    value={"model:" + name}
+                    key={model.id}
+                    value={"model:" + model.id}
                     onSelect={() => {
-                      onChange(name);
+                      setSelectedName(model.name);
+                      onChange({ model_id: model.id, model_name: undefined });
                       setOpen(false);
                     }}
                   >
-                    <span className="break-all">{name}</span>
+                    <span className="break-all">{model.name}</span>
                   </CommandItem>
                 ))}
                 {loading && (
@@ -179,7 +198,7 @@ export function ModelAuditModelSelect({
                     </CommandItem>
                   </>
                 )}
-                {!loading && !failed && names.length === 0 && (
+                {!loading && !failed && models.length === 0 && (
                   <p
                     role="status"
                     className="p-4 text-sm text-muted-foreground"

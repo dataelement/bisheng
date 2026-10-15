@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 from hashlib import sha256
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, or_
 from sqlmodel import select
 
 from bisheng.dsh.domain.models.model_audit_content import DshModelAuditBodyAccess
@@ -21,18 +21,6 @@ def as_utc(value):
 
 
 class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
-    def model_names(self, *, page=1, page_size=20, keyword=None):
-        require_tenant()
-        names = select(DshModelAuditRequest.model_name).where(DshModelAuditRequest.model_name != "")
-        if keyword:
-            escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            names = names.where(DshModelAuditRequest.model_name.like("%" + escaped + "%", escape="\\"))
-        total = self.session.exec(names.with_only_columns(func.count(DshModelAuditRequest.model_name.distinct()))).one()
-        rows = self.session.exec(
-            names.distinct().order_by(DshModelAuditRequest.model_name).offset((page - 1) * page_size).limit(page_size)
-        ).all()
-        return {"data": list(rows), "total": total}
-
     @staticmethod
     def pending_tenants(session, *, cursor=None):
         from bisheng.core.context.tenant import bypass_tenant_filter
@@ -116,9 +104,11 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
                 statement = statement.where(DshModelAuditRequest.started_at >= value)
             elif key == "end_at":
                 statement = statement.where(DshModelAuditRequest.started_at < value)
-            elif key in {"model_name", "provider_name"}:
-                escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                statement = statement.where(getattr(DshModelAuditRequest, key).like("%" + escaped + "%", escape="\\"))
+            elif key == "model_name":
+                statement = statement.where(
+                    DshModelAuditRequest.model_name_digest == sha256(value.encode("utf8")).hexdigest(),
+                    DshModelAuditRequest.model_name == value,
+                )
             elif key == "user_ids":
                 statement = statement.where(DshModelAuditRequest.user_id.in_(value))
             else:
@@ -147,6 +137,8 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
         ).all()
         if "conversation_id" in filters and any(row.conversation_id != filters["conversation_id"] for row in rows):
             raise ValueError("Audit conversation digest binding mismatch")
+        if "model_name" in filters and any(row.model_name != filters["model_name"] for row in rows):
+            raise ValueError("Audit model name digest binding mismatch")
         page = rows[:limit]
         next_cursor = None
         if len(rows) > limit:

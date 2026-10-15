@@ -27,14 +27,16 @@ export function ModelAuditPanel() {
     is_child_admin?: unknown;
   };
   const ownTenant = Number(identity?.tenant_id);
-  const initialTenant =
-    Number.isSafeInteger(ownTenant) && ownTenant > 0 ? ownTenant : undefined;
   const canConfigure =
     identity?.is_child_admin !== true &&
     (identity?.role === "admin" || identity?.is_global_super === true);
-  const [tenant, setTenant] = useState<number | undefined>(
-    canConfigure ? undefined : initialTenant,
-  );
+  const initialTenant = canConfigure
+    ? 1
+    : Number.isSafeInteger(ownTenant) && ownTenant > 0
+      ? ownTenant
+      : undefined;
+  const [selectedTenant, setTenant] = useState<number | undefined>();
+  const tenant = canConfigure ? selectedTenant : initialTenant;
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
@@ -128,8 +130,9 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
         />
         <ModelAuditModelSelect
           tenantId={tenantId}
+          modelId={query.model_id}
           value={query.model_name}
-          onChange={(name) => handleFilter({ model_name: name })}
+          onChange={handleFilter}
         />
       </div>
       <div className="grid gap-3 md:grid-cols-3">

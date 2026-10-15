@@ -1143,3 +1143,19 @@ bash scripts/seed_load_test_org.sh --departments 200 --users 50000 --apply
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7
 python scripts/dsh_migrate_role_policies.py --tenant 2 --actor 1 --model 7 --apply
 ```
+
+## DSH audit model-name digest backfill
+
+After the `dsh_audit_model_lookup` schema migration and deployment of all new writers,
+run from `src/backend/` using the same `config` environment as the service:
+
+```bash
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1
+python scripts/backfill_dsh_audit_model_names.py --tenant-id 1 --apply --batch-size 200 --max-batches 20
+```
+
+Dry-run is the default. Repeat per tenant until `has_more=false`; resume with
+`--after-request-id` from the previous output. Rerun from the beginning for a final
+check. Only missing digests are filled; original names and bodies remain unchanged.
+Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
+query fallback or automatic startup backfill is performed.

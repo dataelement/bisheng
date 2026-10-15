@@ -81,7 +81,7 @@
 | `dsh_model_audit_evidence` | `(request_id,event_type)` 唯一、认证 tenant、发生时间、模式/原因；仅 MODEL_ENTERED 包含认证 user | 与正文写入器分离的尽力持久化进入证据或系统降级诊断；显式 OFF 不建进入证据，MODE_READ_FAILED 不保存用户、登录会话、模型、会话 ID 或正文 |
 | Redis 审计活动租约 | 随机 request_id 的私有 key、随机活动代次及 TTL | 开启模式下后台刷新；认证范围与模式以已授权 SQL 事实为准，不把租约当权限或正文；代次保护避免迟到结束删除新租约 |
 
-不创建旧设计的 `context_event`/`edge`、源消息映射、任务父子、修订、Fork 或压缩来源表。索引包含 `(tenant_id,user_id,conversation_key,started_at,request_id)`，并有租户内的时间/模型/状态查询索引；选型使用 MySQL/DM8 兼容类型。conversation_key 从认证租户、用户及 ID 的原始 UTF-8 值以无歧义编码生成稳定的 SHA-256 摘要，精确定位额外使用 conversation_id_digest=SHA256(原始 ID UTF-8) 并在读出后精确核对原值，避免两库默认排序规则把大小写或其他不同值视为同一 ID；不转换大小写或归一化 ID。查询会话时先设置已授权租户的 ContextVar，让租户过滤按 constitution C3 自动注入，再显式限定目标用户；不能把客户端 ID 当全局唯一主键或对象路径。用户模糊检索仅在授权租户内 join 现有 User 名称，转义 LIKE 元字符，不对正文建立全文索引。`dsh_model_call` 仅按 `request_id` 提供已有用量事实，不改变额度投影。
+不创建旧设计的 `context_event`/`edge`、源消息映射、任务父子、修订、Fork 或压缩来源表。索引包含 `(tenant_id,user_id,conversation_key,started_at,request_id)`，以及 `(tenant_id,started_at,request_id)`、`(tenant_id,model_id,started_at,request_id)`、`(tenant_id,model_name_digest,started_at,request_id)` 联合索引；选型使用 MySQL/DM8 兼容类型。model_name 保留完整历史快照，model_name_digest 为原始 UTF-8 名称的 SHA-256 十六进制摘要，名称过滤同时使用摘要等值与原名等值校验；摘要强制大小写和空白敏感，不执行名称 LIKE。新增 DDL-only 迁移 dsh_audit_model_lookup，已有记录摘要为 NULL，须部署所有新写入进程后按租户运行独立有界、可恢复的 backfill_dsh_audit_model_names.py；回填完成前不承诺历史名称检索完整，禁止以大表 LIKE 或动态计算摘要兜底。conversation_key 从认证租户、用户及 ID 的原始 UTF-8 值以无歧义编码生成稳定的 SHA-256 摘要，精确定位额外使用 conversation_id_digest=SHA256(原始 ID UTF-8) 并在读出后精确核对原值，避免两库默认排序规则把大小写或其他不同值视为同一 ID；不转换大小写或归一化 ID。查询会话时先设置已授权租户的 ContextVar，让租户过滤按 constitution C3 自动注入，再显式限定目标用户；不能把客户端 ID 当全局唯一主键或对象路径。用户模糊检索仅在授权租户内 join 现有 User 名称，转义 LIKE 元字符，不对正文建立全文索引。`dsh_model_call` 仅按 `request_id` 提供已有用量事实，不改变额度投影。
 
 版本化原件编码保持实际接口值、多模态载荷或引用、消息和增量顺序；对重复历史按规范化消息/内容部分切成稳定复用单元，流式增量仍按实际出现顺序记录，不能把整次请求做唯一去重单元。不同编码版本不直接视为相同正文。去重键和加密关联数据均包含 `(tenant,user,scope_type,scope_id,encoding_version)`，采用无歧义编码；会话 ID 与请求 ID 即使字符串相同也属于不同作用域。去重用作用域密钥摘要筛候选，再核对长度和实际等价，避免全局内容存在性探测。共享 MinIO 对象用成熟 AEAD 加密；密钥独立于 License/HMAC，轮换、恢复、备份在 CONTENT 启用前落实。加密/密钥不可用不退回明文；不能给浏览器绕开授权与查看日志的预签名直链。元数据按请求保存模型提供方/名称、开始与终止时间、耗时、四轴各自的来源及观察时间；用量值只引用既有用量事实，缺失时展示未知而不填零。
 
@@ -160,8 +160,8 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | API | 输出与限制 |
 |---|---|
 | `GET /model-audit/users` | 复用审计管理员鉴权和目标租户校验；按当前租户现有用户目录查询，支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100）；仅返回 `{data:[{user_id,user_name}],total}`，响应禁止缓存，不放宽原租户用户管理接口权限 |
-| `GET /model-audit/models` | 复用相同审计租户鉴权；从审计记录的模型名称快照去重查询，不关联现有模型配置，删除配置不影响候选；支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100），返回 `{data:[名称],total}`，计数与数据均受租户自动过滤，响应禁止缓存 |
-| `GET /model-audit/requests` | 授权租户内按用户 ID、时间范围、模型提供方/名称、四轴状态与关联状态过滤；兼容保留 API 用户名片段过滤，支持 request_id/conversation_id 精确定位，按 `(started_at,request_id)` 游标稳定分页；只返元数据、模式/写入水位与证据局限 |
+| `GET /model-audit/models` | 复用相同审计租户鉴权；复用“模型与额度”的当前开放模型目录读取能力（LLMService 与 read_available_models），在授权 profile_scope 下加载，不按管理员本人调用权限缩小，不读取审计明细；小目录可按名称包含搜索；支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100），返回 `{data:[{id,name}],total}`，分页和计数仅基于当前模型小目录，响应禁止缓存 |
+| `GET /model-audit/requests` | 授权租户内按用户 ID、时间范围、模型 ID 或完整历史名称、提供方、四轴状态与关联状态过滤；model_id 与 model_name 互斥，均为等值条件，冲突返回 26131；兼容保留 API 用户名片段过滤，支持 request_id/conversation_id 精确定位，按 `(started_at,request_id)` 游标稳定分页；只返元数据、模式/写入水位与证据局限 |
 | `GET /model-audit/requests/{request_id}` | 单请求元数据、客户端声明的会话 ID、状态及用量引用；不带原文 |
 | `GET /model-audit/conversations?user_id=...&conversation_id=...` | 在授权租户及目标用户范围按开始时间、request_id 分页给请求卡片；不把 ID 当全局唯一，默认不返回原文 |
 | `POST /model-audit/requests/{request_id}/body-access` | 校验授权并先提交查看日志，再以有界流按原始顺序返回该请求正文；一次展开不预取其他请求，不提供批量导出或对象直链 |
@@ -179,7 +179,9 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 
 管理接口沿用现有 `UserPayload.get_tenant_admin_user` 作为入口身份筛选，并在 DSH 管理 Service 中按现有 `authorize_admin` 路径核对所选租户和记录归属；只有全局超管可切换模式，租户管理员仅能读本租户元数据与原文。此处是固定管理员角色与租户范围规则，不做逐人资源授权，也不新增 F048 审计资源、动作或 Catalog 项；新接口复用既有管理员判定与租户范围校验，不自行新增角色关系表查询，也不以菜单权限放行。目标记录先加载并核验归属，普通用户、其他管理员、越界租户与受限管理范围均拒绝。正文读取先验证对象可读和授权，再持久提交本次读取尝试；日志提交失败拒绝传正文。可追加传输结果，但成功授权日志不表示浏览器已收到全部内容。响应禁缓存、禁原文入普通日志和错误；浏览器只安全渲染文本/媒体，不执行 HTML 或脚本。
 
-页面筛选采用常用与高级两层：常用仅显示用户、时间范围、模型名称；高级中的请求/会话编号、提供方、四轴与关联状态默认收起，生效条件数量始终可见，并支持重置。用户选择复用既有 DSH 可搜索下拉交互，每页 20 人、250ms 搜索防抖，选中后仅用 `user_id` 查询审计；取消旧请求并忽略过时结果。用户目录通过租户 Service 复用主部门归属口径，在已授权的精确 `profile_scope` 下执行；不按当前用户归属重新解释历史审计记录。模型名称保留自由输入并增加可搜索、分页的历史名称下拉候选；两种方式均按名称包含匹配（最多 2048 字符，与历史快照长度一致），不依赖模型 ID 或当前配置存在，候选加载失败也不禁用手填。切换租户通过子视图重建清空选择、条件、游标和正文；目录加载失败提供重试，不回退为手填用户编号。
+页面筛选采用常用与高级两层：常用仅显示用户、时间范围、模型名称；高级中的请求/会话编号、提供方、四轴与关联状态默认收起，生效条件数量始终可见，并支持重置。用户选择复用既有 DSH 可搜索下拉交互，每页 20 人、250ms 搜索防抖，选中后仅用 `user_id` 查询审计；取消旧请求并忽略过时结果。用户目录通过租户 Service 复用主部门归属口径，在已授权的精确 `profile_scope` 下执行；不按当前用户归属重新解释历史审计记录。模型下拉来自当前租户现有开放模型目录，按名称搜索/分页，显示名称而提交 model_id；手填按完整历史名称精确过滤（最多 2048 字符），修改文本须清除 model_id，两种查询不能混用。同名不同 ID 的选项不合并，改名后按 ID 能查到旧名称，配置删除后可手填旧名称。候选加载失败也不禁用手填。切换租户通过子视图重建清空选择、条件、游标和正文；目录加载失败提供重试，不回退为手填用户编号。
+
+租户初始范围：全局超管使用系统默认租户编号 1 作为首选，经现有租户目录确认后自动加载，不采用用户个人归属或返回列表的首项；用户主动切换后保留所选租户。租户管理员直接从当前身份的 `tenant_id` 派生查询范围，不加载全局租户目录；身份延迟加载或范围变化时随当前身份更新，不把最初的空值固化在组件 state。未确认租户时不渲染模式和审计查询子视图。沿用现有选择器及切换时的子视图重建，无新增授权规则或控件样式。
 
 ### 6.3 依赖与变更风险
 

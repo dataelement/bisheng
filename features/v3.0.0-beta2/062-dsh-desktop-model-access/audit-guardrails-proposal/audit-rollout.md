@@ -4,6 +4,12 @@
 
 ## 启用前
 
+### 模型查询索引升级（dsh_audit_model_lookup）
+
+发布包含本次修改的镜像时，先执行正常 Alembic DDL 迁移，增加可空 `model_name_digest` 和两条模型查询联合索引；迁移不回填数据。所有 API/消费者均切到新版本后，按实际租户运行 `scripts/backfill_dsh_audit_model_names.py --tenant-id <ID>` 预览，再带 `--apply --batch-size 200 --max-batches 20` 分批补齐旧摘要。可用输出的 `after_request_id` 续跑；最终从头重跑至 `examined=0`，逐租户确认。脚本仅补 NULL 摘要，不改模型名称或原文。旧数据补齐前名称精确查询会漏掉未补记录，不启用大表扫描兜底；按模型 ID 查询不依赖回填。DDL 建索引的耗时及锁影响需在目标 MySQL/DM8 环境预估，不能宣称无锁。此次候选接口返回 `{id,name}`，API 与前端需协调同批发布，禁止混用旧版字符串候选响应。
+
+### 通用启用检查
+
 1. 发布线同步及质量门禁处置；在实际 MySQL/DM8 环境确认八张表/索引、租户 hook 导入、API 和 Celery/Beat 同版本。新表沿既有 model discovery/create_all 创建，不回填存量租户模式。若已运行早期原型，create_all 不会自动补列/改精度，须先审查并执行独立差异迁移，不能删业务表解决。
 2. 所有新/旧租户仍默认 OFF。仅全局超管在客户端管理→模型审计选择租户，切 METADATA 或 CONTENT；操作附 `operation_id/expected_version`，模式与留痕同事务。租户管理员只读；受限管理上下文不会自动取得全局操作权。
 3. CONTENT 前明确数据/安全责任方、持续存储容量、访问日志、私有 bucket 策略、报警、备份与恢复责任；本期**没有到期删除或孤儿对象自动 GC**。部分写入失败可留下无引用加密对象，不得贸然全局删除。

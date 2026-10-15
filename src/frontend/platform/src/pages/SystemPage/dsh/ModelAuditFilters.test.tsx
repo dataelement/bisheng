@@ -28,7 +28,10 @@ import { ModelAuditPanel, ModelAuditRequests } from "./ModelAuditPanel";
 
 beforeEach(() => {
   vi.resetAllMocks();
-  api.models.mockResolvedValue({ data: ["Deleted model"], total: 1 });
+  api.models.mockResolvedValue({
+    data: [{ id: 42, name: "Available model" }],
+    total: 1,
+  });
   api.page.mockResolvedValue({
     items: [],
     next_cursor: null,
@@ -49,14 +52,89 @@ beforeEach(() => {
 });
 
 describe("simplified audit filters", () => {
-  it("selects audited model names without requiring a live configuration and can clear the selection", async () => {
+  it("clears a selected model ID when typing an exact historical name and resets both filters", async () => {
+    render(<ModelAuditRequests tenantId={2} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.selectModel" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Available model" }),
+    );
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        expect.objectContaining({ model_id: 42, model_name: undefined }),
+        expect.any(AbortSignal),
+      ),
+    );
+    const input = screen.getByLabelText(
+      "dsh.modelAuditView.filters.model_name",
+    );
+    fireEvent.change(input, { target: { value: "Provider / Deleted model" } });
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model_id: undefined,
+          model_name: "Provider / Deleted model",
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(input).toHaveValue("Provider / Deleted model");
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.resetFilters" }),
+    );
+    expect(input).toHaveValue("");
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        { tenant_id: 2, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it("keeps same-name models distinct by ID and ignores invalid model candidates", async () => {
+    api.models.mockResolvedValue({
+      data: [
+        { id: null, name: "Invalid" },
+        { id: "", name: "Invalid" },
+        { id: 42, name: "Same name" },
+        { id: 43, name: "Same name" },
+      ],
+      total: 4,
+    });
+    render(<ModelAuditRequests tenantId={2} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.selectModel" }),
+    );
+    const options = await screen.findAllByRole("option", { name: "Same name" });
+    expect(options).toHaveLength(2);
+    expect(screen.queryByRole("option", { name: "Invalid" })).toBeNull();
+    fireEvent.click(options[1]);
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        expect.objectContaining({ model_id: 43, model_name: undefined }),
+        expect.any(AbortSignal),
+      ),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.resetFilters" }),
+    );
+    expect(
+      screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
+    ).toHaveValue("");
+    await waitFor(() => expect(api.page).toHaveBeenLastCalledWith(
+      { tenant_id: 2, limit: 20 }, expect.any(AbortSignal),
+    ));
+  });
+
+  it("selects an available model by ID and can clear the selection", async () => {
     render(<ModelAuditRequests tenantId={2} />);
     expect(api.models).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.selectModel" }),
     );
     fireEvent.click(
-      await screen.findByRole("option", { name: "Deleted model" }),
+      await screen.findByRole("option", { name: "Available model" }),
     );
     expect(api.models).toHaveBeenCalledWith(
       { tenant_id: 2, page: 1, page_size: 20, keyword: undefined },
@@ -64,10 +142,10 @@ describe("simplified audit filters", () => {
     );
     expect(
       screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
-    ).toHaveValue("Deleted model");
+    ).toHaveValue("Available model");
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
-        expect.objectContaining({ model_name: "Deleted model" }),
+        expect.objectContaining({ model_id: 42, model_name: undefined }),
         expect.any(AbortSignal),
       ),
     );
@@ -82,7 +160,7 @@ describe("simplified audit filters", () => {
     ).toHaveValue("");
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
-        expect.objectContaining({ model_name: undefined }),
+        expect.objectContaining({ model_id: undefined, model_name: undefined }),
         expect.any(AbortSignal),
       ),
     );
@@ -112,8 +190,8 @@ describe("simplified audit filters", () => {
 
   it("paginates model suggestions, searches remotely and retries an empty response", async () => {
     api.models
-      .mockResolvedValueOnce({ data: ["One"], total: 21 })
-      .mockResolvedValueOnce({ data: ["Two"], total: 21 })
+      .mockResolvedValueOnce({ data: [{ id: 1, name: "One" }], total: 21 })
+      .mockResolvedValueOnce({ data: [{ id: 2, name: "Two" }], total: 21 })
       .mockResolvedValueOnce({ data: [], total: 0 });
     render(<ModelAuditRequests tenantId={2} />);
     fireEvent.click(

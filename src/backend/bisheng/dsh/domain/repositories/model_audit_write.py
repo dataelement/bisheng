@@ -46,6 +46,7 @@ class DshModelAuditWriteRepository:
             session_id=data["session_id"],
             model_id=data["model_id"],
             model_name=data.get("model_name", ""),
+            model_name_digest=sha256(data.get("model_name", "").encode("utf8")).hexdigest(),
             provider_name=data.get("provider_name", ""),
             conversation_id=conversation,
             conversation_key=conversation_key(event.tenant_id, data["user_id"], conversation) if conversation else None,

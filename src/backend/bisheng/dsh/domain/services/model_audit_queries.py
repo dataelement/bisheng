@@ -26,6 +26,8 @@ class DshModelAuditQueryService:
 
     async def page(self, actor_id, tenant_id, *, user_keyword=None, **query):
         tenant = await self.target(actor_id, tenant_id)
+        if query.get("model_id") is not None and query.get("model_name") is not None:
+            raise DshAuditQueryInvalidError()
         if user_keyword:
             query["user_keyword"] = user_keyword
         for key in ("start_at", "end_at"):
@@ -38,10 +40,19 @@ class DshModelAuditQueryService:
             raise DshAuditQueryInvalidError() from None
 
     async def models(self, actor_id, tenant_id, *, page=1, page_size=20, keyword=None):
+        from bisheng.dsh.admin_runtime import read_available_models
+        from bisheng.llm.domain.services.llm import LLMService
+
         tenant = await self.target(actor_id, tenant_id)
-        return await self.execute(
-            tenant, lambda repository: repository.model_names(page=page, page_size=page_size, keyword=keyword)
-        )
+        with profile_scope(tenant):
+            rows = await read_available_models(await LLMService.get_dsh_model_ids(), LLMService.get_dsh_model_snapshot)
+        if keyword:
+            rows = [row for row in rows if keyword.casefold() in row["name"].casefold()]
+        rows.sort(key=lambda row: (row["name"], row["id"]))
+        return {
+            "data": [{"id": row["id"], "name": row["name"]} for row in rows[(page - 1) * page_size : page * page_size]],
+            "total": len(rows),
+        }
 
     async def users(self, actor, tenant_id, *, page=1, page_size=20, keyword=None):
         from bisheng.tenant.domain.services.tenant_service import TenantService

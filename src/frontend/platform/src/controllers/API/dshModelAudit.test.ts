@@ -58,8 +58,8 @@ it("loads audit-scoped user options with tenant, pagination, search and cancella
   );
 });
 describe("bounded audit NDJSON parser", () => {
-  it("loads historical model names within the requested tenant scope", async () => {
-    const page = { data: ["Deleted model"], total: 1 };
+  it("loads available model IDs and names within the requested tenant scope", async () => {
+    const page = { data: [{ id: 42, name: "Available model" }], total: 1 };
     vi.mocked(request.get).mockResolvedValueOnce(page);
     const signal = new AbortController().signal;
     const query = { tenant_id: 2, page: 1, page_size: 20, keyword: "Deleted" };
