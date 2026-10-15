@@ -62,6 +62,13 @@ networkPolicy:
       podSelector:
         matchLabels:
           app.kubernetes.io/component: worker
+    # Editor "run once" executes in the API process, not the Celery worker.
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: backend
 
 livenessProbe:
   httpGet:

@@ -220,7 +220,7 @@ flowchart TB
 要点：
 
 - 五条业务路径（灵思 / 日常 / 助手 / 工作流 Agent / 工作流工具节点）加上工作流代码节点，全部汇合到 `BaseExecutor`，不各自连沙箱。
-- 只有 **worker** 同时连可信网与 `sandbox_net`。runner 不挂到承载 MySQL / Redis / MinIO 的网络，因此即使用户代码扫内网，也解析不到中间件主机名（AC-12）。
+- **backend**（编辑器「运行一次」在 API 进程里执行）和 **worker** 同时连可信网与 `sandbox_net`。runner 不挂到承载 MySQL / Redis / MinIO 的网络，因此即使用户代码扫内网，也解析不到中间件主机名（AC-12）。
 - 产物进 MinIO 由 worker 上传，执行侧零凭据（决策 3）。
 - 云沙箱是 `BaseExecutor` 的另一个子类，不伪装成副本。
 
@@ -691,7 +691,7 @@ sequenceDiagram
 |---|---|---|
 | 副本怎么声明 | 显式服务 `code-runner-1` / `code-runner-2`，**不用** `deploy.replicas`（匿名实例没有稳定 DNS，粘滞会丢） | `StatefulSet` + headless Service；**不用** `Deployment` + ClusterIP |
 | worker 怎么找到副本 | 默认发现 `code-runner-{n}`（n 从 1 递增到连不上为止）；`endpoints` 非空则覆盖 | 发现 `code-runner-{n}.code-runner`（n 从 0）；粘滞具体主机名，不粘滞 Service 名 |
-| 网络隔离怎么做 | 独立网络 `sandbox_net`：runner 只连它；worker 双挂（default + sandbox_net）；**不**把 runner 端口映射到宿主 | `NetworkPolicy`：只允许来自 worker Pod 的 8080；runner 不加入中间件 Service 的 selector |
+| 网络隔离怎么做 | 独立网络 `sandbox_net`：runner 只连它；backend 与 worker 双挂（default + sandbox_net）；**不**把 runner 端口映射到宿主 | `NetworkPolicy`：允许来自 backend 与 worker Pod 的 8080；runner 不加入中间件 Service 的 selector |
 | 加固怎么落 | compose：`cap_drop: ALL`、`read_only: true`、`mem_limit` / `pids_limit`、`security_opt: no-new-privileges`、`tmpfs`、`user: 65534` | 等价的 `securityContext` + `resources.limits` + `emptyDir.medium: Memory` 作为 `/tmp` |
 | 扩缩容 | 加一个具名服务；worker 在 TTL 后自动发现，不必改 endpoints | 改 `spec.replicas`；同样等 TTL 后发现。缩容中被粘滞的副本按租约 404 处理 |
 | 明确不做 | runner 向 Redis/API 自注册；前面加 nginx / VIP；挂 `docker.sock` | 普通 ClusterIP 当唯一入口；backend 引 `kubernetes` 包；runner 出站注册 |
@@ -712,7 +712,7 @@ worker 代码是同一段 `discover()`，只换 `discover_host_pattern` 与 `dis
 
 **docker compose 运行拓扑**
 
-worker 必须同时加入默认网络（访问 MySQL / Redis / MinIO）和 `sandbox_net`（访问 runner）。runner **只**加入 `sandbox_net`，且不 `ports:` 发布到宿主——隔离靠网络不可达，不靠「不告诉用户端口」。
+backend 与 worker 都必须同时加入默认网络（访问 MySQL / Redis / MinIO）和 `sandbox_net`（访问 runner）。编辑器「运行一次」在 backend 进程里执行。runner **只**加入 `sandbox_net`，且不 `ports:` 发布到宿主——隔离靠网络不可达，不靠「不告诉用户端口」。
 
 ```mermaid
 flowchart TB
@@ -729,6 +729,7 @@ flowchart TB
     end
     Worker -->|"发现 code-runner-n 后直连"| R1
     Worker -->|"发现 code-runner-n 后直连"| R2
+    API -->|"运行一次"| R1
     Worker --> DB
     API --> DB
     API --> Worker
