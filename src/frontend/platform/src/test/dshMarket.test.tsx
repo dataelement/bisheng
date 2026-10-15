@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ContextType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userContext } from "@/contexts/userContext";
@@ -7,8 +8,10 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { previewMarketBundle, deleteMarketPlugin, getMarketContext, getMarketInstallPolicy, getMarketPlugin, importMarketBundle, listMarketImports, listMarketPlugins, setMarketInstallPolicy } from "@/controllers/API/dshMarket";
 import type { MarketPlugin } from "@/controllers/API/dshMarket";
+import { getMarketWorkbench, importWorkbenchBundle, listMarketWorkbenches, listWorkbenchImports, previewWorkbenchBundle } from "@/controllers/API/dshWorkbenches";
 
 vi.mock("@/controllers/API/dshMarket", () => ({ previewMarketBundle: vi.fn(), deleteMarketPlugin: vi.fn(), getMarketContext: vi.fn(), getMarketInstallPolicy: vi.fn(), getMarketPlugin: vi.fn(), importMarketBundle: vi.fn(), listMarketImports: vi.fn(), listMarketPlugins: vi.fn(), resumeMarketImport: vi.fn(), setMarketInstallPolicy: vi.fn() }));
+vi.mock("@/controllers/API/dshWorkbenches", () => ({ getMarketWorkbench: vi.fn(), importWorkbenchBundle: vi.fn(), listMarketWorkbenches: vi.fn(), listWorkbenchImports: vi.fn(), previewWorkbenchBundle: vi.fn(), resumeWorkbenchImport: vi.fn() }));
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({ bsConfirm: vi.fn() }));
 vi.mock("@/components/bs-ui/toast/use-toast", () => ({ toast: vi.fn() }));
 
@@ -32,6 +35,30 @@ beforeEach(() => {
     vi.mocked(getMarketPlugin).mockResolvedValue(plugin);
     vi.mocked(deleteMarketPlugin).mockResolvedValue({ id: plugin.id, deleted: true });
     vi.mocked(importMarketBundle).mockResolvedValue({ id: "job", status: "completed", error: "", created_at: "2026-09-10T00:00:00" });
+    vi.mocked(listMarketWorkbenches).mockResolvedValue({ data: [{
+        id: "a".repeat(32), identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
+        package_name: "dsh-example-workbench", display_name: "Workbench Demo", description: "Example",
+        current_version: { id: "b".repeat(32), version: "1.0.0" }, verification_level: "static",
+        updated_at: "2026-10-15T00:00:00",
+    }], total: 1 });
+    vi.mocked(listWorkbenchImports).mockResolvedValue([]);
+    vi.mocked(previewWorkbenchBundle).mockResolvedValue({
+        package_name: "dsh-example-workbench", identity_kind: "repository", workbench_key: "example/workbench",
+        legacy_id: null, incoming_version: "1.1.0", current_version: "1.0.0", suggested_display_name: "Workbench Demo",
+        allowed: true, duplicate: false, reason: "", warnings: ["runtime_not_verified"],
+    });
+    vi.mocked(importWorkbenchBundle).mockResolvedValue({
+        id: "task", status: "completed", error_code: "", error: "", version_id: "b".repeat(32),
+        created_at: "2026-10-15T00:00:00",
+    });
+    vi.mocked(getMarketWorkbench).mockResolvedValue({
+        id: "a".repeat(32), identity_kind: "repository", workbench_key: "example/workbench", legacy_id: null,
+        package_name: "dsh-example-workbench", display_name: "Workbench Demo", description: "Example",
+        current_version: { id: "b".repeat(32), version: "1.0.0", sha256: "c".repeat(64), size_bytes: 1024, artifact_url: "/artifact" },
+        verification_level: "static", updated_at: "2026-10-15T00:00:00",
+        package_metadata: { repository_url: "https://github.com/example/workbench", patch_entry_id: "example", server_entry: "desktop.js",
+            client_entry: "client.js", bundle_patch: "cordis.patch.yml", license: "MIT", node_engine: ">=22", dependencies: [], legacy_manifest: false },
+    });
 });
 
 describe("DSH market administration", () => {
@@ -132,5 +159,16 @@ describe("DSH market administration", () => {
         expect(within(dialog).getByText("versions")).toBeInTheDocument();
         expect(within(dialog).queryByRole("button", { name: "publish" })).not.toBeInTheDocument();
         expect(within(dialog).queryByText("audit")).not.toBeInTheDocument();
+    });
+    it("previews and imports a workbench archive in its own section", async () => {
+        render(view());
+        await userEvent.setup().click(screen.getByRole("tab", { name: "workbenchSection" }));
+        await screen.findByText("Workbench Demo");
+        fireEvent.click(screen.getByRole("button", { name: "workbenchImport" }));
+        const file = new File(["archive"], "workbench.tgz", { type: "application/gzip" });
+        fireEvent.change(screen.getByLabelText("workbenchImport", { selector: "input" }), { target: { files: [file] } });
+        await screen.findByText("1.0.0 → 1.1.0");
+        fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "workbenchImport" }));
+        await waitFor(() => expect(importWorkbenchBundle).toHaveBeenCalledWith(file, 2, "", expect.any(AbortSignal), expect.any(Function)));
     });
 });
