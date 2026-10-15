@@ -3410,66 +3410,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
         return updated_folder
 
-    async def delete_folder(self, space_id: int, folder_id: int):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
+    async def _delete_formal_resource(self, resource) -> dict:
+        from bisheng.knowledge.domain.services.knowledge_space_direct_delete_service import (
+            KnowledgeSpaceDirectDeleteService,
+        )
 
+        return await KnowledgeSpaceDirectDeleteService(
+            authorize=self._require_action,
+            load_permission_records=self._load_resource_permission_records,
+        ).delete(resource=resource, applicant_user_id=self.login_user.user_id)
+
+    async def delete_folder(self, space_id: int, folder_id: int):
         folder = await self._get_folder_for_action(space_id, folder_id)
-        children = await self._require_folder_delete_permissions(folder)
+        await self._require_folder_delete_permissions(folder)
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
 
-        floder_ids = [folder_id]
-        file_ids = []
-        resource_tuples_to_cleanup = [("folder", folder_id)]
-        for child in children:
-            if child.file_type == FileType.DIR.value:
-                floder_ids.append(child.id)
-                resource_tuples_to_cleanup.append(("folder", child.id))
-            else:
-                file_ids.append(child.id)
-                resource_tuples_to_cleanup.append(("knowledge_file", child.id))
-
-        expanded_file_ids = await self._cascade_version_links_on_delete(file_ids) if file_ids else []
-        if expanded_file_ids:
-            delete_knowledge_file_celery.delay(
-                file_ids=expanded_file_ids,
-                knowledge_id=folder.knowledge_id,
-                clear_minio=True,
-            )
-            # Sibling files pulled in via primary-of-multi-version expansion
-            # also need their tuples cleaned up.
-            for sibling_id in set(expanded_file_ids) - set(file_ids):
-                resource_tuples_to_cleanup.append(("knowledge_file", sibling_id))
-
-        await self.update_folder_update_time(folder.file_level_path)
-        await self._cleanup_resource_tuples(resource_tuples_to_cleanup)
-
-        await KnowledgeFileDao.adelete_batch(expanded_file_ids + floder_ids)
+        manifest = await self._delete_formal_resource(folder)
         self._dispatch_knowledge_chat_rehome(
-            source_space_id=folder.knowledge_id,
-            resources=[("folder", resource_id) for resource_id in floder_ids]
-            + [("knowledge_file", resource_id) for resource_id in expanded_file_ids],
+            source_space_id=space_id,
+            resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
             reason="delete_folder",
         )
-
-        # Prune channel ➜ knowledge-folder sync bindings that target the deleted
-        # folders so the Celery sync worker stops referencing a tombstone.
-        from bisheng.channel.domain.models.channel_knowledge_sync import (
-            ChannelKnowledgeSyncDao,
-        )
+        from bisheng.channel.domain.models.channel_knowledge_sync import ChannelKnowledgeSyncDao
 
         try:
-            await ChannelKnowledgeSyncDao.adelete_by_folder_ids(floder_ids)
-        except Exception as e:
-            _logger.warning(
-                "Failed to cleanup channel knowledge sync bindings for folders %s: %s",
-                floder_ids,
-                e,
-            )
-
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
+            await ChannelKnowledgeSyncDao.adelete_by_folder_ids(manifest["folder_ids"])
+        except Exception:
+            logger.exception("Failed to cleanup channel sync bindings after deleting folder {}", folder_id)
+        await self.update_folder_update_time(folder.file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
         file_record = await self._require_file_or_folder_action(
@@ -4585,8 +4557,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return list(expanded)
 
     async def delete_file(self, file_id: int):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
-
         file_record = await self._get_file_for_action(file_id)
         await self._require_action("knowledge_file", file_id, "delete")
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
@@ -4594,18 +4564,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "delete_file")
 
-        expanded_ids = await self._cascade_version_links_on_delete([file_id])
-        await self._cleanup_resource_tuples([("knowledge_file", fid) for fid in expanded_ids])
-        await KnowledgeFileDao.adelete_batch(expanded_ids)
+        manifest = await self._delete_formal_resource(file_record)
         self._dispatch_knowledge_chat_rehome(
             source_space_id=file_record.knowledge_id,
-            resources=[("knowledge_file", resource_id) for resource_id in expanded_ids],
+            resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
             reason="delete_file",
-        )
-        delete_knowledge_file_celery.delay(
-            file_ids=expanded_ids,
-            knowledge_id=file_record.knowledge_id,
-            clear_minio=True,
         )
         await self.update_folder_update_time(file_record.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
@@ -4834,8 +4797,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
     # ──────────────────────────── Batch Ops ───────────────────────────────────
 
     async def batch_delete(self, knowledge_id: int, file_ids: list[int], folder_ids: list[int]):
-        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
-
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise SpaceNotFoundError()
@@ -4861,20 +4822,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "delete",
                 )
                 direct_files.append(file_record)
-            direct_file_ids = [file.id for file in direct_files]
-            expanded_file_ids = await self._cascade_version_links_on_delete(direct_file_ids)
-            await self._cleanup_resource_tuples([("knowledge_file", file_id) for file_id in expanded_file_ids])
-            await KnowledgeFileDao.adelete_batch(expanded_file_ids)
-            self._dispatch_knowledge_chat_rehome(
-                source_space_id=knowledge.id,
-                resources=[("knowledge_file", resource_id) for resource_id in expanded_file_ids],
-                reason="batch_delete_files",
-            )
-            delete_knowledge_file_celery.delay(
-                file_ids=expanded_file_ids,
-                knowledge_id=knowledge.id,
-                clear_minio=True,
-            )
+            deleted_ids: set[int] = set()
+            for file_record in direct_files:
+                if file_record.id in deleted_ids:
+                    continue
+                manifest = await self._delete_formal_resource(file_record)
+                deleted_ids.update(manifest["file_ids"])
+                self._dispatch_knowledge_chat_rehome(
+                    source_space_id=knowledge.id,
+                    resources=[(item["resource_type"], item["resource_id"]) for item in manifest["fga_resources"]],
+                    reason="batch_delete_files",
+                )
         # Prune channel ➜ knowledge-folder sync bindings for the top-level
         # folders deleted in this batch so the Celery sync worker stops
         # referencing a tombstone. Per-folder cascades are pruned by

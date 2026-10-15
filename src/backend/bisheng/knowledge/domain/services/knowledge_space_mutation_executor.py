@@ -693,6 +693,17 @@ class KnowledgeSpaceMutationExecutor:
 
                 mutation_repository = self.mutation_repository_factory(session)
                 checkpoint = dict(request.execution_checkpoint or {})
+                if (
+                    checkpoint.get("deletion_cutover_active") is True
+                    and checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) == DELETE_PHASE_PURGING
+                ):
+                    # The formal rows are already gone. Recovery must continue
+                    # from the frozen snapshot instead of rebuilding it.
+                    if not isinstance(checkpoint.get("delete_manifest"), dict):
+                        raise RuntimeError("F046 post-cutover delete has no durable manifest")
+                    return MutationExecutionDispatch(
+                        execution_token=str(token), deadline=self._checkpoint_deadline(checkpoint)
+                    )
                 manifest = checkpoint.get("delete_manifest")
                 if manifest is None:
                     snapshot = dict(request.action_snapshot or {})
@@ -871,6 +882,14 @@ class KnowledgeSpaceMutationExecutor:
             )
             checkpoint = dict(request.execution_checkpoint or {}) if request is not None else {}
             if (
+                request is not None
+                and request.action == KnowledgeSpaceFileChangeAction.DELETE
+                and request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED
+                and request.execution_token == str(execution_token)
+                and checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) == DELETE_PHASE_COMPLETED
+            ):
+                return True
+            if (
                 request is None
                 or request.action != KnowledgeSpaceFileChangeAction.DELETE
                 or request.execution_state != KnowledgeSpaceFileChangeExecutionState.APPLYING
@@ -971,9 +990,19 @@ class KnowledgeSpaceMutationExecutor:
                 checkpoint = dict(request.execution_checkpoint or {})
                 checkpoint["purge_failure_reason"] = str(error_summary)[:1000]
                 checkpoint["failure_reason"] = str(error_summary)[:1000]
-                checkpoint[DELETE_PHASE_CHECKPOINT_KEY] = DELETE_PHASE_PURGE_FAILED
+                # Direct deletes have already committed their DB cutover and
+                # have no approval retry action. Keep them discoverable by the
+                # durable purge scan and Celery retry under the same token.
+                direct_delete = request.approval_instance_id is None and checkpoint.get("direct_delete") is True
+                checkpoint[DELETE_PHASE_CHECKPOINT_KEY] = (
+                    DELETE_PHASE_PURGING if direct_delete else DELETE_PHASE_PURGE_FAILED
+                )
                 request.execution_checkpoint = checkpoint
-                request.execution_state = KnowledgeSpaceFileChangeExecutionState.FAILED
+                request.execution_state = (
+                    KnowledgeSpaceFileChangeExecutionState.APPLYING
+                    if direct_delete
+                    else KnowledgeSpaceFileChangeExecutionState.FAILED
+                )
                 await repository.save(request)
 
     async def finalize_delete_execution(
@@ -1081,6 +1110,9 @@ class KnowledgeSpaceMutationExecutor:
                     login_user=build_context_actor(context),
                 )._project_resource_deletes(records)
             return VerifiedMutationStepResult(result_digest=f"fga:projected:{len(records)}")
+
+        if not file_ids and not manifest.get("object_names"):
+            return VerifiedMutationStepResult(result_digest=f"{context.step_code}:empty")
 
         if context.step_code == DeleteExecutionStepCode.MINIO:
             from bisheng.core.storage.minio.minio_manager import get_minio_storage

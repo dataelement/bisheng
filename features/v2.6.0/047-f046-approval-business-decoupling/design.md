@@ -9,7 +9,7 @@
 **Feature ID**: F047
 **覆盖场景**: F045 `resource_user_invite_confirmation`、F046 `knowledge_space_file_change_request`
 **版本**: v2.6.0
-**最后更新**: 2026-08-13
+**最后更新**: 2026-10-15
 
 ---
 
@@ -264,8 +264,11 @@ not_started
 - footprint 继续防止同资源、祖先和子树并发变更。
 - rename/move 使用 durable OLD_VIEW/NEW_VIEW transition 和权威读后校验。
 - delete 使用 prepare、逻辑 cutover、deletion guard、外部 purge 和权威验证。
+- 普通直接删除（文件夹、文件及批量文件）同样复用删除 manifest、step 和 purge 执行器：正式数据删除、无审批实例的 Knowledge request、完整权限快照、deletion guard 和待清理步骤在同一 DB 事务提交。事务失败时不禁用权限、不投递破坏性任务；提交后由后台清理外部系统，漏投通过现有 residue scan 恢复。
+- 直接删除的外部清理失败保留 `applying/purging` 和同一 execution token，供 Celery 与 residue scan 重试；审批删除原有 `failed/purge_failed` 和人工恢复规则保持不变。已 cutover 的协调重试只读取冻结 manifest，不再要求业务记录存在。
+- F048 删除投影先按稳定幂等键查找台账；已完成操作复用原结果，处理中操作恢复原计划。首次 PREPARED 只能认领 CURRENT 或属于本 operation 的 PROJECTING 资源，防止旧快照覆盖新版本。不能用“捕获异常后补回权限”替代删除恢复：DB 提交不确定或并发修改时可能错误恢复已删除资源的权限。
 - 上传正式注册、FGA 写入和解析调度由 Knowledge step推进；解析与发布状态不回写审批。
-- 失败重试复用原 `approval_instance_id` 和业务申请，只生成新的 Knowledge execution token。
+- 审批业务的失败重试复用原 `approval_instance_id` 和业务申请，只生成新的 Knowledge execution token。
 
 ---
 
@@ -475,3 +478,5 @@ claim 必须同时匹配 `id + claim_token` 才能 ack；未过 `claim_deadline`
 | 2026-08-12 | 初版，仅覆盖 F046且包含存量兼容 | 初始范围 |
 | 2026-08-12 | 重写为 F045/F046 统一解耦，删除未上线场景兼容层 | 用户确认两个新场景均未上线，要求高内聚低耦合重新实现 |
 | 2026-08-13 | 设计评审补齐 decision lease、终态 UoW、装配入口、依赖风险、已知坑和验证门禁 | `/sdd-review design` 接手测试与 Constitution Check |
+
+| 2026-10-15 | 普通删除复用持久化清理；补齐删除投影和 cutover 后的幂等重试 | 修复权限已禁用但业务删除未完成的一致性缺口 |

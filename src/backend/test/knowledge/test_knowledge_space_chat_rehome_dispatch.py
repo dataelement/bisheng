@@ -103,8 +103,17 @@ async def test_delete_file_dispatches_only_after_hard_delete_commit():
     service._get_file_for_action = AsyncMock(return_value=file_record)
     service._require_action = AsyncMock()
     service._ensure_space_async_task_tenant_consistency = MagicMock()
-    service._cascade_version_links_on_delete = AsyncMock(return_value=[20, 21])
-    service._cleanup_resource_tuples = AsyncMock()
+
+    async def cutover(_resource):
+        events.append("delete_commit")
+        return {
+            "fga_resources": [
+                {"resource_type": "knowledge_file", "resource_id": 20},
+                {"resource_type": "knowledge_file", "resource_id": 21},
+            ]
+        }
+
+    service._delete_formal_resource = AsyncMock(side_effect=cutover)
     service.update_folder_update_time = AsyncMock()
     service._dispatch_knowledge_chat_rehome = MagicMock(side_effect=lambda **kwargs: events.append("dispatch"))
 
@@ -115,11 +124,6 @@ async def test_delete_file_dispatches_only_after_hard_delete_commit():
             return_value=SimpleNamespace(id=1),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.adelete_batch",
-            new_callable=AsyncMock,
-            side_effect=lambda *args: events.append("hard_delete_commit"),
-        ),
-        patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "KnowledgeDao.async_update_knowledge_update_time_by_id",
             new_callable=AsyncMock,
@@ -127,7 +131,7 @@ async def test_delete_file_dispatches_only_after_hard_delete_commit():
     ):
         await service.delete_file(20)
 
-    assert events == ["hard_delete_commit", "dispatch"]
+    assert events == ["delete_commit", "dispatch"]
     service._dispatch_knowledge_chat_rehome.assert_called_once_with(
         source_space_id=1,
         resources=[("knowledge_file", 20), ("knowledge_file", 21)],
