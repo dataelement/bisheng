@@ -130,7 +130,7 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | 模型等待首字或暂时无输出时仍可能正常运行；租约失效也可能只是刷新故障 | 将活跃请求误判失败或补造取消终态 | 审计活动刷新器、`dsh.inspect_model_audit`；失联标 UNKNOWN 而非失败 |
 | MySQL 普通 DATETIME 会抹去子秒；SQL 字符串 collation 可能忽略大小写或尾空格 | 顺序倒置，不同 ID 被归同组 | `PreciseDateTime` 的 MySQL fsp=6、UTC DTO，以及 ID 原始 UTF-8 摘要+读后精确核对 |
 | 裸内容 SHA 可离线猜测短提示词；超时底层线程并不消失 | 无原文 SQL 仍可能泄露短文本，慢存储挤占模型业务线程池 | scope HMAC 清单/出现摘要、独立有界审计 executor，真实完成才释放容量 |
-| 每个片段重扫全部引用、React 每片复制/渲染全量数组会随正文变慢 | 长原文写入/浏览 O(n²)，卡住管理页面 | 增量字节计数+终止核验；组件 ref 增量保存，最多100帧分段渲染，完整查看不重复读取 |
+| 每个片段重扫全部引用、React 每片复制/渲染全量数组会随正文变慢 | 长原文写入/浏览 O(n²)，卡住管理页面 | 增量字节计数+终止核验；组件 ref 增量组装，最多100条消息分段渲染，长文本每段16000字符，完整查看不重复读取 |
 | 新写入块调小不代表历史加密块也变小 | 已留存历史忽然无法读取 | 编码-v1 的读取上限固定64KiB，独立于新写块设置；NDJSON 帧预算256KiB |
 | end 帧生成不等于发送完成，流可在 yield 处关闭 | 将中途关闭的查看记录误记为完成 | body-access 仅在 end 被下游消费后更新 COMPLETED，关闭时记 INTERRUPTED；不声称客户端已阅读 |
 | 查看会话时可能仍携带单请求过滤；配置读取失败有证据也不是模式未知 | 只看见一张卡、错误报告已知审计缺口 | 清空不相关过滤；AWAITING/DEGRADED_OFF/MODE_UNKNOWN 按可核验事实分别显示 |
@@ -171,7 +171,9 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 
 普通响应使用 resp_200；游标列表 data 为 items、next_cursor、progress，progress 只有模式/最近成功写入时间/积压及证据局限，不含原文。游标绑定查询过滤和目标租户，以 (started_at,request_id) 稳定定位，不为 keyset 页伪造精确总数。模式写命令包含 operation_id、expected_version、mode，冲突沿现有管理错误返回。
 
-正文 POST 成功响应使用 application/x-ndjson，Cache-Control: no-store。先返回 meta（request_id、encoding_version、content_state），再返回 part（全局递增 seq、channel=input/output、unit_index、fragment），最后 end（last_seq、content_state、transfer_status）。part.fragment 是同一有序原件单元的连续序列化文本片段，按序拼接是编码原件，而非模型生成摘要；管理页增量显示文本，不执行内容，不为解析一个单元而缓存全部正文。未采集可返回 meta+end，部分按实际留存范围返回。传输开始前失败沿标准管理错误；开始后返回不含正文的 error 事件并结束。缺少 end 仅表示本次浏览传输不完整，不把服务器已留存原件改判缺失。传输日志追加结果不替代传正文前已持久的授权查看日志。
+正文 POST 成功响应使用 application/x-ndjson，Cache-Control: no-store。先返回 meta（request_id、encoding_version、content_state），再返回 part（全局递增 seq、channel=input/output、unit_index、fragment），最后 end（last_seq、content_state、transfer_status）。part.fragment 是同一有序原件单元的连续序列化文本片段，按序拼接是编码原件，而非模型生成摘要；管理页只暂存当前单元的连续片段，单元边界或 end 时解析并释放原始片段，不等整份原文到齐才展示。已解析消息和当前待解析单元合计受20Mi字符展示预算约束，刷新节流40ms；不执行内容。未采集可返回 meta+end，部分按实际留存范围返回。传输开始前失败沿标准管理错误；开始后返回不含正文的 error 事件并结束。缺少 end 仅表示本次浏览传输不完整，不把服务器已留存原件改判缺失。传输日志追加结果不替代传正文前已持久的授权查看日志。
+
+消息呈现：`input/unit_index=0` 且具有 parameters、无 role 的设置单元不进入消息区；其他输入按 role/content 解包，保留顺序和 tool_call_id。同次请求的 `{delta:...}` 增量以片段数组追加 content 和 reasoning_content，合成一个助手消息，思考区默认折叠；tool_calls 按 index 合并 function.name/arguments，保留 id；非流式 role 消息直接解包，finish_reason 不单独绘制成消息。不跨请求合并或推断新增消息。gap 打断合并并显示缺口，受损单元不冒充完整 JSON；未知/解析失败内容标明并折叠保留片段。图片载荷/引用和其他结构化内容在原位置折叠展示，浏览器不自动请求外部资源、不执行 HTML/脚本。每页最多100条消息，单条文本每16000字符分页，切段只读已授权的内存数据，不再次 POST；切请求/租户或收起取消传输并清空原文。传输中断只标本次读取及消息显示不完整，存储不完整只根据服务端 PARTIAL/gap 事实提示，NOT_CAPTURED 不误算缺口。
 
 现有 Platform Axios 浏览器封装没有 ReadableStream 能力，需要先在共享请求层扩展流式包装，复用 BASE、认证及集中错误策略，并回归会话失效/踢出和权限拒绝；业务组件不直接 import axios、不自行处理 403。普通接口仍走原 request；正文增量走共享 requestStream，支持 AbortSignal，不输出原文到 console。
 

@@ -7,6 +7,7 @@ import "@/style/index.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import i18n from "../i18n";
+import { ModelAuditMessagesPreview } from "./modelAuditMessagesPreview";
 
 if (!import.meta.env.DEV)
   throw new Error("Fixture is available only in development");
@@ -73,4 +74,11 @@ export function ModelAuditPreview() {
   );
 }
 const target = document.getElementById("root");
-if (target) createRoot(target).render(<ModelAuditPreview />);
+if (target)
+  createRoot(target).render(
+    new URLSearchParams(location.search).get("view") === "messages" ? (
+      <ModelAuditMessagesPreview />
+    ) : (
+      <ModelAuditPreview />
+    ),
+  );

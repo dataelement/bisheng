@@ -52,7 +52,7 @@
 
 内部可替换组件接口在各任务中列明；相邻任务修改同一文件均是增量接线，不推翻已完成前驱。统一构建根负责注入仓储/存储/队列与时钟；Domain 不直接建客户端。平台普通 HTTP 走现有 request 包装，增量正文由共享 requestStream 扩展统一认证/错误策略，不在业务组件加 403 分支。
 
-正文读取成功采用 NDJSON：`meta`（request_id、encoding_version、content_state）、`part`（全局递增 seq、channel、unit_index、fragment）、`end`（最后 seq、content_state、传输结果）。part.fragment 是同一有序原件单元的连续序列化文本片段，不是 LLM 摘要；按文本流增量显示，不执行原文，不为解析单元而缓存全部正文。channel 区分 input/output，unit_index 按原件记录顺序取值；无正文时 meta+end 明确未采集，未完整留存则部分。开始传输前失败用标准管理错误；开始后失败用不含正文的 error 事件并结束，缺 end 只能判传输未完成，不篡改服务器原件状态。每次 POST 先持久授权查看日志，禁止原件直链、列表预览、跨卡片预取。详细线格式归 design，前端测试使用同一 fixture。
+正文读取成功采用 NDJSON：`meta`（request_id、encoding_version、content_state）、`part`（全局递增 seq、channel、unit_index、fragment）、`end`（最后 seq、content_state、传输结果）。part.fragment 是同一有序原件单元的连续序列化文本片段，不是 LLM 摘要；增量组装当前单元后按角色展示消息，同请求流式输出合并，不逐存储分片展示 JSON，不修改底层原文。20Mi字符展示预算内缓存已解析消息及当前单元，不等整份正文才展示。channel 区分 input/output，unit_index 按原件记录顺序取值；无正文时 meta+end 明确未采集，未完整留存则部分。开始传输前失败用标准管理错误；开始后失败用不含正文的 error 事件并结束，缺 end 只能判传输未完成，不篡改服务器原件状态。每次 POST 先持久授权查看日志，禁止原件直链、列表预览、跨卡片预取。详细线格式归 design，前端测试使用同一 fixture。
 
 ### 3.3 测试环境与命令
 
@@ -372,6 +372,7 @@
 - 文件：`src/frontend/platform/src/pages/SystemPage/dsh/ModelAuditBody.tsx`；`src/frontend/platform/src/controllers/API/dshModelAudit.ts`
 - 依赖：T054、T053
 - 工作与上下文：按 tasks 头的 NDJSON 契约增量解析，输入/输出保序，长原件分段渲染且仍可完整查看；不执行模型 HTML/脚本，不自动加载外部引用目标，不预取其他请求。收起/切页取消当前浏览读取并清理不再展示的原文状态，原件不被修改。
+- 2026-10-15 展示修正（AC-10、AC-12、AC-14、AC-19、AC-21）：补 `auditMessages` 按单元组装与 `ModelAuditMessage` 内容阅读；首条参数单元仅保留在底层原件，思考默认折叠，流式文本/工具调用合并；每页100条消息、单条16000字符分段，缺口/未知/读取中断不冒充完整记录；补真实 NDJSON 解析到 UI 的合成数据回归，不使用109业务凭证。
 - 完成标准：T054 正文用例通过；手动断流/部分/未采集，不把流中断显示完整。
 
 #### T058 租户模式控件

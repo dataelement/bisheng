@@ -2634,7 +2634,27 @@
   "dsh": {
     "modelAudit": "Model audit",
     "modelAuditView": {
-      "bodySegment": "Original segment {{page}} / {{pages}}. Page through without fetching the original again.",
+      "bodySegment": "Message segment {{page}} / {{pages}}. Page through without fetching the original again.",
+      "messages": {
+        "data": "Structured content",
+        "empty": "Empty message",
+        "image": "Image content (not loaded automatically)",
+        "incomplete": "This displayed message is incomplete. Check the original retention state and this transfer's result separately.",
+        "reasoning": "Reasoning",
+        "roles": {
+          "assistant": "Assistant",
+          "developer": "Developer",
+          "function": "Function result",
+          "system": "System",
+          "tool": "Tool result",
+          "unknown": "Unrecognized message",
+          "user": "User"
+        },
+        "text_page": "Message content {{page}} / {{pages}}",
+        "tool_call": "Tool call",
+        "tool_id": "Call ID",
+        "unparsed": "This content could not be parsed as a complete message. Expand to inspect the saved fragments."
+      },
       "backlogUnknown": "Process buffers and total loss cannot be fully measured; page progress does not prove complete coverage.",
       "missing": {
         "AWAITING": "Model entry is confirmed, but the observation window is open or the request remains active. Refresh later.",

@@ -2579,7 +2579,27 @@
   "dsh": {
     "modelAudit": "模型审计",
     "modelAuditView": {
-      "bodySegment": "原文分段：第 {{page}} / {{pages}} 段；翻页查看，不重复读取原件。",
+      "bodySegment": "消息分段：第 {{page}} / {{pages}} 段；翻页查看，不重复读取原件。",
+      "messages": {
+        "data": "结构化内容",
+        "empty": "空消息",
+        "image": "图片内容（不自动加载）",
+        "incomplete": "此条消息显示不完整，请结合正文留存状态和本次读取结果判断。",
+        "reasoning": "思考内容",
+        "roles": {
+          "assistant": "助手",
+          "developer": "开发者",
+          "function": "函数结果",
+          "system": "系统",
+          "tool": "工具结果",
+          "unknown": "未识别消息",
+          "user": "用户"
+        },
+        "text_page": "消息内容：第 {{page}} / {{pages}} 段",
+        "tool_call": "工具调用",
+        "tool_id": "调用编号",
+        "unparsed": "此条内容无法解析为完整消息，可展开查看已保存片段。"
+      },
       "backlogUnknown": "各进程缓冲积压与完全丢失无法全量确认；本页写入进度不代表完整覆盖。",
       "missing": {
         "AWAITING": "已确认模型接口开始调用，审计记录仍在异步观察窗口内或请求仍活动，请稍后刷新。",

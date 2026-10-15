@@ -120,7 +120,9 @@ describe("audit tenant selection", () => {
       ),
     );
     expect(api.mode).toHaveBeenCalledWith(1, expect.any(AbortSignal));
-    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(true);
+    expect(api.page.mock.calls.every(([query]) => query.tenant_id === 1)).toBe(
+      true,
+    );
   });
 
   it("defaults global administrators to the default tenant even without a personal tenant", async () => {
@@ -270,7 +272,10 @@ describe("request-card audit UI", () => {
             seq: index,
             channel: "input",
             unit_index: index,
-            fragment: "segment-fragment-" + index,
+            fragment: JSON.stringify({
+              role: "user",
+              content: "segment-fragment-" + index,
+            }),
           };
         yield {
           type: "end",
@@ -284,12 +289,12 @@ describe("request-card audit UI", () => {
       <ModelAuditBody requestId="one" tenantId={2} />,
     );
     await screen.findByText("dsh.modelAuditView.transfer.completed");
-    expect(container.querySelectorAll("pre").length).toBeLessThanOrEqual(100);
+    expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(screen.queryByText("segment-fragment-999")).toBeNull();
-    for (let index = 0; index < 10; index++)
+    for (let index = 0; index < 9; index++)
       fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
     await screen.findByText("segment-fragment-999");
-    expect(container.querySelectorAll("pre").length).toBeLessThanOrEqual(100);
+    expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(api.body).toHaveBeenCalledTimes(1);
   });
   it("shows evidence-based missing status instead of claiming no model call", async () => {
