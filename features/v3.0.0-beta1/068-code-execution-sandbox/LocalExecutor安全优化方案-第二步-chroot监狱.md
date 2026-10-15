@@ -186,7 +186,7 @@ subprocess.Popen(
 - 保留 Docker 默认能力集里的 `CAP_SYS_CHROOT`、`CAP_SETUID`、`CAP_SETGID`；不要 `cap_drop: ALL`，不要 `runAsNonRoot`。不需要 `CAP_SYS_ADMIN`。
 - 根文件系统不能是只读的：`/opt/local-root/work` 和 `/var/run/bisheng-local-uids` 要可写（只读根的部署用 `emptyDir` 挂这两处）。
 - seccomp 保持默认即可。现有 `docker/docker-compose.yml` 的后端用 `seccomp:unconfined`，也能工作。
-- 这些要求写进 `沙箱配置与使用说明.md`。
+- 这些要求写进 `沙箱部署说明.md`。
 
 ## 代码改动
 
@@ -197,7 +197,7 @@ subprocess.Popen(
 | `local_isolation.py` | 增加 `jail` 分支：R 的位置、`chroot` 启动参数、监狱专用环境、预检、哈希校验 |
 | `local_executor.py` | 监狱模式下拒绝非 Python；描述追加一句；预生成字体缓存的来源换成监狱里的 |
 | `settings.py` | `local_isolation` 加 `jail` 取值，默认改为 `jail`；新增 `local_jail_root`（默认 `/opt/local-root`） |
-| `沙箱配置与使用说明.md`、`src/backend/AGENTS.md` | 部署要求、发布说明、开发机和 CI 设成 `off` |
+| `沙箱部署说明.md`、`src/backend/AGENTS.md` | 部署要求、发布说明、开发机和 CI 设成 `off` |
 
 ## 测试
 

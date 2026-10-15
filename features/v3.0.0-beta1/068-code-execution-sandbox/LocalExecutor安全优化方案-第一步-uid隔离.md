@@ -1,6 +1,6 @@
 # LocalExecutor 安全优化方案 · 第一步：普通 uid + 私有运行目录
 
-状态：已实现，默认 `off`（Compose 默认开启，见 [沙箱配置与使用说明](./沙箱配置与使用说明.md) 3.4）。实现与本文的出入见"代码改动"表下方的说明。本机模式停在这一步。第二步（chroot 监狱）暂时不做，文档保留在 [LocalExecutor安全优化方案-第二步-chroot监狱.md](./LocalExecutor安全优化方案-第二步-chroot监狱.md)，不排期、不实现。原始设想 [LocalExecutor安全优化方案.md](./LocalExecutor安全优化方案.md) 里的"同会话目录交给临时 uid""硬链接 venv"两处设计已被本文替代。
+状态：已实现，默认 `off`（Compose 默认开启，见 [沙箱部署说明](./沙箱部署说明.md) 3.4）。实现与本文的出入见"代码改动"表下方的说明。本机模式停在这一步。第二步（chroot 监狱）暂时不做，文档保留在 [LocalExecutor安全优化方案-第二步-chroot监狱.md](./LocalExecutor安全优化方案-第二步-chroot监狱.md)，不排期、不实现。原始设想 [LocalExecutor安全优化方案.md](./LocalExecutor安全优化方案.md) 里的"同会话目录交给临时 uid""硬链接 venv"两处设计已被本文替代。
 
 ## 目标
 
@@ -385,7 +385,7 @@ subprocess.Popen(
 | `task_exec.py` | `_cleanup_resources` 里，在自己的 `try` 中、排在第一位，按 `self.file_dir` 调用 `release_local_run(file_dir)`（`asyncio.shield` 加线程池），早于 `_stop_termination_monitor()` 和 `rmtree` | 已实现 |
 | `worker.py` | `ScheduleCenterProcess.run` 进入主循环之前，每个进程跑一次启动清扫：按标记里 pid 加启动时间判断存活，清掉没有存活属主的 R 和标记 | 已实现 |
 | `workbench_impl.py` | 构造代码解释器配置时，`config.local.keep_run_dir = True`（与 `local_sync_path` 同处） | 已实现 |
-| `沙箱配置与使用说明.md` | 记录 `local_isolation` 的开启方式；部署部分写明宿主机 `config.yaml` 设 `0600`、属主 root，`data/bisheng` 目录会被改为 `0700`，依赖它的非 root 运维脚本要调整 | 已更新 |
+| `沙箱部署说明.md` | 记录 `local_isolation` 的开启方式；写明宿主机 `config.yaml` 设 `0600`、属主 root，`data/bisheng` 目录会被改为 `0700`，依赖它的非 root 运维脚本要调整 | 已更新 |
 
 `factory.py` 不改，原因见"配置字段"。
 
