@@ -60,10 +60,11 @@ async def test_worker_runtime_installs_the_resource_registry(monkeypatch):
 
     captured: dict = {}
 
-    def _configure(runtime, *, resource_adapters=None, resource_registry=None):
+    def _configure(runtime, *, resource_adapters=None, resource_registry=None, subject_directory=None):
         captured["runtime"] = runtime
         captured["adapters"] = resource_adapters
         captured["registry"] = resource_registry
+        assert callable(subject_directory.candidate_users)
 
     monkeypatch.setattr(runtime_module, "initialize_f048_background_runtime", _background)
     monkeypatch.setattr(runtime_module, "configure_f048_runtime", _configure)

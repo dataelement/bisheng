@@ -1,3 +1,4 @@
+import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
 import { Button, Radio, RadioGroup } from "@bisheng/ui";
 import type { ComponentProps } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -79,9 +80,6 @@ export function PermissionDraftPickerDialog({
 
   const handleSubjectTypeChange = (value: string) => {
     setSubjectType(value as SubjectType);
-    setSubjects([]);
-    setIncludeChildren(true);
-    setSelectedModelId("");
   };
 
   const handleConfirm = () => {
@@ -90,6 +88,8 @@ export function PermissionDraftPickerDialog({
       subjectType: subject.type,
       subjectId: subject.id,
       subjectName: subject.name,
+      externalId: subject.externalId,
+      departmentPath: subject.departmentPath,
       modelKey: activeModel.id,
       modelName: activeModel.name,
       modelLevel: activeModel.level,
@@ -169,6 +169,7 @@ export function PermissionDraftPickerDialog({
               <SubjectSearchUserGroup {...searchProps} userGroupsApi={searchApi?.userGroupsApi} />
             )}
           </div>
+          <SubjectSelectionSummary subjects={subjects} />
         </div>
         {/* Mobile stacks the relation picker above a full-width action pair, with
             the divider directly above the buttons — matching the resource grant

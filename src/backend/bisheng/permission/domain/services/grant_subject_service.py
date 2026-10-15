@@ -16,13 +16,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlmodel import col, func, select
+from fastapi import HTTPException
+from sqlmodel import col, select
 
+from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao, UserDepartment
-from bisheng.database.models.group import Group
-from bisheng.database.models.tenant import UserTenant
 from bisheng.department.domain.services.department_service import (
     DepartmentService,
     _dept_node_dict,
@@ -30,11 +30,18 @@ from bisheng.department.domain.services.department_service import (
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
-from bisheng.user.domain.models.user import User
+from bisheng.permission.application.access import get_grant_subject_directory
 
 # A department-bound space whose department is gone has no candidate in scope;
 # an empty path would match everything instead of nothing.
 _MATCHES_NOTHING = "\x00never-matches"
+
+
+def _keyword(value: str) -> str:
+    try:
+        return normalize_keyword(value)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,39 +81,8 @@ async def list_candidate_users(
     page: int,
     page_size: int,
 ) -> list[dict]:
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            in_tenant = (
-                select(UserTenant.id)
-                .where(
-                    UserTenant.user_id == User.user_id,
-                    UserTenant.tenant_id == scope.tenant_id,
-                    UserTenant.status == "active",
-                )
-                .exists()
-            )
-            statement = (
-                select(User.user_id, User.user_name, User.external_id)
-                .where(User.delete == 0, in_tenant)
-                .order_by(col(User.user_id).desc())
-            )
-            if scope.department_path is not None:
-                in_subtree = (
-                    select(UserDepartment.id)
-                    .join(Department, Department.id == UserDepartment.department_id)
-                    .where(
-                        UserDepartment.user_id == User.user_id,
-                        col(Department.path).like(f"{scope.department_path}%"),
-                        Department.status == "active",
-                    )
-                    .exists()
-                )
-                statement = statement.where(in_subtree)
-            if keyword:
-                # Prefix match keeps the user_name index usable; a leading
-                # wildcard forced a full scan of a 150k-row table (F038).
-                statement = statement.where(col(User.user_name).like(f"{keyword}%"))
-            rows = (await session.exec(statement.offset((page - 1) * page_size).limit(page_size))).all()
+    directory = await get_grant_subject_directory()
+    rows = await directory.candidate_users(scope, keyword=_keyword(keyword), page=page, page_size=page_size)
     # The picker prints the staff id after the name and the department under it,
     # so people with the same display name can be told apart.
     paths = await _primary_department_paths([int(row.user_id) for row in rows])
@@ -122,33 +98,8 @@ async def list_candidate_users(
 
 
 async def count_candidate_users(scope: GrantSubjectScope, *, keyword: str) -> int:
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            in_tenant = (
-                select(UserTenant.id)
-                .where(
-                    UserTenant.user_id == User.user_id,
-                    UserTenant.tenant_id == scope.tenant_id,
-                    UserTenant.status == "active",
-                )
-                .exists()
-            )
-            statement = select(func.count(User.user_id)).where(User.delete == 0, in_tenant)
-            if scope.department_path is not None:
-                in_subtree = (
-                    select(UserDepartment.id)
-                    .join(Department, Department.id == UserDepartment.department_id)
-                    .where(
-                        UserDepartment.user_id == User.user_id,
-                        col(Department.path).like(f"{scope.department_path}%"),
-                        Department.status == "active",
-                    )
-                    .exists()
-                )
-                statement = statement.where(in_subtree)
-            if keyword:
-                statement = statement.where(col(User.user_name).like(f"{keyword}%"))
-            return int((await session.exec(statement)).one())
+    directory = await get_grant_subject_directory()
+    return await directory.count_candidate_users(scope, keyword=_keyword(keyword))
 
 
 async def _primary_department_paths(user_ids: list[int]) -> dict[int, str]:
@@ -192,23 +143,14 @@ async def list_candidate_user_groups(
     page: int,
     page_size: int,
 ) -> list[dict]:
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            statement = select(Group.id, Group.group_name).where(Group.tenant_id == scope.tenant_id)
-            if keyword:
-                statement = statement.where(col(Group.group_name).like(f"{keyword}%"))
-            statement = statement.order_by(col(Group.id).desc()).offset((page - 1) * page_size).limit(page_size)
-            rows = (await session.exec(statement)).all()
+    directory = await get_grant_subject_directory()
+    rows = await directory.candidate_groups(scope, keyword=_keyword(keyword), page=page, page_size=page_size)
     return [{"id": int(row.id), "name": row.group_name} for row in rows]
 
 
 async def count_candidate_user_groups(scope: GrantSubjectScope, *, keyword: str) -> int:
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            statement = select(func.count(Group.id)).where(Group.tenant_id == scope.tenant_id)
-            if keyword:
-                statement = statement.where(col(Group.group_name).like(f"{keyword}%"))
-            return int((await session.exec(statement)).one())
+    directory = await get_grant_subject_directory()
+    return await directory.count_candidate_groups(scope, keyword=_keyword(keyword))
 
 
 async def list_candidate_department_layer(
@@ -245,18 +187,11 @@ async def search_candidate_departments(
     keyword: str,
     limit: int,
 ) -> dict:
+    keyword = _keyword(keyword)
     if not keyword:
         return {"roots": [], "total_matches": 0, "truncated": False}
-    with bypass_tenant_filter():
-        async with get_async_db_session() as session:
-            statement = select(Department).where(
-                Department.tenant_id == scope.tenant_id,
-                Department.status == "active",
-                col(Department.name).like(f"%{keyword}%"),
-            )
-            if scope.department_path is not None:
-                statement = statement.where(col(Department.path).like(f"{scope.department_path}%"))
-            rows = (await session.exec(statement.order_by(col(Department.id)).limit(limit + 1))).all()
+    directory = await get_grant_subject_directory()
+    rows = await directory.candidate_departments(scope, keyword=keyword, limit=limit + 1)
     truncated = len(rows) > limit
     matches = list(rows[:limit])
     roots = await DepartmentService.abuild_forest_within_subtree(

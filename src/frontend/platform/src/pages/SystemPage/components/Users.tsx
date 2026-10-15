@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable"
+import { SubjectBusinessId, SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus"
 import { FilterIcon } from "@/components/bs-icons/filter";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
@@ -26,7 +28,6 @@ import {
 import { userContext } from "../../../contexts/userContext";
 import { disableUserApi, getUsersApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
-import { useTable } from "../../../util/hook";
 import UserRoleModal from "./UserRoleModal";
 import UserPwdModal from "@/pages/LoginPage/UserPwdModal";
 import { PlusIcon } from "@/components/bs-icons";
@@ -90,14 +91,14 @@ export default function Users(params) {
     const { user } = useContext(userContext);
     const { t } = useTranslation()
 
-    const { page, pageSize, data: users, total, setPage, search, reload, filterData } = useTable({ pageSize: 20 }, (param) =>
+    const { page, pageSize, data: users, total, setPage, reload, filterData, subjectSearch } = useSubjectTable({ pageSize: 20 }, (param, signal) =>
         getUsersApi({
             ...param,
-            name: param.keyword
-        })
+            name: String(param.keyword)
+        }, { signal })
     )
 
-    // 禁用确认
+    // Account status confirmation
     const handleDelete = (user) => {
         bsConfirm({
             title: `${t('prompt')}!`,
@@ -194,13 +195,14 @@ export default function Users(params) {
         <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
             <div className="flex justify-end gap-6">
                 <div className="w-[180px] relative">
-                    <SearchInput placeholder={t('system.username')} onChange={(e) => search(e.target.value)}></SearchInput>
+                    <SearchInput placeholder={t("subjectSearch.userPlaceholder")} {...subjectSearch.inputProps}></SearchInput>
                 </div>
                 {user.role === 'admin' && <Button className="flex justify-around" onClick={() => setOpenCreate(true)}>
                     <PlusIcon className="text-primary" />
                     <span className="text-[#fff] mx-4">{t('create')}</span>
                 </Button>}
             </div>
+            <SubjectSearchStatus tooLong={subjectSearch.tooLong} failed={subjectSearch.failed} loading={subjectSearch.loading} empty={!users.length} onRetry={subjectSearch.retry} />
             <Table
                 noScroll
                 className="mb-[50px] !w-auto min-w-full"
@@ -255,7 +257,7 @@ export default function Users(params) {
                     {users.map((el: any) => (
                         <TableRow key={el.id}>
                             <TableCell {...urc.getTdProps(0)} className="truncate font-medium">
-                                {el.user_name}
+                                {el.user_name} <SubjectBusinessId value={el.external_id} />
                             </TableCell>
                             <TableCell {...urc.getTdProps(1)} className="break-all">{(el.groups || []).map(el => el.name).join(',')}</TableCell>
                             <TableCell {...urc.getTdProps(2)} className="break-all">{(el.roles || []).map(el => el.name).join(',')}</TableCell>

@@ -10,6 +10,7 @@ from bisheng.permission.application.runtime import F048PermissionRuntime
 _runtime: F048PermissionRuntime | None = None
 _resource_adapters: dict[str, object] = {}
 _resource_registry: ResourceAuthorizationRegistry | None = None
+_subject_directory: object | None = None
 
 
 def configure_f048_runtime(
@@ -17,11 +18,13 @@ def configure_f048_runtime(
     *,
     resource_adapters: dict[str, object] | None = None,
     resource_registry: ResourceAuthorizationRegistry | None = None,
+    subject_directory: object | None = None,
 ) -> None:
-    global _runtime, _resource_adapters, _resource_registry
+    global _runtime, _resource_adapters, _resource_registry, _subject_directory
     _runtime = runtime
     _resource_adapters = dict(resource_adapters or {})
     _resource_registry = resource_registry
+    _subject_directory = subject_directory
 
 
 async def _ensure_f048_runtime() -> None:
@@ -55,8 +58,16 @@ async def get_f048_resource_registry() -> ResourceAuthorizationRegistry:
     return _resource_registry
 
 
+async def get_grant_subject_directory():
+    await _ensure_f048_runtime()
+    if _subject_directory is None:
+        raise RuntimeError("Grant subject directory is not configured")
+    return _subject_directory
+
+
 def clear_f048_runtime() -> None:
-    global _runtime, _resource_adapters, _resource_registry
+    global _runtime, _resource_adapters, _resource_registry, _subject_directory
     _runtime = None
     _resource_adapters = {}
     _resource_registry = None
+    _subject_directory = None
