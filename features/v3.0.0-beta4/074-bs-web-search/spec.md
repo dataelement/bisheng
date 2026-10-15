@@ -1,6 +1,7 @@
 # F074 - Published Tool Invocation for Work
 
-Status: draft for user confirmation. Discovery confirmed on 2026-10-15.
+Status: confirmed by the user on 2026-10-15. Discovery and spec are confirmed;
+design confirmation and implementation remain pending.
 
 **Related PRD**: [Confirmed discovery](./discovery.md), including the latest user
 correction from fixed search to published-tool invocation.
