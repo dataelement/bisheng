@@ -29,3 +29,13 @@ class SandboxCodeNodeOutputError(BaseErrorCode):
 class SandboxProtocolError(BaseErrorCode):
     Code: int = 28006
     Msg: str = "Isolation environment response is invalid"
+
+
+class SandboxCodeNodeOutputTooLargeError(BaseErrorCode):
+    Code: int = 28007
+    Msg: str = "Code node result is {size} bytes, over the {limit}-byte limit"
+
+
+class SandboxCodeNodeNoResultError(BaseErrorCode):
+    Code: int = 28008
+    Msg: str = "Code node finished without returning a result from main"

@@ -906,6 +906,30 @@ class SandboxConf(BaseModel):
     )
     code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
 
+    # --- type=local isolation (LocalExecutor) ---
+    local_isolation: str = Field(
+        default="off",
+        description="type=local child processes: 'uid' runs them as a throwaway uid in a private run dir; "
+        "'off' keeps the legacy same-user execution",
+    )
+    local_run_root: str = Field(default="/tmp/bisheng-local-run", description="Parent dir of per-run dirs")
+    local_rlimit_as_bytes: int = Field(default=2 * 1024**3, description="RLIMIT_AS of the child")
+    local_rlimit_nproc: int = Field(default=256, description="RLIMIT_NPROC of the child uid")
+    local_rlimit_cpu_s: int = Field(default=600, description="RLIMIT_CPU of the child (seconds)")
+    local_rlimit_fsize_bytes: int = Field(default=1024**3, description="RLIMIT_FSIZE; also the copy-back file cap")
+    local_rlimit_nofile: int = Field(default=1024, description="RLIMIT_NOFILE of the child")
+    local_disk_limit_bytes: int = Field(default=2 * 1024**3, description="Total size of one run dir")
+    local_copy_in_file_bytes: int = Field(default=1024**3, description="Skip a copy-in file above this size")
+    local_copy_in_total_bytes: int = Field(default=1024**3, description="Stop copying in above this total")
+
+    @field_validator("local_isolation", mode="before")
+    @classmethod
+    def validate_local_isolation(cls, value: object) -> str:
+        # Anything but an explicit 'off' means isolation: a typo must not be
+        # the thing that turns it off.
+        text = str(value or "").strip().lower()
+        return "off" if text in ("", "off") else "uid"
+
     @model_validator(mode="after")
     def overlay_env(self):
         prefix = "BS_SANDBOX_CONF__"
