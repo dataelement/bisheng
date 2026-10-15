@@ -23,7 +23,8 @@ ORGANIZATION_NAME_FIELDS = (
     "squad_name",
 )
 
-CONTENT_DIMENSION_FIELDS = (
+# Keep the deployed daily ID inputs stable when adding snapshot dimensions.
+DAILY_ID_DIMENSION_FIELDS = (
     "space_id",
     "space_name",
     "space_level",
@@ -48,6 +49,16 @@ CONTENT_DIMENSION_FIELDS = (
     "belonging_office_name",
     "belonging_squad_name",
 )
+
+ORIGINAL_DIMENSION_FIELDS = (
+    "original_space_name",
+    "original_upload_company_name",
+    "original_upload_department_name",
+    "original_upload_office_name",
+    "original_upload_squad_name",
+)
+
+CONTENT_DIMENSION_FIELDS = DAILY_ID_DIMENSION_FIELDS + ORIGINAL_DIMENSION_FIELDS
 
 
 class OrganizationNameSnapshot(BaseModel):
@@ -105,7 +116,7 @@ def build_daily_document_id(
     local_date: str,
     dimensions: Mapping[str, Any],
 ) -> str:
-    payload = {field: dimensions.get(field) for field in CONTENT_DIMENSION_FIELDS}
+    payload = {field: dimensions.get(field) for field in DAILY_ID_DIMENSION_FIELDS}
     canonical_json = json.dumps(
         payload,
         ensure_ascii=False,

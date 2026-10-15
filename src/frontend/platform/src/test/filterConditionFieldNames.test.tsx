@@ -24,7 +24,11 @@ describe("filter condition field names", () => {
     const fields = [
       { fieldCode: "uploader_department_name", displayName: "上传人部门", fieldType: "string", role: "dimension" },
       { fieldCode: "belonging_company_name", displayName: "所属公司", fieldType: "string", role: "dimension" },
-      { fieldCode: "original_upload_squad_name", displayName: "原始上传库班组", fieldType: "string", role: "dimension" },
+      { fieldCode: "original_space_name", displayName: "原始上传库", fieldType: "string", role: "dimension" },
+      { fieldCode: "original_upload_company_name", displayName: "原始所属公司", fieldType: "string", role: "dimension" },
+      { fieldCode: "original_upload_department_name", displayName: "原始所属部门", fieldType: "string", role: "dimension" },
+      { fieldCode: "original_upload_office_name", displayName: "原始所属科室", fieldType: "string", role: "dimension" },
+      { fieldCode: "original_upload_squad_name", displayName: "原始所属班组", fieldType: "string", role: "dimension" },
       { fieldCode: "uploader_office_name", displayName: "上传人科室", fieldType: "string", role: "dimension" },
     ] as const
     render(<TooltipProvider><FilterConditionDialog open onOpenChange={vi.fn()} onChange={vi.fn()} value={null}
@@ -33,7 +37,9 @@ describe("filter condition field names", () => {
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" })
     expect(screen.getByRole("option", { name: "上传人部门" })).toBeInTheDocument()
     expect(screen.getByRole("option", { name: "所属公司" })).toBeInTheDocument()
-    expect(screen.getByRole("option", { name: "原始上传库班组" })).toBeInTheDocument()
+    for (const name of ["原始上传库", "原始所属公司", "原始所属部门", "原始所属科室", "原始所属班组"]) {
+      expect(screen.getByRole("option", { name })).toBeInTheDocument()
+    }
     expect(screen.getByRole("option", { name: "自定义科室名称" })).toBeInTheDocument()
   })
 })

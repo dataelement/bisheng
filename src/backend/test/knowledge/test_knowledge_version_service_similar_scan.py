@@ -34,7 +34,9 @@ def enable_switch(monkeypatch):
     from bisheng.knowledge.domain.services import knowledge_version_service as kvs_mod
 
     mock_settings = MagicMock()
-    conf = MagicMock()
+    from bisheng.core.config.settings import KnowledgeConf
+
+    conf = KnowledgeConf()
     conf.version_management.enabled = True
     conf.version_management.simhash_similarity_threshold = 0.85
     conf.version_management.enable_tfidf_refine = False
@@ -418,7 +420,7 @@ async def test_zero_simhash_is_not_recommended(enable_switch, async_db_session):
 
 
 @pytest.mark.asyncio
-async def test_shougang_publish_candidates_require_first_three_encoding_segments(enable_switch, async_db_session):
+async def test_shougang_publish_candidates_include_different_classification(enable_switch, async_db_session):
     async_db_session.add(Knowledge(id=1, name="source", type=3, user_id=1))
     async_db_session.add(Knowledge(id=2, name="target", type=3, user_id=1))
     await async_db_session.commit()
@@ -451,7 +453,8 @@ async def test_shougang_publish_candidates_require_first_three_encoding_segments
         limit=10,
     )
 
-    assert [one.target_document_id for one in candidates] == [matched_doc.id]
+    assert {one.primary_knowledge_file_id for one in candidates} == {200, 201}
+    assert matched_doc.id in {one.target_document_id for one in candidates}
 
 
 @pytest.mark.asyncio
@@ -484,7 +487,7 @@ async def test_shougang_publish_candidates_skip_files_without_encoding(enable_sw
 
 
 @pytest.mark.asyncio
-async def test_scan_requires_first_three_encoding_segments(enable_switch, async_db_session):
+async def test_scan_includes_different_classification(enable_switch, async_db_session):
     async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
     await async_db_session.commit()
     await _seed_file_with_doc(
@@ -503,13 +506,13 @@ async def test_scan_requires_first_three_encoding_segments(enable_switch, async_
     svc = _build_svc(async_db_session)
     n = await svc.scan_similar_for_file(knowledge_file_id=101)
 
-    assert n == 0
+    assert n == 1
     kf = await svc.knowledge_file_repo.find_by_id(101)
-    assert kf.similar_status == 0
+    assert kf.similar_status == 1
 
 
 @pytest.mark.asyncio
-async def test_version_recommendations_require_first_three_encoding_segments(enable_switch, async_db_session):
+async def test_version_recommendations_include_different_classification(enable_switch, async_db_session):
     async_db_session.add(Knowledge(id=1, name="s1", type=3, user_id=1))
     await async_db_session.commit()
     matched_doc = await _seed_file_with_doc(
@@ -535,7 +538,8 @@ async def test_version_recommendations_require_first_three_encoding_segments(ena
     await svc.scan_similar_for_file(knowledge_file_id=100)
     candidates = await svc.get_version_recommendations(current_file_id=100, limit=10)
 
-    assert [one.target_document_id for one in candidates] == [matched_doc.id]
+    assert {one.primary_knowledge_file_id for one in candidates} == {200, 201}
+    assert matched_doc.id in {one.target_document_id for one in candidates}
 
 
 @pytest.mark.asyncio
@@ -595,12 +599,12 @@ async def test_version_recommendations_skip_cached_multi_version_candidates(enab
 
 
 @pytest.mark.asyncio
-async def test_merge_rejects_document_without_shougang_similarity(enable_switch, async_db_session, monkeypatch):
+async def test_merge_rejects_document_from_different_company(enable_switch, async_db_session, monkeypatch):
     source_doc = await _seed_file_with_doc(
         async_db_session,
         200,
         simhash="aaaaaaaaaaaaaaaa",
-        file_encoding="GF-BG-SC-20260500000002",
+        file_encoding="OTHER-BG-SC-20260500000002",
     )
     await _seed_file_with_doc(
         async_db_session,

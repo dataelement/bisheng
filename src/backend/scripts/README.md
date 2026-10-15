@@ -926,7 +926,10 @@ Scope:
 
 - 仅处理知识空间 `Knowledge.type = SPACE`
 - 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
-- 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
+- 跳过没有有效 `simhash` 或无法确认公司编码的文件；分类或业务域缺失本身不再跳过
+- 一级分类、二级分类和业务域完整且一致时使用 `knowledges.version_management.same_metadata`，否则使用 `different_metadata`
+- 每组独立配置 `simhash_similarity_threshold`、`enable_tfidf_refine`、`tfidf_similarity_threshold`；组内未填写的参数先回退旧平铺字段，再回退默认 `0.85 / true / 0.3`
+- 修改系统配置后不会自动重算历史候选；本脚本的 `--apply` 才会更新选定范围内未处理文件的缓存，已处理状态2仍跳过
 
 ### `repair_false_positive_simhash_duplicates.py`
 

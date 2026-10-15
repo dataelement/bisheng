@@ -752,6 +752,7 @@ def _build_knowledge_space_content_records(
     space_department_map: dict | None = None,
     original_space_scope_map: dict | None = None,
     original_space_department_map: dict | None = None,
+    original_space_name_map: dict | None = None,
     primary_department_map: dict | None = None,
     category_label_cache: dict | None = None,
 ):
@@ -793,6 +794,14 @@ def _build_knowledge_space_content_records(
     # at first upload. A file's original space may no longer be one of the CURRENT spaces above
     # (the file could have since moved away from it), so it needs its own scope/department fetch.
     original_space_ids = sorted({_original_space_id_for(file_record, space) for file_record, space in rows})
+    original_space_name_map = original_space_name_map if original_space_name_map is not None else {}
+    for _, space in rows:
+        original_space_name_map[int(space.id)] = (int(getattr(space, "tenant_id", None) or 1), space.name)
+    missing_name_ids = [space_id for space_id in original_space_ids if space_id not in original_space_name_map]
+    if missing_name_ids:
+        with bypass_tenant_filter():
+            names = KnowledgeStatisticsRepository.space_names(missing_name_ids)
+        original_space_name_map.update({space_id: names.get(space_id) for space_id in missing_name_ids})
     missing_original_space_ids = [
         space_id for space_id in original_space_ids if space_id not in original_space_scope_map
     ]
@@ -849,6 +858,7 @@ def _build_knowledge_space_content_records(
         # library->org mapping frozen at the file's ORIGINAL upload space.
         uploader_department = primary_department_map.get(int(file_record.user_id or 0))
         original_space_id = _original_space_id_for(file_record, space)
+        origin = original_space_name_map.get(original_space_id)
         original_upload_department = _resolve_belonging_start_department(
             scope=original_space_scope_map.get(original_space_id),
             space_department=original_space_department_map.get(original_space_id),
@@ -879,6 +889,7 @@ def _build_knowledge_space_content_records(
                     original_upload_department,
                     departments_by_id,
                 ),
+                original_space_name=origin[1] if origin and origin[0] == tenant_id else None,
                 file_category_labels=category_labels,
                 file_subcategory_labels=subcategory_labels,
                 sync_run_id=sync_run_id,
@@ -1064,6 +1075,7 @@ def rebuild_knowledge_space_content_download_projection(
     space_department_map: dict[int, Any] = {}
     original_space_scope_map: dict[int, Any] = {}
     original_space_department_map: dict[int, Any] = {}
+    original_space_name_map: dict[int, Any] = {}
     primary_department_map: dict[int, Any] = {}
     category_label_cache: dict[int, tuple[dict[str, str], dict[str, str]]] = {}
     synced_count = 0
@@ -1089,6 +1101,7 @@ def rebuild_knowledge_space_content_download_projection(
             space_department_map=space_department_map,
             original_space_scope_map=original_space_scope_map,
             original_space_department_map=original_space_department_map,
+            original_space_name_map=original_space_name_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
@@ -1138,6 +1151,7 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     space_department_map = {}
     original_space_scope_map = {}
     original_space_department_map = {}
+    original_space_name_map = {}
     primary_department_map = {}
     category_label_cache = {}
     counters = {"checked": 0, "unchanged": 0, "created": 0, "updated": 0, "conflicts": 0, "blocked": 0}
@@ -1191,6 +1205,7 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
             space_department_map=space_department_map,
             original_space_scope_map=original_space_scope_map,
             original_space_department_map=original_space_department_map,
+            original_space_name_map=original_space_name_map,
             primary_department_map=primary_department_map,
             category_label_cache=category_label_cache,
         )
@@ -1334,6 +1349,7 @@ def sync_pending_knowledge_space_content_stat():
         space_department_map = {}
         original_space_scope_map = {}
         original_space_department_map = {}
+        original_space_name_map = {}
         primary_department_map = {}
         category_label_cache = {}
 
@@ -1414,6 +1430,7 @@ def sync_pending_knowledge_space_content_stat():
                 space_department_map=space_department_map,
                 original_space_scope_map=original_space_scope_map,
                 original_space_department_map=original_space_department_map,
+                original_space_name_map=original_space_name_map,
                 primary_department_map=primary_department_map,
                 category_label_cache=category_label_cache,
             )
@@ -1468,6 +1485,7 @@ def sync_pending_knowledge_space_content_stat():
                     space_department_map=space_department_map,
                     original_space_scope_map=original_space_scope_map,
                     original_space_department_map=original_space_department_map,
+                    original_space_name_map=original_space_name_map,
                     primary_department_map=primary_department_map,
                     category_label_cache=category_label_cache,
                 )

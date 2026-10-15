@@ -28,9 +28,20 @@ knowledges: # 知识库相关配置
       useChartRecognition: false
   version_management:
     enabled: false
+    # 兼容旧配置，两组未显式设置的字段均回退到这里。
     simhash_similarity_threshold: 0.85
     enable_tfidf_refine: true
     tfidf_similarity_threshold: 0.3
+    # 一级分类、二级分类、业务域三项完整且相同。
+    same_metadata:
+      simhash_similarity_threshold: 0.85
+      enable_tfidf_refine: true
+      tfidf_similarity_threshold: 0.3
+    # 任意一项不同或缺失（包括双方都缺失）。
+    different_metadata:
+      simhash_similarity_threshold: 0.85
+      enable_tfidf_refine: true
+      tfidf_similarity_threshold: 0.3
   tag_library:
     review_tag_similarity_threshold: 0.85
   pdf_artifact:

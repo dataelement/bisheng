@@ -24,6 +24,23 @@ from bisheng.telemetry.domain.repositories.interfaces.knowledge_statistics_repos
 
 class KnowledgeStatisticsRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], KnowledgeStatisticsRepository):
     @staticmethod
+    def space_names(space_ids: list[int]) -> dict[int, tuple[int, str]]:
+        result = {}
+        ids = sorted(set(space_ids))
+        if not ids:
+            return result
+        with get_sync_db_session() as session:
+            for offset in range(0, len(ids), 400):
+                rows = session.execute(
+                    select(Knowledge.id, Knowledge.tenant_id, Knowledge.name).where(
+                        Knowledge.id.in_(ids[offset : offset + 400]),
+                        Knowledge.type == 3,
+                    )
+                )
+                result.update({int(space_id): (int(tenant_id or 1), name) for space_id, tenant_id, name in rows})
+        return result
+
+    @staticmethod
     def category_audit_sources(file_ids: list[int], document_ids: list[int]) -> dict:
         tenant_id = get_current_tenant_id()
         if not tenant_id or tenant_id <= 0:

@@ -20,6 +20,7 @@ from loguru import logger
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.config.settings import VersionManagementConf
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
@@ -51,6 +52,7 @@ from bisheng.knowledge.domain.services.favorite_notify import (
     collect_favorite_recipient_snapshots,
     enqueue_favorite_change_events,
 )
+from bisheng.knowledge.domain.services.knowledge_file_similarity_policy import has_company, rule_for, same_company
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
     KnowledgeSpaceContentStat,
 )
@@ -106,6 +108,7 @@ class KnowledgeVersionService:
             getattr(kf, "status", None),
             getattr(kf, "simhash", None),
             getattr(kf, "file_encoding", None),
+            getattr(kf, "file_subcategory_code", None),
         )
 
     async def _require_version_management_enabled(self) -> None:
@@ -927,37 +930,14 @@ class KnowledgeVersionService:
         threshold: float | None = None,
         limit: int = 3,
     ) -> list[KnowledgeFileSimilarityCandidate]:
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)) or not has_company(kf):
             return []
-        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return []
-
-        if threshold is None:
-            conf = await bisheng_settings.async_get_knowledge()
-            vmc = getattr(conf, "version_management", None)
-            threshold = vmc.simhash_similarity_threshold if vmc else 0.85
-
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
             knowledge_id=kf.knowledge_id,
             exclude_file_id=knowledge_file_id,
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for c in candidates:
-            if not self._has_valid_simhash(getattr(c, "simhash", None)):
-                continue
-            if not self._shougang_encoding_matches(kf, c):
-                continue
-            sim = _similarity(kf.simhash, c.simhash)
-            if sim < threshold:
-                continue
-            scored.append((sim, c))
-        scored.sort(key=lambda item: item[0], reverse=True)
-
-        refined = await self._refine_candidates_by_tfidf(kf, scored)
+        refined = await self._score_similarity_candidates(kf, candidates, threshold=threshold)
 
         self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
         self_doc_id = self_v.document_id if self_v else None
@@ -1263,19 +1243,38 @@ class KnowledgeVersionService:
         candidate_file: KnowledgeFile,
         threshold: float | None = None,
     ) -> bool:
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
+        return bool(await self._score_similarity_candidates(source_file, [candidate_file], threshold=threshold))
 
-        if not self._has_valid_simhash(getattr(source_file, "simhash", None)):
-            return False
-        if not self._has_valid_simhash(getattr(candidate_file, "simhash", None)):
-            return False
-        if not self._shougang_encoding_matches(source_file, candidate_file):
-            return False
-        if threshold is None:
-            conf = await bisheng_settings.async_get_knowledge()
-            vmc = getattr(conf, "version_management", None)
-            threshold = vmc.simhash_similarity_threshold if vmc else 0.85
-        return _similarity(source_file.simhash, candidate_file.simhash) >= threshold
+    async def _score_similarity_candidates(
+        self,
+        source: KnowledgeFile,
+        candidates: list[KnowledgeFile],
+        *,
+        threshold: float | None = None,
+        can_view_file: Callable[[int], Awaitable[bool]] | None = None,
+    ) -> list[tuple[float, float | None, KnowledgeFile]]:
+        """所有推荐入口共用资格、分组阈值和正文复核。"""
+        from bisheng.common.utils.simhash_utils import similarity
+
+        if not self._has_valid_simhash(source.simhash) or not has_company(source):
+            return []
+        config = (await bisheng_settings.async_get_knowledge()).version_management
+        scored: list[tuple[float, KnowledgeFile]] = []
+        for candidate in candidates:
+            if not self._has_valid_simhash(candidate.simhash) or not same_company(source, candidate):
+                continue
+            if (source.tenant_id or 1) != (candidate.tenant_id or 1):
+                continue
+            if can_view_file is not None and not await can_view_file(int(candidate.id)):
+                continue
+            sim = similarity(source.simhash, candidate.simhash)
+            minimum = (
+                threshold if threshold is not None else rule_for(config, source, candidate).simhash_similarity_threshold
+            )
+            if sim >= minimum:
+                scored.append((sim, candidate))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return await self._refine_candidates_by_tfidf(source, scored, config=config)
 
     async def _fetch_chunk_texts(self, knowledge, file_ids: list[int]) -> dict[int, str]:
         """Pull each file's chunk text from ES, concatenated, keyed by file_id.
@@ -1288,7 +1287,6 @@ class KnowledgeVersionService:
             return {}
         from bisheng.common.constants.vectorstore_metadata import KNOWLEDGE_RAG_METADATA_SCHEMA
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-
         from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 
         if knowledge.type == KnowledgeTypeEnum.SPACE.value:
@@ -1426,73 +1424,53 @@ class KnowledgeVersionService:
         self,
         current_file: KnowledgeFile,
         scored: list[tuple[float, KnowledgeFile]],
+        *,
+        config: VersionManagementConf | None = None,
     ) -> list[tuple[float, float | None, KnowledgeFile]]:
-        """Re-score simhash-matched candidates with a TF-IDF cosine over chunk text.
-
-        SimHash can report ~100% on documents that merely share a template; this
-        re-scores against the actual terms to drop those false positives.
-
-        Returns ``(simhash_sim, refined_sim_or_None, candidate)`` tuples:
-        - When refine is enabled and text is available: candidates below the
-          TF-IDF threshold are dropped, survivors sorted by TF-IDF cosine desc.
-        - When refine is disabled, ES is unavailable, or the current file has no
-          text: degrades to pure simhash — original order, ``refined_sim=None``.
-        - Individual candidates with no ES text keep ``refined_sim=None`` and are
-          ordered after the refined ones (never dropped on an ES gap alone).
-        """
-        degraded = [(sim, None, c) for sim, c in scored]
-        if not scored:
-            return degraded
-
-        conf = await bisheng_settings.async_get_knowledge()
-        vmc = getattr(conf, "version_management", None)
-        if vmc is not None and not getattr(vmc, "enable_tfidf_refine", True):
-            return degraded
-        tfidf_threshold: float = getattr(vmc, "tfidf_similarity_threshold", 0.3) if vmc else 0.3
-
+        """按候选所属组复核, 跨库正文保持各自的空间过滤。"""
+        from bisheng.common.utils.tfidf_utils import tfidf_cosine_scores_from_tokens
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
-        knowledge = await KnowledgeDao.aquery_by_id(current_file.knowledge_id)
-        if knowledge is None:
-            return degraded
+        if not scored:
+            return []
+        if config is None:
+            config = (await bisheng_settings.async_get_knowledge()).version_management
+        rules = {c.id: rule_for(config, current_file, c) for _, c in scored}
+        enabled = [(sim, c) for sim, c in scored if rules[c.id].enable_tfidf_refine]
+        if not enabled:
+            return [(sim, None, c) for sim, c in scored]
 
-        file_ids = [current_file.id] + [c.id for _, c in scored]
-        texts = await self._fetch_chunk_texts(knowledge, file_ids)
+        by_space: dict[int, set[int]] = {}
+        for file in [current_file, *(c for _, c in enabled)]:
+            by_space.setdefault(int(file.knowledge_id), set()).add(int(file.id))
+        texts: dict[int, str] = {}
+        for space_id, file_ids in by_space.items():
+            knowledge = await KnowledgeDao.aquery_by_id(space_id)
+            if knowledge is not None:
+                texts.update(await self._fetch_chunk_texts(knowledge, sorted(file_ids)))
+        if not texts.get(current_file.id, "").strip():
+            return [(sim, None, c) for sim, c in scored]
 
-        query_text = texts.get(current_file.id, "")
-        if not query_text.strip():
-            # Can't refine without the current file's text — keep pure simhash.
-            return degraded
-
-        from bisheng.common.utils.tfidf_utils import tfidf_cosine_scores_from_tokens
-
-        candidate_texts = [texts.get(c.id, "") for _, c in scored]
-        # Tokenize once, memoized in Redis on a (file_id, simhash) fingerprint.
-        # Candidates recur across recommendation requests, so this skips the hot
-        # jieba step on repeats; a re-parsed file gets a new simhash -> cache miss.
         all_tokens = await self._tokenize_files_cached(
             [
-                (current_file, query_text),
-                *zip((c for _, c in scored), candidate_texts, strict=True),
+                (current_file, texts[current_file.id]),
+                *((c, texts.get(c.id, "")) for _, c in enabled),
             ]
         )
-        query_tokens, candidate_tokens = all_tokens[0], all_tokens[1:]
-        cosines = await asyncio.to_thread(tfidf_cosine_scores_from_tokens, query_tokens, candidate_tokens)
-
+        cosines = await asyncio.to_thread(tfidf_cosine_scores_from_tokens, all_tokens[0], all_tokens[1:])
+        cosine_by_file = {c.id: cos for (_, c), cos in zip(enabled, cosines, strict=True)}
         refined: list[tuple[float, float | None, KnowledgeFile]] = []
         unscored: list[tuple[float, float | None, KnowledgeFile]] = []
-        for (sim, c), text, cos in zip(scored, candidate_texts, cosines, strict=True):
-            if not text.strip():
-                # ES gap for this candidate — can't refine; keep, order last.
-                unscored.append((sim, None, c))
+        for sim, candidate in scored:
+            rule = rules[candidate.id]
+            if not rule.enable_tfidf_refine or not texts.get(candidate.id, "").strip():
+                unscored.append((sim, None, candidate))
                 continue
-            if cos < tfidf_threshold:
-                continue  # filtered: simhash matched but content is unrelated
-            refined.append((sim, cos, c))
-
-        refined.sort(key=lambda x: x[1], reverse=True)
-        # Degraded (un-refinable) candidates fall after refined ones, by simhash.
-        unscored.sort(key=lambda x: x[0], reverse=True)
+            cosine = cosine_by_file[candidate.id]
+            if cosine >= rule.tfidf_similarity_threshold:
+                refined.append((sim, cosine, candidate))
+        refined.sort(key=lambda item: item[1], reverse=True)
+        unscored.sort(key=lambda item: item[0], reverse=True)
         return refined + unscored
 
     async def search_shougang_publish_version_sources(
@@ -1871,58 +1849,11 @@ class KnowledgeVersionService:
         *,
         limit: int = 10,
     ) -> list:
-        """Return similar primary documents from a target knowledge space."""
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
-        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
-
-        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
-            return []
-        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return []
-
-        conf = await bisheng_settings.async_get_knowledge()
-        vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
-        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
-        self_doc_id = self_v.document_id if self_v else None
-        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
-            knowledge_id=target_knowledge_id,
-            exclude_file_id=knowledge_file_id,
+        return await self.get_shougang_publish_similar_candidates_for_file_in_space(
+            knowledge_file_id,
+            target_knowledge_id,
+            limit=limit,
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for candidate in candidates:
-            if not self._has_valid_simhash(getattr(candidate, "simhash", None)):
-                continue
-            if not self._shougang_encoding_matches(kf, candidate):
-                continue
-            sim = _similarity(kf.simhash, candidate.simhash)
-            if sim >= threshold:
-                scored.append((sim, candidate))
-        scored.sort(key=lambda item: item[0], reverse=True)
-
-        out: list[SimilarCandidateEntry] = []
-        for sim, candidate in scored[:limit]:
-            version = await self.version_repo.find_by_knowledge_file_id(candidate.id)
-            if version is None:
-                continue
-            if self_doc_id is not None and version.document_id == self_doc_id:
-                continue
-            out.append(
-                SimilarCandidateEntry(
-                    target_document_id=version.document_id,
-                    title=candidate.file_name,
-                    doc_code=getattr(candidate, "file_encoding", None),
-                    current_primary_version_no=version.version_no,
-                    similarity=sim,
-                    primary_uploader_name=getattr(candidate, "user_name", None),
-                    primary_upload_time=getattr(candidate, "create_time", None),
-                    primary_knowledge_file_id=int(candidate.id),
-                )
-            )
-        return out
 
     async def get_shougang_publish_similar_candidates_for_file_in_space(
         self,
@@ -1932,62 +1863,36 @@ class KnowledgeVersionService:
         limit: int = 10,
         can_view_file: Callable[[int], Awaitable[bool]] | None = None,
     ) -> list:
-        """Return Shougang publish candidates from a target space.
-
-        Shougang matching is stricter than Bisheng's generic recommendation:
-        file_encoding COMPANY/DOCTYPE/DOMAIN must match first, then SimHash must
-        meet the configured threshold. The optional permission callback keeps
-        caller-specific file visibility out of the generic repository query.
-        """
-        from bisheng.common.utils.simhash_utils import similarity as _similarity
+        """目标库推荐, 先执行原资格/权限检查, 再按两套规则复核。"""
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
-        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+        source = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+        if source is None or not self._has_valid_simhash(source.simhash) or not has_company(source):
             return []
-        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
-            return []
-
-        conf = await bisheng_settings.async_get_knowledge()
-        vmc = getattr(conf, "version_management", None)
-        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
-
         self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
         self_doc_id = self_v.document_id if self_v else None
         candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
             knowledge_id=target_knowledge_id,
             exclude_file_id=knowledge_file_id,
         )
-
-        scored: list[tuple[float, KnowledgeFile]] = []
-        for candidate in candidates:
-            if not self._has_valid_simhash(getattr(candidate, "simhash", None)):
-                continue
-            if not self._shougang_encoding_matches(kf, candidate):
-                continue
-            if can_view_file is not None and not await can_view_file(int(candidate.id)):
-                continue
-            sim = _similarity(kf.simhash, candidate.simhash)
-            if sim >= threshold:
-                scored.append((sim, candidate))
-        scored.sort(key=lambda item: item[0], reverse=True)
-
+        refined = await self._score_similarity_candidates(source, candidates, can_view_file=can_view_file)
         out: list[SimilarCandidateEntry] = []
-        for sim, candidate in scored[:limit]:
+        for sim, refined_sim, candidate in refined:
+            if len(out) >= limit:
+                break
             version = await self.version_repo.find_by_knowledge_file_id(candidate.id)
-            if version is None:
-                continue
-            if self_doc_id is not None and version.document_id == self_doc_id:
+            if version is None or version.document_id == self_doc_id:
                 continue
             out.append(
                 SimilarCandidateEntry(
                     target_document_id=version.document_id,
                     title=candidate.file_name,
-                    doc_code=getattr(candidate, "file_encoding", None),
+                    doc_code=candidate.file_encoding,
                     current_primary_version_no=version.version_no,
                     similarity=sim,
-                    primary_uploader_name=getattr(candidate, "user_name", None),
-                    primary_upload_time=getattr(candidate, "create_time", None),
+                    refined_similarity=refined_sim,
+                    primary_uploader_name=candidate.user_name,
+                    primary_upload_time=candidate.create_time,
                     primary_knowledge_file_id=int(candidate.id),
                 )
             )

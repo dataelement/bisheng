@@ -9,6 +9,12 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 class KnowledgeStatisticsRepository(BaseRepository[KnowledgeFile, int], ABC):
     @staticmethod
     @abstractmethod
+    def space_names(space_ids: list[int]) -> dict[int, tuple[int, str]]:
+        """Return space IDs mapped to tenant IDs and names in bounded batches."""
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
     def aliases(identities: set[str]) -> dict[int, str]:
         raise NotImplementedError
 

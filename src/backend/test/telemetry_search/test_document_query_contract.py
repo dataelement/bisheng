@@ -37,6 +37,10 @@ def setup(monkeypatch):
             "uploader_department_name": "B",
         },
     ]
+    for index, record in enumerate(records):
+        record["original_space_name"] = "最初科室库" if index < 2 else "其他原始库"
+        for level in ("company", "department", "office", "squad"):
+            record[f"original_upload_{level}_name"] = "原始组织A" if index < 2 else "原始组织B"
     stats = DocumentStatistics(records, {"document:1": ts("2026-08-03")})
     load = AsyncMock(return_value=stats)
 
@@ -59,6 +63,32 @@ def setup(monkeypatch):
             lambda session: SimpleNamespace(find_one=AsyncMock(return_value=dataset)),
         )
     return stats, load
+
+
+@pytest.mark.parametrize("field", [
+    "original_space_name", "original_upload_company_name", "original_upload_department_name",
+    "original_upload_office_name", "original_upload_squad_name",
+])
+async def test_original_dimensions_group_export_and_preserve_filter_values(setup, field):
+    _, load = setup
+    dataset = next(item for item in DASHBOARD_DATASET if item.dataset_code == INDEX)
+    label = next(item["name"] for item in dataset.schema_config["dimensions"] if item["field"] == field)
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": field, "displayName": label}], metrics=[{"fieldId": "total_file_count"}],
+    )
+    result = await component.DataQueryService(dataset_code=INDEX, data_config=config).query_telemetry_data()
+    assert len(result.dimensions) == 2
+    assert result.value == [[1], [1]]
+    totals = [row for row in result.rollups if not row["dimension_indexes"]]
+    assert totals[0]["rows"][0]["value"] == 2
+    name = "最初科室库" if field == "original_space_name" else "原始组织A"
+    detail = await dashboard_export_detail.query_detail_rows(
+        dataset_code=INDEX, data_config=config,
+        dimension_filters=[DimensionQueryFilter(fieldId=field, values=[name])], row_limit=100,
+    )
+    assert any(column.field == field and column.label.startswith("原始") for column in detail.columns)
+    assert name in str(load.call_args.args[0])
+    assert field in str(load.call_args.args[0])
 
 
 async def test_query_rollups_export_match_with_shared_references(setup):

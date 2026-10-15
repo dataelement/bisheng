@@ -26,6 +26,7 @@ from bisheng.telemetry.domain.mid_table import queue_retry
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
     CONTENT_DIMENSION_FIELDS,
+    ORIGINAL_DIMENSION_FIELDS,
     OrganizationNameSnapshot,
     build_daily_document_id,
 )
@@ -53,6 +54,7 @@ class KnowledgeSpaceContentRecord(BaseModel):
     timestamp: int
     space_id: int
     space_name: str
+    original_space_name: str | None = None
     space_level: str = "unknown"
     space_level_name: str = SPACE_LEVEL_LABELS["unknown"]
     file_id: int
@@ -292,6 +294,7 @@ return removed
                 "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
             }
             for field in (
+                "original_space_name",
                 "uploader_company_name",
                 "uploader_department_name",
                 "uploader_office_name",
@@ -803,6 +806,24 @@ return removed
                 errors[event_id] = f"{type(exc).__name__}: {exc}"
         return records, errors
 
+    @staticmethod
+    def _daily_update_script(field: str, count: int, dimensions: dict) -> dict:
+        source = (
+            f"boolean changed = false; if (ctx._source.{field} == null || "
+            f"ctx._source.{field} < params.count) {{ ctx._source.{field} = params.count; changed = true; }} "
+        )
+        params = {"count": int(count)}
+        original = {key: dimensions[key] for key in ORIGINAL_DIMENSION_FIELDS if dimensions.get(key) is not None}
+        if original:
+            source += (
+                "for (def item : params.original.entrySet()) { "
+                "if (ctx._source[item.getKey()] == null) { "
+                "ctx._source[item.getKey()] = item.getValue(); changed = true; } } "
+            )
+            params["original"] = original
+        source += "if (!changed) { ctx.op = 'noop'; }"
+        return {"lang": "painless", "source": source, "params": params}
+
     def upsert_events_daily_sync(self, groups):
         """同一日统计 ID 只写一次, 绝对计数单调更新且逐项检查结果。"""
         if not groups:
@@ -827,12 +848,7 @@ return removed
                 [
                     {"update": {"_index": self.INDEX_NAME, "_id": envelope.daily_id, "retry_on_conflict": 3}},
                     {
-                        "script": {
-                            "lang": "painless",
-                            "source": f"if (ctx._source.{field} == null || ctx._source.{field} < params.count) "
-                            f"{{ ctx._source.{field} = params.count; }} else {{ ctx.op = 'noop'; }}",
-                            "params": {"count": count},
-                        },
+                        "script": self._daily_update_script(field, count, envelope.dimensions),
                         "upsert": document,
                     },
                 ]
@@ -991,15 +1007,7 @@ return removed
             index=self.INDEX_NAME,
             id=envelope.daily_id,
             retry_on_conflict=5,
-            script={
-                "lang": "painless",
-                "source": (
-                    f"if (ctx._source.{metric_field} == null || "
-                    f"ctx._source.{metric_field} < params.count) "
-                    f"{{ ctx._source.{metric_field} = params.count; }}"
-                ),
-                "params": {"count": int(absolute_count)},
-            },
+            script=self._daily_update_script(metric_field, absolute_count, envelope.dimensions),
             upsert=upsert,
         )
 
@@ -1087,6 +1095,7 @@ return removed
         uploader_organization: OrganizationNameSnapshot | None = None,
         belonging_organization: OrganizationNameSnapshot | None = None,
         original_upload_organization: OrganizationNameSnapshot | None = None,
+        original_space_name: str | None = None,
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
         sync_run_id: str | None = None,
@@ -1114,6 +1123,13 @@ return removed
             timestamp=int((file_record.create_time or datetime.now()).timestamp()),
             space_id=int(space.id),
             space_name=space.name,
+            original_space_name=(
+                original_space_name
+                if original_space_name is not None
+                else space.name
+                if int(getattr(file_record, "original_knowledge_id", None) or space.id) == int(space.id)
+                else None
+            ),
             space_level=normalized_space_level,
             space_level_name=SPACE_LEVEL_LABELS[normalized_space_level],
             file_id=int(file_record.id),

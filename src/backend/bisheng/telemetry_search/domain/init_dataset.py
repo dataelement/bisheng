@@ -1035,10 +1035,11 @@ DASHBOARD_DATASET = [
                 # (same rule as belonging_*) frozen at the file's ORIGINAL upload space
                 # (KnowledgeFile.original_knowledge_id, F081), never recomputed afterward.
                 # See mid_table.py::_build_knowledge_space_content_records.
-                DimensionConfig(name="原始上传库公司", field="original_upload_company_name"),
-                DimensionConfig(name="原始上传库部门", field="original_upload_department_name"),
-                DimensionConfig(name="原始上传库科室", field="original_upload_office_name"),
-                DimensionConfig(name="原始上传库班组", field="original_upload_squad_name"),
+                DimensionConfig(name="原始上传库", field="original_space_name"),
+                DimensionConfig(name="原始所属公司", field="original_upload_company_name"),
+                DimensionConfig(name="原始所属部门", field="original_upload_department_name"),
+                DimensionConfig(name="原始所属科室", field="original_upload_office_name"),
+                DimensionConfig(name="原始所属班组", field="original_upload_squad_name"),
                 DimensionConfig(
                     name="上传人ID",
                     field="uploader_user_id"

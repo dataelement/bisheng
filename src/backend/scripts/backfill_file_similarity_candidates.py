@@ -48,6 +48,7 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (  # noqa: E402
     KnowledgeFileSimilarityCandidateRepositoryImpl,
 )
+from bisheng.knowledge.domain.services.knowledge_file_similarity_policy import has_company  # noqa: E402
 from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService  # noqa: E402
 
 KNOWLEDGE_TYPE_SPACE = 3
@@ -151,7 +152,7 @@ async def backfill(
         report.total_files_scanned += len(files)
         for kf in files:
             last_id = max(last_id, int(kf.id))
-            if _encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
+            if not has_company(kf):
                 report.skipped_invalid_encoding += 1
                 continue
             if not apply:

@@ -682,10 +682,10 @@ class TagLibraryConf(BaseModel):
     )
 
 
-class VersionManagementConf(BaseModel):
-    """Version Management Configure"""
+class FileSimilarityRuleConf(BaseModel):
+    """单组文件相似度规则。"""
 
-    enabled: bool = Field(default=False, description="Enable knowledge-space file version management")
+    model_config = ConfigDict(extra="forbid")
     simhash_similarity_threshold: float = Field(
         default=0.85,
         ge=0.0,
@@ -705,6 +705,26 @@ class VersionManagementConf(BaseModel):
         description="TF-IDF cosine threshold for the refine pass: candidates below this are "
         "dropped even if their simhash cleared simhash_similarity_threshold. Range [0, 1].",
     )
+
+
+class VersionManagementConf(FileSimilarityRuleConf):
+    """版本管理配置, 旧平铺参数继续作为两组规则的回退值。"""
+
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = Field(default=False, description="Enable knowledge-space file version management")
+    same_metadata: FileSimilarityRuleConf | None = None
+    different_metadata: FileSimilarityRuleConf | None = None
+
+    def resolve_similarity_rule(self, same_metadata: bool) -> FileSimilarityRuleConf:
+        group = self.same_metadata if same_metadata else self.different_metadata
+        return FileSimilarityRuleConf(
+            **{
+                name: getattr(group, name)
+                if group is not None and name in group.model_fields_set
+                else getattr(self, name)
+                for name in FileSimilarityRuleConf.model_fields
+            }
+        )
 
 
 class KnowledgePdfArtifactConf(BaseModel):

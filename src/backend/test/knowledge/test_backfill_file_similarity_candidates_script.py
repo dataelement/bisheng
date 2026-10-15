@@ -109,3 +109,19 @@ async def test_backfill_respects_knowledge_id_filter(async_db_session, monkeypat
 
     assert report.refreshed_files == 1
     refresh.assert_awaited_once_with(200)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+async def test_missing_classification_uses_different_mode_instead_of_skipping(async_db_session, monkeypatch, apply):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(async_db_session, file_id=100, file_encoding="GF--SC-20261000000001")
+    await _seed_file(async_db_session, file_id=101, file_encoding="GF-ZD--20261000000002")
+    refresh = AsyncMock(return_value=1)
+    monkeypatch.setattr(
+        script_mod, "_build_service", lambda session: SimpleNamespace(refresh_similar_candidates_for_file=refresh)
+    )
+    report = await backfill(async_db_session, apply=apply)
+    assert report.skipped_invalid_encoding == 0
+    assert report.refreshed_files == (2 if apply else 0)
+    assert report.would_refresh == (0 if apply else 2)
+    assert refresh.await_count == (2 if apply else 0)

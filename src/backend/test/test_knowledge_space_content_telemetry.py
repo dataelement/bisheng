@@ -180,6 +180,7 @@ def _import_worker_mid_table():
         spec.loader.exec_module(worker_module)
         worker_module.KnowledgeStatisticsRepository = SimpleNamespace(
             identities=lambda ids: {file_id: f"document:{file_id}" for file_id in ids},
+            space_names=lambda _ids: {},
         )
         return worker_module
     finally:
