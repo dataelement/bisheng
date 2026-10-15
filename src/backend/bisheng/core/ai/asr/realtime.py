@@ -12,7 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from websockets.asyncio.client import connect
 
-from bisheng.core.ai.base import BaseASRClient
+from bisheng.core.ai.base import ASRSegment, ASRTranscript, BaseASRClient, join_sentence_texts
 
 from .capabilities import ALI_MODELS as ASR_PROTOCOLS
 from .capabilities import realtime_protocol as realtime_protocol
@@ -149,6 +149,7 @@ class RealtimeASRClient(BaseASRClient):
     """A streaming model also accepts normalized files through the same protocol."""
 
     def __init__(self, api_key: str, model: str, base_url: str = "", **kwargs):
+        self.base_url = base_url
         self.api_key = api_key
         self.model = model
         self.protocol = ASR_PROTOCOLS[model]
@@ -196,11 +197,19 @@ class RealtimeASRClient(BaseASRClient):
                 await asyncio.gather(*tasks, return_exceptions=True)
             await connection.close()
 
-    async def _transcribe(self, audio: str, language=None, model=None, **kwargs) -> str:
+    def _for_model(self, model: str) -> RealtimeASRClient:
+        return type(self)(api_key=self.api_key, model=model, base_url=self.base_url)
+
+    async def transcribe_file(
+        self, wav_path: str, language: str | None = None, model: str | None = None
+    ) -> ASRTranscript:
+        if model and model != self.model:
+            return await self._for_model(model).transcribe_file(wav_path, language=language)
+        # Streaming providers detect language and return their own sentence boundaries.
         results: dict[str, str] = {}
 
         async def frames():
-            with wave.open(audio, "rb") as source:
+            with wave.open(wav_path, "rb") as source:
                 if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, 16000):
                     raise ValueError("ASR requires mono 16-bit 16kHz WAV")
                 while pcm := source.readframes(1600):
@@ -215,4 +224,5 @@ class RealtimeASRClient(BaseASRClient):
                 results[event["segment_id"]] = event["text"]
 
         await self.stream(frames(), ready, collect)
-        return "".join(results.values())
+        segments = [ASRSegment(text=text) for text in results.values() if text.strip()]
+        return ASRTranscript(text=join_sentence_texts([segment.text for segment in segments]), segments=segments)

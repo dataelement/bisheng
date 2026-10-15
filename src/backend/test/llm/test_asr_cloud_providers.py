@@ -15,7 +15,7 @@ import pytest
 
 from bisheng.core.ai.asr import realtime, speech_cloud, volcengine
 from bisheng.core.ai.asr.capabilities import realtime_protocol
-from bisheng.llm.domain.llm.asr import BishengASR
+from bisheng.llm.domain.llm.asr import BishengASR, is_asr_provider_supported
 from bisheng.utils.mask_data import JsonFieldMasker
 
 VOLC_CONFIG = {"speech_api_key": "fixture-api", "speech_resource_id": "volc.seedasr.sauc.duration"}
@@ -236,6 +236,7 @@ def test_tencent_signature_uses_sorted_raw_parameters_then_urlencoding():
 )
 async def test_factory_and_capability_match(provider, model, config, cls):
     assert realtime_protocol(provider, model)
+    assert is_asr_provider_supported(provider)
     server = SimpleNamespace(type=provider, config=config)
     instance = await BishengASR.init_asr_client(SimpleNamespace(model_name=model, config=None), server)
     assert isinstance(instance, cls) and isinstance(instance, realtime.RealtimeASRClient)
@@ -308,3 +309,27 @@ async def test_provider_error_is_propagated_without_echoing_credentials(monkeypa
     with pytest.raises(RuntimeError, match="ASR error") as failure:
         _ = [event async for event in connection.events()]
     assert "sensitive" not in str(failure.value)
+
+
+@pytest.mark.parametrize(
+    "provider,model,override,config,cls",
+    [
+        ("baidu", "15372", "1537", BAIDU_CONFIG, speech_cloud.BaiduRealtimeASRClient),
+        ("tencent", "16k_zh", "16k_en", TENCENT_CONFIG, speech_cloud.TencentRealtimeASRClient),
+    ],
+)
+async def test_cloud_file_model_override_preserves_credentials(
+    monkeypatch, tmp_path, provider, model, override, config, cls
+):
+    import wave
+
+    socket = Socket(provider)
+    connect_socket(monkeypatch, provider, socket)
+    client = cls(model, config)
+    path = tmp_path / "probe.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setparams((1, 2, 16000, 0, "NONE", "NONE"))
+    transcript = await client.transcribe_file(str(path), model=override)
+    assert transcript.text == "Final."
+    assert client.model == model
+    assert socket.closed

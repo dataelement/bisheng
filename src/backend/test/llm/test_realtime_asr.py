@@ -130,8 +130,9 @@ async def test_file_probe_uses_streaming_adapter(monkeypatch, tmp_path):
     with wave.open(str(path), "wb") as wav:
         wav.setparams((1, 2, 16000, 0, "NONE", "NONE"))
         wav.writeframes(b"\x00\x00" * 160)
-    text = await realtime.RealtimeASRClient("test-key", "paraformer-realtime-v2")._transcribe(str(path))
-    assert text == "Final."
+    transcript = await realtime.RealtimeASRClient("test-key", "paraformer-realtime-v2").transcribe_file(str(path))
+    assert transcript.text == "Final."
+    assert [segment.text for segment in transcript.segments] == ["Final."]
 
 
 def test_explicit_model_registry_and_region():
@@ -246,3 +247,39 @@ async def test_effective_config_derives_capability_from_model(monkeypatch, name,
     assert result.asr_model.realtime is expected
     assert (inherited, blocked) == (True, False)
     assert typed.await_args.args[-1] == 7
+
+
+async def test_file_transcription_preserves_segments_and_english_word_boundaries(monkeypatch, tmp_path):
+    client = realtime.RealtimeASRClient("test-key", "paraformer-realtime-v2")
+
+    async def stream(audio, on_ready, on_event):
+        async for _ in audio:
+            pass
+        for segment_id, text in [("1", "hello"), ("2", "world")]:
+            await on_event({"type": "final", "segment_id": segment_id, "text": text})
+
+    monkeypatch.setattr(client, "stream", stream)
+    path = tmp_path / "probe.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setparams((1, 2, 16000, 0, "NONE", "NONE"))
+    transcript = await client.transcribe_file(str(path))
+    assert transcript.text == "hello world"
+    assert [segment.text for segment in transcript.segments] == ["hello", "world"]
+
+
+async def test_file_model_override_keeps_original_client_and_region(monkeypatch, tmp_path):
+    socket = ProviderSocket("qwen")
+    connector = AsyncMock(return_value=socket)
+    monkeypatch.setattr(realtime, "connect", connector)
+    client = realtime.RealtimeASRClient(
+        "test-key", "paraformer-realtime-v2", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    )
+    path = tmp_path / "probe.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setparams((1, 2, 16000, 0, "NONE", "NONE"))
+    result = await client.transcribe_file(str(path), model="qwen3-asr-flash-realtime")
+    assert result.text == "Final."
+    assert client.model == "paraformer-realtime-v2"
+    assert connector.await_args.args[0] == (
+        "wss://dashscope-intl.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime"
+    )

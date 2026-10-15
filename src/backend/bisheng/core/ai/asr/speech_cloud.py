@@ -78,8 +78,12 @@ class BaiduRealtimeASRClient(RealtimeASRClient):
         if model not in BAIDU_MODELS:
             raise ValueError("Unsupported Baidu streaming ASR model")
         self.model = model
+        self.config = dict(config)
         self.app_id = app_id(config)
         self.api_key = required(config, "speech_api_key")
+
+    def _for_model(self, model: str):
+        return type(self)(model=model, config=self.config)
 
     def create_connection(self):
         return BaiduConnection(self)
@@ -165,9 +169,13 @@ class TencentRealtimeASRClient(RealtimeASRClient):
         if model not in TENCENT_MODELS:
             raise ValueError("Unsupported Tencent streaming ASR model")
         self.model = model
+        self.config = dict(config)
         self.app_id = app_id(config)
         self.secret_id = required(config, "speech_secret_id")
         self.secret_key = required(config, "speech_secret_key")
+
+    def _for_model(self, model: str):
+        return type(self)(model=model, config=self.config)
 
     def create_connection(self):
         return TencentConnection(self)

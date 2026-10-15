@@ -151,7 +151,7 @@ class FlowGptsOnlineList(BaseModel):
     logo: str = None
     create_time: datetime = None
     update_time: datetime = None
-    flow_type: str = None  # flow: Skill assistant：gptsassistant
+    flow_type: str = None  # flow: Skill assistant: gptsassistant
     count: int = 0
 
 
@@ -276,7 +276,7 @@ class AssistantUpdateReq(BaseModel):
     name: str | None = Field("", description="The assistant name. Leave empty to not update")
     desc: str | None = Field("", description="Assistant description Leave empty to not update")
     logo: str | None = Field("", description="logoRelative address of the file, empty to not update")
-    prompt: str | None = Field("", description="Visible to Userprompt， Leave empty to not update")
+    prompt: str | None = Field("", description="Visible to Userprompt, Leave empty to not update")
     guide_word: str | None = Field("", description="Ice Breaker  Leave empty to not update")
     guide_question: list | None = Field([], description="Guided Question List, Leave empty to not update")
     model_name: str | None = Field("", description="Selected model name, Leave empty to not update")

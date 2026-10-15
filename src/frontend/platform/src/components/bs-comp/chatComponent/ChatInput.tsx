@@ -273,7 +273,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     useEffect(() => {
         const handleCustomEvent = (e) => {
             if (voice.busy) return
-        if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
+            if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
             const { send, message } = e.detail
             inputRef.current.value = message
             if (send) handleSendClick()
@@ -282,7 +282,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         return () => {
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked, showWhenLocked])
+    }, [inputLock.locked, showWhenLocked, voice.busy])
 
     // 点击引导词
     const handleClickGuideWord = (message) => {

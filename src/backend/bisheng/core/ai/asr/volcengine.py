@@ -120,6 +120,7 @@ class VolcengineRealtimeASRClient(RealtimeASRClient):
         if model != "bigmodel":
             raise ValueError("Unsupported Volcengine streaming ASR model")
         self.model = model
+        self.config = dict(config)
         self.auth_mode = config.get("speech_auth_mode") or "api_key"
         self.resource_id = required(config, "speech_resource_id")
         if self.resource_id not in VOLC_RESOURCES:
@@ -131,6 +132,9 @@ class VolcengineRealtimeASRClient(RealtimeASRClient):
             self.access_key = required(config, "speech_access_key")
         else:
             raise ValueError("Unsupported Volcengine ASR authentication mode")
+
+    def _for_model(self, model: str):
+        return type(self)(model=model, config=self.config)
 
     def create_connection(self):
         return VolcengineConnection(self)

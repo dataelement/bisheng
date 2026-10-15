@@ -158,7 +158,7 @@
       "count": 4
     },
     "no-console": {
-      "count": 3
+      "count": 2
     },
     "no-restricted-syntax": {
       "count": 6
@@ -928,20 +928,6 @@
     },
     "no-restricted-syntax": {
       "count": 5
-    }
-  },
-  "src/components/voiceFunction/speechToText.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 9
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/constants.tsx": {
@@ -3238,17 +3224,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/ModelPage/manage/CustomForm.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },

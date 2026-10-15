@@ -1,5 +1,4 @@
 import { Outlined } from 'bisheng-icons';
-import { Pause } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useRecoilState } from 'recoil';
 import { transcribeVoice } from '~/api/voice';
@@ -79,7 +78,7 @@ export function SpeechToTextComponent(props: SpeechToTextProps) {
       aria-label={label} title={label} aria-pressed={recording}
       onMouseDown={(event) => event.preventDefault()} onClick={handleClick}
     >
-      {recording ? <Pause size={18} /> : <Outlined.Microphone size={18} />}
+      {recording ? <Outlined.PlayerPause size={18} /> : <Outlined.Microphone size={18} />}
     </Button>
   );
 }
