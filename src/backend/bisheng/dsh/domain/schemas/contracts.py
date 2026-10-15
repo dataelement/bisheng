@@ -109,7 +109,12 @@ class DshDisabledConfig(DshContract):
     enabled: Literal[False] = False
 
 
+class DshAuditContextCapability(DshContract):
+    fields: list[Literal["conversation_id", "request_kind"]]
+
+
 class DshEnabledConfig(DshContract):
     enabled: Literal[True] = True
     client_id: Literal["dsh-desktop"] = "dsh-desktop"
     contract_version: Literal["0.5.0"] = "0.5.0"
+    audit_context: DshAuditContextCapability | None = None

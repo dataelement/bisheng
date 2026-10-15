@@ -1,9 +1,11 @@
 """Adapt text/tools through BishengLLM's public governed execution methods."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from loguru import logger
 from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshUnsupportedParameterError, DshUpstreamErrorError
@@ -60,6 +62,32 @@ class ChatExecution:
         self.provider_request_id: str | None = None
         self.tool_fragments: dict[int, dict] = {}
         self.allowed_tool_names: set[str] = set()
+        self.capture = None
+        self.audit_input = None
+
+    def audit(self, method, value):
+        if self.capture is not None:
+            try:
+                getattr(self.capture, method)(value)
+            except Exception as error:
+                # Audit observers cannot alter unified model execution or its response.
+                logger.warning("DSH audit observer failed ({})", type(error).__name__)
+
+    def input_units(self):
+        request = self.audit_input
+        if request is None:
+            return
+        yield {
+            "parameters": {
+                key: value
+                for key in type(request).model_fields
+                if key not in {"messages", "tools", "tool_choice"}
+                if (value := getattr(request, key)) is not None
+            },
+            "tools": request.tools or [],
+            "tool_choice": request.tool_choice,
+        }
+        yield from request.messages
 
     def _observe(self, message):
         current = normalize_usage(message)
@@ -84,6 +112,20 @@ class ChatExecution:
             output["reasoning_content"] = reasoning
 
     async def invoke(self) -> dict:
+        self.audit("entered", self.input_units())
+        try:
+            result = await self._invoke()
+            self.audit("output", result)
+            self.audit("terminal", "SUCCEEDED")
+            return result
+        except asyncio.CancelledError:
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+
+    async def _invoke(self) -> dict:
         message = await self.llm.ainvoke(self.messages, **self.parameters)
         self._observe(message)
         if not isinstance(message.content, str):
@@ -130,6 +172,24 @@ class ChatExecution:
             ids.add(call.id)
 
     async def stream(self) -> AsyncIterator[dict]:
+        self.audit("entered", self.input_units())
+        source = self._stream()
+        try:
+            async for delta in source:
+                self.audit("output", {"delta": delta})
+                yield delta
+            self.audit("output", {"finish_reason": self.finish_reason})
+            self.audit("terminal", "SUCCEEDED")
+        except (asyncio.CancelledError, GeneratorExit):
+            self.audit("terminal", "CANCELLED")
+            raise
+        except Exception:
+            self.audit("terminal", "FAILED")
+            raise
+        finally:
+            await source.aclose()
+
+    async def _stream(self) -> AsyncIterator[dict]:
         source = self.llm.astream(self.messages, **self.parameters)
         try:
             async for message in source:

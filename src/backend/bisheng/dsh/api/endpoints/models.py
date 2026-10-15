@@ -1,17 +1,25 @@
 """Frozen Desktop model endpoints, authenticated independently of browser cookies."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
-from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshModelNotAllowedError, DshQuotaUnavailableError
+from bisheng.common.errcode.dsh import (
+    DshInvalidAccessTokenError,
+    DshInvalidRequestError,
+    DshModelNotAllowedError,
+    DshQuotaUnavailableError,
+)
 from bisheng.dsh.api.dependencies import DshRuntime, get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
+from bisheng.dsh.domain.schemas.model_audit_context import parse_audit_context
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model import PreparedStream
 from bisheng.dsh.domain.services.usage_projection import apply_current_policy_limits
@@ -53,12 +61,29 @@ async def models(principal: DshPrincipal = Depends(desktop_principal), runtime: 
 
 @router.post("/dsh/chat/completions")
 async def complete(
-    body: DshChatRequest,
+    request: Request,
     principal: DshPrincipal = Depends(desktop_principal),
     runtime: DshRuntime = Depends(get_runtime),
 ):
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type and content_type != "application/json" and not content_type.endswith("+json"):
+        raise DshInvalidRequestError()
+    try:
+        raw = await request.json()
+        if not isinstance(raw, dict):
+            raise DshInvalidRequestError()
+        audit_context = parse_audit_context(raw.pop("audit_context", None))
+        body = DshChatRequest.model_validate(raw)
+    except (json.JSONDecodeError, UnicodeError, ValidationError, RecursionError):
+        raise DshInvalidRequestError() from None
     service = await get_model_runtime(runtime)
-    result = await service.complete(principal, body)
+    result = await service.complete(
+        principal,
+        body,
+        request_id=request.state.request_id,
+        audit_context=audit_context,
+        audit_callback=lambda capture: setattr(request.state, "audit_capture", capture),
+    )
     return DshStreamingResponse(result) if isinstance(result, PreparedStream) else result
 
 

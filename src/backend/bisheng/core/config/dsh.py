@@ -71,6 +71,42 @@ class DshSettings(BaseModel):
         description="Maximum duration in seconds spent processing batches in one projection invocation.",
     )
 
+    # Operational bounds, not a latency/coverage SLA or tenant-mode cache.
+    audit_chunk_bytes: int = Field(
+        default=16384, ge=1024, le=65536, description="Maximum encoded body fragment size in bytes."
+    )
+    audit_request_budget_bytes: int = Field(
+        default=16777216, ge=65536, description="Maximum body bytes captured per request; exhaustion marks incomplete."
+    )
+    audit_queue_budget_bytes: int = Field(
+        default=67108864, ge=65536, description="Maximum total queued audit body bytes per API process."
+    )
+    audit_queue_max_events: int = Field(
+        default=4096, ge=1, description="Maximum number of buffered audit events per API process."
+    )
+    audit_mode_read_timeout_seconds: float = Field(
+        default=0.1, gt=0, le=5, description="Bounded authoritative tenant-mode read; failure falls back to OFF."
+    )
+    audit_store_timeout_seconds: float = Field(
+        default=5.0, gt=0, le=60, description="Timeout for each background audit storage operation."
+    )
+    audit_write_attempts: int = Field(default=3, ge=1, le=5, description="Finite background storage retry count.")
+    audit_activity_interval_seconds: float = Field(
+        default=10.0, gt=0, description="Background active-request lease refresh interval."
+    )
+    audit_observation_window_seconds: float = Field(
+        default=300.0, gt=0, description="Adjustable audit observation window, not a model timeout."
+    )
+    audit_state_scan_interval_seconds: float = Field(
+        default=60.0, ge=10, le=3600, description="Beat interval for bounded historical audit convergence."
+    )
+    audit_shutdown_seconds: float = Field(
+        default=5.0, gt=0, le=30, description="Maximum graceful audit drain duration."
+    )
+    audit_active_key_id: str | None = Field(
+        default=None, max_length=64, description="Active external audit encryption key reference; no key material."
+    )
+
     @field_validator("platform_public_url", "gateway_internal_url")
     @classmethod
     def validate_origin(cls, value: str | None) -> str | None:

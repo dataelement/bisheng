@@ -1,0 +1,116 @@
+export const modelResults = [
+  "RUNNING",
+  "SUCCEEDED",
+  "FAILED",
+  "CANCELLED",
+  "UNKNOWN",
+] as const;
+export const responseResults = [
+  "RUNNING",
+  "COMPLETED",
+  "ERROR",
+  "INTERRUPTED",
+  "UNKNOWN",
+] as const;
+export const settlements = [
+  "PENDING",
+  "SETTLED",
+  "USAGE_UNKNOWN",
+  "UNCERTAIN",
+] as const;
+export const contentStates = [
+  "PENDING",
+  "COMPLETE",
+  "PARTIAL",
+  "NOT_CAPTURED",
+] as const;
+export type AuditMode = "OFF" | "METADATA" | "CONTENT";
+export type AuditModeSnapshot = { mode: AuditMode; version: number };
+export type ModelAuditRecord = {
+  request_id: string;
+  user_id: number;
+  model_id: number;
+  model_name: string;
+  provider_name: string;
+  conversation_id: string | null;
+  request_kind: string | null;
+  context_invalid: boolean;
+  association_status: "ASSOCIATED" | "UNASSOCIATED";
+  effective_mode: AuditMode;
+  started_at: string;
+  last_write_at: string | null;
+  input_units: number;
+  input_bytes: number;
+  output_bytes: number;
+  model_result: (typeof modelResults)[number];
+  response_result: (typeof responseResults)[number];
+  usage_settlement: (typeof settlements)[number];
+  content_status: (typeof contentStates)[number];
+  usage: {
+    input_tokens: number | null;
+    output_tokens: number | null;
+    total_tokens: number | null;
+    status: string;
+    latency_ms?: number | null;
+  } | null;
+};
+export type ModelAuditQuery = {
+  tenant_id?: number;
+  user_id?: number;
+  user_keyword?: string;
+  request_id?: string;
+  conversation_id?: string;
+  model_name?: string;
+  provider_name?: string;
+  start_at?: string;
+  end_at?: string;
+  model_result?: (typeof modelResults)[number];
+  response_result?: (typeof responseResults)[number];
+  usage_settlement?: (typeof settlements)[number];
+  content_status?: (typeof contentStates)[number];
+  association_status?: "ASSOCIATED" | "UNASSOCIATED";
+  cursor?: string;
+  limit: number;
+};
+export type ModelAuditPage = {
+  items: ModelAuditRecord[];
+  next_cursor: string | null;
+  progress: {
+    last_write_at: string | null;
+    coverage: string;
+    limitations: string[];
+    pending_events?: number | null;
+  };
+};
+export type MissingModelAudit = {
+  request_id: string;
+  audit_record_missing: true;
+  gap: "AWAITING" | "CONFIRMED" | "DEGRADED_OFF" | "MODE_UNKNOWN" | "UNKNOWN";
+};
+export type AuditBodyFrame =
+  | {
+      type: "meta";
+      request_id: string;
+      encoding_version: number;
+      content_state: string;
+    }
+  | {
+      type: "part";
+      seq: number;
+      channel: "input" | "output";
+      unit_index: number;
+      fragment: string;
+    }
+  | {
+      type: "gap";
+      channel: "input" | "output";
+      unit_index: number;
+      stored_sequence: number;
+    }
+  | {
+      type: "end";
+      last_seq: number;
+      content_state: string;
+      transfer_status: string;
+    }
+  | { type: "error"; code: string };

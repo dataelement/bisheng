@@ -4,6 +4,26 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## Diagnostic Scripts
 
+### `measure_dsh_model_audit.py`
+
+Post-development DSH audit timing probe for the **disposable loopback fixture only**.
+Start `python -m test.dsh.audit_local_server --real-stores` first. Supply its
+synthetic administrator/user tokens via `DSH_AUDIT_ADMIN_TOKEN` and
+`DSH_AUDIT_USER_TOKEN`; never use business credentials. The default performs
+read-only preflight. `--apply` sends synthetic requests, measures OFF/METADATA/CONTENT,
+and restores the initial mode. It neither loads application config nor opens DB clients.
+
+```bash
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786
+python scripts/measure_dsh_model_audit.py --base http://127.0.0.1:8786 --apply --samples 10
+```
+
+JSON output separates first content/response duration, metadata/body visibility,
+and the existing persisted `dsh_model_call` Token baseline. An independent fixture
+model-entered counter supplies the denominator. Small-sample percentiles and process
+peak RSS are observations, not a production SLA; production identity/model/Gateway/DM8
+are outside this fixture. No prompt text or credentials are printed.
+
 ### `diagnose_dm_column_reflection.py`
 
 Read-only comparison of DM8 catalog metadata, SQLAlchemy

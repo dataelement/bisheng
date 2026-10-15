@@ -15,6 +15,7 @@ import { OperationStatus } from './OperationStatus'
 import { PolicyView } from './PolicyView'
 import { SeatsView } from './SeatsView'
 import { SettingsPanel } from './SettingsPanel'
+import { ModelAuditPanel } from './ModelAuditPanel'
 import { licenseStatusKey } from './licensePresentation'
 
 interface DshManagementProps {
@@ -149,6 +150,7 @@ function DshManagementContent({
             )}
             {activeSection === 'models' && config.enabled && <DshModelsView />}
             {activeSection === 'usage' && config.enabled && <PolicyView toolbarTarget={usageToolbarTarget} />}
+            {activeSection === 'model-audit' && config.enabled && <ModelAuditPanel />}
             {activeSection === 'operations' && config.enabled && (
                 <div className="space-y-3">
                     <AuditHistory revision={auditRevision} />

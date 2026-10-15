@@ -1,0 +1,93 @@
+"""One bounded consumer writes independently of model calls."""
+
+import asyncio
+from time import perf_counter
+
+from loguru import logger
+
+from bisheng.dsh.domain.services.model_audit_integrity import verify_content
+from bisheng.dsh.domain.services.profile import profile_scope
+from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
+from bisheng.dsh.infrastructure.model_audit_telemetry import record_audit_metric
+
+
+class DshModelAuditWriter:
+    def __init__(self, repository_scope, storage_factory, *, attempts=3):
+        self.repository_scope, self.storage_factory = repository_scope, storage_factory
+        self.attempts = attempts
+        self.written = self.failed = 0
+
+    async def write(self, event):
+        started = perf_counter()
+        for attempt in range(self.attempts):
+            try:
+                reference = None
+                if event.kind == "body":
+                    from bisheng.dsh.infrastructure.model_audit_codec import AuditScope
+
+                    data = event.metadata
+                    scope = AuditScope(
+                        event.tenant_id,
+                        data["user_id"],
+                        "CONVERSATION" if data.get("conversation_id") is not None else "REQUEST",
+                        data["conversation_id"] if data.get("conversation_id") is not None else event.request_id,
+                    )
+                    reference = await self.storage_factory().put_verified_block(
+                        scope, event.body, key_version=event.metadata.get("key_version")
+                    )
+                await run_audit_blocking(self._persist, event, reference)
+                self.written += 1
+                record_audit_metric(
+                    "written", tenant_id=event.tenant_id, kind=event.kind, duration_ms=(perf_counter() - started) * 1000
+                )
+                return True
+            except Exception as error:
+                # Audit failure is non-critical and must not leak input, keys, or provider errors.
+                logger.warning("DSH audit write failed ({}, attempt {})", type(error).__name__, attempt + 1)
+                if attempt + 1 < self.attempts:
+                    await asyncio.sleep(min(0.05 * 2**attempt, 0.5))
+        self.failed += 1
+        record_audit_metric("write_exhausted", tenant_id=event.tenant_id, kind=event.kind)
+        return False
+
+    def _persist(self, event, reference):
+        with profile_scope(event.tenant_id), self.repository_scope() as repository:
+            if event.kind == "evidence":
+                repository.evidence(event)
+                return
+            row = repository.upsert_request(event)
+            if event.kind == "body":
+                repository.append_occurrence(row, event, reference)
+            elif event.kind == "terminal":
+                repository.save_manifest(row, event)
+                if row.model_result in {"RUNNING", "UNKNOWN"}:
+                    row.model_result, row.model_observed_at = event.metadata["model_result"], event.observed_at
+                row.input_units = event.metadata["input_units"]
+                row.capture_failed |= event.metadata["capture_failed"]
+            elif event.kind in {"response", "usage"}:
+                axis = "response_result" if event.kind == "response" else "usage_settlement"
+                previous = "RUNNING" if event.kind == "response" else "PENDING"
+                if getattr(row, axis) in {previous, "UNKNOWN", "UNCERTAIN"}:
+                    setattr(row, axis, event.metadata[axis])
+                    setattr(
+                        row,
+                        "response_observed_at" if event.kind == "response" else "usage_observed_at",
+                        event.observed_at,
+                    )
+            manifest = repository.manifest(row.request_id)
+            if row.effective_mode == "METADATA":
+                row.content_status = "NOT_CAPTURED"
+            elif row.capture_failed:
+                row.content_status = "PARTIAL"
+            elif manifest is None:
+                row.content_status = "PENDING"
+            elif row.content_status != "COMPLETE":
+                expected_bytes = sum(channel.get("byte_length", 0) for channel in manifest.channels.values())
+                if row.input_bytes + row.output_bytes == expected_bytes:
+                    manifest, occurrences, contents = repository.facts(row.request_id)
+                    row.content_status = verify_content(row, manifest, occurrences, contents)
+                else:
+                    row.content_status = "PARTIAL"
+            row.last_write_at = event.observed_at
+            row.state_version += 1
+            repository.session.add(row)

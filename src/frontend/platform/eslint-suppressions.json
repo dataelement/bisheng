@@ -1148,12 +1148,6 @@
   "src/controllers/request.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/i18n.js": {

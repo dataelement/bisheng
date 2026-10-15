@@ -13,6 +13,7 @@
 | DSH SeatAssignment / Session | F062-dsh-desktop-model-access | Gateway DSH 模块持有固定席位、授权代次、登录会话与刷新凭证真相；BiSheng 只引用 |
 | DSH UserPolicy | F062-dsh-desktop-model-access | BiSheng 一条用户策略保存强类型逐模型配置，每个用户/模型独立月 token 上限，不拥有或复制既有模型供应商配置 |
 | DSH MonthlyUsage / ModelCall / AdminOperation | F062-dsh-desktop-model-access | BiSheng 持有已累计用量准入与实际用量入账、调用记录、策略变更不可变审计、可靠用量补记和跨服务管理操作进度；月汇总按用户、模型、月份分行，明细保留 model_id，Redis 实时执行当前用户与所选模型的独立月额度，SQL 为批量投影 |
+| DSH ModelAuditSetting / SettingChange / Request / Evidence / Manifest / Content / Occurrence / BodyAccess | F062 审计扩展（开发登记，非 beta2 已发布能力） | 开发基线见 audit-guardrails-proposal；仅持有模型审计模式、请求事实、加密原件及查看记录，不接管 ModelCall/MonthlyUsage 写入、不改席位/身份/配额真相。实际发布版本另行登记 |
 
 User、Tenant、LLMServer、LLMModel、PermissionActor 和 F053 ApiCredential 继续由原模块持有；F062 通过原模块业务入口读取、鉴权或调用。User 拟增 dsh_profile_version，由原用户/主部门业务事务递增并在同事务通过 DSH 服务登记 SYNC_PROFILE；不迁移用户领域所有权，不改变 F012/F048 权限及回滚语义。
 
@@ -52,6 +53,8 @@ User、Tenant、LLMServer、LLMModel、PermissionActor 和 F053 ApiCredential �
 
 | 日期 | 内容 | 影响范围 |
 |------|------|----------|
+| 2026-10-14 | 审计异步 SQL/MinIO、管理 API/页面及客户端代码联调完成；本机独立存储最终复跑通过。DM8、正式身份/Electron、并发故障量化及全面门禁仍待验收，见 audit-guardrails-proposal/validation-results.md | 审计开发完成核心链路，非 beta2 发布声明；既有 0.5.0 线协议不变 |
+| 2026-10-14 | 登记模型请求审计扩展的领域所有权与两字段客户端开发契约；服务端分支 feat/3.0.0-dsh-audit，真实双端联调待实现后完成，既有 0.5.0 线协议不变 | 仅审计开发，非 beta2 发布声明 |
 | 2026-09-09 | 修复 SDD 审计、共享、双授权、身份 DTO 和 UNKNOWN 恢复问题；客户端 0.1.0 保持冻结 | F062 |
 | 2026-09-09 | 冻结客户端 0.1.0 契约并要求后续同步客户端；Gateway 开发分支 feat/dsh-access 基于 main，新增旧 License 兼容约束 | F062 |
 | 2026-09-09 | 确认官方 DSH 链路商业控制边界及单 Nginx 入口，补充客户端开发与联调契约 | F062 |

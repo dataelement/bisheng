@@ -87,10 +87,11 @@ from bisheng.worker.config import beat_schedule
 from bisheng.user.domain.services.auth import AuthJwt
 from bisheng.dsh.operations_runtime import _decode_admin_token
 required = {'dsh.project_usage', 'dsh.scan_usage',
-            'dsh.inspect_usage', 'dsh.scan_operations', 'dsh.resume_operation', 'dsh.scan_profiles'}
+            'dsh.inspect_usage', 'dsh.scan_operations', 'dsh.resume_operation', 'dsh.scan_profiles',
+            'dsh.inspect_model_audit', 'dsh.scan_model_audit'}
 assert required <= set(bisheng_celery.tasks)
 assert {beat_schedule[k]['task'] for k in beat_schedule if k.startswith('dsh-')} == {
-    'dsh.scan_usage', 'dsh.scan_operations', 'dsh.scan_profiles'}
+    'dsh.scan_usage', 'dsh.scan_operations', 'dsh.scan_profiles', 'dsh.scan_model_audit'}
 subject = {'user_id': 7, 'tenant_id': 1, 'token_version': 4}
 auth = AuthJwt()
 token = auth.create_access_token(subject)

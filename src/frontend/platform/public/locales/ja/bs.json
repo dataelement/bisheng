@@ -2573,6 +2573,91 @@
     "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
   },
   "dsh": {
+    "modelAudit": "モデル監査",
+    "modelAuditView": {
+      "bodySegment": "原文分割 {{page}} / {{pages}}。ページを切り替えても原文を再取得しません。",
+      "backlogUnknown": "各プロセスのバッファ滞留と完全な消失は全数確認できません。このページの進捗は完全な記録を保証しません。",
+      "missing": {
+        "AWAITING": "モデル呼び出し開始は確認済みですが、監視期間内または処理中です。後で更新してください。",
+        "CONFIRMED": "モデル呼び出し開始は確認済みですが、監視期間後も監査記録がなく、保存の欠落が確認されました。",
+        "DEGRADED_OFF": "監査モードの取得に失敗し、この要求はOFFで処理されました。監査の欠落には含めません。",
+        "MODE_UNKNOWN": "業務の呼び出し記録はありますが、適用された監査モードは不明です。未呼び出しや確定した欠落とは判断できません。",
+        "UNKNOWN": "検証可能な監査証拠がなく、モデル呼び出しと保存対象かどうかを確認できません。"
+      },
+      "tenant": "テナント番号",
+      "selectTenant": "テナントを選択",
+      "mode": "記録モード",
+      "modeHint": "無効化すると新規記録を停止します。保存済み記録は引き続き閲覧できます。原文は継続的に保存されるため、容量と暗号鍵の運用を確認してください。",
+      "scopeHint": "専用クライアントのモデル入口のみを監査します。記録の遅延や欠落があり、完全なチャット履歴ではありません。要求ごとに原文を開き、閲覧を記録します。",
+      "loadError": "監査データを読み込めません。更新して再試行してください。",
+      "empty": "一致する監査記録はありません。",
+      "watermark": "このページの最終書き込み",
+      "all": "すべて",
+      "association": "会話の関連付け",
+      "user": "ユーザー番号",
+      "conversation": "クライアント申告の会話",
+      "original": "原文を表示",
+      "collapse": "閉じる",
+      "timeline": "このユーザーの会話を表示",
+      "invalidContext": "無効な関連情報を無視しました。モデル呼び出しに影響はありません。",
+      "size": "入力 {{count}} 件 · 保存 {{bytes}} バイト",
+      "tokens": "利用台帳のトークン",
+      "unknown": "未確認",
+      "input": "モデル入力",
+      "output": "モデル出力",
+      "gap": "原文の一部が欠落しており、完全な記録ではありません。",
+      "modes": {
+        "OFF": "無効",
+        "METADATA": "メタデータのみ",
+        "CONTENT": "メタデータと原文"
+      },
+      "filters": {
+        "request_id": "要求番号",
+        "user_keyword": "ユーザー名",
+        "conversation_id": "会話番号（完全一致）",
+        "model_name": "モデル名",
+        "provider_name": "提供元",
+        "start_at": "開始日時",
+        "end_at": "終了日時（含まない）"
+      },
+      "axes": {
+        "model_result": "モデル結果",
+        "response_result": "API 応答",
+        "usage_settlement": "利用量の確定",
+        "content_status": "原文の保存"
+      },
+      "kinds": {
+        "chat": "チャット",
+        "compaction": "コンテキスト圧縮",
+        "session-title": "タイトル生成",
+        "unknown": "用途未申告"
+      },
+      "states": {
+        "ALL": "すべての関連状態",
+        "ASSOCIATED": "会話に関連",
+        "UNASSOCIATED": "未関連",
+        "RUNNING": "処理中",
+        "SUCCEEDED": "成功",
+        "FAILED": "失敗",
+        "CANCELLED": "キャンセル",
+        "UNKNOWN": "不明",
+        "COMPLETED": "送信完了",
+        "ERROR": "エラー応答",
+        "INTERRUPTED": "中断",
+        "PENDING": "書き込み待ち",
+        "SETTLED": "確定",
+        "USAGE_UNKNOWN": "利用量不明",
+        "UNCERTAIN": "未確認",
+        "COMPLETE": "完全保存",
+        "PARTIAL": "一部保存",
+        "NOT_CAPTURED": "原文未記録"
+      },
+      "transfer": {
+        "loading": "原文を読み込み中…",
+        "completed": "転送が完了しました。",
+        "interrupted": "読み込みが中断しました。閉じて再試行してください。保存状態は変わりません。"
+      }
+    },
     "searchUsername": "ユーザー名で検索",
     "departmentAndMember": "部門 / メンバー",
     "configuredQuota": "設定枠（Token/月）",

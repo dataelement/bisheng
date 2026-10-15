@@ -2628,6 +2628,91 @@
     "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   },
   "dsh": {
+    "modelAudit": "Model audit",
+    "modelAuditView": {
+      "bodySegment": "Original segment {{page}} / {{pages}}. Page through without fetching the original again.",
+      "backlogUnknown": "Process buffers and total loss cannot be fully measured; page progress does not prove complete coverage.",
+      "missing": {
+        "AWAITING": "Model entry is confirmed, but the observation window is open or the request remains active. Refresh later.",
+        "CONFIRMED": "Model entry is confirmed, but no audit record appeared after the observation window. Retention gap confirmed.",
+        "DEGRADED_OFF": "Audit mode lookup failed and this request used OFF. This is not an audit gap.",
+        "MODE_UNKNOWN": "A business call record exists, but the effective audit mode is unknown. It proves neither no model call nor a confirmed audit gap.",
+        "UNKNOWN": "No verifiable audit evidence is available. Model invocation and retention applicability are unknown."
+      },
+      "tenant": "Tenant ID",
+      "selectTenant": "Select tenant",
+      "mode": "Capture mode",
+      "modeHint": "Turning off stops new capture; existing records remain accessible. Original content is retained continuously. Confirm storage capacity and key operations before enabling it.",
+      "scopeHint": "Only the dedicated Desktop model entry is audited. Records may arrive later or be missing; they are not the complete client chat history. Opening one request reads its original content and records an access attempt.",
+      "loadError": "Could not load audit data. Refresh to retry.",
+      "empty": "No matching audit records.",
+      "watermark": "Latest write on this page",
+      "all": "All",
+      "association": "Conversation association",
+      "user": "User ID",
+      "conversation": "Client-declared conversation",
+      "original": "View original",
+      "collapse": "Collapse",
+      "timeline": "View this user's conversation",
+      "invalidContext": "Invalid client correlation fields were ignored. The model call was unaffected.",
+      "size": "{{count}} input items · {{bytes}} retained bytes",
+      "tokens": "Usage ledger tokens",
+      "unknown": "Unconfirmed",
+      "input": "Model input",
+      "output": "Model output",
+      "gap": "Original fragments are missing. This is not a complete record.",
+      "modes": {
+        "OFF": "Off",
+        "METADATA": "Metadata only",
+        "CONTENT": "Metadata and original"
+      },
+      "filters": {
+        "request_id": "Request ID",
+        "user_keyword": "Username",
+        "conversation_id": "Conversation ID (exact)",
+        "model_name": "Model name",
+        "provider_name": "Provider",
+        "start_at": "From",
+        "end_at": "Until (exclusive)"
+      },
+      "axes": {
+        "model_result": "Model outcome",
+        "response_result": "API response",
+        "usage_settlement": "Usage settlement",
+        "content_status": "Original retention"
+      },
+      "kinds": {
+        "chat": "Chat",
+        "compaction": "Context compaction",
+        "session-title": "Title generation",
+        "unknown": "Purpose not declared"
+      },
+      "states": {
+        "ALL": "All associations",
+        "ASSOCIATED": "Associated",
+        "UNASSOCIATED": "Unassociated",
+        "RUNNING": "Running",
+        "SUCCEEDED": "Succeeded",
+        "FAILED": "Failed",
+        "CANCELLED": "Cancelled",
+        "UNKNOWN": "Unknown",
+        "COMPLETED": "Send completed",
+        "ERROR": "Error response",
+        "INTERRUPTED": "Interrupted",
+        "PENDING": "Pending",
+        "SETTLED": "Settled",
+        "USAGE_UNKNOWN": "Usage unknown",
+        "UNCERTAIN": "Unconfirmed",
+        "COMPLETE": "Complete",
+        "PARTIAL": "Partial",
+        "NOT_CAPTURED": "Not captured"
+      },
+      "transfer": {
+        "loading": "Reading original…",
+        "completed": "Transfer completed.",
+        "interrupted": "Reading did not finish. Collapse and retry; retained content status is unchanged."
+      }
+    },
     "searchUsername": "Search username",
     "departmentAndMember": "Department / member",
     "configuredQuota": "Quota (Token/month)",

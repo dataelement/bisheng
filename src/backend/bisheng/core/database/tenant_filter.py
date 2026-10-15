@@ -109,6 +109,9 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.model_call",
     "bisheng.dsh.domain.models.subject_policy",
     "bisheng.dsh.domain.models.subject_grant",
+    "bisheng.dsh.domain.models.model_audit_setting",
+    "bisheng.dsh.domain.models.model_audit_request",
+    "bisheng.dsh.domain.models.model_audit_content",
 )
 
 

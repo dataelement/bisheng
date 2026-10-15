@@ -2573,6 +2573,91 @@
     "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   },
   "dsh": {
+    "modelAudit": "模型审计",
+    "modelAuditView": {
+      "bodySegment": "原文分段：第 {{page}} / {{pages}} 段；翻页查看，不重复读取原件。",
+      "backlogUnknown": "各进程缓冲积压与完全丢失无法全量确认；本页写入进度不代表完整覆盖。",
+      "missing": {
+        "AWAITING": "已确认模型接口开始调用，审计记录仍在异步观察窗口内或请求仍活动，请稍后刷新。",
+        "CONFIRMED": "已确认模型接口开始调用，但超过观察窗口仍无审计记录，存在已知留存缺口。",
+        "DEGRADED_OFF": "本次读取审计模式失败，已按关闭处理；不计为审计缺口。",
+        "MODE_UNKNOWN": "找到业务调用记录，但本次审计模式无法确认；不能据此断言未调用模型或存在已知缺口。",
+        "UNKNOWN": "没有可核验的审计证据，无法判断是否调用过模型或是否应当留存。"
+      },
+      "tenant": "租户编号",
+      "selectTenant": "选择租户",
+      "mode": "采集模式",
+      "modeHint": "关闭后不再采集新请求；已保存的记录仍可查看。保存原文会持续占用存储，请先确认容量和密钥运维。",
+      "scopeHint": "仅审计客户端专用模型入口。记录可能异步到达或缺失，不代表完整的客户端聊天历史。原文只在明确展开单次请求后读取，并记录查看日志。",
+      "loadError": "审计数据读取失败，请刷新重试。",
+      "empty": "没有匹配的审计记录。",
+      "watermark": "本页最近写入时间",
+      "all": "全部",
+      "association": "会话关联",
+      "user": "用户编号",
+      "conversation": "客户端声明的会话",
+      "original": "查看原文",
+      "collapse": "收起",
+      "timeline": "查看本用户会话",
+      "invalidContext": "部分客户端关联信息无效，已忽略；模型调用不受影响。",
+      "size": "入参 {{count}} 项 · 已保存 {{bytes}} 字节",
+      "tokens": "用量账本 Token",
+      "unknown": "待确认",
+      "input": "模型输入",
+      "output": "模型输出",
+      "gap": "部分正文片段缺失，不能当作完整记录。",
+      "modes": {
+        "OFF": "关闭",
+        "METADATA": "仅元数据",
+        "CONTENT": "元数据与原文"
+      },
+      "filters": {
+        "request_id": "请求编号",
+        "user_keyword": "用户名",
+        "conversation_id": "会话编号（精确）",
+        "model_name": "模型名称",
+        "provider_name": "提供方",
+        "start_at": "开始时间",
+        "end_at": "结束时间（不包含）"
+      },
+      "axes": {
+        "model_result": "模型结果",
+        "response_result": "接口响应",
+        "usage_settlement": "用量结算",
+        "content_status": "正文留存"
+      },
+      "kinds": {
+        "chat": "聊天",
+        "compaction": "上下文压缩",
+        "session-title": "标题生成",
+        "unknown": "未声明用途"
+      },
+      "states": {
+        "ALL": "全部关联状态",
+        "ASSOCIATED": "已关联会话",
+        "UNASSOCIATED": "未关联会话",
+        "RUNNING": "处理中",
+        "SUCCEEDED": "成功",
+        "FAILED": "失败",
+        "CANCELLED": "已取消",
+        "UNKNOWN": "未知",
+        "COMPLETED": "已完成发送",
+        "ERROR": "返回错误",
+        "INTERRUPTED": "已中断",
+        "PENDING": "等待写入",
+        "SETTLED": "已结算",
+        "USAGE_UNKNOWN": "用量未知",
+        "UNCERTAIN": "未确认",
+        "COMPLETE": "完整留存",
+        "PARTIAL": "部分留存",
+        "NOT_CAPTURED": "未采集原文"
+      },
+      "transfer": {
+        "loading": "正在读取原文…",
+        "completed": "本次传输已完成。",
+        "interrupted": "本次读取未完成，请收起后重试；这不改变原文留存状态。"
+      }
+    },
     "searchUsername": "搜索用户名",
     "departmentAndMember": "部门 / 成员",
     "configuredQuota": "设置额度（Token/月）",
