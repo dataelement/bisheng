@@ -25,7 +25,13 @@ export const contentStates = [
   "NOT_CAPTURED",
 ] as const;
 export type AuditMode = "OFF" | "METADATA" | "CONTENT";
-export type AuditModeSnapshot = { mode: AuditMode; version: number };
+export type AuditModeSnapshot = {
+  mode: AuditMode;
+  version: number;
+  content_available?: boolean;
+};
+export type AuditUserOption = { user_id: number; user_name: string };
+export type AuditUserPage = { data: AuditUserOption[]; total: number };
 export type ModelAuditRecord = {
   request_id: string;
   user_id: number;

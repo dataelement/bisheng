@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from bisheng.common.errcode.dsh import DshOperationConflictError
+from bisheng.common.errcode.dsh_audit import DshAuditEncryptionUnavailableError
 from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.dsh.domain.models.model_audit_setting import DshModelAuditSetting, DshModelAuditSettingChange
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
@@ -26,7 +27,9 @@ class DshModelAuditSettingRepository:
         row = self._row()
         return AuditModeSnapshot(mode=row.mode, version=row.version) if row else AuditModeSnapshot()
 
-    def change(self, command: AuditModeCommand, *, actor_user_id: int) -> AuditModeSnapshot:
+    def change(
+        self, command: AuditModeCommand, *, actor_user_id: int, content_available: bool = False
+    ) -> AuditModeSnapshot:
         require_tenant()
         with strict_tenant_filter():
             previous = self.session.exec(
@@ -47,6 +50,8 @@ class DshModelAuditSettingRepository:
         version = row.version if row else 0
         if version != command.expected_version:
             raise DshOperationConflictError()
+        if command.mode == "CONTENT" and not content_available:
+            raise DshAuditEncryptionUnavailableError()
         try:
             with self.session.begin_nested():
                 if row is None:

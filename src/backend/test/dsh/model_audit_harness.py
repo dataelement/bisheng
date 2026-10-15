@@ -51,6 +51,7 @@ class AuditHarness:
             timeout_seconds=0.2,
             authorize_admin=self.authorize,
             repository_scope=lambda: self.scope(DshModelAuditSettingRepository),
+            content_readiness=lambda: len(storage.keys.resolve(storage.keys.active_id)) == 32,
         )
         self.queries = DshModelAuditQueryService(self.authorize, lambda: self.scope(DshModelAuditQueryRepository))
         self.admin = ModelAuditAdministration(

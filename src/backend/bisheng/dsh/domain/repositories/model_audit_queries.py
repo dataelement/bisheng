@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime
 from hashlib import sha256
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from sqlmodel import select
 
 from bisheng.dsh.domain.models.model_audit_content import DshModelAuditBodyAccess
@@ -21,6 +21,18 @@ def as_utc(value):
 
 
 class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
+    def model_names(self, *, page=1, page_size=20, keyword=None):
+        require_tenant()
+        names = select(DshModelAuditRequest.model_name).where(DshModelAuditRequest.model_name != "")
+        if keyword:
+            escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            names = names.where(DshModelAuditRequest.model_name.like("%" + escaped + "%", escape="\\"))
+        total = self.session.exec(names.with_only_columns(func.count(DshModelAuditRequest.model_name.distinct()))).one()
+        rows = self.session.exec(
+            names.distinct().order_by(DshModelAuditRequest.model_name).offset((page - 1) * page_size).limit(page_size)
+        ).all()
+        return {"data": list(rows), "total": total}
+
     @staticmethod
     def pending_tenants(session, *, cursor=None):
         from bisheng.core.context.tenant import bypass_tenant_filter
@@ -35,7 +47,7 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
                         DshModelAuditRequest.response_result == "RUNNING",
                         DshModelAuditRequest.usage_settlement == "PENDING",
                         DshModelAuditRequest.content_status == "PENDING",
-                    )
+                    ),
                 )
                 .distinct()
                 .order_by(DshModelAuditRequest.tenant_id)

@@ -19,6 +19,7 @@ export function ModelAuditMode({
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const canCaptureContent = snapshot?.content_available === true;
   useEffect(() => {
     const controller = new AbortController();
     setSnapshot(null);
@@ -36,7 +37,12 @@ export function ModelAuditMode({
     return () => controller.abort();
   }, [tenantId, revision]);
   const handleSave = async () => {
-    if (!tenantId || !snapshot) return;
+    if (
+      !tenantId ||
+      !snapshot ||
+      (selected === "CONTENT" && !canCaptureContent)
+    )
+      return;
     setBusy(true);
     setFailed(false);
     try {
@@ -61,6 +67,7 @@ export function ModelAuditMode({
           options={(["OFF", "METADATA", "CONTENT"] as const).map((value) => ({
             value,
             label: t("dsh.modelAuditView.modes." + value),
+            disabled: value === "CONTENT" && !canCaptureContent,
           }))}
           disabled={!canConfigure || !snapshot || busy}
           onChange={(value) => setSelected(value as AuditMode)}
@@ -69,7 +76,11 @@ export function ModelAuditMode({
           <Button
             variant="outline"
             disabled={
-              !tenantId || !snapshot || busy || selected === snapshot.mode
+              !tenantId ||
+              !snapshot ||
+              busy ||
+              selected === snapshot.mode ||
+              (selected === "CONTENT" && !canCaptureContent)
             }
             onClick={handleSave}
           >
@@ -84,6 +95,22 @@ export function ModelAuditMode({
           {t("dsh.refresh")}
         </Button>
       </div>
+      {snapshot && !canCaptureContent && (
+        <p role="alert">
+          {t(
+            snapshot.content_available === undefined
+              ? "dsh.modelAuditView.contentReadinessUnknown"
+              : snapshot.mode === "CONTENT"
+                ? "dsh.modelAuditView.contentKeyLost"
+                : "dsh.modelAuditView.contentKeyMissing",
+          )}
+        </p>
+      )}
+      {snapshot && canCaptureContent && (
+        <p className="text-sm text-muted-foreground">
+          {t("dsh.modelAuditView.contentKeyReady")}
+        </p>
+      )}
       {failed && <p role="alert">{t("dsh.modelAuditView.loadError")}</p>}
       {!snapshot && !failed && <p role="status">{t("dsh.loading")}</p>}
     </section>

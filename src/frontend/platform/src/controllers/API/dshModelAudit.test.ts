@@ -8,7 +8,8 @@ vi.mock("@/controllers/request", () => ({
 vi.mock("@/controllers/requestStream", () => ({
   requestStream: () => Promise.resolve(state.stream),
 }));
-import { readAuditBody } from "./dshModelAudit";
+import { getAuditModels, getAuditUsers, readAuditBody } from "./dshModelAudit";
+import request from "@/controllers/request";
 import type { AuditBodyFrame } from "@/types/dshModelAudit";
 
 function source(text: string) {
@@ -45,7 +46,29 @@ async function collect() {
   for await (const frame of readAuditBody("request")) frames.push(frame);
   return frames;
 }
+it("loads audit-scoped user options with tenant, pagination, search and cancellation", async () => {
+  const page = { data: [{ user_id: 20, user_name: "Alice" }], total: 1 };
+  vi.mocked(request.get).mockResolvedValueOnce(page);
+  const signal = new AbortController().signal;
+  const query = { tenant_id: 2, page: 1, page_size: 20, keyword: "ali" };
+  expect(await getAuditUsers(query, signal)).toEqual(page);
+  expect(request.get).toHaveBeenCalledWith(
+    "/api/v1/dsh/admin/model-audit/users",
+    { params: query, signal },
+  );
+});
 describe("bounded audit NDJSON parser", () => {
+  it("loads historical model names within the requested tenant scope", async () => {
+    const page = { data: ["Deleted model"], total: 1 };
+    vi.mocked(request.get).mockResolvedValueOnce(page);
+    const signal = new AbortController().signal;
+    const query = { tenant_id: 2, page: 1, page_size: 20, keyword: "Deleted" };
+    expect(await getAuditModels(query, signal)).toEqual(page);
+    expect(request.get).toHaveBeenLastCalledWith(
+      "/api/v1/dsh/admin/model-audit/models",
+      { params: query, signal },
+    );
+  });
   it("decodes fragmented UTF8 and validates identity, order and terminal transfer", async () => {
     source(
       [meta, part, end].map((item) => JSON.stringify(item) + "\n").join(""),

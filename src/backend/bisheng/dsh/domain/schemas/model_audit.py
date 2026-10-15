@@ -27,6 +27,10 @@ class AuditModeSnapshot(AuditDTO):
     version: int = 0
 
 
+class AuditModeAdminSnapshot(AuditModeSnapshot):
+    content_available: bool
+
+
 class AuditRequestMetadata(AuditDTO):
     request_id: str
     user_id: int

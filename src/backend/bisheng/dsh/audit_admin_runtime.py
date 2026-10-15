@@ -37,10 +37,15 @@ def build_audit_administration(settings):
             timeout_seconds=settings.audit_store_timeout_seconds,
         )
 
+    def content_readiness():
+        AuditKeyRing.from_environment(active_id=settings.audit_active_key_id).resolve(settings.audit_active_key_id)
+        return True
+
     modes = DshModelAuditSettingService(
         None,
         timeout_seconds=settings.audit_mode_read_timeout_seconds,
         authorize_admin=authorize_admin,
         repository_scope=lambda: repository_scope(DshModelAuditSettingRepository),
+        content_readiness=content_readiness,
     )
     return ModelAuditAdministration(queries, DshModelAuditBodyAccessService(queries, storage), modes)

@@ -29,6 +29,36 @@ def get_audit_management(settings=Depends(get_settings)):
     return build_audit_administration(settings)
 
 
+@router.get("/users")
+async def users(
+    response: Response,
+    tenant_id: Tenant = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Limit = 20,
+    keyword: Annotated[str | None, Query(max_length=128)] = None,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.users(user, tenant_id, page=page, page_size=page_size, keyword=keyword))
+
+
+@router.get("/models")
+async def models(
+    response: Response,
+    tenant_id: Tenant = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Limit = 20,
+    keyword: Annotated[str | None, Query(max_length=128)] = None,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(
+        data=await service.queries.models(user.user_id, tenant_id, page=page, page_size=page_size, keyword=keyword)
+    )
+
+
 @router.get("/requests")
 async def requests(
     response: Response,
@@ -41,7 +71,7 @@ async def requests(
     request_id: Annotated[str | None, Query(max_length=36)] = None,
     conversation_id: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
     user_keyword: Annotated[str | None, Query(max_length=128)] = None,
-    model_name: Annotated[str | None, Query(max_length=128)] = None,
+    model_name: Annotated[str | None, Query(max_length=2048)] = None,
     provider_name: Annotated[str | None, Query(max_length=128)] = None,
     model_result: ModelResult | None = None,
     response_result: ResponseResult | None = None,

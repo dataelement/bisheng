@@ -33,6 +33,7 @@ def test_mode_and_change_history_rollback_together():
             DshModelAuditSettingRepository(session).change(
                 AuditModeCommand(operation_id="rollback", expected_version=0, mode="CONTENT"),
                 actor_user_id=20,
+                content_available=True,
             )
             session.rollback()
         with audit_session(engine) as session:
@@ -46,7 +47,7 @@ def test_off_default_atomic_changes_idempotency_and_tenant_isolation():
             repo = DshModelAuditSettingRepository(session)
             assert repo.read().mode == "OFF"
             cmd = AuditModeCommand(operation_id="operation-1", expected_version=0, mode="CONTENT")
-            changed = repo.change(cmd, actor_user_id=20)
+            changed = repo.change(cmd, actor_user_id=20, content_available=True)
             session.commit()
             assert changed.version == 1 and changed.mode == "CONTENT"
             assert repo.change(cmd, actor_user_id=20) == changed

@@ -13,6 +13,9 @@ import { useTranslation } from "react-i18next";
 import { DshChoice, DshPager, dshTime } from "./common";
 import { ModelAuditBody } from "./ModelAuditBody";
 import { ModelAuditMode } from "./ModelAuditMode";
+import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
+import { ModelAuditUserSelect } from "./ModelAuditUserSelect";
+import { ModelAuditModelSelect } from "./ModelAuditModelSelect";
 import { useModelAudit } from "./useModelAudit";
 
 export function ModelAuditPanel() {
@@ -29,46 +32,30 @@ export function ModelAuditPanel() {
   const canConfigure =
     identity?.is_child_admin !== true &&
     (identity?.role === "admin" || identity?.is_global_super === true);
-  const [tenant, setTenant] = useState(initialTenant);
-  const [tenantDraft, setTenantDraft] = useState(
-    initialTenant ? String(initialTenant) : "",
+  const [tenant, setTenant] = useState<number | undefined>(
+    canConfigure ? undefined : initialTenant,
   );
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
       <h2 className="font-medium">{t("dsh.modelAudit")}</h2>
       {canConfigure && (
-        <div className="flex flex-wrap items-end gap-2">
-          <label htmlFor="audit-tenant" className="space-y-1">
-            <span className="block text-sm">
-              {t("dsh.modelAuditView.tenant")}
-            </span>
-            <Input
-              id="audit-tenant"
-              value={tenantDraft}
-              type="number"
-              min={1}
-              onChange={(event) => setTenantDraft(event.target.value)}
-            />
-          </label>
-          <Button
-            variant="outline"
-            disabled={
-              !Number.isSafeInteger(Number(tenantDraft)) ||
-              Number(tenantDraft) < 1
-            }
-            onClick={() => setTenant(Number(tenantDraft))}
-          >
-            {t("dsh.modelAuditView.selectTenant")}
-          </Button>
-        </div>
+        <ModelAuditTenantSelect
+          initialTenant={initialTenant}
+          value={tenant}
+          onChange={setTenant}
+        />
       )}
-      <ModelAuditMode
-        key={"mode-" + tenant}
-        tenantId={tenant}
-        canConfigure={canConfigure}
-      />
-      <ModelAuditRequests key={"requests-" + tenant} tenantId={tenant} />
+      {tenant !== undefined && (
+        <>
+          <ModelAuditMode
+            key={"mode-" + tenant}
+            tenantId={tenant}
+            canConfigure={canConfigure}
+          />
+          <ModelAuditRequests key={"requests-" + tenant} tenantId={tenant} />
+        </>
+      )}
     </div>
   );
 }
@@ -85,17 +72,16 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
   const [history, setHistory] = useState<(string | undefined)[]>([]);
   const [revision, setRevision] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { page, loading, failed, missing } = useModelAudit(query, revision);
   const handleFilter = (changes: Partial<ModelAuditQuery>) => {
     setHistory([]);
     setExpanded(null);
     setQuery((old) => ({ ...old, ...changes, cursor: undefined }));
   };
-  const textFilters = [
+  const debugTextFilters = [
     "request_id",
-    "user_keyword",
     "conversation_id",
-    "model_name",
     "provider_name",
   ] as const;
   const axes = [
@@ -104,50 +90,49 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
     ["usage_settlement", settlements],
     ["content_status", contentStates],
   ] as const;
+  const advancedCount = [
+    ...debugTextFilters,
+    ...axes.map(([key]) => key),
+    "association_status" as const,
+  ].filter((key) => query[key] !== undefined && query[key] !== "").length;
+  const renderTextFilter = (key: (typeof debugTextFilters)[number]) => (
+    <label key={key} htmlFor={"audit-" + key} className="space-y-1">
+      <span className="block text-sm">
+        {t("dsh.modelAuditView.filters." + key)}
+      </span>
+      <Input
+        id={"audit-" + key}
+        aria-label={t("dsh.modelAuditView.filters." + key)}
+        value={query[key] || ""}
+        maxLength={
+          key === "conversation_id" ? 256 : key === "request_id" ? 36 : 128
+        }
+        onChange={(event) =>
+          handleFilter({ [key]: event.target.value || undefined })
+        }
+      />
+    </label>
+  );
   return (
     <section className="space-y-4" aria-label={t("dsh.modelAudit")}>
       <p className="text-sm text-muted-foreground">
         {t("dsh.modelAuditView.scopeHint")}
       </p>
       <div className="grid gap-3 md:grid-cols-3">
-        {textFilters.map((key) => (
-          <label key={key} htmlFor={"audit-" + key} className="space-y-1">
-            <span className="block text-sm">
-              {t("dsh.modelAuditView.filters." + key)}
-            </span>
-            <Input
-              id={"audit-" + key}
-              aria-label={t("dsh.modelAuditView.filters." + key)}
-              value={query[key] || ""}
-              maxLength={
-                key === "conversation_id"
-                  ? undefined
-                  : key === "request_id"
-                    ? 36
-                    : 128
-              }
-              onChange={(event) =>
-                handleFilter({ [key]: event.target.value || undefined })
-              }
-            />
-          </label>
-        ))}
-        <label htmlFor="audit-user-id" className="space-y-1">
-          <span className="block text-sm">{t("dsh.modelAuditView.user")}</span>
-          <Input
-            id="audit-user-id"
-            type="number"
-            min={1}
-            value={query.user_id || ""}
-            onChange={(event) =>
-              handleFilter({
-                user_id: event.target.value
-                  ? Number(event.target.value)
-                  : undefined,
-              })
-            }
-          />
-        </label>
+        <ModelAuditUserSelect
+          tenantId={tenantId}
+          value={query.user_id}
+          onChange={(userId) =>
+            handleFilter({ user_id: userId, user_keyword: undefined })
+          }
+        />
+        <ModelAuditModelSelect
+          tenantId={tenantId}
+          value={query.model_name}
+          onChange={(name) => handleFilter({ model_name: name })}
+        />
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
         {(["start_at", "end_at"] as const).map((key) => (
           <label key={key} htmlFor={"audit-" + key}>
             <span className="block text-sm">
@@ -155,7 +140,9 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
             </span>
             <Input
               id={"audit-" + key}
+              aria-label={t("dsh.modelAuditView.filters." + key)}
               type="datetime-local"
+              value={query[key] ? localDateTime(query[key]) : ""}
               onChange={(event) =>
                 handleFilter({
                   [key]: event.target.value
@@ -168,47 +155,15 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
         ))}
       </div>
       <div className="flex flex-wrap gap-2">
-        {axes.map(([key, choices]) => (
-          <DshChoice
-            key={key}
-            label={t("dsh.modelAuditView.axes." + key)}
-            value={query[key] || "ALL"}
-            options={[
-              {
-                value: "ALL",
-                label:
-                  t("dsh.modelAuditView.axes." + key) +
-                  " · " +
-                  t("dsh.modelAuditView.all"),
-              },
-              ...choices.map((value) => ({
-                value,
-                label: t("dsh.modelAuditView.states." + value),
-              })),
-            ]}
-            onChange={(value) =>
-              handleFilter({ [key]: value === "ALL" ? undefined : value })
-            }
-          />
-        ))}
-        <DshChoice
-          label={t("dsh.modelAuditView.association")}
-          value={query.association_status || "ALL"}
-          options={(["ALL", "ASSOCIATED", "UNASSOCIATED"] as const).map(
-            (value) => ({
-              value,
-              label: t("dsh.modelAuditView.states." + value),
-            }),
-          )}
-          onChange={(value) =>
-            handleFilter({
-              association_status:
-                value === "ALL"
-                  ? undefined
-                  : (value as "ASSOCIATED" | "UNASSOCIATED"),
-            })
-          }
-        />
+        <Button
+          variant="outline"
+          aria-expanded={advancedOpen}
+          aria-controls="audit-advanced-filters"
+          onClick={() => setAdvancedOpen((old) => !old)}
+        >
+          {t("dsh.modelAuditView.advancedFilters")}
+          {advancedCount > 0 ? ` (${advancedCount})` : ""}
+        </Button>
         <Button
           variant="outline"
           disabled={loading}
@@ -219,7 +174,67 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
         >
           {t("dsh.refresh")}
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setHistory([]);
+            setExpanded(null);
+            setQuery({ tenant_id: tenantId, limit: 20 });
+          }}
+        >
+          {t("dsh.modelAuditView.resetFilters")}
+        </Button>
       </div>
+      {advancedOpen && (
+        <div id="audit-advanced-filters" className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            {debugTextFilters.map(renderTextFilter)}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {axes.map(([key, choices]) => (
+              <DshChoice
+                key={key}
+                label={t("dsh.modelAuditView.axes." + key)}
+                value={query[key] || "ALL"}
+                options={[
+                  {
+                    value: "ALL",
+                    label:
+                      t("dsh.modelAuditView.axes." + key) +
+                      " · " +
+                      t("dsh.modelAuditView.all"),
+                  },
+                  ...choices.map((value) => ({
+                    value,
+                    label: t("dsh.modelAuditView.states." + value),
+                  })),
+                ]}
+                onChange={(value) =>
+                  handleFilter({ [key]: value === "ALL" ? undefined : value })
+                }
+              />
+            ))}
+            <DshChoice
+              label={t("dsh.modelAuditView.association")}
+              value={query.association_status || "ALL"}
+              options={(["ALL", "ASSOCIATED", "UNASSOCIATED"] as const).map(
+                (value) => ({
+                  value,
+                  label: t("dsh.modelAuditView.states." + value),
+                }),
+              )}
+              onChange={(value) =>
+                handleFilter({
+                  association_status:
+                    value === "ALL"
+                      ? undefined
+                      : (value as "ASSOCIATED" | "UNASSOCIATED"),
+                })
+              }
+            />
+          </div>
+        </div>
+      )}
       <p className="text-sm text-muted-foreground">
         {t("dsh.modelAuditView.watermark")}:{" "}
         {dshTime(page?.progress.last_write_at)}
@@ -347,4 +362,11 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
       />
     </section>
   );
+}
+
+function localDateTime(value: string): string {
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 16);
 }

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuditBodyFrame, ModelAuditRecord } from "@/types/dshModelAudit";
+import { userContext } from "@/contexts/userContext";
+import type { ContextType } from "react";
 
 const api = vi.hoisted(() => ({
   page: vi.fn(),
@@ -8,7 +10,9 @@ const api = vi.hoisted(() => ({
   mode: vi.fn(),
   save: vi.fn(),
   detail: vi.fn(),
+  tenants: vi.fn(),
 }));
+vi.mock("@/controllers/API/tenant", () => ({ getTenantsApi: api.tenants }));
 vi.mock("@/controllers/API/dshModelAudit", () => ({
   getModelAudit: api.page,
   readAuditBody: api.body,
@@ -16,7 +20,7 @@ vi.mock("@/controllers/API/dshModelAudit", () => ({
   saveAuditMode: api.save,
   getModelAuditDetail: api.detail,
 }));
-import { ModelAuditRequests } from "./ModelAuditPanel";
+import { ModelAuditPanel, ModelAuditRequests } from "./ModelAuditPanel";
 import { ModelAuditMode } from "./ModelAuditMode";
 import { ModelAuditBody } from "./ModelAuditBody";
 const record: ModelAuditRecord = {
@@ -43,6 +47,14 @@ const record: ModelAuditRecord = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  api.tenants.mockReset();
+  api.tenants.mockResolvedValue({
+    data: [
+      { id: 1, tenant_name: "First tenant", tenant_code: "first" },
+      { id: 2, tenant_name: "Second tenant", tenant_code: "second" },
+    ],
+    total: 2,
+  });
   api.page.mockResolvedValue({
     items: [record],
     next_cursor: "next",
@@ -72,6 +84,117 @@ beforeEach(() => {
       };
     },
   );
+});
+
+function renderPanel(globalAdmin = true, tenantId = 1) {
+  const value = {
+    user: {
+      tenant_id: tenantId,
+      role: globalAdmin ? "admin" : "user",
+      is_global_super: globalAdmin,
+      is_child_admin: !globalAdmin,
+    },
+  } as unknown as ContextType<typeof userContext>;
+  return render(
+    <userContext.Provider value={value}>
+      <ModelAuditPanel />
+    </userContext.Provider>,
+  );
+}
+
+describe("audit tenant selection", () => {
+  it("selects existing tenants by name and clears the previous tenant's originals", async () => {
+    renderPanel();
+    await screen.findByText("First tenant (first)");
+    expect(screen.queryByLabelText("dsh.modelAuditView.tenant")).toBeNull();
+    await screen.findByText("Synthetic");
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.original" }),
+    );
+    await screen.findByText(/private-original/);
+    const oldSignal = api.page.mock.calls.at(-1)?.[1] as AbortSignal;
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: "dsh.modelAuditView.selectTenant" }),
+      { key: "ArrowDown" },
+    );
+    fireEvent.click(
+      await screen.findByRole("option", { name: "Second tenant (second)" }),
+    );
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        { tenant_id: 2, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(oldSignal.aborted).toBe(true);
+    expect(screen.queryByText(/private-original/)).toBeNull();
+    expect(api.save).not.toHaveBeenCalled();
+  });
+
+  it("does not request audit data until an existing tenant is confirmed", async () => {
+    api.tenants.mockReturnValue(new Promise(() => {}));
+    renderPanel();
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(api.mode).not.toHaveBeenCalled();
+    expect(api.page).not.toHaveBeenCalled();
+  });
+
+  it("loads subsequent tenant pages and ignores invalid IDs", async () => {
+    api.tenants
+      .mockResolvedValueOnce({
+        data: [{ id: null }, { id: "" }, { id: -1 }],
+        total: 101,
+      })
+      .mockResolvedValueOnce({
+        data: [{ id: 2, tenant_name: "Second tenant", tenant_code: "second" }],
+        total: 101,
+      });
+    renderPanel();
+    const selector = screen.getByRole("combobox");
+    await waitFor(() => expect(selector).not.toBeDisabled());
+    expect(api.tenants).toHaveBeenLastCalledWith({ page: 2, page_size: 100 });
+    expect(api.page).not.toHaveBeenCalled();
+    fireEvent.keyDown(selector, { key: "ArrowDown" });
+    expect(await screen.findAllByRole("option")).toHaveLength(1);
+    fireEvent.click(
+      screen.getByRole("option", { name: "Second tenant (second)" }),
+    );
+    await waitFor(() =>
+      expect(api.page).toHaveBeenCalledWith(
+        { tenant_id: 2, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
+  });
+
+  it("offers retry after loading fails and handles an empty list", async () => {
+    api.tenants
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValueOnce({ data: [], total: 0 });
+    renderPanel();
+    await screen.findByRole("alert");
+    expect(screen.getByRole("combobox")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "dsh.refresh" }));
+    await screen.findByText("dsh.modelAuditView.noTenants");
+    expect(api.page).not.toHaveBeenCalled();
+    expect(api.mode).not.toHaveBeenCalled();
+  });
+
+  it("keeps tenant administrators scoped to their tenant without loading the global list", async () => {
+    renderPanel(false, 2);
+    await screen.findByText("Synthetic");
+    expect(api.tenants).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("combobox", {
+        name: "dsh.modelAuditView.selectTenant",
+      }),
+    ).toBeNull();
+    expect(api.page).toHaveBeenCalledWith(
+      { tenant_id: 2, limit: 20 },
+      expect.any(AbortSignal),
+    );
+    expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
+  });
 });
 describe("request-card audit UI", () => {
   it("renders bounded original segments without truncation or refetch", async () => {
@@ -123,6 +246,11 @@ describe("request-card audit UI", () => {
       gap: "MODE_UNKNOWN",
     });
     render(<ModelAuditRequests tenantId={2} />);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "dsh.modelAuditView.advancedFilters",
+      }),
+    );
     fireEvent.change(
       screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
       { target: { value: "missing" } },
@@ -133,6 +261,11 @@ describe("request-card audit UI", () => {
   it("clears the exact-request filter when opening the full user conversation", async () => {
     render(<ModelAuditRequests tenantId={2} />);
     await screen.findByText("Synthetic");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "dsh.modelAuditView.advancedFilters",
+      }),
+    );
     fireEvent.change(
       screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
       { target: { value: "one" } },

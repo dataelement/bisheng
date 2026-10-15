@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 from bisheng.common.errcode.dsh_audit import DshAuditQueryInvalidError, DshAuditRequestUnavailableError
+from bisheng.common.schemas.api import PageData
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
 
@@ -35,6 +36,25 @@ class DshModelAuditQueryService:
             return await self.execute(tenant, lambda repository: repository.page(**query))
         except ValueError:
             raise DshAuditQueryInvalidError() from None
+
+    async def models(self, actor_id, tenant_id, *, page=1, page_size=20, keyword=None):
+        tenant = await self.target(actor_id, tenant_id)
+        return await self.execute(
+            tenant, lambda repository: repository.model_names(page=page, page_size=page_size, keyword=keyword)
+        )
+
+    async def users(self, actor, tenant_id, *, page=1, page_size=20, keyword=None):
+        from bisheng.tenant.domain.services.tenant_service import TenantService
+
+        tenant = await self.target(actor.user_id, tenant_id)
+        with profile_scope(tenant):
+            result = await TenantService.aget_tenant_users(
+                tenant, page=page, page_size=page_size, keyword=keyword, login_user=actor
+            )
+        return PageData[dict](
+            data=[{"user_id": row["user_id"], "user_name": row["user_name"]} for row in result["data"]],
+            total=result["total"],
+        ).model_dump()
 
     async def detail(self, actor_id, tenant_id, request_id):
         tenant = await self.target(actor_id, tenant_id)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from loguru import logger
 
 from bisheng.common.errcode.permission import PermissionDeniedError
-from bisheng.dsh.domain.schemas.model_audit import AuditMode, AuditModeSnapshot
+from bisheng.dsh.domain.schemas.model_audit import AuditMode, AuditModeAdminSnapshot, AuditModeSnapshot
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
 
@@ -19,11 +19,29 @@ class EffectiveAuditMode:
 
 
 class DshModelAuditSettingService:
-    def __init__(self, read_snapshot, *, timeout_seconds: float, authorize_admin=None, repository_scope=None):
+    def __init__(
+        self,
+        read_snapshot,
+        *,
+        timeout_seconds: float,
+        authorize_admin=None,
+        repository_scope=None,
+        content_readiness=None,
+    ):
         self.read_snapshot = read_snapshot
         self.timeout_seconds = timeout_seconds
         self.authorize_admin = authorize_admin
         self.repository_scope = repository_scope
+        self.content_readiness = content_readiness
+
+    def content_available(self) -> bool:
+        if self.content_readiness is None:
+            return False
+        try:
+            return self.content_readiness() is True
+        except (ValueError, TypeError):
+            # Expose readiness only, never parser errors containing key material.
+            return False
 
     async def read_admin(self, actor_id: int, tenant_id: int | None):
         actor, target = await self.authorize_admin(actor_id, tenant_id)
@@ -33,7 +51,8 @@ class DshModelAuditSettingService:
             with profile_scope(target), self.repository_scope() as repository:
                 return repository.read()
 
-        return await run_audit_blocking(read)
+        snapshot = await run_audit_blocking(read)
+        return AuditModeAdminSnapshot(**snapshot.model_dump(), content_available=self.content_available())
 
     async def change_admin(self, actor_id: int, tenant_id: int, command):
         actor, target = await self.authorize_admin(actor_id, tenant_id)
@@ -41,8 +60,10 @@ class DshModelAuditSettingService:
             raise PermissionDeniedError()
 
         def change():
+            available = self.content_available()
             with profile_scope(target), self.repository_scope() as repository:
-                return repository.change(command, actor_user_id=actor_id)
+                snapshot = repository.change(command, actor_user_id=actor_id, content_available=available)
+                return AuditModeAdminSnapshot(**snapshot.model_dump(), content_available=available)
 
         return await run_audit_blocking(change)
 

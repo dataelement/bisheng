@@ -8,9 +8,34 @@ import type {
   ModelAuditQuery,
   MissingModelAudit,
   ModelAuditRecord,
+  AuditUserPage,
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
+export async function getAuditModels(
+  query: {
+    tenant_id?: number;
+    page: number;
+    page_size: number;
+    keyword?: string;
+  },
+  signal?: AbortSignal,
+): Promise<{ data: string[]; total: number }> {
+  return await request.get(base + "/models", { params: query, signal });
+}
+
+export async function getAuditUsers(
+  query: {
+    tenant_id?: number;
+    page: number;
+    page_size: number;
+    keyword?: string;
+  },
+  signal?: AbortSignal,
+): Promise<AuditUserPage> {
+  return await request.get(base + "/users", { params: query, signal });
+}
+
 export async function getModelAuditDetail(
   requestId: string,
   tenantId?: number,

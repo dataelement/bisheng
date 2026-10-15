@@ -21,3 +21,8 @@ class DshAuditOriginalUnavailableError(BaseErrorCode):
 class DshAuditAccessLogUnavailableError(BaseErrorCode):
     Code: int = 26134
     Msg: str = "Audit access logging unavailable"
+
+
+class DshAuditEncryptionUnavailableError(BaseErrorCode):
+    Code: int = 26135
+    Msg: str = "Audit encryption key is missing or invalid"
