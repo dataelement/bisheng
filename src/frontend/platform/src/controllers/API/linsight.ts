@@ -8,6 +8,8 @@ export interface SkillBrief {
   display_name: string;
   description: string;
   enabled: boolean;
+  // Preselected in the end-user picker of every new conversation
+  default_checked: boolean;
   source: 'manual' | 'sop_migrated';
   create_time?: string;
   update_time?: string;
@@ -95,6 +97,10 @@ export const skillApi = {
 
   setSkillStatus: (name: string, enabled: boolean) => {
     return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/status`, { enabled });
+  },
+
+  setSkillDefaultChecked: (name: string, defaultChecked: boolean) => {
+    return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/default-checked`, { default_checked: defaultChecked });
   },
 
   deleteSkill: (name: string) => {

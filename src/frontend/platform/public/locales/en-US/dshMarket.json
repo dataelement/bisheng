@@ -1,6 +1,11 @@
 {
   "title": "Enterprise plugin market",
   "intro": "Administrators import plugins. Employees can install validated plugins from Client.",
+  "installPolicy": "Installation settings",
+  "allow_third_party_plugins": "Allow third-party plugins",
+  "allow_third_party_workbenches": "Allow third-party workbenches",
+  "policyLoadFailed": "Could not load installation settings. Click to retry.",
+  "policySaveFailed": "Could not save installation settings. Try again.",
   "import": "Import plugin",
   "name": "Plugin",
   "version": "Current version",

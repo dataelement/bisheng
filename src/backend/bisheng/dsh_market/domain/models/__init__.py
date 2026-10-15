@@ -80,3 +80,14 @@ class MarketDevice(SQLModel, table=True):
     device_id: str = Field(max_length=64)
     plugins: list = Field(sa_column=Column(JsonType, nullable=False))
     synced_at: datetime = Field(default_factory=now)
+
+
+class MarketInstallPolicy(SQLModel, table=True):
+    __tablename__ = "dsh_market_install_policy"
+    tenant_id: int = Field(primary_key=True)
+    allow_third_party_plugins: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
+    )
+    allow_third_party_workbenches: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=false())
+    )

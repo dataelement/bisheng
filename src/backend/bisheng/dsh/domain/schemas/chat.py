@@ -127,8 +127,8 @@ class DshChatRequest(DshContract):
             for part in message.content
             if part.type == "image_url"
         ]
-        if len(images) > 10 or sum(len(part.image_url.url) for part in images) > 28_000_000:
-            raise ValueError("Use at most ten images within 20 MiB per request")
+        if sum(len(part.image_url.url) for part in images) > 28_000_000:
+            raise ValueError("Image data exceeds the total request size limit")
         if self.model_id > 9223372036854775807:
             raise ValueError("Model identifier is out of range")
         if self.max_tokens is not None and self.max_completion_tokens is not None:
