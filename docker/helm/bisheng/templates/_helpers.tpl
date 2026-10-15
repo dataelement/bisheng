@@ -91,7 +91,5 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.sandbox.discoverIndexStart | quote }}
 - name: BS_SANDBOX_CONF__DISCOVER_TTL_S
   value: {{ .Values.sandbox.discoverTtlS | quote }}
-- name: BS_SANDBOX_CONF__CODE_NODE_ENABLED
-  value: {{ .Values.sandbox.codeNodeEnabled | quote }}
 {{- end }}
 {{- end }}

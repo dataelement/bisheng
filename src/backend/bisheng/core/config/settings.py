@@ -904,7 +904,6 @@ class SandboxConf(BaseModel):
         default=0,
         description="Total bytes of knowledge-base images written per run; 0 means 5 x max_copy_in_bytes",
     )
-    code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
 
     # --- type=local isolation (LocalExecutor) ---
     local_isolation: str = Field(

@@ -69,6 +69,14 @@ networkPolicy:
       podSelector:
         matchLabels:
           app.kubernetes.io/component: backend
+    # Task mode (Linsight) runs in its own Deployment; the worker image's
+    # entrypoint does not start it.
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: bisheng
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/component: linsight
 
 livenessProbe:
   httpGet:

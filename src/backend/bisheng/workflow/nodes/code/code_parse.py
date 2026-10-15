@@ -145,8 +145,7 @@ _CODE_INTERPRETER_TOOL_KEY = "bisheng_code_interpreter"
 def make_code_parser(code: str, *, execute_code=None, enabled: bool | None = None):
     """Out-of-process parser. Backend kind is read from the tool row at exec time.
 
-    ``enabled`` is ignored. ``sandbox_conf.code_node_enabled`` no longer selects
-    an in-process fallback. ``workflow.code_node_enabled`` is the only gate, and
+    ``enabled`` is ignored. ``workflow.code_node_enabled`` is the only gate, and
     it is checked before this function runs.
     """
     del enabled

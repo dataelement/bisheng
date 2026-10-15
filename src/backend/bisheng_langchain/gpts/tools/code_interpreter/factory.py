@@ -25,7 +25,6 @@ _CONTAINER_POOL_KEYS = (
     "enable_uid_isolation",
     "pool_acquire_timeout_s",
     "max_copy_in_bytes",
-    "code_node_enabled",
     "sandbox_conf",
 )
 

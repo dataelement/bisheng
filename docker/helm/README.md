@@ -30,9 +30,9 @@ helm upgrade --install bisheng docker/helm/bisheng \
 `SANDBOX_TOKEN` must be the same on both releases.
 
 NetworkPolicy on the sandbox chart only allows TCP/8080 from pods in namespace
-`bisheng` labeled `app.kubernetes.io/component=worker` or `backend` (automatic
-`kubernetes.io/metadata.name` label). Change `networkPolicy.allowFrom` if you
-use other names. Linsight is not included.
+`bisheng` labeled `app.kubernetes.io/component=worker`, `backend` or `linsight`
+(automatic `kubernetes.io/metadata.name` label). Change `networkPolicy.allowFrom`
+if you use other names.
 
 ## Why not one ClusterIP for runners
 
