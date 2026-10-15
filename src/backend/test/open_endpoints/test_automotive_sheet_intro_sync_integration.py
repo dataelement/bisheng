@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -8,6 +9,9 @@ from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.developer_token.domain.models import DeveloperToken
 from bisheng.open_endpoints.domain.schemas.automotive_sheet_intro_sync import AutomotiveSheetIntroSyncConfig
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
+from bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_client import (
+    AutomotiveSheetIntroFetchedPdf,
+)
 from bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_service import (
     AUTOMOTIVE_SHEET_INTRO_SYNC_ENDPOINT_TAG,
     AutomotiveSheetIntroSyncService,
@@ -35,7 +39,13 @@ async def test_two_runs_use_same_fixed_filename_and_endpoint(async_db_session):
     service.config_service = MagicMock()
     service.config_service.get_config = AsyncMock(return_value=config)
     service.pdf_client = MagicMock()
-    service.pdf_client.fetch_pdf = AsyncMock(return_value=b"%PDF-1.4")
+    service.pdf_client.fetch_pdf = AsyncMock(
+        return_value=AutomotiveSheetIntroFetchedPdf(
+            content=b"%PDF-1.4",
+            upstream_ip="203.0.113.10",
+            succeeded_at=datetime(2026, 10, 15, 11, 31, 0),
+        )
+    )
     service.run_log_repository.insert = AsyncMock(side_effect=[1, 2])
     service.run_log_repository.update = AsyncMock()
 
@@ -98,8 +108,16 @@ async def test_two_runs_use_same_fixed_filename_and_endpoint(async_db_session):
                                     "bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_service.DeveloperTokenService._get_bound_user_payload",
                                     AsyncMock(),
                                 ):
-                                    first = await service.run(tenant_id=5, trigger_type="scheduled")
-                                    second = await service.run(tenant_id=5, trigger_type="scheduled")
+                                    with patch(
+                                        "bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_service.DeveloperTokenRepository.update_last_used",
+                                        AsyncMock(return_value=True),
+                                    ) as update_last_used:
+                                        first = await service.run(tenant_id=5, trigger_type="scheduled")
+                                        second = await service.run(tenant_id=5, trigger_type="scheduled")
+
+    assert update_last_used.await_count == 2
+    assert update_last_used.await_args.kwargs["used_at"] == datetime(2026, 10, 15, 11, 31, 0)
+    assert update_last_used.await_args.args[1] == "203.0.113.10"
 
     assert first.status == "success"
     assert second.status == "success"

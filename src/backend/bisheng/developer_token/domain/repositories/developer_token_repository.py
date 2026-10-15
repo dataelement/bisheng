@@ -138,7 +138,23 @@ class DeveloperTokenRepository:
                 return (getattr(result, "rowcount", 0) or 0) > 0
 
     @classmethod
-    async def update_last_used(cls, token_id: int, ip_address: str | None) -> bool:
+    async def update_last_used(
+        cls,
+        token_id: int,
+        ip_address: str | None,
+        *,
+        used_at: datetime | None = None,
+    ) -> bool:
+        """写入开发者 Token 的最近使用时间和来源地址.
+
+        Args:
+            token_id: 开发者 Token 主键.
+            ip_address: 来源地址. 开放接口鉴权时是客户端 IP, 定时同步时是上游连接 IP.
+            used_at: 使用时间. 为空时用当前时间.
+
+        Returns:
+            是否更新到未删除的 Token 行.
+        """
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 result = await session.exec(
@@ -148,7 +164,7 @@ class DeveloperTokenRepository:
                         DeveloperToken.logic_delete == 0,
                     )
                     .values(
-                        last_used_time=datetime.now(),
+                        last_used_time=used_at or datetime.now(),
                         last_used_ip=ip_address,
                     )
                 )

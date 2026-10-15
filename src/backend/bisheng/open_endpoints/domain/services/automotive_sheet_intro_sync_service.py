@@ -24,12 +24,12 @@ from bisheng.open_endpoints.domain.models.filelib_scheduled_sync_run_log import 
 from bisheng.open_endpoints.domain.repositories.implementations.filelib_scheduled_sync_run_log_repository_impl import (
     FilelibScheduledSyncRunLogRepositoryImpl,
 )
+from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_repository_impl import (
+    FilelibSyncRepositoryImpl,
+)
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_scheduled_sync_run_log_repository import (
     FilelibScheduledSyncRunLogCreate,
     FilelibScheduledSyncRunLogUpdate,
-)
-from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_repository_impl import (
-    FilelibSyncRepositoryImpl,
 )
 from bisheng.open_endpoints.domain.schemas.automotive_sheet_intro_sync import (
     AutomotiveSheetIntroSyncConfig,
@@ -134,13 +134,22 @@ class AutomotiveSheetIntroSyncService:
                 )
             )
 
-            pdf_bytes = await self.pdf_client.fetch_pdf(
+            fetched = await self.pdf_client.fetch_pdf(
                 api_url=str(config.api_url),
                 method=config.api_method,
                 timeout_seconds=config.api_timeout_seconds,
                 api_ssl_verify=bool(config.api_ssl_verify),
             )
-            temp_file_path = await self._write_temp_pdf(config.file_name, pdf_bytes)
+            # 只记录定时任务. 手动测试同步不改 Token 的最近使用.
+            if trigger_type == "scheduled":
+                recorded = await DeveloperTokenRepository.update_last_used(
+                    int(token.id),
+                    fetched.upstream_ip,
+                    used_at=fetched.succeeded_at,
+                )
+                if not recorded:
+                    raise DeveloperTokenMissingError()
+            temp_file_path = await self._write_temp_pdf(config.file_name, fetched.content)
 
             login_user = await DeveloperTokenService._get_bound_user_payload(int(tenant_id), int(token.user_id))
             params = await self._build_filelib_sync_params(token=token, config=config)
