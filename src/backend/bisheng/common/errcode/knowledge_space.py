@@ -343,6 +343,27 @@ class KnowledgeDocumentActiveShareError(BaseErrorCode):
     Msg: str = "文档仍存在有效分享，请先撤回分享"
 
 
+class KnowledgeViolationDeleteForbiddenError(BaseErrorCode):
+    """无权违规删除, 或从个人库发起, 或功能关闭."""
+
+    Code: int = 18052
+    Msg: str = "无权对这份文档做违规删除"
+
+
+class KnowledgeViolationDocumentIdentityMissingError(BaseErrorCode):
+    """文件没有知识文档身份, 无法确认全部副本."""
+
+    Code: int = 18053
+    Msg: str = "无法确认这份文档的全部副本"
+
+
+class KnowledgeViolationDocumentBusyError(BaseErrorCode):
+    """发布或分享还在准备中, 整单拒绝."""
+
+    Code: int = 18054
+    Msg: str = "文档正在发布或分享, 请稍后重试"
+
+
 class PortalManualRecommendationInvalidError(BaseErrorCode):
     Code: int = 18080
     Msg: str = "人工推荐知识无效，请检查知识库范围、文件状态及归属"

@@ -55,6 +55,8 @@ import { LoadMore } from "./LoadMore";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
+import { ViolationDeleteDialog } from "../ViolationDeleteDialog";
+import { canOfferKnowledgeViolationDelete } from "../violationDeleteAccess";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { MoveFolderDialog } from "./MoveFolderDialog";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
@@ -292,6 +294,7 @@ export function KnowledgeSpaceContent({
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [violationFile, setViolationFile] = useState<KnowledgeFile | null>(null);
+    const [violationDeleteTarget, setViolationDeleteTarget] = useState<KnowledgeFile | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
     const [isBatchCategorying, setIsBatchCategorying] = useState(false);
     const [isBatchSettingBusinessDomain, setIsBatchSettingBusinessDomain] = useState(false);
@@ -603,6 +606,7 @@ export function KnowledgeSpaceContent({
     const canUseAddActions = canCreateFolder && !isSearching;
 
     const { showToast } = useToastContext();
+    const offerViolationDelete = canOfferKnowledgeViolationDelete(space.spaceLevel, space.role);
     const confirm = useConfirm();
 
 
@@ -1503,6 +1507,16 @@ export function KnowledgeSpaceContent({
         }
     };
 
+    const performDelete = async (file: KnowledgeFile) => {
+        if (!effectiveDeleteEntryIds.has(file.id)) {
+            showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
+            return;
+        }
+        const ok = await confirmDeleteMultiVersionFile([file]);
+        if (!ok) return;
+        onDeleteFile(file.id);
+    };
+
     const handleDelete = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         if (!file) return;
@@ -1512,10 +1526,12 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        const ok = await confirmDeleteMultiVersionFile([file]);
-        if (!ok) return;
+        if (offerViolationDelete && file.type !== FileType.FOLDER) {
+            setViolationDeleteTarget(file);
+            return;
+        }
 
-        onDeleteFile(fileId);
+        await performDelete(file);
     };
 
     const handleBatchRetry = async () => {
@@ -2207,6 +2223,22 @@ export function KnowledgeSpaceContent({
                     />
                 </>
             )}
+            <ViolationDeleteDialog
+                fileId={violationDeleteTarget?.id ?? null}
+                fileName={violationDeleteTarget?.name}
+                onClose={() => setViolationDeleteTarget(null)}
+                onDeleteWithoutDeduct={() => {
+                    if (!violationDeleteTarget) return;
+                    void performDelete(violationDeleteTarget);
+                }}
+                onDeducted={() => {
+                    if (!violationDeleteTarget) return;
+                    markPendingDeletion([violationDeleteTarget.id]);
+                    setFiles((prev) => prev.filter((item) => item.id !== violationDeleteTarget.id));
+                    setTotal((prev) => Math.max(0, prev - 1));
+                    showToast({ message: localize("com_knowledge.violation_delete_done"), status: "success" });
+                }}
+            />
         </div>
     );
 }

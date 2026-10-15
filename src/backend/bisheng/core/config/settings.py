@@ -1140,6 +1140,10 @@ class PointsConf(BaseModel):
     sync_outbox_enabled: bool = Field(default=False, description="是否消费外部同步发件箱")
     rank_cron_enabled: bool = Field(default=True, description="是否刷新积分榜快照")
     monthly_reward_enabled: bool = Field(default=True, description="是否执行月度管理员奖励")
+    knowledge_violation_delete_enabled: bool = Field(
+        default=True,
+        description="是否允许知识文档违规删除",
+    )
 
 
 class Settings(BaseModel):
