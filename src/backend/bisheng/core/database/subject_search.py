@@ -60,12 +60,15 @@ def _prefix_dm(element, compiler, **kwargs):
 
 
 def case_sensitive_equals(column, keyword: str):
-    return _ExactText(column, literal(keyword))
+    return _ExactText(column, literal(keyword)).as_comparison(1, 2)
 
 
 def case_sensitive_prefix(column, keyword: str):
     # Keep a normal-column range candidate before the binary residual predicate.
-    return and_(column.like(escape_like(keyword) + "%", escape="/"), _PrefixText(column, literal(keyword)))
+    return and_(
+        column.like(escape_like(keyword) + "%", escape="/"),
+        _PrefixText(column, literal(keyword)).as_comparison(1, 2),
+    )
 
 
 def exact_id_priority(column, keyword: str):

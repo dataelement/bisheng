@@ -105,3 +105,11 @@
 - `test/tenant/test_tenant_mount_service.py::TestUnmountChild::test_unmount_migrates_resources_archives_and_unsets`
 - `test/tenant/test_tenant_mount_service.py::TestMountChildSubtreeSync::test_mount_invokes_subtree_sync_and_records_counts`
 - `test/tenant/test_tenant_mount_service_transaction.py::test_mount_child_writes_root_dept_id_and_single_commit`
+
+## 105 升级时的真实达梦验证（2026-10-15）
+
+迁移从实际 `f061_merge_cofco_909_f066_heads` 向前执行至 `f076_subject_id_search_indexes`，包括 F068、合并 revision 和情报游标列；没有 downgrade 或重建数据。停写快照覆盖业务库 123 张表及 OpenFGA 库 6 张表；迁移后所有原表行数一致，没有新增/缺失表。两个 external_id 索引在实际达梦中创建成功。
+
+真实达梦首次检索检查发现 Boolean FunctionElement 被 AND 条件编译成 `(BINARY ... LIKE ...) = 1`，达梦拒绝该语法。已通过 SQLAlchemy `as_comparison(1, 2)` 标记为比较表达式，保持原索引分支、参数和值不变，并补编译回归，防止重新添加 `= 1`。修正后本地聚焦回归 153 passed、4 skipped，改动文件 Ruff 和架构守卫通过。
+
+修正后的真实 DM 精确、前缀、大小写、ID 中段不命中及字面 `%/_` 检查通过；实际用户/部门表查询通过，单次 SQL 约 2–16ms。**这只是只读冒烟，不能作为全入口、并发 P95 或 MySQL 性能验收。** 105 使用基于已构建后端 digest 叠加这一文件修正的本地镜像；后续正式镜像须包含本次修正。部署信息另见 deployment-105.md。

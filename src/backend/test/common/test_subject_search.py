@@ -1,7 +1,7 @@
 """Subject identities are literal prefixes, not numeric coercions or wildcards."""
 
 import pytest
-from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, select
+from sqlalchemy import Column, Integer, MetaData, String, Table, case, create_engine, select
 from sqlalchemy.dialects import mysql
 from sqlalchemy.engine.default import DefaultDialect
 
@@ -109,6 +109,10 @@ def test_mysql_and_dm_compile_index_range_and_binary_residual(subjects):
     dm_sql = str(stmt.compile(dialect=dm, compile_kwargs={"literal_binds": True}))
     assert "BINARY people.ext LIKE" in dm_sql
     assert "people.ext LIKE" in dm_sql
+    assert ") = 1" not in dm_sql
+    projected = select(case((case_sensitive_prefix(users.c.ext, "jia_"), 1), else_=0))
+    projected_sql = str(projected.compile(dialect=dm, compile_kwargs={"literal_binds": True}))
+    assert ") = 1" not in projected_sql
 
 
 def test_id_branch_itself_is_case_sensitive(subjects):
