@@ -345,7 +345,9 @@ export async function getChannelDetailApi(channelId: string): Promise<ChannelDet
  * Lazily called only inside the in-channel view to fill unread badges.
  */
 export async function getChannelUnreadCountsApi(channelId: string): Promise<Record<string, number>> {
-    const res: any = await request.get(`/api/v1/channel/manager/${channelId}/unread-counts`);
+    const res: any = await request.get(`/api/v1/channel/manager/${channelId}/unread-counts`, {
+        skipServiceMaintenance: true,
+    });
     return res?.data ?? res ?? {};
 }
 
