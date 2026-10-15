@@ -1,6 +1,7 @@
 # Release Contract - v3.0.0-beta4
 
-Status: draft, pending F074 discovery confirmation. Scope: additions on the
+Status: F074 discovery confirmed by the user on 2026-10-15; spec/design pending.
+Scope: additions on the
 `codex/bs-web-search` branch; this does not redefine previously shipped features.
 
 ## Baseline
@@ -39,3 +40,4 @@ draft allocates no new numeric codes.
 ## History
 
 2026-10-15: Initial draft for F074 discovery.
+2026-10-15: Record user confirmation of the revised published-tool discovery.

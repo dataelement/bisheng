@@ -1,8 +1,9 @@
 # F074 - Published Tool Invocation for Work
 
-Status: revised discovery, awaiting user confirmation. Latest user correction
-replaces the fixed search proposal. No business code or spec/design/tasks have
-been written. Spec and design gates remain separate under SDD-Guide section 3.
+Status: confirmed by the user on 2026-10-15 ("确认OK"). Latest user correction
+replaces the fixed search proposal. The next gate is spec confirmation; design
+confirmation remains separate under SDD-Guide section 3. This document records
+the confirmed discovery, not implementation or deployment acceptance.
 
 ## Baseline and Scope
 
@@ -176,9 +177,10 @@ endpoint itself, including aliases/other tool codes, and prevent recursion.
 - Middleware/route integration, existing DSH/tool permission regressions, Ruff
   and architecture guard. Real Work/Gateway/upstream acceptance remains pending.
 
-## Confirmation Requested
+## Confirmation Record
 
-Confirm this revised Discovery, including API-only publication management,
-verified DSH Bearer, tool/result contract and proposed limits. Next prepare and
-review spec, obtain its confirmation, then design and its confirmation, then
-tasks, implementation, tests and local commit. No feature completion is claimed.
+User confirmed this revised Discovery on 2026-10-15, including API-only
+publication management, verified DSH Bearer, tool/result contract and proposed
+limits. Next prepare and review spec, obtain its confirmation, then design and
+its confirmation, then tasks, implementation, tests and local commit. No feature
+completion is claimed. No authorization to push was added by this confirmation.
