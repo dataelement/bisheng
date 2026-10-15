@@ -501,5 +501,9 @@
   "26201": "Offline plugin bundle validation failed",
   "26202": "Plugin state changed; refresh and retry",
   "26203": "Plugin or published version not found",
-  "26204": "Tenant administrator access is required"
+  "26204": "Tenant administrator access is required",
+  "26205": "Workbench archive validation failed",
+  "26206": "Workbench identity or version conflict; refresh and retry",
+  "26207": "Workbench or current version not found",
+  "26208": "Workbench file is missing or failed integrity checks"
 }
