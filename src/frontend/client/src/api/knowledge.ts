@@ -3245,6 +3245,77 @@ export async function moveFolderApi(
     );
 }
 
+export interface ViolationDeleteRuleOption {
+    rule_code: string;
+    name: string;
+    score: number;
+}
+
+export interface ViolationDeleteLibrary {
+    space_id: number;
+    level: string;
+    entry_type: string;
+    file_id: number;
+}
+
+export interface ViolationDeletePreview {
+    file_id: number;
+    document_id: number;
+    scope_tier: string;
+    libraries: ViolationDeleteLibrary[];
+    payee_user_id: number | null;
+    can_deduct: boolean;
+    reason: string | null;
+    rule_code: string | null;
+    score: number | null;
+    rules: ViolationDeleteRuleOption[];
+}
+
+export interface ViolationDeleteResult {
+    deleted: boolean;
+    document_id: number;
+    deducted: boolean;
+    pending_deduct: boolean;
+    reason: string | null;
+    scope_tier: string;
+    score: number | null;
+    rule_code: string | null;
+    target_user_id: number | null;
+}
+
+async function postViolationDelete<T>(
+    fileId: string,
+    ruleCode?: string | null,
+    commit = false,
+    remark?: string | null,
+): Promise<T> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/files/${fileId}/violation-delete${commit ? "" : "/preview"}`,
+        {
+            rule_code: ruleCode || null,
+            remark: commit ? (remark?.trim() || null) : null,
+        },
+    ) as ApiResponse<T>;
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || "violation delete failed");
+    }
+    return res.data as T;
+}
+
+/** 预览违规删除的档位和扣分, 不写库. */
+export async function previewViolationDeleteApi(fileId: string, ruleCode?: string): Promise<ViolationDeletePreview> {
+    return postViolationDelete<ViolationDeletePreview>(fileId, ruleCode, false);
+}
+
+/** 确认违规删除并按规则扣分. 不扣分不要调这个接口, 走原来的删除. */
+export async function commitViolationDeleteApi(
+    fileId: string,
+    ruleCode?: string | null,
+    remark?: string | null,
+): Promise<ViolationDeleteResult> {
+    return postViolationDelete<ViolationDeleteResult>(fileId, ruleCode, true, remark);
+}
+
 export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
     return withKnowledgeMutationLog(
         "delete-file",

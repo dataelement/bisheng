@@ -3,7 +3,8 @@
 默认启用（系统内置）：
 - G1–G4：获取类内置规则
 - M1 / M4 / M6：月奖内置规则
-- R1–R3：扣减默认规则
+- R1–R3：专家问答扣减默认规则
+- R4–R6：知识文档扣减默认规则, 分值按库档位
 
 其余 G5–G7、M2/M3/M5/M7/M8 仍入库，默认 disabled，可由运营启用。
 迁移补种按 rule_code 幂等插入；状态同步见 f080。
@@ -131,6 +132,36 @@ SEED_RULES = [
         "status": "enabled",
         "sort_order": 23,
     },
+    {
+        "rule_code": "R4",
+        "rule_type": "deduct",
+        "name": "知识文档色情低俗/暴力违法",
+        "score_expr": {"mode": "library_scope", "public": 3, "department": 2, "team": 1},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 24,
+    },
+    {
+        "rule_code": "R5",
+        "rule_type": "deduct",
+        "name": "知识文档不当言论",
+        "score_expr": {"mode": "library_scope", "public": 3, "department": 2, "team": 1},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 25,
+    },
+    {
+        "rule_code": "R6",
+        "rule_type": "deduct",
+        "name": "知识文档其他违反规范",
+        "score_expr": {"mode": "library_scope", "public": 3, "department": 2, "team": 1},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 26,
+    },
     # --- 月奖 M*：仅 M1/M4/M6 默认启用 ---
     {
         "rule_code": "M1",
@@ -215,7 +246,9 @@ SEED_RULES = [
 ]
 
 # 系统默认启用的编码（便于迁移/脚本对齐）。
-DEFAULT_ENABLED_RULE_CODES = frozenset({"G1", "G2", "G3", "G4", "R1", "R2", "R3", "M1", "M4", "M6"})
+DEFAULT_ENABLED_RULE_CODES = frozenset(
+    {"G1", "G2", "G3", "G4", "R1", "R2", "R3", "R4", "R5", "R6", "M1", "M4", "M6"}
+)
 
 # 种子入库时展示名与默认名一致；运营后续只改 display_name。
 for _seed in SEED_RULES:

@@ -98,10 +98,29 @@ class PointsPendingDeductService:
         biz_id: str,
         operator_id: int,
         remark: str | None = None,
+        resolved_score: int | None = None,
+        scope_tier: str | None = None,
+        idempotency_key: str | None = None,
     ) -> DeductAttemptResult:
-        """尝试按 R* 扣分；失败则写入补扣队列（删除已成功时的兜底）。"""
+        """尝试按规则扣分; 失败则写入补扣队列 (删除已成功时的兜底).
+
+        Args:
+            tenant_id: 租户.
+            user_id: 被扣人.
+            rule_code: 扣减规则编码.
+            biz_type: 业务类型.
+            biz_id: 业务主键.
+            operator_id: 操作者.
+            remark: 备注.
+            resolved_score: 知识文档确认时已经算出的扣分绝对值. 空则读规则的单一 score.
+            scope_tier: 知识文档档位. 专家问答不传.
+            idempotency_key: 调用方指定的幂等键. 空则按规则和业务主键生成.
+
+        Returns:
+            是否入账, 是否进入补扣, 以及原因.
+        """
         code = rule_code.strip().upper()
-        key = stable_deduct_idempotency_key(code, biz_type, biz_id)
+        key = idempotency_key or stable_deduct_idempotency_key(code, biz_type, biz_id)
         try:
             async with get_async_db_session() as session:
                 repo = PointsRepository(session)
@@ -109,7 +128,10 @@ class PointsPendingDeductService:
                 rule = await repo.get_rule(tenant_id, code)
                 if rule is None or rule.rule_type != "deduct" or rule.status != "enabled":
                     raise PointsRuleNotFoundError()
-                score = abs(int((rule.score_expr or {}).get("score", 0)))
+                if resolved_score is not None:
+                    score = abs(int(resolved_score))
+                else:
+                    score = abs(int((rule.score_expr or {}).get("score", 0)))
                 if score == 0:
                     raise PointsInvalidAdjustError(msg="扣减规则分值为 0")
                 rule_name = resolve_point_rule_display_name(rule)
@@ -139,6 +161,8 @@ class PointsPendingDeductService:
                     operator_id=operator_id,
                     remark=remark,
                     last_error="ledger_returned_no_log",
+                    scope_tier=scope_tier,
+                    score_snapshot=score,
                 )
                 return DeductAttemptResult(applied=False, pending=True, reason="ledger_empty")
             await self._notify_admin_deduct(
@@ -165,6 +189,8 @@ class PointsPendingDeductService:
                 operator_id=operator_id,
                 remark=remark,
                 last_error=str(exc)[:1000],
+                scope_tier=scope_tier,
+                score_snapshot=resolved_score,
             )
             return DeductAttemptResult(applied=False, pending=True, reason=type(exc).__name__)
 
@@ -203,8 +229,24 @@ class PointsPendingDeductService:
         operator_id: int,
         remark: str | None,
         last_error: str | None,
+        scope_tier: str | None = None,
+        score_snapshot: int | None = None,
     ) -> None:
-        """写入补扣行；已存在则仅更新 last_error。"""
+        """写入补扣行; 已存在则只更新错误, 不覆盖已记下的金额快照.
+
+        Args:
+            tenant_id: 租户.
+            user_id: 被扣人.
+            rule_code: 扣减规则编码.
+            biz_type: 业务类型.
+            biz_id: 业务主键.
+            idempotency_key: 与正式流水相同的幂等键.
+            operator_id: 操作者.
+            remark: 备注.
+            last_error: 本次失败原因.
+            scope_tier: 知识文档档位.
+            score_snapshot: 确认时的扣分绝对值.
+        """
         try:
             async with get_async_db_session() as session:
                 repo = PointsRepository(session)
@@ -228,6 +270,8 @@ class PointsPendingDeductService:
                             idempotency_key=idempotency_key,
                             operator_id=operator_id,
                             remark=remark,
+                            scope_tier=scope_tier,
+                            score_snapshot=score_snapshot,
                             status="pending",
                             last_error=last_error,
                             next_retry_at=datetime.utcnow() + timedelta(seconds=30),
@@ -244,7 +288,10 @@ class PointsPendingDeductService:
             rule = await repo.get_rule(int(row.tenant_id), row.rule_code)
             if rule is None or rule.rule_type != "deduct" or rule.status != "enabled":
                 raise PointsRuleNotFoundError()
-            score = abs(int((rule.score_expr or {}).get("score", 0)))
+            if row.score_snapshot is not None:
+                score = abs(int(row.score_snapshot))
+            else:
+                score = abs(int((rule.score_expr or {}).get("score", 0)))
             if score == 0:
                 raise PointsInvalidAdjustError(msg="扣减规则分值为 0")
             result = await ledger.deduct(

@@ -7,9 +7,17 @@ from sqlalchemy.orm.attributes import flag_modified
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
+from bisheng.points.domain.constants.library_scope_score import (
+    is_library_scope_rule,
+    validate_library_scope_score_expr,
+)
 from bisheng.points.domain.constants.optional_fixed_score_rules import validate_deferred_config_rule_can_enable
 from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.constants.seed_rules import seed_default_name
+from bisheng.points.domain.constants.library_scope_score import (
+    is_library_scope_rule,
+    validate_library_scope_score_expr,
+)
 from bisheng.points.domain.constants.tier_rule_score_expr import validate_g3_tier_score_expr
 from bisheng.points.domain.models import PointRule
 from bisheng.points.domain.schemas.points_schema import (
@@ -77,6 +85,11 @@ class PointsRuleService:
         code = (rule_code or "").strip().upper()
         if code == "G3":
             err = validate_g3_tier_score_expr(score_expr)
+            if err:
+                raise PointsRuleConflictError(msg=err)
+            return
+        if is_library_scope_rule(code):
+            err = validate_library_scope_score_expr(score_expr)
             if err:
                 raise PointsRuleConflictError(msg=err)
             return

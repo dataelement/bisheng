@@ -411,6 +411,22 @@ class PointPendingDeduct(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(String(200), comment="扣减原因备注"),
     )
+    scope_tier: str | None = Field(
+        default=None,
+        sa_column=Column(
+            String(16),
+            nullable=True,
+            comment="知识文档扣分档位 public/department/team, 专家问答为空",
+        ),
+    )
+    score_snapshot: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            comment="入队时已决定的扣分绝对值, 空则重试时按规则当前分值",
+        ),
+    )
     # pending / done / dead
     status: str = Field(
         default="pending",

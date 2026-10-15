@@ -37,6 +37,7 @@ from bisheng.knowledge.api.router import (
     knowledge_space_router,
     knowledge_space_tag_library_router,
     knowledge_version_router,
+    knowledge_violation_delete_router,
     qa_router,
     shougang_portal_router,
 )
@@ -83,6 +84,7 @@ router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
 router.include_router(shougang_portal_router)
 router.include_router(knowledge_version_router)
+router.include_router(knowledge_violation_delete_router)
 router.include_router(knowledge_recycle_router)
 router.include_router(knowledge_migration_router)
 router.include_router(server_router)
