@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import ClassVar, Optional
 
 from pydantic import field_validator
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_, func, or_, text, update
+from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint, and_, func, or_, text, update
 from sqlalchemy.orm import selectinload
 from sqlmodel import Field, Relationship, col, select
 
@@ -107,7 +107,10 @@ class User(UserBase, table=True):
     departments: list["Department"] = Relationship(link_model=UserDepartment)
 
     __tablename__ = "user"
-    __table_args__ = (UniqueConstraint("source", "external_id", name="uk_user_source_external_id"),)
+    __table_args__ = (
+        UniqueConstraint("source", "external_id", name="uk_user_source_external_id"),
+        Index("ix_user_external_id_search", "external_id"),
+    )
 
 
 class UserRead(UserBase):

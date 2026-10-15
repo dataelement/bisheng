@@ -1,8 +1,9 @@
+import { ApproverUserPicker } from "./components/ApproverUserPicker"
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import SelectSearch from "@/components/bs-ui/select/select";
-import { getRolesApi, getUsersApi } from "@/controllers/API/user";
+import { getRolesApi } from "@/controllers/API/user";
 import { Switch } from "@/components/bs-ui/switch";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import {
@@ -63,13 +64,14 @@ const HIDDEN_DETAIL_KEYS = new Set([
 ]);
 
 function StatusBadge({ enabled }: { enabled?: boolean }) {
+  const { t } = useTranslation("bs");
   return enabled ? (
     <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-green-50 text-green-600 border border-green-200 dark:bg-green-500/15 dark:text-green-400 dark:border-green-500/30">
-      已启用
+      {t("approvalPage.enabled")}
     </span>
   ) : (
     <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200 dark:bg-gray-50/10 dark:text-gray-400 dark:border-gray-50/20">
-      已停用
+      {t("approvalPage.disabled")}
     </span>
   );
 }
@@ -396,7 +398,7 @@ function RouteDialog({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如：管理员直接通过"
+              placeholder={t("subjectSearch.routeExample")}
               className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
@@ -559,7 +561,7 @@ function FlowDialog({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如：菜单权限审批流程 A"
+              placeholder={t("subjectSearch.flowExample")}
               className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
@@ -621,11 +623,6 @@ function NodeDialog({
 
   // user picker state for direct_user source
   const [userPickerOpen, setUserPickerOpen] = useState(false);
-  const [userSearch, setUserSearch] = useState("");
-  const [userList, setUserList] = useState<{ user_id: number; user_name: string }[]>([]);
-  const [userPage, setUserPage] = useState(1);
-  const [userHasMore, setUserHasMore] = useState(false);
-  const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
@@ -656,46 +653,10 @@ function NodeDialog({
     }
   }, [open]);
 
-  const PAGE_SIZE = 50;
-
-  const loadUsers = (page: number, search: string, append: boolean) => {
-    setUserLoading(true);
-    getUsersApi({ name: search, page, pageSize: PAGE_SIZE, simple: true }).then((res) => {
-      const data: { user_id: number; user_name: string }[] = res.data ?? [];
-      setUserList((prev) => append ? [...prev, ...data] : data);
-      setUserHasMore(data.length >= PAGE_SIZE);
-    }).catch(() => {
-      if (!append) setUserList([]);
-    }).finally(() => setUserLoading(false));
-  };
-
-  useEffect(() => {
-    if (!userPickerOpen) return;
-    const timer = setTimeout(() => {
-      setUserPage(1);
-      loadUsers(1, userSearch, false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [userPickerOpen, userSearch]);
-
-  const handleUserListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    if (!userHasMore || userLoading) return;
-    const el = e.currentTarget;
-    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-      const nextPage = userPage + 1;
-      setUserPage(nextPage);
-      loadUsers(nextPage, userSearch, true);
-    }
-  };
-
   const openUserPicker = () => {
     const existing = sources.find((s) => s.type === "direct_user");
     setSelectedUserIds(existing?.userIds ?? []);
     setSelectedUserNames(existing?.userNames ?? []);
-    setUserSearch("");
-    setUserPage(1);
-    setUserHasMore(false);
-    setUserList([]);
     setUserPickerOpen(true);
   };
 
@@ -739,7 +700,7 @@ function NodeDialog({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如：申请人部门管理员审批"
+              placeholder={t("subjectSearch.nodeExample")}
               className="mt-1 block h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
             />
           </label>
@@ -838,55 +799,7 @@ function NodeDialog({
         <DialogHeader>
           <DialogTitle>{t("approvalPage.approverSource.direct_user")}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-3 py-2">
-          <input
-            value={userSearch}
-            onChange={(e) => setUserSearch(e.target.value)}
-            placeholder={t("approvalPage.searchUser")}
-            className="block h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-          />
-          <div
-            className="max-h-60 overflow-y-auto rounded-lg border border-border divide-y divide-border"
-            onScroll={handleUserListScroll}
-          >
-            {userList.length === 0 && !userLoading && (
-              <div className="py-4 text-center text-xs text-muted-foreground">暂无用户</div>
-            )}
-            {userList.map((u) => {
-              const checked = selectedUserIds.includes(u.user_id);
-              return (
-                <label
-                  key={u.user_id}
-                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-50/10"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => {
-                      if (checked) {
-                        setSelectedUserIds((ids) => ids.filter((id) => id !== u.user_id));
-                        setSelectedUserNames((names) => names.filter((_, i) => selectedUserIds[i] !== u.user_id));
-                      } else {
-                        setSelectedUserIds((ids) => [...ids, u.user_id]);
-                        setSelectedUserNames((names) => [...names, u.user_name]);
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-border accent-primary"
-                  />
-                  <span className="text-sm text-foreground">{u.user_name}</span>
-                </label>
-              );
-            })}
-            {userLoading && (
-              <div className="py-2 text-center text-xs text-muted-foreground">加载中…</div>
-            )}
-          </div>
-          {selectedUserIds.length > 0 && (
-            <div className="text-xs text-muted-foreground">
-              已选 {selectedUserIds.length} 人：{selectedUserNames.join("、")}
-            </div>
-          )}
-        </div>
+        <ApproverUserPicker value={selectedUserIds} names={selectedUserNames} onChange={(ids, names) => { setSelectedUserIds(ids); setSelectedUserNames(names) }} />
         <DialogFooter>
           <button
             type="button"
@@ -1173,11 +1086,6 @@ export default function ApprovalPage() {
   // exception approver picker dialog state
   const [exceptionPickerOpen, setExceptionPickerOpen] = useState(false);
   const [exceptionPickerItem, setExceptionPickerItem] = useState<ApprovalExceptionItem | null>(null);
-  const [exceptionPickerSearch, setExceptionPickerSearch] = useState("");
-  const [exceptionPickerList, setExceptionPickerList] = useState<{ user_id: number; user_name: string }[]>([]);
-  const [exceptionPickerPage, setExceptionPickerPage] = useState(1);
-  const [exceptionPickerHasMore, setExceptionPickerHasMore] = useState(false);
-  const [exceptionPickerLoading, setExceptionPickerLoading] = useState(false);
   const [exceptionPickerTempIds, setExceptionPickerTempIds] = useState<number[]>([]);
   const [exceptionPickerTempNames, setExceptionPickerTempNames] = useState<string[]>([]);
 
@@ -1259,28 +1167,6 @@ export default function ApprovalPage() {
   useEffect(() => {
     void loadPage();
   }, []);
-
-  // exception approver picker: load users
-  const EX_PAGE_SIZE = 50;
-  const loadExceptionPickerUsers = (page: number, search: string, append: boolean) => {
-    setExceptionPickerLoading(true);
-    getUsersApi({ name: search, page, pageSize: EX_PAGE_SIZE, simple: true }).then((res) => {
-      const data: { user_id: number; user_name: string }[] = res.data ?? [];
-      setExceptionPickerList((prev) => append ? [...prev, ...data] : data);
-      setExceptionPickerHasMore(data.length >= EX_PAGE_SIZE);
-    }).catch(() => {
-      if (!append) setExceptionPickerList([]);
-    }).finally(() => setExceptionPickerLoading(false));
-  };
-
-  useEffect(() => {
-    if (!exceptionPickerOpen) return;
-    const timer = setTimeout(() => {
-      setExceptionPickerPage(1);
-      loadExceptionPickerUsers(1, exceptionPickerSearch, false);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [exceptionPickerOpen, exceptionPickerSearch]);
 
   // ── scenario actions ──────────────────────────────────────────────────────
   const handleAddScenario = async (preset: ApprovalScenarioPreset) => {
@@ -1450,7 +1336,7 @@ export default function ApprovalPage() {
   // ── flow preview ─────────────────────────────────────────────────────────
   const handleFlowPreview = async (route: ApprovalRouteItem) => {
     if (!route.flow_definition_id) return;
-    const flowName = flows.find((f) => f.id === route.flow_definition_id)?.flow_name ?? `流程 #${route.flow_definition_id}`;
+    const flowName = flows.find((f) => f.id === route.flow_definition_id)?.flow_name ?? t("subjectSearch.flowNumber", { id: route.flow_definition_id });
     try {
       const nodeList = await listApprovalNodesApi(route.flow_definition_id);
       setFlowPreviewDialog({ open: true, flowName, nodes: nodeList });
@@ -1769,7 +1655,7 @@ export default function ApprovalPage() {
                             {/* name + condition */}
                             <div className="flex-1 min-w-0">
                               <div className="text-sm font-medium text-foreground leading-tight">
-                                {route.route_name || `分支 #${route.id}`}
+                                {route.route_name || t("subjectSearch.routeNumber", { id: route.id })}
                               </div>
                               {matchLabel && (
                                 <div className="mt-0.5 text-xs text-muted-foreground">
@@ -1787,7 +1673,7 @@ export default function ApprovalPage() {
                               ) : (
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-foreground">
-                                    {flowName ?? `流程 #${route.flow_definition_id}`}
+                                    {flowName ?? t("subjectSearch.flowNumber", { id: route.flow_definition_id })}
                                   </span>
                                   <button
                                     type="button"
@@ -1977,7 +1863,7 @@ export default function ApprovalPage() {
                                     {node.node_name || node.node_code}
                                   </div>
                                   <div className="mt-0.5 text-xs text-muted-foreground">
-                                    当前节点通过后，才会生成下一节点任务
+                                    {t("subjectSearch.nextNodeHint")}
                                   </div>
                                 </div>
                                 <div className={`shrink-0 flex items-center gap-1.5 ${!isNodeEditMode ? "pointer-events-none opacity-40" : ""}`}>
@@ -2147,10 +2033,6 @@ export default function ApprovalPage() {
                             onClick={() => {
                               setExceptionPickerTempIds([]);
                               setExceptionPickerTempNames([]);
-                              setExceptionPickerSearch("");
-                              setExceptionPickerPage(1);
-                              setExceptionPickerHasMore(false);
-                              setExceptionPickerList([]);
                               setExceptionPickerItem(item);
                               setExceptionPickerOpen(true);
                             }}
@@ -2233,18 +2115,18 @@ export default function ApprovalPage() {
                         className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                       >
                         {expandedProgressIds.has(item.id) ? (
-                          <><ChevronUp size={12} /> 收起审批进度</>
+                          <><ChevronUp size={12} /> {t("subjectSearch.collapseProgress")}</>
                         ) : (
-                          <><ChevronDown size={12} /> 查看审批进度</>
+                          <><ChevronDown size={12} /> {t("subjectSearch.showProgress")}</>
                         )}
                       </button>
                       {expandedProgressIds.has(item.id) && (
                         loadingProgressId === item.id ? (
-                          <div className="mt-2 text-xs text-muted-foreground">加载中…</div>
+                          <div className="mt-2 text-xs text-muted-foreground">{t("loading")}</div>
                         ) : instanceDetailCache[item.id] ? (
                           <ApprovalTimeline detail={instanceDetailCache[item.id]} />
                         ) : (
-                          <div className="mt-2 text-xs text-muted-foreground">暂无进度数据</div>
+                          <div className="mt-2 text-xs text-muted-foreground">{t("subjectSearch.noProgress")}</div>
                         )
                       )}
                     </div>
@@ -2401,65 +2283,7 @@ export default function ApprovalPage() {
           <DialogHeader>
             <DialogTitle>{t("approvalPage.assignApproversAction")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <input
-              value={exceptionPickerSearch}
-              onChange={(e) => setExceptionPickerSearch(e.target.value)}
-              placeholder={t("approvalPage.searchUser")}
-              className="block h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none"
-            />
-            <div
-              className="max-h-60 overflow-y-auto rounded-lg border border-border divide-y divide-border"
-              onScroll={(e) => {
-                if (!exceptionPickerHasMore || exceptionPickerLoading) return;
-                const el = e.currentTarget;
-                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
-                  const nextPage = exceptionPickerPage + 1;
-                  setExceptionPickerPage(nextPage);
-                  loadExceptionPickerUsers(nextPage, exceptionPickerSearch, true);
-                }
-              }}
-            >
-              {exceptionPickerList.length === 0 && !exceptionPickerLoading && (
-                <div className="py-4 text-center text-xs text-muted-foreground">{t("approvalPage.noUsers")}</div>
-              )}
-              {exceptionPickerList.map((u) => {
-                const checked = exceptionPickerTempIds.includes(u.user_id);
-                return (
-                  <label
-                    key={u.user_id}
-                    className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-50/10"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        if (checked) {
-                          setExceptionPickerTempIds((ids) => ids.filter((id) => id !== u.user_id));
-                          setExceptionPickerTempNames((names) =>
-                            names.filter((_, i) => exceptionPickerTempIds[i] !== u.user_id)
-                          );
-                        } else {
-                          setExceptionPickerTempIds((ids) => [...ids, u.user_id]);
-                          setExceptionPickerTempNames((names) => [...names, u.user_name]);
-                        }
-                      }}
-                      className="h-4 w-4 rounded border-border accent-primary"
-                    />
-                    <span className="text-sm text-foreground">{u.user_name}</span>
-                  </label>
-                );
-              })}
-              {exceptionPickerLoading && (
-                <div className="py-2 text-center text-xs text-muted-foreground">{t("approvalPage.loading")}</div>
-              )}
-            </div>
-            {exceptionPickerTempIds.length > 0 && (
-              <div className="text-xs text-muted-foreground">
-                已选 {exceptionPickerTempIds.length} 人：{exceptionPickerTempNames.join("、")}
-              </div>
-            )}
-          </div>
+          <ApproverUserPicker value={exceptionPickerTempIds} names={exceptionPickerTempNames} onChange={(ids, names) => { setExceptionPickerTempIds(ids); setExceptionPickerTempNames(names) }} />
           <DialogFooter>
             <button
               type="button"

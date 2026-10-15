@@ -60,10 +60,11 @@ async def test_worker_runtime_installs_the_resource_registry(monkeypatch):
 
     captured: dict = {}
 
-    def _configure(runtime, *, resource_adapters=None, resource_registry=None):
+    def _configure(runtime, *, resource_adapters=None, resource_registry=None, subject_directory=None):
         captured["runtime"] = runtime
         captured["adapters"] = resource_adapters
         captured["registry"] = resource_registry
+        captured["subjects"] = subject_directory
 
     monkeypatch.setattr(runtime_module, "initialize_f048_background_runtime", _background)
     monkeypatch.setattr(runtime_module, "configure_f048_runtime", _configure)
@@ -79,6 +80,7 @@ async def test_worker_runtime_installs_the_resource_registry(monkeypatch):
     client.configure_contextual_tuple_provider.assert_called_once()
     assert captured["runtime"] is facade
     assert isinstance(captured["registry"], ResourceAuthorizationRegistry)
+    assert callable(captured["subjects"].candidate_users)
     # "tool" is the resource type ToolExecutor checks before binding a tool — the
     # one whose absence disabled the Linsight code interpreter.
     assert "tool" in captured["adapters"]

@@ -1,3 +1,4 @@
+import { useSubjectKeyword } from "./useSubjectKeyword";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -48,6 +49,7 @@ export interface GrantUserTree {
   /** Expand/collapse a department, loading its child layer + first user page on first expand. */
   toggle: (node: GrantDepartmentNode) => void;
   keyword: string;
+  searchInput: ReturnType<typeof useSubjectKeyword>;
   setKeyword: (kw: string) => void;
   searchMode: boolean;
   searchRoots: GrantDepartmentNode[];
@@ -73,9 +75,11 @@ export function useGrantUserTree(source: GrantUserTreeSource): GrantUserTree {
   const [rootError, setRootError] = useState(false);
   const [failedLayerIds, setFailedLayerIds] = useState<Set<number>>(new Set());
   const [failedMoreUserIds, setFailedMoreUserIds] = useState<Set<number>>(new Set());
-  const [keyword, setKeyword] = useState("");
+  const searchInput = useSubjectKeyword();
+  const { keyword, setKeyword, normalized, tooLong, composing } = searchInput;
   const [searchResult, setSearchResult] = useState<GrantDepartmentSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
+  const [resolvedKeyword, setResolvedKeyword] = useState("");
   const [searchError, setSearchError] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
   const [rootAttempt, setRootAttempt] = useState(0);
@@ -225,10 +229,10 @@ export function useGrantUserTree(source: GrantUserTreeSource): GrantUserTree {
 
   // Debounced server-side search.
   useEffect(() => {
-    const kw = keyword.trim();
+    const kw = normalized;
     const requestId = searchRequestRef.current + 1;
     searchRequestRef.current = requestId;
-    if (!kw) {
+    if (!kw || tooLong || composing) {
       setSearchResult(null);
       setSearching(false);
       setSearchError(false);
@@ -251,7 +255,10 @@ export function useGrantUserTree(source: GrantUserTreeSource): GrantUserTree {
           }
         })
         .finally(() => {
-          if (!cancelled && searchRequestRef.current === requestId) setSearching(false);
+          if (!cancelled && searchRequestRef.current === requestId) {
+            setSearching(false);
+            setResolvedKeyword(kw);
+          }
         });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
@@ -259,7 +266,7 @@ export function useGrantUserTree(source: GrantUserTreeSource): GrantUserTree {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [keyword, searchAttempt]);
+  }, [normalized, tooLong, composing, searchAttempt]);
 
   const retryRoot = useCallback(() => setRootAttempt((attempt) => attempt + 1), []);
   const retrySearch = useCallback(() => setSearchAttempt((attempt) => attempt + 1), []);
@@ -282,10 +289,11 @@ export function useGrantUserTree(source: GrantUserTreeSource): GrantUserTree {
     rootError,
     toggle,
     keyword,
+    searchInput,
     setKeyword,
-    searchMode: !!keyword.trim(),
+    searchMode: !!normalized,
     searchRoots: searchResult?.roots ?? [],
-    searching,
+    searching: searching || (!!normalized && normalized !== resolvedKeyword && !tooLong && !composing),
     searchError,
     retryRoot,
     retrySearch,

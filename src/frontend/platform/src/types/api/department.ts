@@ -1,4 +1,5 @@
 export interface DepartmentTreeNode {
+  external_id?: string | null
   id: number
   dept_id: string
   name: string

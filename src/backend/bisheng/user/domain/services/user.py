@@ -66,6 +66,15 @@ PASSWORD_STRENGTH_PATTERN = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W
 
 class UserService:
     @classmethod
+    def list_management_users(cls, user_ids=None, keyword=None, page=0, limit=0):
+        from bisheng.user.domain.repositories.management_search_repository import ManagementSearchRepository
+
+        try:
+            return ManagementSearchRepository.list_users(user_ids, keyword, page, limit)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @classmethod
     async def ainvalidate_jwt_after_account_disabled(cls, user_id: int) -> None:
         """禁用账号后立刻让已签发的 JWT 失效（F012 ``token_version``），并清理管理端 scope 缓存。"""
         try:

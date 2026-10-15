@@ -625,9 +625,16 @@ class TenantService:
         ``TenantResolver`` so v2.5.0 ``aadd_users`` residue rows do not
         surface as phantom members. Return shape unchanged.
         """
-        from bisheng.database.models.department import UserDepartmentDao
+        from fastapi import HTTPException
 
-        users, total = await UserDepartmentDao.aget_users_by_tenant_subtree(
+        from bisheng.common.subject_search import normalize_keyword
+        from bisheng.tenant.domain.repositories.management_search_repository import ManagementSearchRepository
+
+        try:
+            keyword = normalize_keyword(keyword or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        users, total = await ManagementSearchRepository.tenant_users(
             tenant_id=tenant_id,
             page=page,
             page_size=page_size,

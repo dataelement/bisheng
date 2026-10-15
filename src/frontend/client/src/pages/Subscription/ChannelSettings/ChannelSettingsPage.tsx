@@ -101,8 +101,9 @@ export function ChannelSettingsPage() {
               _resourceType,
               _resourceId,
               config,
+              params,
             ) =>
-              getCreationUserGroups("channel", config),
+              getCreationUserGroups("channel", config, params),
           }
         : undefined,
     [isEditMode],

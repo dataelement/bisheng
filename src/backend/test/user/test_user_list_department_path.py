@@ -60,3 +60,23 @@ class TestDepartmentPathLabelMap:
 
         assert labels == {1: "总公司", 21: "总公司/研发部"}
         assert len(calls) == 1  # every ancestor already in the requested set
+
+
+async def test_simple_user_list_preserves_external_id():
+    from bisheng.user.api.user import list_user
+    from bisheng.user.domain.services.user import UserService
+
+    login = types.SimpleNamespace(is_admin=lambda: True)
+    user = types.SimpleNamespace(user_id=7, user_name="Alice", external_id="001-ABC")
+    with patch.object(UserService, "list_management_users", return_value=([user], 1)):
+        response = await list_user(
+            name="001",
+            page_size=10,
+            page_num=1,
+            group_id=None,
+            role_id=None,
+            simple=True,
+            with_department_path=False,
+            login_user=login,
+        )
+    assert response.data == {"data": [{"user_id": 7, "user_name": "Alice", "external_id": "001-ABC"}], "total": 1}

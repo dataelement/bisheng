@@ -1,3 +1,5 @@
+import { SearchInput } from "@bisheng/ui";
+import { SubjectIdentity } from "./SubjectIdentity";
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Button } from "~/components/ui/Button";
 import {
@@ -12,7 +14,7 @@ import type {
   ResourceType,
   SelectedSubject,
 } from "~/api/permission";
-import { Building2, ChevronDown, ChevronRight, Loader2, Search, User as UserIcon } from "lucide-react";
+import { Building2, ChevronDown, ChevronRight, Loader2, User as UserIcon } from "lucide-react";
 import { useMemo } from "react";
 import { useLocalize } from "~/hooks";
 import { PermissionEmptyState } from "./PermissionEmptyState";
@@ -111,11 +113,11 @@ export function SubjectSearchUser({
   );
 
   const toggle = (user: GrantUser) => {
-    if (disabledIdSet.has(user.user_id)) return;
+    if (tree.searching || tree.searchInput.tooLong || tree.searchInput.composing || disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
       onChange(value.filter((s) => s.type !== "user" || s.id !== user.user_id));
     } else {
-      onChange([...value, { type: "user", id: user.user_id, name: user.user_name }]);
+      onChange([...value, { type: "user", id: user.user_id, name: user.user_name, externalId: user.external_id, departmentPath: user.primary_department_path }]);
     }
   };
 
@@ -124,24 +126,29 @@ export function SubjectSearchUser({
     .map((id) => tree.getNode(id))
     .filter((n): n is GrantDepartmentNode => !!n);
   const roots = searchMode ? tree.searchRoots : browseRoots;
-  const busy = searchMode ? tree.searching : tree.initialLoading;
+  const blocked = tree.searchInput.tooLong || tree.searchInput.composing;
+  const busy = blocked || (searchMode ? tree.searching : tree.initialLoading);
   const loadError = searchMode ? tree.searchError : tree.rootError;
   const retry = searchMode ? tree.retrySearch : tree.retryRoot;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
-        <input
-          type="text"
+        <SearchInput
+          clearLabel={localize("com_ui_clear")}
           placeholder={localize("com_permission.search_user")}
+          aria-invalid={tree.searchInput.tooLong}
+          onCompositionStart={tree.searchInput.onCompositionStart}
+          onCompositionEnd={tree.searchInput.onCompositionEnd}
+          onPaste={tree.searchInput.onPaste}
           value={tree.keyword}
           onChange={(e) => tree.setKeyword(e.target.value)}
-          className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
+          className="w-full"
         />
       </div>
+      {tree.searchInput.tooLong && <p role="alert" className="text-caption text-danger">{localize("com_permission.search_too_long")}</p>}
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
-        {busy && (
+        {busy && !blocked && (
           <div className="flex items-center justify-center gap-2 py-4 text-sm text-gray-500">
             <Loader2 className="h-4 w-4 animate-spin" />
             {localize("com_ui_loading")}
@@ -160,7 +167,7 @@ export function SubjectSearchUser({
             message={localize(searchMode ? "com_permission.empty_search" : "com_permission.empty_departments")}
           />
         )}
-        {!busy &&
+        {!busy && !loadError &&
           roots.map((node) => (
             <UserTreeRow
               key={node.id}
@@ -269,6 +276,7 @@ function UserTreeRow({
             depth={depth + 1}
             selected={selectedIds.has(user.user_id)}
             disabled={disabledIdSet.has(user.user_id)}
+            grantedLabel={grantedLabels[String(user.user_id)]}
             onToggle={onToggleUser}
           />
         ))}
@@ -320,7 +328,7 @@ function UserLeafRow({
   const localize = useLocalize();
   // User id (external_id) renders right after the username, same layout as
   // the previous flat list.
-  const showUserId = !!user.external_id && user.external_id !== user.user_name;
+  const showUserId = !!user.external_id;
 
   const handleActivate = () => {
     if (disabled) return;
@@ -345,15 +353,11 @@ function UserLeafRow({
         onClick={(e) => e.stopPropagation()}
         onCheckedChange={handleActivate}
       />
-      <div className="flex min-w-0 flex-1 items-center gap-1.5">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
         <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
         <span className="min-w-0 truncate text-sm" title={user.user_name}>{user.user_name}</span>
-        {showUserId && (
-          <>
-            <span className="h-3 w-px shrink-0 bg-[#D9D9D9]" aria-hidden />
-            <span className="shrink-0 truncate text-xs text-text-3" title={user.external_id ?? undefined}>{user.external_id}</span>
-          </>
-        )}
+        {showUserId && <SubjectIdentity type="user" externalId={user.external_id} />}
+        <SubjectIdentity type="user" path={user.primary_department_path} />
         {disabled && (
           <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
             {grantedLabel ?? localize("com_permission.already_granted")}

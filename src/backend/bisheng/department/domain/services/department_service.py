@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from hashlib import sha256
 from types import SimpleNamespace
 
+from fastapi import HTTPException
 from sqlalchemy import and_, delete, func, or_, update
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import col, select
+from sqlmodel import select
 
 from bisheng.common.errcode.department import (
     DepartmentArchivedReadonlyError,
@@ -39,6 +40,7 @@ from bisheng.common.errcode.department import (
 )
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.common.services.config_service import settings
+from bisheng.common.subject_search import normalize_keyword
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import (
     Department,
@@ -51,6 +53,7 @@ from bisheng.database.models.department_admin_grant import (
     DepartmentAdminGrantDao,
 )
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.department.domain.repositories.management_search_repository import ManagementSearchRepository
 from bisheng.department.domain.schemas.department_schema import (
     DepartmentCreate,
     DepartmentLocalMemberCreate,
@@ -271,6 +274,7 @@ def _dept_node_dict(d, *, has_children: bool = False, matched: bool = False) -> 
     return {
         "id": d.id,
         "dept_id": d.dept_id,
+        "external_id": getattr(d, "external_id", None),
         "name": d.name,
         "parent_id": d.parent_id,
         "path": d.path,
@@ -1116,6 +1120,7 @@ class DepartmentService:
             nodes[d.id] = DepartmentTreeNode(
                 id=d.id,
                 dept_id=d.dept_id,
+                external_id=getattr(d, "external_id", None),
                 name=d.name,
                 parent_id=d.parent_id,
                 path=d.path,
@@ -1197,7 +1202,10 @@ class DepartmentService:
         gotcha 4). ``truncated`` is set when matches exceed ``limit``.
         """
         is_sys_admin, admin_paths = await _aget_user_scope(login_user)
-        kw = (keyword or "").strip()
+        try:
+            kw = normalize_keyword(keyword or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         if not kw:
             return {"roots": [], "total_matches": 0, "truncated": False}
         # Non-sys-admin with an EMPTY visible scope sees nothing — return empty
@@ -1210,7 +1218,7 @@ class DepartmentService:
             return {"roots": [], "total_matches": 0, "truncated": False}
         limit = max(1, min(limit, 200))
         path_prefixes = None if is_sys_admin else list(admin_paths)
-        matched = await DepartmentDao.aget_by_name_like(
+        matched = await ManagementSearchRepository.department_matches(
             kw, path_prefixes=path_prefixes, limit=limit + 1, include_archived=include_archived
         )
         truncated = len(matched) > limit
@@ -2202,7 +2210,10 @@ class DepartmentService:
         - ``root_dept_id``：在调用者可见范围内进一步收窄到指定部门子树，供租户挂载等
           必须从目标子树选择用户的场景使用。
         """
-        kw = (keyword or "").strip()
+        try:
+            kw = normalize_keyword(keyword or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         if not kw:
             return {"data": [], "total": 0}
         page = max(1, page)
@@ -2233,119 +2244,9 @@ class DepartmentService:
                 raise DepartmentPermissionDeniedError()
             requested_root_path = requested_root.path
 
-        async with get_async_db_session() as session:
-            from bisheng.user.domain.models.user import User
-
-            name_rows = await session.exec(
-                select(Department.id, Department.name).where(
-                    Department.status == "active",
-                )
-            )
-            id_to_name = {int(r.id): r.name for r in name_rows.all()}
-
-            def _primary_dept_display_path(dept: Department) -> str:
-                """path 列为祖先内部 id 链（如 ``/22/``），通常不含本部门 id；根常为 ``/``。
-
-                展示「自根到主属部门」的名称链，避免只显示父级或根路径解析为空。
-                """
-                labels: list[str] = []
-                ancestor_ids: list[int] = []
-                for part in (dept.path or "").split("/"):
-                    if not part.strip():
-                        continue
-                    try:
-                        i = int(part)
-                    except ValueError:
-                        continue
-                    ancestor_ids.append(i)
-                    labels.append(id_to_name.get(i, f"#{i}"))
-                self_id = int(dept.id)
-                self_nm = id_to_name.get(self_id) or (dept.name or "")
-                if self_id not in ancestor_ids and self_nm:
-                    labels.append(self_nm)
-                return "/".join(labels) if labels else (self_nm or "")
-
-            # Do not filter User.delete: 部门成员列表 aget_members 包含未启用用户，
-            # 全组织搜索需一致，否则无法按姓名定位已禁用成员。
-            #
-            # 性能（10w+ 用户）三点优化，详见 perf 排查：
-            # 1) 前缀匹配 ``user_name LIKE 'kw%'`` 取代原前导通配 ``'%kw%'``——
-            #    前导通配让 user_name 索引失效、每次按键全表扫 user；前缀可走索引范围扫。
-            # 2) 去掉原 ``GROUP BY user_id``：主属部门唯一性由
-            #    :meth:`UserDepartmentService.change_primary_department` 维护（旧主置 0、
-            #    新主置 1），故 ``is_primary=1`` 的 JOIN 每个命中用户至多一行，分组冗余。
-            # 3) ``COUNT(*) OVER()`` 在分页查询里一次拿到命中总数，省掉原先把整套
-            #    JOIN+分组再跑一遍的独立 COUNT 子查询。
-            def _scoped(stmt):
-                stmt = (
-                    stmt.join(
-                        UserDepartment,
-                        (UserDepartment.user_id == User.user_id) & (UserDepartment.is_primary == 1),
-                    )
-                    .join(Department, Department.id == UserDepartment.department_id)
-                    .where(
-                        Department.status == "active",
-                        User.user_name.like(f"{kw}%"),
-                    )
-                )
-                # 非超管：把可见子树裁剪下推为 ``path`` 前缀谓词。Department 已 JOIN，无需子查询；
-                # ``path LIKE p%`` 等价于 aget_tree 的 ``path.startswith(p)``（path 以本部门 id 收尾，
-                # 故同时覆盖管理员部门自身与其后代）。admin_paths 通常 <10 个，绑定参数极少。
-                if requested_root_path is not None:
-                    stmt = stmt.where(
-                        Department.path.like(f"{requested_root_path}%"),
-                    )
-                elif admin_paths is not None:
-                    stmt = stmt.where(or_(*[Department.path.like(f"{p}%") for p in admin_paths]))
-                return stmt
-
-            page_stmt = (
-                _scoped(
-                    select(
-                        User.user_id,
-                        User.user_name,
-                        User.external_id,
-                        col(Department.id).label("dept_int_id"),
-                        col(User.delete).label("user_deleted"),
-                        func.count().over().label("match_total"),
-                    )
-                )
-                .order_by(User.user_name, User.user_id)
-                .offset((page - 1) * limit)
-                .limit(limit)
-            )
-            rows = (await session.exec(page_stmt)).all()
-
-            if rows:
-                total = int(getattr(rows[0], "match_total", 0) or 0)
-            else:
-                # 命中页为空：可能无匹配（total=0），也可能请求页越界。窗口总数只存在于
-                # 返回行里，此时单独做一次轻量 COUNT 兜底（前缀走索引，成本低）。
-                count_stmt = _scoped(select(func.count()).select_from(User))
-                total = int((await session.exec(count_stmt)).one() or 0)
-                return {"data": [], "total": total}
-
-            dept_int_ids = [int(r.dept_int_id) for r in rows]
-            dept_rows = (await session.exec(select(Department).where(Department.id.in_(dept_int_ids)))).all()
-            dept_by_id = {int(d.id): d for d in dept_rows}
-
-        data = []
-        for r in rows:
-            d = dept_by_id.get(int(r.dept_int_id))
-            if not d:
-                continue
-            udel = int(getattr(r, "user_deleted", 0) or 0)
-            data.append(
-                {
-                    "user_id": int(r.user_id),
-                    "user_name": r.user_name,
-                    "external_id": r.external_id,
-                    "primary_department_dept_id": d.dept_id,
-                    "primary_department_path": _primary_dept_display_path(d),
-                    "enabled": udel == 0,
-                }
-            )
-        return {"data": data, "total": int(total)}
+        return await ManagementSearchRepository.global_members(
+            kw, page, limit, admin_paths=admin_paths, requested_root_path=requested_root_path
+        )
 
     @staticmethod
     async def _aget_ancestor_chain_ids(session, dept: Department) -> list[int]:

@@ -63,8 +63,8 @@ export function useKnowledgeSpacePermissionPicker(
                 limit,
                 config,
               ),
-            userGroupsApi: (_type, _id, config) =>
-              getCreationUserGroups("knowledge_space", config),
+            userGroupsApi: (_type, _id, config, params) =>
+              getCreationUserGroups("knowledge_space", config, params),
           }
         : undefined,
     [mode],

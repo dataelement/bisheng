@@ -1,3 +1,4 @@
+import { SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus"
 import { SearchInput } from "@/components/bs-ui/input"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { cn } from "@/utils"
@@ -143,8 +144,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
         <SearchInput
           placeholder={searchPlaceholder ?? t("bs:department.search")}
           className="mb-2"
-          value={controller.keyword}
-          onChange={(e) => controller.setKeyword(e.target.value)}
+          {...controller.searchInputProps}
         />
       )}
       <div
@@ -157,7 +157,7 @@ export function LazyDepartmentTree(props: LazyDepartmentTreeProps) {
             : undefined
         }
       >
-        {busy ? (
+        {controller.searchTooLong || controller.searchFailed ? <SubjectSearchStatus tooLong={controller.searchTooLong} failed={controller.searchFailed} onRetry={controller.retrySearch} /> : busy ? (
           <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             {t("loading", { defaultValue: "加载中" })}

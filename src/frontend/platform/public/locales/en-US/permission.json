@@ -19,9 +19,9 @@
     "remove": "Remove"
   },
   "search": {
-    "user": "Search users...",
-    "department": "Search departments...",
-    "userGroup": "Search user groups..."
+    "user": "Search user name or ID",
+    "department": "Search department name or ID",
+    "userGroup": "Search user group name or ID"
   },
   "includeChildren": "Include sub-departments",
   "list": {
@@ -29,9 +29,9 @@
   },
   "empty": {
     "permissions": "No permissions yet",
-    "departments": "No departments available",
-    "userGroups": "No user groups available",
-    "searchResults": "No results found"
+    "departments": "No grantable subjects found. Check the name or ID.",
+    "userGroups": "No grantable subjects found. Check the name or ID.",
+    "searchResults": "No grantable subjects found. Check the name or ID."
   },
   "comingSoon": "Coming Soon",
   "managePermission": "Permissions",

@@ -88,12 +88,6 @@ export function PermissionDialog({
     void loadContext()
   }, [loadContext, open])
 
-  useEffect(() => {
-    if (grantSubjectType !== "department") {
-      setGrantIncludeChildren(false)
-    }
-  }, [grantSubjectType])
-
   const handleModeApplied = (result: ApplyPermissionModeDraftResult) => {
     setContext((current) =>
       current
