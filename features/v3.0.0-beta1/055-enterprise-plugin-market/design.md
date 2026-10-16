@@ -92,3 +92,9 @@ C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应
 环境分支通过 `f055_market_deleted` 在实际单头 `f054_merge_beta1_v26_heads` 后添加 deleted Boolean NOT NULL DEFAULT false。迁移只执行 DDL，使用共享 column_exists 守卫；已存在旧记录通过列默认值保持可见。新建表的模型声明与升级一致。
 
 原功能分支的当前单头为 update_time_default_align，对应迁移为 f053_market_deleted。两分支均通过单头检查；后续汇合时保留各自迁移并增加显式 merge revision，DDL 守卫允许同一列已存在。环境回滚版本保留原运行代码和新迁移文件，使原服务可以识别已应用的 f055_market_deleted，同时保留删除记录。
+
+## 工作台扩展（2026-10-15）
+
+工作台使用独立的 `.tgz` 静态校验器、三张租户表和 MinIO 对象前缀，与原有插件 ZIP、设备报告和 `/sync` 签名策略分开。管理员预览与导入、Desktop 目录/详情/制品下载复用市场身份边界；管理页面沿用现有市场交互与组件。新表由 SQLModel 模型发现和 `create_all(checkfirst=True)` 创建，不改动已有市场表。完整数据结构、API 与边界见[工作台上传与查询设计](workbench-upload-query-design.md)，归档规则见[工作台压缩包校验规则](workbench-package-validation.md)。
+
+独立存储与路由是为了避免把 npm `.tgz` 误交给只接受插件 ZIP 的验证与签名流程；等 Desktop 实际安装协议确定后，再评估是否引入工作台租约。已知边界：压缩包静态检查无法证明宿主服务、依赖解析与 UI 运行，真实 MinIO、MySQL/DM8 和 Desktop 联调需在部署环境验收。
