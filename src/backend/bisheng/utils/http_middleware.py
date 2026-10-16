@@ -60,6 +60,7 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("GET", "/api/v1/dsh/usage"),
         ("GET", "/api/v1/dsh/market/capabilities"),
         ("GET", "/api/v1/dsh/market/catalog"),
+        ("GET", "/api/v1/dsh/market/workbenches"),
         ("POST", "/api/v1/dsh/market/sync"),
         ("POST", "/api/v1/dsh/chat/completions"),
         ("POST", "/api/v1/internal/dsh/identity/redeem"),
@@ -71,7 +72,12 @@ DSH_CREDENTIAL_ROUTES = frozenset(
 def owns_dsh_credential(method: str, path: str) -> bool:
     return (method, path) in DSH_CREDENTIAL_ROUTES or (
         method == "GET"
-        and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path) is not None
+        and (
+            re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+            or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}", path)
+            or re.fullmatch(r"/api/v1/dsh/market/workbenches/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
+        )
+        is not None
     )
 
 

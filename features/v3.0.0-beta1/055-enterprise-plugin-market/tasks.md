@@ -27,3 +27,11 @@
 后端在独立 Python 3.11 环境执行；跨仓库联调显式替换身份和对象存储。实际 3006 的迁移、MySQL/MinIO/签名和容器健康见 deployment.md。Desktop 运行代码与安装包保持原版本；企业 HTTPS/网关绑定按用户决定留待后续。
 
 复跑：仓库根 PYTHONPATH=src/backend python -m pytest --confcutdir=src/backend/test/dsh_market src/backend/test/dsh_market src/backend/test/database/test_alembic_single_head.py -q；前端 pnpm --filter bisheng exec vitest run src/test/dshMarket.test.tsx src/test/headerMenuChildAdmin.test.tsx；pnpm --filter bisheng lint、pnpm check-i18n、pnpm build:platform、pnpm typecheck。Desktop 运行 scripts/test-enterprise-market-integration.mjs 并传入 BISHENG 路径与 Python。
+
+## 2026-10-15 工作台压缩包扩展
+
+- [x] 定义 `.tgz` 静态规则、上传/查询/下载设计与 Desktop 接入契约；见本目录的 `workbench-*.md` 和 `desktop-workbench-api.md`。
+- [x] 实现独立的 tar 校验器、工作台 SQLModel/Repository/Service、MinIO 前缀、管理员预览/上传/任务、Desktop 列表/详情/下载路由及 DSH 凭证白名单。
+- [x] 企业插件管理页新增工作台区域，三语言文案及 26205–26208 错误码由 locales 源生成。
+- [x] 两个用户样包本地静态校验分别得到 `repository` 和 `legacy`；后端市场相关测试 60 项通过；平台页面测试 12 项通过；平台 typecheck、目标文件 ESLint、locales check、check-i18n 通过。
+- [ ] 真实 MinIO、MySQL/DM8、管理员浏览器完整上传及 Desktop 下载/运行联调；当前工作分支未部署。

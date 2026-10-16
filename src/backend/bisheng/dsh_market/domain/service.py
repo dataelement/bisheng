@@ -11,6 +11,12 @@ class MarketService:
         self.repository = repository
         self.storage = storage
 
+    def install_policy(self, tenant):
+        return self.repository.install_policy(tenant)
+
+    def set_install_policy(self, tenant, field, allowed):
+        return self.repository.set_install_policy(tenant, field, allowed)
+
     def list_plugins(self, tenant, query="", status="all", page=1, size=20, employee=False):
         return self.repository.list(tenant, query, status, page, size, employee)
 

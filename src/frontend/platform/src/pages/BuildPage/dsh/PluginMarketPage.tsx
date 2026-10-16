@@ -1,6 +1,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { userContext } from "@/contexts/userContext";
@@ -9,6 +10,8 @@ import type { MarketPreview, MarketImport, MarketPlugin } from "@/controllers/AP
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { InstallPolicySettings } from "./InstallPolicySettings";
+import { WorkbenchMarketSection } from "./WorkbenchMarketSection";
 
 const MAX_UPLOAD = 512 * 1024 * 1024;
 
@@ -16,7 +19,12 @@ export function PluginMarketPage() {
     const { user } = useContext(userContext);
     const { t } = useTranslation("dshMarket");
     if (!canManageWorkbenchConfig(user)) return <div className="p-8">{t("forbidden")}</div>;
-    return <TenantPluginMarket key={`${user.user_id}:${user.tenant_id}`} />;
+    return <Tabs defaultValue="plugins" key={`${user.user_id}:${user.tenant_id}`} className="h-full overflow-auto p-6">
+        <TabsList aria-label={t("marketSections")}><TabsTrigger value="plugins">{t("pluginSection")}</TabsTrigger>
+            <TabsTrigger value="workbenches">{t("workbenchSection")}</TabsTrigger></TabsList>
+        <TabsContent value="plugins"><TenantPluginMarket /></TabsContent>
+        <TabsContent value="workbenches"><WorkbenchMarketSection /></TabsContent>
+    </Tabs>;
 }
 
 function TenantPluginMarket() {
@@ -126,7 +134,7 @@ function TenantPluginMarket() {
         finally { setBusy(false); setProgress(null); reload(); }
     }
 
-    return <main className="h-full overflow-auto p-6 space-y-6">
+    return <main className="space-y-6 pt-6">
         <header className="flex items-start justify-between gap-6">
             <div className="space-y-3">
                 <h1 className="text-xl font-semibold">{t("title")}</h1>
@@ -134,6 +142,7 @@ function TenantPluginMarket() {
             </div>
             <Button className="shrink-0" disabled={tenant === null || busy} onClick={() => setUploadOpen(true)}>{t("import")}</Button>
         </header>
+        {tenant !== null && <InstallPolicySettings tenant={tenant} />}
         {error && <div role="alert" className="text-red-600 flex items-center gap-3">{t("loadFailed")}<Button variant="outline" onClick={reload}>{t("retry")}</Button></div>}
         {loading ? <p role="status">{t("loading")}</p> : <div className="border rounded-lg overflow-x-auto">
             <table className="w-full text-sm text-left"><thead className="bg-muted"><tr>
