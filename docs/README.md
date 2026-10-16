@@ -27,4 +27,5 @@
 | [`PRD/`](PRD/) | 现行迭代的产品 PRD 与技术方案(按 `{版本} {主题} PRD/` 组织) |
 | [`observability/`](observability/) | BS_METRIC 指标日志契约(监控团队解析依据) |
 | [`私有化部署/`](私有化部署/) | 部署文档 |
+| [`cofco-upgrade-0920-to-909r1.md`](cofco-upgrade-0920-to-909r1.md) | 中粮生产0920到909r1升级：数据库、权限发布、E+ Worker、K8s验收及回退 |
 | [`blog/`](blog/) | 设计科普(如"企业权限体系的前世今生") |
