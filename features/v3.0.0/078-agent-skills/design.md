@@ -10,7 +10,7 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
 **版本**: v3.0.0（开发分支 `feat/SEC-3.0.0-1016`）
-**最后更新**: 2026-10-16（初版，尚未实现）
+**最后更新**: 2026-10-16（第一期 workflow 实现后同步）
 
 > 本文中的「现状」指 `origin/feat/3.0.0` 41bf8c650 的代码。「目标」指 F078 实现后的状态。路径以 `src/backend/bisheng/`（简写 `B/`）和 `src/frontend/`（简写 `F/`）为根。
 
@@ -231,7 +231,10 @@
 | `B/agent_runtime/domain/services/deliverables.py` | 交付文件判定、格式标注、上传为会话附件 | 不处理下载鉴权 |
 | `B/agent_runtime/domain/services/skill_prompt_middleware.py` | 追加技能提示词（三个变体） | 不改创建者提示词 |
 | `B/agent_runtime/domain/services/tmp_session.py` | 临时会话登记、刷新、清理 | 不处理正式会话 |
+| `B/agent_runtime/domain/services/file_access.py` | 下载鉴权：正式会话走附件归属校验，临时会话校验 Redis 登记的发起人 | 不信任请求里的对象名 |
 | `B/agent_runtime/api/endpoints/files.py` | 下载鉴权与跳转 | 不签发长效链接 |
+| `B/workflow/nodes/agent/skill_support.py` | 把节点配置转成 `AgentRunSpec`，经 `run_async_safe` 驱动 runner；技能错误带错误码进失败事件 | 不直接操作 MinIO |
+| `B/worker/agent_runtime/tasks.py` | Beat 每小时清理过期临时会话的工作区 | 不查业务表 |
 | `B/workflow/nodes/agent/agent.py` | 读节点参数、调用 runner、发事件、写日志 | 不直接操作 MinIO |
 | `B/api/services/assistant_agent.py` | 读助手配置、调用 runner | 同上 |
 
@@ -268,7 +271,9 @@
 
 | 契约 | 形式 | 谁在用 |
 |---|---|---|
-| `GET /api/v1/agent-runtime/files/{session_key}/{file_id}` | HTTP，鉴权后 302 到短时链接 | client、platform、下游节点引用的链接、开放 API 调用方 |
+| `GET /api/v1/agent-runtime/files/{session_key}/{file_id}` | HTTP（网页登录），鉴权后 302 到短时链接 | client、platform、下游节点引用的链接 |
+| `GET /api/v2/workflow/files/{chat_id}/{file_id}` | 开放 API（`workflow:invoke`），按 `SessionSubject` 校验会话归属后 302 | workflow 开放 API 调用方；事件 `files[].path` 指向它 |
+| `ChatSessionService.resolve_subject_attachment_url(chat_id, file_id, subject)` | 内部 Python API | 开放 API 下载路由 |
 | workflow 开放 API 助手节点事件 `output_schema.files` | 事件字段（已有字段，新填值） | 开放 API 调用方（AC-34） |
 | 输出变量 `{node_id}.<输出键>_deliverables` | workflow 变量 | 下游节点 |
 | 消息 `files`、`extra.agent_notices` | 消息字段 | 两个前端、历史回放 |
@@ -330,3 +335,4 @@
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
 | 2026-10-16 | 初版 | spec 定稿后编写 |
+| 2026-10-16 | 同步第一期实现：决策 10 判定口径、交付文件字段、变量命名、开放 API 下载路由、新增模块 | 实现偏差，见 tasks.md「实际偏差记录」 |
