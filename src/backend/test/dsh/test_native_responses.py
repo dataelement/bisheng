@@ -105,8 +105,11 @@ async def test_sdk_wire_and_shared_settlement(app_setup, stream, status, known_u
         ) as client:
             response = await client.post(
                 "/api/v1/dsh/responses",
-                json=body(stream=stream, reasoning={"effort": "high"}),
-                headers={"Authorization": "Bearer dedicated", "x-dsh-conversation-id": "conv-1"},
+                json={
+                    **body(stream=stream, reasoning={"effort": "high"}),
+                    "audit_context": {"conversation_id": "conv-1", "request_kind": "chat"},
+                },
+                headers={"Authorization": "Bearer dedicated"},
             )
     assert response.status_code == 200
     headers, payload, path = captured[0]
@@ -243,3 +246,30 @@ async def test_raw_supplier_limit_precedes_sdk_json_decode(service_setup, monkey
         await stream.aclose()
     assert len(frames) == 1 and "event: error" in frames[0]
     assert closed == [True] and ledger.events[-1].status == "USAGE_UNKNOWN"
+
+
+async def test_unknown_events_and_missing_sequence_do_not_fail_stream():
+    """Suppliers add event types and proxies may drop sequence_number."""
+    from bisheng.dsh.infrastructure.responses_adapter import ResponsesExecution
+
+    terminal = {"status": "completed", "output": [], "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}}
+    events = [
+        {"type": "response.created", "response": {"model": "supplier-model"}},
+        {"type": "response.some_future_event", "delta": "x"},
+        {"type": "response.output_text.delta", "delta": "ok"},
+        {"type": "response.completed", "response": terminal},
+    ]
+
+    class Source:
+        async def __aiter__(self):
+            for raw in events:
+                yield SimpleNamespace(model_dump=lambda raw=raw, **_: json.loads(json.dumps(raw)))
+
+        async def close(self):
+            pass
+
+    execution = ResponsesExecution(None, DshResponsesRequest(**body()), {})
+    execution.source = Source()
+    kinds = [event["type"] async for event in execution._events()]
+    assert kinds == ["response.created", "response.output_text.delta", "response.completed"]
+    assert execution.usage.input_tokens == 1

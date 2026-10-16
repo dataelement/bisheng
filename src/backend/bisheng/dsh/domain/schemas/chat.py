@@ -32,6 +32,9 @@ class ChatCapabilities(BaseModel):
     top_p: bool = Field(default=True, description="Whether the provider accepts a top_p sampling parameter.")
     reasoning: ReasoningDeclaration | None = None
     responses: bool = False
+    prompt_cache_key: bool = Field(
+        default=False, description="Whether the provider accepts OpenAI's prompt_cache_key request field."
+    )
 
     def client_fields(self) -> dict[str, bool]:
         result = self.model_dump(include={"streaming", "tools", "reasoning_content", "vision"})

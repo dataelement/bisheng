@@ -3,6 +3,7 @@
 import json
 
 import httpx
+from loguru import logger
 from pydantic import TypeAdapter, ValidationError
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshUnsupportedParameterError, DshUpstreamErrorError
@@ -151,13 +152,19 @@ class ResponsesExecution:
                 if kind in TERMINAL and isinstance(raw.get("response"), dict):
                     self.usage = normalize_responses_usage(raw["response"].get("usage"))
                 self._bounded(raw)
+                if self.terminal:
+                    raise DshUpstreamErrorError()
+                # Proxies may drop or rewrite sequence numbers; only enforce order when present.
                 sequence = raw.get("sequence_number")
-                if self.terminal or type(sequence) is not int or sequence <= self.sequence:
-                    raise DshUpstreamErrorError()
-                self.sequence = sequence
-                # Reject unnegotiated output families before forwarding their deltas.
+                if sequence is not None:
+                    if type(sequence) is not int or sequence <= self.sequence:
+                        raise DshUpstreamErrorError()
+                    self.sequence = sequence
+                # Suppliers add event types over time; skip unknown ones instead of failing a
+                # billed stream. Unknown output item kinds are still rejected below.
                 if kind not in EVENTS:
-                    raise DshUpstreamErrorError()
+                    logger.debug("Skipping unnegotiated Responses event type={}", kind)
+                    continue
                 if kind in {"response.output_item.added", "response.output_item.done"}:
                     if (raw.get("item") or {}).get("type") not in {"message", "reasoning", "function_call"}:
                         raise DshUpstreamErrorError()
@@ -197,7 +204,9 @@ class DshResponsesAdapter:
                 if isinstance(blocks, list) and any(isinstance(part, InputImage) for part in blocks):
                     raise DshUnsupportedParameterError()
         parameters = request.model_dump(exclude_none=True, exclude={"model"})
-        parameters.update(model=llm.model_name, store=False, include=["reasoning.encrypted_content"])
+        # Azure addresses the deployment, not the model name.
+        model_name = getattr(llm.llm, "deployment_name", None) or llm.model_name
+        parameters.update(model=model_name, store=False, include=["reasoning.encrypted_content"])
         if max_output_tokens is not None and request.max_output_tokens is None:
             parameters["max_output_tokens"] = max_output_tokens
         effort = request.reasoning.effort if request.reasoning else None

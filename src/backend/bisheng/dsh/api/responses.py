@@ -19,14 +19,6 @@ class DshRoute(APIRoute):
 
         async def route(request: Request):
             try:
-                if request.method == "POST" and request.url.path.endswith(("/dsh/responses", "/dsh/chat/completions")):
-                    # Bound incremental reads, including chunked requests without Content-Length.
-                    body = bytearray()
-                    async for chunk in request.stream():
-                        if len(body) + len(chunk) > 32 * 1024 * 1024:
-                            raise DshInvalidRequestError()
-                        body.extend(chunk)
-                    request._body = bytes(body)
                 response = await handler(request)
             except RequestValidationError:
                 response = self.error(DshInvalidRequestError())

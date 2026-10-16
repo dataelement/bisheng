@@ -1,19 +1,21 @@
 """Frozen Desktop model endpoints, authenticated independently of browser cookies."""
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
 from bisheng.common.errcode.dsh import DshInvalidRequestError, DshModelNotAllowedError, DshQuotaUnavailableError
 from bisheng.dsh.api.dependencies import DshRuntime, desktop_principal, get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
-from bisheng.dsh.domain.schemas.conversation import ConversationHint
-from bisheng.dsh.domain.schemas.responses import DshResponsesRequest
+from bisheng.dsh.domain.schemas.conversation import AUDIT_CONTEXT_KEY, ConversationHint, parse_conversation
+from bisheng.dsh.domain.schemas.responses import MAX_REQUEST_BYTES, DshResponsesRequest
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
 from bisheng.dsh.domain.services.model import PreparedStream
 from bisheng.dsh.domain.services.usage_projection import apply_current_policy_limits
@@ -22,17 +24,25 @@ from bisheng.dsh.runtime import get_model_runtime, read_persisted_usage, read_po
 router = APIRouter(route_class=DshRoute)
 
 
-def conversation_hint(request: Request) -> ConversationHint | None:
-    ids = request.headers.getlist("x-dsh-conversation-id")
-    purposes = request.headers.getlist("x-dsh-request-purpose")
-    if not ids and not purposes:
-        return None
-    if len(ids) != 1 or len(purposes) > 1:
-        raise DshInvalidRequestError()
+async def read_model_request(request: Request, model) -> tuple:
+    """Bounded read of a model request; ``audit_context`` is metadata, not model input."""
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+            raise DshInvalidRequestError()
+        body.extend(chunk)
     try:
-        return ConversationHint(conversation_id=ids[0], purpose=purposes[0] if purposes else "chat")
-    except ValueError as exc:
-        raise DshInvalidRequestError() from exc
+        raw = json.loads(body)
+        if not isinstance(raw, dict):
+            raise DshInvalidRequestError()
+        hint: ConversationHint | None = parse_conversation(raw.pop(AUDIT_CONTEXT_KEY, None))
+        return model.model_validate(raw), hint
+    except (json.JSONDecodeError, UnicodeError, ValidationError, RecursionError):
+        raise DshInvalidRequestError() from None
+
+
+def _body_schema(model) -> dict:
+    return {"requestBody": {"required": True, "content": {"application/json": {"schema": model.model_json_schema()}}}}
 
 
 class DshStreamingResponse(StreamingResponse):
@@ -60,32 +70,29 @@ async def models(principal: DshPrincipal = Depends(desktop_principal), runtime: 
     return await service.model.list_models(principal)
 
 
-@router.post("/dsh/chat/completions")
-async def complete(
-    body: DshChatRequest,
-    request: Request,
-    principal: DshPrincipal = Depends(desktop_principal),
-    runtime: DshRuntime = Depends(get_runtime),
-):
-    service = await get_model_runtime(runtime)
-    hint = conversation_hint(request)
-    result = (
-        await service.complete(principal, body, conversation=hint) if hint else await service.complete(principal, body)
-    )
-    return DshStreamingResponse(result) if isinstance(result, PreparedStream) else result
-
-
-@router.post("/dsh/responses")
-async def native_responses(
-    body: DshResponsesRequest,
-    request: Request,
-    principal: DshPrincipal = Depends(desktop_principal),
-    runtime: DshRuntime = Depends(get_runtime),
-):
-    hint = conversation_hint(request)
+async def _complete(request, model, principal, runtime):
+    body, hint = await read_model_request(request, model)
     service = await get_model_runtime(runtime)
     result = await service.complete(principal, body, conversation=hint)
     return DshStreamingResponse(result) if isinstance(result, PreparedStream) else result
+
+
+@router.post("/dsh/chat/completions", openapi_extra=_body_schema(DshChatRequest))
+async def complete(
+    request: Request,
+    principal: DshPrincipal = Depends(desktop_principal),
+    runtime: DshRuntime = Depends(get_runtime),
+):
+    return await _complete(request, DshChatRequest, principal, runtime)
+
+
+@router.post("/dsh/responses", openapi_extra=_body_schema(DshResponsesRequest))
+async def native_responses(
+    request: Request,
+    principal: DshPrincipal = Depends(desktop_principal),
+    runtime: DshRuntime = Depends(get_runtime),
+):
+    return await _complete(request, DshResponsesRequest, principal, runtime)
 
 
 def billing_period(now: datetime, timezone: str) -> dict:

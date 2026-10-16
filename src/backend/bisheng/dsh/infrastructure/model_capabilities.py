@@ -24,7 +24,7 @@ def model_capabilities(model, server) -> ChatCapabilities:
     if reasoning is not None and server.type not in {"openai", "azure_openai"}:
         raise ValueError("Provider has no reasoning effort mapping")
     if reasoning is not None and any(
-        item.id not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"} for item in reasoning.efforts
+        item.id not in {"none", "minimal", "low", "medium", "high", "xhigh"} for item in reasoning.efforts
     ):
         raise ValueError("Provider does not support the declared effort")
     # Moonshot's existing built-in web-search loop explicitly disables streaming.
@@ -34,5 +34,7 @@ def model_capabilities(model, server) -> ChatCapabilities:
         reasoning_content=True,
         max_completion_tokens=server.type in {"openai", "azure_openai"},
         reasoning=reasoning,
-        responses=server.type == "openai" and model_parameters(model.config or {}).get("use_responses_api") is True,
+        responses=server.type in {"openai", "azure_openai"}
+        and model_parameters(model.config or {}).get("use_responses_api") is True,
+        prompt_cache_key=server.type in {"openai", "azure_openai"},
     )

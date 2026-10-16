@@ -217,6 +217,5 @@ class DshResponsesRequest(DshContract):
                 image_size += sum(len(part.image_url) for part in blocks if isinstance(part, InputImage))
         if pending or image_size > 28_000_000:
             raise ValueError("Unmatched tools or excessive images")
-        if len(self.model_dump_json().encode()) > MAX_REQUEST_BYTES:
-            raise ValueError("Request is too large")
+        # Total size is bounded while reading the body (MAX_REQUEST_BYTES).
         return self

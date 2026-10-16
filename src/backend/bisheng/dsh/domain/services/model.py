@@ -144,9 +144,10 @@ class DshModelService:
                 request, llm, capabilities, max_output_tokens=(model.config or {}).get("max_tokens")
             )
             if conversation is not None:
-                execution.parameters["extra_headers"] = conversation.upstream_headers(principal, model.id)
-                if native:
-                    execution.parameters["prompt_cache_key"] = execution.parameters["extra_headers"]["session_id"]
+                headers = conversation.upstream_headers(principal, model.id)
+                execution.parameters["extra_headers"] = headers
+                if native or capabilities.prompt_cache_key:
+                    execution.parameters["prompt_cache_key"] = headers["session_id"]
             started = self.now()
             started = started.replace(tzinfo=UTC) if started.tzinfo is None else started
             event = UsageEvent(
@@ -253,6 +254,7 @@ class DshModelService:
                 async for frame in source:
                     yield frame
             finally:
+                # Closing this generator does not close the inner one; do it explicitly.
                 await source.aclose()
             return
         source = execution.stream()
