@@ -1501,7 +1501,7 @@
     "violation_delete": "Remove for violation",
     "violation_delete_failed": "Could not remove the document",
     "violation_delete_done": "Document removed",
-    "delete_point_intro": "\"{{0}}\" will be deleted. Choosing a deduct rule moves originals and copies in every library to the recycle bin and deducts points. Leaving the rule empty uses the current delete action and does not deduct points. Cancel keeps the file.",
+    "delete_point_intro": "\"{{0}}\" will be deleted. Choosing a deduct rule permanently deletes originals and copies in every library and deducts points. Leaving the rule empty uses the current delete action and does not deduct points. Cancel keeps the file.",
     "delete_point_rule_optional": "Deduct rule (optional)",
     "delete_point_option_skip": "Do not deduct",
     "delete_point_loading": "Loading…",
