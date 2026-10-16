@@ -2362,6 +2362,7 @@
     }
   },
   "dshChat": {
+    "followupPlaceholder": "发送消息",
     "conversationSection": "对话",
     "placeholder": "发消息，或添加文件与知识空间",
     "files": "会话文件",

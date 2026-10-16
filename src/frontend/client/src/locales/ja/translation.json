@@ -2356,6 +2356,7 @@
     }
   },
   "dshChat": {
+    "followupPlaceholder": "メッセージを送信",
     "conversationSection": "会話",
     "placeholder": "メッセージを送信、またはファイルやナレッジスペースを追加",
     "files": "会話のファイル",

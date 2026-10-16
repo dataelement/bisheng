@@ -59,6 +59,7 @@ export const ChatKnowledge = ({
   disabled,
   value = [],
   onChange,
+  showKnowledgeSelection = true,
   showFileUpload = false,
   fileUploadDisabled = false,
   onFileUploadClick,
@@ -78,7 +79,9 @@ export const ChatKnowledge = ({
   disabled: boolean;
   value: KnowledgeItem[];
   onChange: (val: KnowledgeItem[]) => void;
-  /** Render a "上传文件" entry at the top of the menu (v2.5 plus menu). */
+  /** Enable knowledge setup in the plus menu on new-conversation surfaces. */
+  showKnowledgeSelection?: boolean;
+  /** Render file upload at the top of the menu. */
   showFileUpload?: boolean;
   fileUploadDisabled?: boolean;
   onFileUploadClick?: () => void;
@@ -217,6 +220,13 @@ export const ChatKnowledge = ({
   const [mobilePanel, setMobilePanel] = useState<'root' | 'org' | 'skill'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!showKnowledgeSelection) {
+      setOpenSub(null);
+      setMobilePanel('root');
+    }
+  }, [showKnowledgeSelection]);
+
   const handleRootOpenChange = useCallback((open: boolean) => {
     setRootOpen(open);
     setOpenSub(null);
@@ -321,7 +331,7 @@ export const ChatKnowledge = ({
                     "dsh-composer-add flex h-8 w-8 items-center justify-center rounded-lg text-text-2 cursor-pointer hover:bg-fill-2 transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
-                  aria-label={localize('com_knowledge_add_file')}
+                  aria-label={localize(showKnowledgeSelection ? 'com_knowledge_add_file' : 'com_ui_upload_files')}
                 >
                   <Outlined.Plus size={18} />
                 </button>
@@ -332,7 +342,7 @@ export const ChatKnowledge = ({
               tooltip; only the icon-only "+" trigger gets one. */}
           {variant !== 'knowledge' && (
             <TooltipContent side="bottom" sideOffset={6}>
-              {localize('com_knowledge_add_file')}
+              {localize(showKnowledgeSelection ? 'com_knowledge_add_file' : 'com_ui_upload_files')}
             </TooltipContent>
           )}
         </Tooltip>
@@ -447,7 +457,7 @@ export const ChatKnowledge = ({
 
         {/* Org knowledge selector — moved into the "+" menu, below upload.
             Desktop: cascading submenu. Gated by KB feature flag. */}
-        {variant === 'plus' && !isMobile && config?.knowledgeBase?.enabled !== false && (
+        {variant === 'plus' && showKnowledgeSelection && !isMobile && config?.knowledgeBase?.enabled !== false && (
           <DropdownMenuSub
             open={openSub === 'org'}
             onOpenChange={(o) => {
@@ -506,7 +516,7 @@ export const ChatKnowledge = ({
         )}
 
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
-        {variant === 'plus' && isMobile && mobilePanel === 'root' && config?.knowledgeBase?.enabled !== false && (
+        {variant === 'plus' && showKnowledgeSelection && isMobile && mobilePanel === 'root' && config?.knowledgeBase?.enabled !== false && (
           <DropdownMenuItem
             onSelect={(e) => {
               e.preventDefault();
@@ -528,7 +538,7 @@ export const ChatKnowledge = ({
         )}
 
         {/* Org knowledge selector (mobile): drill panel. */}
-        {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
+        {variant === 'plus' && showKnowledgeSelection && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-0.5">
               <button

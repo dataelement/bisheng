@@ -826,6 +826,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <div className="dsh-chat-composer-seat">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                             <AiChatInput
+                              allowConfiguration={false}
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}

@@ -2433,6 +2433,7 @@
     }
   },
   "dshChat": {
+    "followupPlaceholder": "Send a message",
     "conversationSection": "Conversation",
     "placeholder": "Send a message, or add files and knowledge spaces",
     "files": "Conversation files",

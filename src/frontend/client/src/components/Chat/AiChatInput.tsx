@@ -67,6 +67,8 @@ interface DroppableAttachment {
 
 interface AiChatInputProps {
     size?: '' | 'mini';
+    /** Conversation setup choices belong to the new-chat surface. */
+    allowConfiguration?: boolean;
     features?: AiChatInputFeatures;
     disabled?: boolean;
     /**
@@ -134,6 +136,7 @@ interface AiChatInputProps {
 const AiChatInput = memo(
     ({
         size = '',
+        allowConfiguration = true,
         features,
         disabled = false,
         sendDisabled = false,
@@ -319,8 +322,8 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
-        const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
+        const showSkillPicker = allowConfiguration && !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
+        const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
@@ -415,7 +418,7 @@ const AiChatInput = memo(
         // Skills join the knowledge spaces in the strip: both are context you
         // mount onto the conversation, not something you are about to send.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        const hasMountedKbs = (!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0;
+        const hasMountedKbs = allowConfiguration && ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
@@ -446,7 +449,7 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {(showToolPicker || taskModeEntry || showSkillPicker) && (
+                {allowConfiguration && (showToolPicker || taskModeEntry || showSkillPicker) && (
                     <div className="dsh-chat-capabilities flex flex-wrap items-center gap-2 px-2 pb-2">
                         {showSkillPicker && (
                             <ChatSkillSelector
@@ -645,7 +648,7 @@ const AiChatInput = memo(
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
                         disabled={disabled || isStreaming || isParsingMedia}
-                        placeholder={placeholder || bsConfig?.inputPlaceholder || localize("dshChat.placeholder")}
+                        placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
                         tabIndex={0}
                         data-testid="ai-chat-input"
                         data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
@@ -671,6 +674,7 @@ const AiChatInput = memo(
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
                                     variant="plus"
+                                    showKnowledgeSelection={allowConfiguration && knowledgeBase}
                                     config={bsConfig}
                                     disabled={!!disabled}
                                     value={selectedOrgKbs}
@@ -694,7 +698,7 @@ const AiChatInput = memo(
                             )}
                             {/* Knowledge-space pill — separate "+"-menu sibling that
                                 hosts only the knowledge-space / org-knowledge submenus. */}
-                            {!isLingsi && onSelectedOrgKbsChange && (
+                            {allowConfiguration && knowledgeBase && !isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
                                     variant="knowledge"
                                     config={bsConfig}

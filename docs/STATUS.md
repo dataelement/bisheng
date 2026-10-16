@@ -1,3 +1,10 @@
+# 2026-10-16 — 会话输入框能力边界与 CI 核查
+
+- 新建 Chat 保留 Skill、工具、深度研究与知识空间配置。已有会话通过 allowConfiguration=false 收起选择栏、知识空间按钮及已选上下文条带；加号保留文件上传，模型、发送、停止继续可用。原有知识/技能状态继续参与会话，展示切换保持配置。
+- 验证：4 文件 / 21 项定向回归通过，含实际 AiChatInput 渲染、会话状态切换、配置保留、附件发送与停止；变更文件 ESLint、多语言一致性、生产构建通过。严格类型检查保持基线 useAiChat.test.ts:294 的一项 fixture 错误。
+- CI 实际失败：Frontend Quality run 38873431906 / job 116882714781 停在 Lint platform（93 errors），后续 client lint 和两个 typecheck 步骤跳过。最新 run 38874654073 同样停在该步骤。93 项与干净目标基线一致，涉及 API/Citation 的 any、敏感策略硬编码文案/Hook 依赖及 License 测试文案。工作流评估代码规范与类型，不对视觉质量评分；本 PR 保留现有质量检查和抑制规则。
+- 3006 同步采用 beta4 对应实现，并保留 model-discovery-inline-status-20261016 的同期更新。实机已验证新建入口保留、已有会话简化、加号菜单只有上传文件；beta5 PR 的真实服务验收与安装包仍待执行。
+
 # 2026-10-16 — Chat 网页交付到 feat/bisheng-work-103
 
 - Git 交付：用户已授权个人 fork；改动已推送到 SuperstructureJH/bisheng 的 codex/chat-web-103-delivery，并提交 [PR #2495](https://github.com/dataelement/bisheng/pull/2495)，目标为 feat/bisheng-work-103，当前待评审合入。
