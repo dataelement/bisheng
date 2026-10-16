@@ -91,5 +91,5 @@ export function AppChatFileChip({ file, variant = 'message', className }: AppCha
         );
     }
 
-    return <ChatFile fileName={name} filePath={path} />;
+    return <ChatFile fileName={name} filePath={path} formatError={file.format_error} />;
 }

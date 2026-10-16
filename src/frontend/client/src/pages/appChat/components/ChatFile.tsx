@@ -2,7 +2,7 @@
 import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
 import { downloadFile } from "~/utils";
 import useLocalize from "~/hooks/useLocalize";
-export default function ChatFile({ fileName, filePath }) {
+export default function ChatFile({ fileName, filePath, formatError = '' }) {
 
     // download file
     const handleDownloadFile = (filePath) => {
@@ -23,6 +23,8 @@ export default function ChatFile({ fileName, filePath }) {
                 {fileName}
             </div>
             <p className="text-xs text-gray-400 mt-1">{t('com_bschoose_click_to_download')}</p>
+            {/* F078: the file's content does not match its format */}
+            {formatError && <p className="text-xs text-danger mt-1">{t('com_agent_runtime.format_error')}</p>}
         </div>
     </div>
 };

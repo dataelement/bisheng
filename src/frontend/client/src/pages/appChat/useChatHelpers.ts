@@ -225,6 +225,8 @@ export default function useChatHelpers() {
                                 // Keep the id: it's what an image attachment is
                                 // looked up by when its link is re-issued.
                                 file_id: el.file_id,
+                                // F078: flags a deliverable whose content does not match its format.
+                                ...(el.format_error ? { format_error: el.format_error } : {}),
                                 // And what the media chip draws with. Narrowing
                                 // the row to the four fields above dropped them,
                                 // so a stored video reopened as a bare card.
@@ -304,6 +306,8 @@ export default function useChatHelpers() {
                             create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                             source: data.source,
                             citations: data.citations ?? currentMsg.citations,
+                            // F078: an agent node's deliverables arrive with the end event.
+                            files: data.type === "end" && Array.isArray(data.files) && data.files.length ? data.files : currentMsg.files,
                             end: data.type === "end",
                             extra: data.extra,
                         }
@@ -391,7 +395,7 @@ export default function useChatHelpers() {
         endMsg: (chatid: string, data: any) => {
             // 删除所有未结束消息
             if (data.type === "end_cover" && data.message) {
-                console.log("触发安全审计,删除所有未结束消息")
+                console.log("security audit triggered, dropping unfinished messages")
                 data.category = "stream_msg"
                 data.type = "over"
                 data.id = generateUUID(8)

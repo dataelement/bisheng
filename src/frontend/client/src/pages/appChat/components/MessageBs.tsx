@@ -15,6 +15,7 @@ import { cn, copyText, formatStrTime } from "~/utils";
 import { AppChatFileList } from "./AppChatFileList";
 import MessageButtons from "./MessageButtons";
 import useLocalize from "~/hooks/useLocalize";
+import { parseAgentNotices } from "../agentNotices";
 
 
 export const ReasoningLog = ({ loading, msg = '' }) => {
@@ -125,7 +126,7 @@ export default function MessageBs({
                 <div className="flex gap-2 items-center">
                     {data.sender ? <p className="text-gray-600 text-xs mb-1 ml-2">{data.sender}</p> : <p />}
                     {/* <div className={`group-hover:opacity-100 opacity-0`}>
-                        <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        <span className="text-slate-400 text-sm">{formatStrTime(data.create_time, t('com_message_time_format'))}</span>
                     </div> */}
                 </div>
                 <div className="min-h-8 px-4 rounded-2xl">
@@ -148,6 +149,10 @@ export default function MessageBs({
                                     {data.files.length > 0 && (
                                         <AppChatFileList files={data.files} className="mt-2" />
                                     )}
+                                    {/* F078: notices of an agent node that ran skills */}
+                                    {data.end && parseAgentNotices(data.extra).map(code => (
+                                        <p key={code} className="mt-2 text-caption text-text-3">{t(`com_agent_runtime.notice.${code}`)}</p>
+                                    ))}
                                     {/* @user */}
                                     {data.receiver && <p className="text-blue-500 text-sm">@ {data.receiver.user_name}</p>}
                                 </div>
@@ -178,7 +183,7 @@ export default function MessageBs({
                         text={message}
                         onCopy={handleCopyMessage}
                     >
-                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, t('com_message_time_format'))}</span>
                         {chatId && messageId && (
                             <ExportSelectionButton chatId={chatId} messageId={messageId} />
                         )}

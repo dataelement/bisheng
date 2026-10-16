@@ -2726,9 +2726,6 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },
@@ -2890,9 +2887,6 @@
       "count": 1
     },
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
       "count": 1
     }
   },

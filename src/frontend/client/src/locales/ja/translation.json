@@ -2378,5 +2378,13 @@
   "com_citation.locate_missed": "引用箇所を自動で特定できませんでした。引用された原文は次のとおりです:",
   "com_ui": {
     "scroll_to_bottom": "最下部へ移動"
-  }
+  },
+  "com_agent_runtime": {
+    "format_error": "ファイルの内容が形式と一致せず、開けない可能性があります",
+    "notice": {
+      "code_executor_missing": "利用できるコード実行環境がないため、スキルのスクリプトは実行されませんでした。結果が不完全な可能性があります。",
+      "deliverables_failed": "生成されたファイルを保存できませんでした。もう一度実行してください。"
+    }
+  },
+  "com_message_time_format": "MM月dd日 HH:mm"
 }

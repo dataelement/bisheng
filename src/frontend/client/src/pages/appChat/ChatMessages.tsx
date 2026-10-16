@@ -92,8 +92,9 @@ export default function ChatMessages({
 
         {messages.map((msg) => {
                 // A user's own attachments belong on their message bubble;
-                // MessageFile is for files the run produced.
-                if (msg.files?.length && msg.category !== 'question') {
+                // MessageFile is for files the run produced. An agent node's
+                // answer (stream_msg) keeps its text and lists its files below it (F078).
+                if (msg.files?.length && !['question', 'stream_msg'].includes(msg.category)) {
                     return <MessageFile key={msg.id} title={title} data={msg} logo={logo} />;
                 } else if (['tool', 'flow', 'knowledge'].includes(msg.category)) {
                     return <MessageRunlog key={msg.id || msg.extra} data={msg} />;

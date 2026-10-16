@@ -10,6 +10,8 @@ export interface AppChatFileLike {
     cover_filepath?: string;
     mediaDurationSec?: number;
     parsingState?: 'parsing' | 'done';
+    // F078: set on an agent deliverable whose content does not match its extension
+    format_error?: string;
 }
 
 export function normalizeAppChatFile(file: AppChatFileLike): { name: string; path: string } {
