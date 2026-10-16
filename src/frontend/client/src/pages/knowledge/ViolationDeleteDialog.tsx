@@ -113,16 +113,11 @@ export function ViolationDeleteDialog({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [fileId, ruleCode]);
 
-    const blockedReason = preview?.reason === "monthly_award_exempt"
-        || preview?.reason === "self_author"
-        || preview?.reason === "payee_missing";
-    const reasonText = preview?.reason === "monthly_award_exempt"
-        ? localize("com_knowledge.delete_point_reason_monthly")
-        : preview?.reason === "self_author"
-            ? localize("com_knowledge.delete_point_reason_self")
-            : preview?.reason === "payee_missing"
-                ? localize("com_knowledge.delete_point_reason_payee")
-                : "";
+    const reasonText = preview?.reason === "self_author"
+        ? localize("com_knowledge.delete_point_reason_self")
+        : preview?.reason === "payee_missing"
+            ? localize("com_knowledge.delete_point_reason_payee")
+            : "";
 
     function levelLabel(level: string) {
         const key = `com_knowledge.library_level_${level}`;
@@ -144,7 +139,7 @@ export function ViolationDeleteDialog({
             onClose();
             return;
         }
-        if (!preview?.can_deduct || previewing) return;
+        if (previewing) return;
         setBusy(true);
         setError("");
         try {
@@ -161,9 +156,8 @@ export function ViolationDeleteDialog({
     const libraryText = preview
         ? [...new Set(preview.libraries.map((item) => levelLabel(item.level)))].join("、")
         : "";
-    const confirmDisabled = busy
-        || loadingRules
-        || (Boolean(ruleCode) && (previewing || !preview?.can_deduct));
+    // 月奖豁免等不能扣分时仍可确认删除. 确认接口会删文档, 扣分由服务端跳过.
+    const confirmDisabled = busy || loadingRules || (Boolean(ruleCode) && previewing);
 
     return (
         <Dialog open={Boolean(fileId)} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
