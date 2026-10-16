@@ -36,6 +36,7 @@ from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.developer_token.domain.services import DeveloperTokenService
 from bisheng.mcp_server.api.router import McpServerApp, mcp_routes
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveResp
+from test.developer_token.test_developer_token_dependency import _prepare_principal_auth
 
 EXPECTED_TOOL_NAMES = {
     "search_knowledge",
@@ -58,7 +59,7 @@ async def server(monkeypatch, *, enabled=True, failure=None, search=None):
     active = set()
 
     async def authenticate(raw_token, **kwargs):
-        assert kwargs["require_explicit_route"] is True
+        assert "require_explicit_route" not in kwargs
         assert kwargs["route_path"] == "/mcp"
         if failure:
             raise failure()
@@ -153,6 +154,41 @@ async def test_auth_failures_have_real_http_status(monkeypatch, failure, status,
         assert response.status_code == status
         assert response.json()["status_code"] == code
         assert not calls and not active
+
+
+@pytest.mark.parametrize(
+    ("rules", "allowed"),
+    [
+        (None, True),
+        ([], True),
+        ([{"match_type": "METHOD_PATH", "method": "POST", "path": "/mcp"}], True),
+        ([{"match_type": "PATH", "path": "/mcp"}], True),
+        ([{"match_type": "PREFIX", "path": "/*"}], True),
+        ([{"match_type": "METHOD_PATH", "method": "GET", "path": "/mcp"}], False),
+        ([{"match_type": "PATH", "path": "/api/v2/filelib/retrieve"}], False),
+        ([{"match_type": "PREFIX", "path": "/mcp/*"}], False),
+    ],
+)
+async def test_real_token_route_rules_apply_to_mcp_http_and_sdk(monkeypatch, rules, allowed):
+    """AC-04, AC-11: real Token auth allows empty rules and enforces configured rules."""
+    real_authenticate = DeveloperTokenService.authenticate_principal
+    async with server(monkeypatch) as (app, calls, active):
+        _prepare_principal_auth(monkeypatch, "test-mcp-route", file_sync_rule=None, route_whitelist=rules)
+        monkeypatch.setattr(DeveloperTokenService, "authenticate_principal", real_authenticate)
+        if allowed:
+            async with session(app, token="test-mcp-route") as client:
+                assert {tool.name for tool in (await client.list_tools()).tools} == EXPECTED_TOOL_NAMES
+                result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
+                assert not result.isError
+            assert calls == [(7, 5, frozenset({5}), "q")]
+        else:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app)) as client:
+                response = await client.post(
+                    "http://localhost/mcp", headers={"X-Developer-Token": "test-mcp-route"}, json={}
+                )
+            assert response.status_code == 403 and response.json()["status_code"] == 19812
+            assert not calls
+        assert not active
 
 
 @pytest.mark.parametrize("path", ["/mcp", "/mcp/"])

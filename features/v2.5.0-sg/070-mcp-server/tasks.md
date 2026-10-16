@@ -1,7 +1,7 @@
 # MCP Server：执行任务
 
 **Feature ID**: 070-mcp-server  
-**Status**: LOCAL_VERIFIED
+**Status**: LOCAL_VERIFIED_WITH_BASELINE_FAILURES
 **Version**: v2.5.0-sg
 
 用户于 2026-10-08 回复“开始实施”，确认 spec.md、requirements.md、design.md；在原范围内连续实现及验证。
@@ -11,6 +11,7 @@
 | spec.md | ✅ 已评审并获用户确认 |
 | tasks.md | ✅ 已拆解并完成静态评审 |
 | 实现 | ✅ T001～T007 完成；实际业务环境/DM8/正式部署验证待执行 |
+| 统一路由白名单 | ✅ T008～T009 本地完成；73 项定向通过；扩大回归 322 通过、12 项 HEAD 同样失败 |
 
 ## 任务
 
@@ -88,10 +89,28 @@
 
 ## 任务评审
 
+### 2026-10-16 已确认统一路由白名单
+
+- [x] **T008**：先以 None/空列表建立 MCP 放行及非空规则匹配/拒绝回归，再移除 MCP 专用 `require_explicit_route` 参数、调用与拒绝分支；同步服务替身断言。
+  _Requirements: REQ-002, REQ-003, REQ-007, REQ-008_
+  _Acceptance: AC-03, AC-04, AC-05, AC-10, AC-11_
+  _Verification: 定向红/绿灯；真实 SDK/HTTP 与 Token/REST 相关回归_
+  _Depends: T007_
+  _Boundary: 用户已确认空白名单现有 Token 可访问 MCP；不改变资源权限、IP/限流、CORS，不操作真实 Token 或数据_
+
+- [x] **T009**：同步 F070/F078 规格和使用文档，记录策略覆盖、红绿灯及静态/安全自审证据。
+  _Requirements: REQ-003, REQ-009_
+  _Acceptance: AC-04, AC-11, AC-13_
+  _Verification: 文档引用/示例、Ruff、架构及 diff；复用 T008 回归_
+  _Depends: T008_
+  _Boundary: 保留历史测试记录并标明旧策略已被覆盖；不提交、推送或部署_
+
 根据项目 tasks checklist 静态检查：REQ/AC 引用有效、文件范围明确、依赖无环、拒绝路径先于实现、现有测试复用、
 无新 ORM/迁移/权限实体、无原接口收紧、无前端/Worker 任务，验证按业务风险分组而非按 AC 重复运行。结果 LGTM。
 
 ## 实际偏差记录
+
+- 2026-10-16：用户确认 T008～T009 覆盖 T003 原有 MCP 专用非空白名单策略。保留历史任务和测试证据，当前语义以更新后的 REQ-003/AC-04 为准。扩大回归的 12 个组合隔离失败在未修改 HEAD 复现，未为本任务改写入口解析器或全局测试上下文；该文件独立执行 13 passed。Token 服务大文件两处格式差异在 HEAD 已存在，未扩展格式化。
 
 - 项目建议分支 `feat/2.5.0-sg/070-mcp-server` 与既有 `feat/2.5.0-sg` ref 冲突，Git 拒绝创建。改用 `codex/070-mcp-server`，不改起点或用户未提交文件。
 - SDK 的常驻 session manager 在 HTTP 取消时不保证立即清理后台工具，改为每请求 session manager/task group；真实 TCP 断开监听在 SDK 消费完请求体后启动，避免争抢请求体。静态工具注册仍由 worker lifespan 管理，范围不变。

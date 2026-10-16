@@ -15,7 +15,7 @@
 
 ```mermaid
 flowchart TD
-    A[外部 MCP 客户端] --> B[/mcp Token 与显式路由鉴权]
+    A[外部 MCP 客户端] --> B[/mcp Token 与统一路由鉴权]
     B --> C[实际工具任务：绑定用户与租户]
     C --> D[浏览与文件搜索]
     C --> E[正文与来源]

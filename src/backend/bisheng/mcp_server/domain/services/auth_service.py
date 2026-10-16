@@ -29,7 +29,6 @@ class McpAuthService:
             endpoint_key=f"{method} /mcp",
             request_method=method,
             route_path="/mcp",
-            require_explicit_route=True,
         )
         # The SDK executes tools in a different task; never carry reset tokens across tasks.
         DeveloperTokenService.reset_auth_context(principal.user)

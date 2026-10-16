@@ -1,11 +1,13 @@
 # MCP Server：验证证据
 
 **Feature ID**: 070-mcp-server  
-**Status**: LOCAL_VERIFIED  
-**Updated**: 2026-10-09
-**Branch**: codex/mcp-default-on-cors
+**Status**: LOCAL_VERIFIED_WITH_BASELINE_FAILURES
+**Updated**: 2026-10-16
+**Branch**: feat/2.5.0-sg
 
 ## 当前调整与历史证据
+
+最新路由策略及证据见“2026-10-16 统一路由白名单验证”。此前的非空显式授权测试为历史证据，已由用户本次确认覆盖，不能作为当前验收要求。
 
 2026-10-09 用户确认默认开启和 MCP 任意来源跨域，新增 AC-14、改写 AC-01/AC-12。
 下方 E-001～E-006 与初版验收矩阵为历史证据；旧的 Host/Origin 拒绝和默认关闭不再作为当前验收结论。
@@ -139,3 +141,39 @@ E-009 命令（cwd src/backend）：
 本次 code review：仅 MCP 路径取消来源限制；预检不需要 Token，实际请求依然鉴权；新 wrapper 不修改其他 REST Origin 策略。
 显式 false/旧 allowlist 兼容、未知 Host/Origin、成功/401 CORS、邻近非 MCP 路径均有测试。
 保留初版真实业务基础设施替身边界，未部署、未操作真实配置/权限或知识数据。
+
+## 2026-10-16 统一路由白名单验证
+
+- 用户已确认取消 MCP 额外限制；任务 T008～T009，REQ-002/003/007/008/009，重点 AC-04/11。
+- 代码状态：`feat/2.5.0-sg` / `6b01f9556` 加本次工作区 diff。生产变更仅删除 Token 服务中 MCP 专用参数/拒绝分支及 MCP 调用参数，共四行。
+- `None`/空列表不启用路由过滤；非空 METHOD_PATH/PATH/PREFIX 仍要求匹配，拒绝时 HTTP 403/19812 且业务未执行。实际 Token 有效性、绑定用户/租户、IP、限流、每请求认证与实际任务身份不变。空白名单不表示匿名访问、获得资源权限或自动支持新 HTTP 方法。
+
+| Evidence | Command / Scope | Result |
+|---|---|---|
+| E-010 红灯 | `pytest test/mcp_server/test_mcp_server.py -k real_token_route_rules -q --tb=short`，生产修改前 | 2 failed、6 passed、29 deselected，4.19 秒；None 和空列表被额外限制拒绝，其他规则匹配符合原语义 |
+| E-011 绿灯 | `.venv/bin/python -m pytest test/mcp_server/test_mcp_server.py test/developer_token/test_developer_token_dependency.py -q --tb=short` | 73 passed、28 warnings，5.30 秒；真实 Token 服务 + SDK 握手/列工具/检索 + HTTP 拒绝；其余凭证/IP/限流/身份路径通过 |
+| E-012 相关回归 | 下列完整命令；受控外部端口，真实 SDK/HTTP/TCP、SQLite | 322 passed、12 failed、62 warnings，16.81 秒 |
+| E-013 HEAD 对照 | `git archive HEAD src/backend` 隔离快照，同一命令及同一 Python 环境 | 314 passed、同样 12 failed、57 warnings，16.84 秒；失败测试 ID 一致 |
+| E-014 失败范围独立验证 | `.venv/bin/python -m pytest test/knowledge/test_knowledge_document_entry_resolver.py -q --tb=short` | 13 passed、66 warnings，0.46 秒；组合运行失败属于基线已有的测试隔离问题，日志有 tenant context=1 与 fixture tenant=7 不一致 |
+| E-015 静态检查 | 四个变更 Python 文件 Ruff；三个文件格式检查；两生产文件架构守卫；AST、文档引用/示例和 diff | Ruff 无诊断；Token 服务格式检查有两处 HEAD 已存在差异，均在未改代码处，不扩大格式化；其他门禁通过 |
+
+相关回归命令（cwd `src/backend`，Python 3.10.19，锁定依赖与现有 `.venv`）：
+
+```bash
+.venv/bin/python -m pytest test/mcp_server test/developer_token test/api_rate_limit \
+  test/knowledge/test_mcp_knowledge_query_service.py \
+  test/knowledge/test_mcp_knowledge_repository.py \
+  test/knowledge/test_mcp_knowledge_content_service.py \
+  test/knowledge/test_mcp_knowledge_ingestion_service.py \
+  test/knowledge/test_knowledge_document_entry_resolver.py \
+  test/open_endpoints/test_filelib_external_user_context.py \
+  test/open_endpoints/test_filelib_retrieve_service.py \
+  test/open_endpoints/test_filelib_retrieve_source_service.py \
+  test/open_endpoints/test_filelib_file_source_url.py -q --tb=short
+```
+
+日志在 `/tmp/bisheng-mcp-route-policy-{red,targeted,regression,baseline,resolver-isolated}-20261016.log`。12 个基线失败均在未修改的入口解析测试文件，组合执行查不到 fixture 租户数据或触发错误消息断言；没有修改或跳过这些用例，不能将 E-012 宣称为全绿。
+
+AC-04/11 的目标契约及相关鉴权路径本地 PASS（E-011）；整体回归为 PASS_WITH_BASELINE_FAILURES。使用文档、F070/F078 当前规格已统一，保留并标记初版历史策略。已确认影响为现有空白名单 Token 也可进入 MCP，包括绑定用户有权使用的写工具；不会修改 Token 的已存白名单或文件权限。回退本次局部代码即可恢复额外限制，不涉及 Schema/数据回退。
+
+本次未提交、推送或部署，未修改真实 Token/数据库/配置，未执行远程写工具。真实部署/代理和多用户业务资源仍为 MANUAL_REQUIRED；部署后可用专属 Token 分别验证空白名单连接、非空规则拒绝及资源权限，不能以本地替身等同线上验收。

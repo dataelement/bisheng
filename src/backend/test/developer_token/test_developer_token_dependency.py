@@ -560,19 +560,19 @@ def _prepare_principal_auth(monkeypatch, raw: str, *, file_sync_rule: dict | Non
 
 
 @pytest.mark.parametrize(
-    ("explicit", "rules", "allowed"),
+    ("rules", "allowed"),
     [
-        (False, [], True),
-        (True, [], False),
-        (True, [{"match_type": "METHOD_PATH", "method": "POST", "path": "/mcp"}], True),
-        (True, [{"match_type": "METHOD_PATH", "method": "GET", "path": "/mcp"}], False),
-        (True, [{"match_type": "PATH", "path": "/api/v2/filelib/retrieve"}], False),
+        (None, True),
+        ([], True),
+        ([{"match_type": "METHOD_PATH", "method": "POST", "path": "/mcp"}], True),
+        ([{"match_type": "METHOD_PATH", "method": "GET", "path": "/mcp"}], False),
+        ([{"match_type": "PATH", "path": "/api/v2/filelib/retrieve"}], False),
     ],
 )
-async def test_mcp_requires_explicit_route_without_changing_rest_default(monkeypatch, explicit, rules, allowed):
-    """AC-04, AC-11: actual Token service enforces opt-in and retains legacy behavior."""
+async def test_token_route_rules_allow_empty_and_enforce_nonempty_whitelist(monkeypatch, rules, allowed):
+    """AC-04, AC-11: all Token consumers share the existing default route policy."""
     _prepare_principal_auth(monkeypatch, "test-mcp-route", file_sync_rule=None, route_whitelist=rules)
-    kwargs = {"request_method": "POST", "route_path": "/mcp", "require_explicit_route": explicit}
+    kwargs = {"request_method": "POST", "route_path": "/mcp"}
     if not allowed:
         with pytest.raises(DeveloperTokenRouteForbiddenError):
             await DeveloperTokenService.authenticate_principal("test-mcp-route", **kwargs)

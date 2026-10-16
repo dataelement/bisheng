@@ -3,7 +3,7 @@
 **Feature ID**: 070-mcp-server  
 **Status**: CONFIRMED  
 **Created**: 2026-10-08  
-**Updated**: 2026-10-09
+**Updated**: 2026-10-16
 
 关联规格：[spec.md](spec.md)。本文件随规格由用户确认，后续实现遵循已评审任务。
 
@@ -14,7 +14,7 @@
 - `open_endpoints/api/endpoints/filelib.py::retrieve_chunks` 负责用户上下文、检索、来源解析、超时与结果装配。
 - `KnowledgeSpaceChatService.aretrieve_chunks` 拥有业务检索及权限过滤；本期不改算法。
 - `DeveloperTokenService.authenticate_principal` 已负责凭证、绑定、IP、路由、限流和租户上下文，
-  当前空路由白名单允许全部路由；MCP 要在保持原默认行为的前提下要求非空显式授权。
+  空路由白名单不启用路由过滤；2026-10-16 用户确认 MCP 与 REST 统一遵循该默认行为。
 - `FilelibUserContextService.use_user` 拥有 REST external_id 代理语义，不修改其规则。
 - 现有 `McpConf` 只有 `enable_stdio`；`get_mcp_conf` 读取 DB 系统配置并使用已有 100 秒 Redis 缓存。
 - SDK 的 `streamable_http_app()` 延迟创建 session manager，必须在访问 `session_manager.run()` 前构建协议应用。
@@ -51,7 +51,7 @@ src/backend/bisheng/open_endpoints/api/endpoints/filelib.py
 src/backend/bisheng/open_endpoints/api/dependencies.py
                                       # 装配共享服务，不改变 REST 用户依赖
 src/backend/bisheng/developer_token/domain/services/developer_token_service.py
-                                      # 可选的显式路由要求，原调用默认行为不变
+                                      # 移除 MCP 专用非空要求，统一复用路由匹配
 src/backend/bisheng/core/config/settings.py
 src/backend/bisheng/initdb_config.yaml  # server 子块模型与默认模板
 src/backend/bisheng/api/router.py       # 集中暴露 MCP 入口供 main 挂载
@@ -76,13 +76,13 @@ src/backend/test/open_endpoints/       # 最小共享编排与 REST 兼容测试
 - 根据 2026-10-09 用户确认，不再读取 Host/Origin 白名单，SDK `enable_dns_rebinding_protection=false`；仍验证 Content-Type 与 Token，保留全部业务权限。
 - 可选开关以启动快照为准，修改后需配置缓存刷新/到期并重启；Token 状态每次请求重新验证。
 
-### 3.2 身份与显式授权
+### 3.2 身份与统一路由授权
 
 - 协议入口认证调用 DeveloperToken 的 domain service，不导入其他模块的 api dependency。
-- 给既有鉴权服务增加仅 MCP 使用的显式路由要求，缺省关闭此要求，保持所有原调用方行为。
+- 移除仅 MCP 使用的 `require_explicit_route` 参数及非空白名单检查，统一复用现有 `_check_route_access`；仓库无其他生产调用方使用该参数。
 - 每个请求，包括握手、列表、通知、调用及不支持的方法，均按实际 HTTP 方法和规范 `/mcp` 路由鉴权。
 - 非 POST 请求完成鉴权后返回 405，不交给 SDK 自动开启 GET SSE；CORS 预检继续由 CORS 层处理。
-- 空白名单拒绝；非空白名单继续遵循既有 METHOD_PATH/PATH/PREFIX 匹配，不新增白名单语法。
+- 未配置或空白名单不启用路由过滤；非空白名单继续遵循既有 METHOD_PATH/PATH/PREFIX 匹配，不匹配仍返回 403，不新增白名单语法。
 - 身份保存在请求局部状态，在实际工具任务内明确恢复绑定用户/租户可见集；不使用模块全局当前用户。
 - 请求结束或工具结束都在对应上下文中释放资源；不得跨 AnyIO task reset 另一 task 创建的 ContextVar token。
 - 不以 JWT Cookie、Bearer 或默认操作员替代开发者 Token；不把 Token 放入工具输入输出。
@@ -131,7 +131,7 @@ mcp:
 | Requirement | Design elements |
 |-------------|-----------------|
 | REQ-001 | §3.1 规范路径、ASGI 挂载、启动快照和无状态 FastMCP |
-| REQ-002, REQ-003 | §3.2 既有鉴权复用与显式 MCP 路由要求 |
+| REQ-002, REQ-003 | §3.2 既有鉴权复用与统一路由白名单语义 |
 | REQ-004 | §3.2 请求身份、§3.4 唯一工具与严格输入 |
 | REQ-005, REQ-008 | §3.3 共享检索及 REST 保持兼容 |
 | REQ-006 | §3.4 Schema、结果、真实鉴权状态和工具错误 |
@@ -151,6 +151,8 @@ mcp:
 2026-10-09 更新的测试重点：默认启动、旧显式关闭、任意 Host/Origin、预检成功/鉴权错误 CORS、REST 相邻路径策略不变。
 
 ## 7. 备选方案与取舍
+
+2026-10-16 调整：不保留固定为 false 的 MCP 专用开关，直接移除仅此入口使用的额外检查，避免再次分叉。回归覆盖 None/空列表、规则匹配与拒绝、真实 MCP 握手/列表/检索、401/IP/限流和身份隔离；外部存储/权限采用现有受控端口。现有空白名单 Token 可访问 MCP（写入仍需绑定用户上传权限）；可回退局部代码恢复，无数据迁移、不自动改白名单、不部署。
 
 - 独立 MCP HTTP 服务：部署、鉴权和内部调用链增加，首期不选。
 - MCP 经 HTTP 回调已有 REST：可以复用响应，但引入内部凭证、额外网络和错误包装，首期不选。
