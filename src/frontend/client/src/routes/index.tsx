@@ -23,6 +23,7 @@ import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
+import { skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 // Route-level code splitting (ledger #27): only the primary landing path
 // (login + main layout + chat home) ships in the entry chunk; every other
@@ -52,6 +53,7 @@ const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
 const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
 const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
+const SkillCenterPage = lazy(() => import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })));
 
 function RouteLoading() {
   return (
@@ -148,6 +150,12 @@ export const router = createBrowserRouter([
             element: <Root />,
             children: [
               { index: true, element: <HomeEntryRedirect /> },
+              {
+                path: 'c/skills',
+                element: skillCenterPreviewEnabled ? (
+                  <MenuApprovalPluginGate pluginId="home">{suspended(<SkillCenterPage />)}</MenuApprovalPluginGate>
+                ) : <Navigate to="/404" replace />,
+              },
               {
                 path: 'c/media-playback',
                 element: (

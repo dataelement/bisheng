@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
+import { useIsClipped } from '~/hooks/useIsClipped';
 
 interface SkillSelectorProps {
     selected: TaskModeSkill[];
@@ -26,32 +27,6 @@ interface SkillRowProps {
     skill: TaskModeSkill;
     isChecked: boolean;
     onToggle: (skill: TaskModeSkill) => void;
-}
-
-/**
- * Whether a single-line element is actually cut off. Re-measures on resize, so
- * it keeps up with panel-width changes.
- */
-function useIsClipped<T extends HTMLElement>(text?: string) {
-    const ref = useRef<T | null>(null);
-    const [clipped, setClipped] = useState(false);
-
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (!el) {
-            setClipped(false);
-            return;
-        }
-        // +1 absorbs sub-pixel rounding, which otherwise reports a clip on text
-        // that fits exactly.
-        const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
-        measure();
-        const ro = new ResizeObserver(measure);
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, [text]);
-
-    return [ref, clipped] as const;
 }
 
 /**

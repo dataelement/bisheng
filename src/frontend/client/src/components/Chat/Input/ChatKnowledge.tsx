@@ -21,6 +21,9 @@ import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
+import { SkillMenuEntries, SkillUploadHost } from '~/components/Skills/SkillMenuEntries';
+import { SkillMenuPanel } from '~/components/Skills/SkillMenuPanel';
+import { skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
@@ -257,7 +260,8 @@ export const ChatKnowledge = ({
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
       const raw = (preferBottom ? below : above) - 8;
-      const capped = Math.min(MAX_SUB_HEIGHT, Math.max(80, Math.floor(raw)));
+      const heightCap = mobilePanel === 'skill' && skillCenterPreviewEnabled ? 440 : MAX_SUB_HEIGHT;
+      const capped = Math.min(heightCap, Math.max(80, Math.floor(raw)));
       setMobileDrillMaxH(capped);
     };
     run();
@@ -270,9 +274,10 @@ export const ChatKnowledge = ({
       window.removeEventListener('resize', run);
       window.removeEventListener('scroll', run, true);
     };
-  }, [isMobile, rootOpen, mobileTallPanel]);
+  }, [isMobile, rootOpen, mobileTallPanel, mobilePanel]);
 
   return (
+    <SkillUploadHost>{(openSkillUpload) => (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
       <TooltipProvider delayDuration={50}>
         <Tooltip>
@@ -416,6 +421,9 @@ export const ChatKnowledge = ({
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_folder')}</span>
           </DropdownMenuItem>
         )}
+
+        {variant === 'plus' && (!isMobile || mobilePanel === 'root') && <SkillMenuEntries onUpload={openSkillUpload} onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined} />}
+        {variant === 'plus' && isMobile && mobilePanel === 'skill' && skillCenterPreviewEnabled && <SkillMenuPanel onUpload={openSkillUpload} onBack={() => setMobilePanel('root')} />}
 
         {/* Knowledge pill: show the SPACES list directly — no drill, no sub.
             Same layout on both surfaces; only the outer width / position adapt
@@ -587,7 +595,7 @@ export const ChatKnowledge = ({
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
                 close 让选择器先关掉「+」菜单，避免 popover 跳位。 */}
-            {renderSkillSubmenu && (
+            {!skillCenterPreviewEnabled && renderSkillSubmenu && (
               !isMobile ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
@@ -635,7 +643,7 @@ export const ChatKnowledge = ({
         )}
 
         {/* 添加 Skill — 移动端下钻面板 */}
-        {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
+        {!skillCenterPreviewEnabled && isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-0.5">
               <button
@@ -660,5 +668,6 @@ export const ChatKnowledge = ({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    )}</SkillUploadHost>
   );
 };
