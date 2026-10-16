@@ -22,7 +22,7 @@ from bisheng.dsh.domain.repositories.model_audit_queries import DshModelAuditQue
 from bisheng.dsh.domain.repositories.model_audit_setting import DshModelAuditSettingRepository
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities
-from bisheng.dsh.domain.schemas.model_audit_context import AuditContext
+from bisheng.dsh.domain.schemas.model_audit_context import AUDIT_FIELDS, AuditContext
 from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.domain.services.model import DshModelService
 from bisheng.dsh.domain.services.model_audit_body_access import DshModelAuditBodyAccessService
@@ -46,6 +46,7 @@ class AuditHarness:
         self.writer = DshModelAuditWriter(lambda: self.scope(DshModelAuditWriteRepository), lambda: storage, attempts=2)
         self.queue = BoundedAuditQueue(max_events=4096, max_bytes=16 * 1024 * 1024, consumer=self.writer.write)
         self.evidence = BoundedAuditQueue(max_events=4096, max_bytes=4 * 1024 * 1024, consumer=self.writer.write)
+        self.annotations = BoundedAuditQueue(max_events=64, max_bytes=768 * 1024, consumer=self.writer.write)
         self.modes = DshModelAuditSettingService(
             self.read_mode,
             timeout_seconds=0.2,
@@ -108,6 +109,8 @@ class AuditHarness:
                 "provider_name": "Synthetic",
                 "conversation_id": context.conversation_id,
                 "request_kind": context.request_kind,
+                "session_origin": context.session_origin,
+                "parent_conversation_id": context.parent_conversation_id,
                 "context_invalid": context.invalid,
                 "effective_mode": mode.mode,
                 "started_at": started,
@@ -121,6 +124,9 @@ class AuditHarness:
             activity=self.activity,
             digest_key=self.storage.keys.resolve(self.storage.keys.active_id),
             key_version=self.storage.keys.active_id,
+            annotation_queue=self.annotations,
+            message_sources=context.message_sources,
+            message_sources_status=context.message_sources_status,
         )
 
     async def authorize(self, actor_id, tenant_id):
@@ -250,7 +256,7 @@ class AuditHarness:
                 "enabled": True,
                 "client_id": "dsh-desktop",
                 "contract_version": "0.5.0",
-                "audit_context": {"fields": ["conversation_id", "request_kind"]},
+                "audit_context": {"fields": list(AUDIT_FIELDS)},
             }
 
         @app.get("/health")
@@ -283,7 +289,7 @@ class AuditHarness:
 
     async def drain(self):
         for _ in range(400):
-            if not self.queue.used_bytes and not self.evidence.used_bytes:
+            if not self.queue.used_bytes and not self.evidence.used_bytes and not self.annotations.used_bytes:
                 return
             await asyncio.sleep(0.01)
         raise TimeoutError("Controlled audit drain timed out")
@@ -291,4 +297,4 @@ class AuditHarness:
     async def close(self):
         if self.activity:
             await self.activity.close()
-        await asyncio.gather(self.queue.close(5), self.evidence.close(5))
+        await asyncio.gather(self.queue.close(5), self.evidence.close(5), self.annotations.close(5))

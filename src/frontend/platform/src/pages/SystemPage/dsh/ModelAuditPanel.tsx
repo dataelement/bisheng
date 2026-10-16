@@ -12,6 +12,7 @@ import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshChoice, DshPager, dshTime } from "./common";
 import { ModelAuditBody } from "./ModelAuditBody";
+import { ModelAuditParent } from "./ModelAuditParent";
 import { ModelAuditMode } from "./ModelAuditMode";
 import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
 import { ModelAuditUserSelect } from "./ModelAuditUserSelect";
@@ -320,6 +321,20 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
                 {t("dsh.modelAuditView.invalidContext")}
               </p>
             )}
+            <ModelAuditParent
+              row={row}
+              tenantId={tenantId}
+              onNavigate={(userId, conversationId) => {
+                setHistory([]);
+                setExpanded(null);
+                setQuery({
+                  tenant_id: tenantId,
+                  limit: 20,
+                  user_id: userId,
+                  conversation_id: conversationId,
+                });
+              }}
+            />
             <dl className="grid gap-2 text-sm md:grid-cols-2">
               {axes.map(([key]) => (
                 <div key={key} className="flex gap-2">

@@ -1,5 +1,6 @@
 """Tenant-scoped, idempotent audit facts. Caller owns the transaction."""
 
+from dataclasses import asdict
 from hashlib import sha256
 from uuid import uuid4
 
@@ -34,7 +35,16 @@ class DshModelAuditWriteRepository:
     def upsert_request(self, event):
         data = event.metadata
         row = self.request(event.request_id, lock=True)
-        identity = ("user_id", "session_id", "model_id", "conversation_id", "effective_mode")
+        identity = (
+            "user_id",
+            "session_id",
+            "model_id",
+            "conversation_id",
+            "effective_mode",
+            "request_kind",
+            "session_origin",
+            "parent_conversation_id",
+        )
         if row:
             if any(getattr(row, key) != data.get(key) for key in identity):
                 raise ValueError("Conflicting audit identity")
@@ -54,6 +64,9 @@ class DshModelAuditWriteRepository:
             if conversation is not None
             else None,
             request_kind=data.get("request_kind"),
+            session_origin=data.get("session_origin"),
+            parent_conversation_id=data.get("parent_conversation_id"),
+            message_sources_status=data.get("message_sources_status", "NOT_PROVIDED"),
             association_status="ASSOCIATED" if conversation is not None else "UNASSOCIATED",
             context_invalid=data.get("context_invalid", False),
             effective_mode=data["effective_mode"],
@@ -65,6 +78,19 @@ class DshModelAuditWriteRepository:
         self.session.add(row)
         self.session.flush()
         return row
+
+    def save_annotation(self, row, event, reference):
+        expected = AuditScope(row.tenant_id, row.user_id, "REQUEST", row.request_id, 2)
+        if row.effective_mode != "CONTENT" or reference.scope_key != expected.key or reference.encoding_version != 2:
+            raise ValueError("Foreign audit annotation")
+        value = asdict(reference)
+        if row.message_sources_ref is not None and row.message_sources_ref != value:
+            row.message_sources_status = "INVALID"
+            return
+        if row.message_sources_status == "INVALID":
+            return
+        row.message_sources_ref = value
+        row.message_sources_status = event.metadata["sources_result"]
 
     @staticmethod
     def scope(row):

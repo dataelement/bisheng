@@ -41,6 +41,8 @@ export type ModelAuditRecord = {
   provider_name: string;
   conversation_id: string | null;
   request_kind: string | null;
+  session_origin?: "main" | "subagent" | null;
+  parent_conversation_id?: string | null;
   context_invalid: boolean;
   association_status: "ASSOCIATED" | "UNASSOCIATED";
   effective_mode: AuditMode;
@@ -95,7 +97,17 @@ export type MissingModelAudit = {
   audit_record_missing: true;
   gap: "AWAITING" | "CONFIRMED" | "DEGRADED_OFF" | "MODE_UNKNOWN" | "UNKNOWN";
 };
+export type AuditMessageSource = { kind: string; form?: string };
+export type AuditSourceItem = {
+  message_index: number;
+  sources: AuditMessageSource[];
+};
 export type AuditBodyFrame =
+  | {
+      type: "annotations";
+      message_sources_status: string;
+      items: AuditSourceItem[];
+    }
   | {
       type: "meta";
       request_id: string;

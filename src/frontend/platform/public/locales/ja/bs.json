@@ -2579,6 +2579,34 @@
   "dsh": {
     "modelAudit": "モデル監査",
     "modelAuditView": {
+      "sources": {
+        "label": "メッセージの出所",
+        "missing": "出所は未提供",
+        "mixed": "複数の出所",
+        "parent": "親会話を表示",
+        "parent_loading": "親会話を検索中…",
+        "parent_unavailable": "親会話に閲覧可能な記録がありません。",
+        "parent_error": "親会話を検索できませんでした。再試行してください。",
+        "origin": {
+          "main": "通常の会話",
+          "subagent": "サブエージェントの会話",
+          "unknown": "会話の出所は不明"
+        },
+        "kinds": {
+          "user": "ユーザー入力",
+          "system-prompt": "システムプロンプト",
+          "model": "モデルの応答",
+          "tool": "ツール結果",
+          "skill-catalog": "スキル一覧",
+          "runtime-context": "実行時コンテキスト"
+        },
+        "status": {
+          "PARTIAL": "出所は一部のみ提供されています。保存済みの入出力原文には影響しません。",
+          "INVALID": "出所の注釈が無効です。保存済みの原文は閲覧できます。",
+          "UNAVAILABLE": "出所を利用できません。保存済みの原文は閲覧できます。",
+          "PENDING": "出所の保存待ちです。後でもう一度開いてください。"
+        }
+      },
       "bodySegment": "メッセージ分割 {{page}} / {{pages}}。ページを切り替えても原文を再取得しません。",
       "messages": {
         "data": "構造化コンテンツ",

@@ -14,6 +14,25 @@ import type {
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
+export async function getAuditParent(
+  requestId: string,
+  tenantId?: number,
+  signal?: AbortSignal,
+): Promise<
+  | { status: "AVAILABLE"; user_id: number; conversation_id: string }
+  | { status: "NOT_PROVIDED" | "UNAVAILABLE" }
+> {
+  return await request.get(
+    base +
+      "/requests/" +
+      encodeURIComponent(requestId) +
+      "/parent-conversation",
+    {
+      params: { tenant_id: tenantId },
+      signal,
+    },
+  );
+}
 export async function getAuditModels(
   query: {
     tenant_id?: number;
@@ -91,7 +110,9 @@ export async function* readAuditBody(
   tenantId?: number,
   signal?: AbortSignal,
 ): AsyncGenerator<AuditBodyFrame> {
-  const query = tenantId ? "?tenant_id=" + tenantId : "";
+  const query =
+    "?include_message_sources=true" +
+    (tenantId ? "&tenant_id=" + tenantId : "");
   const body = await requestStream(
     base +
       "/requests/" +
@@ -107,6 +128,7 @@ export async function* readAuditBody(
   let meta = false;
   let ended = false;
   let errored = false;
+  let annotations = false;
   function parse(line: string): AuditBodyFrame {
     const frame = JSON.parse(line) as AuditBodyFrame;
     if (!frame || typeof frame !== "object" || ended || errored)
@@ -120,7 +142,57 @@ export async function* readAuditBody(
         throw new Error("Invalid audit identity");
       meta = true;
     } else if (!meta) throw new Error("Missing audit metadata");
-    else if (frame.type === "part") {
+    else if (frame.type === "annotations") {
+      const indexSet = new Set<number>();
+      const validIdentifier = (value: unknown, max: number) =>
+        typeof value === "string" &&
+        value.length <= max &&
+        /^[A-Za-z0-9]/.test(value) &&
+        !/[^A-Za-z0-9._:/-]/.test(value);
+      const valid =
+        !annotations &&
+        seq === -1 &&
+        line.length <= 16384 &&
+        [
+          "NOT_CAPTURED",
+          "NOT_PROVIDED",
+          "PENDING",
+          "AVAILABLE",
+          "PARTIAL",
+          "INVALID",
+          "UNAVAILABLE",
+        ].includes(frame.message_sources_status) &&
+        Array.isArray(frame.items) &&
+        frame.items.length <= 128 &&
+        frame.items.every((item) => {
+          if (
+            !item ||
+            !Number.isSafeInteger(item.message_index) ||
+            item.message_index < 0 ||
+            indexSet.has(item.message_index)
+          )
+            return false;
+          indexSet.add(item.message_index);
+          return (
+            Array.isArray(item.sources) &&
+            item.sources.length > 0 &&
+            item.sources.length <= 4 &&
+            item.sources.every(
+              (source) =>
+                source &&
+                validIdentifier(source.kind, 64) &&
+                (source.form === undefined || validIdentifier(source.form, 32)),
+            )
+          );
+        });
+      annotations = true;
+      if (!valid)
+        return {
+          type: "annotations",
+          message_sources_status: "UNAVAILABLE",
+          items: [],
+        };
+    } else if (frame.type === "part") {
       if (
         frame.seq !== seq + 1 ||
         !["input", "output"].includes(frame.channel) ||

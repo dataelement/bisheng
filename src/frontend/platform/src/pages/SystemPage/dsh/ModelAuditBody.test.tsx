@@ -59,6 +59,32 @@ function source(value: AuditBodyFrame[]) {
 }
 beforeEach(() => vi.clearAllMocks());
 
+it("shows role and producer independently without calling partial sources a body gap", async () => {
+  const result = frames([
+    { channel: "input", value: { parameters: {} } },
+    { channel: "input", value: { role: "user", content: "Synthetic context" } },
+  ]);
+  result.splice(1, 0, {
+    type: "annotations",
+    message_sources_status: "PARTIAL",
+    items: [
+      {
+        message_index: 0,
+        sources: [{ kind: "runtime-context", form: "snapshot" }],
+      },
+    ],
+  });
+  source(result);
+  render(<ModelAuditBody requestId="request" />);
+  expect(
+    await screen.findByText("dsh.modelAuditView.sources.kinds.runtime-context"),
+  ).toBeVisible();
+  expect(
+    screen.getByText("dsh.modelAuditView.sources.status.PARTIAL"),
+  ).toBeVisible();
+  expect(screen.queryByText("dsh.modelAuditView.gap")).toBeNull();
+});
+
 describe("audit body NDJSON-to-message UI", () => {
   it("AC-10, AC-12: displays decoded roles and merged reply, hiding invocation settings and raw delta wrappers", async () => {
     source(
@@ -101,7 +127,7 @@ describe("audit body NDJSON-to-message UI", () => {
     ).toBeNull();
     expect(api.stream).toHaveBeenCalledTimes(1);
     expect(api.stream).toHaveBeenCalledWith(
-      "/api/v1/dsh/admin/model-audit/requests/request/body-access?tenant_id=1",
+      "/api/v1/dsh/admin/model-audit/requests/request/body-access?include_message_sources=true&tenant_id=1",
       expect.any(AbortSignal),
     );
   });

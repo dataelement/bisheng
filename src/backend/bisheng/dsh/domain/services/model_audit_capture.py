@@ -1,5 +1,7 @@
 """Bounded local capture; no persistence ACK on the model execution path."""
 
+import json
+
 from loguru import logger
 
 from bisheng.dsh.domain.schemas.model_audit_events import AuditEvent, ChannelExpectation
@@ -21,6 +23,9 @@ class AuditCapture:
         activity=None,
         digest_key=None,
         key_version=None,
+        annotation_queue=None,
+        message_sources=None,
+        message_sources_status="NOT_PROVIDED",
     ):
         self.metadata, self.queue, self.now = dict(metadata), queue, now
         self.mode = self.metadata["effective_mode"]
@@ -32,6 +37,16 @@ class AuditCapture:
         self.metadata["key_version"] = key_version
         self.capture_failed = self.mode == "CONTENT" and (not isinstance(digest_key, bytes) or len(digest_key) != 32)
         self.started = False
+        self.annotation_queue = annotation_queue
+        self.message_sources = message_sources if self.mode == "CONTENT" else None
+        self.sources_result = message_sources_status
+        self.metadata["message_sources_status"] = (
+            "NOT_CAPTURED"
+            if self.mode != "CONTENT"
+            else "PENDING"
+            if self.message_sources is not None
+            else message_sources_status
+        )
         self.finished = False
         self.used_bytes = 0
         self.input_units = self.metadata.get("input_units", 0) if self.mode == "METADATA" else 0
@@ -44,6 +59,8 @@ class AuditCapture:
     def _put(self, event, queue=None, *, critical=True):
         try:
             if not (self.queue if queue is None else queue).put(event):
+                if event.kind == "annotation":
+                    record_audit_metric("annotation_enqueue_failed", tenant_id=event.tenant_id)
                 if critical:
                     self.capture_failed = True
                 logger.warning("DSH audit buffer rejected an event")
@@ -57,6 +74,13 @@ class AuditCapture:
         if self.mode == "OFF" or self.started:
             return
         self.started = True
+        if self.mode == "CONTENT" and self.sources_result != "NOT_PROVIDED":
+            record_audit_metric("annotation_received", tenant_id=self.metadata["tenant_id"])
+            if self.sources_result in {"PARTIAL", "INVALID"}:
+                record_audit_metric(
+                    "annotation_truncated" if self.sources_result == "PARTIAL" else "annotation_rejected",
+                    tenant_id=self.metadata["tenant_id"],
+                )
         self._put(self._event("entered", metadata=dict(self.metadata)))
         if self.evidence_queue is not None:
             self._put(
@@ -87,6 +111,18 @@ class AuditCapture:
             except Exception as error:
                 self.capture_failed = True
                 logger.warning("DSH audit input encoding failed ({})", type(error).__name__)
+            if self.message_sources is not None and self.annotation_queue is not None:
+                # Provenance is independently bounded; rejection cannot mark model bodies incomplete.
+                self._put(
+                    self._event(
+                        "annotation",
+                        body=json.dumps(self.message_sources, ensure_ascii=False, separators=(",", ":")).encode("utf8"),
+                        metadata={"sources_result": self.sources_result},
+                    ),
+                    self.annotation_queue,
+                    critical=False,
+                )
+                self.message_sources = None
 
     def _body(self, channel, unit_index, value):
         if self.capture_failed:

@@ -36,7 +36,7 @@ class ChannelExpectation:
 class AuditEvent:
     request_id: str
     tenant_id: int
-    kind: Literal["entered", "body", "terminal", "response", "usage", "evidence"]
+    kind: Literal["entered", "body", "terminal", "response", "usage", "evidence", "annotation"]
     observed_at: datetime
     metadata: dict = field(default_factory=dict)
     channel: Literal["input", "output"] | None = None

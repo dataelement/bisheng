@@ -138,14 +138,29 @@ async def request_detail(
     return resp_200(data=await service.queries.detail(user.user_id, tenant_id, request_id))
 
 
-@router.post("/requests/{request_id}/body-access")
-async def body_access(
+@router.get("/requests/{request_id}/parent-conversation")
+async def parent_conversation(
     request_id: Annotated[str, Path(min_length=1, max_length=36)],
+    response: Response,
     tenant_id: Tenant = None,
     user=Depends(audit_admin),
     service=Depends(get_audit_management),
 ):
-    source = await service.bodies.prepare(user.user_id, tenant_id, request_id)
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.parent_conversation(user.user_id, tenant_id, request_id))
+
+
+@router.post("/requests/{request_id}/body-access")
+async def body_access(
+    request_id: Annotated[str, Path(min_length=1, max_length=36)],
+    tenant_id: Tenant = None,
+    include_message_sources: bool = False,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    source = await service.bodies.prepare(
+        user.user_id, tenant_id, request_id, include_message_sources=include_message_sources
+    )
     return StreamingResponse(
         source,
         media_type="application/x-ndjson",

@@ -72,8 +72,9 @@ async def complete(
         raw = await request.json()
         if not isinstance(raw, dict):
             raise DshInvalidRequestError()
-        audit_context = parse_audit_context(raw.pop("audit_context", None))
+        raw_context = raw.pop("audit_context", None)
         body = DshChatRequest.model_validate(raw)
+        audit_context = parse_audit_context(raw_context, message_count=len(body.messages))
     except (json.JSONDecodeError, UnicodeError, ValidationError, RecursionError):
         raise DshInvalidRequestError() from None
     service = await get_model_runtime(runtime)

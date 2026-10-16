@@ -14,6 +14,7 @@ from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
 from bisheng.dsh.domain.schemas.model_audit import AuditRequestMetadata
+from bisheng.dsh.infrastructure.model_audit_codec import conversation_key
 
 
 def as_utc(value):
@@ -35,6 +36,7 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
                         DshModelAuditRequest.response_result == "RUNNING",
                         DshModelAuditRequest.usage_settlement == "PENDING",
                         DshModelAuditRequest.content_status == "PENDING",
+                        DshModelAuditRequest.message_sources_status == "PENDING",
                     ),
                 )
                 .distinct()
@@ -55,6 +57,20 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
         if cursor:
             statement = statement.where(DshModelAuditRequest.request_id > cursor)
         return self.session.exec(statement.order_by(DshModelAuditRequest.request_id).limit(100)).all()
+
+    def pending_annotations(self, *, cursor=None):
+        require_tenant()
+        statement = select(DshModelAuditRequest).where(DshModelAuditRequest.message_sources_status == "PENDING")
+        if cursor:
+            statement = statement.where(
+                or_(
+                    DshModelAuditRequest.started_at > cursor[0],
+                    and_(DshModelAuditRequest.started_at == cursor[0], DshModelAuditRequest.request_id > cursor[1]),
+                )
+            )
+        return self.session.exec(
+            statement.order_by(DshModelAuditRequest.started_at, DshModelAuditRequest.request_id).limit(100)
+        ).all()
 
     def metadata(self, row):
         usage = self.one(DshModelCall, DshModelCall.request_id == row.request_id)
@@ -93,6 +109,10 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
                 statement = statement.where(
                     DshModelAuditRequest.conversation_id_digest == sha256(value.encode("utf8")).hexdigest()
                 )
+                if filters.get("user_id") is not None:
+                    statement = statement.where(
+                        DshModelAuditRequest.conversation_key == conversation_key(tenant, filters["user_id"], value)
+                    )
             elif key == "user_keyword":
                 from bisheng.user.domain.models.user import User
 

@@ -1,14 +1,14 @@
 # 客户端模型调用审计技术设计
 
-版本：0.9　日期：2026-10-14　对应 [spec.md](./spec.md) 0.19　状态：开发实现及本机隔离联调快照，非生产发布声明
+版本：0.10　日期：2026-10-16　对应 [spec.md](./spec.md) 0.20（已确认）　状态：设计已确认，两端增量代码及本机 HTTP 链路已实现并验证；真实三存储、正式 Electron/供应商/DM8 验收未完成
 
-> 模型捕获→有界异步队列→SQL/MinIO→管理查询/逐次原文读取→Platform 页面已接通，并与真实客户端代码链路、本机独立 MySQL/Redis/MinIO 联调通过。客户端协议仍为 0.5.0、两字段扩展仍为 0.3。见[验证结果](./validation-results.md)、[验收记录](./audit-acceptance.md)及[任务状态](./tasks.md)。身份与上游模型在隔离联调中为合成设施；DM8、正式 Electron UI 和生产部署尚未验收。
+> 本分支两端已实现[契约 0.4](./client-api-audit-extension.md)的五字段扩展，根协议保持 0.5.0。真实桌面适配器/主进程校验器→HTTP→异步审计→管理解密读取在独立 SQLite/内存对象存储通过；本轮 MinIO 镜像下载失败，不能沿用早期三存储联调结论证明新增标注可用。当前实现与验证边界见[验证结果](./validation-results.md)最新增量章节；不代表已提交、部署或正式环境验收。
 
 ## 1 目标与非目标
 
-对实际经过毕昇 DSH 专用 Chat Completions 入口的每次统一模型调用，保存独立的请求事实；CONTENT 模式保存该接口实际使用的有效业务入参和返回的统一出参，管理员按客户端声明的会话 ID 浏览请求时间线并按需读取原件。审计写入失败不能改变模型调用或用量结算结果。
+对实际经过毕昇 DSH 专用 Chat Completions 入口的每次统一模型调用，保存独立的请求事实及实际输入输出，管理员按客户端声明的会话浏览请求时间线。本轮补充请求用途、会话来源/直接父会话，以及最终输入消息的来源种类/形态，能分别识别子 Agent 的普通和压缩调用。审计或来源标注失败不能改变模型调用、原件或用量结算结果。
 
-不重建客户端聊天气泡、源消息身份、任务树、重试归组、压缩来源或 Fork 父子关系。客户端直连第三方、其他毕昇入口和未进入统一模型接口的本地工具结果不纳入。本设计不追踪供应商 SDK/网络报文，不保证供应商或客户端实际收到了哪些字节。
+不重建客户端精确气泡、源消息身份、完整任务树、父请求/父轮次、重试归组、压缩摘要来源或普通 Fork 父子关系；只增加子 Agent 声明的直接父会话。客户端直连第三方、其他毕昇入口和未进入统一模型接口的本地工具结果不纳入。本设计不追踪供应商 SDK/网络报文，不保证供应商或客户端实际收到了哪些字节。
 
 ## 2 今日系统与特有约束
 
@@ -18,10 +18,12 @@
 | DshRoute 生成一次 request_id，经 runtime 传给模型服务；usage.check_and_start 仍在 invoke/stream 前 | `dsh/domain/services/model.py`、`dsh/runtime.py` | 业务明细仍可能早于实际调用，不能单独证明接口已进入；审计、用量与响应已复用编号 |
 | 非流式业务异常与正常 JSON/SSE 已复用模型请求编号 | `dsh/api/responses.py:DshRoute.error`、`model.py:DshModelService.complete` | 首批验证了上游/结算失败及前置拒绝；不得回退为错误响应重新生成编号 |
 | `DshChatAdapter.prepare` 转换消息、绑定工具并形成参数；`ChatExecution` 调用 `llm.ainvoke/astream`，输出统一结果或增量 | `dsh/infrastructure/chat_adapter.py` | 记录统一 API 接受的有效参数、工具及逐条消息；不记录底层 SDK 私有报文；非流式结果和流式 delta/finish_reason 分别保序 |
-| 启用的 config 已公布两字段能力；路由解析一次 JSON、剥离扩展后严格校验业务 DTO；协议仍 0.5.0 | `dsh/domain/schemas/model_audit_context.py`、`api/endpoints/identity.py:config`、`api/endpoints/models.py:complete` | 只证明字段可接收，不保证留存；旧部署仍可能无能力，不得通过错误重放探测 |
+| 本分支启用的 config 已公布五字段能力；路由解析一次 JSON、剥离扩展后严格校验业务 DTO；协议仍 0.5.0 | `dsh/domain/schemas/model_audit_context.py`、`api/endpoints/identity.py:config`、`api/endpoints/models.py:complete` | 只证明字段可接收，不保证留存；旧部署仍可能无能力或仅两字段，不得通过错误重放探测 |
 | 既有调用与用量按 `request_id` 关联，但不保存模型输入输出正文 | `dsh/domain/schemas/usage.py`、`domain/models/model_call.py` | 审计另建索引和原件，不建立第二套额度账本 |
 
 8 张审计表已接入模型发现与租户过滤。模型入口已装配 `audit_runtime.ModelAuditRuntime`，独立队列消费器异步写 SQL/MinIO；历史状态由 Celery 扫描收敛。管理接口和 Platform 新 model-audit 页签已实现，旧 operations 仍隐藏。桌面客户端在独立工作树基于 main 实现协商、sessionId/purpose 组装与主进程净化。正常 CONTENT 请求已在本机真实存储验证完整留存；正式 CONTENT 启用仍须满足 §8 的环境及运维门禁。
+
+本轮实现基线：服务端 `5ee9aca1d9`、桌面客户端审计分支 `0367d8e674`，本轮改动尚未提交。公开 sessions 服务提供存活会话 header，企业序列化器在最终 push 处保留来源对应关系；两端规范化器已允许五字段并独立限制标注预算。内置 purpose 区分聊天/压缩/标题，会话来源及父会话由客户端公开 header 提供，不升级依赖、不合并其他分支、不修改 Harness 核心。
 
 本功能特有约束：租户模式读取失败按 OFF 降级；CONTENT 不截断审计正文；审计内存与排队资源有界，远程 SQL/MinIO 不在模型首字路径上；完全失写可能留下不可逐条发现的缺口；正文不进入可检索 SQL 列、普通日志或未授权列表。全局架构遵循 [constitution](../../../../docs/constitution.md) C1–C8；F062 客户端契约变更遵循 [release contract](../../release-contract.md) B2-INV-7。
 
@@ -35,6 +37,9 @@
 | 正文与索引 | SQL 只放查询字段、状态、顺序和对象引用；MinIO 存版本化加密原件。完整请求原件不随列表返回，正文单独授权与留痕 | 不将正文写 SQL 文本列或浏览器直连预签名 URL。若容量实测不可承受，重评架构，不静默截断或生成替代摘要 |
 | 物理复用 | 相同原件仅在相同认证租户、用户、有效客户端会话 ID 内候选复用；无有效 ID 仅单请求内复用。调用、出现和用量事实仍各自独立 | 不做全局哈希去重。若收益低，可关闭物理复用但保持隔离与独立事实；若需跨会话复用须重新确认 D-08 |
 | 权限与保留 | 超管按所选租户、租户管理员按本租户查看原文，正文每次读取先持久留痕；一期不做自动删除 | 不以菜单可见代替业务授权，不做逐人授权或旧草案 TTL。角色或期限政策改变须重新确认 D-04、D-06 |
+| 增量：客户端扩展层 | 企业插件经公开 sessions.get 读取已加载 header；企业适配器读取 purpose/source，并在最终消息 push 时生成索引标注；Electron 用可信能力再次校验。公开 API 已具备所需数据 | 不改 Harness 核心、不维护全量事件镜像、不按原消息 ID 数组直接 zip。若未来公开 API 不再提供来源或需要精确消息身份，再评估最小上游接缝 |
+| 增量：三个维度独立 | request_kind 不变；新增 session_origin/parent_conversation_id 与 message_sources。子 Agent 压缩可同时表达，父子不合并 | 不把 compaction 当独立会话，不凭 parentSession 判断子 Agent，不从正文分类。若要精确因果链/任务图需重开需求 |
+| 增量：独立受限标注 | 12KiB 消息标注预算独立于 4KiB 请求级字段；CONTENT 中以请求专属加密对象保存，只有 body-access 可读取。标注状态与正文完整性分开 | 不复制 source 全对象、不将数组明文放 SQL、不让标注超限清空会话 ID；不把附加信息作为模型输入。若受控长历史确有大量标注不足，再以实测重评上限而非改正文 |
 
 ## 4 目标数据流与状态
 
@@ -114,6 +119,53 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 
 按 request_id 查询合并审计行、独立证据、活动信息和既有业务明细。既有 `dsh_model_call` 可能在接口前创建，只提供候选，不证明已进入。显式 OFF 或可证实的降级 OFF 无审计记录、METADATA 无正文均不报缺口；模式未知则标适用性待核实。已知开启且有同一请求进入证据，终态后的写入窗口已过，或无活动且停滞窗口已过，才将缺失的应留存事实标已知缺口；仅有业务明细且模式可证实为开启，在无活动且超过窗口后标待核实候选，无终态时注明调用状态未知。没有 SQL 行时不伪造 PENDING。系统指标和水位只报告整体异常；记录和独立证据同失时不承诺逐条发现。
 
+### 4.5 增量实现：来源采集、独立留存与父会话定位
+
+#### 客户端与服务端对应流程
+
+1. 企业插件将 `resolveAuditSession(sessionId)` 同步回调注入 EnterpriseLlmAdapter；回调只调用可选公开 `ctx.get('sessions')?.get(id)`，核对 header.id 后返回受限 origin/parentSession，不返回 Session 实例。服务缺失、异常或会话不在存活集合则省略来源，不加载磁盘、不增加事件订阅或请求。只有 header.origin=subagent 才识别子 Agent；已知 header 未设置 origin 时为 main，普通 Fork 也属 main；未来未知 origin 不默认 main。
+2. 在企业模型序列化的统一 `appendMessage(wireMessage, sourceDescriptors)` 边界同时 push 最终消息与来源；公开 `serializeEnterpriseRequest` 的业务请求返回值保持原形，可内部增加返回映射的 helper。文本模型投影须保留 source 直到序列化；视觉与文本路径均不把 source/id 插入 wire message。
+3. 内部消息拆成工具结果和普通文本时，每个最终消息沿用该消息来源；合并工具图片时累积所有贡献消息已知来源，去重并标混合/部分。无来源的 options.system、临时指令不制造标签。message_index 为最终 messages 的 0 基索引，服务端输入 unit_index=message_index+1，不能使用 UI 分页序号或原始消息数组索引。
+4. contract 共享规范化器与 Electron 边界均按可信五字段交集、最终消息数量、固定限额处理；请求级四字段 4096 字节与 message_sources 12288 字节分别校验。源 kind/form 仅受限 ASCII 标识，最多 128 项、每项 4 个来源，不复制来源载荷；具体字段、裁剪顺序、重复索引及异常规则以契约 0.4 §3 为唯一线协议来源。
+5. 毕昇路由在业务 DTO 前剥离扩展，先校验请求级字段；严格校验模型请求后，才按合法 messages 数量校验来源索引。内部 AuditContext 增加三字段，来源数据 `repr=False`，不经模型业务参数传递。normalized sources 只向审计捕获工厂提供，不能进入 ChatExecution 的有效输入、供应商参数或普通日志。
+
+#### 数据结构与模式
+
+不新增审计表或来源边。对 dsh_model_audit_request 增加以下可空/带安全默认的字段，需 DDL-only Alembic 迁移；旧行不扫描正文或回填猜测：
+
+| 新字段 | SQL/内部类型 | 用途与暴露范围 |
+|---|---|---|
+| session_origin | String(16)，可空 | main/subagent；缺失表示未知。正常请求列表/详情可返回 |
+| parent_conversation_id | String(1024)，可空 | 最多 256 码点的客户端声明，只在自身 ID 有效且来源为 subagent 时保存。列表/详情可返回，不当作授权或正文复用键 |
+| message_sources_status | String(16)，默认 NOT_PROVIDED | 标注单独状态，见下表；默认列表/详情不扩展逐消息信息，仅 body-access 按需返回此状态 |
+| message_sources_ref | dialect_helpers.JsonType，可空 | 受限 StoredAuditBlock 引用（对象键、密钥版本、HMAC、长度、scope_key、encoding_version），不含标注正文，不通过普通 DTO 返回 |
+
+仅按现有租户/历史用户/目标 conversation_key 查询父会话，复用现有联合索引，不新增 parent_id 索引、反向子会话扫描、DISTINCT/GROUP BY 或全量计数。标注 PENDING 巡检单独增加 `(tenant_id,message_sources_status,started_at,request_id)` 联合索引，以等值状态和时间范围、游标有界扫描，不能为新巡检全表扫描审计大表。新列和 JsonType 使用当前双库约定；迁移基于实施时的唯一 Alembic head，不在设计阶段假设主线未变化。旧 CONTENT 行无来源显示 NOT_PROVIDED；METADATA 的读取状态按生效模式固定为 NOT_CAPTURED，不回填旧来源、不改变原会话及正文。
+
+| message_sources_status | 含义 |
+|---|---|
+| NOT_CAPTURED | METADATA 不留逐消息标注；OFF 根本不建请求行 |
+| NOT_PROVIDED | CONTENT 请求没有有效来源 section，包括旧记录；不是正文缺口 |
+| PENDING | 有来源待异步写入，尚未核验对象引用 |
+| AVAILABLE | 已核验全部接收的合法标注；不保证客户端所有输入都有来源、不代表来源真实 |
+| PARTIAL | 客户端 truncated=true、服务端忽略了一部分标注，且其余标注对象已核验 |
+| INVALID | section 被拒绝且没有可用标注；不返回无效字段值 |
+| UNAVAILABLE | 标注曾待写入但存储/核验失败、超观察窗口无引用，或读取对象损坏；不改变正文 content_status |
+
+OFF 不产生事件。METADATA 在采集工厂丢弃逐消息数组，仅保留请求级来源/父编号。CONTENT 在进入模型时准备一次有界规范化标注字节快照，添加专用 annotation 事件；payload 不放进 AuditCapture.metadata，避免被每个正文/用量事件重复复制。进入/终止等事件只带标注期望状态，写入器须使来源字段与请求身份一样保持请求内不可变；迟到基础事件不能覆盖 AVAILABLE/PARTIAL，冲突标注不覆盖首次已核验对象，只把标注状态置 INVALID。
+
+annotation 使用独立有界旁路队列（最多 64 个事件、总 payload 768KiB，metadata 也计入有界成本）；复用审计消费者/线程池约束，但不得挤占原输入输出队列容量。无独立持久化 ACK，投递/存储失败只推进标注状态或尽力指标，不设置原正文 capture_failed。队列满时不重试模型；后续状态收敛将超窗口且没有可核验引用的 PENDING 置 UNAVAILABLE。状态检查沿用已有审计扫描，也处理正文已经 COMPLETE 但标注仍 PENDING 的行，不能只扫描正文非终态。注释消费者和队列纳入各 API 进程 runtime 的启动/有限关闭；不会把进程缓冲当跨节点真相。
+
+单个来源对象最大 12288 字节，使用现有 AES-GCM/HMAC 密钥环和 put_verified_block/open_verified_block。作用域固定 `AuditScope(tenant,user,'REQUEST',request_id,encoding_version=2)`，版本 2 专用于来源 JSON 对象；既有模型正文仍为编码版本 1，版本/请求 ID 纳入 AAD，不能互换或跨请求复用。来源存储实例使用固定 16KiB 写上限，不随正文分块调小而拒绝合法标注；读取仍受声明长度、路径、scope、HMAC/AEAD 的独立核验。先写入回读核验，后在请求行同事务保存 ref 与状态；若 SQL 失败可留下私有孤立加密对象，有限重试沿用相同内容地址，不覆盖已有请求引用。沿用本期不删除的边界，不暗加清理任务。
+
+annotation 不加入原件 input/output occurrence 或 manifest 计数，不改变 input_units、正文大小、编码、去重或 COMPLETE 计算；空标注、标注失败和原件失败可分别组合。正文 CONTENT 采集本身仍完全遵循 AC-10、AC-12、AC-13、AC-38。
+
+#### 父会话定位与展示
+
+新增管理 Service 的 `parent_conversation(actor,tenant,request_id)`：先以现有 authorize_admin/目标租户范围读取子请求，再取其历史 user_id、有效父编号；在同一 profile_scope 内按该 user_id + conversation_key + 原值核验精确查最多 1 条父请求。不能使用调用方自填的 user_id/parent_id 扩展范围，也不能按管理员当前个人租户或被审计用户今日组织归属改写历史范围。
+
+没有有效自身 ID、来源非 subagent、缺父编号或自指时无导航；有合法声明但当前范围无记录只返回 UNAVAILABLE，不泄露其他范围是否存在同名编号。A→B→A 等循环不会自动展开或加载树，单次人工导航只走一跳；不同请求的声明保持各自事实，不维护权威会话父节点。普通列表只展示子 Agent / 压缩等独立标签；用户点击父会话才查询目标，没有每张卡片的 N+1 查父请求，更不预取父正文。
+
 ## 5 已知坑与防护位置
 
 | 反直觉事实 | 不知道会怎样 | 防护位置 |
@@ -134,24 +186,38 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | 新写入块调小不代表历史加密块也变小 | 已留存历史忽然无法读取 | 编码-v1 的读取上限固定64KiB，独立于新写块设置；NDJSON 帧预算256KiB |
 | end 帧生成不等于发送完成，流可在 yield 处关闭 | 将中途关闭的查看记录误记为完成 | body-access 仅在 end 被下游消费后更新 COMPLETED，关闭时记 INTERRUPTED；不声称客户端已阅读 |
 | 查看会话时可能仍携带单请求过滤；配置读取失败有证据也不是模式未知 | 只看见一张卡、错误报告已知审计缺口 | 清空不相关过滤；AWAITING/DEGRADED_OFF/MODE_UNKNOWN 按可核验事实分别显示 |
+| 普通 Fork 也有 parentSession；子 Agent 内也可能压缩 | 按父编号把 Fork 误判子 Agent，或把子 Agent 压缩并入父聊天 | 企业插件只按公开 header.origin 分类，保留独立 request_kind 和子会话 ID |
+| 源消息与最终请求消息不是一对一，输入单元 0 又是参数 | 插入系统消息或工具图片合并后全体标签错位 | 企业适配器统一追加消息时同步映射；auditMessages.ts 保留真实 unit_index，不按显示索引贴标签 |
+| 现有 _within_budget/normalizeAuditContext 序列化整个扩展，且现有采集 metadata 会复制到每个事件 | 新标注超限会抹掉会话 ID，或造成正文事件重复携带大数组 | 规范化按 section 独立有界检查；来源 payload 独立 annotation 事件，不放共享 metadata |
+| 原有巡检可能只取正文非终态请求 | 正文 COMPLETE 后来源永久 PENDING | 审计仓储增加有界标注 PENDING 扫描分支，与正文状态独立收敛 |
+| 标注第一页可能全是仍活动的请求，反复从头扫会饿死后续页 | 后续标注无法转为可核验状态或 UNAVAILABLE | `model_audit_states.inspect` 增加 annotations 游标阶段；按 started_at/request_id 继续，不重复停在前100条 |
+| JavaScript 的正则 `$` 可匹配末尾换行之前，Python `\Z` 不会 | 两端对 kind/form 合法性的判断不同 | 客户端和平台校验同时要求首字符合法且全串无非法字符；回归覆盖 CR/LF/Unicode 行分隔符 |
+| Platform 尚不能直接解析共享包 @bisheng/ui | 引入 Tag 会造成构建/测试导入失败 | 复用 Platform 已有 bs-ui/Badge 和 Button，不新增依赖或修改组件样式；实际页面人工验收仍待执行 |
 
 ## 6 对外契约、管理入口与依赖
 
-### 6.1 客户端契约：已实现候选字段、待发布
+### 6.1 客户端契约：两字段现状与五字段增量目标
 
-本分支已在 GET /api/v1/dsh/config 的 enabled 响应增加可选 audit_context.fields，声明 conversation_id/request_kind；不公开租户模式，不另设版本，contract_version 仍 0.5.0。既有部署可能不声明，客户端必须协商而非错误重放探测。正式接口扩展文档已同步，真实兼容联调仍在 T064 验收。
+本分支代码在 GET /api/v1/dsh/config 的 enabled 响应声明 conversation_id、request_kind、session_origin、parent_conversation_id、message_sources；对应接收、传递、独立存储及读取链路已实现并通过定向契约测试，不代表镜像或部署已更新。只更新 fields 白名单，不公开租户模式，不增加 audit_context.version，contract_version 仍 0.5.0；后续不能仅将未实现字段写入能力响应。
 
-新客户端只在服务端明确公布相应字段时，在 `POST /api/v1/dsh/chat/completions` 附加顶层 `audit_context`，且只发送已公布字段。一期冻结两个可选字段 `conversation_id` 和 `request_kind`：客户端适配器可读取 GenerateOptions.sessionId/purpose；普通生成、compaction、session-title 三类对应已知值，其他 purpose 省略。关联字段无效不阻断合法模型调用。ID 非空、最多 256 Unicode 码点并保持原值，扩展规范化紧凑 JSON UTF-8 最多 4096 字节（非 ASCII 不额外转义）；不限定生成算法或字符格式，不限制模型正文。能力解析、缓存失效和逐字段规则以[接口契约 0.3](./client-api-audit-extension.md)为线协议权威来源。轮次/步骤、来源关系和补报不在本期能力声明或 DTO 中。请求形态如下：
+新客户端在 POST /api/v1/dsh/chat/completions 只发送文档定义与服务端公布字段的交集。请求级字段与消息来源分别预算，字段无效软降级，不为探测能力重放模型；旧服务端仅支持两字段时仍遵守原 4096 字节上限。字段类型、上限、来源与裁剪顺序以[接口契约 0.4 候选](./client-api-audit-extension.md) §2、§3 为线协议唯一来源。示例为子 Agent 的压缩请求，messages 中至少有一条输入：
 
 ```json
 {
   "model": "bisheng:123",
   "messages": [{"role": "user", "content": "你好"}],
-  "audit_context": {"conversation_id": "session-123", "request_kind": "chat"}
+  "audit_context": {
+    "conversation_id": "child-123", "request_kind": "compaction",
+    "session_origin": "subagent", "parent_conversation_id": "parent-1",
+    "message_sources": {
+      "items": [{"message_index": 0, "sources": [{"kind": "user"}]}],
+      "truncated": false
+    }
+  }
 }
 ```
 
-模型路由解析一次 JSON，先分离并有界软解析 audit_context，再严格 DshChatRequest.model_validate；合法请求无论关联扩展是否有效均不重放。上下文已向采集工厂透传并按认证租户/用户归组；从统一模型输入中剥离，不公布高级关系或补报字段。
+模型路由仍解析一次 JSON并剥离扩展，再严格 DshChatRequest.model_validate；标注的索引校验需要该合法业务请求的 messages 数量。请求级校验、标注校验分别有界，不能先 JSON 序列化整个扩展导致标注超限连带清空会话；不读取未知字段的深层载荷。按认证租户/历史用户归组，五字段始终不进入统一模型输入；不增加源消息 ID、补报、任务图或压缩摘要来源边。
 
 ### 6.2 管理 API 与正文访问
 
@@ -163,6 +229,7 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | `GET /model-audit/models` | 复用相同审计租户鉴权；复用“模型与额度”的当前开放模型目录读取能力（LLMService 与 read_available_models），在授权 profile_scope 下加载，不按管理员本人调用权限缩小，不读取审计明细；小目录可按名称包含搜索；支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100），返回 `{data:[{id,name}],total}`，分页和计数仅基于当前模型小目录，响应禁止缓存 |
 | `GET /model-audit/requests` | 授权租户内按用户 ID、时间范围、模型 ID 或完整历史名称、提供方、四轴状态与关联状态过滤；model_id 与 model_name 互斥，均为等值条件，冲突返回 26131；兼容保留 API 用户名片段过滤，支持 request_id/conversation_id 精确定位，按 `(started_at,request_id)` 游标稳定分页；只返元数据、模式/写入水位与证据局限 |
 | `GET /model-audit/requests/{request_id}` | 单请求元数据、客户端声明的会话 ID、状态及用量引用；不带原文 |
+| `GET /model-audit/requests/{request_id}/parent-conversation`（增量） | 先授权并读取子请求，按其历史用户及同一授权租户精确定位声明的父会话；返回 `{status:AVAILABLE,user_id,conversation_id}` 或 `{status:NOT_PROVIDED/UNAVAILABLE}`，后两者无目标身份字段。不能由请求参数覆盖 user/parent，不能跨范围搜索或预取正文 |
 | `GET /model-audit/conversations?user_id=...&conversation_id=...` | 在授权租户及目标用户范围按开始时间、request_id 分页给请求卡片；不把 ID 当全局唯一，默认不返回原文 |
 | `POST /model-audit/requests/{request_id}/body-access` | 校验授权并先提交查看日志，再以有界流按原始顺序返回该请求正文；一次展开不预取其他请求，不提供批量导出或对象直链 |
 | `GET /model-audit/settings`、`PUT /model-audit/settings/{tenant_id}` | 两类管理员可查看本范围模式；返回 `{mode,version,content_available}`，其中可用性为本实例密钥实时校验结果、不持久化、不返回密钥。只有全局超管可切换所选租户并原子留痕；新 CONTENT 变更须提交前校验合法活动密钥，缺失/无效返回 `26135` 且不写模式/版本/历史；OFF/METADATA 不要求密钥。幂等重放保持原操作结果，附当前可用性 |
@@ -174,6 +241,16 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 正文 POST 成功响应使用 application/x-ndjson，Cache-Control: no-store。先返回 meta（request_id、encoding_version、content_state），再返回 part（全局递增 seq、channel=input/output、unit_index、fragment），最后 end（last_seq、content_state、transfer_status）。part.fragment 是同一有序原件单元的连续序列化文本片段，按序拼接是编码原件，而非模型生成摘要；管理页只暂存当前单元的连续片段，单元边界或 end 时解析并释放原始片段，不等整份原文到齐才展示。已解析消息和当前待解析单元合计受20Mi字符展示预算约束，刷新节流40ms；不执行内容。未采集可返回 meta+end，部分按实际留存范围返回。传输开始前失败沿标准管理错误；开始后返回不含正文的 error 事件并结束。缺少 end 仅表示本次浏览传输不完整，不把服务器已留存原件改判缺失。传输日志追加结果不替代传正文前已持久的授权查看日志。
 
 消息呈现：`input/unit_index=0` 且具有 parameters、无 role 的设置单元不进入消息区；其他输入按 role/content 解包，保留顺序和 tool_call_id。同次请求的 `{delta:...}` 增量以片段数组追加 content 和 reasoning_content，合成一个助手消息，思考区默认折叠；tool_calls 按 index 合并 function.name/arguments，保留 id；非流式 role 消息直接解包，finish_reason 不单独绘制成消息。不跨请求合并或推断新增消息。gap 打断合并并显示缺口，受损单元不冒充完整 JSON；未知/解析失败内容标明并折叠保留片段。图片载荷/引用和其他结构化内容在原位置折叠展示，浏览器不自动请求外部资源、不执行 HTML/脚本。每页最多100条消息，单条文本每16000字符分页，切段只读已授权的内存数据，不再次 POST；切请求/租户或收起取消传输并清空原文。传输中断只标本次读取及消息显示不完整，存储不完整只根据服务端 PARTIAL/gap 事实提示，NOT_CAPTURED 不误算缺口。
+
+增量正文协议：新增可选 query `include_message_sources=true`（缺省 false），不改变请求体或已有帧字段。缺省时帧序列与旧版一致；新 Platform 展开时显式请求该开关，新前端连接旧后端未收到新帧时降级为来源未提供。开关只影响是否返回标注，不绕过既有正文授权/访问留痕。授权日志持久化成功后才可读取来源对象；按 opt-in 返回 meta 后、第一条 part 前最多一条 annotations 帧：
+
+```json
+{"type":"annotations","message_sources_status":"AVAILABLE","items":[{"message_index":0,"sources":[{"kind":"user"}]}]}
+```
+
+annotations 帧不参与 part 的 seq、last_seq、input/output 单元或内容 manifest 计数，最大 16KiB，客户端读取及 DTO 支持新帧；它也不修改原件 encoding_version。NOT_CAPTURED/NOT_PROVIDED/PENDING/INVALID/UNAVAILABLE 返回空 items。来源对象读取/解密错误或 1 秒标注读取期限到达，返回 UNAVAILABLE 的空帧并继续已有正文读取，不回显对象引用、密钥或异常载荷，不把完整正文改为 PARTIAL；底层未结束 I/O 仍受独立线程池容量约束。客户端不得无限等 annotations；缺帧按未提供，原有 end 缺失只判断读取未完成。未 opt-in 的旧前端不接收陌生帧。
+
+AuditMessageAssembler 增加真实输入 unit_index，按 `message_index=unit_index-1` 应用已验证标注；隐藏参数单元、分页、gap 不改变对应关系。未知角色、解析失败或不满足输入消息结构的单元不强贴来源；output 不套用输入标注。保留真实 role 并额外显示来源，已知 kind=user/system-prompt/model/tool/skill-catalog/runtime-context 使用三语可读标签；未知合法 kind/form 安全纯文本展示。多个来源显示混合及明细，PARTIAL 提示部分提供，缺来源明确未提供，不凭 role=user 宣称用户手输。所有新增文案同步 zh-Hans/en/ja，复用既有标签/折叠组件，不改设计规范或控件视觉。
 
 现有 Platform Axios 浏览器封装没有 ReadableStream 能力，需要先在共享请求层扩展流式包装，复用 BASE、认证及集中错误策略，并回归会话失效/踢出和权限拒绝；业务组件不直接 import axios、不自行处理 403。普通接口仍走原 request；正文增量走共享 requestStream，支持 AbortSignal，不输出原文到 console。
 
@@ -192,12 +269,27 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | `DshChatAdapter.prepare`、`ChatExecution.invoke/stream` 的统一形态 | 消息、工具或多模态字段变化时，审计编码可能漏字段，需同步契约测试 |
 | DSH 凭证与 `dsh_model_call.request_id` | 不能用客户端声明改变 tenant/user，也不能用另一套 ID 造成用量和审计错配 |
 | `GET /dsh/config` 和正式客户端 0.5.0 后续版本 | 新旧客户端/服务端必须能力协商，不能用错误重放探测 |
+| Harness SessionStore.get / SessionHeader.origin、parentSession | 只能查询存活会话，升级可能改变分类语义；不得从 parentSession 单独推断 subagent；无法取得则省略，不扫描历史 |
+| GenerateOptions.sessionId/purpose、Message.source.kind/form | 临时消息可能没有 source；purpose 新值不能默认 chat；内部 source 携带敏感/大载荷，只取受限标识 |
+| 企业消息投影与序列化、输入 unit_index 约定 | 插入/拆分/合并会改变 wire 索引；须在最终 push 处建映射，平台保留原 unit_index，不按显示条数匹配 |
+| annotations opt-in NDJSON / AuditScope 编码版本 2 | 修改帧或 scope 会破坏新管理页和来源解密；旧调用必须维持原帧，不能将来源版本误用于模型原件解码 |
 | MySQL/DM8、Redis、MinIO、密钥服务 | 写入、缺口证据或正文读取可分别降级；加密不可用不写明文；多节点不能靠本地盘 |
 
 ## 7 验证与可观测
 
+本轮 AC-40、AC-41、AC-42、AC-43、AC-44、AC-45、AC-46、AC-47、AC-48 的覆盖目标如下，不沿用历史测试通过结果：客户端验证公开 sessions 有/无、普通 Fork、子 Agent、主/子压缩、消息变换的最终索引与多来源；contract/Electron/服务端验证能力子集、无效索引、12KiB/128项/4来源边界及有效基础字段不丢失。服务端还须核对实际统一模型输入不含扩展，标注状态与正文状态独立、重复/迟到事件不改来源，标注队列满不占正文队列，正文 COMPLETE 后标注 PENDING 仍会收敛。实际已执行与正式操作待验收项分开记录，不把覆盖目标当作已通过。
+
+以上为覆盖目标，不是所有环境均已完成：已执行结果以 validation-results.md 最新增量记录为准，正式 Electron 和真实三存储仍未完成。新测试分布在 test_model_audit_sources.py、test_model_audit_sources_flow.py、test_model_audit_sources_local_e2e.py；最后一个必须显式选择 memory 或真实 Docker 模式，不能把两者结果混记。
+
+真实链路用当前客户端企业插件及 Electron 请求校验模块，调用隔离毕昇 HTTP + 独立 MySQL/Redis/MinIO + 可记录入参的受控模型；核对一次请求只调用一次模型，主会话/子会话普通与压缩的字段、MinIO 标注加密回读、原件字节一致、授权后 annotations 帧与正文映射一致。管理页交互测试覆盖旧后端无新帧、旧前端不开 opt-in、标签混合/缺失、父编号跨用户/租户碰撞、无父记录、自指/环状声明不递归，以及父导航不预取正文。数据库迁移与 SQL 编译覆盖 MySQL/DM8；DM8 运行证据仍须 Linux 环境，不能用编译替代。
+
+手动增量验收：测试环境用超管给测试租户开启 CONTENT，使用测试账号在已协商客户端创建会话、触发一次内置压缩、委派一个子 Agent 并在子会话压缩；客户端管理的模型审计按用户/时间找到请求，核对子会话卡片的“子 Agent / 压缩”，点击直接父会话入口只定位时间线，展开单请求核对 user 角色的技能目录/运行时上下文标签及普通用户来源。测试租户与账号现场指定，不在文档保存凭证；缺内置压缩触发条件时可用合成会话通过真实适配器验证，但须单列正式 Electron 操作未执行。相关 API 路径见 §6.2，桌面定向命令见契约 §7。
+
+标注指标新增 received/rejected/truncated/enqueue_failed/write_failed/read_failed/pending_timeout，按固定 reason 及租户计数，不使用 kind/form、会话 ID 或父 ID 作为指标标签，不记录标注数组。它们不能并入模型失败率或正文缺口率；父导航只记录管理员操作结果，不额外采集模型原文。
+
 - 单元测试：字段软解析/剥离、三元组归组与无效 ID、同用户误复用/换 ID、会话/请求作用域同值碰撞及大小写精确匹配、单请求事实、编码顺序/分块、清单计数、状态轴与迟到事件和幂等冲突；对应 [spec](./spec.md) AC-01 至 AC-38。
 - 基本成功路径：使用受控统一接口、正常存储、成功模式读取及足够预算，确定性处理完异步队列后验收 AC-35：METADATA 留单次元数据且无正文，CONTENT 留完整输入输出、清单核验为 COMPLETE；不先以持久化成功作为测试前提，也不为此新增生产覆盖率/时效阈值。
+- 密钥模式配置回归（AC-39）：没有有效活动密钥时新 CONTENT 变更失败且版本/历史不变，OFF/METADATA 仍可保存；幂等重放、已配置 CONTENT 后密钥失效及当前实例可用性提示维持既有边界，不把标注加密要求扩大成 METADATA 的配置前置。
 - 受控统一模型接口测试：分别比较非流式与流式的有效入参、工具、多模态、返回增量和终止边界；覆盖调用前拒绝、半包/合包、失败、取消、长流、用量结算失败、响应中断。只与统一接口观察值对照，不假称 SDK/供应商网络报文相同。
 - 故障与关联测试：显式 OFF 不产生进入证据/活动租约，读取失败只产生最小系统诊断；验证非流式上游失败和结算失败的响应编号可定位对应审计，调用前拒绝保持同编号但无模型已调用审计；注入末片丢失但终止清单到达、清单丢失、等待首字、进程退出、活动刷新丢失及迟到终态，验证 AC-36、AC-37、AC-38，不伪造完整、失败或取消状态。
 - 双库与端到端：MySQL 和 DM8 分别验证索引、权限、模式切换、MinIO 故障、队列满、进程退出、模式读取失败、正文日志失败和新旧客户端联调；前端验证长会话分页、单卡片展开、无默认原文、租户管理员本范围读取及越权拒绝。新后端测试放 `src/backend/test/dsh/`。
@@ -205,6 +297,8 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 - 观测：按租户统计模式读取降级、缓冲满/丢事件、编码失败、SQL/MinIO/加密错误、PENDING 滞留、可证实与候选缺口、正文读取拒绝与日志失败。指标不带正文或高基数字符串 ID；告警不承诺逐条完整。开发后按 spec D-09 在测试环境测首字/总耗时 P95/P99、内存峰值、元数据/正文可见时效与受控覆盖率；固定现有 DSH Token 用量展示的对照来源，不能用 Redis 实时额度冒充同类基线。
 
 ## 8 交付门禁、短板与后续
+
+增量发布次序：设计确认后拆解任务并实施；先验证唯一 Alembic head 并执行可空列迁移，再部署支持五字段及 annotation 消费/读取/巡检的全部 API/Worker，完成隔离链路测试后开启五字段能力声明；随后交付新客户端，刷新 config 后才发送新字段。新 Platform 对旧后端保持无 annotations 的兼容；新后端对旧前端缺省不发新帧。无停机迁移仅增加可空列，不读取历史正文；回退时保留新增列及加密对象，先撤销新字段能力、刷新客户端连接再回退应用，不删除历史数据。能力快照未刷新的在途新请求不得自动重放；旧后端仅软忽略未知字段，在允许的通用请求体大小内保留原调用。迁移及全实例就绪需实际验证，不把文档发布次序当作已执行。
 
 1. 服务端链路、管理 API/页面及客户端代码到本机真实共享存储的联调已通过；正式 Electron UI、Linux DM8、真实供应商/Gateway/平台登录和持续容量压力尚未验收。任务清单保留这些环境门禁，不以本机合成身份或 mock 上游替代发布验收。协议仍为 0.5.0，不限定会话 ID 格式。
 2. 管理接口须验证“超管按所选租户读/改、租户管理员仅本租户读、其余角色拒绝”的矩阵；不新增 F048 资源/动作，也不能只复用 DSH 菜单可见性满足 D-06。
@@ -216,6 +310,8 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-16 | 用户确认后实现两端五字段、独立加密标注与队列、父会话定位、opt-in 帧和三语展示；修正巡检翻页饥饿与 JS 正则末尾换行差异 | 实施与代码审查；本机 HTTP 实际客户端链路通过，真实三存储因镜像不可取未通过 |
+| 2026-10-16 | 规格 0.20 确认后拟定五字段契约、最终消息来源映射、独立加密标注/预算/状态及直接父会话导航；补齐新旧 body-access 与发布兼容 | 用户确认消息类型、压缩请求、子 Agent 关系增量；设计待确认，新代码未实施 |
 | 2026-10-14 | 以规格 0.17 重写一期设计：按客户端声明 ID 归组，删除高级关联图，加入简洁时间线与单请求正文读取 | 用户确认请求级审计展示及服务端不验真会话关系 |
 | 2026-10-14 | 取消额外协议版本/特定会话 ID 格式与 F048 审计资源要求，改为能力字段协商和现有 DSH 管理员授权路径 | 用户澄清接口与权限边界 |
 | 2026-10-14 | 补齐 OFF 采集边界、带类型去重作用域、完整性清单、请求编号贯通、活动租约/失联收敛和 AC-35 至 AC-38 验证 | 用户要求落实本轮七项评审建议 |

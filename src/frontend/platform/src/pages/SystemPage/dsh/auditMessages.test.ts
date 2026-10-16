@@ -29,6 +29,31 @@ const messages = (assembler: AuditMessageAssembler) =>
   );
 
 describe("request-scoped audit message assembly", () => {
+  it("maps sources by original input unit, not rendered position or output", () => {
+    const assembler = new AuditMessageAssembler();
+    assembler.accept({
+      type: "annotations",
+      message_sources_status: "PARTIAL",
+      items: [
+        {
+          message_index: 1,
+          sources: [{ kind: "runtime-context", form: "snapshot" }],
+        },
+      ],
+    });
+    add(assembler, "input", 0, { parameters: {} });
+    add(assembler, "input", 1, { role: "system", content: "system" });
+    add(assembler, "input", 2, { role: "user", content: "context" });
+    add(assembler, "output", 0, { delta: { content: "reply" } });
+    assembler.finish();
+    expect(messages(assembler)[1].sources).toEqual([
+      { kind: "runtime-context", form: "snapshot" },
+    ]);
+    expect(messages(assembler)[0].sources).toBeUndefined();
+    expect(messages(assembler)[2].sources).toBeUndefined();
+    expect(assembler.partial).toBe(false);
+    expect(assembler.sourcesStatus).toBe("PARTIAL");
+  });
   it("reassembles split JSON, hides only the parameters unit and preserves ordered message roles", () => {
     const assembler = new AuditMessageAssembler();
     add(assembler, "input", 0, {

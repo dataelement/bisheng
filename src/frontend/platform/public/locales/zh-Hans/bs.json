@@ -2579,6 +2579,34 @@
   "dsh": {
     "modelAudit": "模型审计",
     "modelAuditView": {
+      "sources": {
+        "label": "消息来源",
+        "missing": "来源未提供",
+        "mixed": "混合来源",
+        "parent": "查看父会话",
+        "parent_loading": "正在定位父会话…",
+        "parent_unavailable": "父会话暂无可查看记录。",
+        "parent_error": "父会话定位失败，请重试。",
+        "origin": {
+          "main": "普通会话",
+          "subagent": "子 Agent 会话",
+          "unknown": "会话来源未知"
+        },
+        "kinds": {
+          "user": "用户输入",
+          "system-prompt": "系统提示词",
+          "model": "模型回复",
+          "tool": "工具结果",
+          "skill-catalog": "技能目录",
+          "runtime-context": "运行时上下文"
+        },
+        "status": {
+          "PARTIAL": "消息来源仅部分提供，不影响已保存的输入输出原文。",
+          "INVALID": "消息来源标注无效，仍可查看已保存原文。",
+          "UNAVAILABLE": "消息来源暂不可用，仍可查看已保存原文。",
+          "PENDING": "消息来源尚待写入，可稍后重新打开。"
+        }
+      },
       "bodySegment": "消息分段：第 {{page}} / {{pages}} 段；翻页查看，不重复读取原件。",
       "messages": {
         "data": "结构化内容",

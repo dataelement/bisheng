@@ -27,6 +27,7 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
         Index("ix_dma_request_time", "tenant_id", "started_at", "request_id"),
         Index("ix_dma_request_model", "tenant_id", "model_id", "started_at", "request_id"),
         Index("ix_dma_request_name", "tenant_id", "model_name_digest", "started_at", "request_id"),
+        Index("ix_dma_request_sources", "tenant_id", "message_sources_status", "started_at", "request_id"),
         CheckConstraint("effective_mode IN ('METADATA','CONTENT')", name="ck_dma_request_mode"),
     )
     request_id: str = Field(sa_column=Column(String(36), primary_key=True))
@@ -51,6 +52,12 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
     conversation_key: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
     conversation_id_digest: str | None = Field(default=None, sa_column=Column(String(64), nullable=True, index=True))
     request_kind: str | None = Field(default=None, sa_column=Column(String(32), nullable=True))
+    session_origin: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    parent_conversation_id: str | None = Field(default=None, sa_column=Column(String(1024), nullable=True))
+    message_sources_status: str = Field(
+        default="NOT_PROVIDED", sa_column=Column(String(16), nullable=False, server_default="NOT_PROVIDED")
+    )
+    message_sources_ref: dict | None = Field(default=None, sa_column=Column(JsonType, nullable=True))
     association_status: str = Field(default="UNASSOCIATED", sa_column=Column(String(32), nullable=False))
     context_invalid: bool = Field(default=False, sa_column=Column(Boolean, nullable=False))
     effective_mode: str = Field(default="METADATA", sa_column=Column(String(16), nullable=False))

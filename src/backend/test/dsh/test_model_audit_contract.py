@@ -44,7 +44,7 @@ def test_invalid_kind_and_extension_size_boundaries():
     prefix["padding"] = "x" * (4096 - overhead)
     assert parse_audit_context(prefix, AUDIT_FIELDS).conversation_id == "case"
     prefix["padding"] += "x"
-    assert parse_audit_context(prefix, AUDIT_FIELDS).conversation_id is None
+    assert parse_audit_context(prefix, AUDIT_FIELDS).conversation_id == "case"
     assert parse_audit_context({"conversation_id": "\ud800"}, AUDIT_FIELDS).invalid
 
 

@@ -1,5 +1,31 @@
 # 模型审计开发验证结果
 
+## 2026-10-16 消息来源与子 Agent 增量
+
+基线：服务端 `5ee9aca1d9`、桌面客户端 `0367d8e674` 之上的未提交修改，两端分支均为 feat/3.0.0-dsh-audit。规格 0.20、设计 0.10、客户端契约 0.4 均已确认。下面早期三存储通过记录不能替代本节新增能力的验收。
+
+| 范围 | 实际结果与边界 |
+|---|---|
+| 后端审计与迁移 | **131 passed、2 deselected**；`pytest test/dsh/test_model_audit* test/database/test_alembic_single_head.py -m 'not e2e'`，含五字段/预算隔离、独立加密、权限配对、损坏标注不影响正文、101条巡检公平翻页、迁移幂等/保留回退。唯一 head 为 dsh_audit_sources |
+| 实际桌面代码到 HTTP | **1 passed（memory 模式）**；Node v25.6.1 的 EnterpriseLlmAdapter + Electron parseEnterpriseChatPayload → 实际 DSH 路由/适配/队列/SQL/加密/管理读取；主/子会话各聊天与压缩共4次物理调用，无重放；存储为独立 SQLite/内存，不是真 MinIO |
+| 真实 MySQL/Redis/MinIO | **环境准备未通过**；Docker 可用，但本机未缓存 MinIO，Docker Hub 拉取失败、同版本 quay.io 返回 unauthorized，尚未进入业务断言。临时 MySQL/Redis由 fixture 清理，不连接业务库 |
+| Desktop 企业模块 | **211 passed、1 skipped**；`vitest run test/enterprise*.test.ts test/enterprise*.test.mjs`。随后新增末尾行分隔符和多工具图片合并的最终定向回归 **14 passed**，未把新用例数量加进先前全量结果 |
+| Platform 审计回归 | **64 passed（8 files）**；覆盖 API/正文解包/来源帧/父导航/过滤/模式组件；jsdom 不是正式浏览器或 Electron 验收 |
+| 类型、国际化与构建 | Desktop typecheck/build、前端根 typecheck、check-i18n、Platform build 均通过；Platform 549个 strict 文件。新增三语键一致，未手改生成错误码产物 |
+| 质量检查 | 修改文件 scoped ESLint、后端 Ruff、arch-guard、git diff --check 通过；不能据此说仓库全量门禁全绿 |
+
+复跑说明：后端采用已有项目 venv，config 只读用于导入，不修改/连接其业务存储。新增 `test/dsh/test_model_audit_sources_local_e2e.py` 仅在显式设置 `DSH_AUDIT_SOURCES_REAL_STORES=memory` 或 `1` 时执行；另设 `DSH_AUDIT_CLIENT_WORKTREE` 指向客户端审计工作树。memory 与真实 Docker 结果必须分开。真实模式可通过 `DSH_AUDIT_TEST_MINIO_IMAGE` 指定可用测试镜像；仅允许本地 Unix Docker、随机自建实例及 loopback。桌面 `scripts/verify-audit-sources.mjs` 只连接 health.fixture=true 的本机服务，当前 Node 用原生 TS 类型擦除导入纯主进程校验器；正式应用不依赖该探针。
+
+扩大检查仍有未通过项：
+
+- 后端全量初跑4 failed/508 passed/103 skipped/75 errors；新能力声明的旧预期已更新并由定向复跑覆盖。排除 external 后为3 failed/511 passed/103 skipped/81 deselected/5 errors；错误要求独立 SQL/Redis 配置，失败位于未修改的 test_admin_policy_view、test_shared_trust、test_user_grant_switch。本轮未跑干净基线，不能武断断言这3项都是既有失败。
+- Platform 全量 lint 为93 errors，输出文件均未被本轮修改；scoped lint 通过。扩大 DSH 页面测试183 passed/1 failed，commercialLicense.test.tsx 单独也失败：测试仍期待旧的“DSH Enterprise License Request”，实际文案是“Client Enterprise License Request”。该组件及测试未改，不扩大本轮修复范围。
+- 最初直接 tsc 会检查冻结旧文件，不作为项目类型门禁结论；正式结论为根 pnpm typecheck 使用的 tsc-strict。Prettier 旧配置的 CJS require 遇 ESM 插件失败，使用已安装 Prettier 的空配置仅格式化本次文件，不修改配置、依赖或抑制基线。
+
+L1/L2：按 task-review/code-review 检查未提交增量的分层、边界、授权、并发、泄漏、测试和文档，不只看 HEAD diff。修复了标注巡检页饥饿与 JS `$` 可接受末尾换行的差异，均有回归。正式 Electron 会话 resolver 生命周期/重启、安装后插件闭包、浏览器窄屏/信创、Linux DM8、真实供应商/Gateway身份及三存储压力/故障仍未执行。当前结论：核心代码及受控 HTTP 链路完成，完整环境验收 **PARTIAL**。未提交、推送、部署或删除业务数据。
+
+---
+
 2026-10-15 合并 `feat/bisheng-work-103` 及单迁移头修复的最新证据见 [分支合并验证](./merge-validation-20261015.md)。以下保留 2026-10-14 开发验收的历史快照，不代表合并后已重新部署或完成全面门禁。
 
 日期：2026-10-14。结论：功能代码、本机隔离存储及双端代码联调通过；发布验收 **PARTIAL**。未提交、推送、合并或部署。

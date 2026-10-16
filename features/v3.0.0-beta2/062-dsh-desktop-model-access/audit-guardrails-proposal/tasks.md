@@ -6,9 +6,9 @@
 
 | 文档/交付 | 状态 | 说明 |
 |---|---|---|
-| spec.md 0.19 | 开发基线 | 本轮用户要求生成任务并交付客户端并行开发，按当前版拆解；不增加一期范围 |
-| design.md 0.9 | 实现快照 | 已回写异步留存、共享存储、管理页面及本机双端联调；不是生产发布证明 |
-| client-api-audit-extension.md 0.3 | 客户端并行开发契约 | 可以交付客户端；不是服务端能力已发布的证明 |
+| spec.md 0.20 | ✅ 已评审，用户已确认 | 2026-10-16 确认消息来源、压缩用途及子 Agent 直接父会话增量，既有任务完成记录不代表新增能力已实现 |
+| design.md 0.10 | ✅ 已评审，用户已确认 | 2026-10-16 用户确认；按增量任务实施，不再等待设计确认 |
+| client-api-audit-extension.md 0.4 | ✅ 已随设计确认 | 旧两字段仍有效；新字段通过实际能力声明协商，实施状态见下文 |
 | tasks.md 1.1 | 开发与验证回写 | 测试合并到实际模块，未验收的环境和压力门禁保持未勾选 |
 | 服务端/Platform | 功能代码及本机联调已接通 | 65/70 项完成；T063、T064、T065、T066、T068 含环境或扩展评估未执行部分，详见验证记录 |
 | 桌面客户端 | C001 至 C009 完成 | C010 自动化及真实服务端代码联调通过，正式 Electron UI/Fork 等仍待操作验收 |
@@ -859,3 +859,89 @@ L1 逐项审查 T001、T002、T003、T004、T005、T006、T007、T008、T009、T
 仍未勾选的任务不是缺失核心功能：T063 的本机 MySQL/Redis/MinIO 和 SQL 编译通过，真实 DM8 未执行；T064 本机 HTTP 验收、真实客户端代码链路和页面通过，正式 JWT/FGA/供应商/Electron 验收待执行；T065/T066 的安全评估脚本、分母/分轴测试和正常小样本已完成，但并发长流、故障/取消/读取降级的量化报告尚未完成；T068 文档/代码评审已产出，全面质量门禁仍有与干净基线相同的既有失败，不能标全绿。C010 正式 Electron UI/Fork/Windows 等保留未执行。
 
 对应证据与门禁：[validation-results.md](./validation-results.md)、[audit-acceptance.md](./audit-acceptance.md)、[implementation-review.md](./implementation-review.md)、[audit-rollout.md](./audit-rollout.md)。不提交、不推送、不部署、不删除历史审计表/业务数据。
+
+### 2026-10-16 消息来源与子 Agent 关联增量（确认前历史快照）
+
+用户接受调研建议，要求同时修改服务端及 bisheng-work 客户端，以区分消息类型、压缩请求和子 Agent 关系。现已更新 spec.md 0.20 草案，新增 AC-40、AC-41、AC-42、AC-43、AC-44、AC-45、AC-46、AC-47、AC-48；上文任务与完成记录仍仅针对既有基线，不代表新能力已实现。
+
+| 文档/交付 | 增量状态 | 下一步 |
+|---|---|---|
+| spec.md 0.20 | ✅ 已评审，用户已确认 | 明确角色/来源、请求用途、会话来源与直接父会话互相独立；保留缺失降级、权限范围和旧客户端兼容 |
+| design.md 0.10 / 客户端契约 0.4 | 候选已更新，待设计确认 | 五字段、最终消息映射、独立预算、存储/读取及兼容策略已明确，设计评审不代表实施完成 |
+| 两端代码及增量测试 | 未开始 | 设计确认后追加服务端/Platform/桌面任务和 AC 对照，再实施及联调；当前未提交、推送或部署 |
+
+规格审查已对照需求、当前 beta2 release-contract、constitution、后端模块与权限架构及 spec-checklist；新增范围未发现 high/medium 问题，48 条 AC 编号唯一、引用均可解析，未改章节编号。不存在独立外部 PRD，用户本轮要求作为增量需求来源。以下为既有文档的低优先级结构问题，不改变已确认查询行为、不扩大本轮改动：
+
+- ISSUE: 既有 AC-21 含名称摘要联合索引、游标等实现细节，不符合规格纯 What 的分工；技术细节应在后续设计同步时集中维护 | SEVERITY: low | AC: AC-21
+
+本次仅完成文档更新与静态检查，没有执行新增功能测试，也未把字段可从客户端代码取得等同于端到端上报成功。用户随后确认规格，现已继续完成设计及客户端契约候选，下一强制暂停点为设计确认。
+
+### 2026-10-16 增量设计及接口契约审查
+
+用户已明确确认规格 0.20；已回写状态，未改变验收目标。设计 0.10 / 客户端契约 0.4 现为待确认候选，按 sdd-review design 的接手测试和 24 项清单审查，结论：LGTM。Constitution C1–C8 与 B2-INV-7 未发现冲突：业务模块内分层、管理员/历史租户范围、双库兼容字段、共享加密对象、无源载荷 SQL/日志、无客户端凭证变化，均有明确落点。
+
+本轮审查中已补齐三处设计缺口：来源状态 PENDING 的独立索引和巡检（不能依赖正文仍非终态）、旧前端缺省不接收新 NDJSON 帧的 opt-in、按规范化已知字段增量计预算（不能先序列化巨型原始扩展清空会话）。这只是设计修订，不表示实现验证通过。
+
+| 增量 AC | 设计覆盖 | 客户端联调用例 |
+|---|---|---|
+| AC-40 | design §4.5 来源采集、§6.2 角色与来源标签分开 | C-A13、C-A15 |
+| AC-41 | design §4.5 最终 push 映射、多来源及 unit_index 对应 | C-A08、C-A14 |
+| AC-42 | design §4.5 公开 SessionHeader、Fork 区分与元信息降级 | C-A05 |
+| AC-43 | design §6.1 用途与会话来源独立 | C-A06 |
+| AC-44 | design §6.1 白名单/软降级/剥离与 §8 双端发布次序 | C-A01、C-A02、C-A03、C-A09、C-A11 |
+| AC-45 | design §4.5 一跳父会话定位与 §6.2 管理 API | C-A10 |
+| AC-46 | design §4.5 独立预算/队列/状态与契约 §3.2 规范化 | C-A07、C-A14、C-A15 |
+| AC-47 | design §4.5 三档存储及 §6.2 正文授权 opt-in | C-A12、C-A13、C-A15 |
+| AC-48 | design §7 双端实际代码/隔离存储/管理页受控链路 | C-A04、C-A06、C-A08、C-A12、C-A15 |
+
+已执行文档静态检查：git diff --check、JSON 示例解析、相对文件链接存在性、48 个 AC 编号唯一及章节引用核对。没有执行新增模型调用、数据库迁移、服务端/客户端测试或环境部署。设计确认后再追加实施任务，服务端与客户端新扩展目前均未开始编码；不把本节 LGTM 当作代码、端到端或发布门禁通过。
+
+### 2026-10-16 设计确认后的增量实施计划
+
+用户已确认设计。下表为新增执行轨道，历史未验收门禁不被覆盖。后端路径前缀 B=`src/backend/bisheng/dsh/`、测试 T=`src/backend/test/dsh/`；平台 P=`src/frontend/platform/src/`；桌面 D 为 bisheng-work 审计工作树。每行最多两个实现/测试文件，同文件后续任务只增量接线。迁移只加可空字段/索引；应用回退保留列和对象，不在本任务执行删除。审计扫描继续沿既有 Celery 可信 tenant header → ContextVar，不增加跨租户后台入口。
+
+| 完成 | 任务及依赖 | 文件与自包含工作/验收 |
+|---|---|---|
+| [x] | X001 基础设施；无依赖 | B/domain/models/model_audit_request.py、src/backend/bisheng/core/database/alembic/versions/v3_0_0_dsh_audit_sources.py：新增 origin/parent/独立标注状态和引用，状态巡检索引；以实际单 head 为父，DDL 幂等，双库兼容，不回填正文，应用回退保留数据 |
+| [x] | X002 后端测试；X001 | T/test_model_audit_sources.py：先写失败用例，覆盖五字段、12KiB/128项/4来源、坏索引、预算隔离、旧能力；覆盖 AC: AC-40, AC-41, AC-42, AC-43, AC-44, AC-46, AC-47 |
+| [x] | X003 后端 Domain；X002 | B/domain/schemas/model_audit_context.py、B/domain/schemas/model_audit_sources.py：独立规范化、依赖校验、repr 隐藏来源、最终消息索引验证；保留有效基础字段，不遍历未知对象 |
+| [x] | X004 后端测试；X003 | T/test_model_audit_sources_flow.py：先写加密标注/异步状态/权限读取/队列故障的失败用例；覆盖 AC: AC-44, AC-45, AC-46, AC-47, AC-48 |
+| [x] | X005 后端 Domain；X004 | B/domain/schemas/model_audit_events.py、B/domain/services/model_audit_capture.py：annotation 专用事件，payload 不复制到公共 metadata，失败不改变正文完整性 |
+| [x] | X006 后端装配；X005 | B/audit_runtime.py、B/api/endpoints/models.py：独立 64事件/768KiB 队列与生命周期、模式边界、合法业务消息数验证；新字段不进模型 DTO |
+| [x] | X007 后端落库；X006 | B/domain/services/model_audit_writer.py、B/domain/repositories/model_audit_write.py：REQUEST/编码2 的单对象加密核验、独立 ref/status 幂等写入，冲突不覆盖原件 |
+| [x] | X008 Worker；X007 | B/domain/services/model_audit_states.py、B/domain/repositories/model_audit_queries.py：正文 COMPLETE 后标注 PENDING 仍按索引有界收敛，保持既有 header/ContextVar 和状态版本保护 |
+| [x] | X009 管理 Domain；X007 | B/domain/services/model_audit_queries.py、B/domain/repositories/model_audit_queries.py：按子请求历史用户/同授权租户一跳定位父会话、DTO仅公开请求级信息，不预取原文 |
+| [x] | X010 管理 API；X009 | B/domain/schemas/model_audit.py、B/api/endpoints/model_audit_admin.py：新增父定位接口、来源 DTO 和 body-access opt-in；默认不发新帧，保持旧响应 |
+| [x] | X011 正文读取；X010 | B/domain/services/model_audit_body_access.py：先授权持久留痕，再发有界 annotations 帧，1秒标注超时不阻断已有正文；来源损坏不改正文状态 |
+| [x] | X012 桌面测试；无依赖 | D/test/enterprise-audit-context.test.ts、D/test/enterprise-audit-sources.test.ts：先写独立预算/能力与最终消息映射/公开会话 resolver 的失败用例；覆盖 AC: AC-40, AC-41, AC-42, AC-43, AC-44, AC-46, AC-47 |
+| [x] | X013 桌面契约；X012 | D/packages/dsh-desktop-enterprise/contract.js、contract.d.ts：五字段及独立规范化，与服务端边界 fixture 一致，旧能力仅发两字段 |
+| [x] | X014 桌面组装；X013 | D/packages/dsh-desktop-enterprise/openai.js、index.js：公开 sessions.get 同步 resolver；序列化 push 同步映射，拆分/合并多来源；不改 Harness 核心或业务 messages |
+| [x] | X015 桌面边界；X014 | D/src/main/enterprise/enterprise-chat.ts、D/packages/dsh-desktop-enterprise/index.d.ts：可信能力重新净化、合法消息数验证，声明与 JS 同步；不改认证、工具、图片语义 |
+| [x] | X016 平台测试；X003 | P/pages/SystemPage/dsh/auditMessages.test.ts、ModelAuditBody.test.tsx：先写真实 unit_index、标签/缺失/混合、opt-in 帧用例；覆盖 AC: AC-40, AC-41, AC-46, AC-47 |
+| [x] | X017 平台数据；X016 | P/types/dshModelAudit.ts、P/controllers/API/dshModelAudit.ts：请求级字段、annotations 帧与校验、父定位/正文 opt-in API，保持共享认证错误策略 |
+| [x] | X018 平台组装；X017 | P/pages/SystemPage/dsh/auditMessages.ts、ModelAuditBody.tsx：保留 wire 单元位置，不跨 gap/输出套标注，不因来源失败标正文损坏 |
+| [x] | X019 平台展示；X018 | P/pages/SystemPage/dsh/ModelAuditMessage.tsx、ModelAuditPanel.tsx：角色和来源分开、压缩/子 Agent 独立标签、用户点击才父定位；沿现有控件，无关系树 |
+| [x] | X020 平台三语；X019 | src/frontend/platform/public/locales/zh-Hans/bs.json、en-US/bs.json：新增来源/关系/状态文案，不改生成错误码产物 |
+| [x] | X021 平台三语；X020 | src/frontend/platform/public/locales/ja/bs.json：同批补齐相同 key；键一致性检查通过后才算三语完成 |
+| [ ] | X022 隔离联调测试；X011、X015、X021 | T/test_model_audit_sources_local_e2e.py、T/model_audit_harness.py：真实客户端 HTTP 到独立存储，主/子聊天/压缩、上游无扩展、一次物理调用、授权配对拒绝；覆盖 AC: AC-40, AC-41, AC-42, AC-43, AC-44, AC-45, AC-46, AC-47, AC-48 |
+| [x] | X023 验收证据；X022（含阻塞结论） | validation-results.md、e2e-checklist.md：命令/结果、手动步骤、未执行 Electron/DM8/供应商门禁；不把静态或 mock 结果当正式发布完成 |
+
+增量任务审查：LGTM。新增 AC 均由明确列举的测试任务覆盖；基础设施在先，配对测试先于实现，依赖无环；每项至多两文件，三语任务拆分但同批交付；没有新权限真相、任务树、源 ID 或正文回填。实施中真实文件落点不同时按职责回写，不通过挪走验收目标来减少测试。每项完成执行范围内任务审查，代码整体评审与 E2E 在交付前执行。
+
+### 2026-10-16 增量实施与验收回写（当前状态）
+
+用户随后确认设计，已完成 X001 至 X021 的实现及定向自动化；X023 已如实记录验证和阻塞。上文设计前“候选/未开始/待确认”均为历史快照，不再是当前状态。X022 仅完成实际客户端适配器及 Electron 入参校验器 → 本机 HTTP → SQLite/内存加密存储链路；真实 MySQL/Redis/MinIO 因 MinIO 镜像拉取失败，仍保留未勾选，不能以 memory 模式冒充通过。正式 Electron、DM8、供应商及压力门禁仍未验收。
+
+实际落点补充（不改变产品边界）：
+
+| 完成 | 配套任务 | 实际文件及验证 |
+|---|---|---|
+| [x] | X024 桌面规范化与拆并测试；X013、X014 | D/packages/dsh-desktop-enterprise/audit-context.js、D/test/enterprise-audit-serializer.test.mjs：共享有界规范化，覆盖系统插入、工具拆分/多图片合并、五种主/子用途组合 |
+| [x] | X025 平台父关系；X019 | P/pages/SystemPage/dsh/ModelAuditParent.tsx、ModelAuditParent.test.tsx：仅点击才查父关系，历史用户固定、范围变化取消、失败不跳转；复用已有 Button/Badge |
+| [x] | X026 服务端能力协商；X003 | B/domain/schemas/contracts.py、T/test_model_audit_contract_api.py：公布五字段并回归旧字段兼容 |
+| [x] | X027 HTTP 探针与隔离设施；X022 | D/scripts/verify-audit-sources.mjs、T/audit_local_server.py：仅本机合成服务；真实桌面代码不向上游泄漏扩展，容器启动有界并隐藏错误中的临时凭据 |
+| [x] | X028 API 来源帧回归；X017 | P/controllers/API/dshModelAudit.test.ts：来源 opt-in、非法/重复索引降级，不中断原正文 |
+
+X015 的 index.d.ts 已通过既有 AuditContextField 别名自动继承新字段，无需重复声明，实际修改仅 enterprise-chat.ts。X008 沿用实际查询仓储，不新增 maintenance 仓储。新增迁移父 revision 已按实际唯一 head 固定为 dsh_audit_model_lookup，最终 head=dsh_audit_sources。
+
+task-review 的规格/设计/代码规范/局部回归/安全/文档检查已完成，修复了独立 PENDING 扫描饥饿和 JS 末尾换行识别差异；保留待环境验证项，不把局部测试当完整发布门禁。后端131、Platform64项通过；桌面企业模块211项通过/1跳过，新增最后回归14项通过；两端类型/构建及三语一致性通过。全量失败与未执行门禁详见 [validation-results.md](./validation-results.md)，不据未修改文件就宣称失败必为既有。尚未提交、推送或部署。

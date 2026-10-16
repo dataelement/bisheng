@@ -110,7 +110,9 @@ class DshDisabledConfig(DshContract):
 
 
 class DshAuditContextCapability(DshContract):
-    fields: list[Literal["conversation_id", "request_kind"]]
+    fields: list[
+        Literal["conversation_id", "request_kind", "session_origin", "parent_conversation_id", "message_sources"]
+    ]
 
 
 class DshEnabledConfig(DshContract):

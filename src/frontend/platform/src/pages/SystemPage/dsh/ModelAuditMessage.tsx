@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager } from "./common";
+import { Badge } from "@/components/bs-ui/badge";
 import {
   auditTextPage,
   type AuditMessage,
@@ -15,6 +16,14 @@ const roles = new Set([
   "assistant",
   "tool",
   "function",
+]);
+const sourceKinds = new Set([
+  "user",
+  "system-prompt",
+  "model",
+  "tool",
+  "skill-catalog",
+  "runtime-context",
 ]);
 
 interface AuditMessageTextProps {
@@ -73,6 +82,44 @@ export function ModelAuditMessage({ message }: ModelAuditMessageProps) {
         {t("dsh.modelAuditView.messages.roles." + role)}
         {message.name && <span className="ml-2 break-all">{message.name}</span>}
       </p>
+      {message.channel === "input" && !message.unparsed && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            {t("dsh.modelAuditView.sources.label")}
+          </span>
+          {message.sources?.length ? (
+            <>
+              {message.sources.length > 1 && (
+                <span className="text-sm">
+                  {t("dsh.modelAuditView.sources.mixed")}
+                </span>
+              )}
+              {message.sources.slice(0, 3).map((source, index) => (
+                <Badge
+                  key={index}
+                  variant="secondary"
+                  title={
+                    source.form
+                      ? source.kind + " / " + source.form
+                      : source.kind
+                  }
+                >
+                  {sourceKinds.has(source.kind)
+                    ? t("dsh.modelAuditView.sources.kinds." + source.kind)
+                    : source.kind}
+                </Badge>
+              ))}
+              {message.sources.length > 3 && (
+                <span className="text-sm">{message.sources[3].kind}</span>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {t("dsh.modelAuditView.sources.missing")}
+            </span>
+          )}
+        </div>
+      )}
       {message.toolCallId && (
         <p className="break-all text-sm text-muted-foreground">
           {t("dsh.modelAuditView.messages.tool_id")} · {message.toolCallId}

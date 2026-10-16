@@ -1,4 +1,4 @@
-import type { AuditBodyFrame } from "@/types/dshModelAudit";
+import type { AuditBodyFrame, AuditMessageSource } from "@/types/dshModelAudit";
 
 export type AuditText = { parts: string[]; length: number };
 export type AuditToolCall = {
@@ -12,6 +12,8 @@ export type AuditMessage = {
   key: number;
   channel: "input" | "output";
   role: string;
+  unitIndex?: number;
+  sources?: AuditMessageSource[];
   name?: string;
   toolCallId?: string;
   content: { kind: "text" | "image" | "data"; text: AuditText }[];
@@ -55,6 +57,8 @@ export function auditTextPage(
 export class AuditMessageAssembler {
   readonly entries: AuditMessageEntry[] = [];
   partial = false;
+  sourcesStatus = "NOT_PROVIDED";
+  private sources = new Map<number, AuditMessageSource[]>();
   private size = 0;
   private pending?: {
     channel: PartFrame["channel"];
@@ -66,7 +70,12 @@ export class AuditMessageAssembler {
   private key = 0;
 
   accept(frame: AuditBodyFrame) {
-    if (frame.type === "meta" || frame.type === "end") {
+    if (frame.type === "annotations") {
+      this.sourcesStatus = frame.message_sources_status;
+      this.sources = new Map(
+        frame.items.map((item) => [item.message_index, item.sources]),
+      );
+    } else if (frame.type === "meta" || frame.type === "end") {
       this.partial ||= frame.content_state === "PARTIAL";
       if (frame.type === "end") this.finish();
     } else if (frame.type === "part") {
@@ -232,6 +241,9 @@ export class AuditMessageAssembler {
       this.reply = undefined;
     } else if (typeof value.role === "string") {
       const message = this.message(unit.channel, value.role);
+      message.unitIndex = unit.index;
+      if (unit.channel === "input" && unit.index > 0)
+        message.sources = this.sources.get(unit.index - 1);
       message.name = typeof value.name === "string" ? value.name : undefined;
       message.toolCallId =
         typeof value.tool_call_id === "string" ? value.tool_call_id : undefined;

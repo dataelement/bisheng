@@ -38,6 +38,7 @@ class ModelAuditRuntime:
             max_bytes=min(settings.audit_queue_budget_bytes, 4 * 1024 * 1024),
             consumer=self.writer.write,
         )
+        self.annotation_queue = BoundedAuditQueue(max_events=64, max_bytes=768 * 1024, consumer=self.writer.write)
         self.activity = RedisAuditActivity(
             redis,
             interval=settings.audit_activity_interval_seconds,
@@ -97,6 +98,8 @@ class ModelAuditRuntime:
             "effective_mode": mode.mode,
             "conversation_id": context.conversation_id,
             "request_kind": context.request_kind,
+            "session_origin": context.session_origin,
+            "parent_conversation_id": context.parent_conversation_id,
             "context_invalid": context.invalid,
             "started_at": started,
             "input_units": len(request.messages) + 1,
@@ -111,6 +114,9 @@ class ModelAuditRuntime:
             activity=self.activity,
             digest_key=digest_key,
             key_version=self.settings.audit_active_key_id,
+            annotation_queue=self.annotation_queue,
+            message_sources=context.message_sources,
+            message_sources_status=context.message_sources_status,
         )
 
     async def close(self):
@@ -118,4 +124,5 @@ class ModelAuditRuntime:
         await asyncio.gather(
             self.queue.close(self.settings.audit_shutdown_seconds),
             self.evidence_queue.close(self.settings.audit_shutdown_seconds),
+            self.annotation_queue.close(self.settings.audit_shutdown_seconds),
         )

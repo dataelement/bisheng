@@ -2634,6 +2634,34 @@
   "dsh": {
     "modelAudit": "Model audit",
     "modelAuditView": {
+      "sources": {
+        "label": "Message source",
+        "missing": "Source not provided",
+        "mixed": "Mixed sources",
+        "parent": "View parent conversation",
+        "parent_loading": "Locating parent conversation…",
+        "parent_unavailable": "No viewable records for the parent conversation.",
+        "parent_error": "Could not locate the parent conversation. Please retry.",
+        "origin": {
+          "main": "Regular conversation",
+          "subagent": "Subagent conversation",
+          "unknown": "Conversation origin unknown"
+        },
+        "kinds": {
+          "user": "User input",
+          "system-prompt": "System prompt",
+          "model": "Model reply",
+          "tool": "Tool result",
+          "skill-catalog": "Skill catalog",
+          "runtime-context": "Runtime context"
+        },
+        "status": {
+          "PARTIAL": "Message sources are partially provided; stored inputs and outputs are unaffected.",
+          "INVALID": "Source annotations are invalid. Stored originals remain available.",
+          "UNAVAILABLE": "Message sources are unavailable. Stored originals remain available.",
+          "PENDING": "Message sources are pending. Reopen this request later."
+        }
+      },
       "bodySegment": "Message segment {{page}} / {{pages}}. Page through without fetching the original again.",
       "messages": {
         "data": "Structured content",

@@ -1,10 +1,11 @@
-"""Negotiated, untrusted correlation metadata; never part of model inputs."""
+"""Negotiated, untrusted metadata; never part of model inputs."""
 
-import json
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-AUDIT_FIELDS = ("conversation_id", "request_kind")
+from bisheng.dsh.domain.schemas.model_audit_sources import normalize_message_sources
+
+AUDIT_FIELDS = ("conversation_id", "request_kind", "session_origin", "parent_conversation_id", "message_sources")
 REQUEST_KINDS = frozenset({"chat", "compaction", "session-title"})
 MAX_CONTEXT_BYTES = 4096
 
@@ -14,62 +15,51 @@ class AuditContext:
     conversation_id: str | None = None
     request_kind: str | None = None
     invalid: bool = False
+    session_origin: str | None = None
+    parent_conversation_id: str | None = None
+    message_sources: dict | None = field(default=None, repr=False)
+    message_sources_status: str = "NOT_PROVIDED"
 
 
-def _within_budget(raw: dict) -> bool:
-    # Preflight string/container size before iterencode can allocate a giant token.
-    pending = [raw]
-    nodes = 0
-    while pending:
-        item = pending.pop()
-        nodes += 1
-        if nodes > MAX_CONTEXT_BYTES:
-            return False
-        if isinstance(item, str) and len(item) > MAX_CONTEXT_BYTES:
-            return False
-        if isinstance(item, dict):
-            if len(item) > MAX_CONTEXT_BYTES:
-                return False
-            pending.extend(item.keys())
-            pending.extend(item.values())
-        elif isinstance(item, list):
-            if len(item) > MAX_CONTEXT_BYTES:
-                return False
-            pending.extend(item)
-    size = 0
-    for token in json.JSONEncoder(ensure_ascii=False, separators=(",", ":"), allow_nan=False).iterencode(raw):
-        size += len(token.encode("utf-8"))
-        if size > MAX_CONTEXT_BYTES:
-            return False
-    return True
+def valid_id(value):
+    if not isinstance(value, str) or not 1 <= len(value) <= 256:
+        return False
+    try:
+        value.encode("utf8")
+        return True
+    except UnicodeError:
+        return False
 
 
-def parse_audit_context(raw, advertised_fields: Iterable[str] = AUDIT_FIELDS) -> AuditContext:
+def parse_audit_context(raw, advertised_fields: Iterable[str] = AUDIT_FIELDS, *, message_count=None) -> AuditContext:
     if raw is None:
         return AuditContext()
     if not isinstance(raw, dict):
         return AuditContext(invalid=True)
-    try:
-        if not _within_budget(raw):
-            return AuditContext(invalid=True)
-    except (TypeError, ValueError, UnicodeError, RecursionError):
-        # Invalid optional metadata cannot reject otherwise valid model business data.
-        return AuditContext(invalid=True)
     fields = set(advertised_fields) & set(AUDIT_FIELDS)
-    conversation_id = raw.get("conversation_id") if "conversation_id" in fields else None
-    request_kind = raw.get("request_kind") if "request_kind" in fields else None
-    bad_id = (
-        "conversation_id" in fields
-        and "conversation_id" in raw
-        and (not isinstance(conversation_id, str) or not 1 <= len(conversation_id) <= 256)
-    )
-    bad_kind = (
-        "request_kind" in fields
-        and "request_kind" in raw
-        and (not isinstance(request_kind, str) or request_kind not in REQUEST_KINDS)
-    )
-    return AuditContext(
-        conversation_id=None if bad_id else conversation_id,
-        request_kind=None if bad_kind else request_kind,
-        invalid=bad_id or bad_kind,
-    )
+    clean, invalid = {}, False
+    for key in ("conversation_id", "request_kind", "session_origin", "parent_conversation_id"):
+        if key not in fields or key not in raw:
+            continue
+        value = raw[key]
+        valid = (
+            valid_id(value)
+            if key.endswith("id")
+            else isinstance(value, str) and value in (REQUEST_KINDS if key == "request_kind" else {"main", "subagent"})
+        )
+        if valid:
+            clean[key] = value
+        else:
+            invalid = True
+    if "parent_conversation_id" in clean and (
+        not clean.get("conversation_id")
+        or clean.get("session_origin") != "subagent"
+        or clean["parent_conversation_id"] == clean["conversation_id"]
+    ):
+        clean.pop("parent_conversation_id")
+        invalid = True
+    sources, status = None, "NOT_PROVIDED"
+    if "message_sources" in fields and "message_sources" in raw:
+        sources, status = normalize_message_sources(raw["message_sources"], message_count)
+        invalid |= status in {"INVALID", "PARTIAL"}
+    return AuditContext(**clean, invalid=invalid, message_sources=sources, message_sources_status=status)

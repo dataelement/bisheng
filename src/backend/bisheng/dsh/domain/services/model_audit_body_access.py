@@ -9,7 +9,9 @@ from loguru import logger
 
 from bisheng.common.errcode.dsh_audit import DshAuditAccessLogUnavailableError, DshAuditOriginalUnavailableError
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
+from bisheng.dsh.infrastructure.model_audit_codec import AuditScope
 from bisheng.dsh.infrastructure.model_audit_storage import StoredAuditBlock
+from bisheng.dsh.infrastructure.model_audit_telemetry import record_audit_metric
 
 
 def frame(kind, **fields):
@@ -20,7 +22,7 @@ class DshModelAuditBodyAccessService:
     def __init__(self, queries, storage_factory):
         self.queries, self.storage_factory = queries, storage_factory
 
-    async def prepare(self, actor_id, tenant_id, request_id):
+    async def prepare(self, actor_id, tenant_id, request_id, *, include_message_sources=False):
         tenant, (row, occurrences, contents) = await self.queries.body_facts(actor_id, tenant_id, request_id)
         storage = None
         if occurrences:
@@ -56,12 +58,42 @@ class DshModelAuditBodyAccessService:
         except Exception as error:
             logger.warning("DSH audit body access log unavailable ({})", type(error).__name__)
             raise DshAuditAccessLogUnavailableError() from None
-        return self.transfer(tenant, row, occurrences, contents, storage, access_id)
+        return self.transfer(
+            tenant, row, occurrences, contents, storage, access_id, include_message_sources=include_message_sources
+        )
 
-    async def transfer(self, tenant, row, occurrences, contents, storage, access_id):
+    async def annotations(self, row):
+        state = getattr(row, "message_sources_status", "NOT_PROVIDED")
+        if row.effective_mode != "CONTENT":
+            state = "NOT_CAPTURED"
+        reference = getattr(row, "message_sources_ref", None)
+        if state not in {"AVAILABLE", "PARTIAL"} or not reference:
+            return frame("annotations", message_sources_status=state, items=[])
+        try:
+            async with asyncio.timeout(1):
+                body = await self.storage_factory().open_verified_block(
+                    AuditScope(row.tenant_id, row.user_id, "REQUEST", row.request_id, 2), StoredAuditBlock(**reference)
+                )
+            if len(body) > 12288:
+                raise ValueError("Annotation read budget exceeded")
+            from bisheng.dsh.domain.schemas.model_audit_sources import normalize_message_sources
+
+            sources, checked = normalize_message_sources(json.loads(body), max(0, row.input_units - 1))
+            if sources is None or checked != state:
+                raise ValueError("Annotation integrity invalid")
+            return frame("annotations", message_sources_status=state, items=sources["items"])
+        except Exception as error:
+            # Optional provenance failure cannot block already authorized model originals.
+            logger.warning("DSH audit annotation unavailable ({})", type(error).__name__)
+            record_audit_metric("annotation_read_failed", tenant_id=row.tenant_id)
+            return frame("annotations", message_sources_status="UNAVAILABLE", items=[])
+
+    async def transfer(self, tenant, row, occurrences, contents, storage, access_id, *, include_message_sources=False):
         status, sequence = "INTERRUPTED", -1
         try:
             yield frame("meta", request_id=row.request_id, encoding_version=1, content_state=row.content_status)
+            if include_message_sources:
+                yield await self.annotations(row)
             current_unit, decoder = None, None
             next_stored = {"input": 0, "output": 0}
             for occurrence in occurrences:

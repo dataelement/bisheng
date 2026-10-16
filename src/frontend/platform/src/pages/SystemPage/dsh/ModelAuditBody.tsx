@@ -66,6 +66,16 @@ export function ModelAuditBody({ requestId, tenantId }: ModelAuditBodyProps) {
       {messages.current.partial && (
         <p role="alert">{t("dsh.modelAuditView.gap")}</p>
       )}
+      {["PARTIAL", "INVALID", "UNAVAILABLE", "PENDING"].includes(
+        messages.current.sourcesStatus,
+      ) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t(
+            "dsh.modelAuditView.sources.status." +
+              messages.current.sourcesStatus,
+          )}
+        </p>
+      )}
       {count > 100 && (
         <p className="text-sm text-muted-foreground">
           {t("dsh.modelAuditView.bodySegment", {

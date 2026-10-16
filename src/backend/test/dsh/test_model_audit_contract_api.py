@@ -20,7 +20,9 @@ async def test_config_declares_optional_fields_without_tenant_mode(monkeypatch):
         enabled=True, platform_public_url="https://example.test", gateway_internal_url="https://gateway.test"
     )
     result = await identity.config(settings)
-    assert result["audit_context"] == {"fields": ["conversation_id", "request_kind"]}
+    assert result["audit_context"] == {
+        "fields": ["conversation_id", "request_kind", "session_origin", "parent_conversation_id", "message_sources"]
+    }
     assert "mode" not in result and result["contract_version"] == "0.5.0"
     assert await identity.config(DshSettings()) == {"enabled": False}
 

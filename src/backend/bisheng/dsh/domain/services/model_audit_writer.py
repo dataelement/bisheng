@@ -22,7 +22,7 @@ class DshModelAuditWriter:
         for attempt in range(self.attempts):
             try:
                 reference = None
-                if event.kind == "body":
+                if event.kind in {"body", "annotation"}:
                     from bisheng.dsh.infrastructure.model_audit_codec import AuditScope
 
                     data = event.metadata
@@ -32,7 +32,18 @@ class DshModelAuditWriter:
                         "CONVERSATION" if data.get("conversation_id") is not None else "REQUEST",
                         data["conversation_id"] if data.get("conversation_id") is not None else event.request_id,
                     )
-                    reference = await self.storage_factory().put_verified_block(
+                    storage = self.storage_factory()
+                    if event.kind == "annotation":
+                        from bisheng.dsh.infrastructure.model_audit_storage import EncryptedAuditStorage
+
+                        scope = AuditScope(event.tenant_id, data["user_id"], "REQUEST", event.request_id, 2)
+                        storage = EncryptedAuditStorage(
+                            storage.objects,
+                            storage.keys,
+                            max_block_bytes=16384,
+                            timeout_seconds=storage.timeout_seconds,
+                        )
+                    reference = await storage.put_verified_block(
                         scope, event.body, key_version=event.metadata.get("key_version")
                     )
                 await run_audit_blocking(self._persist, event, reference)
@@ -47,6 +58,8 @@ class DshModelAuditWriter:
                 if attempt + 1 < self.attempts:
                     await asyncio.sleep(min(0.05 * 2**attempt, 0.5))
         self.failed += 1
+        if event.kind == "annotation":
+            record_audit_metric("annotation_write_failed", tenant_id=event.tenant_id)
         record_audit_metric("write_exhausted", tenant_id=event.tenant_id, kind=event.kind)
         return False
 
@@ -58,6 +71,8 @@ class DshModelAuditWriter:
             row = repository.upsert_request(event)
             if event.kind == "body":
                 repository.append_occurrence(row, event, reference)
+            elif event.kind == "annotation":
+                repository.save_annotation(row, event, reference)
             elif event.kind == "terminal":
                 repository.save_manifest(row, event)
                 if row.model_result in {"RUNNING", "UNKNOWN"}:

@@ -82,6 +82,30 @@ class DshModelAuditQueryService:
                 result["gap"] = "AWAITING"
         return result
 
+    async def parent_conversation(self, actor_id, tenant_id, request_id):
+        tenant = await self.target(actor_id, tenant_id)
+
+        def read(repository):
+            row = repository.request(request_id)
+            if row is None:
+                raise DshAuditRequestUnavailableError()
+            parent = row.parent_conversation_id
+            if (
+                row.session_origin != "subagent"
+                or not row.conversation_id
+                or not parent
+                or parent == row.conversation_id
+            ):
+                return {"status": "NOT_PROVIDED"}
+            page = repository.page(user_id=row.user_id, conversation_id=parent, limit=1)
+            return (
+                {"status": "AVAILABLE", "user_id": row.user_id, "conversation_id": parent}
+                if page["items"]
+                else {"status": "UNAVAILABLE"}
+            )
+
+        return await self.execute(tenant, read)
+
     async def body_facts(self, actor_id, tenant_id, request_id):
         tenant = await self.target(actor_id, tenant_id)
 

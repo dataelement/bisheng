@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import io
 import json
+import os
 import secrets
 import subprocess
 import time
@@ -26,7 +27,13 @@ def docker_stores():
         command = [docker, "run", "-d", "--name", name, "--label", "bisheng.test=dsh-audit", "-p", f"127.0.0.1::{port}"]
         for key, value in env.items():
             command.extend(["-e", f"{key}={value}"])
-        subprocess.check_output([*command, image, *args], stderr=subprocess.DEVNULL)
+        try:
+            completed = subprocess.run([*command, image, *args], capture_output=True, timeout=50)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Owned fixture container startup timed out: " + role) from None
+        if completed.returncode:
+            # Docker argv contains ephemeral credentials; never include it in exception output.
+            raise RuntimeError("Owned fixture container could not start: " + role)
         owned.append(name)
         output = subprocess.check_output([docker, "port", name, str(port)], text=True).strip()
         return int(output.split(":")[-1])
@@ -40,7 +47,7 @@ def docker_stores():
         minio_user, minio_password = secrets.token_hex(12), secrets.token_hex(24)
         minio_port = start(
             "minio",
-            "minio/minio:RELEASE.2025-04-22T22-12-26Z",
+            os.environ.get("DSH_AUDIT_TEST_MINIO_IMAGE", "minio/minio:RELEASE.2025-04-22T22-12-26Z"),
             9000,
             {"MINIO_ROOT_USER": minio_user, "MINIO_ROOT_PASSWORD": minio_password},
             "server",

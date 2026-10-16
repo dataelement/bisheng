@@ -1,33 +1,30 @@
-# DSH 客户端模型审计：客户端开发接口契约
+# DSH 客户端模型审计：客户端接口契约
 
-文档版本：0.3　日期：2026-10-14　状态：客户端首批已实现并通过 mock；服务端已实现字段接收，审计留存及真实联调待完成
-关联：[规格 0.19](./spec.md) · [设计 0.8](./design.md) · [任务文档](./tasks.md) · [既有客户端契约 0.5.0](../client-api.md)
+文档版本：0.4　日期：2026-10-16　状态：规格和设计已确认，两端已实现并通过本机实际客户端 HTTP 链路；真实三存储/正式 Electron 等待验收，未提交或发布
 
-本文可直接交给客户端开发者。一期只在现有 Chat Completions 请求上附加两个可选字段：`conversation_id` 和 `request_kind`。服务端保存实际模型输入输出，并按认证租户、用户及客户端会话 ID 归组；客户端无需提交审计正文、源消息 ID、轮次、步骤、任务关系或响应后补报。
+关联：[规格](./spec.md) · [技术设计](./design.md) · [任务记录](./tasks.md) · [既有客户端契约](../client-api.md)
 
-本文的 0.3 是文档修订号，不是线协议字段。不增加 `audit_context.version`，不要求仅为此扩展升级 `contract_version`。旧服务端可能不声明扩展；本分支已实现字段接收，但完整留存尚未实现。客户端必须读取实际能力声明后发送，不仅凭 0.5.0 版本号判断。本文替代旧 0.2 高级关联草案，不能据它声称原件已成功持久化或真实联调已通过。
+现有两端代码已支持本版五字段，旧文档 0.3 的 `conversation_id`、`request_kind` 继续兼容。本版在能力协商基础上补充会话来源、直接父会话和最终输入消息的来源类型，不新增源消息 ID、轮次、任务树或响应后补报，不修改模型正文、凭证、用量、SSE 或取消语义。新扩展已验证真实适配器/主进程校验器到本机 HTTP 及独立 SQLite/内存存储；真实 MinIO、正式 Electron、真实供应商等门禁以最新验证记录为准。
 
-## 1 客户端可以立即开始的工作
+0.4 是文档修订号，不是线协议字段；不增加 `audit_context.version`，`contract_version` 保持 0.5.0。客户端仅在实际 config 公布某字段时发送它，不能凭版本号推断支持，更不能遇到未知字段错误后自动重放模型请求。
 
-本轮正式开发工作树为 `/Users/zhangguoqing/works/bisheng-work/.worktrees/feat-3.0.0-dsh-audit`，同名分支基于最新 origin/main `3f6f010b280e7e095a13f59d8e3faae2c6223ab2` 创建，已由独立 agent 完成 C001 至 C009。114 项企业测试、typecheck/build 通过；C010 的 mock/JSONL 重开自动化已完成，真实 Electron 操作和 T064 未执行。下述 PoC 路径仅是历史调研参考，不是本次开发基线；详见 [阶段验证](./implementation-progress.md)。
+## 1 开发范围与事实来源
 
-沿现有企业插件、模型适配器、Electron 主进程请求链开发，先用 §2 的能力响应作为 mock。最终传给毕昇的模型业务请求保持既有形态，只增加顶层 `audit_context`；只影响毕昇企业 provider，其他第三方 provider 沿原有链路。
+桌面客户端为 bisheng-work 的 `feat/3.0.0-dsh-audit` 工作树，不是本仓库的 Web client。现有代码锚点如下，依赖升级时须重新核验：
 
-2026-10-14 复核的客户端 PoC 位置：
+| 位置 | 读取或修改内容 | 不做什么 |
+|---|---|---|
+| 企业插件 `index.js` | 经公开 `ctx.get('sessions')?.get(sessionId)` 读取已加载会话的 header，将同步只读 resolver 注入适配器 | 不强制注入 sessions 服务，不扫描/加载磁盘历史，不监听全部消息事件 |
+| 企业模型适配器 `openai.js` | `sessionId`、`purpose` 与序列化前消息的 `source.kind/form`；在最终 messages.push 时同步记录来源 | 不复制完整 source，不按原始数组与最终数组直接 zip |
+| `contract.js/.d.ts` | 能力白名单、规范化及限额，两端传递过程使用同一客户端实现 | 不放宽原有模型业务校验 |
+| Electron `enterprise-chat.ts`、`enterprise-service.ts` 及类型 | 使用可信连接能力重新规范化，按最终消息数量检查对应关系 | 不信任请求自报能力，不把凭证交给插件 |
+| Harness 公开类型和内置插件 | SessionHeader 的 origin/parentSession；GenerateOptions 的 purpose；内部 Message.source | 不修改 Harness 核心或 node_modules，不增加 patch |
 
-- 仓库：`/Users/zhangguoqing/works/bisheng-work`；PoC 工作树：`.worktrees/codex-dsh-audit-poc`，分支 `codex/dsh-audit-poc`，基线提交 `c452b3bc39d3bcccb1d4baca7661fdae3534d8b3`。
-- `packages/dsh-desktop-enterprise/openai.js:EnterpriseLlmAdapter.stream` 已能读取 `GenerateOptions.sessionId` 与 `purpose`。
-- `purpose` 的已知值为 `compaction`、`session-title`；普通生成路径未设置 purpose。
-- PoC 仅验证了局部代码路径，当前临时钩子还包含 `version` 与消息来源信息，必须按本文精简；跨重启、能力协商和真实服务端上报仍需验收。
-- 完整客户端任务见 [tasks.md 的客户端轨道](./tasks.md#client-work)。客户端开发不依赖服务端审计存储完成，可先交付能力解析、两字段组装、主进程透传及 mock 测试。
+当前依赖中子 Agent header 有 `origin='subagent'` 与 `parentSession`；普通 Fork 也可能有 parentSession，但没有子 Agent origin。内置压缩与标题分别设置 `purpose='compaction'/'session-title'`，仍带发起会话 sessionId。消息 role=user 可能来自技能目录或运行时上下文；source 缺失时不能推断为用户手输。
 
-## 2 服务端能力声明
+## 2 能力声明与缓存
 
-### 2.1 入口与响应
-
-`GET {BASE}/api/v1/dsh/config`，无请求体、无 Authorization；BASE 仍是现有毕昇 Nginx 公开 origin。
-
-支持一期两字段的新服务端响应：
+`GET {BASE}/api/v1/dsh/config`，无请求体和 Authorization；BASE 为既有 Nginx 公开 origin。实现本版后 enabled 响应示例：
 
 ~~~json
 {
@@ -35,181 +32,161 @@
   "client_id": "dsh-desktop",
   "contract_version": "0.5.0",
   "audit_context": {
-    "fields": ["conversation_id", "request_kind"]
+    "fields": [
+      "conversation_id", "request_kind", "session_origin",
+      "parent_conversation_id", "message_sources"
+    ]
   }
 }
 ~~~
 
-只支持会话 ID 也是合法响应：
+字段子集合法，旧部署可能只公布两字段或完全没有 audit_context；部署未开启时仍返回 `{"enabled":false}`。能力仅表示可接收，不公开租户模式，不保证审计已经持久化。
+
+1. 根响应先按主契约校验。仅 enabled=true、audit_context 为对象且 fields 为字符串数组时解析可选能力；坏的可选能力只移除扩展，不改变登录结果。
+2. fields 去重并与本文五字段白名单取交集；未知字段忽略，空交集不发送扩展。只支持消息来源或用途、不支持会话 ID 也是合法子集。
+3. 快照取自可信企业连接，按规范化 BASE 保存于进程内；登录、重连、企业 provider 初始化时刷新。切换 BASE、账号、连接时清除旧能力，重启不沿用未刷新的持久快照。
+4. 已连接时仅可选能力刷新失败则清除该扩展快照；首次 config 的整体失败仍按原连接错误处理。请求使用当前快照，不为每次模型调用额外查 config；已发送请求不因能力变化重发。
+
+## 3 请求字段与规范化
+
+`POST {BASE}/api/v1/dsh/chat/completions`，Bearer DSH access token；顶层可选 `audit_context`，不是 OpenAI 模型参数。
+
+### 3.1 请求级字段
+
+| 字段 | 类型/限制 | 来源及行为 |
+|---|---|---|
+| conversation_id | 非空字符串，最多 256 Unicode 码点，UTF-8 可编码；原值精确保留 | 当前 GenerateOptions.sessionId；无值不临时造 ID 或借用登录会话编号 |
+| request_kind | chat / compaction / session-title | purpose 未设置的已知普通路径为 chat；已知辅助用途原值；其他 purpose 省略 |
+| session_origin | main / subagent | 已加载且 header.id 与 sessionId 精确相同时，origin=subagent 则 subagent；origin 未设置则 main（包括普通 Fork）；无法读取或未知 origin 则省略 |
+| parent_conversation_id | 与 conversation_id 同样的字符串限制 | 只在有效子会话 ID、session_origin=subagent 且公开 parentSession 有效时发送；与自身 ID 相同则忽略。普通 Fork 不发送，不能代替子会话 ID |
+
+四字段规范化后组成请求级 section，紧凑 JSON UTF-8 不超过 4096 字节。未知字段不参与序列化或预算检查；无效值逐字段忽略。`parent_conversation_id` 依赖有效子会话和 subagent 来源，但父字段无效不能使子会话或来源失效。其他字段相互独立，未提供的来源/用途显示未知。
+
+### 3.2 message_sources：最终输入的来源标注
+
+仅协商支持时发送可选对象：
 
 ~~~json
 {
-  "enabled": true,
-  "client_id": "dsh-desktop",
-  "contract_version": "0.5.0",
-  "audit_context": {
-    "fields": ["conversation_id"]
-  }
+  "items": [
+    {"message_index": 1, "sources": [{"kind": "runtime-context", "form": "snapshot"}]},
+    {"message_index": 2, "sources": [{"kind": "skill-catalog", "form": "catalog"}]}
+  ],
+  "truncated": false
 }
 ~~~
 
-旧响应 `{"enabled":true,"client_id":"dsh-desktop","contract_version":"0.5.0"}` 保持有效，客户端不发送 `audit_context`。部署未开启时仍返回 `{"enabled":false}`。
-
-能力只说明字段能被服务端接受，不公开租户 OFF/METADATA/CONTENT 模式，也不保证留存成功。客户端不按租户模式决定是否发关联信息；已认证的合法模型调用由服务端决定采集范围。
-
-### 2.2 客户端解析规则
-
-1. 先按既有契约校验根响应的 enabled、client_id、contract_version。
-2. 只有 enabled=true 且 audit_context 是对象、fields 是字符串数组时解析审计能力；否则仅省略审计扩展，不把一个无效的可选能力字段当成登录或模型功能失败。
-3. fields 去重后与本文已定义字段取交集。未知字段名忽略，不原样转发；交集为空时省略整个 audit_context。
-4. 字段子集合法。只公布 conversation_id 时只发它；只公布 request_kind 时可以只发调用种类，该请求仍未关联会话。
-5. 不根据 contract_version、客户端版本、提示词或一次未知字段错误猜测支持情况。
-
-根响应、网络、鉴权等整体异常仍遵循既有接口契约；“省略可选扩展”不是把首次 config 请求失败当作已完成登录。
-
-### 2.3 缓存与失效
-
-能力按当前规范化 BASE 保存为进程内快照。登录/重新连接、企业 provider 初始化时读取 config；切换 BASE、账号或企业连接时清除旧能力，重新获取后再使用，客户端重启不沿用未经刷新验证的持久能力副本。服务端升级/降级后可通过重新连接或手动刷新 config 更新快照。
-
-模型请求使用当前快照，不为每次请求或每个 SSE 增量额外查 config。在已有效连接上，仅审计能力刷新失败时清除该扩展快照，后续合法模型请求省略附加字段。已经发出的模型请求不会因能力变化被重发。
-
-## 3 Chat Completions 扩展字段
-
-### 3.1 请求入口和字段表
-
-`POST {BASE}/api/v1/dsh/chat/completions`，Bearer DSH access token。既有 model/messages/tools/流式参数、凭证刷新、错误和取消语义见主客户端契约。
-
-| 字段 | 类型及本期规则 | 来源与作用 | 无效或缺失时 |
-|---|---|---|---|
-| audit_context | 可选 JSON 对象；规范化紧凑 JSON 的 UTF-8 大小最多 4096 字节 | 与模型业务入参分离的附加信息；只含已公布且本文定义的字段 | 非对象或整体超限：忽略整个扩展，继续合法模型请求 |
-| conversation_id | 可选非空字符串，最多 256 个 Unicode 码点；保留原值，不裁剪、不改变大小写，不要求 UUID/前缀/特定字符集合 | 直接取本次 GenerateOptions.sessionId；同一真实客户端会话继续使用现有持久 Session ID | 仅忽略该字段，审计显示未关联；不以登录会话、时间或相似文本推断 |
-| request_kind | 可选字符串，只接受 chat、compaction、session-title | 仅作为请求卡片调用种类，不影响归组、身份、模型调用或计费 | 仅忽略该字段，显示调用种类未知，合法 conversation_id 仍可归组 |
-
-256 码点与 4096 字节是附加字段的实现保护上限，不是会话 ID 生成格式或模型正文上限。客户端也应检查，并省略无效字段；不对模型正文做审计专用截断。JSON 大小按紧凑序列化、非 ASCII 不额外转义的 UTF-8 编码计算，两端采用相同规则。
-
-字段独立：request_kind 不依赖 conversation_id。若只有一个有效且被公布的字段，可以只发送该字段；若没有有效字段，省略整个 audit_context，不发送空对象或 null。
-
-### 3.2 调用种类映射
-
-| 客户端观察到的调用路径/purpose | request_kind |
+| 项 | 固定约定 |
 |---|---|
-| 已确认的普通生成路径，purpose 未设置 | chat |
-| purpose=compaction | compaction |
-| purpose=session-title | session-title |
-| 其他未定义 purpose 或无法确认路径 | 省略，服务端展示未知 |
+| message_index | 最终 HTTP `messages[]` 的 0 基整数索引，不是内部源消息编号或显示气泡序号；禁止布尔值、小数、负数及越界值 |
+| sources | 1–4 个来源描述，按首次出现顺序去重；仅 kind 与可选 form，不传 entries/sections/text/id/replayState 等完整 source 对象 |
+| kind / form | 非空 ASCII 标识；kind 最多 64 字符，form 最多 32 字符，均匹配 `[A-Za-z0-9][A-Za-z0-9._:/-]*`；大小写原样保留。kind 无效则该来源无效，form 无效则只忽略 form |
+| items | 按 message_index 严格递增，最多 128 项；没有已知来源的输入不填条目，不补造 generated/user 等标签 |
+| truncated | 必填布尔值；表示客户端曾因数量、来源数或字节预算省略可取得的来源标注，不表示模型正文被截断 |
+| 字节预算 | 整个规范化 message_sources 对象紧凑 JSON UTF-8 最多 12288 字节，独立于请求级 4096 字节；两端非 ASCII 不额外转义，无 lone surrogate、NaN 或 Infinity |
 
-取值大小写精确匹配。不能把未知 purpose 默认写为 chat，也不能从提示词或模型返回判断调用种类。压缩后摘要实际进入后续 messages 时随该请求照常发送；无需上报摘要来源。
+客户端在追加最终消息时同步生成映射：直接消息沿用该消息已知 source；一条内部消息拆成多个请求消息时分别沿用来源；多个工具图片合成一条请求消息时合并所有已知来源。合成消息包含无来源成分时不能宣称已覆盖全部来源；本版使用 truncated=true 表示映射信息不全，已知来源仍可保留，UI 显示“来源部分提供”。`options.system` 和临时压缩指令若没有 source，不伪造来源。
 
-### 3.3 请求示例
+一个合成消息有超过 4 种来源时保留前 4 种并设 truncated=true；超过 128 项或 12288 字节时按最终索引保留可容纳的完整前缀，设 truncated=true。大小检查必须预留 truncated 字段，不截断字符串或模型正文。没有任何可取得的来源时省略整个 message_sources；确实发生删减但没有可容纳项时可发送 items=[]、truncated=true。
 
-同一会话的第一次流式请求：
+服务端与 Electron 对畸形输入：只扫描前 128 项，每项最多检查前 4 个来源，不无界遍历；超出的部分标部分提供。重复索引不采用 first/last-wins，已扫描重复索引的所有条目均忽略；越界/非法条目及无效来源忽略，其余有效条目可保留并标部分提供。section 非对象、items 非数组或 truncated 非布尔时仅丢弃该 section；其他层级的未知字段也忽略，不序列化或深遍历未知值。预算按提取的合法字段增量计算，超过 12288 字节时同样保留可容纳的完整前缀并标部分提供；不得先对整个原始扩展 JSON.stringify。拒绝后没有合法信息则标注无效；不回显无效值。依赖最终 messages 数量的校验在业务 DTO 合法之后执行，业务错误仍沿原规则拒绝。
 
-~~~json
-{
-  "model": "bisheng:42",
-  "messages": [{"role": "user", "content": "你好"}],
-  "stream": true,
-  "stream_options": {"include_usage": true},
-  "audit_context": {
-    "conversation_id": "session-123",
-    "request_kind": "chat"
-  }
-}
-~~~
+有效标注不证明客户端来源真实，也不保证所有消息都有来源。不允许根据内容补全旧日志；source_kind 不是 role，也不是内容风险判定。
 
-第二次请求继续使用原 Session ID，完整上下文仍由客户端既有算法产生：
+### 3.3 统一软降级与旧版兼容
+
+| 情况 | 行为 |
+|---|---|
+| 无扩展、非对象扩展、无已公布合法字段 | 省略/忽略扩展，保留原合法模型请求；按生效模式产生请求级审计 |
+| 请求级某字段无效 | 只忽略该字段及其依赖；消息标注仍可独立有效 |
+| 消息标注超限、坏类型或索引无效 | 只降级标注；有效会话、用途、来源及父编号继续有效 |
+| 未知/未公布字段 | 不读取其深层对象，不计算其序列化大小；忽略，不替它占用已知字段预算 |
+| 旧服务端只公布两字段 | 新客户端裁剪为两字段，仍符合旧版 4096 字节规则；不发送新 section |
+| 非法 JSON、原有通用请求大小上限、模型业务/认证/额度错误 | 保持既有拒绝语义，不能用审计软降级放宽业务限制 |
+
+无合法字段时不发送空对象/null。不为审计拒绝、存储失败、缺能力或未知字段错误自动重试模型。
+
+## 4 请求示例与服务端关系
+
+子 Agent 发起一次压缩，最终请求包含系统消息、运行时上下文和无来源的临时指令：
 
 ~~~json
 {
   "model": "bisheng:42",
   "messages": [
-    {"role": "user", "content": "你好"},
-    {"role": "assistant", "content": "你好"},
-    {"role": "user", "content": "你会什么？"}
+    {"role": "system", "content": "你是编程助手。"},
+    {"role": "user", "content": "Current runtime context: ..."},
+    {"role": "user", "content": "请压缩当前上下文。"}
   ],
   "stream": true,
   "stream_options": {"include_usage": true},
   "audit_context": {
-    "conversation_id": "session-123",
-    "request_kind": "chat"
+    "conversation_id": "child-session-9",
+    "request_kind": "compaction",
+    "session_origin": "subagent",
+    "parent_conversation_id": "parent-session-1",
+    "message_sources": {
+      "items": [
+        {"message_index": 1, "sources": [{"kind": "runtime-context", "form": "snapshot"}]}
+      ],
+      "truncated": false
+    }
   }
 }
 ~~~
 
-同一会话的压缩调用用原会话 ID 和 request_kind=compaction；标题调用用 request_kind=session-title。Fork 使用客户端已经创建的新 Session ID；一期不传父会话关系。若当前调用拿不到 sessionId，则省略 conversation_id，不临时生成或借用登录会话 ID。
+服务端取认证 tenant/user，与 child-session-9 归组；卡片显示子 Agent / 压缩。父编号仅是同一认证租户和该历史用户范围的可选导航，不替换自身会话，不影响正文去重作用域。父会话无可见记录时显示暂无可查看记录，不能查询其他用户或租户来补齐。
 
-工具定义、调用、结果及图片仍在既有业务字段中发送。未进入模型请求的本地工具结果、文件或消息不额外上报。客户端按既有交互发起的重试是新请求，服务端生成新请求编号；客户端不为审计自动重试或归并请求。
+正文授权后，输入 NDJSON 的 unit_index=0 仍为模型参数，message_index=1 对应 input/unit_index=2；UI 展示该条真实 user 角色与“运行时上下文”来源。无来源的另外两条仍显示来源未提供。模型仅收到原有 model/messages/stream 等业务字段，绝不收到 audit_context。
 
-## 4 组装、透传和服务端处理
+普通会话使用自身 ID、session_origin=main 与实际用途；子 Agent 普通聊天仅将 request_kind 改为 chat。压缩和标题不新建会话，未知 purpose 省略用途。Fork 使用客户端已创建的新 Session ID，不因 parentSession 就标为子 Agent。未发送给模型的本地工具结果、事件或文件不额外上报。
 
-### 4.1 客户端链路
+## 5 链路、存储与管理读取
 
-`config → 企业连接的能力快照 → EnterpriseLlmAdapter.stream → 最终模型请求 + audit_context → brokerChat → Electron parseEnterpriseChatPayload → 企业请求 → 毕昇专用入口`
+`可信 config 快照 → 企业插件解析已加载会话 → 适配器序列化并同步标注 → Electron 按可信能力净化 → 毕昇剥离扩展/严格业务校验 → 异步审计`
 
-能力必须从现有可信企业连接状态交给插件；不能让任意模型请求自报“服务端支持”。Electron 只放行 audit_context 及本文两字段，对无效扩展执行省略/逐字段忽略，维持原有模型业务字段、图片限额和请求认证检查。仅扩展字段无效不得让合法模型调用在客户端先失败。
+1. 两端共享各自规范化函数，不能出现插件允许而主进程静默丢弃所有新字段。Electron 不信任请求自报能力；会话 resolver 失败只省略会话来源，不加载历史或阻断生成。
+2. 服务端字段与模型 DTO 分离，租户、用户、登录会话、request_id 和模式永远来自服务端；解析后仅用于审计，不加入统一模型入参或供应商 SDK 参数。
+3. OFF 不产生本功能审计；METADATA 保留请求级字段，不存逐消息来源；CONTENT 才在独立加密对象中保存规范化来源标注。原模型输入输出及正文完整性不因标注缺失被改判。
+4. 管理列表/详情只新增 session_origin 与 parent_conversation_id 等请求级字段，不返回逐消息数组、密钥或私有对象引用。标注仅随逐次授权留痕后的 body-access 返回，详见设计 §6.2；导航父会话不预读正文。
+5. 来源记录使用客户端断言，不做真实性验证、完整任务图或历史回填；完整来源对象、认证凭证不进入标注、普通日志或错误。
 
-`packages/dsh-desktop-enterprise/contract.js:parseConfig` 当前会丢弃未定义字段，需要保存经过校验的可选能力；`enterprise-service.ts` 等现有连接状态链需将快照传到插件；`index.js` 注册适配器时传入关联组装回调；`openai.js` 只用 sessionId/purpose 组装两个字段。PoC 的 messageSources 观察钩子和 version 参数均不是本期上报前提。
+## 6 响应和失败语义
 
-### 4.2 服务端处理和降级矩阵
+不新增审计 ACK、回调或补报接口。错误体 request_id、完成对象 id（chatcmpl-前缀后编号）、流式增量 id、用量和审计继续复用同次服务端编号；客户端不自行覆盖它。审计存储或标注写入失败不令模型调用失败、重放或改变结算。
 
-服务端在严格模型业务 DTO 校验前分离 audit_context，按已公布字段软解析，调用适配器前剥离。该扩展不传给统一模型接口或供应商，也不进入模型消息正文。
+HTTP 200、SSE 正常结束和能力存在均不保证审计已持久化。客户端不等待审计页面可见，不因扩展改变 [DONE]、工具执行或取消处理。
 
-| 请求中的情况 | 服务端目标行为 |
-|---|---|
-| 完全没有 audit_context | 原有调用正常进行；开启模式下留存独立、未关联请求 |
-| 有合法 conversation_id，request_kind 无效 | 保留会话归组；调用种类未知 |
-| conversation_id 无效，request_kind 合法 | 未关联请求；仍保留合法调用种类 |
-| audit_context 为 null、数组、字符串或整体超过 4096 字节 | 忽略整个扩展；合法模型调用继续 |
-| 含未知/未公布字段 | 忽略对应字段，其他有效字段继续生效；客户端不应主动发送这些字段 |
-| 不同用户传同一 conversation_id | 按认证租户、用户隔离，不能合并或跨用户复用正文 |
-| 合法关联信息但租户 OFF 或读取失败降级 OFF | 模型照常调用，不产生模型请求审计；读取失败只尽力产生系统降级诊断 |
-| 非法 JSON、业务参数错误、身份/模型权限/额度失败或既有通用安全限制触发 | 沿用既有错误语义；关联软解析不放宽模型业务规则 |
+## 7 测试与联调
 
-服务端不验证 ID 是否对应真实客户端会话。审计元数据可记录附加信息缺失/无效的诊断，不回显无效字段值或模型原文。tenant_id、user_id、登录 session_id、request_id、审计模式由服务端确定，客户端不能通过附加字段改变它们。
+以下是本版验收矩阵，执行/未执行证据见 validation-results.md 的 2026-10-16 增量记录，不沿用历史测试通过结论：
 
-## 5 响应和错误编号
-
-本扩展不新增审计 ACK、回调或补报接口，也不新增“审计失败”客户端模型错误。模型结果、SSE、用量及现有错误码保持既有语义；审计写入失败不会导致模型调用失败或重放。
-
-目标服务端让一次请求的错误体 request_id、完成对象 id（chatcmpl-前缀后的编号）、流式增量 id、用量和审计使用同一编号。客户端应保留服务端返回的编号供排查，不自行生成或通过 X-Request-ID 覆盖。流式正常结束、失败和取消仍按主契约处理，不因有 audit_context 更改 [DONE] 或工具执行判断。
-
-HTTP 200 或正常流式结束并不证明审计已留存。客户端无需等待管理员审计页面可见，也不在响应后补交本地消息。
-
-## 6 客户端改动范围与测试
-
-| 位置 | 本期开发内容 |
-|---|---|
-| contract.js / contract.d.ts | 解析、保留可选 fields；共享两字段校验与组装规则 |
-| enterprise-service.ts / enterprise-desktop.ts | 按当前连接保存及对插件暴露非敏感能力快照；连接变化失效 |
-| index.js / openai.js | 注册组装回调，从真实 sessionId/purpose 附加已公布字段 |
-| enterprise-chat.ts / index.d.ts | 主进程边界放行、净化两字段，补齐类型；保持凭证注入和来源限制 |
-| mock 与测试 | 缺能力、字段子集、非法附加字段、切换连接、两轮、标题、压缩、Fork、取消与错误编号 |
-
-按客户端仓库 AGENTS.md 执行检查。在上述 PoC 工作树，可用 `npx vitest run test/enterprise-contract.test.ts test/enterprise-audit-context-poc.test.mjs test/enterprise-openai-adapter.test.mjs test/enterprise-chat.test.ts` 跑已存在测试；新增能力/集成测试按 [客户端任务](./tasks.md#client-work) 加入。既有 PoC 的高级字段期望须更新，不能以旧测试通过代表本契约实现完成。
-
-## 7 双端联调用例
-
-以下均为待执行，客户端可先用 mock；服务端真实审计可查询后由双方完成。
-
-| ID | 场景 | 客户端/服务端验收 |
+| ID | 场景 | 必验结果 |
 |---|---|---|
-| C-A01 | 旧客户端 → 新服务端 | 一次合法模型调用；开启模式下有请求审计，未关联 |
-| C-A02 | 新客户端 → 无审计能力的旧服务端 | 最终请求没有 audit_context；不触发未知字段失败或能力探测重放 |
-| C-A03 | 只声明 conversation_id；未知字段名；fields 格式错误 | 已知字段取交集；错误可选能力只移除扩展，原有连接语义保持 |
-| C-A04 | 两轮、重新登录、客户端重启续接现有会话 | 使用现有真实 Session ID；同认证用户同 ID 成一条请求时间线，各请求原件独立 |
-| C-A05 | 不同会话及 Fork | 不同 Session ID 分组；不传父会话或消息来源 |
-| C-A06 | 普通、压缩、标题和未知 purpose | chat/compaction/session-title 精确映射；未知省略；均按独立模型请求审计 |
-| C-A07 | ID 缺失/错误类型/空字符串/256 与 257 码点；扩展 4096 与 4097 字节 | 有效边界接受；无效字段或超限扩展忽略；合法模型调用仍只发生一次 |
-| C-A08 | 工具和图片请求 | 附加信息不改变最终模型业务内容；服务端统一接口不接收 audit_context |
-| C-A09 | BASE/账号切换与能力刷新失败 | 不把旧能力或旧凭证送往新连接；仅可选能力失败时省略扩展 |
-| C-A10 | 两用户同 ID、同用户大小写不同 ID、无会话 ID | 认证作用域隔离，原值精确比较；无 ID 未关联，不按文本推断 |
-| C-A11 | 模型错误、SSE 中断、主动取消、客户端交互重试 | 保留返回编号；不为审计自动重试或补报；各次实际调用独立 |
-| C-A12 | 租户 OFF/METADATA/CONTENT、审计存储故障及读取失败 | 客户端请求结构不依赖模式；服务端按模式留存/降级，审计故障不改变模型业务结果 |
+| C-A01 | 旧客户端 → 新服务端 | 原合法请求仅调用一次；缺字段按未知/未关联，不造来源 |
+| C-A02 | 新客户端 → 无能力旧服务端 | 不发送扩展，不探测重放 |
+| C-A03 | 两字段能力、五字段能力、字段子集及畸形 config | 只发已知且获准字段；可选能力失败不改变根连接校验 |
+| C-A04 | 两轮、重启或重新登录续接会话 | 复用现有 Session ID，保留各次独立请求 |
+| C-A05 | 主会话、普通 Fork、子 Agent 及缺失会话服务 | 只 origin=subagent 标子 Agent；缺信息继续调用，Fork 不误标 |
+| C-A06 | 主/子会话各自聊天、压缩、标题及未知 purpose | 用途与会话来源独立，不新建压缩会话、不合并父子 |
+| C-A07 | 256/257 码点、12288/12289 字节、128/129 项、4/5 来源 | 边界确定；超限只影响相应 section，不丢有效会话，不改正文 |
+| C-A08 | 插入 system、拆工具结果、合并多工具图片 | 标注对应最终索引，混合/缺失来源不冒充单来源 |
+| C-A09 | BASE/账号切换与能力刷新失败 | 无旧能力或旧凭证串用，不重复调用 |
+| C-A10 | 跨用户/租户同名父 ID、自指/环状/冲突关系、父记录缺失 | 只定位同历史租户/用户；无递归、无正文预取、无范围外存在性泄露 |
+| C-A11 | 错误、SSE 中断、取消、客户端主动重试 | 原错误编号/响应/用量不变，审计不触发重试或补报 |
+| C-A12 | 三档模式、存储/密钥失败、模式读取失败 | 按既定留存/降级规则；正文完整性与标注状态独立 |
+| C-A13 | 同角色不同来源、未知/缺来源、来源对象带 entries 等 | 仅留受限 kind/form，不复制载荷，不从正文猜测 |
+| C-A14 | 重复/负数/小数/布尔/越界索引，未知巨型字段 | 无效标注局部忽略，合法基础字段保留，校验有界 |
+| C-A15 | 新旧 body-access、标注对象缺失/损坏、日志持久化失败 | 授权前无标注；失败不阻止已授权正文读取，日志失败则两者均拒绝；正文状态不受标注错误污染 |
 
-联调材料记录 BASE（使用测试环境）、服务端/客户端提交与构建版本、能力响应、脱敏请求样本、服务端请求编号和预期/实际结论。测试只用合成正文与测试凭证；此材料用于证明实际线上链路，不以局部适配器单测替代。
+客户端现有定向入口：`./node_modules/.bin/vitest run test/enterprise-audit-context.test.ts test/enterprise-chat.test.ts test/enterprise-contract-import.test.ts test/enterprise-audit-integration.test.ts`；适配器新增映射用例按实际测试文件扩展。完整检查沿客户端 AGENTS.md 的 npm test、typecheck、build；不使用旧 PoC 工作树作为开发或验收基线。
+
+真实联调记录两端提交/构建、能力响应、合成请求、服务端编号、落库/正文读取及实际上游入参。只用隔离环境与合成正文；正式 Electron、供应商、DM8 未执行时单独注明，不能用 mock 或源码断言替代。
 
 ## 修订记录
 
-| 日期 | 文档版本 | 变更 |
+| 日期 | 版本 | 变更 |
 |---|---|---|
-| 2026-10-14 | 0.3 | 按一期请求审计重写为客户端开发契约；精简到会话 ID/调用种类，取消额外版本和高级关系，补齐能力缓存、校验、降级与双端验收 |
+| 2026-10-14 | 0.3 | 请求级两字段契约及能力协商、缓存、软降级；现有代码基线 |
+| 2026-10-16 | 0.4 候选 | 规格 0.20 确认后增加会话来源/父会话与最终消息来源；明确独立预算、映射、范围隔离及新版验收，等待设计确认 |
+| 2026-10-16 | 0.4 确认及实现 | 用户确认后完成两端规范化与上报、独立加密标注、管理页读取与直接父会话导航；受控 HTTP 链路通过，真实三存储和正式 Electron 等待验收，尚未提交发布 |

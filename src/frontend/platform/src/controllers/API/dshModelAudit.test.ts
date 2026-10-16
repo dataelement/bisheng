@@ -58,6 +58,38 @@ it("loads audit-scoped user options with tenant, pagination, search and cancella
   );
 });
 describe("bounded audit NDJSON parser", () => {
+  it("degrades invalid provenance without interrupting the original body", async () => {
+    const annotation = {
+      type: "annotations",
+      message_sources_status: "AVAILABLE",
+      items: [{ message_index: true, sources: [{ kind: "user" }] }],
+    };
+    source(
+      [meta, annotation, part, end]
+        .map((item) => JSON.stringify(item) + "\n")
+        .join(""),
+    );
+    const result = await collect();
+    expect(result[1]).toEqual({
+      type: "annotations",
+      message_sources_status: "UNAVAILABLE",
+      items: [],
+    });
+    expect(result.at(-1)).toEqual(end);
+  });
+  it("accepts an opt-in annotations frame without changing body sequence", async () => {
+    const annotation = {
+      type: "annotations",
+      message_sources_status: "AVAILABLE",
+      items: [{ message_index: 0, sources: [{ kind: "user" }] }],
+    };
+    source(
+      [meta, annotation, part, end]
+        .map((item) => JSON.stringify(item) + "\n")
+        .join(""),
+    );
+    expect(await collect()).toEqual([meta, annotation, part, end]);
+  });
   it("loads available model IDs and names within the requested tenant scope", async () => {
     const page = { data: [{ id: 42, name: "Available model" }], total: 1 };
     vi.mocked(request.get).mockResolvedValueOnce(page);

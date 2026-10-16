@@ -40,6 +40,8 @@ class AuditRequestMetadata(AuditDTO):
     provider_name: str
     conversation_id: str | None = None
     request_kind: str | None = None
+    session_origin: str | None = None
+    parent_conversation_id: str | None = None
     association_status: Literal["ASSOCIATED", "UNASSOCIATED"]
     context_invalid: bool = False
     effective_mode: Literal["METADATA", "CONTENT"]
