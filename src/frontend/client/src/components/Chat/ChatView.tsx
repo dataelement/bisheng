@@ -22,6 +22,7 @@ import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtil
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { collectChatAttachments } from './attachments/collectChatAttachments';
 import './chat-surface.css';
+import { useDesktopConversation } from './useDesktopConversation';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
@@ -368,6 +369,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
+  useDesktopConversation(conversationId, isNew && !hasMessages && !isStreaming);
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   // F035: the task checklist is pinned above the input (Figma 12221-39902 /

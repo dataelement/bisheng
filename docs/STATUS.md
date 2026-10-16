@@ -1,8 +1,9 @@
 # 2026-10-16 — Chat 网页交付到 feat/bisheng-work-103
 
-- Git 交付：直接推送 dataelement/bisheng 返回 403（SuperstructureJH 写权限不足），远端仍为 5beb3bc90。个人 fork 备用推送被自动审批拦截，等待用户明确授权该发布目的地。代码已提交到本地 codex/chat-web-103-delivery，PR 尚未创建。
+- Git 交付：用户已授权个人 fork；改动已推送到 SuperstructureJH/bisheng 的 codex/chat-web-103-delivery，并提交 [PR #2495](https://github.com/dataelement/bisheng/pull/2495)，目标为 feat/bisheng-work-103，当前待评审合入。
 - 用户指定交付分支：dataelement/bisheng / feat/bisheng-work-103；本次以远端 5beb3bc90b2728dbdee3ae373eda50a01583f1a2（3.0.0-beta5）为基线迁移已在 3006 验收的 Chat 外观、历史侧栏、宿主主题/页面内导航、输入框上方能力栏及会话附件预览。
 - 保留该分支的会话模型记忆、知识空间可见权限过滤、任务会话行为、引用对照预览、文件夹上传、推荐应用返回路径，以及企业后台代码。桌面继续由 bisheng-work/V1.2.0 提供左侧导航和本地 Work。
+- 追加首次发送修复：ChatView 按当前乐观消息状态上报欢迎页状态，桌面即时收起 Chat / Work；KeepAlive 页面按当前路由过滤，独立网页继续正常运行。新增 2 项行为回归通过，配套桌面改动位于 bisheng-work/V1.2.0。
 - 验证：锁文件安装和 client 生产构建通过；9 个定向测试文件 / 117 项通过，覆盖嵌入导航、主题交接、附件收集、预览生命周期、引用导出、模型记忆、权限过滤和任务模式。DOM 测试采用 jsdom 的可选 canvas 缺省路径；本机 canvas 原生二进制缺失，测试范围没有 Canvas 渲染。
 - 全仓检查与干净基线对照：平台 lint 同为 93 项既有错误，client lint 同为 21 项既有错误，client strict typecheck 同为 useAiChat.test.ts:294 的一项 ChatMessage fixture 类型错误。本批变更文件定向 lint 与多语言一致性检查通过。
 - 3006 保持此前 beta4 环境和 chat-capability-bar-20261016-r1 发布；本次负责 Git 分支交付。下方真实环境记录属于 3006 已发布版本；合入 beta5 后的安装包、企业登录和全文件格式端到端复验另行执行。
