@@ -216,7 +216,7 @@
 | 助手节点参数 `skill_list` | `[{key: 技能名, label: 显示名}]` | 缺省或空表示不配置技能 | `AgentNode`、platform 节点面板 |
 | 助手节点参数 `input_files` | `[node.var]`，上游文件变量 | 运行时拷进 `uploads/` | `AgentNode` |
 | `assistant.skill_names` | JSON 字符串数组，可空 | `None` 与 `[]` 等价 | 助手配置读写、`AssistantAgent` |
-| 交付文件描述 | `{file_id, file_name, object_name, size, url, format_error?}` | `url` 是决策 7 的鉴权跳转地址；`format_error` 只在 AC-33 情况出现 | 消息 `files`、前端文件卡片、开放 API `files` |
+| 交付文件描述 | `{file_id, file_name, object_name, bucket, size, file_url, format_error?}` | `file_url` 是决策 7 的鉴权跳转地址，用这个键名是因为前端文件卡片已认 `file_url`；`bucket` 为 `public`（正式会话）或 `tmp`（临时会话）；`format_error` 只在 AC-33 情况出现 | 消息 `files`、前端文件卡片、开放 API `files` |
 | 输出变量 `{node_id}.deliverables` | 文本，每行「文件名：下载地址」 | 没有交付文件时为空串 | 下游节点 |
 | 消息 `extra.agent_notices` | `["code_executor_missing"]` 等提示代码 | 前端按 i18n 渲染 | client、platform |
 | Redis `agent_runtime:tmp_session:{ID}` | `{user_id, tenant_id}`，TTL 24h | 临时会话归属 | 下载接口、清理任务 |
