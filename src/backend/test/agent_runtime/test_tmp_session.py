@@ -86,3 +86,18 @@ class TestTmpSession:
         ids = {service.new_id() for _ in range(20)}
         assert len(ids) == 20
         assert all(i.isalnum() for i in ids)
+
+
+class TestSweep:
+    async def test_sweep_removes_only_expired_sessions(self, service, minio):
+        live, dead = service.new_id(), service.new_id()
+        await service.aregister(live, user_id=7, tenant_id=2)
+        for tmp_id in (live, dead):
+            minio.put_object_sync(object_name=f"workspace/agent/tmp-{tmp_id}/wf-n1/output/a.md", file=b"a")
+        minio.put_object_sync(object_name="workspace/agent/c1/wf-n1/output/a.md", file=b"a")
+
+        assert await service.asweep_expired() == 1
+
+        assert minio.keys(f"workspace/agent/tmp-{dead}/") == []
+        assert minio.keys(f"workspace/agent/tmp-{live}/") != []
+        assert minio.keys("workspace/agent/c1/") != []

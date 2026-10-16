@@ -263,6 +263,12 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.admin_scope.tasks.admin_scope_cleanup",
                 "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
             }
+        # F078: remove workspaces of temporary agent sessions whose registration expired.
+        if "sweep_agent_tmp_sessions" not in self.beat_schedule:
+            self.beat_schedule["sweep_agent_tmp_sessions"] = {
+                "task": "bisheng.worker.agent_runtime.tasks.sweep_agent_tmp_sessions",
+                "schedule": crontab.from_string("15 * * * *"),  # every hour at :15
+            }
         if "file_scheduler_dispatch" not in self.beat_schedule:
             self.beat_schedule["file_scheduler_dispatch"] = {
                 "task": "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",

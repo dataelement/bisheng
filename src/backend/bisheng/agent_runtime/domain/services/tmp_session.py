@@ -16,7 +16,11 @@ import uuid
 
 from loguru import logger
 
-from bisheng.agent_runtime.domain.services.agent_workspace import adelete_session_workspaces
+from bisheng.agent_runtime.domain.services.agent_workspace import (
+    AGENT_WORKSPACE_ROOT,
+    WORKSPACE_PREFIX,
+    adelete_session_workspaces,
+)
 
 TMP_SESSION_TTL_SECONDS = 24 * 60 * 60
 _KEY_PREFIX = "agent_runtime:tmp_session:"
@@ -34,6 +38,13 @@ def tmp_deliverable_dir(tmp_id: str) -> str:
 
 def _registration_key(tmp_id: str) -> str:
     return f"{_KEY_PREFIX}{tmp_id}"
+
+
+def _list_tmp_session_ids(minio) -> set[str]:
+    """Temporary session ids that still own a workspace in the public bucket."""
+    prefix = f"{WORKSPACE_PREFIX}/{AGENT_WORKSPACE_ROOT}/tmp-"
+    objects = minio.minio_client_sync.list_objects(minio.bucket, prefix=prefix, recursive=True)
+    return {obj.object_name[len(prefix) :].split("/", 1)[0] for obj in objects}
 
 
 def _remove_tmp_bucket_dir(minio, prefix: str) -> int:
@@ -75,3 +86,18 @@ class TmpSessionService:
         logger.info(
             "act=agent_tmp_session_close tmp_id={} workspaces={} deliverables={}", tmp_id, workspaces, deliverables
         )
+
+    async def asweep_expired(self) -> int:
+        """Delete the workspaces of temporary sessions whose registration expired.
+
+        Catches debug sessions whose WebSocket never closed cleanly. Their
+        deliverables in the tmp bucket expire through the bucket lifecycle rule.
+        """
+        removed = 0
+        for tmp_id in await asyncio.to_thread(_list_tmp_session_ids, self.minio):
+            if not tmp_id or await self.aexists(tmp_id):
+                continue
+            await adelete_session_workspaces(self.minio, tmp_session_key(tmp_id))
+            removed += 1
+        logger.info("act=agent_tmp_session_sweep removed={}", removed)
+        return removed
