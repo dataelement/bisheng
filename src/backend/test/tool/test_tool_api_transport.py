@@ -15,7 +15,6 @@ def implementation():
             "method": "post",
             "parameters": [{"name": "query", "in": "body", "schema": {"type": "string"}}],
         },
-        input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
         max_output_bytes=100,
     )
 
@@ -111,3 +110,29 @@ async def test_stream_cap_stops_consumption_and_closes(monkeypatch):
     with pytest.raises(DshToolOutputTooLargeError):
         await implementation().arun(query="hello")
     assert stream.reads == 2 and stream.closed
+
+
+async def test_number_arguments_keep_integer_precision(monkeypatch):
+    """The legacy mapper coerced number fields to float; the bounded path sends them as-is."""
+    requests = []
+
+    async def handle(request):
+        requests.append(request)
+        return httpx.Response(200, text="ok")
+
+    impl = BoundedOpenApiTools(
+        url="https://fixture.example",
+        params={
+            "path": "/search",
+            "method": "get",
+            "parameters": [{"name": "id", "in": "query", "schema": {"type": "number"}}],
+        },
+        max_output_bytes=100,
+    )
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    assert await impl.arun(id=9007199254740993) == "ok"
+    assert requests[0].url.params["id"] == "9007199254740993"

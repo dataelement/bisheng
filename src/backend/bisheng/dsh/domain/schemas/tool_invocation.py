@@ -4,7 +4,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ToolCode = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,125}$")]
+TOOL_CODE_PATTERN = r"[A-Za-z0-9_-]{1,125}"
+ToolCode = Annotated[str, Field(pattern=f"^{TOOL_CODE_PATTERN}$")]
 
 
 class ToolLimits(BaseModel):

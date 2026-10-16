@@ -212,34 +212,6 @@ class ToolExecutor(BaseTool):
         return tool
 
     @classmethod
-    async def init_saved_openapi(cls, tool, tool_type, schema, *, user_id, tool_code, limits):
-        """Only the tool-owned invocation service supplies these verified snapshots."""
-        from bisheng.tool.domain.services.bounded_openapi import BoundedOpenApiTools
-
-        auth = json.loads(tool_type.extra) if tool_type.extra else {}
-        params = {
-            "path": "",
-            "method": schema.method,
-            "parameters": schema.parameters,
-            "api_location": auth.get("api_location"),
-            "parameter_name": auth.get("parameter_name"),
-        }
-        return cls._init_by_tool_and_type_with_context(
-            tool,
-            tool_type,
-            app_id=tool_code,
-            app_name="DSH tool invocation",
-            app_type=ApplicationTypeEnum.DSH_DESKTOP,
-            user_id=user_id,
-            api_tool_factory=BoundedOpenApiTools.get_api_tool,
-            input_schema=schema.schema,
-            max_output_bytes=limits.max_output_bytes,
-            request_timeout=limits.timeout_seconds,
-            url=schema.destination,
-            params=params,
-        )
-
-    @classmethod
     def _init_mcp_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
         mcp_client = ClientManager.sync_connect_mcp_from_json(tool_type.openapi_schema)
         input_schema = json.loads(tool.extra)

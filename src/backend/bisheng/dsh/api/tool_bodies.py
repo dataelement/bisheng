@@ -15,6 +15,6 @@ async def read_tool_body(request, limit, model):
             raise DshToolInputTooLargeError()
         body.extend(chunk)
     try:
-        return model.model_validate(strict_json(bytes(body).decode("utf-8"))), len(body)
+        return model.model_validate(strict_json(bytes(body).decode("utf-8")))
     except (ValueError, UnicodeError, RecursionError):
         raise DshToolArgumentsInvalidError() from None

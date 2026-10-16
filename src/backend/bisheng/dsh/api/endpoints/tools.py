@@ -6,10 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from loguru import logger
 from starlette.requests import ClientDisconnect
 
-from bisheng.common.errcode.dsh import (
-    DshToolArgumentsInvalidError,
-    DshToolExecutionTimeoutError,
-)
+from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolExecutionTimeoutError
 from bisheng.dsh.api.dependencies import desktop_principal
 from bisheng.dsh.api.responses import ToolInvocationRoute
 from bisheng.dsh.api.tool_bodies import read_tool_body
@@ -20,17 +17,28 @@ from bisheng.dsh.tool_runtime import get_tool_service
 router = APIRouter(route_class=ToolInvocationRoute)
 
 
-async def read_invocation(request, limit=65536):
-    if request.query_params:
-        raise DshToolArgumentsInvalidError()
-    return await read_tool_body(request, limit, ToolInvocationInput)
+async def _wait_disconnect(request):
+    # The body has already been consumed; this task is the sole remaining receiver.
+    while (await request.receive())["type"] != "http.disconnect":
+        pass
 
 
-async def disconnect(request):
-    # Body has already been consumed; this task is the sole remaining receiver.
-    while True:
-        if (await request.receive())["type"] == "http.disconnect":
-            return
+async def _run_until_disconnect(request, coro):
+    """Return the coroutine's result, or cancel it and raise once the client leaves."""
+    execution = asyncio.create_task(coro)
+    watcher = asyncio.create_task(_wait_disconnect(request))
+    try:
+        await asyncio.wait({execution, watcher}, return_when=asyncio.FIRST_COMPLETED)
+        if execution.done():
+            return execution.result()
+        raise ClientDisconnect()
+    finally:
+        for task in (execution, watcher):
+            task.cancel()
+        # Await cancellation so the lease release and upstream close complete.
+        outcomes = await asyncio.gather(execution, watcher, return_exceptions=True)
+        if isinstance(outcomes[1], Exception):
+            logger.warning("Tool disconnect watcher failed type={}", type(outcomes[1]).__name__)
 
 
 @router.post(
@@ -48,37 +56,13 @@ async def invoke(
     principal: DshPrincipal = Depends(desktop_principal),
     service=Depends(get_tool_service),
 ):
-    execution = watcher = None
-    observed_execution = False
-    started_at = getattr(request.state, "dsh_verified_at", asyncio.get_running_loop().time())
+    if request.query_params:
+        raise DshToolArgumentsInvalidError()
+    limits = service.limits
     try:
-        async with asyncio.timeout_at(started_at + 60) as deadline:
-            limits = service.limits
-            deadline.reschedule(started_at + limits.timeout_seconds)
-            body, size = await read_invocation(request, limits.max_input_bytes)
-            execution = asyncio.create_task(
-                service.invoke(principal, toolCode, body.arguments, size, started_at=started_at)
-            )
-            watcher = asyncio.create_task(disconnect(request))
-            done, _ = await asyncio.wait({execution, watcher}, return_when=asyncio.FIRST_COMPLETED)
-            if execution in done:
-                observed_execution = True
-                return await execution
-            raise ClientDisconnect()
+        # One deadline covers body reading, admission and upstream execution.
+        async with asyncio.timeout(limits.timeout_seconds):
+            body = await read_tool_body(request, limits.max_input_bytes, ToolInvocationInput)
+            return await _run_until_disconnect(request, service.invoke(principal, toolCode, body.arguments))
     except TimeoutError:
         raise DshToolExecutionTimeoutError() from None
-    finally:
-        for task in (execution, watcher):
-            if task is not None and not task.done():
-                task.cancel()
-        if execution is not None or watcher is not None:
-            tasks = [task for task in (execution, watcher) if task is not None]
-            outcomes = await asyncio.gather(*tasks, return_exceptions=True)
-            for task, outcome in zip(tasks, outcomes, strict=True):
-                if not isinstance(outcome, BaseException) or isinstance(outcome, asyncio.CancelledError):
-                    continue
-                if task is watcher:
-                    raise outcome
-                if not observed_execution:
-                    # The client has left or timed out; retain safe failure evidence.
-                    logger.warning("Tool cancelled execution ended type={}", type(outcome).__name__)

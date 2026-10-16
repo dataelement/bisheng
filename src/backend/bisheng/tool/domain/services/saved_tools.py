@@ -1,7 +1,10 @@
-"""Tool-owned tenant/state checks and opt-in saved OpenAPI execution."""
+"""Tenant/state checks for saved API tools, then the shared ToolExecutor entry."""
 
+from langsmith import tracing_context
+from loguru import logger
 from sqlalchemy.exc import SQLAlchemyError
 
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.dsh import (
     DshToolNotFoundError,
@@ -9,14 +12,15 @@ from bisheng.common.errcode.dsh import (
     DshToolServiceUnavailableError,
     DshToolUnsupportedError,
 )
+from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.services.bounded_openapi import BoundedOpenApiTools
+from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializationError
 from bisheng.tool.domain.services.saved_schema import SavedToolSchema
 
 
 class SavedToolService:
-    async def verify(self, tenant_id, tool_key, user_id):
-        from bisheng.tool.domain.services.executor import ToolExecutor
-
+    async def _load(self, tenant_id, tool_key):
         try:
             tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key)
             category = await GptsToolsDao.aget_one_tool_type(tool.type) if tool else None
@@ -27,41 +31,39 @@ class SavedToolService:
             or category is None
             or tool.tenant_id != tenant_id
             or category.tenant_id != tenant_id
-            or tool.type != category.id
             or tool.is_delete
             or category.is_delete
         ):
             raise DshToolNotFoundError()
-        try:
-            await ToolExecutor._ensure_use_permission_async(category, user_id)
-        except PermissionError:
-            raise DshToolPermissionDeniedError() from None
-        except BaseErrorCode:
-            raise DshToolServiceUnavailableError() from None
-        if tool.is_preset != 0 or category.is_preset != 0:
-            raise DshToolUnsupportedError()
-        schema = SavedToolSchema.from_saved(tool, category)
-        return tool, category, schema
+        return tool, category
 
     async def prepare(self, tenant_id, user_id, tool_key, arguments, limits):
-        from bisheng.tool.domain.services.executor import ToolExecutor
-
-        tool, category, schema = await self.verify(tenant_id, tool_key, user_id)
-        arguments = schema.validate(arguments)
+        tool, category = await self._load(tenant_id, tool_key)
+        if tool.is_preset != ToolPresetType.API.value:
+            raise DshToolUnsupportedError()
         try:
-            executor = await ToolExecutor.init_saved_openapi(
-                tool, category, schema, user_id=user_id, tool_code=tool_key, limits=limits
+            # init_by_tool_id enforces the "use" permission before initialization.
+            executor = await ToolExecutor.init_by_tool_id(
+                tool=tool,
+                app_id=tool_key,
+                app_name="DSH tool invocation",
+                app_type=ApplicationTypeEnum.DSH_DESKTOP,
+                user_id=user_id,
+                api_tool_factory=BoundedOpenApiTools.get_api_tool,
+                max_output_bytes=limits.max_output_bytes,
+                request_timeout=limits.timeout_seconds,
             )
         except PermissionError:
             raise DshToolPermissionDeniedError() from None
         except BaseErrorCode:
             raise DshToolServiceUnavailableError() from None
-        return executor, arguments
+        except ToolInitializationError as error:
+            logger.warning("Tool initialization failed tool={} cause={}", tool_key, type(error.__cause__).__name__)
+            raise DshToolServiceUnavailableError() from None
+        schema = SavedToolSchema.from_saved(tool, category)
+        return executor, schema.validate(arguments)
 
     async def execute(self, executor, arguments):
-        from langsmith import tracing_context
-
-        # Full schema validation precedes this call. Use the existing execution
-        # and metadata telemetry wrapper without BaseTool's ambient callback setup.
+        # Arguments are already validated; skip BaseTool's ambient callback/tracing setup.
         with tracing_context(enabled=False):
             return await executor._arun(config={"callbacks": []}, **arguments)

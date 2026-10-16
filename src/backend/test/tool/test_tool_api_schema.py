@@ -115,3 +115,11 @@ def test_destination_rejects_recursion_and_ambiguity(url):
     """AC-31: aliases and ambiguous destinations cannot recursively invoke the API."""
     with pytest.raises(DshToolUnsupportedError):
         validate_destination(url)
+
+
+def test_huge_integer_is_rejected_not_crashing():
+    """math.isfinite would overflow on huge ints; they must validate, not raise."""
+    schema = SavedToolSchema.from_saved(*saved_schema({"amount": {"type": "number", "maximum": 10}}))
+    assert schema.validate({"amount": 3}) == {"amount": 3}
+    with pytest.raises(DshToolArgumentsInvalidError):
+        schema.validate({"amount": 10**400})

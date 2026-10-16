@@ -1,7 +1,6 @@
 """Faithful flat OpenAPI input validation for existing saved tools."""
 
 import math
-from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import yaml
@@ -46,7 +45,8 @@ StrictValidator = validators.extend(
     type_checker=Draft202012Validator.TYPE_CHECKER.redefine_many(
         {
             "integer": lambda _checker, value: type(value) is int,
-            "number": lambda _checker, value: type(value) in {int, float} and math.isfinite(value),
+            # math.isfinite(int) overflows for huge ints; only floats can be non-finite.
+            "number": lambda _checker, value: type(value) is int or (type(value) is float and math.isfinite(value)),
         }
     ),
 )
@@ -102,12 +102,99 @@ def _document(raw):
     return value
 
 
-@dataclass(frozen=True)
+_SCHEMA_PREFIX = "#/components/schemas/"
+
+
+def _parse_json(value):
+    return strict_json(value) if isinstance(value, str) else (value or {})
+
+
+def _find_operation(document, tool_name, path, method):
+    """The saved path/method must be the single operation carrying the tool's operationId."""
+    paths = document["paths"]
+    matches = [
+        (p, m)
+        for p, entry in paths.items()
+        for m, operation in entry.items()
+        if isinstance(operation, dict) and operation.get("operationId") == tool_name
+    ]
+    if matches != [(path, method)]:
+        raise ValueError("Ambiguous saved operation")
+    if paths[path].get("parameters") or paths[path][method].get("servers") or document.get("webhooks"):
+        raise ValueError("Unsupported operation override")
+    return paths[path][method]
+
+
+def _body_schema(document, operation, method):
+    if method == "get" or operation.get("parameters"):
+        raise ValueError("Unsupported mixed parameters")
+    content = operation["requestBody"]["content"]
+    if set(content) != {"application/json"}:
+        raise ValueError("Unsupported content type")
+    root = content["application/json"]["schema"]
+    if "$ref" in root:
+        name = root["$ref"].removeprefix(_SCHEMA_PREFIX)
+        if set(root) != {"$ref"} or name == root["$ref"] or "/" in name:
+            raise ValueError("Unsupported schema reference")
+        root = document["components"]["schemas"][name]
+    if set(root) - ROOT_KEYS or root.get("type") != "object":
+        raise ValueError("Unsupported body schema")
+    required = root.get("required", [])
+    parameters = [
+        {"name": name, "in": "body", "required": name in required, "schema": spec}
+        for name, spec in root.get("properties", {}).items()
+    ]
+    return dict(root), parameters
+
+
+def _query_schema(operation):
+    properties, required, parameters = {}, [], []
+    for param in operation.get("parameters", []):
+        if param.get("in") != "query" or param.get("style", "form") != "form" or param.get("content"):
+            raise ValueError("Unsupported parameter location")
+        name = param["name"]
+        if name in properties:
+            raise ValueError("Duplicate parameter")
+        properties[name] = param["schema"]
+        if param.get("required", False):
+            required.append(name)
+        parameters.append(param)
+    return {"type": "object", "properties": properties, "required": required}, parameters
+
+
+def _tighten(schema):
+    """Accept flat scalar fields only, cap strings, and forbid unknown arguments."""
+    properties = schema.get("properties", {})
+    if len(properties) > 32 or schema.get("additionalProperties", False) is not False:
+        raise ValueError("Unsupported object constraints")
+    tightened = {}
+    for name, spec in properties.items():
+        if name in RESERVED or not name or set(spec) - SCALAR_KEYS:
+            raise ValueError("Unsupported field")
+        if spec.get("type") not in {"string", "integer", "number", "boolean"}:
+            raise ValueError("Unsupported scalar")
+        spec = dict(spec)
+        if spec["type"] == "string":
+            spec["maxLength"] = min(spec.get("maxLength", 4096), 4096)
+        tightened[name] = spec
+    schema = {**schema, "properties": tightened, "additionalProperties": False}
+    StrictValidator.check_schema(schema)
+    return schema
+
+
+def _signature(parameters):
+    return sorted((p["name"], p["in"], p.get("required", False), p["schema"]["type"]) for p in parameters)
+
+
 class SavedToolSchema:
-    schema: dict
-    parameters: list
-    destination: str
-    method: str
+    """Strict argument schema rebuilt from the saved OpenAPI document.
+
+    The importer keeps only name/type for body fields, so constraints such as
+    enum and length bounds are recovered from the original document here.
+    """
+
+    def __init__(self, schema):
+        self.schema = schema
 
     def validate(self, arguments):
         try:
@@ -126,80 +213,22 @@ class SavedToolSchema:
             document = _document(category.openapi_schema)
             if not str(document.get("openapi", "")).startswith("3.0."):
                 raise ValueError("Unsupported OpenAPI version")
-            extra = strict_json(tool.extra) if isinstance(tool.extra, str) else tool.extra
+            extra = _parse_json(tool.extra)
             path, method = extra["path"], extra["method"].lower()
             if method not in {"get", "post", "put", "delete"} or not path.startswith("/"):
                 raise ValueError("Unsupported operation")
-            destination = validate_destination(category.server_host.rstrip("/") + path)
-            paths = document["paths"]
-            matches = [
-                (p, m)
-                for p, entry in paths.items()
-                for m, operation in entry.items()
-                if isinstance(operation, dict) and operation.get("operationId") == tool.name
-            ]
-            if matches != [(path, method)]:
-                raise ValueError("Ambiguous saved operation")
-            operation = paths[path][method]
-            if paths[path].get("parameters") or operation.get("servers") or document.get("webhooks"):
-                raise ValueError("Unsupported operation override")
-            parameters = []
+            validate_destination(category.server_host.rstrip("/") + path)
+            operation = _find_operation(document, tool.name, path, method)
             if "requestBody" in operation:
-                if method == "get" or operation.get("parameters"):
-                    raise ValueError("Unsupported mixed parameters")
-                content = operation["requestBody"]["content"]
-                if set(content) != {"application/json"}:
-                    raise ValueError("Unsupported content type")
-                root = content["application/json"]["schema"]
-                if "$ref" in root:
-                    reference = root["$ref"]
-                    prefix = "#/components/schemas/"
-                    if set(root) != {"$ref"} or not reference.startswith(prefix) or "/" in reference[len(prefix) :]:
-                        raise ValueError("Unsupported schema reference")
-                    root = document["components"]["schemas"][reference[len(prefix) :]]
-                if set(root) - ROOT_KEYS or root.get("type") != "object":
-                    raise ValueError("Unsupported body schema")
-                schema = dict(root)
-                properties = schema.get("properties", {})
-                for name, spec in properties.items():
-                    parameters.append(
-                        {"name": name, "in": "body", "required": name in schema.get("required", []), "schema": spec}
-                    )
+                schema, parameters = _body_schema(document, operation, method)
             else:
-                properties, required = {}, []
-                for param in operation.get("parameters", []):
-                    if param.get("in") != "query" or param.get("style", "form") != "form" or param.get("content"):
-                        raise ValueError("Unsupported parameter location")
-                    name = param["name"]
-                    if name in properties:
-                        raise ValueError("Duplicate parameter")
-                    properties[name] = param["schema"]
-                    if param.get("required", False):
-                        required.append(name)
-                    parameters.append(param)
-                schema = {"type": "object", "properties": properties, "required": required}
-            if len(properties) > 32 or schema.get("additionalProperties", False) is not False:
-                raise ValueError("Unsupported object constraints")
-            for name, spec in properties.items():
-                if name in RESERVED or not name or set(spec) - SCALAR_KEYS:
-                    raise ValueError("Unsupported field")
-                if spec.get("type") not in {"string", "integer", "number", "boolean"}:
-                    raise ValueError("Unsupported scalar")
-                spec = dict(spec)
-                if spec["type"] == "string":
-                    spec["maxLength"] = min(spec.get("maxLength", 4096), 4096)
-                properties = {**properties, name: spec}
-            schema = {**schema, "properties": properties, "additionalProperties": False}
-            StrictValidator.check_schema(schema)
-            saved = extra["parameters"]
-            actual = [(p["name"], p["in"], p.get("required", False), p["schema"]["type"]) for p in parameters]
-            imported = [(p["name"], p["in"], p.get("required", False), p["schema"]["type"]) for p in saved]
-            if sorted(actual) != sorted(imported):
+                schema, parameters = _query_schema(operation)
+            schema = _tighten(schema)
+            if _signature(parameters) != _signature(extra["parameters"]):
                 raise ValueError("Saved operation does not match schema")
-            auth = strict_json(category.extra) if isinstance(category.extra, str) else (category.extra or {})
-            if auth.get("parameter_name") in properties:
+            if _parse_json(category.extra).get("parameter_name") in schema["properties"]:
                 raise ValueError("Authentication parameter is not caller controlled")
-            return cls(schema, parameters, destination, method)
+            return cls(schema)
         except DshToolUnsupportedError:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, RecursionError, yaml.YAMLError, SchemaError):
