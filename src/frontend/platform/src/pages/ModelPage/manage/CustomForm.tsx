@@ -373,15 +373,27 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
 };
 
 
-const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, apiKeySite, apiKeyUrl }, ref) => {
+interface CustomFormProps {
+    showDefault: boolean;
+    provider: string;
+    formData: Record<string, string>;
+    providerName?: string;
+    apiKeySite?: string;
+    apiKeyUrl?: string;
+    onConnectionChange?: () => void;
+    onConnectionBlur?: () => void;
+}
+interface CustomFormHandle {
+    getData: () => [Record<string, string>, string];
+}
+
+const CustomForm = forwardRef<CustomFormHandle, CustomFormProps>(({ showDefault, provider, formData, providerName, apiKeySite, apiKeyUrl, onConnectionChange, onConnectionBlur }, ref) => {
     const [form, setForm] = useState(formData);
     const fields = modelProviders[provider] || [];
     
     const handleChange = (key, value) => {
-        setForm((prevData) => ({
-            ...prevData,
-            [key]: value,
-        }));
+        setForm((prevData) => ({ ...prevData, [key]: value }));
+        onConnectionChange?.();
     };
     useEffect(() => {
         setForm(formData);
@@ -398,7 +410,7 @@ const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, 
     }))
 
     return (
-        <div className="overflow-hidden">
+        <div className="overflow-hidden" onBlur={onConnectionBlur}>
             {fields.map((field) => (
                 <FormField
                     key={provider + field.key}

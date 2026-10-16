@@ -33,6 +33,54 @@ column, exit `2` confirms a catalog/reflection mismatch, exit `3` means the
 column is absent from the DM catalog, and exit `4` means the diagnostic itself
 failed.
 
+## Model Configuration Upgrade
+
+### `migrate_model_token_configs.py`
+
+Convert legacy LLM `config.max_tokens` into advanced `config.user_kwargs` while
+preserving the effective limit and other parameters. Ollama writes `num_ctx`;
+other LLM providers write `max_tokens`. Model IDs, status, tenant ownership and
+provider daily-call quotas retain their values.
+
+Run from `src/backend/` with the live service's `config` environment:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants
+python scripts/migrate_model_token_configs.py --tenant-id 1
+```
+
+Dry-run is the default. After draining model calls and stopping API/Worker/
+Linsight configuration writers, use the new backend runtime and a fresh private
+backup path to apply. Complete the target schema upgrade first:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --backup-file /secure-backups/model-tokens-before.json
+```
+
+Any invalid legacy configuration blocks the entire batch. The script creates
+an exclusive mode-0600 backup before writing; an existing backup path blocks
+writes. Re-running migrated rows is a no-op. Reports contain identifiers and
+counts; protect the backup because model configuration can contain credentials.
+Restart API/Worker/Linsight after migration to clear process-local model caches.
+Never delete daily-call Redis counters during this upgrade.
+
+To restore from a reviewed backup in the same maintenance window:
+
+```bash
+python scripts/migrate_model_token_configs.py --all-tenants \
+  --restore-backup /secure-backups/model-tokens-before.json
+python scripts/migrate_model_token_configs.py --all-tenants --apply \
+  --restore-backup /secure-backups/model-tokens-before.json \
+  --backup-file /secure-backups/model-tokens-before-restore.json
+```
+
+Restore checks the saved identity and post-upgrade configuration before writing.
+A later edit or a missing model blocks the batch; newly created models stay
+intact. Fix reported conflicts before retrying. MySQL/DM8 JSON conversion runs
+in Python; this procedure performs data maintenance outside Alembic revisions.
+See [the feature upgrade runbook](../../../features/v3.0.0-beta2/model-discovery/upgrade.md).
+
 ## Export Scripts
 
 ### `export_daily_chat_messages.py`
