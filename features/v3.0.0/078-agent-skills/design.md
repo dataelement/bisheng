@@ -254,7 +254,7 @@
 | 11 | `update_status` 上线校验会调用 `init_assistant`，此时 `chat_id` 为空 | 每次上线都建一个空工作区 | 工作区准备放在 `run` 开始时 |
 | 12 | 助手前端的运行日志按 `tool_list/knowledge_list/flow_list` 查名称，三个列表都空时整块隐藏（`F/client/src/components/MessageRunlog.tsx:51-54`、`F/platform/.../RunLog.tsx:56-58`）；`runLogsTypes` 只认 `tool/flow/knowledge` | 只配了技能的助手看不到任何工具调用记录，违反 AC-26 | 前端任务补技能工具的名称映射 |
 | 13 | workflow 节点参数由客户端整体提交，后端照单执行 | 前端绕过 ReAct 禁用也能提交技能 | 后端运行时按决策 5 和 AC-13 校验 |
-| 14 | `create_agent` 的流式节点名从 `"agent"` 改成 `"model"`，且不支持预先绑定工具的模型 | 依赖节点名的流式过滤失效；`vision_llm.py` 的绑定逻辑可能失效 | 迁移任务里做无技能对照测试，检查 `B/common/image_view/vision_llm.py` |
+| 14 | `create_agent` 的流式节点名从 `"agent"` 改成 `"model"`，且每次模型调用都重新 `bind_tools`（`create_react_agent` 在编译时绑定一次） | 依赖节点名的流式过滤失效；按「编译时只绑定一次」写的模型包装类行为会变 | 助手节点已用对照测试锁定迁移前后一致（`T/workflow/test_agent_node_create_agent.py`）。`B/common/image_view/vision_llm.py` 依赖编译时绑定，但它只用于日常对话，助手节点和助手应用都不引用 |
 | 15 | `run_async_safe` 默认超时 10 秒 | 拷大技能包或水合大工作区时超时 | 显式传超时 |
 | 16 | `FilesystemMiddleware` 总会注册 `execute` 工具，只在 backend 支持执行时才暴露给模型（`deepagents/middleware/filesystem.py:858-870`） | 若判断条件变化，模型会看到一个必然失败的 `execute` | 构建器测试断言模型可见工具列表里没有 `execute` |
 | 17 | `ChatSessionService.delete_session` 不校验调用方是否拥有会话 | 在其中加清理钩子会放大这个缺口的影响 | 本期不改，见 §8，已告知用户 |

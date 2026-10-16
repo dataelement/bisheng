@@ -1,11 +1,11 @@
 import json
 from typing import Annotated, Any
 
+from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import ArgsSchema, BaseTool
-from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import BaseModel, Field, SkipValidation, field_validator
 
@@ -38,6 +38,15 @@ agent_executor_dict = {
     "ReAct": "get_react_agent_executor",
     "function call": "get_openai_functions_agent_executor",
 }
+
+
+def build_function_call_agent(llm, tools: list[BaseTool], system_prompt: str, middleware: list):
+    """Build the function-call agent graph (F078 design decision 1).
+
+    One path for every agent node: without skills ``middleware`` is empty and the
+    graph behaves like the former ``create_react_agent`` one.
+    """
+    return create_agent(llm, tools, system_prompt=system_prompt, middleware=middleware)
 
 
 class WorkflowCitationToolWrapper(BaseTool):
@@ -304,7 +313,7 @@ class AgentNode(BaseNode):
                 assistant_message=system_prompt,
             )
         else:
-            self._agent = create_react_agent(self._llm, func_tools, prompt=system_prompt, checkpointer=False)
+            self._agent = build_function_call_agent(self._llm, func_tools, system_prompt, middleware=[])
 
     def _resolve_kb_name_by_id(self) -> dict[str, str]:
         """Map knowledge_id -> name for the agent's knowledge bases, used to fill
