@@ -220,6 +220,19 @@ async def test_cross_origin_is_rejected_before_accept(monkeypatch):
     browser.close.assert_awaited_once_with(code=1008)
 
 
+async def test_dev_proxy_forwarded_host_is_accepted(monkeypatch):
+    setup_service(monkeypatch)
+    browser = BrowserSocket(origin="http://localhost:4001")
+    browser.headers = {
+        "host": "127.0.0.1:7860",
+        "origin": "http://localhost:4001",
+        "x-forwarded-host": "localhost:4001",
+    }
+    await asr_realtime.run_realtime_asr(browser, SimpleNamespace(user_id=7))
+    browser.accept.assert_awaited()
+    browser.close.assert_awaited_once()
+
+
 async def test_oversized_audio_is_rejected(monkeypatch):
     setup_service(monkeypatch)
     browser = BrowserSocket(messages=[{"type": "websocket.receive", "bytes": bytes(32002)}])

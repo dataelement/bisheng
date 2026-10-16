@@ -8,6 +8,7 @@ import struct
 import zlib
 
 from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidStatus
 
 from .capabilities import VOLC_RESOURCES
 from .connection import StreamConnection, required
@@ -60,22 +61,33 @@ def decode_packet(raw: bytes) -> tuple[dict, bool]:
     return message, bool(flags & 2)
 
 
+class SpeechAccessRejected(Exception):
+    """Volcengine refused the Resource ID for these speech credentials."""
+
+
 class VolcengineConnection(StreamConnection):
-    async def start(self):
+    def _auth_headers(self) -> dict[str, str]:
         headers = {"X-Api-Resource-Id": self.client.resource_id, "X-Api-Connect-Id": self.task_id}
         if self.client.auth_mode == "api_key":
             headers["X-Api-Key"] = self.client.api_key
         else:
             headers["X-Api-App-Key"] = self.client.app_id
             headers["X-Api-Access-Key"] = self.client.access_key
+        return headers
+
+    async def open(self):
         self.ws = await connect(
             "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
-            additional_headers=headers,
+            additional_headers=self._auth_headers(),
+            proxy=None,
             open_timeout=10,
             close_timeout=3,
             max_size=MAX_PAYLOAD,
             max_queue=16,
         )
+
+    async def start(self):
+        await self.open()
         request = {
             "user": {"uid": self.task_id},
             "audio": {"format": "pcm", "codec": "raw", "rate": 16000, "bits": 16, "channel": 1},
@@ -138,3 +150,15 @@ class VolcengineRealtimeASRClient(RealtimeASRClient):
 
     def create_connection(self):
         return VolcengineConnection(self)
+
+    async def verify_access(self):
+        """Handshake only. A mismatched Resource ID is HTTP 403 before any audio."""
+        connection = self.create_connection()
+        try:
+            await connection.open()
+        except InvalidStatus as exc:
+            if getattr(exc.response, "status_code", None) == 403:
+                raise SpeechAccessRejected("Volcengine rejected the Resource ID") from exc
+            raise
+        finally:
+            await connection.close()

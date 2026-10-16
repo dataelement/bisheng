@@ -46,6 +46,9 @@ class ASRConnection(StreamConnection):
         self.ws = await connect(
             self.client.url,
             additional_headers=headers,
+            # A shell SOCKS proxy (common on dev machines) makes websockets
+            # require python-socks. The vendor socket is a direct connection.
+            proxy=None,
             open_timeout=10,
             close_timeout=3,
             max_size=1024 * 1024,

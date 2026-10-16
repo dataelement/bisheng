@@ -106,6 +106,7 @@
   "10801": "Duplicate model",
   "10802": "Failed to add provider. All models failed to initialize",
   "10803": "Failed to add provider. Some models failed to initialize",
+  "10804": "Volcengine rejected this Resource ID. Check the speech resource granted to these credentials.",
   "10810": "Please configure the workbench embedding model.",
   "10811": "The daily mode default model must be one of the configured workbench chat models. Please select again.",
   "10900": "Knowledge base name already exists",

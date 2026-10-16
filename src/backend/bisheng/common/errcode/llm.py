@@ -4,29 +4,34 @@ from .base import BaseErrorCode
 #  Model management module related return error code, function module code:108
 class ServerExistError(BaseErrorCode):
     Code: int = 10800
-    Msg: str = 'Service provider name is duplicated, please modify'
+    Msg: str = "Service provider name is duplicated, please modify"
 
 
 class ModelNameRepeatError(BaseErrorCode):
     Code: int = 10801
-    Msg: str = 'Model is not repeatable'
+    Msg: str = "Model is not repeatable"
 
 
 class ServerAddAllError(BaseErrorCode):
     Code: int = 10802
-    Msg: str = 'Failed to add service provider, failed to initialize all models'
+    Msg: str = "Failed to add service provider, failed to initialize all models"
 
 
 class ServerAddError(BaseErrorCode):
     Code: int = 10803
-    Msg: str = 'Failed to add service provider, some models failed to initialize'
+    Msg: str = "Failed to add service provider, some models failed to initialize"
+
+
+class SpeechCredentialError(BaseErrorCode):
+    Code: int = 10804
+    Msg: str = "Volcengine rejected this Resource ID. Check the speech resource granted to these credentials."
 
 
 class WorkbenchEmbeddingError(BaseErrorCode):
     Code: int = 10810
-    Msg: str = 'Please configure the workbench embedding model.'
+    Msg: str = "Please configure the workbench embedding model."
 
 
 class WorkbenchChatDefaultModelError(BaseErrorCode):
     Code: int = 10811
-    Msg: str = 'The daily-chat default model must be one of the configured workbench chat models.'
+    Msg: str = "The daily-chat default model must be one of the configured workbench chat models."

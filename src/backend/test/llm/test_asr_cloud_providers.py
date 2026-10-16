@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock
 from urllib.parse import parse_qsl, urlsplit
 
 import pytest
+from fastapi import HTTPException
+from websockets.exceptions import InvalidStatus
 
 from bisheng.core.ai.asr import realtime, speech_cloud, volcengine
 from bisheng.core.ai.asr.capabilities import realtime_protocol
@@ -216,6 +218,41 @@ async def test_volcengine_old_console_authentication(monkeypatch):
     assert "X-Api-Key" not in headers
 
 
+async def test_volcengine_access_check_is_only_a_handshake(monkeypatch):
+    socket = Socket("volcengine")
+    connector = connect_socket(monkeypatch, "volcengine", socket)
+    await volcengine.VolcengineRealtimeASRClient("bigmodel", VOLC_CONFIG).verify_access()
+    assert socket.closed and socket.sent == []
+    headers = connector.await_args.kwargs["additional_headers"]
+    assert headers["X-Api-Resource-Id"] == "volc.seedasr.sauc.duration"
+    assert headers["X-Api-Key"] == "fixture-api"
+
+
+async def test_volcengine_forbidden_resource_fails_the_handshake(monkeypatch):
+    async def reject(*_args, **_kwargs):
+        raise InvalidStatus(SimpleNamespace(status_code=403))
+
+    monkeypatch.setattr(volcengine, "connect", reject)
+    with pytest.raises(volcengine.SpeechAccessRejected):
+        await volcengine.VolcengineRealtimeASRClient("bigmodel", VOLC_CONFIG).verify_access()
+
+
+async def test_save_rejects_a_resource_the_speech_credentials_cannot_use(monkeypatch):
+    from bisheng.llm.domain.services.llm import LLMService
+
+    async def reject(self):
+        raise volcengine.SpeechAccessRejected("rejected")
+
+    monkeypatch.setattr(volcengine.VolcengineRealtimeASRClient, "verify_access", reject)
+    speech = SimpleNamespace(model_type="asr", model_name="bigmodel")
+    with pytest.raises(HTTPException) as caught:
+        await LLMService._ensure_volcengine_speech("volcengine", VOLC_CONFIG, [speech])
+    assert caught.value.status_code == 10804
+
+    chat = SimpleNamespace(model_type="llm", model_name="doubao")
+    await LLMService._ensure_volcengine_speech("volcengine", VOLC_CONFIG, [chat])
+
+
 def test_tencent_signature_uses_sorted_raw_parameters_then_urlencoding():
     url = speech_cloud.tencent_url("123", "id+/=", "secret", "16k_zh", "unique-id", 1700000000, 1234)
     expected_text = "asr.cloud.tencent.com/asr/v2/123?engine_model_type=16k_zh&expired=1700003600&needvad=1&nonce=1234&secretid=id+/=&timestamp=1700000000&voice_format=1&voice_id=unique-id"
@@ -278,6 +315,52 @@ def test_speech_secrets_mask_and_round_trip():
     assert masker.update_json_with_masked(original, masked) == original
     masked["config"]["speech_api_key"] = "replacement"
     assert masker.update_json_with_masked(original, masked)["config"]["speech_api_key"] == "replacement"
+
+
+async def test_baidu_close_without_status_keeps_the_partial(monkeypatch):
+    socket = Socket("baidu", finish_response=False)
+    connect_socket(monkeypatch, "baidu", socket)
+    connection = client_for("baidu").create_connection()
+    await connection.start()
+    connection.finished_input = True
+    socket.close_code = 1005
+    socket.put({"type": "MID_TEXT", "err_no": 0, "sn": "s1", "result": "你好"})
+    socket.put(None)
+    events = [event async for event in connection.events()]
+    assert [(event["type"], event["text"]) for event in events] == [("partial", "你好"), ("final", "你好")]
+
+
+async def test_baidu_abnormal_close_is_still_rejected(monkeypatch):
+    socket = Socket("baidu", finish_response=False)
+    connect_socket(monkeypatch, "baidu", socket)
+    connection = client_for("baidu").create_connection()
+    await connection.start()
+    connection.finished_input = True
+    socket.close_code = 1006
+    socket.put(None)
+    with pytest.raises(RuntimeError, match=r"closed before recognition completed \(1006\)"):
+        _ = [event async for event in connection.events()]
+
+
+async def test_baidu_paces_browser_backlog_before_finish(monkeypatch):
+    socket = Socket("baidu")
+    connect_socket(monkeypatch, "baidu", socket)
+    clock = [100.0]
+    sleeps = []
+    monkeypatch.setattr(speech_cloud.time, "monotonic", lambda: clock[0])
+
+    async def advance(delay):
+        sleeps.append(delay)
+        clock[0] += delay
+
+    monkeypatch.setattr(speech_cloud.asyncio, "sleep", advance)
+    connection = client_for("baidu").create_connection()
+    await connection.start()
+    await connection.send_audio(bytes(16000))
+    await connection.finish()
+    assert [len(packet) for packet in socket.sent if isinstance(packet, bytes)] == [6400, 6400, 3200]
+    assert sleeps == pytest.approx([0, 0.2, 0.2, 0.1])
+    assert socket.sent[-1] == '{"type": "FINISH"}'
 
 
 async def test_tencent_paces_browser_backlog_and_limits_packet_size(monkeypatch):

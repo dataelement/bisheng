@@ -17,11 +17,16 @@ from .capabilities import BAIDU_MODELS, TENCENT_MODELS
 from .connection import StreamConnection, app_id, required
 from .realtime import RealtimeASRClient
 
+# websockets treats 1000, 1001, and a close frame without a status (1005) as a
+# normal end. Baidu uses the last of those after FINISH.
+_BAIDU_OK_CLOSE = {1000, 1001, 1005}
+
 
 class BaiduConnection(StreamConnection):
     async def start(self):
         self.ws = await connect(
             f"wss://vop.baidu.com/realtime_asr?sn={self.task_id}",
+            proxy=None,
             open_timeout=10,
             close_timeout=3,
             max_size=1024 * 1024,
@@ -41,18 +46,29 @@ class BaiduConnection(StreamConnection):
                 },
             }
         )
+        # Clock starts after START so the first audio frame is not charged for the handshake.
+        self.next_audio_at = time.monotonic()
 
     async def send_audio(self, pcm: bytes):
-        # Baidu accepts 20-200 ms packets; browser/file sources normally send 100 ms.
+        # Baidu returns -3005 when audio arrives faster than realtime, including the
+        # buffered tail flushed when the browser stops. 6400 bytes is 200 ms at 16 kHz.
         for offset in range(0, len(pcm), 6400):
-            await self.ws.send(pcm[offset : offset + 6400])
+            frame = pcm[offset : offset + 6400]
+            await asyncio.sleep(max(0, self.next_audio_at - time.monotonic()))
+            await self.ws.send(frame)
+            self.next_audio_at = time.monotonic() + len(frame) / 32000
 
     async def finish(self):
-        if not self.finished_input:
-            self.finished_input = True
-            await self.send_json({"type": "FINISH"})
+        if self.finished_input:
+            return
+        # The official client waits out the last frame before FINISH. Sending the
+        # end marker in the same instant makes Baidu fail that sentence with -3005.
+        await asyncio.sleep(max(0, self.next_audio_at - time.monotonic()))
+        await self.send_json({"type": "FINISH"})
+        self.finished_input = True
 
     async def events(self):
+        partials: dict[str, str] = {}
         async for raw in self.ws:
             message = json.loads(raw)
             if message.get("err_no", 0) != 0:
@@ -62,15 +78,24 @@ class BaiduConnection(StreamConnection):
             segment = message.get("sn")
             if not isinstance(segment, str) or not segment:
                 raise ValueError("Baidu ASR response requires a sentence identifier")
-            event = self.transcript(segment, message.get("result", ""), message["type"] == "FIN_TEXT")
+            final = message["type"] == "FIN_TEXT"
+            event = self.transcript(segment, message.get("result", ""), final)
+            if event is not None:
+                if final:
+                    partials.pop(segment, None)
+                else:
+                    partials[segment] = message.get("result", "")
+                yield event
+        # The iterator returns only after a normal close. Anything else raises
+        # ConnectionClosedError before this point.
+        if not self.finished_input or self.ws.close_code not in _BAIDU_OK_CLOSE:
+            raise RuntimeError(f"Baidu ASR connection closed before recognition completed ({self.ws.close_code})")
+        # Baidu may close after FINISH without a trailing FIN_TEXT. The partial
+        # already shown to the user is the completed sentence.
+        for segment, text in partials.items():
+            event = self.transcript(segment, text, True)
             if event is not None:
                 yield event
-        # Baidu terminates the session with a normal WebSocket close after FINISH.
-        # Abnormal close codes are raised by the websockets iterator.
-        if not self.finished_input or self.ws.close_code != 1000:
-            raise RuntimeError("Baidu ASR connection closed before recognition completed")
-        if set(self.versions) - self.finals:
-            raise RuntimeError("Baidu ASR connection closed with unfinished sentences")
 
 
 class BaiduRealtimeASRClient(RealtimeASRClient):
@@ -120,7 +145,7 @@ class TencentConnection(StreamConnection):
             int(time.time()),
             secrets.randbelow(9999999999) + 1,
         )
-        self.ws = await connect(url, open_timeout=10, close_timeout=3, max_size=1024 * 1024, max_queue=16)
+        self.ws = await connect(url, proxy=None, open_timeout=10, close_timeout=3, max_size=1024 * 1024, max_queue=16)
         async with asyncio.timeout(10):
             message = json.loads(await self.ws.recv())
             self.check_error(message)

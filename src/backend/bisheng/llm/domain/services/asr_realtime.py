@@ -19,9 +19,17 @@ SESSION_LIMIT_SECONDS = 600
 MAX_FRAME_BYTES = 32000
 
 
+def _browser_host(headers) -> str:
+    """Host the browser used, not the upstream the dev proxy rewrote it to."""
+    forwarded = headers.get("x-forwarded-host")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return headers.get("host") or ""
+
+
 async def run_realtime_asr(websocket: WebSocket, login_user):
     origin = websocket.headers.get("origin")
-    if origin and urlsplit(origin).netloc != websocket.headers.get("host"):
+    if origin and urlsplit(origin).netloc != _browser_host(websocket.headers):
         await websocket.close(code=1008)
         return
     await websocket.accept()
