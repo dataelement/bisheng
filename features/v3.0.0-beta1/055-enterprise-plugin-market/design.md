@@ -2,11 +2,11 @@
 
 ## 结构
 
-API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品由存储适配器读写。校验器只读取 ZIP/JSON/文件摘要，服务端始终将插件作为数据处理。
+API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品由存储适配器读写。校验器只读取 ZIP/tgz、package.json 和文件摘要，服务端始终将插件作为数据处理。
 
 五张新表：dsh_market_plugin、dsh_market_version、dsh_market_import、dsh_market_audit、dsh_market_device。表模型已加入数据库发现；按项目新表创建机制建表，既有表结构保持原样。
 
-插件 ID 稳定，版本 ID 与 ZIP SHA-256 绑定；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建不可变版本、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入返回原任务并保留版本；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
+插件 ID 稳定，版本 ID 与制品 SHA-256 绑定；插件记录维护 current_version_id、disabled、deleted、revision。删除在 CAS 事务中置 deleted=true、清空当前版本并记录后台操作；普通列表和详情过滤 deleted，策略继续返回曾发布版本以支持已有安装。导入校验成功后，在同一个事务中创建不可变版本、设置当前版本、更新展示元数据、递增 revision、记录前后状态，导入任务置为 completed。版本属性 published_once 记录曾发布资格，映射既有物理列 reviewed；保持现有数据结构与历史资格。导入任务以 tenant_id + digest 幂等，当前可用插件重复导入返回原任务并保留版本；已删除、旧下架或旧禁用记录的明确重导入重新校验并恢复当前版本；失败保持原状态。validating 任务可在服务恢复后继续。旧 pending 任务对应的版本可由管理员重新导入恢复。
 
 制品对象键为 `dsh-market/{tenant_id}/{sha256}.zip`，使用当前 BISHENG 的 MinIO bucket/config。生产环境配置持久化对象存储与数据库备份；全量历史保留。当前没有租户容量配额与自动清理任务。
 
@@ -23,20 +23,20 @@ Desktop 的企业登录基于另外已有的网关登录工作；本次 API 接�
 
 ## API v1
 
-统一前缀 `/api/v1/dsh/market`。标准 JSON 信封为 `status_code/status_message/data`；制品返回 ZIP 二进制。
+统一前缀 `/api/v1/dsh/market`。标准 JSON 信封为 `status_code/status_message/data`；制品返回原始 ZIP 或 gzip 二进制。
 
 | 方法/路径 | 身份 | 内容 |
 | --- | --- | --- |
 | GET /capabilities | 登录员工 | contract_version=1、配置状态、tenant_id、上限与周期 |
 | GET /catalog?q=&page=&size= | 登录员工 | 仅本租户当前发布版本，授权过滤后分页 |
-| GET /plugins/{id}/versions/{version_id}/artifact | 登录员工 | 复核发布状态和摘要，返回 ZIP；禁止共享缓存 |
+| GET /plugins/{id}/versions/{version_id}/artifact | 登录员工 | 复核发布状态和摘要，返回原始压缩包；禁止共享缓存 |
 | POST /sync | 登录员工 | 设备运行状态报告，返回 Ed25519 签名策略 |
 | GET /admin/context | 租户管理员 | 当前登录租户 |
 | GET /admin/plugins | 租户管理员 | 本登录租户列表及分页；旧搜索/状态参数保留协议兼容 |
 | GET /admin/plugins/{id} | 租户管理员 | 插件状态和全部版本；操作记录保留在后台 |
 | DELETE /admin/plugins/{id}?revision= | 租户管理员 | 删除本租户市场记录，保留历史及已有安装授权 |
 | POST /admin/plugins/{id}/transition | 租户管理员 | 旧 publish/unpublish/disable 协议保留兼容；当前页面使用导入和删除 |
-| POST /admin/imports | 租户管理员 | multipart file，单 ZIP；上传后校验，新版本校验成功即可安装；已有可用版本重复包保持现状，已删除记录重导入恢复 |
+| POST /admin/imports | 租户管理员 | multipart file，单 ZIP/tgz 插件包；上传后校验，新版本校验成功即可安装；已有可用版本重复包保持现状，已删除记录重导入恢复 |
 | GET /admin/imports | 租户管理员 | 导入任务与失败原因 |
 | POST /admin/imports/{id}/resume | 租户管理员 | 恢复 validating 任务 |
 | GET /admin/devices | 租户管理员 | 兼容已有设备状态读取；首版管理页面使用插件与版本详情 |
@@ -53,9 +53,11 @@ Desktop 用部署公钥验证签名，绑定账号与设备，设置授权到期
 
 部署代理应支持 256 MiB 文件加 multipart 开销，限制整体请求体、并发和临时上传空间。应用在读取文件时再次执行大小限制；框架可能先把 multipart 暂存到磁盘，因此反向代理限制仍需配置。
 
-## 离线发布包
+## 插件发布包
 
-ZIP 根目录 `manifest.json`，平台文件位于 `bundles/{os}-{arch}/node_modules/...`。清单结构：
+管理员直接导入包含 package.json 和运行代码的 ZIP 或 npm tgz 包。名称、版本、描述、作者和许可证从 npm 元数据读取；适用系统由 os/cpu 声明派生。后台保存原始制品，并生成数据库使用的 schema_version=2 元数据。客户端按标准依赖声明准备运行环境，具体合同与验收见[社区插件包导入](community-packages.md)。版本排序采用 SemVer，覆盖预发布与正式版本。
+
+旧离线包继续按 schema_version=1 校验。其 ZIP 根目录 `manifest.json`，平台文件位于 `bundles/{os}-{arch}/node_modules/...`。清单结构：
 
 ```json
 {
@@ -97,4 +99,4 @@ C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应
 
 工作台使用独立的 `.tgz` 静态校验器、三张租户表和 MinIO 对象前缀，与原有插件 ZIP、设备报告和 `/sync` 签名策略分开。管理员预览与导入、Desktop 目录/详情/制品下载复用市场身份边界；管理页面沿用现有市场交互与组件。新表由 SQLModel 模型发现和 `create_all(checkfirst=True)` 创建，不改动已有市场表。完整数据结构、API 与边界见[工作台上传与查询设计](workbench-upload-query-design.md)，归档规则见[工作台压缩包校验规则](workbench-package-validation.md)。
 
-独立存储与路由是为了避免把 npm `.tgz` 误交给只接受插件 ZIP 的验证与签名流程；等 Desktop 实际安装协议确定后，再评估是否引入工作台租约。已知边界：压缩包静态检查无法证明宿主服务、依赖解析与 UI 运行，真实 MinIO、MySQL/DM8 和 Desktop 联调需在部署环境验收。
+工作台保留独立的标识、静态验证和发布状态；插件导入现已支持社区 ZIP/tgz，并沿用插件设备授权流程。等 Desktop 实际安装协议确定后，再评估是否引入工作台租约。已知边界：压缩包静态检查无法证明宿主服务、依赖解析与 UI 运行，真实 MinIO、MySQL/DM8 和 Desktop 联调需在部署环境验收。

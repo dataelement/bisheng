@@ -527,3 +527,19 @@ def test_market_upload_limit_is_512_mib():
     from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES
 
     assert MAX_UPLOAD_BYTES == 512 * 1024 * 1024
+
+
+def test_community_versions_upgrade_from_prerelease_and_keep_immutable_releases(service):
+    from test.dsh_market.test_community_bundle import package_archive
+
+    first = package_archive(fields={"version": "1.2.0-beta.1"})
+    assert service.import_bundle(2, 20, first)["status"] == "completed"
+    release = package_archive(fields={"version": "1.2.0"})
+    assert service.preview_bundle(2, release)["allowed"] is True
+    assert service.import_bundle(2, 20, release)["status"] == "completed"
+    assert service.preview_bundle(2, first)["reason"] == "lower_version"
+    assert service.preview_bundle(2, release)["duplicate"] is True
+    changed = package_archive(fields={"version": "1.2.0", "description": "Changed release"})
+    assert service.preview_bundle(2, changed)["reason"] == "version_conflict"
+    assert service.import_bundle(2, 20, changed)["status"] == "failed"
+    assert service.repository.list(3)["total"] == 0

@@ -61,7 +61,7 @@ with TestClient(app) as client:
             if "artifact" in command:
                 kwargs = {"files": {"file": ("plugin.zip", base64.b64decode(command["artifact"]), "application/zip")}}
             response = client.request(command["method"], command["path"], **kwargs)
-            if response.headers.get("content-type", "").startswith("application/zip"):
+            if response.headers.get("content-type", "").startswith(("application/zip", "application/gzip")):
                 result = {"artifact": base64.b64encode(response.content).decode()}
             else:
                 result = response.json()
