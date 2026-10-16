@@ -30,6 +30,7 @@ DEFAULT_BASE_URL = "{{BASE_URL}}"
 ENV_KEY = "KNOWLEDGE_API_KEY"
 APP_DIR_NAME = "knowledge-search"
 CREDENTIALS_FILE = "credentials.json"
+REQUEST_TIMEOUT_SECONDS = 60
 LIST_TYPES = {"space": 3, "doc": 0}
 _PLACEHOLDER_KEYS = {"<key>", "<api-key>", "<api_key>", "{{key}}", "$" + ENV_KEY, "${" + ENV_KEY + "}"}
 
@@ -174,7 +175,7 @@ def _call(url: str, token: str, body: bytes | None = None, *, source: str = "") 
         },
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             print(response.read().decode("utf-8"))
     except HTTPError as exc:
         # Surface the API's business error body: its status_code (e.g. 26044
@@ -253,7 +254,7 @@ def _verify_key(base_url: str, key: str) -> tuple[str, str, str]:
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
             raw = response.read().decode("utf-8", "replace")
     except HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")
