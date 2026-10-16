@@ -35,6 +35,10 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
   showResearch, researchActive, onResearchChange, children }: Props) {
   const localize = useLocalize();
   const { isChecked, toggle } = useAgentToolSelection(availableTools);
+  const activeSearchGroups = showTools
+    ? availableTools.filter((group) => isChecked(group.id)
+      && group.children?.some((child) => child.tool_key === 'web_search'))
+    : [];
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [selecting, setSelecting] = useState(false);
@@ -76,6 +80,23 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
+    <div className="dsh-active-capabilities">
+      {activeSearchGroups.map((group) => <button key={group.id} type="button"
+        className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
+        onClick={() => toggle(group)}>
+        <Outlined.Earth size={14} /><span>{labelForGroup(group, localize)}</span><Outlined.Close size={12} />
+      </button>)}
+      {showWebSearch && webSearchActive && <button type="button"
+        className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
+        onClick={() => onWebSearchChange?.(false)}>
+        <Outlined.Earth size={14} /><span>{localize('com_tools_web_search')}</span><Outlined.Close size={12} />
+      </button>}
+      {showResearch && researchActive && <button type="button"
+        className="dsh-composer-control dsh-active-capability" aria-pressed="true" disabled={disabled}
+        onClick={onResearchChange}>
+        <Outlined.ListSuccess size={14} /><span>{localize('com_linsight_task_mode')}</span><Outlined.Close size={12} />
+      </button>}
+    </div>
     {selecting && <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
       setSelecting(false);
       requestAnimationFrame(() => trigger.current?.focus());

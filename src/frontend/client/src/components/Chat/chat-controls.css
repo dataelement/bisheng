@@ -72,3 +72,9 @@ body[data-dsh-chat-theme] .dsh-chat-menu {
 
 body[data-dsh-chat-theme] .dsh-add-menu [data-highlighted] { background:rgb(var(--fill-2)); color:rgb(var(--text-1)); }
 body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:first-child svg { color:rgb(var(--text-1)); }
+
+.dsh-active-capabilities { display:flex; align-items:center; gap:4px; min-width:0; overflow-x:auto; scrollbar-width:none; }
+.dsh-active-capabilities:empty { display:none; }
+.dsh-active-capabilities::-webkit-scrollbar { display:none; }
+.dsh-chat-surface .dsh-active-capability { display:inline-flex; align-items:center; gap:6px; flex:none; white-space:nowrap; border:0; background:rgb(var(--brand-500) / 12%); color:rgb(var(--brand-500)); }
+.dsh-active-capability:disabled { opacity:.5; cursor:default; }
