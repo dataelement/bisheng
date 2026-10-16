@@ -296,16 +296,18 @@ export function ModelDiscovery({
                           })
                         }
                       />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm break-all">{model.model_name}</p>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <p className="min-w-0 truncate text-sm" title={model.model_name}>
+                          {model.model_name}
+                        </p>
                         {(added || unsupported) && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {t(
                               added
                                 ? "model.modelAlreadyAdded"
                                 : "model.discoveryUnsupportedType",
                             )}
-                          </p>
+                          </span>
                         )}
                       </div>
                       {model.type_source === "unknown" &&
