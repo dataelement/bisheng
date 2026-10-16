@@ -90,6 +90,52 @@ def monthly_award_exempt(
     return False
 
 
+def manager_spaces_needing_relation_check(
+    *,
+    payee_id: int,
+    space_levels: dict[int, str],
+    owners_by_space: dict[int, set[int]],
+    managers_by_space: dict[int, set[int]],
+    enabled_matchers: list[MonthlyRuleMatcher],
+) -> list[int]:
+    """列出还要向 OpenFGA 确认 manager 的非个人库.
+
+    直连管理员已经在名单里的不再查. 所有者只走所有者月奖, 不再用 manager 推导扩免扣.
+    该库等级没有已启用的管理员月奖时也不查.
+
+    Args:
+        payee_id: 被扣的上传者.
+        space_levels: 空间 id 到库等级.
+        owners_by_space: 各空间直连所有者.
+        managers_by_space: 各空间直连管理员.
+        enabled_matchers: 当前启用且分值大于 0 的月奖匹配器.
+
+    Returns:
+        需要做一次 manager 检查的空间 id, 按空间 id 升序.
+    """
+    manager_levels = {
+        level
+        for matcher in enabled_matchers
+        if "manager" in matcher.roles
+        for level in matcher.levels
+    }
+    if not manager_levels or int(payee_id) <= 0:
+        return []
+    needed: list[int] = []
+    for space_id, raw_level in space_levels.items():
+        level = str(getattr(raw_level, "value", raw_level) or "")
+        if is_personal_level(level) or level not in manager_levels:
+            continue
+        sid = int(space_id)
+        if int(payee_id) in managers_by_space.get(sid, set()):
+            continue
+        if int(payee_id) in owners_by_space.get(sid, set()):
+            continue
+        needed.append(sid)
+    needed.sort()
+    return needed
+
+
 def resolve_payee_id(original_uploader_id: int | None, entry_user_id: int | None) -> int | None:
     """确定被扣人.
 
