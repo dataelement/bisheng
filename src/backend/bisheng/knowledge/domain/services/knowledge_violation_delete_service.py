@@ -282,7 +282,8 @@ class KnowledgeViolationDeleteService:
             raise KnowledgeViolationDeleteForbiddenError()
         roles = await self._roles(set(scope_levels))
         operator_id = int(getattr(operator, "user_id", 0) or 0)
-        if not is_platform_super_admin(operator) and not _operator_can_manage(operator_id, roles):
+        # 直连 user 管理员之外, 按部门或用户组授予的 can_manage 也要能删.
+        if not await _operator_may_violation_delete(operator, operator_id, set(scope_levels), roles):
             raise KnowledgeViolationDeleteForbiddenError()
         tier = highest_scope_tier(scope_levels.values())
         if tier is None:
@@ -440,8 +441,58 @@ def _scope_entries(entries: list[KnowledgeFile], *, recycled: bool) -> list[Know
 
 
 def _operator_can_manage(operator_id: int, roles: dict[int, tuple[set[int], set[int]]]) -> bool:
+    """操作者是否出现在各库的直连 owner 或 manager 用户集合里.
+
+    Args:
+        operator_id: 操作者用户 id.
+        roles: 空间 id 到 (所有者, 直连管理员).
+
+    Returns:
+        任一库的直连集合包含操作者时为 True.
+    """
     for owners, managers in roles.values():
         if operator_id in owners or operator_id in managers:
+            return True
+    return False
+
+
+async def _operator_may_violation_delete(
+    operator,
+    operator_id: int,
+    space_ids: set[int],
+    roles: dict[int, tuple[set[int], set[int]]],
+) -> bool:
+    """判断操作者能否违规删除这份文档.
+
+    直连用户管理员走角色集合. 按部门或用户组授予的管理员没有 user 元组,
+    改用知识空间 can_manage, 与成员管理同一套 ReBAC.
+
+    Args:
+        operator: 当前登录用户.
+        operator_id: 操作者用户 id.
+        space_ids: 文档所在的非个人库.
+        roles: 各库直连 owner 与 manager.
+
+    Returns:
+        超管, 直连管理员, 或任一库 can_manage 时为 True.
+    """
+    if is_platform_super_admin(operator):
+        return True
+    if _operator_can_manage(operator_id, roles):
+        return True
+    if operator_id <= 0:
+        return False
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    for space_id in space_ids:
+        allowed = await PermissionService.check(
+            user_id=operator_id,
+            relation="can_manage",
+            object_type="knowledge_space",
+            object_id=str(int(space_id)),
+            login_user=operator,
+        )
+        if allowed:
             return True
     return False
 
