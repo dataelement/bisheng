@@ -216,7 +216,7 @@ const ParagraphEdit = ({
     }
 
     const fileView = () => {
-        const newVersion = ['etl4lm', 'un_etl4lm'].includes(parseType)
+        const newVersion = ['etl4lm', 'un_etl4lm', 'mineru', 'mineru_v4'].includes(parseType)
         if (!newVersion) return previewFileUrl && <FileView
             select
             fileUrl={previewFileUrl}
@@ -229,6 +229,7 @@ const ParagraphEdit = ({
             case 'ppt':
             case 'pptx':
             case 'pdf':
+            case 'ofd':
                 return previewFileUrl && <FileView
                     select
                     startIndex={0}
@@ -255,7 +256,7 @@ const ParagraphEdit = ({
                         <img
                             className="size-52 block"
                             src={__APP_ENV__.BASE_URL + "/assets/knowledge/damage.svg"} alt="" />
-                        <p>此文件类型不支持预览</p>
+                        <p>{t('fileNotSupported')}</p>
                     </div>
                 </div>
         }

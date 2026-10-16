@@ -45,15 +45,15 @@ export const modelProvider = [
   { name: "xinference", value: "xinference" },
   { name: "llamacpp", value: "llamacpp" },
   { name: "vllm", value: "vllm" },
-  { name: "model.provider_qwen", value: "qwen" },
+  { name: "", labelKey: "model.providerNames.qwen", value: "qwen" },
   { name: "DeepSeek", value: "deepseek" },
-  { name: "model.provider_silicon", value: "silicon" },
-  { name: "model.provider_volcengine", value: "volcengine" },
-  { name: "model.provider_zhipu", value: "zhipu" },
-  { name: "model.provider_spark", value: "spark" },
-  { name: "model.provider_tencent", value: "tencent" },
-  { name: "model.provider_moonshot", value: "moonshot" },
-  { name: "model.provider_qianfan", value: "qianfan" },
+  { name: "", labelKey: "model.providerNames.silicon", value: "silicon" },
+  { name: "", labelKey: "model.providerNames.volcengine", value: "volcengine" },
+  { name: "", labelKey: "model.providerNames.zhipu", value: "zhipu" },
+  { name: "", labelKey: "model.providerNames.spark", value: "spark" },
+  { name: "", labelKey: "model.providerNames.tencent", value: "tencent" },
+  { name: "", labelKey: "model.providerNames.moonshot", value: "moonshot" },
+  { name: "", labelKey: "model.providerNames.qianfan", value: "qianfan" },
   { name: "Minimax", value: "minimax" },
   { name: "Anthropic", value: "anthropic" },
   { name: "MindIE", value: "MindIE" },
@@ -91,6 +91,7 @@ export default function ModelConfig({
   const { appConfig } = useContext(locationContext);
 
   const [formData, setFormData] = useState({ ...defaultForm });
+  const [nameError, setNameError] = useState("");
   const [connectionVersion, setConnectionVersion] = useState(0);
   const [autoFetchVersion, setAutoFetchVersion] = useState(0);
 
@@ -283,9 +284,7 @@ export default function ModelConfig({
       id === -1 ? modelProvider : [...modelProvider, bishengModelProvider]
     ).map((provider) => ({
       ...provider,
-      name: provider.name.startsWith("model.")
-        ? t(provider.name, { ns: "model" })
-        : provider.name,
+      name: "labelKey" in provider ? t(provider.labelKey) : provider.name,
     }));
   }, [id, t]);
 
@@ -356,20 +355,10 @@ export default function ModelConfig({
             onChange={(e) => {
               const name = e.target.value;
               setFormData({ ...formData, name });
-              document.getElementById(
-                "model_provider_name_error",
-              ).style.display = !name || name.length > 100 ? "block" : "none";
+              setNameError(!name ? t("model.cannotBeEmpty") : name.length > 100 ? t("model.max100Characters") : "");
             }}
           ></Input>
-          <span
-            id="model_provider_name_error"
-            style={{ display: "none" }}
-            className="text-red-500 text-xs"
-          >
-            {formData.name
-              ? t("model.max100Characters")
-              : t("model.cannotBeEmpty")}
-          </span>
+          {nameError && <span className="text-red-500 text-xs">{nameError}</span>}
         </div>
         <CustomForm
           ref={formRef}

@@ -20,6 +20,7 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
+from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -28,6 +29,22 @@ class TenantPermissionSubjectDirectory:
 
     def __init__(self) -> None:
         self._sources = GrantSourceService()
+        self._candidate_queries = GrantSubjectSearchRepository()
+
+    async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_users(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_users(scope, keyword=keyword)
+
+    async def candidate_groups(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.groups(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_groups(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_groups(scope, keyword=keyword)
+
+    async def candidate_departments(self, scope, *, keyword: str, limit: int):
+        return await self._candidate_queries.departments(scope, keyword=keyword, limit=limit)
 
     @staticmethod
     def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:
@@ -276,11 +293,7 @@ class TenantPermissionSubjectDirectory:
         from bisheng.tool.domain.models.gpts_tools import GptsToolsType
 
         ids_by_type = {
-            resource_type: tuple(
-                resource_id
-                for item_type, resource_id in resources
-                if item_type == resource_type
-            )
+            resource_type: tuple(resource_id for item_type, resource_id in resources if item_type == resource_type)
             for resource_type in ("workflow", "assistant", "channel", "tool", "dashboard")
         }
         if not any(ids_by_type.values()):
@@ -288,11 +301,7 @@ class TenantPermissionSubjectDirectory:
         labels: dict[tuple[str, str], str] = {}
         async with get_async_db_session() as session:
             if ids_by_type["workflow"]:
-                rows = (
-                    await session.exec(
-                        select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Flow).where(col(Flow.id).in_(ids_by_type["workflow"])))).all()
                 labels.update({("workflow", str(row.id)): row.name for row in rows})
             if ids_by_type["assistant"]:
                 rows = (
@@ -305,11 +314,7 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("assistant", str(row.id)): row.name for row in rows})
             if ids_by_type["channel"]:
-                rows = (
-                    await session.exec(
-                        select(Channel).where(col(Channel.id).in_(ids_by_type["channel"]))
-                    )
-                ).all()
+                rows = (await session.exec(select(Channel).where(col(Channel.id).in_(ids_by_type["channel"])))).all()
                 labels.update({("channel", str(row.id)): row.name for row in rows})
 
             tool_ids = tuple(int(value) for value in ids_by_type["tool"] if value.isdigit())
@@ -324,14 +329,8 @@ class TenantPermissionSubjectDirectory:
                 ).all()
                 labels.update({("tool", str(row.id)): row.name for row in rows})
 
-            dashboard_ids = tuple(
-                int(value) for value in ids_by_type["dashboard"] if value.isdigit()
-            )
+            dashboard_ids = tuple(int(value) for value in ids_by_type["dashboard"] if value.isdigit())
             if dashboard_ids:
-                rows = (
-                    await session.exec(
-                        select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids))
-                    )
-                ).all()
+                rows = (await session.exec(select(Dashboard).where(col(Dashboard.id).in_(dashboard_ids)))).all()
                 labels.update({("dashboard", str(row.id)): row.title for row in rows})
         return labels

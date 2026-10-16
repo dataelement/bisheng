@@ -1,25 +1,33 @@
+import asyncio
 import glob
 import os
 import re
-import shutil
 import signal
 import subprocess
 import sys
 import tempfile
-import uuid
 from hashlib import md5
-from os import DirEntry
 from pathlib import Path
 from typing import Any
 
 import matplotlib
 from loguru import logger
 
+from bisheng_langchain.gpts.tools.code_interpreter import local_run_registry
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
+    EXECUTION_BOUNDARY_RULES,
     OUTPUT_DIR_NAME,
     BaseExecutor,
     clip_middle,
     path_namespace_rules,
+)
+from bisheng_langchain.gpts.tools.code_interpreter.local_isolation import (
+    IsolatedOutcome,
+    LocalIsolationUnavailable,
+    RunClosed,
+    isolation_mode,
+    run_isolated,
+    run_retained,
 )
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
@@ -40,6 +48,20 @@ UNKNOWN = "unknown"
 MAX_FAILURE_LOG_CHARS = 8000
 LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
 PARTIAL_OUTPUT_HEADER = "\nOutput captured before the kill:\n"
+DISK_LIMIT_MSG = (
+    "Disk limit: this script wrote more data into its working directory than allowed and was killed. "
+    "Nothing it wrote was kept. Write less, or process the data in smaller pieces."
+)
+OUTPUT_LIMIT_MSG = (
+    "Output limit: this script printed far more than can be returned and was killed. Print a summary, "
+    "or write the bulk to a file under `scratch/` instead."
+)
+COPY_IN_SKIPPED_NOTICE = "These workspace files exceed the size limit and were not available to this run"
+ISOLATION_UNAVAILABLE_MSG = (
+    "The local code execution environment is not ready, so nothing was executed. Do not retry; "
+    "tell the user that code execution is currently unavailable."
+)
+TASK_ENDED_MSG = "The task has ended, so this code was not run."
 
 LOCAL_DESCRIPTION = (
     """Evaluates python code in native environment. \
@@ -54,27 +76,39 @@ leading slash such as `/output/...` or `/scratch/...` — anything written outsi
 current working directory is DISCARDED and will NOT be delivered to the user. \
 """
     + path_namespace_rules(include_skills=True)
+    + EXECUTION_BOUNDARY_RULES
     + """\
 Do not use things like plot.show() as it will not work; save figures to `output/` \
 instead. print() any output and results so you can capture the output. \
-AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
-installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
+AVAILABLE LIBRARIES: these are ALREADY installed in this \
+environment — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
 python-docx (Word), python-pptx (PowerPoint), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
 `fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
 (PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
 import fails, switch to an already-installed library instead of assuming a package \
-exists; do NOT run `pip install` (this is a shared, offline environment)."""
+exists; do NOT run `pip install` (this environment is offline)."""
 )
 
 
 class LocalExecutor(BaseExecutor):
+    supports_kb_stage = True
+    # Subclasses that replace execute_code (ContainerExecutor) must not be routed
+    # into the retained local run dir.
+    supports_retained_run = True
+
     def __init__(self, minio: dict = None, **kwargs):
         super().__init__(minio, **kwargs)
         self.minio = minio
+        # Set by the Linsight binder: keep one run dir for the task workspace
+        # (local_sync_path) instead of a fresh copy per call.
+        self.keep_run_dir = bool(kwargs.get("keep_run_dir", False))
+        self._run_entry: local_run_registry.RunEntry | None = None
+        if self.keep_run_dir and self.local_sync_path and self.supports_retained_run and isolation_mode() == "uid":
+            self._run_entry = local_run_registry.register(self.local_sync_path)
 
     @property
     def description(self) -> str:
-        return LOCAL_DESCRIPTION
+        return LOCAL_DESCRIPTION + self.kb_stage_hint()
 
     @staticmethod
     def infer_lang(code):
@@ -93,15 +127,20 @@ class LocalExecutor(BaseExecutor):
             return UNKNOWN
 
     @staticmethod
+    def _drop_font_cache() -> None:
+        # Legacy behaviour, kept only for local_isolation=off. Isolated runs get a
+        # private copy of the cache instead, so deleting the shared one there would
+        # only race with concurrent runs.
+        for cache in glob.glob(f"{matplotlib.get_cachedir()}/fontlist*"):
+            os.remove(cache)
+
+    @staticmethod
     def insert_set_font_code(code: str) -> str:
         """判断python代码中是否导入了matplotlib库，如果有则插入设置字体的代码"""
 
         split_code = code.split("\n")
-        cache_file = matplotlib.get_cachedir()
-        font_cache = glob.glob(f"{cache_file}/fontlist*")
-
-        for cache in font_cache:
-            os.remove(cache)
+        if isolation_mode() == "off":
+            LocalExecutor._drop_font_cache()
 
         # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
         if "matplotlib" in code:
@@ -206,6 +245,8 @@ class LocalExecutor(BaseExecutor):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             start_new_session=not WIN32,
         )
         try:
@@ -271,12 +312,11 @@ class LocalExecutor(BaseExecutor):
             raise AssertionError(error_msg)
 
         timeout = timeout or DEFAULT_TIMEOUT
-        original_filename = filename
 
         if filename is None:
-            code_hash = md5(code.encode()).hexdigest()
-            # create a file with a automatically generated name
-            filename = f"tmp_code_{code_hash}.{'py' if lang.startswith('python') else lang}"
+            filename = cls._script_name(code, lang)
+        if isolation_mode() == "uid":
+            return cls._execute_isolated(code=code, timeout=timeout, filename=filename, work_dir=work_dir, lang=lang)
         if work_dir is None:
             work_dir = WORKING_DIR
         filepath = os.path.join(work_dir, filename)
@@ -294,108 +334,81 @@ class LocalExecutor(BaseExecutor):
             if filepath is not None:
                 os.remove(filepath)
 
+    @classmethod
+    def _execute_isolated(
+        cls,
+        code: str | None,
+        timeout: int,
+        filename: str,
+        work_dir: str | None,
+        lang: str,
+    ) -> tuple[int, str, str]:
+        """``local_isolation=uid``: run as a pool uid in a private copy of ``work_dir``."""
+        if work_dir is None:
+            raise AssertionError("local isolation needs a work_dir; the shared extensions/ dir is not a workspace")
+        if code is None:
+            with open(os.path.join(work_dir, filename), encoding="utf-8") as fh:
+                code = fh.read()
+        outcome = run_isolated(
+            code=code,
+            filename=filename,
+            work_dir=work_dir,
+            lang=lang,
+            interpreter=cls._interpreter(lang),
+            timeout=timeout,
+        )
+        return cls._format_isolated(outcome, timeout, filename, work_dir)
+
     @staticmethod
-    def _snapshot_files(dir_path: str) -> dict[str, tuple[float, int]]:
-        """Map every non-hidden file under ``dir_path`` to ``(mtime, size)``.
+    def _script_name(code: str, lang: str) -> str:
+        return f"tmp_code_{md5(code.encode()).hexdigest()}.{'py' if lang.startswith('python') else lang}"
 
-        Taken before and after a run so the executor can tell what THIS run
-        produced. Without the diff the working dir is indistinguishable from its
-        contents: it also holds the prefetched uploaded sources and every earlier
-        step's files, so "what did this code write" is otherwise unanswerable.
-        """
-        snapshot: dict[str, tuple[float, int]] = {}
-        for root, dirs, files in os.walk(dir_path):
-            # hidden dirs and __pycache__ are never deliverables or inputs
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
-            for name in files:
-                if name.startswith("."):
-                    continue
-                abs_path = os.path.join(root, name)
-                try:
-                    stat = os.stat(abs_path)
-                except OSError:
-                    # raced away between walk and stat — treat as absent
-                    continue
-                snapshot[os.path.relpath(abs_path, dir_path)] = (stat.st_mtime, stat.st_size)
-        return snapshot
+    @classmethod
+    def _interpreter(cls, lang: str) -> list[str]:
+        if lang.startswith("python"):
+            return [sys.executable, "-s", "-B", "-X", "utf8"]
+        return [cls._cmd(lang)]
 
-    def _relocate_root_files(self, dir_path: str, created: list[str]) -> list[tuple[str, str]]:
-        """Move run-created ROOT-level files into ``output/``; return the moves.
-
-        The working-dir root is not a delivery zone — only ``output/`` is harvested
-        into the result panel — so a model that writes ``report.xlsx`` instead of
-        ``output/report.xlsx`` loses its deliverable silently. Relocating is safe
-        because only files *this run created* are eligible: prefetched upload
-        sources and prior-step files sit in the pre-run snapshot and stay put.
-
-        An existing ``output/<name>`` is overwritten on purpose: re-running the same
-        script must refresh its deliverable, not accumulate ``report (1).xlsx``.
-        """
-        moved: list[tuple[str, str]] = []
-        for rel in created:
-            # anything with a path separator already lives in a zone (output/,
-            # scratch/, or a model-made subdir) — leave it alone
-            if os.sep in rel or "/" in rel:
-                continue
-            src = os.path.join(dir_path, rel)
-            if not os.path.isfile(src):
-                continue
-            target_dir = os.path.join(dir_path, OUTPUT_DIR_NAME)
-            dst = os.path.join(target_dir, rel)
-            try:
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.move(src, dst)
-            except OSError:
-                # best-effort: a file we cannot relocate stays where it is (it just
-                # will not be delivered) — never fail the user's code run over this
-                logger.exception("relocate root deliverable failed: {}", src)
-                continue
-            moved.append((rel, os.path.relpath(dst, dir_path)))
-        return moved
-
-    def run_with_dir(self, code: str, dir_path: str, lang: str) -> (int, str, list):
-        """在指定目录下运行代码，并返回日志和生成的文件列表"""
-        pre_snapshot = self._snapshot_files(dir_path)
-        exitcode, logs, _ = self.execute_code(
-            code,
+    def _execute_in_dir(self, code: str, dir_path: str, lang: str) -> tuple[int, str, str]:
+        entry = self._run_entry
+        if entry is None or os.path.realpath(dir_path) != entry.work_dir or isolation_mode() != "uid":
+            return super()._execute_in_dir(code, dir_path, lang)
+        filename = self._script_name(code, lang)
+        outcome = run_retained(
+            entry,
+            code=code,
+            filename=filename,
             work_dir=dir_path,
             lang=lang,
+            interpreter=self._interpreter(lang),
+            timeout=DEFAULT_TIMEOUT,
         )
-        file_list = []
-        if exitcode != 0:
-            return exitcode, logs, file_list
+        return self._format_isolated(outcome, DEFAULT_TIMEOUT, filename, dir_path)
 
-        post_snapshot = self._snapshot_files(dir_path)
-        created = [rel for rel in post_snapshot if rel not in pre_snapshot]
-        modified = [rel for rel, meta in post_snapshot.items() if rel in pre_snapshot and pre_snapshot[rel] != meta]
-
-        # Root-level new files are in no delivery zone; normalise them into output/
-        # and tell the model where they went (the old path stops resolving).
-        moved = self._relocate_root_files(dir_path, created)
-        relocated_from = {old for old, _ in moved}
-        touched = [rel for rel in created if rel not in relocated_from]
-        touched.extend(new for _, new in moved)
-        touched.extend(modified)
-        logs += self.relocation_advisory(moved)
-
-        # 获取文件: only what this run actually produced. Uploading the whole
-        # working dir every run (the previous behaviour) re-uploaded the prefetched
-        # upload sources and every earlier step's output on each call, so the tool
-        # result grew with the task and told the model nothing about its own write.
-        for rel in touched:
-            file_name = os.path.join(dir_path, rel)
-            if not os.path.isfile(file_name):
-                continue
-            file_ext = os.path.splitext(rel)[-1]
-            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
-        # Mirror the same set into the session workspace so the file tools and the
-        # next turn can see what this run produced (see sync_to_workspace).
-        self.sync_to_workspace(dir_path, touched)
-        # 同步执行结果文件到本地同步目录
-        if self.local_sync_path and os.path.exists(self.local_sync_path):
-            files_info = list(os.scandir(dir_path))
-            self.sync_files_to_local(files_info, dir_path)
-        return exitcode, logs, file_list
+    @classmethod
+    def _format_isolated(
+        cls, outcome: IsolatedOutcome, timeout: int, filename: str, work_dir: str
+    ) -> tuple[int, str, str]:
+        notice = ""
+        if outcome.skipped:
+            notice = f"\n\n[SYSTEM NOTICE] {COPY_IN_SKIPPED_NOTICE}: {', '.join(outcome.skipped)}"
+        if outcome.disk_exceeded or outcome.output_overflow:
+            logger.warning("code interpreter run exceeded the disk or output limit and was killed")
+            return 1, (DISK_LIMIT_MSG if outcome.disk_exceeded else OUTPUT_LIMIT_MSG) + notice, ""
+        if outcome.timed_out:
+            logger.warning("code interpreter run exceeded {}s and was killed", timeout)
+            message = TIMEOUT_MSG.format(timeout=timeout)
+            partial = f"{outcome.stdout}{outcome.stderr}"
+            if not partial.strip():
+                return 1, message + notice, ""
+            budget = MAX_FAILURE_LOG_CHARS - len(message) - len(PARTIAL_OUTPUT_HEADER) - len(LOG_TRUNCATED_NOTICE)
+            return 1, f"{message}{PARTIAL_OUTPUT_HEADER}{cls._tail(partial, budget)}{notice}", ""
+        if outcome.returncode:
+            abs_path = str(Path(os.path.join(work_dir, filename)).absolute())
+            logs = outcome.stderr.replace(abs_path, "").replace(filename, "")
+        else:
+            logs = outcome.stdout
+        return outcome.returncode, logs + notice, ""
 
     @staticmethod
     def _tail(logs: str, limit: int = MAX_FAILURE_LOG_CHARS) -> str:
@@ -413,18 +426,55 @@ class LocalExecutor(BaseExecutor):
         if escape_notice:
             logger.warning("code interpreter: rejected a run that reaches outside the working directory")
             return {"exitcode": 1, "log": escape_notice, "file_list": []}
-        code_blocks = self.extract_code(code)
+        entry = self._run_entry
+        if entry is not None and not entry.acquire_inner():
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        try:
+            return self._run_blocks(original_code)
+        except LocalIsolationUnavailable:
+            # The reason is already in the server log; the model only needs to stop retrying.
+            return {"exitcode": 1, "log": ISOLATION_UNAVAILABLE_MSG, "file_list": []}
+        except RunClosed:
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        finally:
+            if entry is not None:
+                entry.inner.release()
+
+    async def arun(self, code: str) -> Any:
+        """Async entry of the code tool.
+
+        Calls on one retained workspace queue on an asyncio lock in the order the
+        model issued them, so waiting does not hold a thread; ``run`` then takes
+        the inner lock that guarantees one run at a time even after a cancel.
+        """
+        entry = self._run_entry
+        if entry is None:
+            return await asyncio.to_thread(self.run, code)
+        if entry.closing:
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        async with entry.queue:
+            return await asyncio.to_thread(self.run, code)
+
+    def _run_blocks(self, original_code: str) -> dict:
+        code_blocks = self.extract_code(original_code)
         logs_all = ""
         all_file_list = []
+        stage_notices = ""
         for i, code_block in enumerate(code_blocks):
             lang, code = code_block
             lang = self.infer_lang(code)
             code = self.insert_set_font_code(code)
+            # Knowledge images are written BEFORE run_with_dir takes its pre-snapshot, so
+            # they count as inputs, never as deliverables to harvest.
             if self.local_sync_path and os.path.exists(self.local_sync_path):
+                notice = self.stage_kb_images(self.local_sync_path)
                 exit_code, logs, file_list = self.run_with_dir(code, dir_path=self.local_sync_path, lang=lang)
             else:
                 with tempfile.TemporaryDirectory() as temp_dir:
+                    notice = self.stage_kb_images(temp_dir)
                     exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
+            if notice and notice not in stage_notices:
+                stage_notices += notice
             logs_all += "\n" + logs
             if exit_code != 0:
                 # The traceback (or the timeout notice) lives in THIS block's log, so it
@@ -438,7 +488,13 @@ class LocalExecutor(BaseExecutor):
                 # failure the read-side notice exists to explain would otherwise
                 # never see it. Appended AFTER ``_tail`` (which keeps the tail) so
                 # the truncation cannot eat it.
-                return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
+                return {
+                    "exitcode": exit_code,
+                    "log": self._tail(logs_all)
+                    + self.absolute_path_advisory(original_code)
+                    + self.kb_stage_failure_advisory(original_code)
+                    + stage_notices,
+                }
             all_file_list += file_list
 
         # Clip BEFORE appending the advisory, same as the failure path above: the
@@ -453,27 +509,8 @@ class LocalExecutor(BaseExecutor):
         advisory = self.absolute_path_advisory(original_code)
         if advisory:
             logs_all += advisory
+        logs_all += stage_notices
         return {"exitcode": 0, "log": logs_all, "file_list": all_file_list}
-
-    def sync_files_to_local(self, files_info: list[DirEntry], root_path: str):
-        if not files_info:
-            return
-        for file in files_info:
-            # ignore hidden files
-            if file.name.startswith("."):
-                continue
-            if file.is_file():
-                self.download_file(file, root_path)
-            else:
-                new_files_info = os.scandir(file.path)
-                self.sync_files_to_local(list(new_files_info), root_path)
-
-    def download_file(self, file_info: DirEntry, root_path: str):
-        relative_path = file_info.path.replace(root_path, "").lstrip(os.sep)
-        local_path = os.path.join(self.local_sync_path, relative_path)
-        local_dir = os.path.dirname(local_path)
-        os.makedirs(local_dir, exist_ok=True)
-        shutil.move(file_info.path, local_path)
 
 
 if __name__ == "__main__":

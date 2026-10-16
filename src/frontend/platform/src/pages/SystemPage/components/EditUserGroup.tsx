@@ -63,6 +63,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
         setMemberPick(
             pickRows.map((r) => ({
                 label: r.user_name,
+                external_id: r.external_id,
                 value: uid(r.user_id),
                 department_path: (r.department_path || "").trim() || undefined,
             })),

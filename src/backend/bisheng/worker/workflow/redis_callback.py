@@ -21,6 +21,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.errcode.flow import (
+    WorkFlowInvalidUserInputError,
     WorkFlowNodeRunMaxTimesError,
     WorkFlowNodeUpdateError,
     WorkFlowTaskBusyError,
@@ -28,7 +29,6 @@ from bisheng.common.errcode.flow import (
     WorkFlowVersionUpdateError,
     WorkFlowWaitUserTimeoutError,
 )
-from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -339,7 +339,7 @@ class RedisCallback(BaseCallback):
         self, data: dict, message_id: int = None, message_content: str = None, verify_input: bool = False
     ):
         if self.chat_id and message_id:
-            message_db = ChatMessageDao.get_message_by_id(message_id)
+            message_db = self._own_message(ChatMessageDao.get_message_by_id(message_id), verify_input)
             self.update_old_message(data, message_db, message_content, verify_input)
         # Notify Asynchronous Task User Input
         self.redis_client.set(self.workflow_input_key, data, expiration=self.workflow_expire_time)
@@ -354,32 +354,54 @@ class RedisCallback(BaseCallback):
         files: list | None = None,
     ):
         if self.chat_id and message_id:
-            message_db = await ChatMessageDao.aget_message_by_id(message_id)
+            message_db = self._own_message(await ChatMessageDao.aget_message_by_id(message_id), verify_input)
             await self.async_update_old_message(data, message_db, message_content, verify_input, files)
         # Notify Asynchronous Task User Input
         await self.redis_client.aset(self.workflow_input_key, data, expiration=self.workflow_expire_time)
         return
 
+    def _own_message(self, message_db: ChatMessage | None, verify_input: bool) -> ChatMessage | None:
+        """When verifying caller input, a message of another session counts as not found."""
+        if verify_input and message_db is not None and message_db.chat_id != self.chat_id:
+            return None
+        return message_db
+
     @staticmethod
-    def _verify_input_schema(input_schema_message: dict, user_input: dict):
-        """Verify that the user input matches the input schema"""
+    def _verify_node_input(input_schema_message: dict, user_input: dict) -> dict:
+        """Return the input of the waiting node; the caller input must be an object per node."""
         node_id = input_schema_message["node_id"]
-        if node_id not in user_input:
-            raise ServerError(msg="node_id not found in user input")
-        user_input = user_input[node_id]
+        if not isinstance(user_input, dict) or node_id not in user_input:
+            raise WorkFlowInvalidUserInputError(msg=f"input does not contain the waiting node {node_id}")
+        node_input = user_input[node_id]
+        if not isinstance(node_input, dict):
+            raise WorkFlowInvalidUserInputError(msg=f"input of node {node_id} must be an object")
+        return node_input
+
+    @classmethod
+    def _verify_input_schema(cls, input_schema_message: dict, user_input: dict):
+        """Verify that the user input matches the input schema"""
+        user_input = cls._verify_node_input(input_schema_message, user_input)
         input_schema = input_schema_message["input_schema"]
         if input_schema["tab"] == "form_input":
             user_input_keys = dict.fromkeys(user_input.keys())
             for key_info in input_schema["value"]:
                 key = key_info["key"]
                 if key not in user_input:
-                    raise ServerError(msg=f"key {key} not found in user input")
+                    raise WorkFlowInvalidUserInputError(msg=f"key {key} not found in user input")
                 user_input_keys.pop(key)
             if user_input_keys:
-                raise ServerError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
+                raise WorkFlowInvalidUserInputError(msg=f"extra key {list(user_input_keys.keys())} found in user input")
         else:
             if input_schema["key"] not in user_input:
-                raise ServerError(msg=f"key {input_schema['key']} not found in user input")
+                raise WorkFlowInvalidUserInputError(msg=f"key {input_schema['key']} not found in user input")
+
+    _INPUT_CATEGORIES = frozenset(
+        {
+            WorkflowEventType.UserInput.value,
+            WorkflowEventType.OutputWithInput.value,
+            WorkflowEventType.OutputWithChoose.value,
+        }
+    )
 
     @classmethod
     def _update_old_message(
@@ -397,10 +419,17 @@ class RedisCallback(BaseCallback):
         """
         if not message_db:
             if verify_input:
-                raise ServerError(msg="message info not found by message id")
+                raise WorkFlowInvalidUserInputError(msg="message_id does not match a message in this session")
             return None
         # Update the input and selection of the user in the output to be entered message
         old_message = json.loads(message_db.message)
+        if verify_input:
+            if message_db.category not in cls._INPUT_CATEGORIES:
+                raise WorkFlowInvalidUserInputError(msg="message_id does not refer to a message that waits for input")
+            if message_db.category != WorkflowEventType.UserInput.value:
+                node_input = cls._verify_node_input(old_message, user_input)
+                if old_message["key"] not in node_input:
+                    raise WorkFlowInvalidUserInputError(msg=f"key {old_message['key']} not found in user input")
         if message_db.category == WorkflowEventType.OutputWithInput.value:
             old_message["hisValue"] = user_input[old_message["node_id"]][old_message["key"]]
         elif message_db.category == WorkflowEventType.OutputWithChoose.value:

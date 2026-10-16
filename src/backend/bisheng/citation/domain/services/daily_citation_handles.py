@@ -1,4 +1,4 @@
-"""Short citation handles for the workbench daily chat (F072).
+"""Short citation handles for the workbench daily chat (F075).
 
 The daily chat reuses the F069 contract: retrieval hits carry a session handle
 (``S3``), the model writes ``[S3]`` and the backend turns it back into the

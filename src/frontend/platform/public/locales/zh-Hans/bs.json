@@ -424,7 +424,7 @@
     "userGroup": "用户组",
     "role": "角色",
     "searchUserGroups": "搜索用户组",
-    "searchUser": "搜索用户",
+    "searchUser": "搜索用户名称或 ID",
     "searchRoles": "搜索角色",
     "reset": "重置",
     "confirm": "确认",
@@ -601,7 +601,7 @@
     "modelNameTooltip": "模型在该服务提供商中的具体名称",
     "modelNameDuplicate": "模型名称已存在",
     "modelNameValidation": "模型名称不可为空且最多100个字符",
-    "modelStatusChecking": "模型状态检测中",
+    "modelStatusChecking": "检测中",
     "notBeEmpty": "不能为空",
     "pasteAdvancedParamsHere": "请在下方的文本框中粘贴或输入你的高级参数配置",
     "rerank": "重排(Rerank)",
@@ -618,7 +618,7 @@
     "voiceType": "语音类型",
     "voiceTypeRequired": "语音类型为必填项",
     "voiceTypeTooltip": "选择语音合成的声音类型",
-    "webSearch": "网络搜索",
+    "webSearch": "模型内置联网搜索",
     "visitOfficialWebsiteToViewAvailableModels": "前往官网查看可用模型",
     "modelManagement": "模型管理",
     "modelFineTune": "模型微调",
@@ -641,7 +641,41 @@
     "unknown": "未知",
     "empty": "暂无数据",
     "gpuResourceUsageTitle": "GPU资源使用情况",
-    "jsonFormatError": "JSON格式有误"
+    "jsonFormatError": "JSON格式有误",
+    "webSearchTipQwen": "开启后，由阿里云百炼在模型内部判断是否需要检索网页，并用检索结果作答；回答里不会显示来源链接。仅部分模型支持，检索按次单独计费。它与工作台的「联网搜索」工具是两套独立的能力。高级参数里填写的 enable_search 不生效，以此开关为准。",
+    "webSearchTipMoonshot": "开启后，Kimi 会在需要时调用月之暗面自带的网页检索工具，并用检索结果作答；回答里不会显示来源链接。检索按次单独计费。它与工作台的「联网搜索」工具是两套独立的能力。",
+    "webSearchTipTencent": "开启后，腾讯混元会在需要时联网检索，并用检索结果作答。它与工作台的「联网搜索」工具是两套独立的能力。高级参数里填写的 enable_enhancement 不生效，以此开关为准。",
+    "untitledModel": "未填写模型名称",
+    "deleteModel": "删除模型",
+    "maxOutputTokens": "最大输出 token 数",
+    "contextLength": "上下文长度",
+    "maxTokensTip": "对应接口参数 {{param}}",
+    "maxTokensPlaceholder": "留空则使用模型默认值",
+    "advancedParams": "高级参数",
+    "advancedParamsCount": "已自定义 {{count}} 项",
+    "advancedParamsNone": "未配置",
+    "edit": "编辑",
+    "insertParamsExample": "填入参数示例",
+    "providerNames": {
+      "qwen": "阿里云百炼",
+      "silicon": "硅基流动",
+      "volcengine": "火山引擎",
+      "zhipu": "智谱 AI",
+      "spark": "讯飞星火",
+      "tencent": "腾讯云",
+      "moonshot": "月之暗面",
+      "qianfan": "百度千帆"
+    },
+    "sectionConnection": "连接信息",
+    "sectionUsage": "使用设置",
+    "providerType": "服务提供商类型",
+    "providerTypeTip": "决定调用接口的方式和下面需要填写的连接信息，保存后不能修改。",
+    "dailyCallLimitTip": "限制这个服务提供商下所有模型每天合计的调用次数。超出后当天的调用会直接报错，次日 0 点重新计数。",
+    "dailyLimitPrefix": "每天最多",
+    "dailyLimitSuffix": "次",
+    "shareToChildrenTip": "开启后，子租户可以使用这个服务提供商下的模型，但不能查看或修改它的配置。",
+    "getApiKey": "获取{{provider}} API Key",
+    "formatExample": "格式示例：{{example}}"
   },
   "finetune": {
     "all": "全部",
@@ -977,6 +1011,7 @@
     "assistantConfiguration": "助手配置",
     "assistantPortrait": "助手画像",
     "portraitOptimization": "助手画像优化",
+    "portraitGenerating": "正在根据你填写的角色和任务生成助手画像，完成后可编辑",
     "automaticOptimization": "自动优化",
     "searchApp": "搜索您需要的应用",
     "establishAssistant": "创建助手",
@@ -2131,7 +2166,7 @@
     "tabException": "异常流程列表",
     "tabFlow": "流程管理",
     "searchRole": "搜索身份 / 角色名…",
-    "searchUser": "搜索用户名…",
+    "searchUser": "搜索用户名称或 ID",
     "menuNeedsApproval": "菜单需审批开通",
     "menuApprovalDesc": "你的角色当前未包含该菜单权限，点击下方按钮发起申请，审批通过后即可访问。",
     "menuApply": "申请菜单权限",
@@ -2173,6 +2208,7 @@
       "displayName": "展示名称",
       "description": "描述",
       "status": "状态",
+      "defaultChecked": "默认勾选",
       "updateTime": "修改时间",
       "actions": "操作"
     },
@@ -2184,6 +2220,9 @@
     "deleteConfirm": "删除后终端用户将无法再选用该技能，且不可恢复。确认删除「{{name}}」？",
     "enabledToast": "已启用，终端用户输入区即时可见",
     "disabledToast": "已停用，已从终端用户输入区移除",
+    "defaultCheckedTip": "开启后，用户每次新建对话时，这个技能已经勾选好，用户可以自己取消。技能停用期间不生效。",
+    "defaultCheckedOnToast": "已设为默认勾选，新建对话时生效",
+    "defaultCheckedOffToast": "已取消默认勾选",
     "deleted": "已删除",
     "saved": "保存成功",
     "count": "共 {{count}} 条",
@@ -2348,6 +2387,9 @@
       "revealTitle": "密钥已生成",
       "once": "这是唯一一次显示完整密钥，请立即复制并安全保存。",
       "saved": "我已安全保存此密钥",
+      "verifyTitle": "验证密钥是否可用",
+      "verifyHint": "在终端运行下面的命令，返回服务账号名称即说明密钥可以使用。",
+      "verifyDelegateHint": "委托密钥必须指明代表哪位用户，命令里的用户 ID 可换成委托范围内的其他用户。",
       "mask": "密钥",
       "permissions": "权限位",
       "noPermissions": "未授予权限",
@@ -2364,8 +2406,8 @@
       "revokeAllConfirm": "全部吊销后，该服务账号当前所有有效密钥都会立即失效。确定继续吗？"
     },
     "scopeGroups": {
-      "workflow": "工作流",
-      "assistant": "助手与会话",
+      "app": "应用",
+      "workstation": "工作台",
       "knowledge": "知识库",
       "delegation": "身份委托",
       "local_dev_toolkit": "本地开发工具包"
@@ -2373,7 +2415,7 @@
     "scopes": {
       "workflow_invoke": {
         "label": "调用工作流",
-        "desc": "运行、停止工作流，并建立工作流会话连接。"
+        "desc": "运行和停止工作流。"
       },
       "workflow_read": {
         "label": "读取工作流",
@@ -2393,11 +2435,11 @@
       },
       "knowledge_read": {
         "label": "读取知识库",
-        "desc": "列出知识库与文件、检索内容、读取问答与溯源。"
+        "desc": "列出知识库与文件、检索内容、读取问答、元数据与溯源。"
       },
       "knowledge_write": {
         "label": "写入知识库",
-        "desc": "创建、修改或删除知识库、文件、分段、问答与元数据。"
+        "desc": "创建、修改或删除知识库、文件、分段、问答与元数据。包含读取知识库的全部权限。"
       },
       "delegate": {
         "label": "代表用户调用",
@@ -2942,5 +2984,36 @@
   "request": {
     "session_expired": "登录过期",
     "sign_in_again": "登录过期，请重新登录"
+  },
+  "subjectSearch": {
+    "userPlaceholder": "搜索用户名称或 ID",
+    "departmentPlaceholder": "搜索部门名称或 ID",
+    "groupPlaceholder": "搜索用户组名称或 ID",
+    "tooLong": "搜索内容超过长度限制，请缩短后重试",
+    "failed": "搜索失败，请重试",
+    "retry": "重试",
+    "emptyUsers": "未找到匹配的用户，请核对名称或 ID",
+    "emptySubjects": "未找到可授权对象，请核对名称或 ID",
+    "userId": "人员 ID",
+    "departmentId": "部门 ID",
+    "user_groupId": "用户组 ID",
+    "loadMore": "加载更多",
+    "selectedCount": "已选 {{count}} 人",
+    "routeExample": "如：管理员直接通过",
+    "flowExample": "如：菜单权限审批流程 A",
+    "nodeExample": "如：申请人部门管理员审批",
+    "flowNumber": "流程 #{{id}}",
+    "routeNumber": "分支 #{{id}}",
+    "nextNodeHint": "当前节点通过后，才会生成下一节点任务",
+    "collapseProgress": "收起审批进度",
+    "showProgress": "查看审批进度",
+    "noProgress": "暂无进度数据"
+  },
+  "department": {
+    "searchUsersPlaceholder": "搜索用户名称或 ID",
+    "searchMember": "搜索用户名称或 ID"
+  },
+  "tenant": {
+    "searchUser": "搜索用户名称或 ID"
   }
 }

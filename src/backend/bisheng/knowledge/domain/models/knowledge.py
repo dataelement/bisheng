@@ -173,7 +173,14 @@ class KnowledgeCreate(BaseModel):
         description="Knowledge Base Type, value from KnowledgeTypeEnum",
     )
     description: str | None = Field(default=None, index=True)
-    model: str | None = Field(default=None, index=False)
+    model: str | None = Field(
+        default=None,
+        index=False,
+        description=(
+            "Embedding model ID for types 0/1; ignored for type 3. POST /api/v2/filelib/ accepts "
+            "an omitted value and then uses the default knowledge-base embedding model of the tenant."
+        ),
+    )
     collection_name: str | None = Field(default=None, index=False)
     index_name: str | None = Field(default=None, index=False)
     state: int | None = Field(

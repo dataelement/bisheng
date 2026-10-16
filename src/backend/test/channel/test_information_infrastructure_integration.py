@@ -2,31 +2,24 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.channel.domain.models.information_article_sync_state import InformationArticleSyncState
+from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
 from bisheng.channel.domain.repositories.implementations.information_article_sync_state_repository_impl import (
     InformationArticleSyncStateRepositoryImpl,
 )
 from bisheng.core.config.settings import CeleryConf, IntelligenceCenterConf
 from bisheng.core.database import tenant_filter
-from bisheng.core.database.model_discovery import discover_sqlmodel_module_names
 from bisheng.tenant.domain.services import tenant_mount_service
 
 
-def test_public_state_table_has_no_tenant_or_api_key_columns():
-    columns = set(InformationArticleSyncState.__table__.columns.keys())
+def test_channel_info_source_contains_public_sync_state_columns():
+    columns = set(ChannelInfoSource.__table__.columns.keys())
 
-    assert columns == {
-        "source_id",
+    assert {
         "article_cursor_create_time",
         "processed_remote_sync_at",
         "processed_article_list_updated_at",
-        "create_time",
-        "update_time",
-    }
-
-
-def test_public_state_model_is_in_schema_bootstrap_discovery():
-    assert "bisheng.channel.domain.models.information_article_sync_state" in discover_sqlmodel_module_names()
+    }.issubset(columns)
+    assert "source_id" not in columns
 
 
 def test_channel_info_source_is_public_and_not_unmount_migrated():
@@ -44,7 +37,7 @@ def test_information_defaults_and_custom_schedule_override_are_preserved():
     }
     celery = CeleryConf(beat_schedule=custom)
 
-    assert runtime.information_initial_article_limit == 20
+    assert runtime.information_initial_article_limit == 36
     assert runtime.information_subscription_auto_unsubscribe_enabled is True
     assert runtime.information_knowledge_delivery_enabled is True
     assert celery.beat_schedule["dispatch_information_subscription_reconcile"]["task"] == "custom.subscription.task"
@@ -80,14 +73,17 @@ async def test_state_repository_boundary_and_compare_and_swap(tmp_path):
     database_path = tmp_path / "information-state.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
     async with engine.begin() as connection:
-        await connection.run_sync(InformationArticleSyncState.__table__.create)
+        await connection.run_sync(ChannelInfoSource.__table__.create)
     async with AsyncSession(engine, expire_on_commit=False) as session:
+        session.add(ChannelInfoSource(id="source-A", source_name="A", source_type="website"))
+        await session.commit()
         repository = InformationArticleSyncStateRepositoryImpl(session)
-        initial = await repository.create_initial_boundary_if_absent("source-A", 100)
-        assert initial.article_cursor_create_time == 100
+        initial = await repository.find_by_source_id("source-A")
+        assert initial is not None
+        assert initial.article_cursor_create_time is None
         assert await repository.commit_if_unchanged("source-A", initial, 200, 10, 20) is True
 
-        stale = InformationArticleSyncState(source_id="source-A", article_cursor_create_time=100)
+        stale = ChannelInfoSource(id="source-A", source_name="A", source_type="website")
         assert await repository.commit_if_unchanged("source-A", stale, 300, 30, 40) is False
         current = await repository.find_by_source_id("source-A")
         assert current.article_cursor_create_time == 200
@@ -99,17 +95,26 @@ async def test_state_repository_cas_refreshes_identity_map_before_compare(tmp_pa
     database_path = tmp_path / "information-state-cas.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{database_path}")
     async with engine.begin() as connection:
-        await connection.run_sync(InformationArticleSyncState.__table__.create)
+        await connection.run_sync(ChannelInfoSource.__table__.create)
 
     async with AsyncSession(engine, expire_on_commit=False) as first_session:
-        first_repository = InformationArticleSyncStateRepositoryImpl(first_session)
-        stale = await first_repository.create_initial_boundary_if_absent("source-A", 100)
+        first_session.add(
+            ChannelInfoSource(
+                id="source-A",
+                source_name="A",
+                source_type="website",
+                article_cursor_create_time=100,
+            )
+        )
         await first_session.commit()
+        first_repository = InformationArticleSyncStateRepositoryImpl(first_session)
+        stale = await first_repository.find_by_source_id("source-A")
+        assert stale is not None
 
         async with AsyncSession(engine, expire_on_commit=False) as second_session:
             await second_session.exec(
-                update(InformationArticleSyncState)
-                .where(InformationArticleSyncState.source_id == "source-A")
+                update(ChannelInfoSource)
+                .where(ChannelInfoSource.id == "source-A")
                 .values(article_cursor_create_time=200, processed_remote_sync_at=10)
             )
             await second_session.commit()
@@ -124,7 +129,7 @@ async def test_state_repository_cas_refreshes_identity_map_before_compare(tmp_pa
         assert committed is False
 
     async with AsyncSession(engine, expire_on_commit=False) as verify_session:
-        current = await verify_session.get(InformationArticleSyncState, "source-A")
+        current = await verify_session.get(ChannelInfoSource, "source-A")
         assert current.article_cursor_create_time == 200
         assert current.processed_remote_sync_at == 10
     await engine.dispose()

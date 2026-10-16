@@ -25,7 +25,7 @@ import { cloneDeep, isEqual } from "lodash-es";
 import { ChevronLeft, EllipsisVertical, PencilLineIcon, Play, Shield, ShieldCheck } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { unstable_useBlocker as useBlocker, useLocation, useNavigate } from "react-router-dom";
+import { useBlocker, useLocation, useNavigate } from "react-router-dom";
 import CreateApp from "../CreateApp";
 import { ChatTest } from "./FlowChat/ChatTest";
 import useFlowStore from "./flowStore";
@@ -795,18 +795,6 @@ const useVersion = (flow) => {
 const useBeforeUnload = (flow, nodes, preFlow, onPreFlowChange) => {
     const { t } = useTranslation()
     const navigate = useNavigate()
-    // 离开提示保存
-    useEffect(() => {
-        const fun = (e) => {
-            // 系统 重新加载 提示
-            const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
-            (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
-            return confirmationMessage;
-        }
-        window.addEventListener('beforeunload', fun);
-        return () => { window.removeEventListener('beforeunload', fun) }
-    }, [])
-
     // 检查流程变化（忽略节点位置，只对比数据和边）
     const hasChanged = useMemo(() => {
         // 无新数据时视为未修改
@@ -828,6 +816,19 @@ const useBeforeUnload = (flow, nodes, preFlow, onPreFlowChange) => {
             return true; // 解析失败视为有修改
         }
     }, [preFlow, nodes, flow]);
+
+    // Ask before unload only with unsaved changes: the browser dialog otherwise
+    // shows on every reload or back step that leaves the page.
+    useEffect(() => {
+        if (!hasChanged) return
+        const fun = (e) => {
+            const confirmationMessage = `${t('flow.unsavedChangesConfirmation')}`;
+            (e || window.event).returnValue = confirmationMessage; // Compatible with different browsers
+            return confirmationMessage;
+        }
+        window.addEventListener('beforeunload', fun);
+        return () => { window.removeEventListener('beforeunload', fun) }
+    }, [hasChanged])
 
     /**
      * 处理页面返回逻辑：

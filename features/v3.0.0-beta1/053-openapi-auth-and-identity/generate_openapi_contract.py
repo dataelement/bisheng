@@ -62,12 +62,6 @@ def generate() -> dict:
         },
         "x-websocket-endpoints": [
             {
-                "url": "/api/v2/workflow/chat/{workflow_id}",
-                "authorization": "Bearer API Key",
-                "headers": ["Authorization", "X-End-User", "X-On-Behalf-Of"],
-                "query": ["chat_id"],
-            },
-            {
                 "url": "/api/v2/assistant/chat/{assistant_id}",
                 "authorization": "Bearer API Key",
                 "headers": ["Authorization", "X-End-User", "X-On-Behalf-Of"],

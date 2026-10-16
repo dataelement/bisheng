@@ -103,6 +103,20 @@ class OpenApiRemovedIdentityInputError(OpenApiAuthError):
     http_status = 400
 
 
+class ServiceAccountNameTakenError(OpenApiAuthError):
+    """The name is already used in this tenant, by a live or a deleted account.
+
+    Deleted accounts keep their row (audit references it) and the
+    ``uk_service_account_tenant_name`` constraint still counts them, so a name
+    is never reused. Checked before the write so the caller gets this instead
+    of the database's integrity error (which surfaced as a 500).
+    """
+
+    Code = 26070
+    Msg = "A service account with this name already exists in this tenant (deleted accounts included)"
+    http_status = 409
+
+
 class ServiceAccountNotFoundError(OpenApiAuthError):
     Code = 26020
     Msg = "Service account not found"

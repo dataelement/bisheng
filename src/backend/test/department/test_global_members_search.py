@@ -104,7 +104,7 @@ def _session_patch(engine):
             yield session
 
     return patch(
-        "bisheng.department.domain.services.department_service.get_async_db_session",
+        "bisheng.department.domain.repositories.management_search_repository.get_async_db_session",
         _factory,
     )
 
@@ -248,3 +248,59 @@ class TestGlobalMembersSearch:
         with _session_patch(engine), _visible_tree(10):
             res = await DepartmentService.aget_global_members_search("   ", 1, 20, _login)
         assert res == {"data": [], "total": 0}
+
+
+async def test_external_id_prefix_exact_priority_and_root_scope(engine):
+    await _seed_dept(engine, did=10, dept_id="BS@vis", name="Visible", path="/10/")
+    await _seed_dept(engine, did=20, dept_id="BS@other", name="Other", path="/20/")
+    await _seed_user(engine, uid=1, name="aaa", dept_int_id=10)
+    await _seed_user(engine, uid=2, name="zzz", dept_int_id=10, deleted=1)
+    await _seed_user(engine, uid=3, name="outside", dept_int_id=20)
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE user SET external_id='jia0100-more' WHERE user_id=1"))
+        await conn.execute(text("UPDATE user SET external_id='jia0100' WHERE user_id IN (2,3)"))
+    requested_root = SimpleNamespace(id=10, status="active", path="/10/")
+    with _session_patch(engine), patch.object(DepartmentDao, "aget_by_id", new=AsyncMock(return_value=requested_root)):
+        result = await DepartmentService.aget_global_members_search("jia0100", 1, 1, _login, root_dept_id=10)
+        empty_page = await DepartmentService.aget_global_members_search("jia0100", 9, 1, _login, root_dept_id=10)
+        infix = await DepartmentService.aget_global_members_search("0100", 1, 50, _login, root_dept_id=10)
+        uppercase = await DepartmentService.aget_global_members_search("JIA", 1, 50, _login, root_dept_id=10)
+    assert result["total"] == 2
+    assert result["data"][0]["user_id"] == 2
+    assert result["data"][0]["enabled"] is False
+    assert empty_page == {"data": [], "total": 2}
+    assert infix == uppercase == {"data": [], "total": 0}
+
+
+async def test_external_id_wildcards_are_literal(engine):
+    await _seed_dept(engine, did=10, dept_id="BS@d", name="Dept", path="/10/")
+    await _seed_user(engine, uid=1, name="one", dept_int_id=10)
+    await _seed_user(engine, uid=2, name="two", dept_int_id=10)
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE user SET external_id='jia_0%' WHERE user_id=1"))
+        await conn.execute(text("UPDATE user SET external_id='jiaX0suffix' WHERE user_id=2"))
+    with _session_patch(engine):
+        result = await DepartmentService.aget_global_members_search("jia_0%", 1, 20, _login)
+    assert result["total"] == 1
+    assert result["data"][0]["user_id"] == 1
+
+
+async def test_department_search_uses_external_id_not_department_code(engine):
+    from bisheng.department.domain.repositories.management_search_repository import ManagementSearchRepository
+
+    await _seed_dept(engine, did=10, dept_id="jia0100", name="Name unrelated", path="/10/")
+    await _seed_dept(engine, did=11, dept_id="BS@target", name="zzz", path="/10/11/")
+    await _seed_dept(engine, did=12, dept_id="BS@prefix", name="aaa", path="/10/12/")
+    await _seed_dept(engine, did=20, dept_id="BS@outside", name="outside", path="/20/")
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE department SET source='wecom' WHERE id=20"))
+        await conn.execute(text("UPDATE department SET external_id='jia0100' WHERE id IN (11,20)"))
+        await conn.execute(text("UPDATE department SET external_id='jia0100-more' WHERE id=12"))
+    with _session_patch(engine):
+        matches = await ManagementSearchRepository.department_matches("jia0100", ["/10/"], limit=1)
+        none = await ManagementSearchRepository.department_matches("0100", ["/10/"])
+        empty_scope = await ManagementSearchRepository.department_matches("jia", [])
+        name_contains = await ManagementSearchRepository.department_matches("unrelated", ["/10/"])
+    assert [row.id for row in matches] == [11]
+    assert none == empty_scope == []
+    assert [row.id for row in name_contains] == [10]

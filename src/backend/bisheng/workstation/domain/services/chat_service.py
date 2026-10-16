@@ -61,6 +61,7 @@ from bisheng.common.image_view import (
     annotate,
     missing_viewed_markdown,
 )
+from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -81,6 +82,7 @@ from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
+from bisheng.workstation.domain.services.kb_image_stage import KbImageStage
 
 from .chat_helpers import (
     # insert a placeholder entry in the sidebar conversation list
@@ -259,7 +261,9 @@ class DailyChatCitationToolWrapper(BaseTool):
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
     kb_name_by_id: dict[str, str] = PydanticField(default_factory=dict, exclude=True)
     image_registry: Any = PydanticField(default=None, exclude=True)
-    # F072: session handle table mirror; results show [Sn] handles, not registry keys
+    # Request-scoped stage that exposes retrieved knowledge images to the code interpreter
+    kb_image_stage: Any = PydanticField(default=None, exclude=True)
+    # F075: session handle table mirror; results show [Sn] handles, not registry keys
     citation_scope: Any = PydanticField(default=None, exclude=True)
 
     @classmethod
@@ -269,6 +273,7 @@ class DailyChatCitationToolWrapper(BaseTool):
         citation_collector: CitationRegistryCollector,
         image_registry: ImageRegistry | None = None,
         citation_scope: DailyCitationScope | None = None,
+        kb_image_stage: KbImageStage | None = None,
     ) -> BaseTool:
         return cls(
             name=tool.name,
@@ -278,6 +283,7 @@ class DailyChatCitationToolWrapper(BaseTool):
             citation_collector=citation_collector,
             image_registry=image_registry,
             citation_scope=citation_scope,
+            kb_image_stage=kb_image_stage,
         )
 
     def _is_web_search_tool(self) -> bool:
@@ -341,7 +347,7 @@ class DailyChatCitationToolWrapper(BaseTool):
         return chunks
 
     def _dump_knowledge_chunks(self, chunks: list[str]) -> str:
-        results = [_annotate_retrieved_chunk(chunk, self.image_registry) for chunk in chunks]
+        results = [_annotate_retrieved_chunk(chunk, self.image_registry, self.kb_image_stage) for chunk in chunks]
         return json.dumps(results, ensure_ascii=False)
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
@@ -374,10 +380,38 @@ class DailyChatCitationToolWrapper(BaseTool):
         return await self._aformat_knowledge_results(retrieval_result)
 
 
-def _annotate_retrieved_chunk(chunk: str, image_registry: ImageRegistry | None) -> str:
+CODE_INTERPRETER_TOOL_KEY = "bisheng_code_interpreter"
+
+
+def _annotate_retrieved_chunk(
+    chunk: str,
+    image_registry: ImageRegistry | None,
+    kb_image_stage: KbImageStage | None = None,
+) -> str:
+    # The stage serves the code interpreter and image_registry serves view_image.
+    # They are independent, so the stage must run before the image_registry early return.
+    if kb_image_stage is not None:
+        chunk = kb_image_stage.annotate(chunk)
     if image_registry is None:
         return chunk
     return annotate(chunk, image_registry)
+
+
+def _attach_kb_image_stage(tool: BaseTool, stage: KbImageStage) -> None:
+    """Give a code-interpreter tool access to this request's retrieved knowledge images."""
+    inner = getattr(tool, "tool_instance", tool)
+    executor = getattr(inner, "executor", None)
+    if executor is None or not hasattr(executor, "attach_stage"):
+        return
+    executor.attach_stage(stage)
+    if not getattr(executor, "supports_kb_stage", False):
+        return
+    # The description the model sees is a copy taken at construction; refresh it so it
+    # carries the knowledge-image usage hint.
+    description = executor.description
+    inner.description = description
+    if inner is not tool:
+        tool.description = description
 
 
 def _wrap_daily_chat_citation_tool(
@@ -385,10 +419,15 @@ def _wrap_daily_chat_citation_tool(
     citation_collector: CitationRegistryCollector,
     image_registry: ImageRegistry | None = None,
     citation_scope: DailyCitationScope | None = None,
+    kb_image_stage: KbImageStage | None = None,
 ) -> BaseTool:
     if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
         return DailyChatCitationToolWrapper.wrap(
-            tool, citation_collector, image_registry=image_registry, citation_scope=citation_scope
+            tool,
+            citation_collector,
+            image_registry=image_registry,
+            citation_scope=citation_scope,
+            kb_image_stage=kb_image_stage,
         )
     return tool
 
@@ -709,6 +748,7 @@ async def _build_knowledge_search_tool(
     citation_collector: CitationRegistryCollector,
     image_registry: ImageRegistry | None = None,
     citation_scope: DailyCitationScope | None = None,
+    kb_image_stage: KbImageStage | None = None,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -1010,9 +1050,9 @@ async def _build_knowledge_search_tool(
         citation_items = collect_rag_citation_registry_items(docs)
         await cache_citation_registry_items(citation_items)
         citation_collector.extend(citation_items)
-        # F072: the model sees <ref>S3</ref>, never the registry key.
+        # F075: the model sees <ref>S3</ref>, never the registry key.
         chunks = await handles_for_chunks(citation_scope, citation_items, [_format_chunk(doc) for doc in docs])
-        results = [_annotate_retrieved_chunk(chunk, image_registry) for chunk in chunks]
+        results = [_annotate_retrieved_chunk(chunk, image_registry, kb_image_stage) for chunk in chunks]
 
         # Surface per-KB failures as synthetic chunks carrying
         # <retrieval_error>. The frontend detects these and renders the KB
@@ -1149,6 +1189,7 @@ async def _prepare_tools(
     knowledge_bases_info: list[dict] | None = None,
     image_registry: ImageRegistry | None = None,
     citation_scope: DailyCitationScope | None = None,
+    kb_image_stage: KbImageStage | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
     """Assemble the BaseTool list passed to LangGraph create_react_agent.
 
@@ -1169,6 +1210,10 @@ async def _prepare_tools(
             continue
         tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
         tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
+        # Image View stores which visual model to use. Pixel viewing is wired
+        # separately, so loading this row as a LangChain tool always fails.
+        if tool_key == IMAGE_VIEW_TOOL_KEY:
+            continue
 
         t = None
         err: str | None = None
@@ -1188,9 +1233,15 @@ async def _prepare_tools(
                 logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
+            if kb_image_stage is not None:
+                _attach_kb_image_stage(t, kb_image_stage)
             tools.append(
                 _wrap_daily_chat_citation_tool(
-                    t, citation_collector, image_registry=image_registry, citation_scope=citation_scope
+                    t,
+                    citation_collector,
+                    image_registry=image_registry,
+                    citation_scope=citation_scope,
+                    kb_image_stage=kb_image_stage,
                 )
             )
         elif err:
@@ -1213,6 +1264,7 @@ async def _prepare_tools(
             citation_collector=citation_collector,
             image_registry=image_registry,
             citation_scope=citation_scope,
+            kb_image_stage=kb_image_stage,
         )
         if kb_tool is not None:
             tools.append(kb_tool)
@@ -1601,7 +1653,7 @@ async def _agent_stream_chat_completion(
         error_flag = False
         error_msg = ""
         citation_collector = CitationRegistryCollector()
-        # F072: the model cites with [Sn] handles from the session table shared
+        # F075: the model cites with [Sn] handles from the session table shared
         # with the task mode; answer text is converted before it is stored or sent.
         citation_scope = DailyCitationScope(conversation_id)
         stream_converter = HandleStreamConverter(citation_scope.handles)
@@ -1817,6 +1869,12 @@ async def _agent_stream_chat_completion(
             # citations both need the numbers earlier turns handed out.
             await citation_scope.load()
             tool_payloads = [t.model_dump() for t in (data.tools or [])]
+            # Knowledge images only need to reach the sandbox when the code interpreter is on.
+            kb_image_stage = (
+                KbImageStage.from_settings()
+                if any(p.get("tool_key") == CODE_INTERPRETER_TOOL_KEY for p in tool_payloads)
+                else None
+            )
             langchain_tools, tool_failures = await _prepare_tools(
                 tool_payloads=tool_payloads,
                 login_user=login_user,
@@ -1825,6 +1883,7 @@ async def _agent_stream_chat_completion(
                 knowledge_bases_info=knowledge_bases_info,
                 image_registry=image_registry if visual_enabled else None,
                 citation_scope=citation_scope,
+                kb_image_stage=kb_image_stage,
             )
 
             # Surface init failures as synthetic tool_call events so the user
@@ -1910,7 +1969,7 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # F072: the saved prompt may still teach the verbatim-id format
+            # F075: the saved prompt may still teach the verbatim-id format
             # (tenants saved the old default); swap that section for the handle
             # rules at run time, or append them when the prompt has none.
             sys_prompt = replace_legacy_citation_rules(sys_prompt)
@@ -2344,7 +2403,7 @@ async def _agent_stream_chat_completion(
                 return
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        # F072: every marker in the text was produced by the handle converter
+        # F075: every marker in the text was produced by the handle converter
         # from the session table (model-written ids were dropped while
         # streaming), so none is invented. Bind exactly the sources the answer
         # cites, earlier turns included; none when it cites none. A cited

@@ -120,7 +120,7 @@ async def test_draft_history_still_requires_a_published_application(client, publ
     response = await _history(client)
 
     assert response.status_code == 404
-    assert response.json()["status_code"] == 26102
+    assert response.json()["status_code"] == 26402
     publication.history.assert_not_awaited()
 
 
@@ -173,7 +173,7 @@ async def test_existing_title_still_requires_a_published_application(client, pub
     response = await client.post("/api/v3/chat/gen_title", json={"conversationId": CHAT_ID})
 
     assert response.status_code == 404
-    assert response.json()["status_code"] == 26102
+    assert response.json()["status_code"] == 26402
 
 
 @pytest.mark.parametrize("header", ["X-On-Behalf-Of", "X-End-User"])

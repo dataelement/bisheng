@@ -484,6 +484,8 @@ export default defineConfig(({ command, mode }) => {
       chunkSizeWarningLimit: 1500,
     },
     resolve: {
+      // Workspace viewers must use the app's initialized i18n hook instance.
+      dedupe: ['react-i18next'],
       alias: {
         '~': path.join(__dirname, 'src/'),
         '@': path.join(__dirname, 'src/'),

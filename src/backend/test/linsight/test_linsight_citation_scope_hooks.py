@@ -176,6 +176,23 @@ async def test_web_wrapper_scope_failure_returns_bare(cache_web):
     assert json.loads(out) == json.loads(_FakeWeb().payload)
 
 
+class _TimeoutWeb(_FakeWeb):
+    async def _arun(self, query: str = "") -> str:
+        raise TimeoutError("read timed out")
+
+
+async def test_web_wrapper_turns_search_failure_into_tool_output():
+    """ToolNode re-raises tool errors by default: one search timeout would abort the run."""
+    scope = _RecordingScope()
+    wrapped = _LinsightWebCitationWrapper.wrap(_TimeoutWeb(), scope=scope)
+
+    out = await wrapped.ainvoke({"query": "pm25"})
+
+    assert "联网搜索失败" in out
+    assert "read timed out" in out
+    assert scope.calls == []
+
+
 def test_wrap_tools_threads_scope_to_web_only():
     scope = _RecordingScope()
     kb = SearchKnowledgeBase()

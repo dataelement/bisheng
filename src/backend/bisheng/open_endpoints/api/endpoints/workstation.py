@@ -70,7 +70,7 @@ async def chat_completions(
     payload: dict[str, Any] = Body(...),
     principal: OpenApiPrincipal = Depends(get_open_api_execution),
 ):
-    """Daily mode streams (unchanged); ``run_mode="task"`` queues a task and returns JSON.
+    """Daily mode (``run_mode`` omitted or ``"daily"``) streams; ``run_mode="task"`` queues a task.
 
     The body is taken raw so one endpoint can serve both run modes (PRD D11 /
     D12); each branch validates it against its own model with FastAPI's error

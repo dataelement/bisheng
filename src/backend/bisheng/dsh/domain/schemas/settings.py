@@ -19,7 +19,7 @@ class DshManagementSettings(BaseModel):
     )
 
     launch_url: str = Field(
-        default="bisheng-work://login",
+        default="bisheng://login",
         max_length=2048,
         description="Desktop native protocol base URL; the browser appends the current platform server parameter.",
     )

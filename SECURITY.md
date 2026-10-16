@@ -1,39 +1,53 @@
 # Security Policy
 
-## Reporting Security Issues
+## Reporting a Vulnerability
 
-We take the security of our project seriously. If you believe you have found a security vulnerability, please report it to us privately. **Please do not report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
+Please report security vulnerabilities to us privately, and **not** through public
+GitHub issues, discussions or pull requests.
 
-> **Important Note**: Any code within the `classic/` folder is considered legacy, unsupported, and out of scope for security reports. We will not address security vulnerabilities in this deprecated code.
+Use GitHub's private reporting:
+[**Report a vulnerability**](https://github.com/dataelement/bisheng/security/advisories/new)
 
-Instead, please report them via:
-- [GitHub Security Advisory](https://github.com/dataelement/bisheng/security/advisories/new)
-<!--- [Huntr.dev](https://huntr.com/repos/significant-gravitas/autogpt) - where you may be eligible for a bounty-->
+This opens a draft advisory visible only to you and the maintainers. We can discuss
+the details, share a patch, and publish the advisory together once a fix is out.
 
-### Reporting Process
-1. **Submit Report**: Use one of the above channels to submit your report
-2. **Response Time**: Our team will acknowledge receipt of your report within 14 business days.
-3. **Collaboration**: We will collaborate with you to understand and validate the issue
-4. **Resolution**: We will work on a fix and coordinate the release process
+### What to include
 
+- Reproducible steps, and a proof of concept if you have one
+- The version or commit hash you tested
+- Any mitigation or workaround you already know of
 
-### Disclosure Policy
-- Please provide detailed reports with reproducible steps
-- Include the version/commit hash where you discovered the vulnerability
-- Allow us a 90-day security fix window before any public disclosure
-- Share any potential mitigations or workarounds if known
+### What to expect
+
+| | |
+|---|---|
+| We acknowledge your report | within **3 business days** |
+| We tell you whether we can reproduce it, and how we rate it | within **10 business days** |
+| We keep you updated while a fix is being prepared | at least every 2 weeks |
+| We credit you in the advisory and the release notes | unless you ask us not to |
+
+If you have not heard from us within those windows, the report has fallen through
+a crack rather than been dismissed — please say so in the draft advisory, or open a
+public issue asking us to look at it.
+
+### Disclosure
+
+We ask for a 90-day window before public disclosure, and we would rather publish
+sooner: once a fix has shipped we publish the advisory and request a CVE.
+
+If a report goes unanswered past the windows above, we do not expect you to keep
+waiting. That has happened before and it was our failure, not yours.
 
 ## Supported Versions
-Only the following versions are eligible for security updates:
+
+Security fixes land on the current release line. Older lines receive fixes only for
+vulnerabilities rated critical, and only while they are still in support.
 
 | Version | Supported |
 |---------|-----------|
-| Latest release on master branch | ✅ |
-| Development commits (pre-master) | ✅ |
-| Classic folder (deprecated) | ❌ |
-| All other versions | ❌ |
-
-
+| 3.0.x (current release line) | ✅ |
+| 2.6.x | Critical fixes only |
+| Earlier releases | ❌ |
 
 ---
-Last updated: November 2024
+Last updated: September 2026

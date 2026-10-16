@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import HTTPException
-
 from bisheng.chat_session.domain.session_subject import SessionSubject
 from bisheng.common.errcode.open_api import OpenApiModelUnavailableError
 from bisheng.knowledge.domain.services.temp_upload_service import TempUploadService
 from bisheng.open_api.domain.context import OpenApiPrincipal
 from bisheng.open_api.domain.schemas.workstation import OpenDailyChatCompletionReq
 from bisheng.open_api.domain.services.session_subject_service import session_subject_from_principal
+from bisheng.open_api.domain.services.task_mode_service import OpenTaskModeService
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
@@ -35,14 +34,5 @@ class OpenDailyChatService:
         if request.model not in model_ids:
             # F073: a platform error code instead of a bare 400 (task-mode PRD §4.10).
             raise OpenApiModelUnavailableError(model=request.model)
-
-        available = {
-            (int(child.get("id", 0) or 0), str(child.get("tool_key") or ""))
-            for group in config.get("tools", [])
-            for child in group.get("children", [])
-            if isinstance(child, dict)
-        }
-        for tool in request.tools or []:
-            requested = (int(tool.id or 0), str(tool.tool_key or ""))
-            if requested not in available:
-                raise HTTPException(status_code=400, detail="tools contains an unavailable tool")
+        # Same check and same error (26067 with tool_id / tool_key) as task mode.
+        OpenTaskModeService.check_tools(request.tools, config)

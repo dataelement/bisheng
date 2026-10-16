@@ -1,4 +1,7 @@
-import { Loader2, LockKeyhole, Plus, Trash2 } from "lucide-react";
+import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
+import { Outlined } from "bisheng-icons";
+// `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
+import { LockKeyhole } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   getGrantablePermissionModels,
@@ -144,6 +147,31 @@ export function PermissionGrantTab({
     ],
     [assignees, queuedAdds, subjectType],
   );
+  const disabledDepartmentSubtreeRootIds = useMemo(
+    () => [
+      ...assignees
+        .filter(
+          (assignee) =>
+            assignee.subject.type === "department"
+            && assignee.scope === "LOCAL"
+            && assignee.source.include_children,
+        )
+        .map((assignee) => Number(assignee.subject.id))
+        .filter(Number.isFinite),
+      ...queuedAdds
+        .filter(
+          (change) =>
+            change.op === "ADD"
+            && change.subject.type === "department"
+            && change.subject.include_children,
+        )
+        .map((change) =>
+          change.op === "ADD" ? Number(change.subject.id) : Number.NaN,
+        )
+        .filter(Number.isFinite),
+    ],
+    [assignees, queuedAdds],
+  );
 
   // The badge names which model they already hold, so a locked row explains
   // itself rather than just refusing to be clicked.
@@ -241,10 +269,6 @@ export function PermissionGrantTab({
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission;
 
-  const subjectLabel = localize(`f048_permission.subject.${subjectType}`);
-  const selectedSummaryText = selectedSubjects
-    .map((subject) => subject.name)
-    .join("、");
   const subjectPicker = (
     <>
       {subjectType === "user" && (
@@ -265,6 +289,7 @@ export function PermissionGrantTab({
           resourceId={resourceId}
           includeChildren={includeChildren}
           disabledIds={disabledSubjectIds}
+          disabledSubtreeRootIds={disabledDepartmentSubtreeRootIds}
           grantedLabels={grantedModelLabels}
         />
       )}
@@ -316,11 +341,9 @@ export function PermissionGrantTab({
         <div className="mt-4 flex h-10 shrink-0 items-center gap-4 pr-1">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
-              {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
+              {`${localize("com_permission.selected_prefix")}:`}
             </span>
-            <span className="truncate text-sm leading-[22px] text-[#4E5969]">
-              {selectedSummaryText}
-            </span>
+            <SubjectSelectionSummary subjects={selectedSubjects} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -360,7 +383,7 @@ export function PermissionGrantTab({
             onClick={() => void handleSubmit(selectedAddChanges)}
           >
             {submitting && (
-              <Loader2 aria-hidden="true" className="animate-spin" />
+              <Outlined.Loading aria-hidden="true" className="animate-spin" />
             )}
             {localize("f048_permission.grant.submit")}
           </Button>
@@ -464,7 +487,7 @@ export function PermissionGrantTab({
                     })
                   }
                 >
-                  <Trash2 aria-hidden="true" />
+                  <Outlined.Delete aria-hidden="true" />
                 </Button>
               </div>
             );
@@ -484,7 +507,6 @@ export function PermissionGrantTab({
                   className="min-h-10 rounded px-3 text-sm text-[#818181] aria-pressed:bg-white aria-pressed:text-blue-500"
                   onClick={() => {
                     setSubjectType(type);
-                    setSelectedSubjects([]);
                   }}
                 >
                   {localize(`f048_permission.subject.${type}`)}
@@ -496,6 +518,7 @@ export function PermissionGrantTab({
           <div className="min-h-40">
             {subjectPicker}
           </div>
+          <SubjectSelectionSummary subjects={selectedSubjects} />
 
           {subjectType === "department" && (
             <label className="flex min-h-10 items-center gap-2 text-sm">
@@ -538,7 +561,7 @@ export function PermissionGrantTab({
               }
               onClick={handleAdd}
             >
-              <Plus aria-hidden="true" />
+              <Outlined.Plus aria-hidden="true" />
               {localize("f048_permission.grant.add")}
             </Button>
           </div>
@@ -557,7 +580,7 @@ export function PermissionGrantTab({
           onClick={() => void handleSubmit()}
         >
           {submitting && (
-            <Loader2 aria-hidden="true" className="animate-spin" />
+            <Outlined.Loading aria-hidden="true" className="animate-spin" />
           )}
           {localize("f048_permission.grant.submit")}
         </Button>

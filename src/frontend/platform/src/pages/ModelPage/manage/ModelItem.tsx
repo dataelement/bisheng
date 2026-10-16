@@ -267,7 +267,7 @@ export function ModelItem({
             <div className="grid min-h-8 w-80 max-w-full shrink-0 grid-cols-[9rem_minmax(0,1fr)] items-center gap-4 self-end">
               <div className="flex min-h-8 items-center">
                 {model.model_type === "llm" &&
-                  ["qwen", "tencent", "moonshot"].includes(type) && (
+                  ["qwen", "tencent", "moonshot", "minimax"].includes(type) && (
                     <div className="flex shrink-0 items-center gap-2">
                       <Label
                         htmlFor={`${controlId}-search`}
@@ -277,7 +277,7 @@ export function ModelItem({
                       </Label>
                       <QuestionTooltip
                         className="shrink-0"
-                        content={tModel("model.webSearchHint")}
+                        content={t(`model.webSearchTip${{ qwen: "Qwen", tencent: "Tencent", moonshot: "Moonshot", minimax: "Minimax" }[type]}`)}
                       />
                       <Switch
                         id={`${controlId}-search`}
@@ -318,7 +318,13 @@ export function ModelItem({
                             )}
                           </p>
                         )}
-                        <Label>{t("model.pasteAdvancedParamsHere")}</Label>
+                        <div className="flex items-center justify-between gap-4">
+                          <Label>{t("model.pasteAdvancedParamsHere")}</Label>
+                          <Button variant="link" size="sm" className="h-auto shrink-0 px-0"
+                            onClick={() => { setInputAdvancedParams(advancedParams); setJsonError(false); }}>
+                            {t("model.insertParamsExample")}
+                          </Button>
+                        </div>
                         <Textarea
                           value={inputAdvancedParams}
                           onChange={(event) => {

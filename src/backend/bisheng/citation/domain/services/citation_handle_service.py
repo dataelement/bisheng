@@ -106,7 +106,9 @@ def _item_location(item: Any) -> str:
     item_id = getattr(item, "itemId", None)
     for sub in getattr(payload, "items", None) or []:
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 
@@ -190,7 +192,7 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
     (``scope.handles`` handle→key, ``scope.key_to_handle``, ``scope.entries``).
     Any Redis failure returns an EMPTY mapping — never partial numbering. The
     task mode then keeps the raw-key contract for the batch (F069 AC-17); the
-    daily chat shows no source id at all (F072 AC-17).
+    daily chat shows no source id at all (F075 AC-17).
     """
     if not items or not getattr(scope, "enabled", True):
         return {}
@@ -220,7 +222,7 @@ async def assign_handles(scope: Any, items: list[Any] | None) -> dict[str, str]:
                 number = await redis_client.ahincrby(name, "next", 1)
                 if number == 1 and getattr(scope, "pins_contract", True):
                     # table just came into existence: pin the task-mode contract this
-                    # session runs under. The daily chat (F072) shares the table but has
+                    # session runs under. The daily chat (F075) shares the table but has
                     # no switch; it must not pin, or it would override the task-mode
                     # kill switch for this conversation.
                     await redis_client.ahsetnx(name, "meta:enabled", "1" if scope.enabled else "0")
@@ -513,36 +515,6 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
     return "".join(out)
 
 
-def collected_web_sources(entries: list[dict] | None) -> list[dict]:
-    """Web pages this run retrieved, for the result page source list.
-
-    Titles and URLs come from the handle table the model already saw. Knowledge
-    documents are omitted: those names stay behind the citation resolve check.
-    """
-    rows: list[dict] = []
-    seen: set[str] = set()
-    for entry in entries or []:
-        if str(entry.get("type") or "") != "web":
-            continue
-        url = str(entry.get("url") or "").strip()
-        if not url:
-            for raw in entry.get("urls") or []:
-                url = str(raw or "").strip()
-                if url:
-                    break
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        rows.append(
-            {
-                "title": str(entry.get("title") or url)[:200],
-                "url": url,
-                "source": str(entry.get("loc") or "")[:80],
-            }
-        )
-    return rows
-
-
 def strip_citation_handles(text: str) -> str:
     """Drop every ``[Sn]`` run (exports must not leak unresolved handles)."""
     if not text or "[" not in text:
@@ -646,7 +618,9 @@ def _export_identity(item: Any, item_id: str | None) -> str:
 def _export_location(item: Any, item_id: str | None) -> str:
     for sub in _payload_items(item):
         if str(getattr(sub, "itemId", None)) == str(item_id):
-            return _location_label(getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None))
+            return _location_label(
+                getattr(sub, "page", None), getattr(sub, "chunkIndex", None), getattr(sub, "bbox", None)
+            )
     return ""
 
 

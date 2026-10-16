@@ -1,4 +1,5 @@
 export interface DepartmentTreeNode {
+  external_id?: string | null
   id: number
   dept_id: string
   name: string
@@ -47,6 +48,7 @@ export interface DepartmentDetail {
 }
 
 export interface DepartmentMember {
+  external_id?: string | null
   user_id: number
   user_name: string
   /** 本地人员 ID（external_id），用于重名展示；非展示字段 */

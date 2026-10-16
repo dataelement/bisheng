@@ -183,3 +183,25 @@ describe("configured model parameters", () => {
     );
   });
 });
+
+
+describe("3.0 model settings compatibility", () => {
+  it("keeps Minimax native web search and all saved parameters", () => {
+    const onConfig = vi.fn();
+    render(<ModelItem type="minimax" data={initial} onConfig={onConfig} onInput={vi.fn()} onDelete={vi.fn()} />);
+    expand();
+    fireEvent.click(screen.getByRole("switch", { name: "model.webSearch" }));
+    expect(onConfig).toHaveBeenCalledWith({ ...initial.config, enable_web_search: true });
+  });
+  it("inserts an example into the draft and keeps saved settings until save", () => {
+    const onConfig = vi.fn();
+    render(<ModelItem type="openai" data={initial} onConfig={onConfig} onInput={vi.fn()} onDelete={vi.fn()} />);
+    expand(); advanced();
+    fireEvent.click(screen.getByRole("button", { name: "model.insertParamsExample" }));
+    expect(JSON.parse((editor() as HTMLTextAreaElement).value).max_tokens).toBe(1024);
+    expect(onConfig).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "model.cancel" }));
+    advanced();
+    expect(JSON.parse((editor() as HTMLTextAreaElement).value).max_tokens).toBe(20);
+  });
+});

@@ -1523,9 +1523,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 15
     }
   },
   "src/pages/BuildPage/bench/AppCenter.tsx": {
@@ -3250,9 +3247,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 10
     },
     "react-hooks/exhaustive-deps": {
       "count": 1

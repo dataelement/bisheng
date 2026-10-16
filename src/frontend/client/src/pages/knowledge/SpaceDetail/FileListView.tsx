@@ -35,6 +35,8 @@ interface FileListViewProps {
     onValidateName: (name: string, isFolder: boolean, fileId: string, isCreating: boolean) => string | null;
     onCancelCreate?: () => void;
     permissionEntryIds?: Set<string>;
+    /** File ids whose lazy permission lookup is still in flight. */
+    pendingFileIds?: Set<string>;
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
     downloadEntryIds?: Set<string>;
@@ -78,6 +80,7 @@ export function FileListView({
     onValidateName,
     onCancelCreate,
     permissionEntryIds,
+    pendingFileIds,
     renameEntryIds,
     deleteEntryIds,
     downloadEntryIds,
@@ -129,7 +132,7 @@ export function FileListView({
         } catch (e) {
             showToast?.({
                 message: localize("com_knowledge.file_encoding_update_failed"),
-                severity: NotificationSeverity.ERROR,
+                severity: NotificationSeverity.WARNING,
             });
             throw e;
         }
@@ -159,6 +162,7 @@ export function FileListView({
                         index={index}
                         isAdmin={isAdmin}
                         onEnsureFilePermissions={onEnsureFilePermissions}
+                        permissionsLoading={Boolean(pendingFileIds?.has(String(file.id)))}
                         isSelected={selectedFiles.has(file.id)}
                         onSelect={(val) => handleSelectFile(file.id, val)}
                         onDownload={() => onDownload(file.id)}

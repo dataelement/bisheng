@@ -5,6 +5,8 @@ export interface PermissionDraftRow {
   subjectType: SubjectType;
   subjectId: number;
   subjectName: string;
+  externalId?: string | null;
+  departmentPath?: string | null;
   modelKey: string;
   modelName?: string;
   modelLevel?: number | null;

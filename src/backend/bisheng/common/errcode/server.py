@@ -83,7 +83,7 @@ class InitLlmError(BaseErrorCode):
 
 class NoAsrModelConfigError(BaseErrorCode):
     Code: int = 10014
-    Msg: str = "Knowledge base ASR model is not configured"
+    Msg: str = "Speech-to-text (ASR) model is not configured"
 
 
 class AsrModelConfigDeletedError(BaseErrorCode):
@@ -157,6 +157,18 @@ class AsrTranscriptionFailedError(BaseErrorCode):
     # it is leaves them with nothing to act on. Mirrors TtsSynthesisFailedError.
     Code: int = 10027
     Msg: str = "Speech recognition failed, please try again later. Reason: {exception}"
+
+
+class LlmInvokeError(BaseErrorCode):
+    # A provider that rejects or cannot serve a call inside a plain request
+    # (bad key, model removed upstream, endpoint unreachable). Without a business
+    # code the raw provider exception becomes an HTTP 500 and the user only sees
+    # "server error", with no hint that a model is at fault or which one.
+    Code: int = 10028
+    Msg: str = (
+        "Model {model_name} under {server_name} failed to respond. "
+        "Contact the administrator to check its settings and service status. Reason: {reason}"
+    )
 
 
 class SystemConfigEmptyError(BaseErrorCode):

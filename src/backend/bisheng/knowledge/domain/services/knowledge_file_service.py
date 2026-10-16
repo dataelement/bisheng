@@ -203,6 +203,21 @@ class KnowledgeFileService:
 
         return knowledge_file_model
 
+    async def _load_files_in_knowledge(self, knowledge_id: int, knowledge_file_ids: list[int]) -> dict:
+        """Load the requested files and require every one to belong to knowledge_id.
+
+        The check runs before any write so a batch that names a file from another
+        knowledge base is rejected as a whole. Files of other knowledge bases are
+        reported exactly like missing files, so the caller cannot probe them.
+        """
+        existing_files = await self.knowledge_file_repository.find_by_ids(list(knowledge_file_ids))
+        files_dict = {file.id: file for file in existing_files if file.knowledge_id == knowledge_id}
+        for knowledge_file_id in knowledge_file_ids:
+            if knowledge_file_id not in files_dict:
+                raise KnowledgeFileNotExistError(
+                    msg=f"Knowledge Base FilesID:{knowledge_file_id} Does not exist")
+        return files_dict
+
     async def add_file_user_metadata(self, login_user: 'UserPayload', knowledge_id: int,
                                      add_file_metadata_req: 'List[ModifyKnowledgeFileMetaDataReq]'):
         """Add Knowledge File Metadata"""
@@ -218,10 +233,8 @@ class KnowledgeFileService:
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
 
-        existing_files = await self.knowledge_file_repository.find_by_ids(
-            [req.knowledge_file_id for req in add_file_metadata_req])
-
-        existing_files_dict = {file.id: file for file in existing_files}
+        existing_files_dict = await self._load_files_in_knowledge(
+            knowledge_id, [req.knowledge_file_id for req in add_file_metadata_req])
 
         updated_knowledge_files = []
 
@@ -308,10 +321,8 @@ class KnowledgeFileService:
         metadata_field_dict = {item['field_name']: MetadataField(**item) for item in
                                knowledge_model.metadata_fields or []}
 
-        existing_files = await self.knowledge_file_repository.find_by_ids(
-            [req.knowledge_file_id for req in modify_file_metadata_reqs])
-
-        existing_files_dict = {file.id: file for file in existing_files}
+        existing_files_dict = await self._load_files_in_knowledge(
+            knowledge_id, [req.knowledge_file_id for req in modify_file_metadata_reqs])
 
         updated_knowledge_files = []
 
@@ -401,10 +412,8 @@ class KnowledgeFileService:
 
         await self._ensure_knowledge_access(login_user, knowledge_model, "edit")
 
-        existing_files = await self.knowledge_file_repository.find_by_ids(
-            [req.knowledge_file_id for req in delete_user_metadata_req])
-
-        existing_files_dict = {file.id: file for file in existing_files}
+        existing_files_dict = await self._load_files_in_knowledge(
+            knowledge_id, [req.knowledge_file_id for req in delete_user_metadata_req])
 
         updated_knowledge_files = []
         for delete_metadata_req in delete_user_metadata_req:

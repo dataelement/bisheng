@@ -41,7 +41,7 @@ export function ImageViewForm({ formData = {}, onSubmit }: ImageViewFormProps) {
         };
     }, []);
 
-    const selected = models.some((model) => String(model.id) === String(modelId)) ? String(modelId) : undefined;
+    const selected = models.some((model) => String(model.id) === String(modelId)) ? String(modelId) : "";
 
     const handleSubmit = (event: FormEvent) => {
         event.preventDefault();
@@ -53,7 +53,10 @@ export function ImageViewForm({ formData = {}, onSubmit }: ImageViewFormProps) {
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
             <div className="flex flex-col gap-2">
                 <Label>{t("imageViewModelLabel")}</Label>
-                <Select value={selected} onValueChange={setModelId}>
+                <Select value={selected} onValueChange={(value) => {
+                    // Radix's native form select can emit an empty value while async options load.
+                    if (value) setModelId(value);
+                }}>
                     <SelectTrigger>
                         <SelectValue placeholder={t("pleaseSelect")} />
                     </SelectTrigger>

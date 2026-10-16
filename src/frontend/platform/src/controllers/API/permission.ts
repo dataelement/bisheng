@@ -405,6 +405,9 @@ export async function checkResourceActionApi(
  */
 
 export interface GrantSubjectUser {
+  external_id?: string | null
+  department_path?: string | null
+  primary_department_path?: string | null
   user_id: number
   user_name: string
 }
@@ -441,10 +444,12 @@ export async function getGrantSubjectUserGroupsApi(
   resourceType: PermissionResourceType,
   resourceId: string,
   params: { keyword?: string; page?: number; pageSize?: number } = {},
+  config: { signal?: AbortSignal } = {},
 ): Promise<{ data: GrantSubjectUserGroup[]; total: number }> {
   return await axios.get(
     `${permissionResourcePath(resourceType, resourceId)}/grant-subjects/user-groups`,
     {
+      signal: config.signal,
       params: {
         keyword: params.keyword ?? "",
         page: params.page ?? 1,

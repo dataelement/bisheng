@@ -14,6 +14,8 @@ from bisheng.knowledge.rag.pipeline.loader.hierarchical import HierarchicalMarkd
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
 from bisheng.knowledge.rag.pipeline.loader.media import BishengMediaLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
+from bisheng.knowledge.rag.pipeline.loader.mineru_v4 import MineruV4Loader
+from bisheng.knowledge.rag.pipeline.loader.mineru_v4_client import MineruV4Error
 from bisheng.knowledge.rag.pipeline.loader.ofd import OfdLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
@@ -244,6 +246,18 @@ class BaseFilePipeline(BasePipeline):
                 **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
                 **knowledge_conf.mineru.model_dump(),
+            )
+        elif knowledge_conf.loader_provider == ParseType.MINERU_V4.value:
+            if not knowledge_conf.mineru_v4.api_url:
+                raise MineruV4Error("MinerU V1 API root URL is missing")
+            if hasattr(self, "db_file") and self.db_file:
+                self.db_file.parse_type = ParseType.MINERU_V4.value
+            return MineruV4Loader(
+                **common_params,
+                filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
+                force_ocr=self.file_split_rule.force_ocr == 1,
+                retain_images=self.file_split_rule.retain_images == 1,
+                **knowledge_conf.mineru_v4.model_dump(),
             )
         elif knowledge_conf.loader_provider == ParseType.PADDLE_OCR.value and knowledge_conf.paddle_ocr.url:
             if hasattr(self, "db_file") and self.db_file:

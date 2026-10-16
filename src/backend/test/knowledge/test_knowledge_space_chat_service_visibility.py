@@ -39,6 +39,10 @@ def _make_service(*, is_admin: bool = False, user_id: int = 7) -> KnowledgeSpace
     login_user.is_admin = MagicMock(return_value=is_admin)
     svc = KnowledgeSpaceChatService(request=MagicMock(), login_user=login_user)
     svc.version_repo = MagicMock()
+    svc.chat_session_repo = MagicMock()
+    svc.chat_session_repo.find_first_by_effective_entry = AsyncMock(
+        return_value=MagicMock(chat_id="cid", flow_id="fid", name="title")
+    )
     return svc
 
 
@@ -314,11 +318,6 @@ async def test_chat_single_file_logs_view_file_passed_debug(monkeypatch):
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
         AsyncMock(return_value=space),
-    )
-    session = MagicMock(chat_id="cid", flow_id="fid", name="title")
-    monkeypatch.setattr(
-        "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
-        AsyncMock(return_value=[session]),
     )
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",

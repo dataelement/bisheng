@@ -44,7 +44,7 @@ interface AiChatMessagesProps {
         it off. Independent of knowledgeChatLayout (which is a layout-width flag and is
         true for the homepage chat too). */
     allowExport?: boolean;
-    /** F072: copying an answer also drops unresolved [Sn] citation handles.
+    /** F075: copying an answer also drops unresolved [Sn] citation handles.
         Only the daily chat (and its share view) opts in; knowledge / channel
         docks never produce handles and keep their copy text as is. */
     stripCitationHandlesOnCopy?: boolean;

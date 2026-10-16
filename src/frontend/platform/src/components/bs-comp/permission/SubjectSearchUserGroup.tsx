@@ -1,112 +1,55 @@
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { getUserGroupsApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Search, Users } from "lucide-react"
-import { getGrantSubjectUserGroupsApi } from "@/controllers/API/permission"
-import { useEffect, useMemo, useState } from "react"
+import { getGrantSubjectUserGroupsApi, type GrantSubjectUserGroup } from "@/controllers/API/permission"
 import { useTranslation } from "react-i18next"
+import { useSubjectSearch } from "../selectComponent/useSubjectSearch"
+import { SubjectBusinessId, SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus"
 import { ResourceType, SelectedSubject } from "./types"
-
-interface UserGroup {
-  id: number
-  group_name: string
-}
 
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[]
-  onChange: (v: SelectedSubject[]) => void
+  onChange: (value: SelectedSubject[]) => void
   resourceType?: ResourceType
   resourceId?: string
   disabledIds?: number[]
 }
 
-export function SubjectSearchUserGroup({
-  value,
-  onChange,
-  resourceType,
-  resourceId,
-  disabledIds = [],
-}: SubjectSearchUserGroupProps) {
-  const { t } = useTranslation('permission')
-  const [groups, setGroups] = useState<UserGroup[]>([])
-  const [loading, setLoading] = useState(false)
-  const [keyword, setKeyword] = useState('')
-
-  useEffect(() => {
-    setLoading(true)
-    // Scoped to the resource when we know it: the org-management list answers
-    // "which groups do I administer", which a resource manager may administer
-    // none of.
-    const request =
-      resourceType && resourceId
-        ? getGrantSubjectUserGroupsApi(resourceType, resourceId, { pageSize: 200 }).then((res) =>
-            (res?.data || []).map((row) => ({ id: row.id, group_name: row.name })),
-          )
-        : getUserGroupsApi({})
-    captureAndAlertRequestErrorHoc(request).then((res) => {
-      if (res) setGroups(Array.isArray(res) ? res : [])
-      setLoading(false)
-    })
-  }, [resourceId, resourceType])
-
-  const filtered = useMemo(() => {
-    if (!keyword) return groups
-    const lower = keyword.toLowerCase()
-    return groups.filter((g) => g.group_name.toLowerCase().includes(lower))
-  }, [groups, keyword])
-
-  const selectedIds = new Set(value.map((s) => s.id))
-  const disabledIdSet = new Set(disabledIds)
-
-  const toggle = (group: UserGroup) => {
-    if (disabledIdSet.has(group.id)) return
-    if (selectedIds.has(group.id)) {
-      onChange(value.filter((s) => s.id !== group.id))
-    } else {
-      onChange([...value, { type: 'user_group', id: group.id, name: group.group_name }])
-    }
+export function SubjectSearchUserGroup({ value, onChange, resourceType, resourceId, disabledIds = [] }: SubjectSearchUserGroupProps) {
+  const { t } = useTranslation("permission")
+  const search = useSubjectSearch<GrantSubjectUserGroup>({
+    scopeKey: `${resourceType}:${resourceId}`,
+    fetchPage: async (keyword, page, signal) => {
+      if (!resourceType || !resourceId) return { data: [], total: 0 }
+      return getGrantSubjectUserGroupsApi(resourceType, resourceId, { keyword, page, pageSize: 50 }, { signal })
+    },
+  })
+  const selectedIds = new Set(value.filter(subject => subject.type === "user_group").map(subject => subject.id))
+  const disabled = new Set(disabledIds)
+  const toggle = (group: GrantSubjectUserGroup) => {
+    if (search.loading || search.failed || search.tooLong || disabled.has(group.id)) return
+    onChange(selectedIds.has(group.id)
+      ? value.filter(subject => subject.type !== "user_group" || subject.id !== group.id)
+      : [...value, { type: "user_group", id: group.id, name: group.name, externalId: String(group.id) }])
   }
-
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
-        <input
-          type="text"
-          placeholder={t('search.userGroup')}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
-        />
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
-        {loading && (
-          <div className="py-4 text-center text-sm text-muted-foreground">{t('loading', { ns: 'bs' })}</div>
-        )}
-        {!loading && filtered.length === 0 && (
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            {t('empty.userGroups')}
-          </div>
-        )}
-        {!loading && filtered.map((group) => (
-          <div
-            key={group.id}
-            className={`flex min-w-0 items-center gap-2 px-3 py-2 ${
-              disabledIdSet.has(group.id)
-                ? 'cursor-not-allowed opacity-60'
-                : 'cursor-pointer hover:bg-accent'
-            }`}
-            onClick={() => toggle(group)}
-          >
-            <Checkbox
-              checked={selectedIds.has(group.id) || disabledIdSet.has(group.id)}
-              disabled={disabledIdSet.has(group.id)}
-            />
-            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 truncate text-sm" title={group.group_name}>{group.group_name}</span>
-          </div>
-        ))}
-      </div>
+  return <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="relative shrink-0">
+      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+      <input type="text" placeholder={t("search.userGroup")} {...search.inputProps} className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]" />
     </div>
-  )
+    <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]" onScroll={event => {
+      const element = event.currentTarget
+      if (element.scrollTop + element.clientHeight >= element.scrollHeight - 100) search.loadMore()
+    }}>
+      <SubjectSearchStatus permission tooLong={search.tooLong} failed={search.failed} loading={search.loading} empty={search.rows.length === 0} onRetry={search.retry} />
+      {!search.loading && !search.failed && !search.tooLong && search.rows.map(group => <div key={group.id} className={`flex min-w-0 items-center gap-2 px-3 py-2 ${disabled.has(group.id) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-accent'}`} onClick={() => toggle(group)}>
+        <Checkbox checked={selectedIds.has(group.id) || disabled.has(group.id)} disabled={disabled.has(group.id)} />
+        <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm" title={group.name}>{group.name}</div>
+          <SubjectBusinessId kind="user_group" value={String(group.id)} />
+        </div>
+      </div>)}
+      {!search.loading && !search.failed && search.rows.length < search.total && <button type="button" onClick={search.loadMore}>{t("subjectSearch.loadMore", { ns: "bs" })}</button>}
+    </div>
+  </div>
 }

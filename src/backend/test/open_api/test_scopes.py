@@ -36,11 +36,11 @@ def test_issuable_scopes_have_localized_presentation_metadata():
     scopes = [scope for scope in OPEN_API_SCOPES if scope.issuable]
 
     assert [scope.group for scope in scopes] == [
-        "workflow",
-        "workflow",
-        "assistant",
-        "assistant",
-        "assistant",
+        "app",
+        "app",
+        "app",
+        "app",
+        "workstation",
         "knowledge",
         "knowledge",
         "delegation",

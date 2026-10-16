@@ -154,20 +154,35 @@ class ToolExecutor(BaseTool):
         )
 
     @staticmethod
+    def _coerce_preset_extra(raw) -> dict:
+        """Turn a stored extra payload into a new dict (never the ORM object)."""
+        if not raw:
+            return {}
+        if isinstance(raw, dict):
+            return json.loads(json.dumps(raw))
+        if isinstance(raw, str):
+            loaded = json.loads(raw)
+            return loaded if isinstance(loaded, dict) else {}
+        return {}
+
+    @staticmethod
+    def parse_preset_extra(tool: GptsTools, tool_type: GptsToolsType | None) -> dict:
+        """Preset-tool extra: tool row first, category extra only when the row is empty.
+
+        Matches the built-in-tool config save path, which writes ``t_gpts_tools_type.extra``
+        and NULLs ``t_gpts_tools.extra``. Callers must not stuff a placeholder dict onto
+        ``tool.extra`` before this runs — a non-empty dict blocks the category fallback.
+        """
+        if tool.extra:
+            return ToolExecutor._coerce_preset_extra(tool.extra)
+        if tool_type is not None and tool_type.extra:
+            return ToolExecutor._coerce_preset_extra(tool_type.extra)
+        return {}
+
+    @staticmethod
     def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
         """parse tool init params"""
-        # get tool config from tool.extra first
-        params = {}
-        if tool.extra:
-            if isinstance(tool.extra, str):
-                params = json.loads(tool.extra)
-            elif isinstance(tool.extra, dict):
-                params = tool.extra
-        elif tool_type.extra:
-            if isinstance(tool_type.extra, str):
-                params = json.loads(tool_type.extra)
-            elif isinstance(tool_type.extra, dict):
-                params = tool_type.extra
+        params = ToolExecutor.parse_preset_extra(tool, tool_type)
 
         # special handling for bisheng_code_interpreter, because it needs minio config
         if tool.tool_key == "bisheng_code_interpreter":

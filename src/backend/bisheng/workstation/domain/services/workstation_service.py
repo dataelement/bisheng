@@ -1498,7 +1498,7 @@ class WorkStationService(BaseService):
         token-cap stage is skipped — keep this for callers that only want
         row-count trimming or that manage budgeting themselves.
 
-        ``citation_key_to_handle`` (F072): when given, citation markers in past
+        ``citation_key_to_handle`` (F075): when given, citation markers in past
         answers are shown to the model as ``[Sn]`` handles, and markers whose
         key has no handle are dropped — the model never sees the verbatim-id
         format it is no longer taught.

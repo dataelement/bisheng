@@ -422,7 +422,7 @@
     "userGroup": "ユーザーグループ",
     "role": "ロール",
     "searchUserGroups": "ユーザーグループ検索",
-    "searchUser": "ユーザー検索",
+    "searchUser": "ユーザー名または ID で検索",
     "searchRoles": "ロール検索",
     "reset": "リセット",
     "confirm": "確定",
@@ -596,7 +596,7 @@
     "modelNameTooltip": "このサービスプロバイダでの具体的なモデル名",
     "modelNameDuplicate": "モデル名はすでに存在します",
     "modelNameValidation": "モデル名は必須で、100文字以内にしてください",
-    "modelStatusChecking": "モデルステータスを確認中",
+    "modelStatusChecking": "確認中",
     "notBeEmpty": "空欄にはできません",
     "pasteAdvancedParamsHere": "下のテキストボックスに高度なパラメータ設定を貼り付けまたは入力してください",
     "rerank": "リランキング(Rerank)",
@@ -613,7 +613,7 @@
     "voiceType": "音声タイプ",
     "voiceTypeRequired": "音声タイプは必須項目です",
     "voiceTypeTooltip": "音声合成で使用する音声タイプを選択してください",
-    "webSearch": "Web 検索",
+    "webSearch": "モデル内蔵のウェブ検索",
     "visitOfficialWebsiteToViewAvailableModels": "公式サイトで利用可能なモデルを確認してください",
     "modelManagement": "モデル管理",
     "modelFineTune": "モデル微調整",
@@ -636,7 +636,41 @@
     "unknown": "不明",
     "empty": "データがありません",
     "gpuResourceUsageTitle": "GPU リソース使用状況",
-    "jsonFormatError": "JSON フォーマットエラー"
+    "jsonFormatError": "JSON フォーマットエラー",
+    "webSearchTipQwen": "オンにすると、Alibaba Cloud Model Studio がモデル内部でウェブ検索の要否を判断し、検索結果を回答に使います。出典リンクは表示されません。一部のモデルのみ対応し、検索は回数ごとに別途課金されます。ワークベンチの「ウェブ検索」ツールとは別の機能です。詳細パラメータの enable_search は無効で、このスイッチの設定が優先されます。",
+    "webSearchTipMoonshot": "オンにすると、Kimi が必要に応じて Moonshot AI 内蔵のウェブ検索ツールを呼び出し、検索結果を回答に使います。出典リンクは表示されません。検索は回数ごとに別途課金されます。ワークベンチの「ウェブ検索」ツールとは別の機能です。",
+    "webSearchTipTencent": "オンにすると、Tencent Hunyuan が必要に応じてウェブ検索を行い、検索結果を回答に使います。ワークベンチの「ウェブ検索」ツールとは別の機能です。詳細パラメータの enable_enhancement は無効で、このスイッチの設定が優先されます。",
+    "untitledModel": "モデル名が未入力",
+    "deleteModel": "モデルを削除",
+    "maxOutputTokens": "最大出力トークン数",
+    "contextLength": "コンテキスト長",
+    "maxTokensTip": "API パラメータ {{param}} として送信されます",
+    "maxTokensPlaceholder": "空欄の場合はモデルの既定値を使用",
+    "advancedParams": "詳細パラメータ",
+    "advancedParamsCount": "{{count}} 項目をカスタマイズ済み",
+    "advancedParamsNone": "未設定",
+    "edit": "編集",
+    "insertParamsExample": "例を挿入",
+    "providerNames": {
+      "qwen": "Alibaba Cloud Model Studio",
+      "silicon": "SiliconFlow",
+      "volcengine": "Volcano Engine",
+      "zhipu": "Zhipu AI",
+      "spark": "iFLYTEK Spark",
+      "tencent": "Tencent Cloud",
+      "moonshot": "Moonshot AI",
+      "qianfan": "Baidu Qianfan"
+    },
+    "sectionConnection": "接続情報",
+    "sectionUsage": "利用設定",
+    "providerType": "プロバイダーの種類",
+    "providerTypeTip": "API の呼び出し方式と、下に入力する接続情報を決めます。保存後は変更できません。",
+    "dailyCallLimitTip": "このプロバイダーのすべてのモデルを合計した 1 日の呼び出し回数を制限します。上限を超えるとその日の呼び出しはエラーになり、翌日 0 時にリセットされます。",
+    "dailyLimitPrefix": "1 日最大",
+    "dailyLimitSuffix": "回",
+    "shareToChildrenTip": "オンにすると、子テナントはこのプロバイダーのモデルを利用できますが、設定の閲覧や変更はできません。",
+    "getApiKey": "{{provider}} の API キーを取得",
+    "formatExample": "形式の例：{{example}}"
   },
   "finetune": {
     "all": "すべて",
@@ -971,6 +1005,7 @@
     "assistantConfiguration": "アシスタント設定",
     "assistantPortrait": "アシスタント画像",
     "portraitOptimization": "アシスタント画像の最適化",
+    "portraitGenerating": "入力された役割とタスクからアシスタント画像を生成しています。完了後に編集できます。",
     "automaticOptimization": "自動最適化",
     "searchApp": "必要なアプリケーションを検索",
     "establishAssistant": "アシスタントを作成",
@@ -2131,7 +2166,7 @@
     "tabException": "例外フロー一覧",
     "tabFlow": "フロー管理",
     "searchRole": "ロールを検索…",
-    "searchUser": "ユーザー名を検索…",
+    "searchUser": "ユーザー名または ID で検索",
     "menuNeedsApproval": "メニューの承認が必要です",
     "menuApprovalDesc": "あなたのロールにはこのメニュー権限が含まれていません。下のボタンをクリックして申請してください。承認後にアクセスできます。",
     "menuApply": "アクセスを申請",
@@ -2173,6 +2208,7 @@
       "displayName": "表示名",
       "description": "説明",
       "status": "状態",
+      "defaultChecked": "デフォルト選択",
       "updateTime": "更新日時",
       "actions": "操作"
     },
@@ -2184,6 +2220,9 @@
     "deleteConfirm": "削除するとエンドユーザーは選択できなくなり、復元できません。「{{name}}」を削除しますか？",
     "enabledToast": "有効化しました。エンドユーザーの選択リストに即時表示されます",
     "disabledToast": "無効化しました。エンドユーザーの選択リストから削除されました",
+    "defaultCheckedTip": "オンにすると、新しい会話を始めるたびにこのスキルが選択済みになります。ユーザーは選択を外せます。スキルが無効の間は適用されません。",
+    "defaultCheckedOnToast": "デフォルト選択に設定しました。新しい会話から適用されます",
+    "defaultCheckedOffToast": "デフォルト選択を解除しました",
     "deleted": "削除しました",
     "saved": "保存しました",
     "count": "全 {{count}} 件",
@@ -2348,6 +2387,9 @@
       "revealTitle": "キーを生成しました",
       "once": "完全なキーが表示されるのは今回だけです。今すぐコピーして安全に保存してください。",
       "saved": "キーを安全に保存しました",
+      "verifyTitle": "キーが使えるか確認する",
+      "verifyHint": "ターミナルで次のコマンドを実行します。サービスアカウント名が返れば、キーは使用できます。",
+      "verifyDelegateHint": "委任キーでは代理するユーザーの指定が必要です。ユーザー ID は委任範囲内の別のユーザーに置き換えられます。",
       "mask": "キー",
       "permissions": "権限",
       "noPermissions": "権限なし",
@@ -2364,8 +2406,8 @@
       "revokeAllConfirm": "このサービスアカウントの有効なキーがすべて直ちに無効になります。続行しますか？"
     },
     "scopeGroups": {
-      "workflow": "ワークフロー",
-      "assistant": "アシスタントとチャット",
+      "app": "アプリ",
+      "workstation": "ワークスペース",
       "knowledge": "ナレッジ",
       "delegation": "ID 委任",
       "local_dev_toolkit": "ローカル開発ツールキット"
@@ -2373,7 +2415,7 @@
     "scopes": {
       "workflow_invoke": {
         "label": "ワークフローを実行",
-        "desc": "ワークフローの実行・停止と、ワークフローセッションの接続を行います。"
+        "desc": "ワークフローの実行と停止を行います。"
       },
       "workflow_read": {
         "label": "ワークフローを参照",
@@ -2393,11 +2435,11 @@
       },
       "knowledge_read": {
         "label": "ナレッジを参照",
-        "desc": "ナレッジベースとファイルの一覧、検索、Q&A、出典を参照します。"
+        "desc": "ナレッジベースとファイルの一覧、検索、Q&A、メタデータ、出典を参照します。"
       },
       "knowledge_write": {
         "label": "ナレッジを更新",
-        "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。"
+        "desc": "ナレッジベース、ファイル、チャンク、Q&A、メタデータを作成・変更・削除します。「ナレッジを参照」のすべての権限を含みます。"
       },
       "delegate": {
         "label": "ユーザーの代理で実行",
@@ -2942,5 +2984,36 @@
   "request": {
     "session_expired": "セッションの有効期限が切れました",
     "sign_in_again": "セッションの有効期限が切れました。再度ログインしてください。"
+  },
+  "subjectSearch": {
+    "userPlaceholder": "ユーザー名または ID で検索",
+    "departmentPlaceholder": "部署名または ID で検索",
+    "groupPlaceholder": "ユーザーグループ名または ID で検索",
+    "tooLong": "検索内容が文字数制限を超えています。短くして再試行してください",
+    "failed": "検索に失敗しました。再試行してください",
+    "retry": "再試行",
+    "emptyUsers": "一致するユーザーが見つかりません。名前または ID を確認してください",
+    "emptySubjects": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "userId": "従業員 ID",
+    "departmentId": "部署 ID",
+    "user_groupId": "ユーザーグループ ID",
+    "loadMore": "さらに読み込む",
+    "selectedCount": "{{count}} 人を選択済み",
+    "routeExample": "例：管理者は直接承認",
+    "flowExample": "例：メニュー権限承認フロー A",
+    "nodeExample": "例：申請者の部署管理者による承認",
+    "flowNumber": "フロー #{{id}}",
+    "routeNumber": "分岐 #{{id}}",
+    "nextNodeHint": "現在のノードの承認後に次のノードのタスクが生成されます",
+    "collapseProgress": "承認状況を閉じる",
+    "showProgress": "承認状況を表示",
+    "noProgress": "承認状況はありません"
+  },
+  "department": {
+    "searchUsersPlaceholder": "ユーザー名または ID で検索",
+    "searchMember": "ユーザー名または ID で検索"
+  },
+  "tenant": {
+    "searchUser": "ユーザー名または ID で検索"
   }
 }

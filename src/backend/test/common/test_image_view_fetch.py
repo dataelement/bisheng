@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from PIL import Image
 
-from bisheng.common.image_view.fetch import fetch_and_encode
+from bisheng.common.image_view.fetch import _download_wechat, fetch_and_encode
 
 
 def _png_bytes(width: int, height: int) -> bytes:
@@ -88,6 +88,55 @@ async def test_signed_relative_path_uses_download(fetch_env):
 
     assert result.ok is True
     download.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_wechat_image_hosts_use_wechat_download(fetch_env, monkeypatch):
+    _, download = fetch_env
+    wechat = AsyncMock(return_value=_png_bytes(80, 60))
+    monkeypatch.setattr("bisheng.common.image_view.fetch._download_wechat", wechat)
+
+    for url in (
+        "https://mmbiz.qpic.cn/mmbiz_jpg/abc/640?wx_fmt=jpeg",
+        "https://mmecoa.qpic.cn/sz_mmecoa_png/abc/640?from=appmsg",
+    ):
+        result = await fetch_and_encode(url)
+        assert result.ok is True
+        assert result.data_uri.startswith("data:image/png;base64,")
+
+    assert wechat.await_count == 2
+    download.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_wechat_lookalike_host_is_rejected(fetch_env):
+    _, download = fetch_env
+
+    result = await fetch_and_encode("https://evil.mmbiz.qpic.cn/a.png")
+
+    assert result.ok is False
+    assert result.reason == "host"
+    download.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_wechat_download_sends_mp_referer(monkeypatch):
+    response = type("Response", (), {"status_code": 200, "body": _png_bytes(40, 40)})()
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=response)
+    monkeypatch.setattr(
+        "bisheng.core.external.http_client.http_client_manager.get_http_client",
+        AsyncMock(return_value=client),
+    )
+
+    raw = await _download_wechat("https://mmbiz.qpic.cn/a.jpg")
+
+    assert raw.startswith(b"\x89PNG")
+    client.get.assert_awaited_once_with(
+        url="https://mmbiz.qpic.cn/a.jpg",
+        data_type="binary",
+        headers={"Referer": "https://mp.weixin.qq.com"},
+    )
 
 
 @pytest.mark.asyncio

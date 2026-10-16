@@ -1,4 +1,4 @@
-"""F072 — stored markers are shown to the model as ``[Sn]`` in history.
+"""F075 — stored markers are shown to the model as ``[Sn]`` in history.
 
 Past answers are stored with private-use markers around registry keys. Replayed
 as-is, the model would see two citation formats and start copying the old one.

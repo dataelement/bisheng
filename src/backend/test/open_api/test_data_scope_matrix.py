@@ -43,6 +43,8 @@ KNOWLEDGE_READ_CLASSIFICATION = {
     ("GET", "/api/v2/filelib/detail_qa"): "raise",
     ("POST", "/api/v2/filelib/query_qa"): "raise",
     ("GET", "/api/v2/citation/{citation_id}"): "per-item",
+    ("GET", "/api/v2/knowledge/get_metadata_fields/{knowledge_id}"): "raise",
+    ("POST", "/api/v2/knowledge/file/list_user_metadata"): "raise",
 }
 
 

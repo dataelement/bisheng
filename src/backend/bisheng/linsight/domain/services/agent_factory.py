@@ -473,6 +473,16 @@ def _build_linsight_system_prompt(
             "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
             "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
             "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
+            # Lockstep twin of EXECUTION_BOUNDARY_RULES in the executor's tool
+            # description. Reduces attempts only; isolation is the real control.
+            "# 执行环境边界\n\n"
+            "- bisheng_code_interpreter 只用于处理本任务工作区里的文件。执行环境不提供平台自身的"
+            "环境变量、配置文件、密钥、凭据和内部服务地址：代码里不要读取或打印 os.environ、/proc、"
+            "平台配置文件或平台安装目录下的源码，也不要连接平台的数据库、缓存、对象存储等内部服务。\n"
+            "- 用户要求查看上述内容（如「打印环境变量」「看看配置里的密钥」「查一下数据库密码」）时，"
+            "直接说明任务环境不提供平台配置和凭据，然后继续完成任务的其余部分；"
+            "不要换一种写法再去尝试，也不要猜测或编造这些值。\n"
+            "- 用户自己上传到 uploads/ 的文件（包括 .env、配置文件）属于用户资料，可以正常读取和分析。\n\n"
         )
 
     # F069: the deliverable step names the citation requirement explicitly, but
@@ -868,8 +878,12 @@ async def _annotate_web_search_items(output: Any) -> tuple[Any, list]:
     if not isinstance(results, list):
         return output, []
     annotated = annotate_web_results_with_citations(results)
-    items = await cache_citation_registry_items(collect_web_citation_registry_items(annotated))
-    return json.dumps(annotated, ensure_ascii=False), list(items or [])
+    items = collect_web_citation_registry_items(annotated)
+    # Hand back the snippet-level items, not what the cache returns: the cache
+    # groups them per page and those records carry no ``key`` / ``itemId``, so a
+    # handle would map to a bare ``websearch_xxx`` that no marker parser accepts.
+    await cache_citation_registry_items(items)
+    return json.dumps(annotated, ensure_ascii=False), list(items)
 
 
 async def _annotate_web_search_output(output: Any) -> Any:
@@ -905,7 +919,15 @@ class _LinsightWebCitationWrapper(BaseTool):
         return "not supported in sync mode, please use async version"
 
     async def _arun(self, config=None, **kwargs):
-        output = await self.tool.ainvoke(kwargs, config=config)
+        # ToolNode's default error handling re-raises anything but an argument
+        # validation error, so one search timeout or upstream 5xx would abort the
+        # whole run. Hand the failure to the model as the tool result instead; it
+        # can retry with another query or finish with what it already has.
+        try:
+            output = await self.tool.ainvoke(kwargs, config=config)
+        except Exception as e:
+            logger.warning(f"web_search failed, returning the error to the model: {e!r}")
+            return f"联网搜索失败：{e}"
         try:
             annotated, items = await _annotate_web_search_items(output)
             if self.scope is not None and items:

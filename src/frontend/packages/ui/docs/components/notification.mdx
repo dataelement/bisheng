@@ -1,0 +1,266 @@
+---
+status: done
+component: Notification
+---
+
+# 通知提醒 Notification
+
+组件库 `@bisheng/ui` Notification 的实时预览（client 经 `~/components/ui/Notification` 挂载同一实现）。**命令式 API**：业务代码任何地方 `notification.success('…')` 即可，不需要为它维护 state；页面只在根节点挂一个 `<Notifier />` 容器。规范全文见「文档 → 组件规范 → 通知提醒 Notification」。
+
+> 本页每个 demo 都自带一个 `<Notifier />`，但**只有第一个挂载的容器会真正渲染**（同一队列，单例容器），所以下面任一按钮弹出的通知都出现在页面右上角同一处。
+
+## 和轻提示怎么分工
+
+**用户自己刚做的操作，结果用轻提示；不是用户当下动作引起的事，才用通知提醒。** 后台任务跑完了、别人把你拉进了一个空间、系统有消息要你跟进——这些用通知；点保存成功、链接已复制——这些用轻提示。会让用户干不下去的错误两者都不用，走弹窗。
+
+## 四种类型
+
+靠**左上角的图标**区分语义，卡片一律白底（暗色模式随主题变深并加描边）。每种类型必须带图标；拿不准用哪种就用 Info，别把「没成功」的事包装成 Info。
+
+```tsx
+import { Button, Notifier, notification } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Notifier />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.success('「产品手册」已解析完成，共 128 个分段，可以开始提问了', {
+          title: '知识库解析完成',
+        })
+      }
+    >
+      成功 Success
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.error('「发票识别」运行失败，3 个节点未执行，请检查输入参数后重试', {
+          title: '工作流运行失败',
+        })
+      }
+    >
+      失败 Error
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.warning('「季度报表」已导出，其中 2 张图表因数据缺失为空白', {
+          title: '导出完成，部分内容缺失',
+        })
+      }
+    >
+      警告 Warning
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() => notification.info('管理员将你加入了「数据组」，现在可以访问该组的知识库')}
+    >
+      信息 Info（无标题）
+    </Button>
+  </div>
+);
+```
+
+## 堆叠与去重
+
+固定在右上角，最多同时 3 条，纵向间距 16px，新的追加在最下方；第 4 条来的时候最旧的立即让位。**同一条通知重复触发只更新已有那条并重新计时**——去重按 `id`，不传时按「类型 + 标题 + 描述」。
+
+```tsx
+import { Button, Notifier, notification } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Notifier />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() => {
+        ['合同 A', '合同 B', '合同 C', '合同 D'].forEach((name, index) =>
+          window.setTimeout(
+            () => notification.success(`「${name}」已解析完成，可以开始提问了`, { title: '知识库解析完成' }),
+            index * 500,
+          ),
+        );
+      }}
+    >
+      连发 4 条（只留最新 3 条）
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.info('「日报生成」已运行完成，本次处理 36 条记录', { id: 'daily-report' })
+      }
+    >
+      连点我（始终只有一条）
+    </Button>
+  </div>
+);
+```
+
+## 操作按钮
+
+最多两个，右对齐放在操作行：**主动作用次强调按钮，次动作用文字按钮**，都是 24px 小号——不放实心主按钮，通知不该抢页面的视线。按钮必须是跟进这件事的实际动作（查看、重试、前往），不许是「关闭」「知道了」。**带操作按钮时停留 10 秒**（默认 5 秒）；点了任一按钮，通知随即关闭。
+
+```tsx
+import { Button, Notifier, notification, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Notifier />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.success('「产品手册」已解析完成，共 128 个分段，可以开始提问了', {
+          title: '知识库解析完成',
+          actions: [{ label: '查看', onClick: () => toast.info('打开知识库') }],
+        })
+      }
+    >
+      一个动作（查看）
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.error('「发票识别」运行失败，3 个节点未执行，请检查输入参数后重试', {
+          title: '工作流运行失败',
+          actions: [
+            { label: '重试', onClick: () => toast.info('已重新发起运行') },
+            { label: '查看日志', onClick: () => toast.info('打开运行日志') },
+          ],
+        })
+      }
+    >
+      两个动作（重试 / 查看日志）
+    </Button>
+  </div>
+);
+```
+
+`actions[0]` 是主动作，渲染在最右；`actions[1]` 是次动作，在它左边。传第三个会被丢弃。
+
+## 长描述与「展开」
+
+描述不做字数限制，但**默认最多显示 3 行**，超出的部分截断加省略号，操作行左侧自动出现「展开」。点「展开」在原地展开全文，卡片变高，最高不超过视口高度减 48px，再长的部分在卡片内滚动。**展开即视为用户在读，停止自动关闭**，改为等用户手动关闭。
+
+```tsx
+import { Button, Notifier, notification } from '@bisheng/ui';
+
+const LONG =
+  '「年度采购合同」已解析完成，共 412 个分段。其中 3 个附件为扫描件，已走 OCR 识别，识别置信度较低的 7 页已标记，建议在知识库详情页逐页核对；另有 2 个附件因加密无法读取，已跳过，如需纳入请解密后重新上传。解析完成后即可在对话中提问，首次提问可能需要几秒钟建立索引。';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Notifier />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() => notification.success(LONG, { title: '知识库解析完成' })}
+    >
+      超 3 行（出现「展开」）
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.warning(LONG, {
+          title: '知识库解析完成，部分附件未读取',
+          actions: [{ label: '前往核对', onClick: () => undefined }],
+        })
+      }
+    >
+      超 3 行 + 操作按钮
+    </Button>
+  </div>
+);
+```
+
+## 停留与关闭
+
+默认 5 秒，带操作按钮 10 秒，不按字数动态延长。**鼠标悬停或键盘焦点落在通知上时暂停计时**，移开后从头重新计时。按 ESC 关闭最新的一条。关闭按钮常驻，每条都有。
+
+`duration: 0` 是「必须等用户处理」的少数场景才用的档位；拿不准就用默认值——一屏常驻的通知多了，用户只会整片关掉。
+
+```tsx
+import { Button, Notifier, notification, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Notifier />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        notification.warning('「客户名单」的共享申请等待你审批，申请人：李雷', {
+          title: '待审批',
+          duration: 0,
+          actions: [{ label: '去审批', onClick: () => toast.info('打开审批中心') }],
+          onClose: () => toast.info('通知已关闭'),
+        })
+      }
+    >
+      不自动关闭（duration: 0）
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => notification.closeAll()}>
+      关掉全部
+    </Button>
+  </div>
+);
+```
+
+## 规格
+
+| 项 | 值 |
+|---|---|
+| 位置 | 右上角，距顶部 / 右侧各 24px，随页面滚动不动；视口不足 408px 时距右 16px、宽度收为视口减 32px |
+| 堆叠 | 最多 3 条，纵向间距 16px，新的在最下方 |
+| 宽度 / 高度 | 固定 360px；高度随内容，最矮 54px |
+| 内边距 / 圆角 / 投影 | 16px · `rounded-xl`（12px）· `shadow-popup`；暗色模式加 1px `border-base` 描边 |
+| 底色 | `bg-page`（浅色白，暗色随主题） |
+| 图标 | 20px，对应类型的功能色主色（信息取品牌色），与首行居中对齐，与文字间距 12px |
+| 标题 / 描述 | 都是 `text-body`（14/22）；标题字重 500 主文字色，单行截断；描述有标题时次要文字色，无标题时主文字色，默认最多 3 行 |
+| 关闭按钮 | 16px，右上角与首行居中对齐，`text-4`，悬停 `text-2` |
+| 动效 | 进 240ms（右侧 16px 滑入淡入）/ 出 200ms / 补位与展开 240ms，`cubic-bezier(0.2,0,0,1)` |
+| 层级 | `1200`，与轻提示同档，盖住弹窗与抽屉 |
+
+## 使用规则
+
+- **同一件事只发一条。** 任务有 10 个步骤，报最终结果，不要每一步都弹一张。
+- **会让用户干不下去的错误不要用通知提醒。** 它停几秒就走、也不进历史，错过就找不回来；阻断性的事用弹窗说。
+- **不要把它当广播。** 营销、引导、「试试新功能」一律不走通知提醒。
+- 标题一句话说发生了什么、不加句号；描述用完整的句子说清「发生了什么」和「用户能做什么」。只放纯文字，要跳转用操作按钮。
+- 不做「加载中」类型，通知只报结果；不做整张卡片可点击，可点的只有按钮和关闭。
+- 无障碍：成功 / 信息 `role="status"`，失败 / 警告 `role="alert"`，`role` 放在每条通知的根节点；出现时不抢焦点；操作按钮、「展开」和关闭都能 Tab 到达，焦点落上去暂停计时。
+
+## API
+
+```ts
+notification.open({ type?, title?, description, actions?, duration?, id?, onClose? })
+notification.success(description, options?)   // options 同上，去掉 type / description
+notification.error(description, options?)
+notification.warning(description, options?)
+notification.info(description, options?)
+notification.close(id)
+notification.closeAll()
+
+interface NotificationOptions {
+  type?: 'success' | 'error' | 'warning' | 'info';  // 默认 info
+  title?: string;        // 可选，单行
+  description: string;   // 必填
+  actions?: { label: string; onClick: () => void }[];  // 最多两个，[0] 为主动作
+  duration?: number;     // 毫秒；默认 5000，有 actions 时 10000，0 = 不自动关闭
+  id?: string;           // 去重键，默认「类型 + 标题 + 描述」
+  onClose?: () => void;  // 关闭后回调（计时、关闭按钮、ESC、操作按钮、被顶掉都算）
+}
+
+// 容器只挂一次；两个文案 prop 由业务侧传入本地化字符串
+<Notifier closeLabel="关闭通知" expandLabel="展开" />
+```

@@ -405,7 +405,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                     }).catch((err) => {
                         console.error('start-execute failed :>> ', err);
                         if (versionId === activeVersionIdRef.current) {
-                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'error' });
+                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'warning' });
                             setError(true)
                             setLoading(false)
                         }
@@ -422,7 +422,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                     if (versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
                         showToast({
                             message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                            status: 'error',
+                            status: 'warning',
                         });
                         setError(true)
                         setLoading(false)

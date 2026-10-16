@@ -182,12 +182,12 @@ async def _async_value(value):
     return value
 
 
-async def test_app_switch_off_is_26103(operator_lookups, monkeypatch) -> None:
+async def test_app_switch_off_is_26403(operator_lookups, monkeypatch) -> None:
     operator_lookups.app_row = AppGuestLink(enabled=False, user_id=None)
     monkeypatch.setattr(guest_policy, "load_app_guest_link", lambda *a, **k: _async_value(operator_lookups.app_row))
     with pytest.raises(PublicGuestAccessDisabledError) as caught:
         await guest_policy._load_default_operator(23, "workflow", "flow-1")
-    assert caught.value.code == 26103
+    assert caught.value.code == 26403
 
 
 async def test_specified_user_overrides_default(operator_lookups, monkeypatch) -> None:
@@ -213,7 +213,7 @@ async def test_specified_user_overrides_default(operator_lookups, monkeypatch) -
     assert operator.user_id == 7
 
 
-async def test_follow_default_outside_tenant_is_26103(operator_lookups, monkeypatch) -> None:
+async def test_follow_default_outside_tenant_is_26403(operator_lookups, monkeypatch) -> None:
     operator_lookups.memberships.pop((41, 23), None)
     monkeypatch.setattr(guest_policy, "load_app_guest_link", lambda *a, **k: _async_value(AppGuestLink()))
     monkeypatch.setattr(
@@ -222,7 +222,7 @@ async def test_follow_default_outside_tenant_is_26103(operator_lookups, monkeypa
     )
     with pytest.raises(PublicGuestAccessDisabledError) as caught:
         await guest_policy._load_default_operator(23, "workflow", "flow-1")
-    assert caught.value.code == 26103
+    assert caught.value.code == 26403
 
 
 async def test_patch_rejects_missing_share(operator_lookups) -> None:
@@ -329,7 +329,7 @@ def test_guest_skip_does_not_cover_knowledge_or_tools() -> None:
         reset_current_public_api_principal(token)
 
 
-async def test_use_check_rereads_switch_and_raises_26103(monkeypatch) -> None:
+async def test_use_check_rereads_switch_and_raises_26403(monkeypatch) -> None:
     from bisheng.permission.application.business_authorization import check_business_action
 
     token = set_current_public_api_principal(
@@ -355,7 +355,7 @@ async def test_use_check_rereads_switch_and_raises_26103(monkeypatch) -> None:
                 action="use",
                 actor=SimpleNamespace(super_admin=False, data_scope=None),
             )
-        assert caught.value.code == 26103
+        assert caught.value.code == 26403
     finally:
         reset_current_public_api_principal(token)
 

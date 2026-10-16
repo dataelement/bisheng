@@ -81,7 +81,7 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
             // response, etc.), so the user doesn't see two toasts. State reset
             // on error is handled inside the store.
             if (!(typeof error === 'object' && error !== null && 'status_code' in error && error.status_code)) {
-                showToast({ message: localize('com_voice.playback_unavailable'), severity: NotificationSeverity.ERROR })
+                showToast({ message: localize('com_voice.playback_unavailable'), severity: NotificationSeverity.WARNING })
             }
         }
     }

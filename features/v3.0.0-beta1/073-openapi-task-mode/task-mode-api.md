@@ -1,6 +1,6 @@
 # 任务模式 API 接口文档
 
-> 适用版本：v3.0.0（发版线 `feat/3.0.0-beta2`）　·　可导入文件：[`openapi-v2-key-auth-api.json`](../053-openapi-auth-and-identity/openapi-v2-key-auth-api.json)
+> 适用版本：v3.0.0（发版线 `feat/3.0.0-beta3`）　·　可导入文件：[`openapi-v2-key-auth-api.json`](../053-openapi-auth-and-identity/openapi-v2-key-auth-api.json)
 > 通用请求头、错误响应格式与身份模式见《[v2 密钥鉴权 API 接口文档](../053-openapi-auth-and-identity/openapi-v2-key-auth-api.md)》。
 
 任务模式处理多文件、多步骤的复杂任务。调用方一次提交任务描述、附件、技能与模型，平台在后台异步执行；调用方凭任务标识查询状态、取回结果、下载产物。任务执行期间平台**不会向用户提问**：信息不足时按合理的默认假设推进，并在答复中写明所做假设。
@@ -41,14 +41,16 @@
 {
   "status_code": 200,
   "data": {
-    "models": [{"id": "7", "name": "qwen-max", "displayName": "通义千问"}],
+    "models": [{"key": "dca7", "id": "7", "name": "", "displayName": "通义千问", "description": "", "visual": false}],
     "default_model_id": "7",
-    "tools": [{"id": 3, "name": "联网搜索", "children": [{"id": 30, "tool_key": "web_search", "name": "联网搜索"}]}],
+    "tools": [{"id": 3, "name": "联网搜索", "is_preset": 1, "description": "检索互联网公开信息", "default_checked": false,
+               "children": [{"id": 30, "tool_key": "web_search", "name": "联网搜索", "desc": "…", "description": "…"}]}],
     "skills": [{"name": "contract-review", "display_name": "合同审阅", "description": "按公司模板审阅合同条款"}]
   }
 }
 ```
 
+- `default_model_id` 是租户为任务模式配置的默认模型，未配置时为 `null`；`models[].visual` 表示模型能否读图。
 - 提交时模型填 `models[].id`，技能填 `skills[].name`（不是 `display_name`，后者可能重复、可能被修改），工具填 `tools[].children[]` 的 `id` 与 `tool_key`。
 - 查询结果中列出的项，提交时不会因「不存在」或「无权限」被拒；但它是一个时点快照，管理员停用技能、下线模型后，提交仍按当时状态校验。
 
@@ -65,7 +67,9 @@
 {"status_code": 200, "data": {"data": [{"id": 12, "name": "合同库", "description": null, "update_time": "2026-09-20T10:00:00"}], "page_size": 20, "has_more": false, "next_cursor": null}}
 ```
 
-只返回执行身份能用的文档知识库和能看到的知识空间。任务模式不支持问答知识库与个人知识库。
+只返回执行身份能用的文档知识库和能看到的知识空间。任务模式不支持问答知识库与个人知识库。`cursor` 无法解析时返回 400，文档知识库为 `10991`、知识空间为 `18070`。
+
+代表员工调用本节两个查询接口时，同样要求员工有任务模式使用权限，否则返回 403 / `26063`。
 
 ## 4. 上传附件
 
@@ -77,23 +81,23 @@
 
 ### `POST /api/v2/workstation/chat/completions`
 
-与日常模式共用同一接口，以 `run_mode` 区分。任务模式返回 JSON，不是 SSE 流。
+与日常模式共用同一接口：请求体带 `"run_mode": "task"` 时为任务模式，返回 JSON，不是 SSE 流。日常模式**不传** `run_mode`；在请求体里写 `"run_mode": "daily"` 会被当作契约外字段返回 400，写其它取值返回 400 / `26017`。
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `run_mode` | 是 | 固定 `"task"` |
 | `execution` | 是 | 固定 `"async"`；缺省或 `"sync"` 返回 400 / `26060` |
 | `clientTimestamp` | 是 | 客户端时间，如 `2026-09-30T10:00:00` |
-| `text` | 是 | 任务描述（客户应用内置的提示词放这里），1–20000 字符 |
+| `text` | 是 | 任务描述（客户应用内置的提示词放这里），1–20000 字符，不能全是空白 |
 | `instructions` | 否 | 业务上下文指令，≤ 4000 字符；叠加在平台规则之下，不替换平台规则 |
 | `model` | 是 | 模型 id |
-| `skills` | 否 | 技能名数组；不传则不加载任何技能 |
-| `tools` | 否 | `[{"id": 30, "tool_key": "web_search"}]` |
+| `skills` | 否 | 技能名数组，≤ 50，重复项自动去重；不传则不加载任何技能 |
+| `tools` | 否 | `[{"id": 30, "tool_key": "web_search"}]`；元素可带 `"type": "tool"`，也可省略 |
 | `knowledge_ids` | 否 | 文档知识库 id 数组，≤ 50 |
 | `knowledge_space_ids` | 否 | 知识空间 id 数组，≤ 50 |
-| `files` | 否 | `[{"file_path": "...", "file_name": "a.pdf"}]`，≤ 50 |
+| `files` | 否 | `[{"file_path": "...", "file_name": "a.pdf"}]`，≤ 50；元素里的其它字段（如上传返回的 `relative_path`）会被忽略 |
 
-不接受 `conversationId`（每次提交新建会话，传入返回 400 / `26061`）；不接受契约外的任何字段（400）。任一入参不合法，整次提交被拒，不会创建任务。
+不接受 `conversationId`（每次提交新建会话，传入返回 400 / `26061`）；请求体顶层不接受契约外的任何字段（400，`status_message` 为字段校验错误列表）。任一入参不合法，整次提交被拒，不会创建任务。
 
 ```json
 {"status_code": 200, "data": {"task_id": "3f2c…", "status": "queued", "queue_position": 3}}
@@ -112,6 +116,8 @@
 | `terminated` | 已被终止 | — |
 | `waiting_input` | 预留，本期不会出现 | — |
 
+每种状态都带 `task_id`、`created_at`、`updated_at`；不适用的字段为 `null`。
+
 `result` 结构：
 
 ```json
@@ -123,7 +129,8 @@
 }
 ```
 
-- `files[].primary = true` 的是主交付物。
+- `files[].primary = true` 的是主交付物，固定是 `files` 的第一项。平台按文件类型排序：文档优先于表格、表格优先于演示文稿、图片排最后；同一目录下同名的草稿（`.md` / `.txt`）和它转换出的文件（如 `.docx`）同时存在时，转换出的文件排在前面。
+- `files[].size` 读不到文件大小时为 `null`；`failure.message` 也可能为 `null`。
 - `unavailable_deliverables`：答复里提到但实际没有生成（`not_generated`）或格式损坏（`invalid_format`）的文件，不会出现在 `files` 里。
 - `attachments`：未能使用的附件及原因：`unsupported`（类型不支持）、`failed`（解析失败）、`expired`（已过期）。单个附件不可用不会导致任务失败。
 
@@ -164,7 +171,7 @@
 | 任务模式要求同步或缺少 `execution` | 400 | `26060` |
 | 任务模式传入会话标识 | 400 | `26061` |
 | 技能不存在或未启用（`data.unavailable` 列出技能名） | 400 | `26062` |
-| 被代表员工没有任务模式使用权限 | 403 | `26063` |
+| 被代表员工没有任务模式使用权限（提交与第 3 节两个查询接口） | 403 | `26063` |
 | 终止已结束的任务 | 409 | `26064` |
 | 内容未通过安全审查（`data.auto_reply` 为处置文案） | 400 | `26065` |
 | 模型不存在、不可用或未上线（日常模式同） | 400 | `26066` |
@@ -172,8 +179,9 @@
 | 任务队列暂不可用（未创建任务，可稍后重新提交） | 503 | `26068` |
 | 知识库不存在 / 类型不支持 / 无权使用 | 404 / 400 / 403 | 沿用知识库模块错误码 |
 | 知识空间不存在 / 无权访问 | 404 / 403 | 沿用知识空间模块错误码 |
-| 附件引用不属于当前调用主体 | 404 | — |
-| 任务不存在或不属于当前调用主体 | 404 | — |
+| 附件引用不属于当前调用主体 | 404 | —（响应不带 `data`） |
+| 任务或产物不存在、不属于当前调用主体 | 404 | —（`data.exception` 为原因） |
+| 分页游标无效（文档知识库 / 知识空间） | 400 | `10991` / `18070` |
 | 权限服务暂不可用 | 503 | — |
 
 执行期失败不是 HTTP 错误，体现在任务状态的 `failure` 里（第 6 节）。

@@ -14,11 +14,18 @@ from bisheng.core.cache.redis_conn import RedisClient
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.logger import set_logger_config
+from bisheng.linsight.domain.models.linsight_execute_task import (
+    ExecuteTaskStatusEnum,
+    LinsightExecuteTask,
+    LinsightExecuteTaskDao,
+)
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
+from bisheng.linsight.domain.utils import announce_stranded_session_failure
+from bisheng_langchain.gpts.tools.code_interpreter.local_isolation import sweep_on_startup
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +319,15 @@ class ScheduleCenterProcess(Process):
                     "detail": detail,
                 }
                 await LinsightSessionVersionDao.insert_one(session)
+                await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
+                    session_version_ids=[session_version_id],
+                    status=ExecuteTaskStatusEnum.FAILED,
+                    where=(
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
+                    ),
+                )
+                await announce_stranded_session_failure(session_version_id)
             logger.warning(
                 f"Force-failed stranded session {session_version_id} (task died before recording a terminal status)"
             )
@@ -483,6 +499,10 @@ class ScheduleCenterProcess(Process):
             fga_manager=None,
         )
         self.heartbeat_task = loop.create_task(self.node_manager.start_heartbeat())
+
+        # Disk-side counterpart of the incomplete-task sweep: run dirs and uids a
+        # crashed worker of this host left behind. Sibling workers keep theirs.
+        sweep_on_startup()
 
         # 启动主逻辑
         for _ in range(10000):  # 你的原始逻辑

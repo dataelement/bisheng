@@ -9,7 +9,8 @@ from dataclasses import dataclass
 
 from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.chat_session.domain.session_subject import SessionSubject
-from bisheng.common.errcode.http_error import NotFoundError, ServerError
+from bisheng.common.errcode.flow import WorkFlowInvalidUserInputError
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.flow import Flow, FlowDao, FlowType
 from bisheng.database.models.session import MessageSession
 from bisheng.open_api.domain.context import OpenApiExecutionSnapshot
@@ -94,9 +95,9 @@ class PublishedWorkflowService:
             )
         elif status_info["status"] == WorkflowStatus.INPUT.value:
             if not user_input:
-                raise ServerError(msg="workflow waiting for user input, but user input not provided")
+                raise WorkFlowInvalidUserInputError(msg="workflow waiting for user input, but user input not provided")
             if not message_id:
-                raise ServerError(msg="message_id is required when providing user input")
+                raise WorkFlowInvalidUserInputError(msg="message_id is required when providing user input")
             await callback.async_set_user_input(user_input, message_id, verify_input=True)
             await callback.async_set_workflow_status(WorkflowStatus.INPUT_OVER.value)
             continue_workflow.apply_async(

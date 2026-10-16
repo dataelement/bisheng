@@ -202,8 +202,11 @@ export function PermissionGrantTab({
 
   useEffect(() => {
     if (fixedSubjectType) setSubjectType(fixedSubjectType)
+  }, [fixedSubjectType])
+
+  useEffect(() => {
     setSelectedSubjects([])
-  }, [fixedSubjectType, resourceId])
+  }, [resourceId, resourceType])
 
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission
@@ -298,7 +301,7 @@ export function PermissionGrantTab({
     `subject.${subjectType === "user_group" ? "userGroup" : subjectType}`,
   )
   const selectedSummaryText = selectedSubjects
-    .map((subject) => subject.name)
+    .map((subject) => [subject.externalId ? `${subject.name} (${t(`subjectSearch.${subject.type}Id`, { ns: "bs" })}: ${subject.externalId})` : subject.name, subject.departmentPath].filter(Boolean).join(" / "))
     .join("、")
   const subjectPicker = (
     <>
@@ -372,7 +375,7 @@ export function PermissionGrantTab({
             <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
               {`${t("action.grant")}${subjectLabel}:`}
             </span>
-            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]">
+            <span className="truncate text-[14px] leading-[22px] text-[#4E5969]" title={selectedSummaryText}>
               {selectedSummaryText}
             </span>
           </div>
@@ -464,7 +467,6 @@ export function PermissionGrantTab({
                   className="min-h-11 rounded-md px-3 text-sm text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
                   onClick={() => {
                     setSubjectType(type)
-                    setSelectedSubjects([])
                   }}
                 >
                   {t(`subject.${type === "user_group" ? "userGroup" : type}`)}

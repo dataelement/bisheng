@@ -362,7 +362,7 @@ export function KnowledgeSpaceContent({
             await navigator.clipboard.writeText(buildClientShareUrl(`/knowledge/share/${space.id}`));
             showToast({ message: localize("com_knowledge.share_link_copied"), severity: NotificationSeverity.SUCCESS });
         } catch {
-            showToast({ message: localize("com_knowledge.share_link_copy_failed"), severity: NotificationSeverity.ERROR });
+            showToast({ message: localize("com_knowledge.share_link_copy_failed"), severity: NotificationSeverity.WARNING });
         }
     };
     const [canCreateFolder, setCanCreateFolder] = useState(false);
@@ -381,6 +381,9 @@ export function KnowledgeSpaceContent({
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    // File ids whose lazy permission lookup is in flight — the row/card menu shows
+    // a loading row instead of the fail-closed item set until it settles.
+    const [pendingFileIds, setPendingFileIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -460,6 +463,7 @@ export function KnowledgeSpaceContent({
         setRenameEntryIds(new Set());
         setDownloadEntryIds(new Set());
         setDeleteEntryIds(new Set());
+        setPendingFileIds(new Set());
     }, [permissionEntryProbeKey]);
 
     const ensureFilePermissions = useCallback(
@@ -468,6 +472,7 @@ export function KnowledgeSpaceContent({
             if (file.isCreating || !/^\d+$/.test(id)) return;
             if (checkedFileIdsRef.current.has(id)) return; // already resolved for this file
             checkedFileIdsRef.current.add(id);
+            setPendingFileIds((prev) => new Set(prev).add(id));
 
             const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
             try {
@@ -487,6 +492,13 @@ export function KnowledgeSpaceContent({
                 grant("delete", setDeleteEntryIds);
             } catch {
                 checkedFileIdsRef.current.delete(id);
+            } finally {
+                setPendingFileIds((prev) => {
+                    if (!prev.has(id)) return prev;
+                    const next = new Set(prev);
+                    next.delete(id);
+                    return next;
+                });
             }
         },
         [],
@@ -541,17 +553,17 @@ export function KnowledgeSpaceContent({
         const trimmedUrl = webLinkUrl.trim();
         const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
         if (!trimmedUrl) {
-            showToast({ message: localize("com_knowledge.web_link_url_required"), status: "error" });
+            showToast({ message: localize("com_knowledge.web_link_url_required"), status: "warning" });
             return;
         }
         try {
             const parsed = new URL(trimmedUrl);
             if (!["http:", "https:"].includes(parsed.protocol)) {
-                showToast({ message: localize("com_knowledge.web_link_http_only"), status: "error" });
+                showToast({ message: localize("com_knowledge.web_link_http_only"), status: "warning" });
                 return;
             }
         } catch {
-            showToast({ message: localize("com_knowledge.web_link_invalid"), status: "error" });
+            showToast({ message: localize("com_knowledge.web_link_invalid"), status: "warning" });
             return;
         }
 
@@ -586,7 +598,7 @@ export function KnowledgeSpaceContent({
             }
             showToast({
                 message: resolveLocalizedKnowledgeImportError(error, localize, "com_knowledge.web_link_import_failed"),
-                status: "error",
+                status: "warning",
             });
         } finally {
             setWebLinkSubmitting(false);
@@ -614,7 +626,7 @@ export function KnowledgeSpaceContent({
             const filesList = Array.from(e.target.files);
 
             if (filesList.length > 50) {
-                showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
+                showToast({ message: localize("com_knowledge.max_upload_50"), status: "warning" });
                 if (fileInputRef.current) fileInputRef.current.value = "";
                 return;
             }
@@ -623,13 +635,13 @@ export function KnowledgeSpaceContent({
                 const fileMaxSizeMB = getMaxFileSizeMBForFile(f.name, uploadSizeLimits);
                 const fileMaxSizeBytes = getMaxFileSizeBytesForFile(f.name, uploadSizeLimits);
                 if (f.size > fileMaxSizeBytes) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: fileMaxSizeMB }), status: "error" });
+                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: fileMaxSizeMB }), status: "warning" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
                 const ext = f.name.split('.').pop()?.toLowerCase();
                 if (!ext || !allowedExtensions.includes(ext)) {
-                    showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "error" });
+                    showToast({ message: localize("com_knowledge.unsupported_file_format", { 0: f.name }), status: "warning" });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -738,7 +750,7 @@ export function KnowledgeSpaceContent({
             downloadEntryIds.has(file.id)
         );
         if (!canDownloadSelected) {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "warning" });
             return;
         }
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
@@ -748,7 +760,7 @@ export function KnowledgeSpaceContent({
                 file_ids: fileIds.length ? fileIds : undefined,
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
-            if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+            if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "warning" }); return; }
             const now = new Date();
             const dateStr =
                 String(now.getFullYear()) +
@@ -757,7 +769,7 @@ export function KnowledgeSpaceContent({
             const randomStr = Math.random().toString(36).substring(2, 8).toUpperCase();
             triggerUrlDownload(url, `${dateStr}_${randomStr}.zip`);
         } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "warning" });
         }
     };
 
@@ -797,7 +809,7 @@ export function KnowledgeSpaceContent({
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
         if (!downloadEntryIds.has(fileId)) {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "warning" });
             return;
         }
         try {
@@ -806,7 +818,7 @@ export function KnowledgeSpaceContent({
                 const url = await batchDownloadApi(space.id, {
                     folder_ids: [Number(fileId)],
                 });
-                if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                if (!url) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "warning" }); return; }
                 triggerUrlDownload(url, `${file?.name ?? "folder"}.zip`);
             } else {
                 // Single file: use preview_url for channel files, original_url for others
@@ -814,11 +826,11 @@ export function KnowledgeSpaceContent({
                 const downloadUrl = file?.fileSource === 'channel'
                     ? downloadData.preview_url || downloadData.original_url
                     : downloadData.original_url;
-                if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "error" }); return; }
+                if (!downloadUrl) { showToast({ message: localize("com_knowledge.get_download_link_failed"), status: "warning" }); return; }
                 triggerUrlDownload(downloadUrl, file?.name);
             }
         } catch {
-            showToast({ message: localize("com_knowledge.download_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.download_failed"), status: "warning" });
         }
     };
 
@@ -872,7 +884,7 @@ export function KnowledgeSpaceContent({
         if (!confirmed) return;
 
         if (!canBatchDelete) {
-            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "warning" });
             return;
         }
 
@@ -885,7 +897,7 @@ export function KnowledgeSpaceContent({
         if (ok) {
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
         } else {
-            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "warning" });
         }
     };
 
@@ -895,7 +907,7 @@ export function KnowledgeSpaceContent({
 
         const isFolder = file.type === FileType.FOLDER;
         if (!deleteEntryIds.has(fileId)) {
-            showToast({ message: localize("com_knowledge.delete_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.delete_failed"), status: "warning" });
             return;
         }
 
@@ -926,7 +938,7 @@ export function KnowledgeSpaceContent({
             // Refresh list
             onDeleteFile("");
         } catch {
-            showToast({ message: localize("com_knowledge.batch_retry_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.batch_retry_failed"), status: "warning" });
         }
     };
 
@@ -937,7 +949,7 @@ export function KnowledgeSpaceContent({
             // Refresh list
             onDeleteFile("");
         } catch {
-            showToast({ message: localize("com_knowledge.retry_failed"), status: "error" });
+            showToast({ message: localize("com_knowledge.retry_failed"), status: "warning" });
         }
     };
 
@@ -1381,6 +1393,7 @@ export function KnowledgeSpaceContent({
                                             file={file}
                                             userRole={space.role}
                                             onEnsureFilePermissions={ensureFilePermissions}
+                                            permissionsLoading={pendingFileIds.has(String(file.id))}
                                             isSelected={selectedFiles.has(file.id)}
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
@@ -1443,6 +1456,7 @@ export function KnowledgeSpaceContent({
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
                                     permissionEntryIds={permissionEntryIds}
+                                    pendingFileIds={pendingFileIds}
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}
@@ -1652,7 +1666,7 @@ export function KnowledgeSpaceContent({
                                 if (!downloadUrl) {
                                     showToast({
                                         message: localize("com_knowledge.get_download_link_failed"),
-                                        status: "error",
+                                        status: "warning",
                                     });
                                     return;
                                 }
@@ -1660,7 +1674,7 @@ export function KnowledgeSpaceContent({
                             } catch {
                                 showToast({
                                     message: localize("com_knowledge.download_failed"),
-                                    status: "error",
+                                    status: "warning",
                                 });
                             }
                         }}

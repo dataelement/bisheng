@@ -4,9 +4,9 @@
  * the cited passage; tables and failed matches report 'missed' so the host shows
  * the quoted text; PDFs are left to their own bbox highlight.
  */
-import { render, waitFor } from '@testing-library/react';
-import { useRef } from 'react';
-import { useCitedPassageLocate, type CitedPassageLocateState } from './useCitedPassageLocate';
+import { act, render, waitFor } from '@testing-library/react';
+import { useRef, useState } from 'react';
+import { MISS_SETTLE_MS, useCitedPassageLocate, type CitedPassageLocateState } from './useCitedPassageLocate';
 
 const DOC = [
     'Chapter one sets out the purpose of the performance rules for every employee.',
@@ -51,8 +51,45 @@ test('a docx preview lands on and marks the cited paragraph', async () => {
 
 test('a passage that is not in the file reports missed', async () => {
     const r = run('docx', ['Bonus pools are split by department headcount at year end every single year.']);
-    await waitFor(() => expect(r.state).toBe('missed'));
+    await waitFor(() => expect(r.state).toBe('missed'), { timeout: MISS_SETTLE_MS + 1000 });
     expect(r.view.container.querySelectorAll('[data-cite-hit]')).toHaveLength(0);
+});
+
+/** Renders the document in two passes, the cited paragraph arriving second. */
+function ProgressiveHarness({ onState }: { onState: (state: CitedPassageLocateState) => void }) {
+    const ref = useRef<HTMLDivElement>(null);
+    const [shown, setShown] = useState(1);
+    (window as unknown as { revealRest: () => void }).revealRest = () => setShown(DOC.length);
+    onState(useCitedPassageLocate(ref, 'docx', [DOC[1]]));
+    return (
+        <div ref={ref}>
+            {DOC.slice(0, shown).map((text) => (
+                <p key={text}>{text}</p>
+            ))}
+        </div>
+    );
+}
+
+test('a passage still rendering never flashes missed before it is found', async () => {
+    jest.useFakeTimers();
+    try {
+        const states: CitedPassageLocateState[] = [];
+        render(<ProgressiveHarness onState={(s) => states.push(s)} />);
+        // First pass has content but not the cited paragraph.
+        act(() => {
+            jest.advanceTimersByTime(MISS_SETTLE_MS / 2);
+        });
+        act(() => {
+            (window as unknown as { revealRest: () => void }).revealRest();
+        });
+        await act(async () => {
+            jest.advanceTimersByTime(MISS_SETTLE_MS * 2);
+        });
+        expect(states[states.length - 1]).toBe('found');
+        expect(states).not.toContain('missed');
+    } finally {
+        jest.useRealTimers();
+    }
 });
 
 test('spreadsheets show the quote instead of trying to locate', async () => {
