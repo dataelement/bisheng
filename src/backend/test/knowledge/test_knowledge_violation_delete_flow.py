@@ -95,9 +95,16 @@ async def flow_env(monkeypatch):
     async def _no_notify(self, **_kwargs):
         return None
 
+    async def _not_computed_manager(_space_id: int, _user_id: int) -> bool:
+        return False
+
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_violation_delete_service.read_space_owner_manager_ids",
         _roles,
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_violation_delete_service.user_has_space_manager_relation",
+        _not_computed_manager,
     )
     monkeypatch.setattr(PointsPendingDeductService, "_notify_admin_deduct", _no_notify)
     yield engine, roles

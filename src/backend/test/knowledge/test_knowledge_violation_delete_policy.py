@@ -3,6 +3,7 @@
 from bisheng.knowledge.domain.services.knowledge_violation_delete_policy import (
     deduct_block_reason,
     highest_scope_tier,
+    manager_spaces_needing_relation_check,
     monthly_award_exempt,
     resolve_payee_id,
 )
@@ -32,6 +33,17 @@ def test_clinic_manager_exempt_only_while_file_is_visible_in_that_clinic():
         managers_by_space={2: set()},
         enabled_matchers=[matcher],
     )
+
+
+def test_relation_check_skips_direct_manager_owner_and_disabled_level():
+    department_manager = MonthlyRuleMatcher(levels=("department",), roles=("manager",))
+    assert manager_spaces_needing_relation_check(
+        payee_id=79,
+        space_levels={10: "department", 11: "department", 12: "department", 13: "personal", 14: "team"},
+        owners_by_space={10: set(), 11: {79}, 12: set(), 13: set(), 14: set()},
+        managers_by_space={10: {79}, 11: set(), 12: set(), 13: set(), 14: {79}},
+        enabled_matchers=[department_manager],
+    ) == [12]
 
 
 def test_payee_and_self_delete():
