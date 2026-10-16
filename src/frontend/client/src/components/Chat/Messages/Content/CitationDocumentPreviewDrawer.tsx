@@ -1,6 +1,5 @@
-// @ts-strict-ignore
 import { Outlined } from 'bisheng-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -18,6 +17,8 @@ import {
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
 } from './citationUtils';
+import { getCitedPassageChunks } from './citationLocate';
+import { useCitedPassageLocate } from './useCitedPassageLocate';
 
 export type CitationDocumentPreviewState = {
   detail: ChatCitation;
@@ -62,6 +63,7 @@ export function CitationDocumentPreviewContent({
   compactMode = false,
   className,
 }: CitationDocumentPreviewContentProps) {
+  const localize = useLocalize();
   const detail = preview?.detail ?? null;
   const canRenderPreview = !!detail && isRagCitation(detail);
   const itemId = preview?.itemId;
@@ -86,6 +88,17 @@ export function CitationDocumentPreviewContent({
     ? getCitationItemBBoxes(detail as ChatCitation, itemId)
     : [];
   const targetBBox = bboxes[0] ?? null;
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const citedChunks = useMemo(
+    () => locateChunk ? getCitedPassageChunks(detail, itemId) : [],
+    [detail, itemId, locateChunk],
+  );
+  useCitedPassageLocate(
+    viewerRef,
+    fileUrl ? fileType : '',
+    citedChunks,
+    `${detail?.citationId ?? ''}:${fileUrl}`,
+  );
 
   useEffect(() => {
     let active = true;
@@ -117,22 +130,25 @@ export function CitationDocumentPreviewContent({
   return (
     <div className={cn('flex h-full min-h-0 flex-1 flex-col', className)}>
       {fileUrl ? (
-        <FilePreview
-          fileName={fileName}
-          fileType={fileType}
-          fileUrl={fileUrl}
-          transcriptUrl={transcriptUrl}
-          highlightBboxes={bboxes}
-          targetBBox={targetBBox}
-          compactMode={compactMode}
-        />
+        <div ref={viewerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <FilePreview
+            key={fileUrl}
+            fileName={fileName}
+            fileType={fileType}
+            fileUrl={fileUrl}
+            transcriptUrl={transcriptUrl}
+            highlightBboxes={bboxes}
+            targetBBox={targetBBox}
+            compactMode={compactMode}
+          />
+        </div>
       ) : isResolvingFileUrl ? (
         <div className="flex h-full items-center justify-center text-[14px] text-text-3">
-          正在加载文件预览...
+          {localize('com_citation.preview_loading')}
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-text-3">
-          暂无可预览文件地址
+          {localize('com_citation.no_preview_url')}
         </div>
       )}
     </div>
@@ -149,6 +165,7 @@ export default function CitationDocumentPreviewDrawer({
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
+  const drawerRef = useRef<HTMLElement>(null);
   const detail = preview?.detail ?? null;
   const fileName = getCitationDocumentName(detail);
   // Download always hands back the file the user uploaded, never the derived
@@ -187,7 +204,7 @@ export default function CitationDocumentPreviewDrawer({
       if (!target || drawerRef.current?.contains(target)) return;
       // Don't collapse the preview when clicking the citation marker or its
       // hover popover card — those re-drive the preview, not dismiss it.
-      const el = target instanceof Element ? target : (target as any)?.parentElement;
+      const el = target instanceof Element ? target : target.parentElement;
       if (el?.closest?.('[data-citation-trigger="true"]')) return;
       if (el?.closest?.('[data-citation-popover-surface]')) return;
       onClose();
@@ -238,13 +255,14 @@ export default function CitationDocumentPreviewDrawer({
 
   const drawer = (
     <aside
+      ref={drawerRef}
       className={cn(
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
         'z-[121] inset-y-0 right-0 w-[min(520px,calc(var(--bs-vw,100vw)-24px))] border-l border-border-base shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
-      aria-label="文档预览"
+      aria-label={localize('com_citation.document_preview')}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -294,7 +312,7 @@ export default function CitationDocumentPreviewDrawer({
               ? 'inline-flex size-8 rounded-md'
               : 'inline-flex size-6 rounded-md',
           )}
-          aria-label="关闭文档预览"
+          aria-label={localize('com_citation.close_preview')}
         >
           <Outlined.Close className="size-4" strokeWidth={1.5} />
         </button>

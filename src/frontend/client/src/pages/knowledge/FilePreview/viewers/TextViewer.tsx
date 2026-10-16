@@ -51,7 +51,7 @@ export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]">
+        <div data-citation-scroll-container className="flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="flex justify-center py-6 px-4">
                 <div
                     className="bg-white shadow-md max-w-[800px] w-full rounded-sm"
@@ -60,7 +60,7 @@ export function TextViewer({ fileUrl, zoomLevel }: TextViewerProps) {
                         transformOrigin: "top center",
                     }}
                 >
-                    <pre className="p-10 text-sm leading-relaxed text-text-1 font-mono whitespace-pre-wrap break-words">
+                    <pre data-citation-document-body className="p-10 text-sm leading-relaxed text-text-1 font-mono whitespace-pre-wrap break-words">
                         {content}
                     </pre>
                 </div>

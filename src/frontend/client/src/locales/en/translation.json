@@ -2416,6 +2416,12 @@
   "com_voice": {
     "playback_unavailable": "Playback is unavailable. Please contact your administrator."
   },
+  "com_citation": {
+    "close_preview": "Close document preview",
+    "document_preview": "Document preview",
+    "no_preview_url": "No document preview is available",
+    "preview_loading": "Loading document preview..."
+  },
   "com_ai_access": {
     "action_failed": "The operation failed. Please try again.",
     "address_mismatch_admin": "The platform address written into skill packs ({{packOrigin}}) differs from the address you are using ({{browserOrigin}}). Employees who run the setup command copied here are not affected. To correct the address inside the pack as well, set open_api.public_base_url on the backend, or have the reverse proxy forward X-Forwarded-Proto and X-Forwarded-Host.",

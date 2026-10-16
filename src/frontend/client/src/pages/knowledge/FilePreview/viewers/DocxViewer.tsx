@@ -55,7 +55,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="scrollbar-os min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
+        <div data-citation-scroll-container className="min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
                     ref={containerRef}
@@ -97,6 +97,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
                         .docx-content h1, .docx-content h2, .docx-content h3 { color: #1d2129; margin: 1.5em 0 0.5em; }
                     `}</style>
                     <div
+                        data-citation-document-body
                         className="docx-content"
                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(htmlContent) }}
                     />

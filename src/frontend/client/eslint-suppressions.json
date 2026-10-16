@@ -562,14 +562,8 @@
     }
   },
   "src/components/Chat/Messages/Content/CitationDocumentPreviewDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/components/Chat/Messages/Content/CitationReferencesDrawer.tsx": {
