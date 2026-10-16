@@ -166,7 +166,21 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
                 }
             })
         })
+        if (node.type === 'agent' && key === 'output') syncAgentDeliverables()
         setFocusUpdate(!focusUpdate) // render
+    }
+
+    // F078: one deliverables variable per agent output, named <output_key>_deliverables
+    // like the backend. Empty in single mode, where the picker falls back to the key.
+    const syncAgentDeliverables = () => {
+        const params = node.group_params.flatMap(group => group.params)
+        const output = params.find(param => param.key === 'output')
+        const deliverables = params.find(param => param.key === 'output_deliverables')
+        if (!output || !deliverables) return
+        deliverables.value = (output.value || []).map(item => ({
+            key: `${item.key}_deliverables`,
+            label: `${item.label}_deliverables`
+        }))
     }
 
     const [nodeError, setNodeError] = useBorderColor(node)

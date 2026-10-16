@@ -23,6 +23,8 @@ import SqlConfigItem from "./component/SqlConfigItem";
 import SwitchItem from "./component/SwitchItem";
 import TextAreaItem from "./component/TextAreaItem";
 import ToolItem from "./component/ToolItem";
+import { SkillItem } from "./component/SkillItem";
+import { InputFileItem } from "./component/InputFileItem";
 import VarItem from "./component/VarItem";
 import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
@@ -195,6 +197,10 @@ export default function Parameter({
         case 'add_tool':
             return <ToolItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix}
             />;
+        case 'skill_select':
+            return <SkillItem node={node} data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix} />;
+        case 'skill_input_files':
+            return <InputFileItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onVarEvent={bindVarValidate} i18nPrefix={i18nPrefix} />;
         case 'condition':
             return <ConditionItem
                 nodeId={nodeId}

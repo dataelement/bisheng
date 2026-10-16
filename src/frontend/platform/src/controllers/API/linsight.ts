@@ -15,6 +15,13 @@ export interface SkillBrief {
   update_time?: string;
 }
 
+export interface SkillSelectable {
+  name: string;
+  display_name: string;
+  description: string;
+  default_checked: boolean;
+}
+
 export interface SkillFileEntry {
   path: string;
   size: number;
@@ -58,6 +65,11 @@ export const skillApi = {
    *  so its copy and the server agree on the numbers. */
   getUploadLimit: (): Promise<SkillUploadLimit> => {
     return axios.get(`${SKILL_BASE}/upload-limit`);
+  },
+
+  /** F078: the tenant's enabled skills, for the agent node's skill picker. */
+  getSelectableSkills: (): Promise<SkillSelectable[]> => {
+    return axios.get(`${SKILL_BASE}/selectable`);
   },
 
   getSkillList: (params: { keyword?: string; enabled?: boolean; page?: number; page_size?: number }): Promise<SkillPage> => {

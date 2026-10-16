@@ -556,7 +556,7 @@ const workflowTemplate = [
         "name": "true",
         "description": "true",
         "type": "agent",
-        "v": "2",
+        "v": "3",
         "tab": {
             "value": "single",
             "options": [
@@ -698,6 +698,28 @@ const workflowTemplate = [
                 ]
             },
             {
+                // F078: skills the agent may call, and upstream files copied into its workspace.
+                "name": "skills",
+                "params": [
+                    {
+                        "key": "skill_list",
+                        "label": "true",
+                        "type": "skill_select",
+                        "placeholder": "true",
+                        "help": "true",
+                        "value": []
+                    },
+                    {
+                        "key": "input_files",
+                        "label": "true",
+                        "type": "skill_input_files",
+                        "placeholder": "true",
+                        "help": "true",
+                        "value": []
+                    }
+                ]
+            },
+            {
                 "name": "工具",
                 "params": [
                     {
@@ -720,6 +742,16 @@ const workflowTemplate = [
                     },
                     {
                         "key": "output",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "label": "true",
+                        "type": "var",
+                        "help": "true",
+                        "value": []
+                    },
+                    {
+                        // F078: deliverable files of a run that used skills; batch mode
+                        // gets one per output, kept in sync by the node's output change.
+                        "key": "output_deliverables",
                         "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
                         "label": "true",
                         "type": "var",

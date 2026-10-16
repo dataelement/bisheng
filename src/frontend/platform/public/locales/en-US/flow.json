@@ -467,6 +467,23 @@
       "output": {
         "label": "Output Variable",
         "help": "Stores model output."
+      },
+      "skills": "Skills",
+      "skill_list": {
+        "label": "Skills",
+        "placeholder": "Select skills",
+        "search": "Search skills",
+        "help": "The agent follows the selected skills to complete the task and can produce files such as Word, Excel and PowerPoint documents.",
+        "react_disabled": "Skills are not supported by the execution mode of this model. Select a model that uses function call."
+      },
+      "input_files": {
+        "label": "Files to process",
+        "placeholder": "Select upstream file variables",
+        "help": "The original files are handed to the skills, for example to edit a spreadsheet the user uploaded. Results are saved as new files; the originals are not overwritten."
+      },
+      "output_deliverables": {
+        "label": "Generated files",
+        "help": "Files the skills produced in this run, one file name and download link per line. Set only when skills are configured. Downloading requires signing in."
       }
     },
     "qa_retriever": {

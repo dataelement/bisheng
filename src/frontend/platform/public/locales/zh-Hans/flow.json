@@ -467,6 +467,23 @@
       "output": {
         "label": "输出变量",
         "help": "模型输出内容将会存储在该变量中。"
+      },
+      "skills": "技能",
+      "skill_list": {
+        "label": "技能",
+        "placeholder": "选择技能",
+        "search": "搜索技能",
+        "help": "助手可以按所选技能的说明完成任务，并生成 Word、Excel、PPT 等文件。",
+        "react_disabled": "当前模型的执行方式不支持技能，请换用 function call 执行方式的模型。"
+      },
+      "input_files": {
+        "label": "处理的文件",
+        "placeholder": "选择上游的文件变量",
+        "help": "所选文件的原件会交给技能处理，例如修改用户上传的表格。修改结果另存为新文件，不覆盖原件。"
+      },
+      "output_deliverables": {
+        "label": "生成的文件",
+        "help": "技能本次生成的文件，每行一个文件名和下载地址。只有配置了技能时才有值；下载需要登录。"
       }
     },
     "qa_retriever": {

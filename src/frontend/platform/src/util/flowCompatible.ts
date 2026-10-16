@@ -386,6 +386,36 @@ const comptibleAgent = (node) => {
 
         node.v = 2
     }
+
+    // F078: add the skills group before the tools group, and the deliverables
+    // output variable. Groups are found by their params, not by position.
+    if (node.v == 2) {
+        const hasParam = (key) => node.group_params.some(group => group.params.some(param => param.key === key))
+        if (!hasParam('skill_list')) {
+            const toolIndex = node.group_params.findIndex(group => group.params.some(param => param.key === 'tool_list'))
+            const skillsGroup = {
+                name: "skills",
+                params: [
+                    { key: "skill_list", label: "true", type: "skill_select", placeholder: "true", help: "true", value: [] },
+                    { key: "input_files", label: "true", type: "skill_input_files", placeholder: "true", help: "true", value: [] }
+                ]
+            }
+            node.group_params.splice(toolIndex === -1 ? node.group_params.length : toolIndex, 0, skillsGroup)
+        }
+        const outputGroup = node.group_params.find(group => group.params.some(param => param.key === 'output'))
+        if (outputGroup && !hasParam('output_deliverables')) {
+            const output = outputGroup.params.find(param => param.key === 'output')
+            outputGroup.params.push({
+                key: "output_deliverables",
+                global: "code:value.map(el => ({ label: el.label, value: el.key }))",
+                label: "true",
+                type: "var",
+                help: "true",
+                value: (output.value || []).map(item => ({ key: `${item.key}_deliverables`, label: `${item.label}_deliverables` }))
+            })
+        }
+        node.v = 3
+    }
 }
 
 

@@ -27,7 +27,7 @@ const isMatch = (obj, expression) => {
 };
 
 // 特殊结构提取变量
-const getSpecialVar = ({ obj, group, onlyImg = false }) => {
+const getSpecialVar = ({ obj, group, onlyImg = false, onlyPath = false }) => {
     const type = obj.global
     
     switch (type) {
@@ -46,6 +46,11 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                 const isIngest = modes.includes('ingest_to_temp_kb');
 
                 const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
+                // F078: agent input files take the original file path only.
+                if (onlyPath) {
+                    if (!['select', 'text'].includes(item.type) && item.file_path) add('file_path');
+                    return res
+                }
                 // 文本 / 下拉 use key
                 if (['select', 'text'].includes(item.type)) {
                     !onlyImg && add('key')
@@ -82,6 +87,7 @@ const SelectVar = forwardRef(({
     nodeId,
     align = "left",
     findInputFile = false, // 只展示input节点file_image变量(视觉表单项使用)
+    findFilePath = false, // F078: only input-node file path variables (agent input files)
     itemKey, multip = false, value = [], children, onSelect, onCheck, className = '' }, ref) => {
     const [open, setOpen] = useState(false)
     const { flow } = useFlowStore()
@@ -146,7 +152,7 @@ const SelectVar = forwardRef(({
                     _vars = [..._vars, ...result]
                     // 特殊变量(getSpecialVar前端策略)
                 } else if (param.global.startsWith('item')) {
-                    const result = getSpecialVar({ obj: param, onlyImg: findInputFile, group })
+                    const result = getSpecialVar({ obj: param, onlyImg: findInputFile, onlyPath: findFilePath, group })
                     _vars = [..._vars, ...result]
                 } else if ((param.global === 'key' && nodeId !== item.id)
                     || (param.global === 'self' && nodeId === item.id)) {
@@ -191,10 +197,10 @@ const SelectVar = forwardRef(({
             if (node.data.type === 'input') {
                 // 输入节点，跳过自己
                 if (node.data.id === nodeId) return processedNodes
-                nodeData = processInputNode(node.data, findInputFile);
+                nodeData = processInputNode(node.data, findInputFile ? 'image' : findFilePath ? 'path' : null);
             }
             // 其他节点，跳过
-            else if (findInputFile) {
+            else if (findInputFile || findFilePath) {
                 return processedNodes;
             }
 
@@ -209,7 +215,7 @@ const SelectVar = forwardRef(({
      * 限制findInputFileOnly为true时，过滤其他变量,只返回dialog_image_files文件变量
      * 处理输入节点数据
      * @param {Object} inputNodeData 原始节点数据
-     * @param {Boolean} findInputFileOnly 是否仅返回文件变量
+     * @param {'image'|'path'|null} findInputFileOnly 'image' keeps dialog_image_files, 'path' keeps dialog_file_paths (F078)
      */
     function processInputNode(inputNodeData, findInputFileOnly) {
         if (inputNodeData.tab.value === 'form_input') return inputNodeData;
@@ -272,9 +278,12 @@ const SelectVar = forwardRef(({
                 }
 
                 // --- GLOBAL FILTER: Only applies if findInputFileOnly is requested ---
-                if (findInputFileOnly) {
+                if (findInputFileOnly === 'image') {
                     // Only return dialog_image_files as the valid file variable
                     return key === 'dialog_image_files';
+                }
+                if (findInputFileOnly === 'path') {
+                    return key === 'dialog_file_paths';
                 }
 
                 return true;
