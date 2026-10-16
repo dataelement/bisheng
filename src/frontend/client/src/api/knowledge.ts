@@ -3297,7 +3297,9 @@ async function postViolationDelete<T>(
         },
     ) as ApiResponse<T>;
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || "violation delete failed");
+        const error = new Error(res.status_message || "violation delete failed") as Error & { status_code?: number };
+        error.status_code = res.status_code;
+        throw error;
     }
     return res.data as T;
 }
