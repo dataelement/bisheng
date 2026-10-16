@@ -2226,6 +2226,7 @@ export function KnowledgeSpaceContent({
             <ViolationDeleteDialog
                 fileId={violationDeleteTarget?.id ?? null}
                 fileName={violationDeleteTarget?.name}
+                parseFailed={violationDeleteTarget?.status === FileStatus.FAILED}
                 onClose={() => setViolationDeleteTarget(null)}
                 onDeleteWithoutDeduct={() => {
                     if (!violationDeleteTarget) return;

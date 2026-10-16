@@ -13,6 +13,8 @@ import { useLocalize } from "~/hooks";
 interface ViolationDeleteDialogProps {
     fileId: string | null;
     fileName?: string;
+    /** 解析失败的文件没有文档身份, 预览 18053 不展示. */
+    parseFailed?: boolean;
     onClose: () => void;
     /** 不扣分: 走当前删除, 不扩大删除范围. 普通删除接口没有原因字段. */
     onDeleteWithoutDeduct: () => void;
@@ -23,9 +25,18 @@ interface ViolationDeleteDialogProps {
 const fieldClassName = "mt-1.5 w-full rounded-lg border border-[#E5E6EB] bg-white px-2.5 py-2 text-sm text-[#1D2129] outline-none focus:border-[#165DFF] disabled:opacity-50";
 
 /** 删除确认. 下拉默认不扣分; 选了规则才走违规删除接口. */
+const MISSING_DOCUMENT_IDENTITY = 18053;
+
+function violationStatusCode(err: unknown): number | undefined {
+    if (typeof err !== "object" || err === null) return undefined;
+    const code = (err as { status_code?: unknown }).status_code;
+    return typeof code === "number" ? code : undefined;
+}
+
 export function ViolationDeleteDialog({
     fileId,
     fileName,
+    parseFailed = false,
     onClose,
     onDeleteWithoutDeduct,
     onDeducted,
@@ -39,6 +50,7 @@ export function ViolationDeleteDialog({
     const [previewing, setPreviewing] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
+    const [identityMissing, setIdentityMissing] = useState(false);
 
     useEffect(() => {
         setRules([]);
@@ -46,6 +58,7 @@ export function ViolationDeleteDialog({
         setRemark("");
         setPreview(null);
         setError("");
+        setIdentityMissing(false);
         if (!fileId) return;
         let cancelled = false;
         setLoadingRules(true);
@@ -54,7 +67,13 @@ export function ViolationDeleteDialog({
                 if (!cancelled) setRules(data.rules);
             })
             .catch((err: Error) => {
-                if (!cancelled) setError(err.message || localize("com_knowledge.violation_delete_failed"));
+                if (cancelled) return;
+                // 解析失败的文件还没有文档编号, 预览无法列出副本. 不扣分删除不依赖这次预览.
+                if (parseFailed && violationStatusCode(err) === MISSING_DOCUMENT_IDENTITY) {
+                    setIdentityMissing(true);
+                    return;
+                }
+                setError(err.message || localize("com_knowledge.violation_delete_failed"));
             })
             .finally(() => {
                 if (!cancelled) setLoadingRules(false);
@@ -64,7 +83,7 @@ export function ViolationDeleteDialog({
         };
         // localize 每次渲染都是新函数, 放进依赖会反复请求预览.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [fileId]);
+    }, [fileId, parseFailed]);
 
     useEffect(() => {
         if (!fileId || !ruleCode) {
@@ -210,7 +229,7 @@ export function ViolationDeleteDialog({
                     ) : null}
                 </div>
                 {error ? <p className="text-left text-sm text-[#f53f3f]" role="alert">{error}</p> : null}
-                {!loadingRules && rules.length === 0 && !error ? (
+                {!loadingRules && rules.length === 0 && !error && !identityMissing ? (
                     <p className="text-left text-sm text-[#4E5969]">
                         {localize("com_knowledge.delete_point_reason_no_rule")}
                     </p>
