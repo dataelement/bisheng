@@ -28,7 +28,7 @@
 }
 .dsh-chat-surface .dsh-composer-attachments { padding:4px 12px 0; margin:0; }
 .dsh-chat-surface .dsh-composer-chip { color:rgb(var(--text-1)); background:rgb(var(--fill-1)); border:1px solid rgb(var(--border-base)); }
-.dsh-chat-surface .dsh-composer-chip:focus-within button { display:flex; }
+.dsh-chat-surface .dsh-composer-chip:focus-within button { opacity:1; }
 /* Radix portals inherit the Chat palette explicitly, outside the embedded root. */
 body[data-dsh-chat-theme] .dsh-chat-menu {
   background:rgb(var(--dsh-menu-bg)); color:rgb(var(--text-1));
@@ -53,5 +53,5 @@ body[data-dsh-chat-theme] .dsh-chat-menu {
 
 .dsh-chat-surface :is(.dsh-composer-toolbar,.dsh-chat-capabilities) button[aria-pressed=true] { color:rgb(var(--brand-500)); background:rgb(var(--brand-500) / 12%); }
 
-.dsh-chat-surface .dsh-chat-capabilities { min-height:36px; column-gap:12px; row-gap:4px; }
+.dsh-chat-surface .dsh-chat-capabilities { min-height:28px; column-gap:4px; row-gap:4px; }
 .dsh-chat-surface .dsh-chat-capabilities .dsh-composer-control[data-active=true] { color:rgb(var(--brand-500)); background:rgb(var(--brand-500) / 12%); }

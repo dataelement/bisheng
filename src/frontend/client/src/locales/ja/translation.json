@@ -2356,6 +2356,7 @@
     }
   },
   "dshChat": {
+    "addContext": "コンテキストを追加",
     "selectKnowledge": "ナレッジスペースを選択",
     "searchKnowledge": "ナレッジスペースを検索",
     "selectedKnowledge": "{{count}} 件のナレッジスペースを選択中",

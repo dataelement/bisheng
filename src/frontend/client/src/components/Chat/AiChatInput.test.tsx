@@ -27,17 +27,16 @@ jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: () => <button
 jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
-jest.mock('./Input/ChatKnowledge', () => ({
-  ChatKnowledge: ({ variant, spaceDialog, showKnowledgeSelection, showFileUpload, onFileUploadClick }) => (
+jest.mock('./Input/ChatResourceMenu', () => ({
+  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick }) => (
     <div>
-      {spaceDialog && showKnowledgeSelection && <button>spaces</button>}
-      {variant === 'plus' && showKnowledgeSelection && <button>org knowledge</button>}
-      {variant === 'plus' && showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
+      {showKnowledgeSelection && <button>spaces</button>}
+      {showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
     </div>
   ),
 }));
 jest.mock('./Input/AttachmentBar', () => ({
-  AttachmentBar: ({ appearance, files }) => <div data-testid={appearance === 'strip' ? 'context-strip' : 'attachments'}>{files.map((file) => file.name).join(',')}</div>,
+  AttachmentBar: ({ files, kbs }) => <div data-testid="attachments">{[...files, ...kbs].map((file) => file.name).join(',')}</div>,
 }));
 jest.mock('./Input/Files/DragDropOverlay', () => () => null);
 jest.mock('~/components/Voice/SpeechToText', () => () => null);
@@ -66,22 +65,23 @@ beforeEach(() => mockSetSkills.mockClear());
 test('new chat offers setup, established chat hides setup while preserving context', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
-  for (const label of ['skills', 'tools', 'research', 'spaces', 'org knowledge']) {
+  for (const label of ['skills', 'tools', 'research', 'spaces']) {
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
   }
-  expect(screen.getByTestId('context-strip')).toBeInTheDocument();
+  expect(screen.getByTestId('attachments')).toHaveTextContent('Reference');
+  expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
   for (const label of ['skills', 'tools', 'research']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.getByTestId('context-strip')).toBeInTheDocument();
+  expect(screen.getByTestId('attachments')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
   expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', 'dshChat.followupPlaceholder');
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
   expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'model' })).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} />);
-  expect(screen.getByTestId('context-strip')).toBeInTheDocument();
+  expect(screen.getByTestId('attachments')).toBeInTheDocument();
 });
 
 test('follow-up retains attachment upload and sends its text and file', () => {

@@ -12,9 +12,17 @@ export function useDesktopAppearance() {
     const initialTheme = document.documentElement.dataset.dshHostTheme;
     let hostTheme: 'dark' | 'light' | undefined = nativeEmbedded && (initialTheme === 'dark' || initialTheme === 'light') ? initialTheme : undefined;
     const apply = () => {
-      const theme = hostTheme || (media.matches ? 'dark' : 'light');
+      const root = document.documentElement;
+      const pageTheme = root.classList.contains('dark') ? 'dark' : root.classList.contains('light') ? 'light' : media.matches ? 'dark' : 'light';
+      const theme = hostTheme || pageTheme;
       document.body.dataset.dshChatTheme = theme;
-      if (nativeEmbedded) document.documentElement.dataset.dshHostTheme = theme;
+      if (nativeEmbedded && hostTheme) {
+        root.dataset.dshHostTheme = theme;
+        if (!root.classList.contains(theme)) {
+          root.classList.remove(theme === 'dark' ? 'light' : 'dark');
+          root.classList.add(theme);
+        }
+      }
     };
     const receive = (event: MessageEvent) => {
       if (!embedded || event.source !== window.parent || event.origin !== parentOrigin) return;
@@ -30,12 +38,15 @@ export function useDesktopAppearance() {
         apply();
       }
     };
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     apply();
     window.addEventListener('dsh:appearance', receiveNative);
     window.addEventListener('message', receive);
     media.addEventListener('change', apply);
     if (embedded) window.parent.postMessage({ type: 'bisheng:ready' }, parentOrigin);
     return () => {
+      observer.disconnect();
       delete document.body.dataset.dshChatTheme;
       window.removeEventListener('dsh:appearance', receiveNative);
       window.removeEventListener('message', receive);

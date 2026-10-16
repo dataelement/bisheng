@@ -2433,6 +2433,7 @@
     }
   },
   "dshChat": {
+    "addContext": "Add context",
     "selectKnowledge": "Select knowledge spaces",
     "searchKnowledge": "Search knowledge spaces",
     "selectedKnowledge": "{{count}} knowledge spaces selected",

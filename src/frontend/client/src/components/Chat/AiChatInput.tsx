@@ -20,7 +20,7 @@ import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
-import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
+import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -185,7 +185,7 @@ const AiChatInput = memo(
 
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
-        const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
+        const { ref: toolbarRef, compact } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
         // Selecting a skill picks it into the fresh
         // task session ('new'), then enters task mode (/linsight/new) where the
@@ -415,7 +415,7 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Skills join the knowledge spaces in the strip: both are context you
+        // Skills join the knowledge spaces as context resources you
         // mount onto the conversation, not something you are about to send.
         const mountedSkills = allowConfiguration && taskMode && !isLingsi ? dailySkills : [];
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
@@ -449,74 +449,6 @@ const AiChatInput = memo(
                     </div>
                 </div>}
 
-                {allowConfiguration && (showToolPicker || taskModeEntry || showSkillPicker) && (
-                    <div className="dsh-chat-capabilities flex flex-wrap items-center gap-2 px-2 pb-2">
-                        {showSkillPicker && (
-                            <ChatSkillSelector
-                                selected={taskMode ? dailySkills : []}
-                                disabled={!!disabled}
-                                onChange={(next) => {
-                                    setDailySkills(next);
-                                    if (taskMode) return;
-                                    if (onToggleTaskMode) onToggleTaskMode();
-                                    else navigate('/linsight/new');
-                                }}
-                            />
-                        )}
-                        {/* Tools picker */}
-                        {showToolPicker && agentMode && (
-                            <AgentToolSelector
-                                availableTools={bsConfig.tools}
-                                disabled={toolsDisabled}
-                                compact={false}
-                            />
-                        )}
-                        {showToolPicker && !agentMode && onSearchTypeChange && (
-                            <ChatToolDown
-                                config={bsConfig}
-                                compact={false}
-                                searchType={searchType}
-                                setSearchType={(type) => {
-                                    onSearchTypeChange(type);
-                                    // Legacy mutex: clear files + kb when tool activated
-                                    if (type === "netSearch") {
-                                        setChatFiles(null);
-                                        onSelectedOrgKbsChange?.([]);
-                                    }
-                                }}
-                                disabled={toolsDisabled}
-                            />
-                        )}
-                        {/* Research uses the existing Chat mode transition. */}
-                        {taskModeEntry && (
-                            <TaskModeToggle
-                                active={taskMode}
-                                compact={false}
-                                onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {/* Mounted knowledge spaces and task-mode skills — a gray strip
-                    stacked ABOVE the input box (Figma 12841:47449). Attachments
-                    deliberately do not join it: files stay inline inside the box,
-                    where they read as part of what you are about to send rather
-                    than as mounted context. */}
-                {hasMountedKbs && (
-                    <AttachmentBar
-                        appearance="strip"
-                        uploadingFiles={[]}
-                        files={[]}
-                        kbs={selectedOrgKbs || []}
-                        skills={mountedSkills}
-                        onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id || i.type !== kb.type));
-                        } : undefined}
-                        onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
-                    />
-                )}
-
                 <div
                     className={cn(
                         // Figma 12669:66966 — white surface, 16px radius, hairline
@@ -530,12 +462,14 @@ const AiChatInput = memo(
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasInlineAttachments && (
+                    {hasSelectionTags && (
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            kbs={[]}
-                            skills={[]}
+                            kbs={selectedOrgKbs || []}
+                            skills={mountedSkills}
+                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => onSelectedOrgKbsChange(selectedOrgKbs.filter((item) => item.id !== kb.id || item.type !== kb.type)) : undefined}
+                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((item) => item.name !== skill.name))}
                             onRemoveFile={(file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
@@ -668,15 +602,10 @@ const AiChatInput = memo(
                     <div className="dsh-composer-toolbar flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
                         <div ref={toolbarRef} className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-                            {/* "+" menu — v2.5: combines file upload + knowledge space +
-                                org knowledge base. Renders in place of ChatKnowledge when
-                                agent mode is active (which is the v2.5 default). */}
+                            {/* Add files and knowledge spaces to the conversation context. */}
                             {!isLingsi && onSelectedOrgKbsChange && (
-                                <ChatKnowledge
-                                    variant="plus"
-                                    spaceDialog
+                                <ChatResourceMenu
                                     showKnowledgeSelection={knowledgeBase}
-                                    config={bsConfig}
                                     disabled={!!disabled}
                                     value={selectedOrgKbs}
                                     onChange={(val) => {
@@ -696,6 +625,55 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 />
+                            )}
+
+                            {allowConfiguration && (showToolPicker || taskModeEntry || showSkillPicker) && (
+                                <div className="dsh-chat-capabilities flex flex-wrap items-center gap-2">
+                                    {showSkillPicker && (
+                                        <ChatSkillSelector
+                                            selected={taskMode ? dailySkills : []}
+                                            disabled={!!disabled}
+                                            onChange={(next) => {
+                                                setDailySkills(next);
+                                                if (taskMode) return;
+                                                if (onToggleTaskMode) onToggleTaskMode();
+                                                else navigate('/linsight/new');
+                                            }}
+                                        />
+                                    )}
+                                    {/* Tools picker */}
+                                    {showToolPicker && agentMode && (
+                                        <AgentToolSelector
+                                            availableTools={bsConfig.tools}
+                                            disabled={toolsDisabled}
+                                            compact={compact}
+                                        />
+                                    )}
+                                    {showToolPicker && !agentMode && onSearchTypeChange && (
+                                        <ChatToolDown
+                                            config={bsConfig}
+                                            compact={compact}
+                                            searchType={searchType}
+                                            setSearchType={(type) => {
+                                                onSearchTypeChange(type);
+                                                // Legacy mutex: clear files + kb when tool activated
+                                                if (type === "netSearch") {
+                                                    setChatFiles(null);
+                                                    onSelectedOrgKbsChange?.([]);
+                                                }
+                                            }}
+                                            disabled={toolsDisabled}
+                                        />
+                                    )}
+                                    {/* Research uses the existing Chat mode transition. */}
+                                    {taskModeEntry && (
+                                        <TaskModeToggle
+                                            active={taskMode}
+                                            compact={compact}
+                                            onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
+                                        />
+                                    )}
+                                </div>
                             )}
 
                         </div>

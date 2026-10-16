@@ -2362,6 +2362,7 @@
     }
   },
   "dshChat": {
+    "addContext": "添加上下文",
     "selectKnowledge": "选择知识空间",
     "searchKnowledge": "搜索知识空间",
     "selectedKnowledge": "已选 {{count}} 个知识空间",

@@ -40,9 +40,9 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-sidebar { --fill-1:48 
 .dsh-web-chat:has(.dsh-history-reopen) .dsh-chat-header { padding-left:52px; }
 .dsh-web-chat .dsh-history-new-chat { width:calc(100% - 4px); height:38px; margin:0 2px; padding:8px 12px; display:flex; justify-content:center; align-items:center; gap:6px; font-size:14px; font-weight:500; line-height:22px; border:1px solid rgb(var(--border-deep)/35%); border-radius:10px; color:rgb(var(--text-1)); background:rgb(var(--bg-page)/60%); box-shadow:none; }
 body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:rgb(255 255 255 / 15%); }
-.dsh-web-chat .dsh-history-row { height:32px; padding:0 8px; margin-bottom:2px; border-radius:8px; }
+.dsh-web-chat .dsh-history-row { height:32px; padding:0 8px 0 28px; margin-bottom:2px; border-radius:8px; }
 .dsh-history-group { padding:4px 8px 12px; }
-.dsh-history-time { flex:none; font-size:11px; color:rgb(var(--text-3)); white-space:nowrap; }
+.dsh-history-time { flex:none; font-size:10px; color:rgb(var(--text-3)); white-space:nowrap; }
 .dsh-history-row:has(.dsh-history-options:hover) .dsh-history-time,
 .dsh-history-row:hover .dsh-history-time,
 .dsh-history-row:focus-within .dsh-history-time { display:none; }
@@ -135,3 +135,5 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 body[data-dsh-chat-theme] .dsh-knowledge-dialog { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); border-color:rgb(var(--border-base)); }
 body[data-dsh-chat-theme] .dsh-knowledge-dialog input { background:transparent; color:rgb(var(--text-1)); border-color:rgb(var(--border-deep, var(--border-base))); }
 body[data-dsh-chat-theme] .dsh-knowledge-dialog .dsh-knowledge-cancel { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); border-color:rgb(var(--border-base)); }
+
+.dsh-history-row:is(:hover,:focus-within) .dsh-history-label { text-overflow:clip; }

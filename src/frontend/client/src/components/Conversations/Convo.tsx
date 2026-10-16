@@ -17,6 +17,7 @@ import store from "~/store";
 import { conversationTaskRunningState } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
+import { useTitleReveal } from "./useTitleReveal";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
 
@@ -182,9 +183,12 @@ export default function Conversation({
     [currentConvoId, conversationId, isLatestConvo, activeConvos]
   );
 
+  const titleReveal = useTitleReveal(title ?? "");
   return (
     <div
       data-active={isActiveConvo}
+      onPointerEnter={titleReveal.reveal} onPointerLeave={titleReveal.reset}
+      onFocus={titleReveal.reveal} onBlur={titleReveal.reset}
       className={cn(
         "dsh-history-row group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
         // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
@@ -261,7 +265,7 @@ export default function Conversation({
           >
             {/* F035: conversation list no longer distinguishes daily vs task
                 mode — the leading icon is removed for both (unified list). */}
-            <span className="text-text-1 text-[14px] leading-[20px] font-normal truncate">
+            <span ref={titleReveal.ref} className="dsh-history-label text-text-1 text-[14px] leading-[20px] font-normal truncate">
               {title}
             </span>
           </div>
