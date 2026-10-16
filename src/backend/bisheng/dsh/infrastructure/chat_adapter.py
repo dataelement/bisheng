@@ -178,6 +178,10 @@ class DshChatAdapter:
     ):
         if (request.stream and not capabilities.streaming) or (request.tools and not capabilities.tools):
             raise DshUnsupportedParameterError()
+        # The enterprise Chat endpoint always produces Chat shapes, even for a
+        # model that also enables native Responses. Copy only this call's SDK view.
+        if hasattr(llm, "llm") and hasattr(llm.llm, "use_responses_api"):
+            llm = llm.model_copy(update={"llm": llm.llm.model_copy(update={"use_responses_api": False})})
         for field in ("max_completion_tokens", "stop", "temperature", "top_p"):
             if getattr(request, field) is not None and not getattr(capabilities, field):
                 raise DshUnsupportedParameterError()
@@ -209,6 +213,13 @@ class DshChatAdapter:
             for key in ("max_tokens", "max_completion_tokens", "temperature", "top_p", "stop")
             if getattr(request, key) is not None
         }
+        effort = request.reasoning_effort
+        if effort is None and capabilities.reasoning is not None:
+            effort = capabilities.reasoning.defaultEffort
+        if effort is not None:
+            if capabilities.reasoning is None or effort not in {item.id for item in capabilities.reasoning.efforts}:
+                raise DshUnsupportedParameterError()
+            parameters["reasoning_effort"] = effort
         if request.tools:
             choice = request.tool_choice or "auto"
             if isinstance(choice, SelectedTool):

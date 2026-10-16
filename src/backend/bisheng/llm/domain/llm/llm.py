@@ -51,8 +51,11 @@ from .base import BishengBase
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get("user_kwargs", {})
     if isinstance(user_kwargs, str) and user_kwargs:
-        return json.loads(user_kwargs)
-    return dict(user_kwargs) if user_kwargs else {}
+        user_kwargs = json.loads(user_kwargs)
+    result = dict(user_kwargs) if user_kwargs else {}
+    # A capability declaration is not an SDK constructor parameter.
+    result.pop("reasoning_efforts", None)
+    return result
 
 
 # Attention needs to be paid to the priority of the initialization parameters. Instantiation Incoming Highest -> The following configurations of the front-end interface -> Advanced parameters of the front-end interface have the lowest priority
