@@ -38,7 +38,7 @@ export interface ChatCitationItem {
     title?: string;
     bbox?: string | null;
     page?: number;
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface ChatCitation {
@@ -55,10 +55,13 @@ export interface ChatCitation {
         downloadUrl?: string;
         knowledgeName?: string;
         documentName?: string;
+        datePublished?: string;
+        siteIcon?: string;
+        fileType?: string;
         items?: ChatCitationItem[];
-        [key: string]: any;
+        [key: string]: unknown;
     };
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 const citationDetailMemoryCache: Record<string, ChatCitation> = {};

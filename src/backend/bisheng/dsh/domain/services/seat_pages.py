@@ -7,13 +7,12 @@ import json
 from bisheng.common.errcode.dsh import DshAuthorizationUnavailableError, DshInvalidRequestError
 
 
-async def read_seat_page(request, *, actor, target, cursor, limit, keyword, seat_state, login_state):
+async def read_seat_page(request, *, actor, target, cursor, limit, keyword, seat_state):
     payload = {
         "resource": "seats",
         "actor": actor,
         "target": target,
         "keyword": keyword,
-        "login_state": login_state,
     }
 
     async def fetch(state, cursor, size):

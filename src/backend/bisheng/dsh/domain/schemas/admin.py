@@ -32,22 +32,6 @@ class SeatItem(DshContract):
         return value
 
 
-class SessionItem(DshContract):
-    session_id: str = Field(min_length=1)
-    seat_id: str = Field(min_length=1)
-    device_label: str | None
-    client_version: str | None
-    state: str = Field(min_length=1)
-    expires_at: str
-    last_seen_at: str | None
-    created_at: str
-
-    @field_validator("expires_at", "last_seen_at", "created_at")
-    @classmethod
-    def timestamp(cls, value):
-        return SeatItem.timestamp(value)
-
-
 class LicenseSnapshot(DshContract):
     status: Literal["active", "license_invalid", "license_expired", "dsh_disabled"]
     source: Literal["builtin", "signed"] | None = None

@@ -276,7 +276,7 @@ const Citation = ({
     initialDetail?: ChatCitation | null;
     initialNotPermitted?: boolean;
     initialExpired?: boolean;
-    webContent?: any;
+    webContent?: unknown[];
     loadCitationDetail: CitationDetailLoader;
     popoverKey: string;
     activePopoverKey: string | null;
@@ -474,7 +474,7 @@ const MessageMarkDown = React.memo(function MessageMarkDown({ message, version, 
     chat?: any;
     flowType?: number;
     citations?: ChatCitation[] | null;
-    webContent?: any;
+    webContent?: unknown[];
     allowRemoteCitationResolve?: boolean;
 }) {
 
