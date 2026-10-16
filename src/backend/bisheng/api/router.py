@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends
 
 from bisheng.admin.api.router import router as admin_router
+from bisheng.agent_runtime.api.router import router as agent_runtime_router
 from bisheng.api.v1 import (
     assistant_router,
     audit_router,
@@ -120,6 +121,7 @@ router.include_router(commercial_license_router)
 router.include_router(admin_router)
 router.include_router(approval_router)
 router.include_router(brand_router)
+router.include_router(agent_runtime_router)
 router.include_router(sensitive_word_policy_router)
 router.include_router(open_api_management_router)
 

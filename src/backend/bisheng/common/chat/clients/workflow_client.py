@@ -64,7 +64,23 @@ class WorkflowClient(BaseClient):
                     await asyncio.sleep(0.5)
         else:
             await self.send_response("processing", "close", "")
+        await self._close_agent_tmp_session()
         await super().close()
+
+    async def _close_agent_tmp_session(self) -> None:
+        """A debug run's agent workspace and files go away with its connection (F078)."""
+        if self.chat_id or self.workflow is None:
+            return
+        try:
+            from bisheng.agent_runtime.domain.services.tmp_session import TmpSessionService
+            from bisheng.core.cache.redis_manager import get_redis_client
+            from bisheng.core.storage.minio.minio_manager import get_minio_storage
+
+            service = TmpSessionService(redis=await get_redis_client(), minio=await get_minio_storage())
+            await service.aclose(self.workflow.unique_id)
+        except Exception:
+            # The Beat sweep removes what this misses.
+            logger.exception("failed to close agent temp session of workflow {}", self.client_id)
 
     async def _handle_message(self, message: dict[any, any]):
         logger.debug("----------------------------- start handle message -----------------------")

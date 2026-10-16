@@ -162,6 +162,23 @@ class ChatSessionService:
             logger.exception("failed to clean up attachments of chat {}", chat_id)
 
     @staticmethod
+    async def _remove_agent_workspaces(chat_id: str) -> None:
+        """Drop the agent workspaces (F078) of a deleted conversation.
+
+        Best-effort like ``_remove_attachments``: the deliverable files are
+        attachments and already gone; this removes the working files.
+        """
+        try:
+            from bisheng.agent_runtime.domain.services.agent_workspace import adelete_session_workspaces
+
+            await adelete_session_workspaces(await get_minio_storage(), chat_id)
+        except ValueError:
+            # Not a path-safe chat id, so it never had an agent workspace.
+            return
+        except Exception:
+            logger.exception("failed to clean up agent workspaces of chat {}", chat_id)
+
+    @staticmethod
     async def resolve_attachment_url(chat_id: str, file_id: str, login_user: UserPayload) -> str:
         """Issue a fresh link for one attachment of one conversation.
 
@@ -208,6 +225,7 @@ class ChatSessionService:
 
         await MessageSessionDao.delete_session(chat_id)
         await ChatSessionService._remove_attachments(chat_id)
+        await ChatSessionService._remove_agent_workspaces(chat_id)
 
         await telemetry_service.log_event(
             user_id=login_user.user_id,
