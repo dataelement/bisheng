@@ -21,6 +21,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_web_citation_registry_items,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.linsight import AgentSkillExecutorUnsupportedError
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -28,6 +29,12 @@ from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workflow.callback.event import StreamMsgOverData
 from bisheng.workflow.callback.llm_callback import LLMNodeCallbackHandler
+from bisheng.workflow.nodes.agent.skill_support import (
+    AgentNodeSkillRun,
+    AgentNodeSkills,
+    AgentSkillRunError,
+    format_deliverables,
+)
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng.workflow.nodes.prompt_template import PromptTemplateParser
 from bisheng_langchain.agents.llm_functions_agent.base import _format_intermediate_steps
@@ -264,6 +271,13 @@ class AgentNode(BaseNode):
         self._agent = None
         self._citation_tools: list[WorkflowCitationToolWrapper] = []
 
+        # F078 skills. With skills the agent is built per run, because every run
+        # prepares its own workspace view and deliverable baseline.
+        self._skills = AgentNodeSkills(self)
+        self._func_tools: list[BaseTool] = []
+        self._agent_system_prompt = ""
+        self._skill_runs: list[AgentNodeSkillRun] = []
+
     def _get_chat_history_messages(self) -> list[BaseMessage]:
         if not self._chat_history_flag:
             return []
@@ -305,6 +319,15 @@ class AgentNode(BaseNode):
         # Citation-rule backstop: only inject when the node has citation tools and its own
         # system prompt doesn't already carry the rules (the default template does), so
         # existing nodes keep citations and updated prompts aren't duplicated.
+        self._func_tools = func_tools
+        self._agent_system_prompt = system_prompt
+        if self._skills.enabled:
+            if self._agent_executor_type == "ReAct":
+                # The node config comes from the client, so the frontend's ReAct
+                # guard is not enough (design pitfall 13).
+                raise AgentSkillRunError(AgentSkillExecutorUnsupportedError(), self.name)
+            # Built per run in _run_once.
+            return
         if self._agent_executor_type == "ReAct":
             self._agent = ConfigurableAssistant(
                 agent_executor_type=agent_executor_dict.get(self._agent_executor_type),
@@ -485,6 +508,8 @@ class AgentNode(BaseNode):
         self._user_prompt_list = []
         self._tool_invoke_list = []
         self._log_reasoning_content = []
+        self._skill_runs = []
+        deliverable_vars: dict[str, str] = {}
 
         for one in self._system_variables:
             variable_map[one] = self.get_other_node_variable(one)
@@ -501,6 +526,9 @@ class AgentNode(BaseNode):
                 self._tool_invoke_list[0],
             )
             self._log_reasoning_content.append(reasoning_content)
+            skill_run = self._last_skill_run()
+            if skill_run is not None:
+                deliverable_vars[self._deliverable_key("output")] = format_deliverables(skill_run.files)
             if self._output_user:
                 self.callback_manager.on_stream_over(
                     StreamMsgOverData(
@@ -511,6 +539,8 @@ class AgentNode(BaseNode):
                         unique_id=unique_id,
                         output_key="output",
                         citation_registry_items=citation_items,
+                        files=skill_run.files if skill_run else [],
+                        notices=skill_run.plan.notices if skill_run else [],
                     )
                 )
         else:
@@ -525,6 +555,9 @@ class AgentNode(BaseNode):
                     self._tool_invoke_list[index],
                 )
                 self._log_reasoning_content.append(reasoning_content)
+                skill_run = self._last_skill_run()
+                if skill_run is not None:
+                    deliverable_vars[self._deliverable_key(output_key)] = format_deliverables(skill_run.files)
                 if self._output_user:
                     self.callback_manager.on_stream_over(
                         StreamMsgOverData(
@@ -535,6 +568,8 @@ class AgentNode(BaseNode):
                             unique_id=unique_id,
                             output_key=output_key,
                             citation_registry_items=citation_items,
+                            files=skill_run.files if skill_run else [],
+                            notices=skill_run.plan.notices if skill_run else [],
                         )
                     )
 
@@ -545,12 +580,18 @@ class AgentNode(BaseNode):
                 answer = v
                 self.graph_state.save_context(content=answer, msg_sender="AI")
 
+        # Deliverable variables join the outputs only after the answers were
+        # saved to the conversation context, so they are never read as answers.
+        ret.update(deliverable_vars)
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
         index = 0
+        deliverable_keys = {self._deliverable_key(k) for k in result}
         for k, v in result.items():
+            if k in deliverable_keys:
+                continue
             one_ret = [
                 {"key": "system_prompt", "value": self._system_prompt_list[0], "type": "params"},
                 {"key": "user_prompt", "value": self._user_prompt_list[index], "type": "params"},
@@ -560,9 +601,21 @@ class AgentNode(BaseNode):
                     0, {"key": "batch_variable", "value": self._batch_variable_list[index], "type": "variable"}
                 )
 
+            skill_runs = getattr(self, "_skill_runs", [])
+            skill_run = skill_runs[index] if index < len(skill_runs) else None
+            if skill_run is not None:
+                one_ret.append({"key": "skills", "value": skill_run.plan.skill_names, "type": "params"})
+                for notice in skill_run.plan.notices:
+                    one_ret.append({"key": "notice", "value": notice, "type": "params"})
+
             # Handler Call Log
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
             one_ret.append({"key": f"{self.id}.{k}", "value": v, "type": "variable"})
+            deliverable_key = self._deliverable_key(k)
+            if deliverable_key in result:
+                one_ret.append(
+                    {"key": f"{self.id}.{deliverable_key}", "value": result[deliverable_key], "type": "variable"}
+                )
             ret.append(one_ret)
             index += 1
         return ret
@@ -679,13 +732,34 @@ class AgentNode(BaseNode):
             self._append_chat_history_messages(round_messages)
             return output, llm_callback.reasoning_content, self._collect_citation_registry_items()
         else:
-            result = self._agent.invoke({"messages": chat_history}, config=config)
+            result = self._invoke_function_call_agent(chat_history, config)
             result_messages = result["messages"]
             new_messages = [human_message]
             if len(result_messages) > len(chat_history):
                 new_messages.extend(result_messages[len(chat_history) :])
             self._append_chat_history_messages(new_messages)
             return result_messages[-1].content, llm_callback.reasoning_content, self._collect_citation_registry_items()
+
+    def _invoke_function_call_agent(self, chat_history: list[BaseMessage], config: RunnableConfig) -> dict:
+        if not self._skills.enabled:
+            return self._agent.invoke({"messages": chat_history}, config=config)
+        # F078: every run prepares its own workspace view, so the agent is built
+        # around this run's middleware and always finished, even on failure.
+        skill_run = self._skills.prepare(self._agent_executor_type, self._func_tools)
+        self._skill_runs.append(skill_run)
+        try:
+            agent = build_function_call_agent(
+                self._llm, skill_run.plan.tools, self._agent_system_prompt, middleware=skill_run.plan.middleware
+            )
+            return agent.invoke({"messages": chat_history}, config=config)
+        finally:
+            self._skills.finish(skill_run)
+
+    def _last_skill_run(self) -> AgentNodeSkillRun | None:
+        return self._skill_runs[-1] if self._skills.enabled and self._skill_runs else None
+
+    def _deliverable_key(self, output_key: str) -> str:
+        return "deliverables" if output_key == "output" else f"{output_key}_deliverables"
 
     def _reset_citation_registry_items(self) -> None:
         for tool in self._citation_tools:

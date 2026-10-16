@@ -55,6 +55,7 @@ from bisheng.workflow.callback.event import (
     UserInputData,
 )
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.workflow.nodes.agent.skill_support import parse_agent_skill_error
 
 
 class RedisCallback(BaseCallback):
@@ -215,6 +216,10 @@ class RedisCallback(BaseCallback):
             )
         elif status_info["reason"].find("stop by user") != -1:
             return None
+        elif skill_error := parse_agent_skill_error(status_info["reason"]):
+            # F078: a skill error keeps its own code and the skill name, so the
+            # frontend can show the translated message.
+            return self.build_chat_response(WorkflowEventType.Error.value, "over", message=skill_error)
         else:
             return self.build_chat_response(
                 WorkflowEventType.Error.value, "over", WorkFlowTaskOtherError(exception=status_info["reason"]).to_dict()
@@ -888,10 +893,11 @@ class RedisCallback(BaseCallback):
         chat_response = ChatResponse(
             message=data.dict(exclude={"source_documents", "citation_registry_items"}),
             category=WorkflowEventType.StreamMsg.value,
-            extra="",
+            extra=json.dumps({"agent_notices": data.notices}) if data.notices else "",
             type="end",
             flow_id=self.workflow_id,
             chat_id=self.chat_id,
+            files=data.files,
             citations=data.citation_registry_items,
             citation_registry_items=data.citation_registry_items,
         )

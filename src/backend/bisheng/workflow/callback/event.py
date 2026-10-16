@@ -79,3 +79,8 @@ class StreamMsgOverData(StreamMsgData):
         default_factory=list,
         description='Citation registry items for persistence',
     )
+    # F078: deliverable files of an agent node that ran skills. Excluded from the
+    # message dict like OutputMsgData.files: they travel in ChatResponse.files.
+    files: List[dict] = Field(default_factory=list, description='Deliverable files', exclude=True)
+    # F078: notice codes the frontend renders as hints, e.g. "code_executor_missing".
+    notices: List[str] = Field(default_factory=list, description='Notice codes', exclude=True)
