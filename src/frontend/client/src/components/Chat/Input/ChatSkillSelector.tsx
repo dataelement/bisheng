@@ -1,18 +1,27 @@
 import { Outlined } from 'bisheng-icons';
 import { SkillSelector } from '~/components/Linsight/Input/SkillSelector';
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '~/components/ui';
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 
 interface Props {
     selected: TaskModeSkill[];
     disabled: boolean;
+    menu?: boolean;
     onChange: (skills: TaskModeSkill[]) => void;
 }
 
 /** Skill selection shares the existing enterprise list and multi-select state. */
-export function ChatSkillSelector({ selected, disabled, onChange }: Props) {
+export function ChatSkillSelector({ selected, disabled, onChange, menu }: Props) {
     const localize = useLocalize();
+    if (menu) return <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={disabled} className="gap-2">
+            <Outlined.Skill size={16} />{localize('com_linsight_add_skill')}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="dsh-chat-menu w-[280px] max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] overflow-auto p-3">
+            <SkillSelector selected={selected} onChange={onChange} />
+        </DropdownMenuSubContent>
+    </DropdownMenuSub>;
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>

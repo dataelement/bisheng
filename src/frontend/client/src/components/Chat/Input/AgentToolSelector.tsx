@@ -59,8 +59,7 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
-export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
-  const localize = useLocalize();
+export function useAgentToolSelection(availableTools: AvailableToolGroup[]) {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
 
@@ -89,14 +88,11 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
   // Prune selections for groups that no longer exist in the admin config
   // (e.g., admin removed a tool between sessions).
   useEffect(() => {
-    if (!availableTools || selected.length === 0) return;
+    if (!availableTools?.length || selected.length === 0) return;
     const validIds = new Set(availableTools.map((g) => g.id));
     const pruned = selected.filter((g) => validIds.has(g.id));
     if (pruned.length !== selected.length) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
-
-  const activeCount = selected.length;
-  const isActive = activeCount > 0;
 
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
@@ -119,6 +115,16 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       ]);
     }
   };
+
+  return { selected, isChecked, toggle };
+}
+
+export { iconForGroup, labelForGroup };
+
+export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
+  const localize = useLocalize();
+  const { selected, isChecked, toggle } = useAgentToolSelection(availableTools);
+  const isActive = selected.length > 0;
 
   if (!availableTools || availableTools.length === 0) return null;
 

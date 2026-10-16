@@ -14,7 +14,7 @@ test('file and knowledge resources share names and metadata, removing never open
   expect(screen.getByText('PDF · 1.2 MB')).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole('button', { name: /Brief.pdf/ }), { key: 'Enter' });
   expect(preview).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getAllByRole('button', { name: 'Remove', exact: true })[1]);
+  fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1]);
   expect(removeSpace).toHaveBeenCalledTimes(1);
   expect(removeFile).not.toHaveBeenCalled();
   expect(preview).toHaveBeenCalledTimes(1);

@@ -28,8 +28,9 @@ jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
 jest.mock('./Input/ChatResourceMenu', () => ({
-  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick }) => (
+  ChatResourceMenu: ({ showKnowledgeSelection, showFileUpload, onFileUploadClick, showTools, showResearch, children }) => (
     <div>
+      {children}{showTools && <button>tools</button>}{showResearch && <button>research</button>}
       {showKnowledgeSelection && <button>spaces</button>}
       {showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
     </div>
