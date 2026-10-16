@@ -1,3 +1,12 @@
+## 2026-10-16 — 企业市场直接导入社区插件包
+
+- 管理员上传普通 ZIP、npm tgz/tar.gz，系统直接读取 package.json 的名称、版本、作者、许可证及系统架构；内部发布元数据由系统派生。客户端复用既有 pnpm generation 安装器准备依赖，支持 main/exports 和 dsh.bundle，旧离线包继续可用。
+- 保留原始制品摘要、账号隔离、依赖树完整性与失败更新恢复；较旧版本和同版本内容冲突按 SemVer 校验，覆盖预发布版本。
+- 桌面基线 bisheng-work/V1.2.0@7edfd09170c23b005c81a78b65a42360377fc87d，安装 Harness 0.2.0-rc.2；后台基线 bisheng/feat/bisheng-work-103@5beb3bc90b2728dbdee3ae373eda50a01583f1a2。两个改动在独立功能分支交付。
+- 已验证：桌面相关 33 项、后台市场/工作台 57 项、管理端 14 项；桌面干净安装/类型检查/构建，管理端 525 strict 文件、变更文件 lint、构建、多语言一致性、Ruff 和架构守卫通过。真实 ASGI/SQL/pnpm/Cordis 联调覆盖导入、下载安装、未捆绑依赖准备、重启恢复、失败更新回退与卸载。
+- 管理端完整 lint 的 93 项错误与目标干净基线逐字一致。扩展身份测试有 3 项因隔离环境缺少 telemetry 依赖失败，原基线同样重现。真实企业账号、目标环境部署、原生安装包与 Windows 验收为 NOT_RUN。
+- 桌面完整回归 220 文件 / 1878 项通过、1 项跳过；证据位于主工作区 outputs/enterprise-community-packages-20261016/。
+
 # DSH 企业后台交付状态
 
 - 2026-09-22：跟进 #2433 的席位反馈验收。确认“重新分配”后，失败原因以“用户名 + 原因”的单个 toast 展示，约 4 秒自动消失；每次操作的同一失败只提示一次，新操作可再次提示。表格保持原列宽。已撤销席位的管理提示提供明确的重新分配步骤。批量容量错误配套 [Gateway #6](https://github.com/dataelement/bisheng-gateway/pull/6)：新增和待恢复成员统一计入所需席位，容量不足统一返回 seat_limit_reached。

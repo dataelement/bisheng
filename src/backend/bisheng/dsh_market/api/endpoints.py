@@ -130,11 +130,13 @@ async def artifact(
     data, digest = await call(service.download, actor.tenant_id, plugin_id, version_id)
     return Response(
         data,
-        media_type="application/zip",
+        media_type="application/gzip" if data.startswith(b"\x1f\x8b") else "application/zip",
         headers={
             "ETag": f'"{digest}"',
             "Cache-Control": "no-store",
-            "Content-Disposition": 'attachment; filename="plugin.zip"',
+            "Content-Disposition": 'attachment; filename="plugin.tgz"'
+            if data.startswith(b"\x1f\x8b")
+            else 'attachment; filename="plugin.zip"',
             "X-Content-Type-Options": "nosniff",
         },
     )
