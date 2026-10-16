@@ -158,10 +158,10 @@ class TestAgentNodeWithSkills:
         result = node._run("exec-1")
         (log,) = node.parse_log("exec-1", result)
         keys = [item["key"] for item in log]
-        assert "skills" in keys
+        assert "skill_list" in keys
         assert "agent_1.output" in keys
         assert "agent_1.output_deliverables" in keys
-        assert next(item["value"] for item in log if item["key"] == "skills") == ["docx"]
+        assert next(item["value"] for item in log if item["key"] == "skill_list") == ["docx"]
 
     def test_react_model_with_skills_fails_with_11063(self, env):
         env.executor["type"] = "ReAct"

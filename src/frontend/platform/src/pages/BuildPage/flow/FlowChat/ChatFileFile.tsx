@@ -2,7 +2,7 @@ import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { WordIcon } from "@/components/bs-icons/office";
 import { downloadFile } from "@/util/utils";
 import { useTranslation } from "react-i18next";
-export default function ChatFile({ fileName, filePath }) {
+export default function ChatFile({ fileName, filePath, formatError = '' }) {
     const { t } = useTranslation()
 
     // download file
@@ -18,6 +18,8 @@ export default function ChatFile({ fileName, filePath }) {
         <div>
             <h1 className="text-sm font-bold">{fileName}</h1>
             <p className="text-xs text-gray-400 mt-1">{t('chat.clickDownload')}</p>
+            {/* F078: the file's content does not match its extension */}
+            {formatError && <p className="text-xs text-red-500 mt-1">{t('agentRuntime.formatError', { ns: 'flow' })}</p>}
         </div>
     </div>
 };

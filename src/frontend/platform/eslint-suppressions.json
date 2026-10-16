@@ -288,17 +288,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/filterTableDataComponent/FilterByUser.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/filterTableDataComponent/FilterByUsergroup.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -374,11 +363,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    }
-  },
-  "src/components/bs-comp/selectComponent/Users.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
     }
   },
   "src/components/bs-comp/selectComponent/knowledge.tsx": {
@@ -1410,7 +1394,7 @@
       "count": 24
     },
     "no-restricted-syntax": {
-      "count": 35
+      "count": 16
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -1772,9 +1756,6 @@
     },
     "no-console": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 2
     },
     "prefer-const": {
       "count": 5
@@ -2583,11 +2564,6 @@
       "count": 4
     }
   },
-  "src/pages/DepartmentPage/components/AddMemberDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
   "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2835,7 +2811,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 2
     },
     "no-useless-escape": {
       "count": 1
@@ -3466,7 +3442,7 @@
   },
   "src/pages/TenantPage/components/CreateTenantDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3482,7 +3458,7 @@
   },
   "src/pages/TenantPage/components/TenantUserDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 5
@@ -3783,7 +3759,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     },
     "no-prototype-builtins": {
       "count": 4

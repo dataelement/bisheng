@@ -484,6 +484,9 @@
       "output_deliverables": {
         "label": "生成されたファイル",
         "help": "今回スキルが生成したファイル。1 行に 1 つのファイル名とダウンロードリンク。スキルを設定した場合のみ値があります。ダウンロードにはログインが必要です。"
+      },
+      "skill_notice": {
+        "label": "スキルの通知"
       }
     },
     "qa_retriever": {
@@ -615,6 +618,22 @@
       "output": {
         "label": "出力変数"
       }
+    }
+  },
+  "agentRuntime": {
+    "formatError": "ファイルの内容が形式と一致せず、開けない可能性があります",
+    "notice": {
+      "code_executor_missing": "利用できるコード実行環境がないため、スキルのスクリプトは実行されませんでした。結果が不完全な可能性があります。",
+      "deliverables_failed": "生成されたファイルを保存できませんでした。もう一度実行してください。"
+    },
+    "tools": {
+      "ls": "ファイル一覧",
+      "read_file": "ファイルを読む",
+      "write_file": "ファイルに書き込む",
+      "edit_file": "ファイルを編集",
+      "glob": "ファイルを探す",
+      "grep": "ファイル内容を検索",
+      "bisheng_code_interpreter": "コード実行"
     }
   }
 }

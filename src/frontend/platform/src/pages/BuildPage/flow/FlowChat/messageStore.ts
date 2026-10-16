@@ -8,6 +8,7 @@ import i18next from 'i18next';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { create } from 'zustand';
 import { normalizeCitationItems } from '@/components/bs-comp/chatComponent/citationUtils';
+import { parseAgentNotices, toChatFiles } from './agentDeliverables';
 
 /**
  * 会话消息管理
@@ -67,7 +68,7 @@ const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
                 message = message && message[0] === '{' ? JSON.parse(message) : message || ''
             } catch (e) {
                 // 未考虑的情况暂不处理
-                console.error('消息 to JSON error :>> ', e);
+                console.error('message to JSON error :>> ', e);
             }
             // hack
             let chatKey = undefined
@@ -85,7 +86,8 @@ const handleHistoryMsg = (data: any[]): WorkflowMessage[] => {
                 category,
                 chatKey,
                 end: true,
-                files: files ? JSON.parse(files) : [],
+                files: toChatFiles(files ? JSON.parse(files) : []),
+                notices: parseAgentNotices(other.extra),
                 isSend: !is_bot,
                 message,
                 thought: intermediate_steps,
@@ -132,7 +134,8 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             newChat.push({
                 category, flow_id, chat_id,
                 message_id: messageId,
-                files, is_bot,
+                files: toChatFiles(files), is_bot,
+                notices: parseAgentNotices(extra),
                 message, receiver, source, user_id,
                 liked: !!liked,
                 end: type === 'over',
@@ -165,6 +168,9 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
             create_time: formatDate(new Date(), 'yyyy-MM-ddTHH:mm:ss'),
             source: data.source,
             citations: normalizeCitationItems(data) || currentMsg.citations || null,
+            // F078: an agent node's deliverables and notices arrive with the end event.
+            files: data.type === 'end' ? toChatFiles(data.files) : currentMsg.files,
+            notices: data.type === 'end' ? parseAgentNotices(data.extra) : currentMsg.notices,
             end: data.type === 'end'
         }
 
@@ -261,7 +267,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     overWsMsg(data) {
         // 删除所有未结束消息
         if (data.type === 'end_cover' && data.message) {
-            console.log('触发安全审计,删除所有未结束消息 :>> ');
+            console.log('security audit triggered, dropping unfinished messages');
             data.category = "stream_msg"
             data.type = 'over'
             data.message_id = generateUUID(8)

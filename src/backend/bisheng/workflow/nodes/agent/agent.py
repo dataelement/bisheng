@@ -604,9 +604,10 @@ class AgentNode(BaseNode):
             skill_runs = getattr(self, "_skill_runs", [])
             skill_run = skill_runs[index] if index < len(skill_runs) else None
             if skill_run is not None:
-                one_ret.append({"key": "skills", "value": skill_run.plan.skill_names, "type": "params"})
+                # Keys match the node's i18n entries so the run log can label them.
+                one_ret.append({"key": "skill_list", "value": skill_run.plan.skill_names, "type": "params"})
                 for notice in skill_run.plan.notices:
-                    one_ret.append({"key": "notice", "value": notice, "type": "params"})
+                    one_ret.append({"key": "skill_notice", "value": notice, "type": "params"})
 
             # Handler Call Log
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))

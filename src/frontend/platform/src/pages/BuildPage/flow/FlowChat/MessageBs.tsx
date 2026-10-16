@@ -104,7 +104,8 @@ export default function MessageBs({ debug, mark = false, logo, data, onUnlike = 
                                     allowRemoteCitationResolve={allowRemoteCitationResolve}
                                     buttonClassName="mt-2"
                                 />}
-                                {!!data.files?.length && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} />)}
+                                {!!data.files?.length && data.files.map(file => <ChatFile key={file.path} fileName={file.name} filePath={file.path} formatError={file.format_error} />)}
+                                {!!data.notices?.length && data.notices.map(code => <p key={code} className="mt-2 text-xs text-muted-foreground">{t(`agentRuntime.notice.${code}`, { ns: 'flow' })}</p>)}
                                 {/* @user */}
                                 {data.receiver && <p className="text-blue-500 text-sm">@ {(data.receiver as any).user_name}</p>}
                                 {/* 光标 */}

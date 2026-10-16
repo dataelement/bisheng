@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
+import { AGENT_SKILL_TOOL_NAMES } from "../FlowChat/agentDeliverables";
 
 const enum Status {
     normal = 'normal',
@@ -37,6 +38,12 @@ export default function RunLog({ node, children }) {
                                 keyMap[el.tool_key] = el.label
                             })
                         }
+                        // F078: readable names for the tools a skill run adds
+                        if (param.key === 'skill_list' && param.value?.length) {
+                            AGENT_SKILL_TOOL_NAMES.forEach(name => {
+                                keyMap[name] = keyMap[name] || t(`agentRuntime.tools.${name}`)
+                            })
+                        }
                     });
                 });
 
@@ -52,6 +59,9 @@ export default function RunLog({ node, children }) {
                         label = item.key
                     } else if (item.key === 'error') {
                         label = item.key
+                    } else if (item.key === 'skill_notice') {
+                        label = t(`node.${node.type}.${item.key}.label`)
+                        return { label, type: item.type, value: t(`agentRuntime.notice.${item.value}`) }
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)
                     }

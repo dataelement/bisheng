@@ -484,6 +484,9 @@
       "output_deliverables": {
         "label": "Generated files",
         "help": "Files the skills produced in this run, one file name and download link per line. Set only when skills are configured. Downloading requires signing in."
+      },
+      "skill_notice": {
+        "label": "Skill notice"
       }
     },
     "qa_retriever": {
@@ -615,6 +618,22 @@
       "output": {
         "label": "Output Variable"
       }
+    }
+  },
+  "agentRuntime": {
+    "formatError": "The file content does not match its format and may not open",
+    "notice": {
+      "code_executor_missing": "No code executor was available, so the skill scripts did not run. The result may be incomplete.",
+      "deliverables_failed": "The generated files could not be saved. Run again."
+    },
+    "tools": {
+      "ls": "List files",
+      "read_file": "Read file",
+      "write_file": "Write file",
+      "edit_file": "Edit file",
+      "glob": "Find files",
+      "grep": "Search file content",
+      "bisheng_code_interpreter": "Run code"
     }
   }
 }

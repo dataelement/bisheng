@@ -484,6 +484,9 @@
       "output_deliverables": {
         "label": "生成的文件",
         "help": "技能本次生成的文件，每行一个文件名和下载地址。只有配置了技能时才有值；下载需要登录。"
+      },
+      "skill_notice": {
+        "label": "技能提示"
       }
     },
     "qa_retriever": {
@@ -615,6 +618,22 @@
       "output": {
         "label": "输出变量"
       }
+    }
+  },
+  "agentRuntime": {
+    "formatError": "文件内容与格式不符，可能无法打开",
+    "notice": {
+      "code_executor_missing": "本次没有可用的代码执行器，技能脚本未执行，结果可能不完整。",
+      "deliverables_failed": "生成的文件没有保存成功，请重新运行。"
+    },
+    "tools": {
+      "ls": "列出文件",
+      "read_file": "读取文件",
+      "write_file": "写入文件",
+      "edit_file": "修改文件",
+      "glob": "查找文件",
+      "grep": "搜索文件内容",
+      "bisheng_code_interpreter": "代码执行"
     }
   }
 }
