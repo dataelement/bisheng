@@ -247,7 +247,95 @@ class DshOperationConflictError(BaseErrorCode):
     ErrorType: str = "conflict_error"
 
 
+class DshToolPublicationNotFoundError(BaseErrorCode):
+    Code: int = 26131
+    Msg: str = "Tool publication is not available"
+    HttpStatus: int = 404
+    ClientCode: str = "tool_publication_not_found"
+
+
+class DshToolPermissionDeniedError(BaseErrorCode):
+    Code: int = 26132
+    Msg: str = "Tool access denied"
+    HttpStatus: int = 403
+    ClientCode: str = "tool_permission_denied"
+
+
+class DshToolPublicationInvalidError(BaseErrorCode):
+    Code: int = 26133
+    Msg: str = "Tool publication is invalid or unsupported"
+    HttpStatus: int = 400
+    ClientCode: str = "tool_publication_invalid"
+
+
+class DshToolArgumentsInvalidError(BaseErrorCode):
+    Code: int = 26134
+    Msg: str = "Tool arguments are invalid"
+    HttpStatus: int = 400
+    ClientCode: str = "tool_arguments_invalid"
+
+
+class DshToolConcurrencyExceededError(BaseErrorCode):
+    Code: int = 26135
+    Msg: str = "Tool concurrency limit reached"
+    HttpStatus: int = 429
+    ClientCode: str = "tool_concurrency_exceeded"
+
+
+class DshToolUpstreamFailedError(BaseErrorCode):
+    Code: int = 26136
+    Msg: str = "Tool upstream request failed"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_upstream_failed"
+
+
+class DshToolResultInvalidError(BaseErrorCode):
+    Code: int = 26137
+    Msg: str = "Tool result is invalid"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_result_invalid"
+
+
+class DshToolExecutionTimeoutError(BaseErrorCode):
+    Code: int = 26138
+    Msg: str = "Tool execution timed out"
+    HttpStatus: int = 504
+    ClientCode: str = "tool_execution_timeout"
+
+
+class DshToolServiceUnavailableError(BaseErrorCode):
+    Code: int = 26139
+    Msg: str = "Tool service is temporarily unavailable"
+    HttpStatus: int = 503
+    ClientCode: str = "tool_service_unavailable"
+
+
+class DshToolInputTooLargeError(BaseErrorCode):
+    Code: int = 26140
+    Msg: str = "Tool input exceeds the size limit"
+    HttpStatus: int = 413
+    ClientCode: str = "tool_input_too_large"
+
+
+class DshToolOutputTooLargeError(BaseErrorCode):
+    Code: int = 26141
+    Msg: str = "Tool output exceeds the size limit"
+    HttpStatus: int = 502
+    ClientCode: str = "tool_output_too_large"
+
+
 DSH_ERROR_TYPES = (
+    DshToolPublicationNotFoundError,
+    DshToolPermissionDeniedError,
+    DshToolPublicationInvalidError,
+    DshToolArgumentsInvalidError,
+    DshToolConcurrencyExceededError,
+    DshToolUpstreamFailedError,
+    DshToolResultInvalidError,
+    DshToolExecutionTimeoutError,
+    DshToolServiceUnavailableError,
+    DshToolInputTooLargeError,
+    DshToolOutputTooLargeError,
     DshInvalidRequestError,
     DshUnsupportedParameterError,
     DshContextLengthExceededError,

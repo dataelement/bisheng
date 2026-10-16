@@ -5,11 +5,11 @@ from datetime import UTC, datetime
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
-from bisheng.common.errcode.dsh import DshInvalidAccessTokenError, DshModelNotAllowedError, DshQuotaUnavailableError
-from bisheng.dsh.api.dependencies import DshRuntime, get_runtime
+from bisheng.common.errcode.dsh import DshModelNotAllowedError, DshQuotaUnavailableError
+from bisheng.dsh.api.dependencies import DshRuntime, desktop_principal, get_runtime
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.domain.schemas.chat import DshChatRequest
 from bisheng.dsh.domain.services.access import DshPrincipal, principal_scope
@@ -18,12 +18,6 @@ from bisheng.dsh.domain.services.usage_projection import apply_current_policy_li
 from bisheng.dsh.runtime import get_model_runtime, read_persisted_usage, read_policy
 
 router = APIRouter(route_class=DshRoute)
-
-
-async def desktop_principal(request: Request, runtime: DshRuntime = Depends(get_runtime)) -> DshPrincipal:
-    if len(request.headers.getlist("authorization")) != 1:
-        raise DshInvalidAccessTokenError()
-    return await runtime.access.authenticate(request.headers["authorization"])
 
 
 class DshStreamingResponse(StreamingResponse):

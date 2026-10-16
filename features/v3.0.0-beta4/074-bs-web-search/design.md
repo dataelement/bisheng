@@ -1,9 +1,9 @@
 # Design: F074 Published Tool Invocation
 
 Release: v3.0.0-beta4. Updated: 2026-10-15.
-Status: proposed design for confirmation; no business implementation exists.
+Status: confirmed by the user on 2026-10-15; implemented locally, deployment acceptance pending.
 Inputs: confirmed [spec](./spec.md), [discovery](./discovery.md),
-[release contract](../release-contract.md). tasks.md follows design confirmation.
+[release contract](../release-contract.md), [tasks](./tasks.md).
 
 ## 1. Goal and Non-goals
 
@@ -116,12 +116,13 @@ named error. Reconsider result-schema publication only when another business
 contract requires it. Unknown reverse-proxy rewrites and upstream services that
 internally call Bisheng remain operator-owned routing, not discoverable here.
 
-## 4. Current Baseline and Proposed Implementation
+## 4. Baseline and Implementation
 
 ### 4.1 Verified baseline
 
 Tag v3.0.0-beta4 and origin/feat/3.0.0-beta4 both identify db23811133. The branch
-codex/bs-web-search currently contains discovery/spec documents only.
+codex/bs-web-search contains the confirmed SDD artifacts and local implementation.
+The deployed release line has not been modified by this work.
 
 Existing `dsh/api/endpoints/models.py:desktop_principal` requires exactly one
 Authorization header and calls `DshAccessService.authenticate`. That service
@@ -257,6 +258,9 @@ edit generated JSON by hand. No component, visual-style or page change is involv
 | Per-revision admission keys reset counters | Updating limits permits excess parallel work | One tenant/code lease bucket |
 | Jsonschema considers integral floats integers by default | Input intended to be strict may be coerced | Explicit strict integer/number type checker |
 | Callback traces can capture arguments/results | Safe local logs alone do not prove no sensitive trace leakage | No user callbacks; verify runnable tracing configuration and sanitize this path |
+| Empty callback lists do not suppress ambient trace collectors | Tool inputs/results still enter inherited tracing | Validated ToolExecutor._arun entry and disabled LangSmith scope |
+| httpx/httpcore can log transport URLs and response headers | Saved query credentials can leak without application logs | Task-local private_http_logs filter |
+| Legacy parameter assembly merges category extra over tool extra | A checked path/schema can differ from the executed path/schema | Strict factory explicitly receives the verified destination and parameter snapshot |
 
 ## 6. Wire Contracts and Dependencies
 
@@ -391,8 +395,8 @@ logs. Test tracing suppression explicitly instead of assuming callbacks=[] is en
 
 | Dependency / interface | Contract and change risk |
 | --- | --- |
-| ToolPublicationService.save/read/list/invoke | DSH orchestration consumes tool-owned snapshots and safe errors, not business ORM |
-| PublishedToolService.prepare/authorize/build | Tool-owned tenant/schema facts, permission facade and ToolExecutor assembly |
+| ToolPublicationService.put/get/list/preflight/invoke | DSH orchestration consumes tool-owned snapshots and safe errors, not business ORM |
+| PublishedToolService.verify/prepare/execute | Tool-owned tenant/schema facts, permission facade and ToolExecutor assembly |
 | DshAccessService.authenticate/principal_scope | F062 issuer/audience/session contract changes affect every external invoke |
 | ToolExecutor strict initialization entry | Must retain saved permissions and telemetry; never change legacy defaults |
 | jsonschema 4.25.1 / httpx / safe YAML parser | Validator and bounded async transport; no new binary or provider SDK |
@@ -466,3 +470,16 @@ separate authoritative admission protocol, not a claim based on lease tests.
 
 2026-10-15: Proposed design after user-confirmed spec; current source gaps and
 planned opt-in execution path documented before implementation.
+
+2026-10-15: Design confirmed; implemented publication management, shared credential
+dependency, strict saved-schema adapter and bounded execution. Invocation executes
+the existing ToolExecutor._arun metadata wrapper after full schema validation;
+it bypasses BaseTool callback setup, which otherwise attaches ambient tracers even
+with an empty callback list. LangSmith tracing is disabled in the same scope.
+Strict HTTP calls additionally suppress httpx/httpcore records through a task-local
+logging filter: the libraries can log URLs containing server-owned query credentials.
+Other requests retain their logging behavior. The executor takes the already
+validated destination/parameter snapshot explicitly, so category extra cannot
+override those fields during the legacy parameter merge. These implement D2/D3's
+existing strict execution and non-disclosure requirements; no API scope change.
+See e2e-report.md for passing local evidence and unverified deployment checks.

@@ -7,6 +7,8 @@ from bisheng.dsh.api.endpoints.identity import router as identity_router
 from bisheng.dsh.api.endpoints.models import router as model_router
 from bisheng.dsh.api.endpoints.self_service import router as self_router
 from bisheng.dsh.api.endpoints.settings import router as settings_router
+from bisheng.dsh.api.endpoints.tool_publications import router as tool_publication_router
+from bisheng.dsh.api.endpoints.tools import router as tool_router
 
 router = APIRouter()
 router.include_router(self_router)
@@ -14,3 +16,5 @@ router.include_router(identity_router)
 router.include_router(model_router)
 router.include_router(admin_router)
 router.include_router(settings_router)
+router.include_router(tool_router)
+router.include_router(tool_publication_router)

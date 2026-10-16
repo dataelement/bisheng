@@ -205,10 +205,40 @@ class ToolExecutor(BaseTool):
     def _init_api_tool(
         cls, tool: GptsTools, tool_type: GptsToolsType, callbacks: Callbacks = None, **kwargs
     ) -> BaseTool:
+        api_tool_factory = kwargs.pop("api_tool_factory", OpenApiTools.get_api_tool)
         tool_params = cls.parse_api_tool_params(tool, tool_type, **kwargs)
-        tool = OpenApiTools.get_api_tool(tool.tool_key, **tool_params)
+        tool = api_tool_factory(tool.tool_key, **tool_params)
         tool.callbacks = callbacks
         return tool
+
+    @classmethod
+    async def init_published_openapi(cls, tool, tool_type, schema, *, user_id, tool_code, limits):
+        """Only the tool-owned publication service supplies these verified snapshots."""
+        from bisheng.tool.domain.services.published_openapi import PublishedOpenApiTools
+
+        await cls._ensure_use_permission_async(tool_type, user_id)
+        auth = json.loads(tool_type.extra) if tool_type.extra else {}
+        params = {
+            "path": "",
+            "method": schema.method,
+            "parameters": schema.parameters,
+            "api_location": auth.get("api_location"),
+            "parameter_name": auth.get("parameter_name"),
+        }
+        return cls._init_by_tool_and_type_with_context(
+            tool,
+            tool_type,
+            app_id=tool_code,
+            app_name="Published tool",
+            app_type=ApplicationTypeEnum.DSH_DESKTOP,
+            user_id=user_id,
+            api_tool_factory=PublishedOpenApiTools.get_api_tool,
+            input_schema=schema.schema,
+            max_output_bytes=limits.max_output_bytes,
+            request_timeout=limits.timeout_seconds,
+            url=schema.destination,
+            params=params,
+        )
 
     @classmethod
     def _init_mcp_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
