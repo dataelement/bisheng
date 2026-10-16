@@ -7,6 +7,10 @@
 
 ## 1. 设计结论
 
+2026-10-16 缺陷修复：`get_file_source` 在现有 MCP 空间/文件/入口权限校验后，调用已装配的知识 Owner `get_file_preview(entry_file_id)`，不再自行预测对象路径。优先采用其 PDF、HTML、普通预览；只有原生可预览的文本、PDF、图片可使用 Owner 返回的原生文件地址作为 `preview_url`。Office 缺少预览时不回退原件。仅输出现有来源 DTO 字段，`original_url` 保持为空，显式 original 仍拒绝。Owner 的相对签名 URL 补回现有对象存储分享域名，绝对地址及签名保持原样。复用已生成的产物，不新增生成/上传/转换流程。
+
+落点为 `knowledge_mcp_content_service.py`、其领域回归和受控 Owner 的 SDK 流程替身。备选的逐格式补拼对象路径会继续复制预览分支，因此不采用。回退可还原本次局部提交，无数据迁移。
+
 继续扩展已有 `mcp_server`。MCP 层负责 schema、协议、绑定身份、超时和安全结果；知识模块负责查询、内容和写入；现有共享检索服务负责 RAG。服务之间直接调用领域接口，不在后端通过 HTTP 回调自身 REST，也不让 MCP endpoint 导入其他模块 endpoint。
 
 ```mermaid

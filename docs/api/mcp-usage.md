@@ -300,7 +300,9 @@ X-Developer-Token: <完整Token>
 
 返回包含 `file_id`、`knowledge_id`、`preview_url`、`original_url`、`expires_at`、`original_unavailable_reason`。
 
-当前实现中，`auto/preview` 返回有权访问且已生成的预览链接，默认有效期七天。原件下载仍需通过系统已有的授权水印下载流程，因此 `original_url` 为空，并返回不可用原因；显式请求 `original` 会返回工具错误。不要将 `source_type=original` 当作获取原件的可用开关。
+当前实现中，`auto/preview` 复用系统现有的预览权限和来源解析，优先返回已生成的 PDF、HTML 或普通预览链接，默认有效期七天。Markdown、文本、PDF 和常见图片可沿用页面的原生文件预览地址，无需额外生成预览对象；相对签名链接会补齐现有对象存储分享域名。
+
+`original_url` 保持为空，并返回不可用原因；显式请求 `original` 会返回工具错误。Office 预览缺失时不会回退原件，原件下载仍需通过系统已有的授权水印下载流程。原生预览地址可能与页面读取原生文件的地址相同，获取预览不代表获得额外下载授权。
 
 文件未生成预览、预览不可用或用户无权限时会报错。链接失效后重新调用本工具获取，不能把签名链接当作永久文件地址。
 

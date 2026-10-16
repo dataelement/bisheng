@@ -79,6 +79,13 @@ class OwnerPort:
     async def get_existing_portal_visible_space_levels(self):
         return {118: "team"}
 
+    async def get_file_preview(self, file_id):
+        file = await self.db.get(KnowledgeFile, file_id)
+        return {
+            "preview_url": await self.storage.get_share_link(file.preview_file_object_name, self.storage.bucket),
+            "original_url": "",
+        }
+
     async def add_file(self, *, knowledge_id, parent_id, file_path, **kwargs):
         key = file_path[0].rsplit("/", 1)[-1]
         name = self.storage.names[key]

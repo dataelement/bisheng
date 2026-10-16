@@ -1,5 +1,7 @@
 # MCP 九工具实施验证
 
+最新 `get_file_source` 缺陷修复及其证据见 §7。§1～6 保留最初九工具实施记录。
+
 - 日期：2026-10-16。
 - 基线：`feat/2.5.0-sg-main` / `06bc21e27`。
 - 工作分支：`codex/078-mcp-knowledge-tools`，改动尚未提交、合并、推送或部署。
@@ -132,3 +134,45 @@
 九份特性文档的相对链接、10 个 JSON 示例和 Python 示例语法通过检查；所有变更 Python/Markdown 文件的尾随空白与 `git diff --check` 通过。任务 ID/依赖、REQ/AC 追溯与实际文件范围已核对，T001～T018 完成，本次没有更改配置/依赖/Schema。代码自审见 [code-review.md](code-review.md)。
 
 回退方式为回退本次应用改动；无需回退表结构。已经通过业务上传创建的文件保留，不能声称回退代码会撤销数据。
+
+## 7. get_file_source 缺陷修复（2026-10-16）
+
+- 基线：`feat/2.5.0-sg` / `74dc97768`；本节对应未提交工作区的 T019～T020。
+- 状态：`LOCAL_PASS_WITH_BASELINE_FAILURES / DEPLOYMENT_NOT_VERIFIED`。
+- 前序运行环境证据：空间 317 的文件 9992556（Markdown）及四个 DOCX 均返回 `Resource denied or unavailable`；正文读取及检索成功。前序报告在 `/tmp/bisheng-mcp-live-verification-20261016.md`，不包含 Token、签名链接或正文。
+- 已证实的代码根因：MCP 只调用 `resolve_preview_object_name` 并检查对应对象，绕过预览 Owner。该 helper 对无派生预览的 Markdown/PDF 返回空；Office 路径遗漏 `get_file_share_detail` 已支持的 PDF 元数据、统一 PDF 产物及 HTML 来源。这些可用来源在本地用例中仍触发旧错误。运行环境五个文件的实际权限/对象状态未读取，不能断言它们均为同一具体失败分支。
+- 修复：保留 MCP 原授权与 canonical 预览门禁，使用原始入口 ID 调用 `KnowledgeSpaceService.get_file_preview`；只映射来源 DTO，保留签名，补齐相对链接的现有存储分享域名。原生文本/PDF/常见图片沿用页面的原生预览地址；Office 仅剩原件时仍拒绝，显式 original 及无权限请求不新增签名或下载通道。
+
+| Evidence | 范围及命令 | Result |
+|---|---|---|
+| E14 红灯 | `.venv/bin/python -m pytest test/knowledge/test_mcp_knowledge_content_service.py -q --tb=short`，生产修复前 | 10 failed、9 passed，4.24 秒；缺少 Owner 预览来源及权限委托 |
+| E15 绿灯 | 同一内容测试 + `test/mcp_server/test_mcp_knowledge_flow.py` | 20 passed、10 warnings，4.09 秒 |
+| E16 模块回归 | 下列核心命令，包含真实 SDK/ASGI/TCP、SQLite 及入口解析器，外部端口受控 | 100 passed、105 warnings，11.08 秒 |
+| E17 扩大回归及基线对照 | 核心命令 + 下列预览回归；相同命令在 `git archive HEAD src/backend` 的隔离快照执行 | 当前 109 passed、7 failed，17.13 秒；HEAD 95 passed、同样 7 failed，17.55 秒；失败测试 ID 集合相同 |
+| E18 静态/审查 | 三个变更 Python 文件的 Ruff 检查/格式；生产文件架构守卫；`git diff --check`；文档引用/示例语法 | PASS；无新增依赖、配置、Schema 或权限策略 |
+
+核心命令（cwd 为 `src/backend`，Python 3.10.19，现有 `.venv`）：
+
+```bash
+.venv/bin/python -m pytest test/mcp_server \
+  test/knowledge/test_mcp_knowledge_query_service.py \
+  test/knowledge/test_mcp_knowledge_repository.py \
+  test/knowledge/test_mcp_knowledge_content_service.py \
+  test/knowledge/test_mcp_knowledge_ingestion_service.py \
+  test/knowledge/test_knowledge_document_entry_resolver.py -q --tb=short
+```
+
+扩大回归在核心命令中追加：
+
+```text
+test/knowledge/test_dept_admin_member_personal_preview.py
+test/knowledge/test_department_file_view_content.py
+test/test_knowledge_space_service.py::TestTupleLifecycle::test_get_file_preview_uses_knowledge_file_can_read
+test/test_knowledge_space_service.py::TestTupleLifecycle::test_get_file_preview_schedules_success_telemetry_without_changing_response
+test/test_knowledge_space_service.py::TestTupleLifecycle::test_get_file_preview_skips_my_knowledge_read_for_portal_bff_proxy
+test/test_knowledge_space_service.py::TestTupleLifecycle::test_get_file_preview_denied_without_view_file_permission
+```
+
+七个基线失败为：部门管理预览测试的两个过期异步 mock/断言、部门文件预览测试的两个数据库/KnowledgeRag 替身缺口，以及旧知识空间预览的两个完整响应等值断言和一个未隔离数据库调用。本次未修改这些 Owner 方法或旧测试，也未隐藏失败。日志分别保存在 `/tmp/bisheng-mcp-source-fix-core-20261016.log`、`/tmp/bisheng-mcp-source-fix-regression-20261016.log`、`/tmp/bisheng-mcp-source-fix-baseline-20261016.log`。
+
+AC-09-FIX、AC-09、AC-17、AC-18 的本地回归为 PASS（E15～E18）。本次未提交、推送或部署，未新增运行环境探测，未调用两个远程写工具。部署后需以同一 Token 复测上述文件的 auto/preview、显式 original 拒绝及预览链接可达性；真实 MinIO/FGA、MySQL/DM8 和五个文件的实际产物仍为 MANUAL_REQUIRED。若 Owner 自身没有可用预览，工具继续安全失败，不通过强制生成产物或签发 Office 原件掩盖问题。

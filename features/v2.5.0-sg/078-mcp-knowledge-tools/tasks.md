@@ -10,6 +10,7 @@
 | spec.md | ✅ 已评审 | 用户明确确认 |
 | tasks.md | ✅ 已拆解 | 依项目 21 项清单自审，LGTM；无独立 agent |
 | 实现 | ✅ 本地完成 | T001～T018；73 项本功能测试通过，相关回归 308 通过、6 项 HEAD 已有失败 |
+| 来源缺陷修复 | ✅ 本地完成 | T019～T020；MCP/入口解析 100 项通过；扩大预览回归 109 通过、7 项 HEAD 同样失败，见 verification §7 |
 | 真实环境验收 | 🔲 待执行 | FGA/MinIO/ES/Milvus/Worker、MySQL/DM8、代理与压测；见 verification |
 
 完成证据见 [verification.md](verification.md)，L1/L2 自审见 [code-review.md](code-review.md)。本地完成不代表已提交、合并、部署或生产验收。
@@ -144,6 +145,21 @@
 
 ## 任务评审
 
+### 2026-10-16 来源工具缺陷修复
+
+- [x] **T019** 补充来源预览兼容、逻辑入口及拒绝路径回归；观察现有实现失败，再以现有 Owner 预览替代路径拼接，更新 SDK Owner 替身。
+  _Requirements: REQ-007, REQ-012_
+  _Acceptance: AC-09, AC-09-FIX, AC-17, AC-18_
+  _Verification: 领域红/绿灯、SDK 流程、入口解析及现有预览权限回归_
+  _Depends: T018_
+  _Boundary: 不改变 Owner、权限或下载政策，不部署或写入远程业务数据_
+
+- [x] **T020** 更新使用文档与 verification，记录根因、验证证据及待部署复验范围。
+  _Requirements: REQ-007, REQ-012_
+  _Acceptance: AC-09-FIX, AC-18_
+  _Verification: Ruff、架构守卫、diff 与文档检查；复用 T019 回归_
+  _Depends: T019_
+
 LGTM。已对照项目 tasks 清单检查完整 AC 追溯、前置依赖、测试先行、每任务最多两个主要文件、原有 Owner 边界及无新数据迁移。测试文件可先存在失败用例，批次成功后更新最终完成状态。T015 的测试先于 T013/T014 配对实现执行，展示顺序按交付模块分组。
 
 ## 实际偏差记录
@@ -155,6 +171,7 @@ LGTM。已对照项目 tasks 清单检查完整 AC 追溯、前置依赖、测�
 - E2E 复用 F070 的 MCP SDK/ASGI/TCP 入口；新业务流程采用真实新服务/SQLite/入口解析器及受控外部端口，不使用 JWT/REST 响应模板，不代表真实基础设施验收。
 - 扩大回归发现六项旧上传测试失败，已在未修改 HEAD 快照复现相同原因，未为本功能修复无关代码或装配。最终记录为有基线失败的本地交付。
 - 全局测试预置了 KnowledgeUtils/BaseService 替身；内容测试在本用例作用域加载真实纯工具函数，不为适配替身修改生产代码。
+- 来源缺陷修复沿用用户指定的现有预览和权限逻辑，纳入已确认 REQ-007；T019 的三个直接关联文件（内容服务、领域测试、SDK Owner 替身）作为同一批次处理，不修改预览 Owner 或其旧测试。
 
 ## 完成证据索引
 
@@ -167,3 +184,4 @@ LGTM。已对照项目 tasks 清单检查完整 AC 追溯、前置依赖、测�
 | T011～T015 | E06/E09/E12：十名称、旧契约、签名、主应用 TCP、session 释放 | PASS |
 | T016 | E07/E09/E12：九工具 SDK 连续流程与回查、租户拒绝 | PASS（受控端口） |
 | T017～T018 | E10/E11：基线对照、Ruff、架构、文档与特性自审 | PASS_WITH_NOTES |
+| T019～T020 | E14～E18：来源红/绿灯、SDK、MCP/入口解析、扩大预览回归及 HEAD 对照；见 verification §7 | PASS_WITH_BASELINE_FAILURES；待部署复验 |

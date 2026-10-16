@@ -56,7 +56,7 @@
 2. `search_files` 返回文件检索结果，不返回 RAG 片段；匹配文件名和正文并集在权限检查后按入口 ID 去重。同一 canonical 文档在不同有权空间的入口可分别保留，供客户端选择位置。
 3. 正文读取先验证入口，再确定当前 canonical 文档、版本和内容代次；后续分页中内容已变化时拒绝旧游标，要求重新读取。不能因无正文而去掉空间/代次过滤。
 4. `content_format` 为 `text/markdown`；若没有原生 Markdown，只能返回真实可用文本并标明实际格式，不能声称无损还原文档排版。
-5. `get_file_source` 的 `auto` 优先预览。原件必须通过下载权限、入口限制和 Owner 当前下载政策；只有预览权不能签发原件。若当前政策仅允许水印 PDF，返回预览及 `original_unavailable_reason`，不新增原件例外或匿名下载通道。
+5. `get_file_source` 的 `auto` 优先预览。原件必须通过下载权限、入口限制和 Owner 当前下载政策；只有预览权不能签发原件。若当前政策仅允许水印 PDF，返回预览及 `original_unavailable_reason`，不新增原件例外或匿名下载通道。预览来源复用现有 Owner：原生文本、PDF、图片可使用页面已授权的原生预览地址；Office 缺少预览时不回退原件。`original_url` 保持为空，显式 original 仍拒绝。
 6. 新 `retrieve_chunks` 在调用共享检索前验证全部目标均为有权知识空间。旧 `search_knowledge` 不改变；两者共享检索核心，不复制检索算法。
 7. 分类/标签参数使用现有语义：`file_category_code`、`file_subcategory_code`、`business_domain_code`、`manual_tag_ids`、`manual_tag_names`；不从文件名或模型输出猜测分类，不改变标签审核和业务域校验规则。
 8. `search_files` 排序固定为 `update_time desc, id desc`；排序针对最终去重后的文件入口，不把分块相关度当文件列表排序。`statuses` 只属于 `list_files`，搜索结果仅包含可读的当前成功文件。`get_file_detail` 的 `cursor` 为正文续页游标，不与列表游标混用。

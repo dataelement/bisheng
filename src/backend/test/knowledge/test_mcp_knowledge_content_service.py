@@ -2,10 +2,11 @@ import importlib
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from bisheng.common.errcode.knowledge import KnowledgeChunkError
 from bisheng.common.errcode.knowledge_space import KnowledgeDocumentStateConflictError, SpacePermissionDeniedError
 from bisheng.knowledge.domain.services.knowledge_mcp_content_service import KnowledgeMcpContentService
 from test.knowledge.test_mcp_knowledge_query_service import item, make_query
@@ -35,6 +36,10 @@ def make_content():
         bucket="public",
         object_exists=AsyncMock(return_value=False),
         get_share_link=AsyncMock(return_value="https://example.test/preview"),
+        get_minio_share_host=Mock(return_value="https://example.test"),
+    )
+    query.owner.get_file_preview = AsyncMock(
+        return_value={"preview_url": "https://example.test/preview", "original_url": "https://example.test/original"}
     )
     resolved = SimpleNamespace(
         content_file_id=3,
@@ -73,15 +78,85 @@ async def test_unparsed_and_denied_files_never_read_content():
 
 async def test_source_never_turns_preview_access_into_original_download():
     """AC-09: preview-only clients receive no original and explicit original fails before signing."""
-    service, _, _, storage, _ = make_content()
-    storage.object_exists.return_value = True
+    service, query, _, storage, _ = make_content()
     result = await service.get_file_source(knowledge_id=1, file_id=3)
     assert result["preview_url"] and not result["original_url"]
     assert result["original_unavailable_reason"]
-    storage.get_share_link.reset_mock()
+    query.owner.get_file_preview.reset_mock()
     with pytest.raises(SpacePermissionDeniedError):
         await service.get_file_source(knowledge_id=1, file_id=3, source_type="original")
     storage.get_share_link.assert_not_called()
+    query.owner.get_file_preview.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("filename", "detail", "expected"),
+    [
+        ("note.md", {"original_url": "/public/note.md?signature=native"}, "/public/note.md?signature=native"),
+        ("scan.PDF", {"original_url": "/public/scan.pdf?signature=native"}, "/public/scan.pdf?signature=native"),
+        ("note.txt", {"original_url": "/public/note.txt"}, "/public/note.txt"),
+        ("image.png", {"original_url": "/public/image.png"}, "/public/image.png"),
+        (
+            "report.docx",
+            {"pdf_preview_url": "/public/current.pdf?signature=pdf", "preview_url": "/public/legacy.docx"},
+            "/public/current.pdf?signature=pdf",
+        ),
+        ("page.html", {"html_preview_url": "/public/snapshot.html"}, "/public/snapshot.html"),
+        ("sheet.xlsx", {"preview_url": "https://cdn.example.test/sheet.xlsx"}, "https://cdn.example.test/sheet.xlsx"),
+    ],
+)
+async def test_source_uses_existing_preview_sources_without_guessing_objects(filename, detail, expected):
+    """AC-09-FIX: native and derived previews reuse the owner's existing signed links."""
+    service, query, _, storage, file = make_content()
+    file.file_name, file.preview_file_object_name = filename, None
+    query.owner.get_file_preview.return_value = {**detail, "manager_file_id": 99, "source_url": "private"}
+    result = await service.get_file_source(knowledge_id=1, file_id=3)
+    assert result["preview_url"] == (expected if expected.startswith("https://") else "https://example.test" + expected)
+    assert result["original_url"] == "" and "manager_file_id" not in result and "source_url" not in result
+    query.owner.get_file_preview.assert_awaited_once_with(3)
+    storage.object_exists.assert_not_called()
+    storage.get_share_link.assert_not_called()
+
+
+@pytest.mark.parametrize("denial", ["space", "file", "preview", "owner"])
+async def test_source_preserves_permission_denials(denial):
+    """AC-09-FIX: denied requests never fall through to a storage URL."""
+    service, query, _, storage, _ = make_content()
+    if denial == "space":
+        query.repository.get_space.return_value = None
+    elif denial == "file":
+        query._permission_cache[("knowledge_file", 3, 1)] = set()
+    elif denial == "preview":
+        service.resolver.resolve.return_value.capabilities.can_preview = False
+    else:
+        query.owner.get_file_preview.side_effect = SpacePermissionDeniedError()
+    with pytest.raises(SpacePermissionDeniedError):
+        await service.get_file_source(knowledge_id=1, file_id=3)
+    if denial != "owner":
+        query.owner.get_file_preview.assert_not_called()
+    storage.get_share_link.assert_not_called()
+
+
+@pytest.mark.parametrize("detail", [{}, {"original_url": "https://example.test/private.docx"}])
+async def test_source_missing_office_preview_never_falls_back_to_original(detail):
+    service, query, _, storage, file = make_content()
+    file.file_name = "report.docx"
+    query.owner.get_file_preview.return_value = detail
+    with pytest.raises(KnowledgeChunkError):
+        await service.get_file_source(knowledge_id=1, file_id=3)
+    storage.get_share_link.assert_not_called()
+
+
+async def test_source_resolves_logical_entry_through_owner_entry_id():
+    service, query, repo, _, entry = make_content()
+    physical = item(11)
+    physical.knowledge_id, physical.file_name = 2, "private-manager.docx"
+    service.resolver.resolve.return_value.content_file_id = 11
+    repo.find_by_id.side_effect = lambda file_id: entry if file_id == 3 else physical
+    result = await service.get_file_source(knowledge_id=1, file_id=3, source_type="preview")
+    query.owner.get_file_preview.assert_awaited_once_with(3)
+    assert result["file_id"] == 3 and result["knowledge_id"] == 1
+    assert "private-manager" not in str(result)
 
 
 async def test_chunk_boundaries_preserve_separator_across_pages():

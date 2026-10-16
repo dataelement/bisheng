@@ -14,6 +14,8 @@ from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import 
 from bisheng.knowledge.domain.services.knowledge_mcp_query_service import KnowledgeMcpQueryService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
+NATIVE_PREVIEW_EXTENSIONS = frozenset({"txt", "md", "markdown", "pdf", "jpg", "jpeg", "png", "gif", "bmp", "webp"})
+
 
 class KnowledgeMcpContentService:
     def __init__(
@@ -214,14 +216,19 @@ class KnowledgeMcpContentService:
         # Original downloads must use the owner's watermarked download flow.
         if source_type == "original":
             raise SpacePermissionDeniedError()
-        preview = KnowledgeService.resolve_preview_object_name(
-            int(physical.id),
-            str(physical.file_name),
-            getattr(physical, "preview_file_object_name", None),
-        )
-        if not preview or not await self.storage.object_exists(self.storage.bucket, preview):
+        # Pass the entry ID so the owner retains its canonical and permission checks.
+        detail = await self.query.owner.get_file_preview(file_id)
+        url = detail.get("pdf_preview_url") or detail.get("html_preview_url") or detail.get("preview_url")
+        extension = str(physical.file_name or "").rsplit(".", 1)[-1].lower()
+        # Native viewers use the owner's original URL; Office originals are never a fallback.
+        if not url and extension in NATIVE_PREVIEW_EXTENSIONS:
+            url = detail.get("original_url")
+        if not url:
             raise KnowledgeChunkError()
-        url = await self.storage.get_share_link(preview, self.storage.bucket, clear_host=False)
+        # The existing UI strips the storage host. MCP clients need an absolute link,
+        # with the owner's signed path and query left unchanged.
+        if url.startswith("/"):
+            url = self.storage.get_minio_share_host().rstrip("/") + url
         return {
             "file_id": file_id,
             "knowledge_id": knowledge_id,
