@@ -401,12 +401,12 @@
   "com_label_remove_display": "Remove from display list",
   "com_label_save": "Save",
   "com_linsight_add_skill": "Add Skill",
-  "com_linsight_exit_task_mode": "Exit task mode",
+  "com_linsight_exit_task_mode": "Turn off deep research",
   "com_linsight_input_placeholder": "Enter your task goal, then leave it to $t(bisheng)$t(linsight)",
   "com_linsight_awaiting_reply": "Answer the question above to continue the task",
   "com_linsight_skill_empty": "No skills available",
   "com_linsight_skill_search": "Search skills",
-  "com_linsight_task_mode": "Task mode",
+  "com_linsight_task_mode": "Deep research",
   "com_linsight_voice_coming_soon": "Voice input is not available yet",
   "com_linsight_intent_confirmed": "User intent confirmed",
   "com_linsight_preparing": "Preparing the task",
@@ -2431,5 +2431,21 @@
       "hundredMillion": "100M",
       "tenThousand": "10K"
     }
-  }
+  },
+  "dshChat": {
+    "conversationSection": "Conversation",
+    "placeholder": "Send a message, or add files and knowledge spaces",
+    "files": "Conversation files",
+    "resizePreview": "Resize file preview",
+    "loadingConversation": "Loading conversation…",
+    "recommendedApps": "Recommended apps",
+    "scrollToBottom": "Scroll to bottom",
+    "preview": "Preview",
+    "source": "Source",
+    "closeResearch": "Turn off deep research",
+    "welcome": "What would you like to work on?"
+  },
+  "chat.sidebar.title": "Chat",
+  "chat.sidebar.newConversation": "New conversation",
+  "chat.sidebar.recent": "Recent"
 }

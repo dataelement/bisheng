@@ -76,7 +76,7 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-fill-1 focus:ring-0">
+                <SelectTrigger className="dsh-composer-control h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-fill-2 focus:ring-0">
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal">
                             {label}
@@ -90,7 +90,7 @@ const AiModelSelect = memo(
                     the model list is already in memory via `options`. */}
                 <SelectContent
                     auto
-                    className="bg-white w-auto min-w-[100px] max-w-[240px] rounded-2xl"
+                    className="dsh-chat-menu bg-page w-auto min-w-[100px] max-w-[240px] rounded-2xl"
                     viewportClassName="flex flex-col gap-1 p-3"
                 >
                     {uniqueOptions.map((opt) => (

@@ -697,7 +697,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     };
 
     return (
-        <div className="">
+        <div hidden={hideTrigger && hideList}>
             {/* Displaying files */}
             {!hideList && !!files.length && (
                 <div className="flex max-w-full gap-2 overflow-x-auto overflow-y-hidden p-2 pb-3">

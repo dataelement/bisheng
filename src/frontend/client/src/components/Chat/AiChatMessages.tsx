@@ -374,7 +374,7 @@ export default function AiChatMessages({
                 (z-10) so it fades, but BELOW pinned sticky headers (z-20) — the
                 overflow container creates no stacking context, so a header's z-20
                 bubbles up to outrank this overlay and stays crisp. */}
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
+            <div className="dsh-chat-scroll-fade pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
             <div
                 ref={(el) => {
                     scrollRef.current = el;
@@ -391,7 +391,7 @@ export default function AiChatMessages({
                 // specificity it would win on source order.
                 style={{ scrollbarGutter: "stable both-edges" }}
                 className={cn(
-                    "min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
+                    "dsh-chat-message-scroll min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll",
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport

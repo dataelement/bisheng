@@ -71,7 +71,7 @@ const CardShell = ({
 }) => (
     <div
         className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
+            "dsh-composer-chip group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
             onClick && "cursor-pointer",
         )}
         style={{ width: CARD_WIDTH }}
@@ -414,6 +414,7 @@ export const AttachmentBar = ({
     return (
         <div
             className={cn(
+                "dsh-composer-attachments",
                 appearance === "strip"
                     // The -mb-4 is the overlap: the box's rounded top corner
                     // reaches the edge exactly at the strip's bottom, so the two
@@ -491,14 +492,14 @@ export const AttachmentBar = ({
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />

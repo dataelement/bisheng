@@ -16,9 +16,16 @@ import { useAgentsMap, useAssistantsMap, useAuthContext, useFileMap, useSearch }
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { cn } from '~/utils';
+import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
+
+import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
+import { useDesktopAppearance } from '~/components/Chat/useDesktopAppearance';
 
 export default function Root() {
+  useDesktopAppearance();
+  useDesktopNavigation();
   const [, setBannerHeight] = useState(0);
+  const embedded = isDesktopEmbedded();
   const isSmallScreen = usePrefersMobileLayout();
   const [navVisible, setNavVisible] = useRecoilState(store.chatHistoryDrawerOpen);
   const mobileNavHidden = useRecoilValue(store.chatMobileNavHiddenState);
@@ -45,7 +52,7 @@ export default function Root() {
     // (same BrandTickSpinner, size and centering) so the platform→client
     // hand-off shows no size/position jump.
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white">
+      <div className="dsh-chat-startup flex h-full w-full items-center justify-center">
         <LoadingIcon className="w-48 text-primary" />
       </div>
     );
@@ -70,7 +77,7 @@ export default function Root() {
               */}
               <div
                 className={cn(
-                  'flex flex-col overflow-hidden min-w-0',
+                  'dsh-chat-root flex flex-col overflow-hidden min-w-0',
                   isSmallScreen
                     ? 'h-[100dvh] max-h-[100dvh]'
                     : 'h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)]',
@@ -79,9 +86,9 @@ export default function Root() {
                 <Banner onHeightChange={setBannerHeight} />
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
-                    <Nav navVisible={navVisible} setNavVisible={setNavVisible} />
+                    {!embedded && <Nav navVisible={navVisible} setNavVisible={setNavVisible} />}
                     <div className="relative flex min-h-0 max-w-full flex-1 flex-col overflow-hidden">
-                      {showMobileNav && isSmallScreen && !mobileNavHidden ? (
+                      {!embedded && showMobileNav && isSmallScreen && !mobileNavHidden ? (
                         // 勿用 fixed 贴视口：会盖住 MainLayout 白卡 rounded-xl 上沿与两侧灰底留白（与知识库 H5、StandaloneChat 一致）
                         <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                           <MobileNav
@@ -93,7 +100,7 @@ export default function Root() {
                         </div>
                       ) : null}
                       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                        <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
+                        <Outlet context={{ navVisible: embedded || navVisible, setNavVisible } satisfies ContextType} />
                       </div>
                     </div>
                   </div>

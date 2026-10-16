@@ -389,12 +389,12 @@
   "com_label_remove_display": "从展示列表移除",
   "com_label_save": "保存",
   "com_linsight_add_skill": "添加技能",
-  "com_linsight_exit_task_mode": "退出任务模式",
+  "com_linsight_exit_task_mode": "关闭深度研究",
   "com_linsight_input_placeholder": "请输入你的任务目标，然后交给$t(bisheng)$t(linsight)",
   "com_linsight_awaiting_reply": "请在上方回答问题后继续任务",
   "com_linsight_skill_empty": "暂无可用技能",
   "com_linsight_skill_search": "搜索技能",
-  "com_linsight_task_mode": "任务模式",
+  "com_linsight_task_mode": "深度研究",
   "com_linsight_voice_coming_soon": "语音输入暂未开放",
   "com_linsight_intent_confirmed": "已经明确用户意图",
   "com_linsight_preparing": "正在准备任务",
@@ -2360,5 +2360,21 @@
       "hundredMillion": "亿",
       "tenThousand": "万"
     }
-  }
+  },
+  "dshChat": {
+    "conversationSection": "对话",
+    "placeholder": "发消息，或添加文件与知识空间",
+    "files": "会话文件",
+    "resizePreview": "调整文件预览宽度",
+    "loadingConversation": "正在加载会话…",
+    "recommendedApps": "推荐应用",
+    "scrollToBottom": "回到底部",
+    "preview": "预览",
+    "source": "源文件",
+    "closeResearch": "关闭深度研究",
+    "welcome": "今天想完成什么？"
+  },
+  "chat.sidebar.title": "聊天",
+  "chat.sidebar.newConversation": "新会话",
+  "chat.sidebar.recent": "最近"
 }

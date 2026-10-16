@@ -15,7 +15,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
-import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
+import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -47,8 +47,7 @@ export interface AiChatInputFeatures {
     voiceInput?: boolean;
     /** F035 Track H: show the task-mode entry (daily chat surface only). */
     taskModeEntry?: boolean;
-    /** F035 Track H: this input IS the task-mode landing. Adds the "添加技能"
-     *  entry to the "+" menu; everything else mirrors the daily input. */
+    /** This input uses the task-mode landing and its skill selections. */
     taskMode?: boolean;
 }
 
@@ -185,7 +184,7 @@ const AiChatInput = memo(
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
         const { ref: toolbarRef, compact: toolbarCompact } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
-        // F035 (PRD §4.1.3): daily "+ → 添加 Skill" picks a skill into the fresh
+        // Selecting a skill picks it into the fresh
         // task session ('new'), then enters task mode (/linsight/new) where the
         // selection is refilled as a chip. Keyed 'new' to match the landing page.
         const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
@@ -320,6 +319,8 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
+        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
+        const showToolPicker = tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
@@ -428,7 +429,7 @@ const AiChatInput = memo(
         }, [hasSelectionTags, onSelectionPresenceChange]);
 
         return (
-            <div className="px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
+            <div className="dsh-chat-input-shell px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -440,10 +441,59 @@ const AiChatInput = memo(
                             onClick={onScrollToBottom}
                         >
                             <ArrowDown className="size-4" />
-                            <span className="text-sm">回到底部</span>
+                            <span className="text-sm">{localize('dshChat.scrollToBottom')}</span>
                         </Button>
                     </div>
                 </div>}
+
+                {(showToolPicker || taskModeEntry || showSkillPicker) && (
+                    <div className="dsh-chat-capabilities flex flex-wrap items-center gap-2 px-2 pb-2">
+                        {showSkillPicker && (
+                            <ChatSkillSelector
+                                selected={taskMode ? dailySkills : []}
+                                disabled={!!disabled}
+                                onChange={(next) => {
+                                    setDailySkills(next);
+                                    if (taskMode) return;
+                                    if (onToggleTaskMode) onToggleTaskMode();
+                                    else navigate('/linsight/new');
+                                }}
+                            />
+                        )}
+                        {/* Tools picker */}
+                        {showToolPicker && agentMode && (
+                            <AgentToolSelector
+                                availableTools={bsConfig.tools}
+                                disabled={toolsDisabled}
+                                compact={false}
+                            />
+                        )}
+                        {showToolPicker && !agentMode && onSearchTypeChange && (
+                            <ChatToolDown
+                                config={bsConfig}
+                                compact={false}
+                                searchType={searchType}
+                                setSearchType={(type) => {
+                                    onSearchTypeChange(type);
+                                    // Legacy mutex: clear files + kb when tool activated
+                                    if (type === "netSearch") {
+                                        setChatFiles(null);
+                                        onSelectedOrgKbsChange?.([]);
+                                    }
+                                }}
+                                disabled={toolsDisabled}
+                            />
+                        )}
+                        {/* Research uses the existing Chat mode transition. */}
+                        {taskModeEntry && (
+                            <TaskModeToggle
+                                active={taskMode}
+                                compact={false}
+                                onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
+                            />
+                        )}
+                    </div>
+                )}
 
                 {/* Mounted knowledge spaces and task-mode skills — a gray strip
                     stacked ABOVE the input box (Figma 12841:47449). Attachments
@@ -469,7 +519,7 @@ const AiChatInput = memo(
                         // Figma 12669:66966 — white surface, 16px radius, hairline
                         // border (replaces the legacy gray fill). z-[1] keeps it
                         // painted above the attachment strip it overlaps.
-                        "relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
+                        "dsh-chat-composer relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
                         // Soft drop shadow on the landing page (always) and on the
                         // in-conversation input only while it has a mounted knowledge
                         // space / file; otherwise in-conversation inputs stay flat
@@ -595,7 +645,7 @@ const AiChatInput = memo(
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
                         disabled={disabled || isStreaming || isParsingMedia}
-                        placeholder={placeholder || bsConfig?.inputPlaceholder}
+                        placeholder={placeholder || bsConfig?.inputPlaceholder || localize("dshChat.placeholder")}
                         tabIndex={0}
                         data-testid="ai-chat-input"
                         data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
@@ -612,7 +662,7 @@ const AiChatInput = memo(
                         )}
                     />
 
-                    <div className="flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
+                    <div className="dsh-composer-toolbar flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
                         <div ref={toolbarRef} className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
@@ -640,33 +690,6 @@ const AiChatInput = memo(
                                     onFolderUploadClick={taskMode
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
-                                    // Task mode toggle present in both modes (plan-mode style).
-                                    // Gated by the caller's taskModeEntry feature (role permission in
-                                    // ChatView); the legacy global `linsight_entry` switch was retired
-                                    // when task mode replaced 灵思 mode, so it no longer gates here.
-                                    showTaskModeEntry={taskModeEntry || taskMode}
-                                    onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
-                                    taskModeActive={taskMode}
-                                    skillSelected={taskMode && dailySkills.length > 0}
-                                    renderSkillSubmenu={showAddSkill ? () => (
-                                        <SkillSelector
-                                            selected={dailySkills}
-                                            onChange={(next) => {
-                                                setDailySkills(next);
-                                                // Keep the panel open on toggle (matches the
-                                                // knowledge-space panel); it closes on outside click.
-                                                // Picking a skill ENTERS task mode only when not
-                                                // already in it. onToggleTaskMode is a toggle, so
-                                                // calling it while already active would flip it OFF —
-                                                // selecting a skill must never exit task mode.
-                                                if (taskMode) return;
-                                                // Daily welcome page enters in place (callback);
-                                                // otherwise navigate to the linsight landing.
-                                                if (onToggleTaskMode) onToggleTaskMode();
-                                                else navigate('/linsight/new');
-                                            }}
-                                        />
-                                    ) : undefined}
                                 />
                             )}
                             {/* Knowledge-space pill — separate "+"-menu sibling that
@@ -687,45 +710,11 @@ const AiChatInput = memo(
                                     }}
                                 />
                             )}
-                            {/* Tools picker */}
-                            {tools && agentMode && (
-                                <AgentToolSelector
-                                    availableTools={bsConfig.tools}
-                                    disabled={toolsDisabled}
-                                    compact={toolbarCompact}
-                                />
-                            )}
-                            {tools && !agentMode && onSearchTypeChange && (
-                                <ChatToolDown
-                                    config={bsConfig}
-                                    compact={toolbarCompact}
-                                    searchType={searchType}
-                                    setSearchType={(type) => {
-                                        onSearchTypeChange(type);
-                                        // Legacy mutex: clear files + kb when tool activated
-                                        if (type === "netSearch") {
-                                            setChatFiles(null);
-                                            onSelectedOrgKbsChange?.([]);
-                                        }
-                                    }}
-                                    disabled={toolsDisabled}
-                                />
-                            )}
-                            {/* Task-mode toggle — sits to the right of the tools
-                                block; clicking exits task mode (flips the local
-                                state in place; falls back to navigate for the
-                                legacy /linsight Sop usage). */}
-                            {taskMode && (
-                                <TaskModeToggle
-                                    active
-                                    compact={toolbarCompact}
-                                    onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
-                                />
-                            )}
+
                         </div>
 
                         {/* Send / Stop / Voice — 固定宽度列，不参与挤压 */}
-                        <div className="flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
+                        <div className="dsh-composer-trailing flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
                             {/* Model select */}
                             {modelSelect && modelOptions && !isLingsi && (
                                 <AiModelSelect
@@ -739,7 +728,7 @@ const AiChatInput = memo(
                             {isStreaming || taskRunning ? (
                                 <button
                                     type="button"
-                                    className="btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
+                                    className="dsh-composer-submit btn-brand-primary rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100"
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -785,7 +774,7 @@ const AiChatInput = memo(
                                         fileUploading ||
                                         filesParsing
                                     }
-                                    className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
+                                    className="dsh-composer-submit btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >

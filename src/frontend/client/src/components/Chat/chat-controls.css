@@ -1,0 +1,57 @@
+/* Shared Harness control geometry; Chat keeps its knowledge/tool selection rules. */
+.dsh-chat-surface .dsh-chat-input-shell { padding-inline:0; }
+.dsh-chat-surface .dsh-composer-control,
+.dsh-chat-surface :is(.dsh-composer-toolbar,.dsh-chat-capabilities) button[aria-pressed] {
+  height:28px; min-height:28px; padding:0 8px; border-radius:8px;
+  font-size:13px; font-weight:500; line-height:20px;
+  color:rgb(var(--text-2));
+}
+.dsh-chat-surface .dsh-composer-control span { font-size:inherit; font-weight:inherit; }
+.dsh-chat-surface .dsh-composer-add {
+  width:28px; height:28px; flex:none; border-radius:50%;
+  color:rgb(var(--text-2)); background:rgb(var(--fill-2));
+}
+.dsh-chat-surface .dsh-composer-trailing { gap:12px; margin-left:auto; max-width:100%; }
+.dsh-chat-surface .dsh-composer-submit {
+  display:inline-flex; flex:none; align-items:center; justify-content:center;
+  width:34px; height:34px; padding:5px; border:0; border-radius:50%;
+  transform:translateY(-2px); color:white; background:rgb(var(--brand-500));
+  transition:background-color 150ms ease-out,transform 150ms ease-out;
+}
+.dsh-chat-surface .dsh-composer-submit:disabled { background:rgb(var(--brand-500) / 40%); color:white; opacity:1; }
+.dsh-chat-surface .dsh-composer-submit svg { color:inherit; }
+.dsh-chat-surface .dsh-composer-submit:active:enabled { transform:translateY(-2px) scale(.96); }
+.dsh-chat-surface .dsh-composer-toolbar button:focus-visible,
+.dsh-chat-surface .dsh-chat-capabilities button:focus-visible,
+.dsh-chat-surface .dsh-message-actions button:focus-visible {
+  outline:2px solid rgb(var(--brand-500)); outline-offset:2px;
+}
+.dsh-chat-surface .dsh-composer-attachments { padding:4px 12px 0; margin:0; }
+.dsh-chat-surface .dsh-composer-chip { color:rgb(var(--text-1)); background:rgb(var(--fill-1)); border:1px solid rgb(var(--border-base)); }
+.dsh-chat-surface .dsh-composer-chip:focus-within button { display:flex; }
+/* Radix portals inherit the Chat palette explicitly, outside the embedded root. */
+body[data-dsh-chat-theme] .dsh-chat-menu {
+  background:rgb(var(--dsh-menu-bg)); color:rgb(var(--text-1));
+  border:1px solid rgb(var(--border-base)); border-radius:12px;
+  box-shadow:0 8px 28px rgb(0 0 0 / 16%);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+.dsh-chat-menu [data-highlighted] { background:rgb(var(--fill-2)); color:rgb(var(--text-1)); }
+.dsh-chat-menu input { color:rgb(var(--text-1)); background:transparent; }
+.dsh-chat-menu input::placeholder { color:rgb(var(--text-3)); }
+@media (hover:hover) and (pointer:fine) {
+  .dsh-chat-surface .dsh-composer-control:hover,
+  .dsh-chat-surface .dsh-composer-add:hover { background:rgb(var(--fill-1)); }
+  .dsh-chat-surface .dsh-composer-submit:hover:enabled { background:rgb(var(--brand-600)); }
+}
+@media (max-width:767px) {
+  .dsh-chat-surface .dsh-composer-trailing { gap:8px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .dsh-chat-surface .dsh-composer-submit { transition:none; }
+}
+
+.dsh-chat-surface :is(.dsh-composer-toolbar,.dsh-chat-capabilities) button[aria-pressed=true] { color:rgb(var(--brand-500)); background:rgb(var(--brand-500) / 12%); }
+
+.dsh-chat-surface .dsh-chat-capabilities { min-height:36px; column-gap:12px; row-gap:4px; }
+.dsh-chat-surface .dsh-chat-capabilities .dsh-composer-control[data-active=true] { color:rgb(var(--brand-500)); background:rgb(var(--brand-500) / 12%); }

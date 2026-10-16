@@ -285,7 +285,7 @@ export const ChatKnowledge = ({
                   className={cn(
                     // `group` lets the chevron pick up the Radix-emitted
                     // `data-state` to mirror the Tools-select rotation.
-                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-text-2 outline-none transition-colors hover:bg-fill-1",
+                    "dsh-composer-control group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-text-2 outline-none transition-colors hover:bg-fill-2",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -297,7 +297,7 @@ export const ChatKnowledge = ({
                       aria-hidden
                       className={cn(
                         "block size-4",
-                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#4E5969]"
+                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-current"
                       )}
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
@@ -318,7 +318,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg text-text-2 cursor-pointer hover:bg-fill-1 transition-colors outline-none",
+                    "dsh-composer-add flex h-8 w-8 items-center justify-center rounded-lg text-text-2 cursor-pointer hover:bg-fill-2 transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}
@@ -351,7 +351,7 @@ export const ChatKnowledge = ({
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          'flex flex-col gap-1 rounded-2xl border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'dsh-chat-menu flex flex-col gap-1 rounded-2xl border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
           // compact for its short action items. Bottom padding is 0 on the list
@@ -395,7 +395,7 @@ export const ChatKnowledge = ({
             className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
             <Outlined.Attachment size={16} className="text-text-2" />
-            <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
+            <span className="text-[14px] font-normal text-text-1">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
 
@@ -412,8 +412,8 @@ export const ChatKnowledge = ({
             }}
             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.FolderClose size={16} className="text-[#999]" />
-            <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_folder')}</span>
+            <Outlined.FolderClose size={16} className="text-text-3" />
+            <span className="text-[14px] font-normal text-text-1">{localize('com_ui_upload_folder')}</span>
           </DropdownMenuItem>
         )}
 
@@ -426,7 +426,7 @@ export const ChatKnowledge = ({
                 trigger to icon-only (`compact`), leaving this as the only place
                 the name shows. On desktop the trigger reads "知识空间" beside it. */}
             {isMobile && (
-              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-text-1">
                 {localize('com_ui_knowledge_space')}
               </p>
             )}
@@ -466,7 +466,7 @@ export const ChatKnowledge = ({
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
                   <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
                 </div>
-                <span className="text-[14px] font-normal text-slate-700">
+                <span className="text-[14px] font-normal text-text-1">
                   {localize('com_tools_org_knowledge')}
                 </span>
               </div>
@@ -477,7 +477,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubContent
               align="center"
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="dsh-chat-menu ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-border-base bg-page pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
@@ -519,11 +519,11 @@ export const ChatKnowledge = ({
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
                 <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
               </div>
-              <span className="truncate text-[14px] font-normal text-slate-700">
+              <span className="truncate text-[14px] font-normal text-text-1">
                 {localize('com_tools_org_knowledge')}
               </span>
             </div>
-            <Outlined.Right className="size-4 shrink-0 text-slate-400" />
+            <Outlined.Right className="size-4 shrink-0 text-text-3" />
           </DropdownMenuItem>
         )}
 
@@ -543,8 +543,8 @@ export const ChatKnowledge = ({
               >
                 <Outlined.ArrowLeft size={18} />
               </button>
-              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-fill-2" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-1">
                 {localize('com_tools_org_knowledge')}
               </span>
             </div>
@@ -567,7 +567,7 @@ export const ChatKnowledge = ({
             桌面端与移动端 root 面板都展示；进入任务模式跳转 /linsight。 */}
         {variant === 'plus' && showTaskModeEntry && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
           <>
-            <div className="my-1 h-px bg-slate-100" />
+            <div className="my-1 h-px bg-fill-2" />
             <DropdownMenuItem
               onSelect={() => {
                 // Close the menu before navigating: keeping it open while the
@@ -579,7 +579,7 @@ export const ChatKnowledge = ({
               className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none"
             >
               <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-text-2'} />
-              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-slate-700')}>
+              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-text-1')}>
                 {localize('com_linsight_task_mode')}
               </span>
               {taskModeActive && <Outlined.Check size={14} className="text-blue-500" />}
@@ -597,7 +597,7 @@ export const ChatKnowledge = ({
                   >
                     <div className="flex items-center gap-2">
                       <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
-                      <span className="text-[14px] font-normal text-slate-700">
+                      <span className="text-[14px] font-normal text-text-1">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
@@ -608,7 +608,7 @@ export const ChatKnowledge = ({
                   <DropdownMenuSubContent
                     align="center"
                     collisionPadding={BOTTOM_GAP}
-                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                    className="dsh-chat-menu ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-page px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
                   >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
@@ -623,11 +623,11 @@ export const ChatKnowledge = ({
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
-                    <span className="truncate text-[14px] font-normal text-slate-700">
+                    <span className="truncate text-[14px] font-normal text-text-1">
                       {localize('com_linsight_add_skill')}
                     </span>
                   </div>
-                  <Outlined.Right className="size-4 shrink-0 text-slate-400" />
+                  <Outlined.Right className="size-4 shrink-0 text-text-3" />
                 </DropdownMenuItem>
               )
             )}
@@ -650,8 +650,8 @@ export const ChatKnowledge = ({
               >
                 <Outlined.ArrowLeft size={18} />
               </button>
-              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-fill-2" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-1">
                 {localize('com_linsight_add_skill')}
               </span>
             </div>

@@ -5,8 +5,9 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
 
-export default function Landing({ Header, isNew, hideSubtitle = false }: {
+export default function Landing({ Header, isNew, hideSubtitle = false, onStarterClick }: {
   Header?: ReactNode;
+  onStarterClick?: (text: string) => void;
   isNew?: boolean;
   /**
    * Hide the welcome subtitle while the input has a mounted knowledge space /
@@ -40,10 +41,10 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
             />
           )}
           <h2 className="max-w-full md:max-w-[75vw] text-center text-xl md:text-2xl font-semibold md:font-medium leading-snug md:leading-8 text-text-1 dark:text-white px-0">
-            {bsConfig?.welcomeMessage}
+            {bsConfig?.welcomeMessage || localize('dshChat.welcome')}
           </h2>
         </div>
-        {!hideSubtitle && (
+        {!hideSubtitle && bsConfig?.functionDescription?.trim() && (
           <div className="max-w-lg text-center mt-[26px] text-sm font-normal text-gray-500 leading-5">
             {bsConfig?.functionDescription}
           </div>
@@ -60,7 +61,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false }: {
                   text={text}
                   onClick={() => {
                     // Conversation starter click is handled in parent
-                    console.log('Convo starter clicked:', text);
+                    onStarterClick?.(text);
                   }}
                 />
               ))}
