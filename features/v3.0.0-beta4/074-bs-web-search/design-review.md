@@ -1,1 +1,0 @@
-Local self-review: direct key lookup, existing use permission and common execution bounds follow constitution C1-C8. No publication persistence, admin API or search-specific branches. Redis state-loss, supported OpenAPI subset and live acceptance limits are explicit.
