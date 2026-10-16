@@ -199,7 +199,7 @@ async def _ensure_r4(session: AsyncSession, expr: dict) -> dict | None:
 
 
 async def test_violation_delete_removes_personal_original_and_deducts_public_score(flow_env):
-    """公共库副本加个人库原件: 两处都回收, 按公共库 3 分扣一次, 再确认不新增流水."""
+    """公共库副本加个人库原件: 两处都标成删除中且不进回收站, 按公共库 3 分扣一次."""
     engine, roles = flow_env
     token = uuid.uuid4().hex[:8]
     async with AsyncSession(engine, expire_on_commit=False) as session:
@@ -306,9 +306,48 @@ async def test_violation_delete_removes_personal_original_and_deducts_public_sco
             ).scalar_one()
         )
         previous_rule = await _ensure_r4(session, {"mode": "library_scope", "public": 3, "department": 2, "team": 1})
-    roles[public_id] = ({operator}, set())
-    roles[personal_id] = ({uploader}, set())
-    file_ids = [manager_id, publish_id]
+        roles[public_id] = ({operator}, set())
+        roles[personal_id] = ({uploader}, set())
+        await session.execute(
+            text(
+                """
+                INSERT INTO knowledgefile
+                  (user_id, knowledge_id, file_name, file_type, tenant_id, object_name,
+                   file_source, status)
+                VALUES (:uid, :personal, :name, 1, 1, 'vd-fav', 'favorite_reference', 2)
+                """
+            ),
+            {"uid": uploader, "personal": personal_id, "name": f"vd-fav-{token}.pdf"},
+        )
+        await session.execute(
+            text(
+                """
+                INSERT INTO knowledge_recycle_item
+                  (tenant_id, file_id, knowledge_id, file_type, is_list_entry, display_name,
+                   original_knowledge_id, original_path, deleted_by, deleted_at, expire_at,
+                   recycle_batch_id, recycle_root_id, document_id)
+                VALUES
+                  (1, :file, :kid, 1, 1, 'vd-old', :kid, '/', :uid, NOW(), NOW(), :batch, :file, :doc)
+                """
+            ),
+            {
+                "file": manager_id,
+                "kid": personal_id,
+                "uid": uploader,
+                "batch": f"vd-old-{token}",
+                "doc": document_id,
+            },
+        )
+        await session.commit()
+        favorite_id = int(
+            (
+                await session.execute(
+                    text("SELECT id FROM knowledgefile WHERE file_name = :n"),
+                    {"n": f"vd-fav-{token}.pdf"},
+                )
+            ).scalar_one()
+        )
+        file_ids = [manager_id, publish_id, favorite_id]
     try:
         stranger_app = _app(_user(stranger, name=f"vd-st-{token}"))
         async with AsyncClient(transport=ASGITransport(app=stranger_app), base_url="http://test") as client:
@@ -353,7 +392,26 @@ async def test_violation_delete_removes_personal_original_and_deducts_public_sco
             "SELECT lifecycle_status FROM knowledge_document WHERE id = :id",
             {"id": document_id},
         )
-        assert document[0]["lifecycle_status"] == "recycled"
+        assert document[0]["lifecycle_status"] == "deleting"
+        recycle = await _select(
+            engine,
+            "SELECT id FROM knowledge_recycle_item WHERE document_id = :id",
+            {"id": document_id},
+        )
+        assert recycle == []
+        statuses = await _select(
+            engine,
+            "SELECT entry_status FROM knowledgefile WHERE id IN (:manager, :publish)",
+            {"manager": manager_id, "publish": publish_id},
+        )
+        assert {row["entry_status"] for row in statuses} == {"deleting"}
+        favorite = await _select(
+            engine,
+            "SELECT deleted_at, reference_document_id FROM knowledgefile WHERE id = :id",
+            {"id": favorite_id},
+        )
+        assert favorite[0]["deleted_at"] is None
+        assert favorite[0]["reference_document_id"] is None
         logs = await _select(
             engine,
             """
@@ -692,6 +750,18 @@ async def test_clinic_manager_upload_visible_in_clinic_is_not_deducted(flow_env)
             {"a": manager_id, "b": publish_id},
         )
         assert all(row["deleted_at"] is not None for row in files)
+        recycle = await _select(
+            engine,
+            "SELECT id FROM knowledge_recycle_item WHERE document_id = :id",
+            {"id": document_id},
+        )
+        assert recycle == []
+        document = await _select(
+            engine,
+            "SELECT lifecycle_status FROM knowledge_document WHERE id = :id",
+            {"id": document_id},
+        )
+        assert document[0]["lifecycle_status"] == "deleting"
     finally:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             await session.execute(text("DELETE FROM knowledge_recycle_item WHERE document_id = :id"), {"id": document_id})
@@ -782,6 +852,18 @@ async def test_skip_deduct_then_later_deduct_writes_one_log(flow_env):
             {"uid": uploader, "bid": str(document_id)},
         )
         assert [row["delta"] for row in logs] == [-3]
+        recycle = await _select(
+            engine,
+            "SELECT id FROM knowledge_recycle_item WHERE document_id = :id",
+            {"id": document_id},
+        )
+        assert recycle == []
+        document = await _select(
+            engine,
+            "SELECT lifecycle_status FROM knowledge_document WHERE id = :id",
+            {"id": document_id},
+        )
+        assert document[0]["lifecycle_status"] == "deleting"
     finally:
         async with AsyncSession(engine, expire_on_commit=False) as session:
             await session.execute(text("DELETE FROM knowledge_recycle_item WHERE document_id = :id"), {"id": document_id})

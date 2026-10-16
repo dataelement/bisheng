@@ -230,6 +230,48 @@ class KnowledgeDocumentRecycleService:
         await self.session.flush()
         return list(files.values()), projection_ids
 
+    async def begin_hard_delete(self, document: KnowledgeDocument) -> list[int]:
+        """把文档标成删除中并清掉回收站记录, 不新增回收站行.
+
+        Args:
+            document: 已存在的知识文档. 调用方应处于同一事务.
+
+        Returns:
+            需要投入投影清理的入口 id. 文档已经是删除中时返回空列表.
+
+        Raises:
+            ValueError: 租户不一致, 版本链不完整, 或仍有准备中的发布或分享.
+        """
+        if document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value:
+            return []
+        loaded, entries, versions, physical = await self.repository.load_document(int(document.id))
+        if loaded is None:
+            raise ValueError("文档不存在, 无法物理删除")
+        document = loaded
+        if document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value:
+            return []
+        if any(int(file.tenant_id or 0) != int(document.tenant_id) for file in [*entries, *physical]):
+            raise ValueError("文档版本或关联入口的租户不一致, 无法物理删除")
+        if not versions or len(physical) != len({int(version.knowledge_file_id) for version in versions}):
+            raise ValueError("文档版本链不完整, 无法物理删除")
+        if any(entry.entry_status == KnowledgeFileEntryStatus.PREPARING.value for entry in entries):
+            raise ValueError("文档仍有准备中的发布或分享, 请稍后重试")
+        now = datetime.now()
+        seen = {int(file.id): file for file in [*physical, *entries]}
+        for file in seen.values():
+            if file.deleted_at is None:
+                file.deleted_at = now
+            self.session.add(file)
+        for entry in entries:
+            entry.entry_status = KnowledgeFileEntryStatus.DELETING.value
+            self._invalidate_projection(entry)
+            self.session.add(entry)
+        document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
+        self.session.add(document)
+        await self.repository.remove_document_items(int(document.id))
+        await self.session.flush()
+        return [int(entry.id) for entry in entries]
+
     async def purge(self, item: KnowledgeRecycleItem) -> tuple[int, list[int]]:
         document, entries, _, _, snapshots = await self._load_recycled(item)
         document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value

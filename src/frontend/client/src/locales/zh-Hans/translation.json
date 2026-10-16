@@ -1429,7 +1429,7 @@
     "violation_delete": "违规删除",
     "violation_delete_failed": "违规删除失败",
     "violation_delete_done": "文档已违规删除",
-    "delete_point_intro": "将删除「{{0}}」。选择扣减规则后，这份文档在各库的原件和副本都会进入回收站并扣除积分；不选规则则按当前删除处理，不扣积分。取消则不删除。",
+    "delete_point_intro": "将删除「{{0}}」。选择扣减规则后，这份文档在各库的原件和副本会被永久删除且不可恢复，并扣除积分；不选规则则按当前删除处理，不扣积分。取消则不删除。",
     "delete_point_rule_optional": "扣减规则（选填）",
     "delete_point_option_skip": "不扣分",
     "delete_point_loading": "加载中…",

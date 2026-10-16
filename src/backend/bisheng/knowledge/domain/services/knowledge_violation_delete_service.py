@@ -1,4 +1,4 @@
-"""知识文档违规删除: 回收全部入口, 再按影响范围扣一次分."""
+"""知识文档违规删除: 物理清理全部入口, 再按影响范围扣一次分."""
 
 from __future__ import annotations
 
@@ -165,7 +165,7 @@ class KnowledgeViolationDeleteService:
         rule_code: str | None = None,
         remark: str | None = None,
     ) -> ViolationCommit:
-        """回收全部入口, 需要时按确认时的金额扣一次.
+        """物理清理全部入口, 需要时按确认时的金额扣一次.
 
         Args:
             operator: 当前登录用户.
@@ -197,19 +197,14 @@ class KnowledgeViolationDeleteService:
                 int(document.id),
                 for_update=True,
             )
-            already_recycled = document.lifecycle_status == KnowledgeDocumentLifecycleStatus.RECYCLED.value
-            if not already_recycled:
+            entry_ids: list[int] = []
+            if document.lifecycle_status != KnowledgeDocumentLifecycleStatus.DELETING.value:
                 if any(entry.entry_status == KnowledgeFileEntryStatus.PREPARING.value for entry in entries):
                     raise KnowledgeViolationDocumentBusyError()
-                manager = self._manager_entry(entries) or loaded.clicked
-                await KnowledgeDocumentRecycleService(session).recycle(
-                    document,
-                    manager,
-                    entries,
-                    actor_id=int(getattr(operator, "user_id", 0) or 0),
-                    actor_name=str(getattr(operator, "user_name", "") or ""),
-                )
+                entry_ids = await KnowledgeDocumentRecycleService(session).begin_hard_delete(document)
             await session.commit()
+        if entry_ids:
+            _enqueue_document_projection(loaded.tenant_id, entry_ids)
         deducted = False
         pending = False
         reason = preview.reason
@@ -256,15 +251,19 @@ class KnowledgeViolationDeleteService:
         document = await KnowledgeDocumentRepositoryImpl(session).find_by_id(document_id)
         if document is None:
             raise KnowledgeViolationDocumentIdentityMissingError()
-        recycled = document.lifecycle_status == KnowledgeDocumentLifecycleStatus.RECYCLED.value
-        if clicked.deleted_at is not None and not (allow_recycled and recycled):
+        # 已进回收站或已开始物理删除的文档, 确认接口仍要能幂等扣分.
+        closed = document.lifecycle_status in {
+            KnowledgeDocumentLifecycleStatus.RECYCLED.value,
+            KnowledgeDocumentLifecycleStatus.DELETING.value,
+        }
+        if clicked.deleted_at is not None and not (allow_recycled and closed):
             raise SpaceFileNotFoundError()
         entries = await files.find_distribution_entries_by_document_id(document_id)
         return _Loaded(
             clicked=clicked,
             document_id=document_id,
             tenant_id=int(document.tenant_id or clicked.tenant_id or 1),
-            recycled=recycled,
+            recycled=closed,
             entries=entries,
         )
 
@@ -402,12 +401,27 @@ class KnowledgeViolationDeleteService:
         return (active or managers or [None])[0]
 
 
+def _enqueue_document_projection(tenant_id: int, entry_ids: list[int]) -> None:
+    """把已标记删除中的入口交给现有文档投影做物理清理.
+
+    Args:
+        tenant_id: 文档所属租户.
+        entry_ids: 待清理的文件入口 id.
+    """
+    try:
+        from bisheng.worker.knowledge.document_projection import enqueue_document_projection_entries
+
+        enqueue_document_projection_entries(tenant_id=tenant_id, entry_ids=entry_ids)
+    except Exception:
+        logger.exception("violation delete projection dispatch failed tenant=%s entries=%s", tenant_id, entry_ids)
+
+
 def _scope_entries(entries: list[KnowledgeFile], *, recycled: bool) -> list[KnowledgeFile]:
     """选出参与影响范围和删除清单的入口.
 
     Args:
         entries: 同一文档的全部分发入口.
-        recycled: 文档是否已经在回收站.
+        recycled: 文档已进回收站或已开始物理删除. 这时用打过删除时间的入口计算范围.
 
     Returns:
         回收前的有效入口, 或已经打上删除时间的入口.
