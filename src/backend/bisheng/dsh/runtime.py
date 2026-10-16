@@ -71,13 +71,13 @@ class ModelRuntime:
             logger.exception("DSH quota storage is unavailable")
             raise DshQuotaUnavailableError() from None
 
-    async def complete(self, principal, request):
+    async def complete(self, principal, request, *, conversation=None):
         from bisheng.dsh.domain.services.access import principal_scope
 
         with principal_scope(principal):
             month = datetime.now(UTC).astimezone(ZoneInfo(self.settings.billing_timezone)).strftime("%Y-%m")
             await self.prepare_month(principal, month)
-            return await self.model.complete(principal, request)
+            return await self.model.complete(principal, request, conversation=conversation)
 
     async def close(self):
         self.quota.topology.close()

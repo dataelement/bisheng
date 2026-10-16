@@ -1,6 +1,7 @@
 """Protocol adaptation from existing provider implementations, never an authorization list."""
 
 from bisheng.dsh.domain.schemas.chat import ChatCapabilities
+from bisheng.dsh.domain.schemas.reasoning import model_parameters, reasoning_declaration
 
 
 async def desktop_model_capabilities(model, server) -> ChatCapabilities:
@@ -19,10 +20,19 @@ def model_capabilities(model, server) -> ChatCapabilities:
     adapter = _llm_node_type.get(server.type, {})
     client = adapter.get("client")
     tools = client is not None and getattr(client, "bind_tools", None) is not BaseChatModel.bind_tools
+    reasoning = reasoning_declaration(model.config or {})
+    if reasoning is not None and server.type not in {"openai", "azure_openai"}:
+        raise ValueError("Provider has no reasoning effort mapping")
+    if reasoning is not None and any(
+        item.id not in {"none", "minimal", "low", "medium", "high", "xhigh", "max"} for item in reasoning.efforts
+    ):
+        raise ValueError("Provider does not support the declared effort")
     # Moonshot's existing built-in web-search loop explicitly disables streaming.
     return ChatCapabilities(
         streaming=server.type != "moonshot",
         tools=tools,
         reasoning_content=True,
         max_completion_tokens=server.type in {"openai", "azure_openai"},
+        reasoning=reasoning,
+        responses=server.type == "openai" and model_parameters(model.config or {}).get("use_responses_api") is True,
     )
