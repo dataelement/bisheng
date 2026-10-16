@@ -200,7 +200,7 @@
 2. `_init_agent` 调用 `AgentRunner.prepare(...)`。它判定技能可用性、准备工作区、构建代码执行工具，返回 middleware 列表和附加工具。没有配置技能时返回空列表，不建工作区。
 3. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11063（AC-13）。
 4. `_run_once` 照旧 `invoke`。批量模式下每个批次各自做基线和交付文件收集（AC-17）。
-5. 运行结束后，`AgentRunner.finish()` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.deliverables`（AC-16）。
+5. 运行结束后，`AgentRunner.finish()` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.<输出键>_deliverables`（AC-16）：单个模式是 `output_deliverables`，批量模式是每个批次的 `output_xxx_deliverables`。变量名以 `output` 开头，是为了让 platform 的变量选择器沿用「本节点 output 开头的参数即输出变量」这一现有规则。
 
 **助手应用**
 
@@ -217,7 +217,7 @@
 | 助手节点参数 `input_files` | `[node.var]`，上游文件变量 | 运行时拷进 `uploads/` | `AgentNode` |
 | `assistant.skill_names` | JSON 字符串数组，可空 | `None` 与 `[]` 等价 | 助手配置读写、`AssistantAgent` |
 | 交付文件描述 | `{file_id, file_name, object_name, bucket, size, file_url, format_error?}` | `file_url` 是决策 7 的鉴权跳转地址，用这个键名是因为前端文件卡片已认 `file_url`；`bucket` 为 `public`（正式会话）或 `tmp`（临时会话）；`format_error` 只在 AC-33 情况出现 | 消息 `files`、前端文件卡片、开放 API `files` |
-| 输出变量 `{node_id}.deliverables` | 文本，每行「文件名：下载地址」 | 没有交付文件时为空串 | 下游节点 |
+| 输出变量 `{node_id}.<输出键>_deliverables` | 文本，每行「文件名: 下载地址」 | 单个模式为 `output_deliverables`；没有交付文件时为空串；节点未配置技能时不设置 | 下游节点 |
 | 消息 `extra.agent_notices` | `["code_executor_missing"]` 等提示代码 | 前端按 i18n 渲染 | client、platform |
 | Redis `agent_runtime:tmp_session:{ID}` | `{user_id, tenant_id}`，TTL 24h | 临时会话归属 | 下载接口、清理任务 |
 | MinIO `workspace/agent/{会话键}/{运行面}/…` | public 桶 | 工作区内容；`skills/` 只读 | `WorkspaceBackend` |
@@ -270,7 +270,7 @@
 |---|---|---|
 | `GET /api/v1/agent-runtime/files/{session_key}/{file_id}` | HTTP，鉴权后 302 到短时链接 | client、platform、下游节点引用的链接、开放 API 调用方 |
 | workflow 开放 API 助手节点事件 `output_schema.files` | 事件字段（已有字段，新填值） | 开放 API 调用方（AC-34） |
-| 输出变量 `{node_id}.deliverables` | workflow 变量 | 下游节点 |
+| 输出变量 `{node_id}.<输出键>_deliverables` | workflow 变量 | 下游节点 |
 | 消息 `files`、`extra.agent_notices` | 消息字段 | 两个前端、历史回放 |
 | `assistant.skill_names`、`AssistantUpdateReq.skill_names` | 表列、HTTP 字段 | platform 助手配置页 |
 | 错误码 11061（已停用）、11062（已删除）、11063（执行方式不支持） | 错误码 | 前端 `api_errors` |

@@ -758,8 +758,11 @@ class AgentNode(BaseNode):
     def _last_skill_run(self) -> AgentNodeSkillRun | None:
         return self._skill_runs[-1] if self._skills.enabled and self._skill_runs else None
 
-    def _deliverable_key(self, output_key: str) -> str:
-        return "deliverables" if output_key == "output" else f"{output_key}_deliverables"
+    @staticmethod
+    def _deliverable_key(output_key: str) -> str:
+        # "output_deliverables" in single mode. Starting with "output" lets the
+        # builder's variable picker list it like the node's other outputs.
+        return f"{output_key}_deliverables"
 
     def _reset_citation_registry_items(self) -> None:
         for tool in self._citation_tools:

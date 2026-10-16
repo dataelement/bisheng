@@ -135,14 +135,14 @@ class TestAgentNodeWithSkills:
         node, callback = _node(_params())
         result = node._run("exec-1")
         assert result["output"] == "answer"
-        assert result["deliverables"] == "r1.docx: /u/1"
+        assert result["output_deliverables"] == "r1.docx: /u/1"
         (event,) = callback.stream_over
         assert event.files == env.runs[0].files
 
     def test_deliverables_variable_is_set_even_when_not_shown(self, env):
         node, callback = _node(_params(output_user=False))
         result = node._run("exec-1")
-        assert result["deliverables"] == "r1.docx: /u/1"
+        assert result["output_deliverables"] == "r1.docx: /u/1"
         assert callback.stream_over == []
 
     def test_batch_runs_keep_their_own_files(self, env):
@@ -160,7 +160,7 @@ class TestAgentNodeWithSkills:
         keys = [item["key"] for item in log]
         assert "skills" in keys
         assert "agent_1.output" in keys
-        assert "agent_1.deliverables" in keys
+        assert "agent_1.output_deliverables" in keys
         assert next(item["value"] for item in log if item["key"] == "skills") == ["docx"]
 
     def test_react_model_with_skills_fails_with_11063(self, env):
