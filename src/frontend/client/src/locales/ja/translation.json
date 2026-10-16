@@ -2356,6 +2356,16 @@
     }
   },
   "dshChat": {
+    "selectKnowledge": "ナレッジスペースを選択",
+    "searchKnowledge": "ナレッジスペースを検索",
+    "selectedKnowledge": "{{count}} 件のナレッジスペースを選択中",
+    "confirmKnowledge": "追加を確定",
+    "knowledgeLoadError": "ナレッジスペースを読み込めませんでした",
+    "retryKnowledge": "再試行",
+    "loadingKnowledge": "ナレッジスペースを読み込み中…",
+    "noKnowledgeMatch": "一致するナレッジスペースはありません",
+    "noKnowledge": "選択できるナレッジスペースはありません",
+    "knowledgeLimit": "ナレッジスペースは最大50件まで選択できます",
     "followupPlaceholder": "メッセージを送信",
     "conversationSection": "会話",
     "placeholder": "メッセージを送信、またはファイルやナレッジスペースを追加",

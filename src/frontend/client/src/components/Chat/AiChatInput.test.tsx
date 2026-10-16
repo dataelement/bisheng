@@ -28,9 +28,9 @@ jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
 jest.mock('./Input/ChatKnowledge', () => ({
-  ChatKnowledge: ({ variant, showKnowledgeSelection, showFileUpload, onFileUploadClick }) => (
+  ChatKnowledge: ({ variant, spaceDialog, showKnowledgeSelection, showFileUpload, onFileUploadClick }) => (
     <div>
-      {variant === 'knowledge' && <button>spaces</button>}
+      {spaceDialog && showKnowledgeSelection && <button>spaces</button>}
       {variant === 'plus' && showKnowledgeSelection && <button>org knowledge</button>}
       {variant === 'plus' && showFileUpload && <button onClick={onFileUploadClick}>upload</button>}
     </div>
@@ -71,10 +71,11 @@ test('new chat offers setup, established chat hides setup while preserving conte
   }
   expect(screen.getByTestId('context-strip')).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['skills', 'tools', 'research', 'spaces', 'org knowledge']) {
+  for (const label of ['skills', 'tools', 'research']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.queryByTestId('context-strip')).toBeNull();
+  expect(screen.getByTestId('context-strip')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
   expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', 'dshChat.followupPlaceholder');
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
   expect(mockSetSkills).not.toHaveBeenCalled();

@@ -2433,6 +2433,16 @@
     }
   },
   "dshChat": {
+    "selectKnowledge": "Select knowledge spaces",
+    "searchKnowledge": "Search knowledge spaces",
+    "selectedKnowledge": "{{count}} knowledge spaces selected",
+    "confirmKnowledge": "Confirm",
+    "knowledgeLoadError": "Could not load knowledge spaces",
+    "retryKnowledge": "Retry",
+    "loadingKnowledge": "Loading knowledge spaces…",
+    "noKnowledgeMatch": "No matching knowledge spaces",
+    "noKnowledge": "No knowledge spaces available",
+    "knowledgeLimit": "Select up to 50 knowledge spaces",
     "followupPlaceholder": "Send a message",
     "conversationSection": "Conversation",
     "placeholder": "Send a message, or add files and knowledge spaces",

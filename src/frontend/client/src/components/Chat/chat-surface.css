@@ -22,8 +22,8 @@
 .dsh-chat-attachment:hover { background: rgb(var(--fill-1)); }
 .dsh-chat-attachment:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: 2px; }
 /* Harness 0.2.0-rc.2 conversation geometry and semantic surface palette. */
-body[data-dsh-chat-theme] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal) { --bg-page:255 255 255; --fill-1:248 249 250; --fill-2:242 242 244; --text-1:15 17 21; --dsh-composer-bg:255 255 255; --dsh-bubble-bg:237 243 254; --dsh-menu-bg:248 249 250; --text-2:88 90 94; --text-3:129 133 140; --border-base:232 233 235; }
-body[data-dsh-chat-theme=dark] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal) { --bg-page:20 20 22; --fill-1:27 27 28; --fill-2:44 44 46; --text-1:249 250 251; --dsh-composer-bg:44 44 46; --dsh-bubble-bg:44 44 46; --dsh-menu-bg:48 49 54; --text-2:182 184 190; --text-3:129 133 140; --border-base:51 51 54; --border-deep:83 85 91; color:rgb(var(--text-1)); color-scheme:dark; }
+body[data-dsh-chat-theme] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:255 255 255; --fill-1:248 249 250; --fill-2:242 242 244; --text-1:15 17 21; --dsh-composer-bg:255 255 255; --dsh-bubble-bg:237 243 254; --dsh-menu-bg:248 249 250; --text-2:88 90 94; --text-3:129 133 140; --border-base:232 233 235; }
+body[data-dsh-chat-theme=dark] :is(.dsh-web-chat, .dsh-chat-menu, .dsh-chat-preview-modal, .dsh-knowledge-dialog) { --bg-page:20 20 22; --fill-1:27 27 28; --fill-2:44 44 46; --text-1:249 250 251; --dsh-composer-bg:44 44 46; --dsh-bubble-bg:44 44 46; --dsh-menu-bg:48 49 54; --text-2:182 184 190; --text-3:129 133 140; --border-base:51 51 54; --border-deep:83 85 91; color:rgb(var(--text-1)); color-scheme:dark; }
 body[data-dsh-chat-theme] .dsh-web-chat { background:rgb(var(--bg-page)); }
 .dsh-web-chat .dsh-mobile-chat-header { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); }
 .dsh-web-chat .dsh-mobile-chat-header :is(button,span,svg) { color:inherit; }
@@ -130,3 +130,8 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-web-chat #toggle-left-nav { color:rgb(var(--text-3)); }
 
 .dsh-chat-surface .dsh-chat-header :is(button,svg) { color:rgb(var(--text-2)); }
+
+/* The space picker is portaled outside the Chat root and owns its theme surface. */
+body[data-dsh-chat-theme] .dsh-knowledge-dialog { background:rgb(var(--bg-page)); color:rgb(var(--text-1)); border-color:rgb(var(--border-base)); }
+body[data-dsh-chat-theme] .dsh-knowledge-dialog input { background:transparent; color:rgb(var(--text-1)); border-color:rgb(var(--border-deep, var(--border-base))); }
+body[data-dsh-chat-theme] .dsh-knowledge-dialog .dsh-knowledge-cancel { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); border-color:rgb(var(--border-base)); }

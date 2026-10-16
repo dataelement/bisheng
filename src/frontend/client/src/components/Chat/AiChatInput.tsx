@@ -185,7 +185,7 @@ const AiChatInput = memo(
 
         // Collapse toolbar labels to icons when the toolbar's own width (not the
         // viewport's) runs short — e.g. once the sidebar opens on a mid-size screen.
-        const { ref: toolbarRef, compact: toolbarCompact } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
+        const { ref: toolbarRef } = useContainerCompact(TOOLBAR_COMPACT_THRESHOLD);
 
         // Selecting a skill picks it into the fresh
         // task session ('new'), then enters task mode (/linsight/new) where the
@@ -417,8 +417,8 @@ const AiChatInput = memo(
 
         // Skills join the knowledge spaces in the strip: both are context you
         // mount onto the conversation, not something you are about to send.
-        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
-        const hasMountedKbs = allowConfiguration && ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
+        const mountedSkills = allowConfiguration && taskMode && !isLingsi ? dailySkills : [];
+        const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
 
@@ -511,7 +511,7 @@ const AiChatInput = memo(
                         kbs={selectedOrgKbs || []}
                         skills={mountedSkills}
                         onRemoveKb={onSelectedOrgKbsChange ? (kb) => {
-                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id));
+                            onSelectedOrgKbsChange(selectedOrgKbs.filter((i) => i.id !== kb.id || i.type !== kb.type));
                         } : undefined}
                         onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                     />
@@ -674,7 +674,8 @@ const AiChatInput = memo(
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
                                     variant="plus"
-                                    showKnowledgeSelection={allowConfiguration && knowledgeBase}
+                                    spaceDialog
+                                    showKnowledgeSelection={knowledgeBase}
                                     config={bsConfig}
                                     disabled={!!disabled}
                                     value={selectedOrgKbs}
@@ -694,24 +695,6 @@ const AiChatInput = memo(
                                     onFolderUploadClick={taskMode
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
-                                />
-                            )}
-                            {/* Knowledge-space pill — separate "+"-menu sibling that
-                                hosts only the knowledge-space / org-knowledge submenus. */}
-                            {allowConfiguration && knowledgeBase && !isLingsi && onSelectedOrgKbsChange && (
-                                <ChatKnowledge
-                                    variant="knowledge"
-                                    config={bsConfig}
-                                    disabled={!!disabled}
-                                    compact={toolbarCompact}
-                                    value={selectedOrgKbs}
-                                    onChange={(val) => {
-                                        onSelectedOrgKbsChange(val);
-                                        if (val.length > 0 && !agentMode) {
-                                            setChatFiles(null);
-                                            onSearchTypeChange?.("");
-                                        }
-                                    }}
                                 />
                             )}
 

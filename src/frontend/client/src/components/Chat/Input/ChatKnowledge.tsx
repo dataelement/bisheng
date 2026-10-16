@@ -19,6 +19,7 @@ import { BsConfig } from "~/types/chat";
 import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
+import { KnowledgeSpaceDialog } from "./KnowledgeSpaceDialog";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
@@ -60,6 +61,7 @@ export const ChatKnowledge = ({
   value = [],
   onChange,
   showKnowledgeSelection = true,
+  spaceDialog = false,
   showFileUpload = false,
   fileUploadDisabled = false,
   onFileUploadClick,
@@ -81,6 +83,8 @@ export const ChatKnowledge = ({
   onChange: (val: KnowledgeItem[]) => void;
   /** Enable knowledge setup in the plus menu on new-conversation surfaces. */
   showKnowledgeSelection?: boolean;
+  /** Open the Chat space picker as a searchable confirmation dialog. */
+  spaceDialog?: boolean;
   /** Render file upload at the top of the menu. */
   showFileUpload?: boolean;
   fileUploadDisabled?: boolean;
@@ -130,11 +134,12 @@ export const ChatKnowledge = ({
   // knowledge/space/{mine,joined} every time the input box re-mounted (e.g. the
   // send-triggered welcome→messages layout flip), causing duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
+  const [spaceDialogOpen, setSpaceDialogOpen] = useState(false);
 
   // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
   // Empty groups (including "no search hit in this group") are dropped by the hook.
   const { groups: spaceGroups, isFetching: spaceFetching } = useCategorizedKnowledgeSpaces({
-    enabled: rootOpen,
+    enabled: rootOpen && variant === 'knowledge',
     keyword: debouncedSpaceKeyword,
   });
   const spaceListGroups = useMemo(
@@ -283,6 +288,13 @@ export const ChatKnowledge = ({
   }, [isMobile, rootOpen, mobileTallPanel]);
 
   return (
+    <>
+    {spaceDialogOpen && (
+      <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
+        setSpaceDialogOpen(false);
+        triggerRef.current?.focus();
+      }} />
+    )}
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
       <TooltipProvider delayDuration={50}>
         <Tooltip>
@@ -368,7 +380,7 @@ export const ChatKnowledge = ({
           // variant — the scroll list carries its own so rows can reach the edge.
           variant === 'knowledge'
             ? 'w-[240px] overflow-hidden pt-3 px-3 pb-0'
-            : 'w-[160px] p-3',
+            : 'w-[208px] p-2',
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
@@ -406,6 +418,14 @@ export const ChatKnowledge = ({
           >
             <Outlined.Attachment size={16} className="text-text-2" />
             <span className="text-[14px] font-normal text-text-1">{localize('com_ui_upload_files')}</span>
+          </DropdownMenuItem>
+        )}
+
+        {variant === 'plus' && spaceDialog && showKnowledgeSelection && mobilePanel === 'root' && (
+          <DropdownMenuItem onSelect={() => { setRootOpen(false); setSpaceDialogOpen(true); }}
+            className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2">
+            <Outlined.FolderClose size={16} className="text-text-2" />
+            <span className="text-body text-text-1">{localize('dshChat.selectKnowledge')}</span>
           </DropdownMenuItem>
         )}
 
@@ -670,5 +690,6 @@ export const ChatKnowledge = ({
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   );
 };
