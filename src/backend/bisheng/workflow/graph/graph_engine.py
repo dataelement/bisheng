@@ -36,6 +36,8 @@ class GraphEngine:
         callback: BaseCallback = None,
         tenant_id: int = None,
         flow_user_id: int = None,
+        chat_id: str | None = None,
+        tmp_session_id: str | None = None,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -52,6 +54,11 @@ class GraphEngine:
         # knowledge-space retrieval by the config author's view_file when the
         # permission toggle is OFF (see design decision 2/3).
         self.flow_user_id = flow_user_id
+        # F078: the session the run belongs to, so agent nodes can keep a
+        # per-session workspace. A formal conversation has a chat id; a debug run
+        # has only a temporary session id.
+        self.chat_id = chat_id
+        self.tmp_session_id = tmp_session_id
 
         # node_id: NodeInstance
         self.nodes_map = {}
@@ -228,6 +235,8 @@ class GraphEngine:
                 workflow_name=self.workflow_name,
                 tenant_id=self.tenant_id,
                 flow_user_id=self.flow_user_id,
+                chat_id=self.chat_id,
+                tmp_session_id=self.tmp_session_id,
             )
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)

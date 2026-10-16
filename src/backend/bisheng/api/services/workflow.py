@@ -4,6 +4,7 @@ from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
 
+import anyio
 from fastapi.encoders import jsonable_encoder
 from langchain_classic.memory import ConversationBufferWindowMemory
 from loguru import logger
@@ -883,6 +884,9 @@ class WorkFlowService(BaseService):
             target_edges=None,
             max_steps=233,
             callback=base_callback,
+            tenant_id=workflow_info.tenant_id,
+            # F078: a single-node test is a one-off debug session.
+            tmp_session_id=generate_uuid(),
         )
         if node_data.type == NodeType.CODE.value:
             node.handle_input({"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]})
@@ -896,7 +900,12 @@ class WorkFlowService(BaseService):
                 graph_state.set_variable_by_str(key, val)
 
         exec_id = generate_uuid()
-        result = node._run(exec_id)
+        if node_data.type == NodeType.AGENT.value:
+            # The agent node bridges to async code with run_async_safe, which must
+            # not be called on the running loop; a worker thread can hop back to it.
+            result = await anyio.to_thread.run_sync(node._run, exec_id)
+        else:
+            result = node._run(exec_id)
         log_data = node.parse_log(exec_id, result)
         res = []
         for one_batch in log_data:

@@ -52,6 +52,11 @@ class BaseNode(ABC):
         # view_file when the permission toggle is OFF (falls back to user_id when
         # unset, e.g. legacy call sites that don't thread it).
         self.flow_user_id: int | None = kwargs.get("flow_user_id") or user_id
+        # F078: session identity for per-session agent workspaces. ``chat_id`` is
+        # set for a formal conversation; ``tmp_session_id`` for a debug run or a
+        # single-node test. Other nodes ignore both.
+        self.chat_id: str | None = kwargs.get("chat_id") or None
+        self.tmp_session_id: str | None = kwargs.get("tmp_session_id") or None
 
         # Data of all nodes
         self.node_data = node_data

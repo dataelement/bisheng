@@ -87,6 +87,10 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
             redis_callback,
             tenant_id=flow_tenant_id,
             flow_user_id=flow_user_id,
+            chat_id=chat_id or None,
+            # A debug run has no chat id; its unique_id is stable for the whole
+            # WebSocket connection, so it identifies the temporary session.
+            tmp_session_id=None if chat_id else unique_id,
         )
         redis_callback.workflow = workflow
         status, reason = workflow.run()
