@@ -189,7 +189,20 @@ class ChatSessionService:
         account.
         """
         await ChatSessionService._own_conversation_or_raise(chat_id, login_user)
+        return await ChatSessionService._signed_attachment_url(chat_id, file_id)
 
+    @staticmethod
+    async def resolve_subject_attachment_url(chat_id: str, file_id: str, subject: SessionSubject) -> str:
+        """``resolve_attachment_url`` for an Open API identity (F078).
+
+        Same rule: the subject must own the conversation, and the object name
+        comes from the stored messages.
+        """
+        await ChatSessionService.get_subject_session(chat_id, subject)
+        return await ChatSessionService._signed_attachment_url(chat_id, file_id)
+
+    @staticmethod
+    async def _signed_attachment_url(chat_id: str, file_id: str) -> str:
         messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
         for attachment in ChatSessionService._attachments_of(messages):
             if str(attachment.get("file_id")) != str(file_id):

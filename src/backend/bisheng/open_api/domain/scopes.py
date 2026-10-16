@@ -28,6 +28,8 @@ OPEN_API_SCOPES: tuple[OpenApiScope, ...] = (
         (
             ("POST", f"{_V2}/workflow/invoke"),
             ("POST", f"{_V2}/workflow/stop"),
+            # F078: agent-node deliverables of the caller's own session.
+            ("GET", f"{_V2}/workflow/files/{{chat_id}}/{{file_id}}"),
         ),
         "app",
         "openApiManagement.scopes.workflow_invoke.label",

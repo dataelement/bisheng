@@ -2,7 +2,7 @@
 
 > 可导入文件：[`openapi-v2-key-auth-api-by-category.json`](./openapi-v2-key-auth-api-by-category.json)  
 > OpenAPI：3.1.0  
-> 本文档收录：**41 个 HTTP 接口 + 2 个 WebSocket 接口，共 43 个接口**。  
+> 本文档收录：**42 个 HTTP 接口 + 2 个 WebSocket 接口，共 44 个接口**。  
 > 分类顺序：知识库 → 日常模式会话 → 工作流 → 助手。
 
 按“请求方法 + 路径”计数，同一路径的 GET、POST、PUT 分别计数；SSE 属于对应的 HTTP 接口。
@@ -13,9 +13,9 @@
 |---|---:|---:|---:|---|
 | [知识库](#knowledge) | 28 | 0 | **28** | knowledge:read、knowledge:write |
 | [日常模式会话](#daily-chat) | 5 | 0 | **5** | chat:invoke |
-| [工作流](#workflow) | 3 | 1 | **4** | workflow:read、workflow:invoke |
+| [工作流](#workflow) | 4 | 1 | **5** | workflow:read、workflow:invoke |
 | [助手](#assistant) | 5 | 1 | **6** | assistant:read、assistant:invoke |
-| **合计** | **41** | **2** | **43** | |
+| **合计** | **42** | **2** | **44** | |
 
 **使用方式**
 
@@ -2917,13 +2917,14 @@ HTTP 状态：`200`。
 
 ## 工作流
 
-共 **4 个接口**（HTTP 3 个，WebSocket 1 个）。包括工作流详情、执行、停止和 WebSocket 对话。WebSocket 已纳入本类数量。
+共 **5 个接口**（HTTP 4 个，WebSocket 1 个）。包括工作流详情、执行、停止、下载助手节点交付文件和 WebSocket 对话。WebSocket 已纳入本类数量。
 
 | 功能组 | 接口用途 | 方法 | 路径 | 权限位 |
 |---|---|---|---|---|
 | 详情 | [查询工作流详情](#workflow-01) | GET | `/api/v2/flows/{flow_id}` | `workflow:read` |
 | 调用 | [执行工作流](#workflow-02) | POST | `/api/v2/workflow/invoke` | `workflow:invoke` |
 | 调用 | [停止工作流](#workflow-03) | POST | `/api/v2/workflow/stop` | `workflow:invoke` |
+| 调用 | [下载助手节点交付文件](#workflow-05) | GET | `/api/v2/workflow/files/{chat_id}/{file_id}` | `workflow:invoke` |
 | WebSocket | [工作流交互连接](#workflow-04) | WS | `/api/v2/workflow/chat/{workflow_id}` | `workflow:invoke` |
 
 <a id="workflow-01"></a>
@@ -3079,6 +3080,7 @@ HTTP 状态：`200`。
 | `data.events[].node_name` | `string / null` | 节点名称 |
 | `data.events[].node_execution_id` | `string / null` | 节点执行 ID |
 | `data.events[].output_schema` | `object / null` | 节点输出 |
+| `data.events[].output_schema.files` | `array / null` | 节点产出的文件。助手节点运行技能后在这里返回交付文件，每项含 `file_id`、`name`、`path`（下载地址，见 `GET /api/v2/workflow/files/{chat_id}/{file_id}`）、`size`；文件内容与扩展名不符时另有 `format_error`。没有交付文件时为 null |
 | `data.events[].input_schema` | `object / null` | 等待用户输入时的输入定义 |
 
 #### 返回示例
@@ -3203,6 +3205,51 @@ HTTP 状态：`200`。
   "data": null
 }
 ```
+
+<a id="workflow-05"></a>
+
+### `GET /api/v2/workflow/files/{chat_id}/{file_id}`
+
+**接口用途：下载助手节点交付文件。**
+
+只能下载属于当前执行主体的工作流会话中、由助手节点生成的交付文件。下载地址不需要自己拼接：调用 `/api/v2/workflow/invoke` 时，助手节点事件的 `output_schema.files[].path` 已给出完整路径。
+
+#### 基本信息
+
+| 项目 | 值 |
+|---|---|
+| URL | `/api/v2/workflow/files/{chat_id}/{file_id}` |
+| 请求方式 | `GET` |
+| 鉴权头 | `Authorization: Bearer <API_KEY>`，必填 |
+| 权限位 | `workflow:invoke` |
+| 身份模式 | `S/D` |
+
+#### 请求参数
+
+| 位置 | 参数 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---:|---|---|
+| path | `chat_id` | `string` | 是 | `—` | 工作流会话所属的对话 ID，取自 `files[].path` |
+| path | `file_id` | `string` | 是 | `—` | 交付文件 ID，取自 `files[].file_id` |
+| header | `X-On-Behalf-Of` | `string` | 否 | `—` | 可选。与执行工作流时传入的值保持一致。 |
+| header | `X-End-User` | `string` | 否 | `—` | 可选。与执行工作流时传入的值保持一致。 |
+
+#### 请求示例
+
+```bash
+curl -L "$BISHENG_API_BASE/api/v2/workflow/files/chat001/0f3c9a7e2b8d4c51a6e9f0b1c2d3e4f5" \
+  -H "Authorization: Bearer $BISHENG_API_KEY" \
+  -o 周报.docx
+```
+
+#### 成功响应
+
+HTTP 状态：`302`。`Location` 头是一个短时有效的下载地址，跟随跳转即可下载文件。
+
+#### 失败响应
+
+| HTTP 状态 | 说明 |
+|---|---|
+| `404` | 会话不属于当前执行主体，或文件不存在 |
 
 <a id="workflow-04"></a>
 

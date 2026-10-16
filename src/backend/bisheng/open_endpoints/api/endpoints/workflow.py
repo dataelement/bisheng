@@ -128,3 +128,20 @@ async def stop_workflow(workflow_id: UUID = Body(..., description='Workflow Uniq
     )
     return resp_200()
 
+
+
+@router.get('/files/{chat_id}/{file_id}')
+@open_api_scope("workflow:invoke", session=True)
+async def download_workflow_deliverable(chat_id: str, file_id: str):
+    """Download a deliverable file an agent node produced in this caller's session (F078)."""
+    from fastapi.responses import RedirectResponse
+
+    from bisheng.chat_session.domain.chat import ChatSessionService
+
+    principal = get_current_open_api_principal()
+    if principal is None:
+        raise ServerError(msg="Open API execution identity is missing")
+    url = await ChatSessionService.resolve_subject_attachment_url(
+        chat_id, file_id, session_subject_from_principal(principal)
+    )
+    return RedirectResponse(url=url, status_code=302)

@@ -994,6 +994,7 @@ class WorkFlowService(BaseService):
                     message=chat_response.message.get("msg"),
                     reasoning_content=chat_response.message.get("reasoning_content"),
                     output_key=chat_response.message.get("output_key"),
+                    files=cls._open_api_deliverables(chat_response),
                 )
                 cls.handle_source(chat_response, workflow_event)
             case WorkflowEventType.Error.value:
@@ -1001,6 +1002,31 @@ class WorkFlowService(BaseService):
                 workflow_event.output_schema = WorkflowOutputSchema(message=chat_response.message)
 
         return workflow_event
+
+    @staticmethod
+    def _open_api_deliverables(chat_response: ChatResponse) -> list[dict] | None:
+        """Agent-node deliverables for an Open API event (F078 AC-34).
+
+        Same ``name`` / ``path`` keys as output-node files. The path points at
+        the Open API download route, which the caller reaches with its own
+        credentials. ``None`` keeps the field absent when there are no files.
+        """
+        if not chat_response.files:
+            return None
+        files = []
+        for one in chat_response.files:
+            if not isinstance(one, dict) or not one.get("file_id"):
+                continue
+            entry = {
+                "file_id": one["file_id"],
+                "name": one.get("file_name"),
+                "path": f"/api/v2/workflow/files/{chat_response.chat_id}/{one['file_id']}",
+                "size": one.get("size"),
+            }
+            if one.get("format_error"):
+                entry["format_error"] = one["format_error"]
+            files.append(entry)
+        return files or None
 
     @classmethod
     def handle_source(cls, chat_response: ChatResponse, workflow_event: WorkflowEvent):

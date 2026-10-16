@@ -239,6 +239,7 @@ HTTP 状态：`200`。
 | `data.events[].node_name` | `string / null` | 节点名称 |
 | `data.events[].node_execution_id` | `string / null` | 节点执行 ID |
 | `data.events[].output_schema` | `object / null` | 节点输出 |
+| `data.events[].output_schema.files` | `array / null` | 节点产出的文件。助手节点运行技能后在这里返回交付文件，每项含 `file_id`、`name`、`path`（下载地址，见 `GET /api/v2/workflow/files/{chat_id}/{file_id}`）、`size`；文件内容与扩展名不符时另有 `format_error`。没有交付文件时为 null |
 | `data.events[].input_schema` | `object / null` | 等待用户输入时的输入定义 |
 
 #### 返回示例
@@ -352,6 +353,47 @@ HTTP 状态：`200`。
 ```
 
 ## 知识助手
+
+### `GET /api/v2/workflow/files/{chat_id}/{file_id}`
+
+只能下载属于当前执行主体的工作流会话中、由助手节点生成的交付文件。下载地址不需要自己拼接：调用 `/api/v2/workflow/invoke` 时，助手节点事件的 `output_schema.files[].path` 已给出完整路径。
+
+#### 基本信息
+
+| 项目 | 值 |
+|---|---|
+| URL | `/api/v2/workflow/files/{chat_id}/{file_id}` |
+| 请求方式 | `GET` |
+| 鉴权头 | `Authorization: Bearer <API_KEY>`，必填 |
+| 权限位 | `workflow:invoke` |
+| 身份模式 | `S/D` |
+
+#### 请求参数
+
+| 位置 | 参数 | 类型 | 必填 | 默认值 | 说明 |
+|---|---|---|---:|---|---|
+| path | `chat_id` | `string` | 是 | `—` | 工作流会话所属的对话 ID，取自 `files[].path` |
+| path | `file_id` | `string` | 是 | `—` | 交付文件 ID，取自 `files[].file_id` |
+| header | `X-On-Behalf-Of` | `string` | 否 | `—` | 可选。与执行工作流时传入的值保持一致。 |
+| header | `X-End-User` | `string` | 否 | `—` | 可选。与执行工作流时传入的值保持一致。 |
+
+#### 请求示例
+
+```bash
+curl -L "$BISHENG_API_BASE/api/v2/workflow/files/chat001/0f3c9a7e2b8d4c51a6e9f0b1c2d3e4f5" \
+  -H "Authorization: Bearer $BISHENG_API_KEY" \
+  -o 周报.docx
+```
+
+#### 成功响应
+
+HTTP 状态：`302`。`Location` 头是一个短时有效的下载地址，跟随跳转即可下载文件。
+
+#### 失败响应
+
+| HTTP 状态 | 说明 |
+|---|---|
+| `404` | 会话不属于当前执行主体，或文件不存在 |
 
 ### `POST /api/v2/assistant/chat/completions`
 

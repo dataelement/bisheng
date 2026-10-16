@@ -1799,6 +1799,62 @@
         ]
       }
     },
+    "/api/v2/workflow/files/{chat_id}/{file_id}": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Workflow"
+        ],
+        "summary": "Download Workflow Deliverable",
+        "description": "Download a deliverable file an agent node produced in this caller's session (F078).",
+        "operationId": "download_workflow_deliverable_api_v2_workflow_files__chat_id___file_id__get",
+        "parameters": [
+          {
+            "name": "chat_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Chat Id"
+            }
+          },
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "File Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OpenApiBearer": []
+          }
+        ]
+      }
+    },
     "/api/v2/llm/workbench/asr": {
       "post": {
         "tags": [
