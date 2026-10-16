@@ -107,11 +107,11 @@ bisheng-milvus-standalone
 | `information_conf` | `IntelligenceCenterConf` | 情报中心配置 |
 | `open_api` | `OpenApiConf` | 开放 API：个人密钥部署开关、`public_base_url`（对外地址，见下节） |
 
-后台「系统配置」中的 `open_api.ai_access_ui_enabled` 默认为 `false`：隐藏个人设置中的「AI 助手接入」菜单和知识空间列表下方的「连接 AI 助手」卡片。配置为 `true`、保存后刷新页面即可生效，无需重启后端。入口仍遵循原有个人密钥部署开关与租户权限；此项只控制员工入口，不停用开放 API、已有密钥或后台管理入口。配置项缺失或不是布尔值时同样隐藏；服务器 `config.yaml` 的同名项不再控制此入口。启动时按现有系统配置补齐机制添加缺失项，不覆盖管理员已有值。
+后台「系统配置」中的 `open_api.ai_access_ui_external_ids` 配置用户 `external_id` 白名单：只有名单内的用户能看到个人设置中的「AI 助手接入」菜单和知识空间列表下方的「连接 AI 助手」卡片。默认 `[]`，所有用户（包括管理员）均隐藏。填写非空字符串 `external_id`，数字形式也须加引号以保留前导零，保存后刷新页面即可生效，无需重启后端；缺失、非列表配置或非法 ID 不会放开入口。`/api/v1/env` 透传名单，由前端精确匹配当前登录用户的 `external_id`（无 `external_id` 则隐藏），因此名单在未登录时也可读取。入口仍遵循原有个人密钥部署开关与租户权限；此项只控制员工入口，不停用开放 API、已有密钥或后台管理入口。旧 `open_api.ai_access_ui_enabled` 不再生效，需改填名单；服务器 `config.yaml` 的同名项不控制此入口。启动时按现有系统配置补齐机制添加缺失名单，不覆盖管理员已有值。
 
 ```yaml
 open_api:
-  ai_access_ui_enabled: false
+  ai_access_ui_external_ids: ["0012", "employee-34"]  # Replace with actual external_id strings; [] hides entries for everyone.
 ```
 
 ### 反向代理与对外地址

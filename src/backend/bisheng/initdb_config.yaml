@@ -84,7 +84,8 @@ env:
 
 # Employee AI-access entries only; API capabilities and existing keys are unchanged.
 open_api:
-  ai_access_ui_enabled: false
+  # Only users with these external_id strings can see the entries; an empty list hides them for everyone.
+  ai_access_ui_external_ids: []
 
 workflow:
   # 节点运行最大步数
