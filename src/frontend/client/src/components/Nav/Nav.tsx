@@ -1,23 +1,20 @@
 import type { ConversationListResponse } from '~/types/chat';
-import { PermissionTypes, Permissions } from '~/types/chat';
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchContext } from '~/Providers';
 import { Conversations } from '~/components/Conversations';
 import { Spinner } from '~/components/svg';
 import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import {
   useAuthContext,
-  useHasAccess,
   useLocalStorage,
   useLocalize,
   usePrefersMobileLayout,
   useNavScrolling,
 } from '~/hooks';
 import { cn } from '~/utils';
-import AccountSettings from './AccountSettings';
-import NavToggle from './NavToggle';
+import { Outlined } from 'bisheng-icons';
+import { Button } from '~/components/ui';
 import NewChat from './NewChat';
-import { ChatNavUserFooter } from './ChatNavUserFooter';
 
 const Nav = ({
   navVisible,
@@ -29,52 +26,8 @@ const Nav = ({
   const localize = useLocalize();
   const { isAuthenticated } = useAuthContext();
 
-  const [navWidth, setNavWidth] = useState('240px');
-  const [isHovering, setIsHovering] = useState(false);
-  const navPanelRef = useRef<HTMLDivElement>(null);
-  const [navPanelRightPx, setNavPanelRightPx] = useState(0);
   const isSmallScreen = usePrefersMobileLayout();
   const [newUser, setNewUser] = useLocalStorage('newUser', true);
-
-  const hasAccessToBookmarks = useHasAccess({
-    permissionType: PermissionTypes.BOOKMARKS,
-    permission: Permissions.USE,
-  });
-
-  useEffect(() => {
-    if (isSmallScreen) {
-      const savedNavVisible = localStorage.getItem('navVisible');
-      if (savedNavVisible === null) {
-        toggleNavVisible();
-      }
-      // 移动端：与知识/订阅/应用中心侧栏统一 240px
-      setNavWidth('240px');
-    } else {
-      setNavWidth('240px');
-    }
-  }, [isSmallScreen]);
-
-  // 折叠把手贴在会话列表右缘（分隔线右侧），需计入 MainLayout 窄轨 + main 内边距，故用测量值而非假定 left:0 + translateX
-  useLayoutEffect(() => {
-    if (isSmallScreen) {
-      return;
-    }
-    const el = navPanelRef.current;
-    if (!el) {
-      return;
-    }
-    const sync = () => {
-      setNavPanelRightPx(el.getBoundingClientRect().right);
-    };
-    sync();
-    const ro = new ResizeObserver(sync);
-    ro.observe(el);
-    window.addEventListener('resize', sync);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', sync);
-    };
-  }, [isSmallScreen, navVisible, navWidth]);
 
   const [showLoading, setShowLoading] = useState(false);
 
@@ -145,20 +98,18 @@ const Nav = ({
   return (
     <>
       <div
-        ref={navPanelRef}
         data-testid="nav"
         className={cn(
           // 须与 usePrefersMobileLayout（max-width:767px）一致：touch-mobile 为 max-1023，误伤 768–1023 会去掉边距/边框，像「盖在内容上」
-          'max-w-[260px] max-[767px]:max-w-none min-w-0 flex-shrink-0 overflow-x-hidden bg-white border-r border-border-base max-[767px]:border-r-0',
+          'dsh-history-sidebar min-w-0 flex-shrink-0 overflow-x-hidden border-r border-border-base max-[767px]:border-r-0',
           isSmallScreen && 'fixed inset-y-0 left-0 z-[70] h-[100dvh] shadow-[4px_0_24px_rgba(0,0,0,0.06)]',
         )}
         style={{
-          width: navVisible ? navWidth : '0px',
+          width: navVisible ? '280px' : '0px',
           visibility: navVisible ? 'visible' : 'hidden',
-          transition: 'width 0.2s, visibility 0.2s',
         }}
       >
-        <div className="h-full w-[240px] max-[767px]:w-full">
+        <div className="h-full w-[280px] max-[767px]:w-full">
           <div className="flex h-full min-h-0 flex-col">
             <div
               className={cn(
@@ -174,7 +125,7 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col gap-0 pt-4 px-3 max-[767px]:gap-0 max-[767px]:p-0"
+                  className="flex h-full min-h-0 w-full flex-col gap-0 px-3 pt-2"
                 >
                   {/* New chat header and buttons */}
                   <NewChat
@@ -190,7 +141,7 @@ const Nav = ({
                       aria-hidden
                       className={cn(
                         'pointer-events-none absolute left-0 right-0 top-0 h-8 z-10 transition-opacity duration-150',
-                        'bg-gradient-to-b from-white to-transparent',
+                        'bg-gradient-to-b from-fill-1 to-transparent',
                         canScrollUp ? 'opacity-100' : 'opacity-0',
                       )}
                     />
@@ -199,7 +150,7 @@ const Nav = ({
                       aria-hidden
                       className={cn(
                         'pointer-events-none absolute bottom-0 left-0 right-0 h-8 z-10 transition-opacity duration-150',
-                        'bg-gradient-to-t from-white to-transparent',
+                        'bg-gradient-to-t from-fill-1 to-transparent',
                         canScrollDown ? 'opacity-100' : 'opacity-0',
                       )}
                     />
@@ -223,23 +174,27 @@ const Nav = ({
                       )}
                     </div>
                   </div>
-                  {isSmallScreen ? <ChatNavUserFooter /> : null}
                 </nav>
               </div>
             </div>
           </div>
         </div>
       </div>
-      {!isSmallScreen && navPanelRightPx > 0 ? (
-        <NavToggle
-          navVisible={navVisible}
-          onToggle={toggleNavVisible}
-          isHovering={isHovering}
-          setIsHovering={setIsHovering}
-          className=""
-          anchorRightEdgePx={navPanelRightPx}
-        />
-      ) : null}
+      {!isSmallScreen && !navVisible && (
+        <Button
+          variant="ghost"
+          size="small"
+          iconOnly
+          title={localize('com_nav_open_sidebar')}
+          aria-label={localize('com_nav_open_sidebar')}
+          aria-controls="chat-history-nav"
+          aria-expanded={false}
+          onClick={toggleNavVisible}
+          className="dsh-history-toggle dsh-history-reopen"
+        >
+          <Outlined.SidebarMenu className="size-4" />
+        </Button>
+      )}
       {isSmallScreen && (
         <div
           id="mobile-nav-mask-toggle"

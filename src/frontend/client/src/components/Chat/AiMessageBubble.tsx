@@ -5,14 +5,12 @@ import {
     BotIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    Loader2,
-    RefreshCwIcon
 } from "lucide-react";
+import { MessageTime } from "./MessageTime";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
-import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
@@ -50,7 +48,7 @@ const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
  * Uploaded-file list for a user message. All attachments render as square
  * thumbnails in a single horizontal row (media + documents/images).
  */
-function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
+function UploadedFileList({ files, conversationId, onPreviewFile }: { files: any[]; conversationId?: string; onPreviewFile?: (file: ArtifactFile) => void }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [fade, setFade] = useState({ left: false, right: false });
 
@@ -120,7 +118,7 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                                     variant="message"
                                 />
                             ) : (
-                                <ChatHistoryFileRow key={`file-${i}`} file={file} />
+                                <ChatHistoryFileRow key={`file-${i}`} file={file} onPreviewFile={onPreviewFile} />
                             ),
                         )}
                     </div>
@@ -282,8 +280,10 @@ function AgentTimeline({
         return -1;
     })();
 
+    if (blocks.every((block, index) => block.kind === "text" && index === finalTextIdx)) return null;
+
     return (
-        <div className="flex w-full min-w-0 flex-col gap-3">
+        <div className="mb-3 flex w-full min-w-0 flex-col gap-3">
             {blocks.map((block, i) => {
                 if (block.kind === "text") {
                     if (i === finalTextIdx) return null;
@@ -338,6 +338,7 @@ const AiMessageBubble = memo(
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    onPreviewFile={onPreviewFile}
                 />
             );
         }
@@ -371,12 +372,14 @@ function UserBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    onPreviewFile,
 }: {
     message: ChatMessage;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     const { user } = useAuthContext();
 
@@ -395,7 +398,7 @@ function UserBubble({
     );
 
     return (
-        <div className={cn("flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("dsh-user-message flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             {showCheckbox && message.conversationId && (
                 <MessageCheckbox
                     chatId={message.conversationId}
@@ -408,7 +411,7 @@ function UserBubble({
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Uploaded files: icon + filename only (no preview), with soft fade
                     edges while scrolling so the 120px-clipped list never hard-cuts. */}
-                <UploadedFileList files={message.files || []} conversationId={message.conversationId} />
+                <UploadedFileList files={message.files || []} conversationId={message.conversationId} onPreviewFile={onPreviewFile} />
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}
@@ -432,7 +435,7 @@ function UserBubble({
                                 // sizing the box to a long unbreakable URL and max-width
                                 // can't clamp it — `anywhere` reduces min-content so the
                                 // box shrinks and the URL wraps inside max-w-full.
-                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
+                                "dsh-user-bubble w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
@@ -459,7 +462,8 @@ function UserBubble({
                     </div>
                 </div>
                 {/* Action buttons */}
-                <div className="flex items-center justify-end gap-1 mt-1.5">
+                <div className="dsh-message-actions flex items-center justify-end gap-1 mt-1.5">
+                    <MessageTime message={message} />
                     <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
                     {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                         <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
@@ -612,7 +616,7 @@ function AssistantBubble({
     // bubble is the preceding (daily) user row; this row owns the rich panel.
     if (message.category === "task") {
         return (
-            <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
                 {showCheckbox && message.conversationId && (
                     <MessageCheckbox
                         chatId={message.conversationId}
@@ -635,7 +639,7 @@ function AssistantBubble({
     }
 
     return (
-        <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("dsh-assistant-message flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             {showCheckbox && message.conversationId && (
                 <MessageCheckbox
                     chatId={message.conversationId}
@@ -655,14 +659,12 @@ function AssistantBubble({
 
                 {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
                 {isAgentNative ? (
-                    <div className="mb-3 w-full min-w-0">
                         <AgentTimeline
                             events={message.events || []}
                             isStreaming={Boolean(isStreaming && isLatest)}
                             finalTextIdx={finalTextIdx}
                             messageId={message.messageId}
                         />
-                    </div>
                 ) : (
                     <>
                         {/* Legacy :::thinking::: — render with the same "思考内容" block as the
@@ -754,7 +756,7 @@ function AssistantBubble({
                     transient busy notice — copy/feedback on a "try again" status is
                     meaningless; the notice carries its own Retry. */}
                 {!isStreaming && regularContent && !isTransientError && (
-                    <div className="flex items-center gap-1 mt-1.5 text-gray-400">
+                    <div className="dsh-message-actions flex items-center gap-1 mt-1.5 text-gray-400">
                         <CitationReferencesDrawer
                             content={regularContent}
                             webContent={webContent}
@@ -806,6 +808,7 @@ function AssistantBubble({
                                 </>
                             }
                         />
+                        <MessageTime message={message} />
                         {/* Sibling paging */}
                         {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
                             <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />

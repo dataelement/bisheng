@@ -59,8 +59,7 @@ function labelForGroup(group: AvailableToolGroup, localize: (key: string) => str
   return group.name;
 }
 
-export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
-  const localize = useLocalize();
+export function useAgentToolSelection(availableTools: AvailableToolGroup[]) {
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
 
@@ -89,14 +88,11 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
   // Prune selections for groups that no longer exist in the admin config
   // (e.g., admin removed a tool between sessions).
   useEffect(() => {
-    if (!availableTools || selected.length === 0) return;
+    if (!availableTools?.length || selected.length === 0) return;
     const validIds = new Set(availableTools.map((g) => g.id));
     const pruned = selected.filter((g) => validIds.has(g.id));
     if (pruned.length !== selected.length) setSelected(pruned);
   }, [availableTools, selected, setSelected]);
-
-  const activeCount = selected.length;
-  const isActive = activeCount > 0;
 
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
@@ -120,6 +116,16 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
     }
   };
 
+  return { selected, isChecked, toggle };
+}
+
+export { iconForGroup, labelForGroup };
+
+export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
+  const localize = useLocalize();
+  const { selected, isChecked, toggle } = useAgentToolSelection(availableTools);
+  const isActive = selected.length > 0;
+
   if (!availableTools || availableTools.length === 0) return null;
 
   return (
@@ -130,7 +136,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
           // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
+          "dsh-composer-control h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-2 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -149,7 +155,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
         </div>
       </SelectTrigger>
       <SelectContent
-        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
+        className="dsh-chat-menu bg-page rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
         viewportClassName="flex flex-col gap-1 p-3"
       >
         {availableTools.map((group) => {
@@ -167,6 +173,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
               </div>
               <Switch
                 variant="tool"
+                aria-label={label}
                 className="shrink-0"
                 disabled={disabled}
                 checked={isChecked(group.id)}

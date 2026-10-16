@@ -22,18 +22,16 @@ import {
 } from "react";
 import { Outlined } from "bisheng-icons";
 import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
+import { formatBytes } from "~/utils/files";
 import { isMediaChipFile, MediaAttachmentChip } from "~/components/Chat/attachments/MediaAttachmentChip";
-import { FileUploadThumbnail } from "~/components/Chat/attachments/UploadAttachmentThumbnail";
+import { ContextResourceCard } from "./ContextResourceCard";
+import { FileText, Loader2 } from "lucide-react";
 import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
 import { useLocalize } from "~/hooks";
-
-/** Fixed card geometry from the design (Figma 12841:47405). */
-const CARD_WIDTH = 148;
 
 /** Stable sequence key for a file attachment across upload → completed transition. */
 function attachmentSeqKey(clientId: string | undefined): string | undefined {
@@ -55,83 +53,35 @@ function resolveFilePreviewUrl(file: {
     return resolveKnowledgePreviewUrl(remote);
 }
 
-/** Shared card shell: fixed width, white surface, optional hover-only remove. */
-const CardShell = ({
-    icon,
-    label,
-    title,
-    onRemove,
-    onClick,
-}: {
-    icon: React.ReactNode;
-    label: string;
-    title?: string;
-    onRemove?: () => void;
-    onClick?: () => void;
-}) => (
-    <div
-        className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
-            onClick && "cursor-pointer",
-        )}
-        style={{ width: CARD_WIDTH }}
-        onClick={onClick}
-    >
-        <span className="flex size-4 shrink-0 items-center justify-center text-text-3">{icon}</span>
-        <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
-            {label}
-        </span>
-        {onRemove && (
-            <button
-                type="button"
-                // Stop propagation so removing a card never triggers the card's
-                // own click (e.g. opening the image preview).
-                onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                // Hover-reveal on hover-capable pointers; always visible where the
-                // pointer can't hover (touch) — gated by CSS hover capability, not
-                // screen width, so a small-screen PC still gets the hover behaviour.
-                className="hidden size-4 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-slate-600 group-hover:flex coarse-pointer:flex"
-                aria-label="Remove"
-            >
-                <Outlined.Close size={12} />
-            </button>
-        )}
-    </div>
-);
-
-const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
-    <CardShell
-        icon={kb.type === "space"
-            ? <BookOpen className="size-4" />
-            : <BooksIcon className="size-4" />}
-        label={kb.name ?? ""}
-        onRemove={onRemove}
-    />
-);
+const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
+    const localize = useLocalize();
+    return <ContextResourceCard icon={<BookOpen className="size-6" />} label={kb.name ?? ""}
+        description={localize('com_ui_knowledge_space')} onRemove={onRemove} />;
+};
 
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     const fileName = file.name || file.file_name || file.filename || 'File';
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     if (isMediaChipFile({ ...file, name: fileName })) {
         return (
             <MediaAttachmentChip
                 file={{ ...file, name: fileName }}
                 onRemove={onRemove}
-                variant="bar"
+                variant="resource"
             />
         );
     }
 
     const previewUrl = resolveFilePreviewUrl(file);
-    const [previewOpen, setPreviewOpen] = useState(false);
     const isImagePreview = !!previewUrl && /\.(png|jpe?g|bmp|gif|webp)$/i.test(fileName);
 
     return (
         <>
-            <FileUploadThumbnail
-                fileName={fileName}
-                previewUrl={isImagePreview ? previewUrl : undefined}
-                variant="bar"
+            <ContextResourceCard
+                label={fileName}
+                description={[fileName.split('.').pop()?.toUpperCase(), Number(file.size) >= 0 ? formatBytes(Number(file.size), 1, true) : ''].filter(Boolean).join(' · ')}
+                icon={isImagePreview ? <img src={previewUrl} alt="" className="size-7 object-cover" /> : <FileText className="size-6" />}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />
@@ -167,7 +117,7 @@ const FolderCard = ({
     const localize = useLocalize();
     const label = `${folderName} (${localize('com_folder_upload_file_count', { 0: fileCount })})`;
     return (
-        <CardShell
+        <ContextResourceCard
             icon={<Outlined.FolderClose size={16} />}
             label={label}
             title={label}
@@ -177,7 +127,7 @@ const FolderCard = ({
 };
 
 const SkillCard = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => (
-    <CardShell
+    <ContextResourceCard
         icon={<Outlined.Skill size={16} className="text-blue-500" />}
         label={skill?.display_name || skill?.name || ""}
         onRemove={onRemove}
@@ -198,18 +148,13 @@ const UploadingCard = ({
             <MediaAttachmentChip
                 file={{ name, isUploading: true, ...file }}
                 onRemove={onRemove}
-                variant="bar"
+                variant="resource"
             />
         );
     }
     return (
-        <FileUploadThumbnail
-            fileName={name}
-            previewUrl={file?.previewUrl}
-            variant="bar"
-            isUploading
-            onRemove={onRemove}
-        />
+        <ContextResourceCard label={name} icon={<Loader2 className="size-6 animate-spin" />}
+            onRemove={onRemove} />
     );
 };
 
@@ -414,6 +359,7 @@ export const AttachmentBar = ({
     return (
         <div
             className={cn(
+                "dsh-composer-attachments",
                 appearance === "strip"
                     // The -mb-4 is the overlap: the box's rounded top corner
                     // reaches the edge exactly at the strip's bottom, so the two
@@ -491,14 +437,14 @@ export const AttachmentBar = ({
                     {/* Left-edge fade hinting at content scrolled off to the left. */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute left-0 top-0 h-full w-6 bg-gradient-to-r from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canLeft ? "opacity-100" : "opacity-0",
                         )}
                     />
                     {/* Right-edge fade hinting at hidden overflow (Figma gradient). */}
                     <div
                         className={cn(
-                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-white from-[49%] to-transparent transition-opacity",
+                            "pointer-events-none absolute right-0 top-0 h-full w-6 bg-gradient-to-l from-[rgb(var(--dsh-composer-bg,255_255_255))] from-[49%] to-transparent transition-opacity",
                             canRight ? "opacity-100" : "opacity-0",
                         )}
                     />
