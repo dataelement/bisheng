@@ -17,7 +17,7 @@ from bisheng.api_rate_limit.domain.services import ApiRateLimitService
 from bisheng.core.config.openfga import OpenFgaGuardConf
 from bisheng.core.config.settings import McpServerConf
 from bisheng.mcp_server.api.router import McpCorsMiddleware, McpServerApp, mcp_routes
-from test.mcp_server.test_mcp_server import server
+from test.mcp_server.test_mcp_server import EXPECTED_TOOL_NAMES, server
 
 
 def main_app(monkeypatch):
@@ -102,7 +102,7 @@ async def test_real_network_sdk_through_main_middleware(monkeypatch):
                 async with streamable_http_client(url, http_client=http_client) as (read, write, _):
                     async with ClientSession(read, write) as client:
                         await client.initialize()
-                        assert [t.name for t in (await client.list_tools()).tools] == ["search_knowledge"]
+                        assert {t.name for t in (await client.list_tools()).tools} == EXPECTED_TOOL_NAMES
                         result = await client.call_tool("search_knowledge", {"query": "q", "knowledge_base_ids": [118]})
                         assert result.structuredContent["total"] == 1
                         assert not result.isError

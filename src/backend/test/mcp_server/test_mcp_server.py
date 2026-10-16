@@ -37,6 +37,19 @@ from bisheng.developer_token.domain.services import DeveloperTokenService
 from bisheng.mcp_server.api.router import McpServerApp, mcp_routes
 from bisheng.open_endpoints.domain.schemas.filelib import RetrieveChunk, RetrieveResp
 
+EXPECTED_TOOL_NAMES = {
+    "search_knowledge",
+    "list_knowledge",
+    "list_folders",
+    "list_files",
+    "search_files",
+    "get_file_detail",
+    "get_file_source",
+    "retrieve_chunks",
+    "create_document",
+    "upload_file",
+}
+
 
 @asynccontextmanager
 async def server(monkeypatch, *, enabled=True, failure=None, search=None):
@@ -148,7 +161,7 @@ async def test_sdk_lists_and_calls_only_search_knowledge(monkeypatch, path):
     async with server(monkeypatch) as (app, calls, active):
         async with session(app, path=path) as client:
             tools = (await client.list_tools()).tools
-            assert [tool.name for tool in tools] == ["search_knowledge"]
+            assert {tool.name for tool in tools} == EXPECTED_TOOL_NAMES
             assert tools[0].inputSchema["additionalProperties"] is False
             assert "external_id" not in tools[0].inputSchema["properties"]
             assert tools[0].outputSchema["properties"]["chunks"]

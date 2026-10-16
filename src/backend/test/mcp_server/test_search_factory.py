@@ -41,3 +41,31 @@ async def test_production_factory_binds_and_closes_one_session(monkeypatch, fail
     except RuntimeError:
         assert fail
     assert closed == [session]
+
+
+async def test_tool_factory_uses_one_request_session_for_all_domain_services(monkeypatch):
+    """AC-16: production tool wiring never shares a mutable owner across requests."""
+    session = AsyncSession()
+    closed = []
+
+    @asynccontextmanager
+    async def session_scope():
+        try:
+            yield session
+        finally:
+            await session.close()
+            closed.append(session)
+
+    monkeypatch.setattr(factory, "get_async_db_session", session_scope)
+    monkeypatch.setattr(factory, "get_minio_storage", AsyncMock(return_value=object()))
+    user = UserPayload(user_id=7, user_name="bound", user_role=[2], tenant_id=7)
+    async with factory.build_tool_services(None, user) as services:
+        query = services.list_files.__self__
+        content = services.get_file_detail.__self__
+        ingestion = services.upload_file.__self__
+        assert query.repository.session is session
+        assert content.repository is query.repository
+        assert ingestion.query is query
+        assert query.owner.document_entry_resolver is content.resolver
+        assert query.owner.login_user is user
+    assert closed == [session]

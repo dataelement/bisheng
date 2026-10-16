@@ -1,6 +1,8 @@
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from functools import partial
+from tempfile import SpooledTemporaryFile
 from typing import Any
 
 import anyio
@@ -18,9 +20,11 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.settings import McpServerConf
 from bisheng.mcp_server.api.endpoints.tools import register_tools
+from bisheng.mcp_server.domain.schemas.ingestion import MAX_BODY_BYTES
 from bisheng.mcp_server.domain.services.auth_service import McpAuthService
-from bisheng.mcp_server.domain.services.factory import build_search_service
+from bisheng.mcp_server.domain.services.factory import build_search_service, build_tool_services
 from bisheng.mcp_server.domain.services.search_service import McpSearchService
+from bisheng.mcp_server.domain.services.tool_runtime import McpToolRuntime
 from bisheng.utils import get_request_ip
 
 logger = logging.getLogger(__name__)
@@ -36,9 +40,12 @@ class McpServerApp:
         self,
         config_provider: Callable[[], Awaitable[McpServerConf]] = get_config,
         search_factory: Callable[..., Any] = build_search_service,
+        tool_factory: Callable[..., Any] | None = None,
     ) -> None:
         self.config_provider = config_provider
         self.search_service = McpSearchService(search_factory)
+        self.tool_runtime = McpToolRuntime(tool_factory or partial(build_tool_services, search_factory=search_factory))
+        self.max_body_bytes = MAX_BODY_BYTES
         self.server: FastMCP | None = None
         self.security: TransportSecuritySettings | None = None
 
@@ -51,7 +58,7 @@ class McpServerApp:
         # MCP accepts any Host/Origin; token and resource checks remain mandatory.
         self.security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
         server = FastMCP("Bisheng", stateless_http=True, json_response=True, transport_security=self.security)
-        register_tools(server, self.search_service)
+        register_tools(server, self.search_service, self.tool_runtime)
         server.streamable_http_app()
         self.server = server
         try:
@@ -87,6 +94,44 @@ class McpServerApp:
             return
         scope = dict(scope)
         scope["state"] = {**scope.get("state", {}), "mcp_principal": principal}
+        await self._bounded_request(server, scope, receive, send)
+
+    async def _bounded_request(self, server: FastMCP, scope: Scope, receive: Receive, send: Send) -> None:
+        headers = Request(scope).headers
+        try:
+            declared = int(headers.get("content-length", "0"))
+        except ValueError:
+            await Response(status_code=400)(scope, receive, send)
+            return
+        if declared < 0 or declared > self.max_body_bytes:
+            await Response(status_code=413)(scope, receive, send)
+            return
+        # Bound actual bytes before SDK parsing; spill large bodies to temporary disk.
+        with SpooledTemporaryFile(max_size=1024 * 1024) as body:
+            size = 0
+            while True:
+                message = await receive()
+                if message["type"] == "http.disconnect":
+                    return
+                chunk = message.get("body", b"")
+                size += len(chunk)
+                if size > self.max_body_bytes:
+                    await Response(status_code=413)(scope, receive, send)
+                    return
+                await anyio.to_thread.run_sync(body.write, chunk)
+                if not message.get("more_body", False):
+                    break
+            body.seek(0)
+
+            async def replay() -> Message:
+                chunk = await anyio.to_thread.run_sync(body.read, 1024 * 1024)
+                return {"type": "http.request", "body": chunk, "more_body": body.tell() < size}
+
+            await self._run_protocol(server, scope, replay, receive, send)
+
+    async def _run_protocol(
+        self, server: FastMCP, scope: Scope, receive: Receive, raw_receive: Receive, send: Send
+    ) -> None:
         # A request owns its SDK task group, so disconnect/cancellation closes tool resources.
         manager = StreamableHTTPSessionManager(
             app=server.session_manager.app,
@@ -108,7 +153,7 @@ class McpServerApp:
                 # Only read after the SDK consumed the complete body; avoid competing consumers.
                 await body_read.wait()
                 while True:
-                    message = await receive()
+                    message = await raw_receive()
                     if message["type"] == "http.disconnect":
                         group.cancel_scope.cancel()
                         return
