@@ -141,7 +141,7 @@ export function ModelItem({
   };
 
   const handleSaveAdvancedParams = () => {
-    let config: ModelItemConfig;
+    let config: ReturnType<typeof withAdvancedParams>;
     try {
       config = withAdvancedParams(
         model.config,

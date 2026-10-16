@@ -19,6 +19,19 @@ const advanced = () =>
 const editor = () => screen.getByRole("textbox");
 
 describe("configured model parameters", () => {
+  it("opens API-created object parameters and preserves them until an explicit edit", () => {
+    const onConfig = vi.fn();
+    render(<ModelItem type="openai" data={{ ...initial, config: { user_kwargs: { temperature: 0.3 } } }}
+      onConfig={onConfig} onInput={vi.fn()} onDelete={vi.fn()} />);
+    expand();
+    advanced();
+    expect(JSON.parse((editor() as HTMLTextAreaElement).value)).toEqual({ temperature: 0.3 });
+    expect(onConfig).not.toHaveBeenCalled();
+    fireEvent.change(editor(), { target: { value: '{"temperature":0.5}' } });
+    fireEvent.click(screen.getByRole("button", { name: "model.save" }));
+    expect(onConfig).toHaveBeenCalledWith({ user_kwargs: '{"temperature":0.5}' });
+  });
+
   it("shows the old limit in the advanced editor and keeps opening read-only", () => {
     const onConfig = vi.fn();
     render(

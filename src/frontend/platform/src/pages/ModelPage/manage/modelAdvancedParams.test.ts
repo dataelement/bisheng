@@ -8,6 +8,15 @@ import {
 } from "./modelAdvancedParams";
 
 describe("unified advanced model parameters", () => {
+  it.each(["llm", "embedding"] as const)("reads object advanced settings for %s without mutating saved data", (modelType) => {
+    const parameters = { temperature: 0.4, custom_option: true };
+    const config = { user_kwargs: parameters };
+    expect(JSON.parse(advancedParamsText(config, "openai", modelType))).toEqual(parameters);
+    expect(config.user_kwargs).toBe(parameters);
+    const updated = withAdvancedParams(config, '{"temperature":0.2}', modelType);
+    expect(updated.user_kwargs).toBe('{"temperature":0.2}');
+  });
+
   it.each(["openai", "qwen", "qianfan", "ollama"])(
     "keeps the effective legacy limit for %s until the administrator edits it",
     (provider) => {

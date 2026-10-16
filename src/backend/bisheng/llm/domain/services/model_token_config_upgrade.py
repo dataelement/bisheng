@@ -33,6 +33,7 @@ def transform_token_config(config: dict | None, provider: str) -> dict | None:
             raise ValueError("advanced_json_invalid") from None
     if not isinstance(params, dict):
         raise ValueError("advanced_json_not_object")
+    json.dumps(params, allow_nan=False)
     result = deepcopy(config)
     params = deepcopy(params)
     limit = result.pop("max_tokens")

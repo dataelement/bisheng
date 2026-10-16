@@ -63,6 +63,7 @@ def test_inactive_legacy_field_preserves_existing_advanced_value(limit):
     [
         {"max_tokens": 10, "user_kwargs": "{bad"},
         {"max_tokens": 10, "user_kwargs": "[]"},
+        {"max_tokens": 0, "user_kwargs": '{"temperature":NaN}'},
         {"max_tokens": -1},
         {"max_tokens": True},
         {"max_tokens": 2.5},

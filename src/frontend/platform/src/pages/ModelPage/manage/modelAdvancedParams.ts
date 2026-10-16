@@ -8,7 +8,7 @@ export interface ModelItemConfig {
   voice?: string;
   enable_web_search?: boolean;
   max_tokens?: number;
-  user_kwargs?: string;
+  user_kwargs?: string | Record<string, unknown>;
 }
 
 export function parseAdvancedParams(input: string): Record<string, unknown> {
@@ -25,7 +25,8 @@ export function advancedParamsText(
   provider: string,
   modelType: ModelType,
 ): string {
-  const input = config?.user_kwargs || "";
+  const saved = config?.user_kwargs;
+  const input = typeof saved === "string" ? saved : saved ? JSON.stringify(saved, null, 2) : "";
   if (modelType !== "llm" || !config?.max_tokens) return input;
   try {
     // Preserve the effective legacy value, which currently takes priority.
@@ -47,7 +48,7 @@ export function withAdvancedParams(
   config: ModelItemConfig | undefined,
   input: string,
   modelType: ModelType,
-): ModelItemConfig {
+): ModelItemConfig & { user_kwargs: string } {
   parseAdvancedParams(input);
   const next = { ...config, user_kwargs: input.trim() };
   if (modelType === "llm") delete next.max_tokens;
