@@ -1,7 +1,7 @@
 import { Button } from "@/components/bs-ui/button";
 import { getAuditMode, saveAuditMode } from "@/controllers/API/dshModelAudit";
 import type { AuditMode, AuditModeSnapshot } from "@/types/dshModelAudit";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshChoice } from "./common";
 
@@ -14,10 +14,13 @@ export function ModelAuditMode({
   canConfigure,
 }: ModelAuditModeProps) {
   const { t } = useTranslation();
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<AuditModeSnapshot | null>(null);
   const [selected, setSelected] = useState<AuditMode>("OFF");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [revision, setRevision] = useState(0);
   const canCaptureContent = snapshot?.content_available === true;
   useEffect(() => {
@@ -38,65 +41,76 @@ export function ModelAuditMode({
   }, [tenantId, revision]);
   const handleSave = async () => {
     if (
+      !canConfigure ||
       !tenantId ||
       !snapshot ||
+      busy ||
       (selected === "CONTENT" && !canCaptureContent)
     )
       return;
     setBusy(true);
-    setFailed(false);
+    setSaveFailed(false);
     try {
-      setSnapshot(await saveAuditMode(tenantId, snapshot, selected));
+      const saved = await saveAuditMode(tenantId, snapshot, selected);
+      setSnapshot(saved);
+      setSelected(saved.mode);
     } catch {
-      setFailed(true);
+      setSaveFailed(true);
       setRevision((old) => old + 1);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <section className="space-y-3 rounded-lg border p-4">
-      <h3 className="font-medium">{t("dsh.modelAuditView.mode")}</h3>
-      <p className="text-sm text-muted-foreground">
-        {t("dsh.modelAuditView.modeHint")}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        <DshChoice
-          label={t("dsh.modelAuditView.mode")}
-          value={selected}
-          options={(["OFF", "METADATA", "CONTENT"] as const).map((value) => ({
-            value,
-            label: t("dsh.modelAuditView.modes." + value),
-            disabled: value === "CONTENT" && !canCaptureContent,
-          }))}
-          disabled={!canConfigure || !snapshot || busy}
-          onChange={(value) => setSelected(value as AuditMode)}
-        />
+    <>
+      <div className="flex flex-wrap items-center gap-2 text-sm md:justify-end">
+        <span className="text-xs text-muted-foreground">
+          {t("dsh.modelAuditView.capture_status")}
+        </span>
+        {snapshot && (
+          <span className="inline-flex items-center gap-2">
+            <i
+              aria-hidden="true"
+              className={
+                "size-1.5 rounded-full " +
+                (snapshot.mode === "OFF"
+                  ? "bg-muted-foreground"
+                  : "bg-success-foreground")
+              }
+            />
+            {t("dsh.modelAuditView.modes." + snapshot.mode)}
+          </span>
+        )}
+        {!snapshot && !failed && <span role="status">{t("dsh.loading")}</span>}
         {canConfigure && (
           <Button
-            variant="outline"
-            disabled={
-              !tenantId ||
-              !snapshot ||
-              busy ||
-              selected === snapshot.mode ||
-              (selected === "CONTENT" && !canCaptureContent)
-            }
-            onClick={handleSave}
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-sm [@media(pointer:coarse)]:min-h-11"
+            aria-expanded={open}
+            aria-controls={panelId}
+            onClick={() => setOpen((old) => !old)}
           >
-            {t("dsh.save")}
+            {t("dsh.modelAuditView.configure")}
           </Button>
         )}
         <Button
-          variant="outline"
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="text-sm [@media(pointer:coarse)]:min-h-11"
           disabled={busy}
           onClick={() => setRevision((old) => old + 1)}
         >
-          {t("dsh.refresh")}
+          {t("dsh.modelAuditView.refresh_mode")}
         </Button>
       </div>
       {snapshot && !canCaptureContent && (
-        <p role="alert">
+        <p
+          role="alert"
+          className="col-span-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm"
+        >
           {t(
             snapshot.content_available === undefined
               ? "dsh.modelAuditView.contentReadinessUnknown"
@@ -106,13 +120,59 @@ export function ModelAuditMode({
           )}
         </p>
       )}
-      {snapshot && canCaptureContent && (
-        <p className="text-sm text-muted-foreground">
-          {t("dsh.modelAuditView.contentKeyReady")}
+      {(failed || saveFailed) && (
+        <p role="alert" className="col-span-full text-sm text-destructive">
+          {t("dsh.modelAuditView.loadError")}
         </p>
       )}
-      {failed && <p role="alert">{t("dsh.modelAuditView.loadError")}</p>}
-      {!snapshot && !failed && <p role="status">{t("dsh.loading")}</p>}
-    </section>
+      {canConfigure && open && (
+        <section
+          id={panelId}
+          className="col-span-full space-y-3 rounded-lg bg-muted/50 p-4"
+        >
+          <h3 className="text-sm font-medium">
+            {t("dsh.modelAuditView.mode")}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {t("dsh.modelAuditView.modeHint")}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 [&_button]:[@media(pointer:coarse)]:min-h-11">
+            <DshChoice
+              label={t("dsh.modelAuditView.mode")}
+              value={selected}
+              options={(["OFF", "METADATA", "CONTENT"] as const).map(
+                (value) => ({
+                  value,
+                  label: t("dsh.modelAuditView.modes." + value),
+                  disabled: value === "CONTENT" && !canCaptureContent,
+                }),
+              )}
+              disabled={!snapshot || busy}
+              onChange={(value) => setSelected(value as AuditMode)}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="text-sm"
+              disabled={
+                !tenantId ||
+                !snapshot ||
+                busy ||
+                selected === snapshot.mode ||
+                (selected === "CONTENT" && !canCaptureContent)
+              }
+              onClick={handleSave}
+            >
+              {t("dsh.save")}
+            </Button>
+            {snapshot && canCaptureContent && (
+              <span className="text-xs text-muted-foreground">
+                {t("dsh.modelAuditView.contentKeyReady")}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
+    </>
   );
 }

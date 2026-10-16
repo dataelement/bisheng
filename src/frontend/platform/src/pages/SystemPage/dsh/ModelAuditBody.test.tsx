@@ -92,8 +92,44 @@ it("shows role and producer independently without calling partial sources a body
     .getByText("dsh.modelAuditView.sources.kinds.runtime-context")
     .closest("header")!;
   expect(metadata).toHaveClass("border-b", "bg-muted/50", "text-xs");
-  expect(within(metadata).getByText("/ snapshot")).toBeVisible();
+  expect(within(metadata).queryByText(/snapshot/)).toBeNull();
+  expect(metadata.querySelector("[title]")).toBeNull();
+  expect(metadata.closest("article")!.querySelector("details")).toBeNull();
   expect(metadata).not.toContainElement(screen.getByText("Synthetic context"));
+});
+
+it("uses readable source labels, deduplicates forms, and never exposes unknown technical kinds", async () => {
+  const result = frames([
+    { channel: "input", value: { parameters: {} } },
+    {
+      channel: "input",
+      value: { role: "user", content: "Synthetic source test" },
+    },
+  ]);
+  result.splice(1, 0, {
+    type: "annotations",
+    message_sources_status: "AVAILABLE",
+    items: [
+      {
+        message_index: 0,
+        sources: [
+          { kind: "runtime-context", form: "snapshot" },
+          { kind: "runtime-context", form: "private-technical-form" },
+          { kind: "private-unknown-kind", form: "private-form" },
+        ],
+      },
+    ],
+  });
+  source(result);
+  render(<ModelAuditBody requestId="request" />);
+  expect(
+    await screen.findByText("dsh.modelAuditView.sources.kinds.runtime-context"),
+  ).toBeVisible();
+  expect(
+    screen.getAllByText("dsh.modelAuditView.sources.kinds.runtime-context"),
+  ).toHaveLength(1);
+  expect(screen.getByText("dsh.modelAuditView.sources.unknown")).toBeVisible();
+  expect(screen.queryByText(/private-|snapshot/)).toBeNull();
 });
 
 describe("audit body NDJSON-to-message UI", () => {

@@ -1,6 +1,6 @@
 import { Button } from "@/components/bs-ui/button";
 import type { ModelAuditRecord } from "@/types/dshModelAudit";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dshTime } from "./common";
 import { ModelAuditBody } from "./ModelAuditBody";
@@ -44,6 +44,7 @@ export function ModelAuditCard({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsId = useId();
   const bodyId = useId();
+  const originalButton = useRef<HTMLButtonElement>(null);
   return (
     <article className="min-w-0 overflow-hidden rounded-lg border">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
@@ -92,6 +93,7 @@ export function ModelAuditCard({
           {t("dsh.modelAuditView.request_details")}
         </Button>
         <Button
+          ref={originalButton}
           variant="outline"
           size="sm"
           className="text-xs [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
@@ -145,7 +147,16 @@ export function ModelAuditCard({
         </p>
       )}
       {expanded && (
-        <div id={bodyId} className="border-t">
+        <div
+          id={bodyId}
+          className="border-t"
+          onKeyDown={(event) => {
+            if (event.key !== "Escape") return;
+            event.stopPropagation();
+            onToggle();
+            originalButton.current?.focus();
+          }}
+        >
           <ModelAuditBody requestId={row.request_id} tenantId={tenantId} />
         </div>
       )}

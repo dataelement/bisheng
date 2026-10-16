@@ -71,6 +71,9 @@ interface ModelAuditMessageProps {
 export function ModelAuditMessage({ message }: ModelAuditMessageProps) {
   const { t } = useTranslation();
   const role = roles.has(message.role) ? message.role : "unknown";
+  const kinds = [
+    ...new Set(message.sources?.map((source) => source.kind) || []),
+  ];
   const empty =
     !message.reasoning.length &&
     !message.tools.length &&
@@ -88,36 +91,27 @@ export function ModelAuditMessage({ message }: ModelAuditMessageProps) {
         {message.channel === "input" && !message.unparsed && (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span>{t("dsh.modelAuditView.sources.label")}</span>
-            {message.sources?.length ? (
+            {kinds.length ? (
               <>
-                {message.sources.length > 1 && (
+                {kinds.length > 1 && (
                   <span>{t("dsh.modelAuditView.sources.mixed")}</span>
                 )}
-                {message.sources.slice(0, 3).map((source, index) => (
+                {kinds.slice(0, 3).map((kind) => (
                   <Badge
-                    key={index}
+                    key={kind}
                     variant="secondary"
                     className="max-w-full whitespace-normal break-all font-normal"
-                    title={
-                      source.form
-                        ? source.kind + " / " + source.form
-                        : source.kind
-                    }
                   >
-                    {sourceKinds.has(source.kind)
-                      ? t("dsh.modelAuditView.sources.kinds." + source.kind)
-                      : source.kind}
-                    {source.form && (
-                      <span className="ml-1 font-mono font-normal text-muted-foreground">
-                        / {source.form}
-                      </span>
-                    )}
+                    {sourceKinds.has(kind)
+                      ? t("dsh.modelAuditView.sources.kinds." + kind)
+                      : t("dsh.modelAuditView.sources.unknown")}
                   </Badge>
                 ))}
-                {message.sources.length > 3 && (
-                  <span className="break-all font-mono">
-                    {message.sources[3].kind}
-                    {message.sources[3].form && " / " + message.sources[3].form}
+                {kinds.length > 3 && (
+                  <span>
+                    {t("dsh.modelAuditView.sources.more", {
+                      count: kinds.length - 3,
+                    })}
                   </span>
                 )}
               </>

@@ -55,8 +55,10 @@ export function ModelAuditTenantSelect({
   }, [initialTenant, onChange, revision]);
 
   return (
-    <div className="space-y-2">
-      <span className="block text-sm">{t("dsh.modelAuditView.tenant")}</span>
+    <div className="flex min-w-0 flex-wrap items-center gap-2 [&_button]:max-w-full [&_button]:[@media(pointer:coarse)]:min-h-11">
+      <span className="text-sm text-muted-foreground">
+        {t("dsh.modelAuditView.tenant")}
+      </span>
       <DshChoice
         label={t("dsh.modelAuditView.selectTenant")}
         value={value === undefined ? "" : String(value)}

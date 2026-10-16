@@ -90,17 +90,23 @@ export function ModelAuditModelSelect({
   }, [open, tenantId, keyword, page, revision]);
 
   return (
-    <div className="space-y-1">
-      <label htmlFor="audit-model_name" className="block text-sm">
+    <div className="min-w-0 space-y-1">
+      <label
+        htmlFor="audit-model_name"
+        className="block text-xs text-muted-foreground"
+      >
         {t("dsh.modelAuditView.filters.model_name")}
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Input
           id="audit-model_name"
           aria-label={t("dsh.modelAuditView.filters.model_name")}
           aria-describedby="audit-model-hint"
           value={modelId === undefined ? value || "" : selectedName}
           maxLength={2048}
+          placeholder={t("dsh.modelAuditView.model_placeholder")}
+          boxClassName="min-w-0"
+          className="[@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-base"
           onChange={(event) =>
             onChange({
               model_id: undefined,
@@ -122,7 +128,13 @@ export function ModelAuditModelSelect({
           }}
         >
           <PopoverTrigger asChild>
-            <Button variant="outline" aria-expanded={open}>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0 text-sm [@media(pointer:coarse)]:min-h-11"
+              aria-expanded={open}
+            >
               {t("dsh.modelAuditView.selectModel")}
             </Button>
           </PopoverTrigger>
@@ -222,7 +234,7 @@ export function ModelAuditModelSelect({
           </PopoverContent>
         </Popover>
       </div>
-      <p id="audit-model-hint" className="text-sm text-muted-foreground">
+      <p id="audit-model-hint" className="sr-only">
         {t("dsh.modelAuditView.modelHint")}
       </p>
     </div>

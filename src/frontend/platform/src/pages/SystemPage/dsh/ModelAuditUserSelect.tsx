@@ -92,8 +92,8 @@ export function ModelAuditUserSelect({
   };
 
   return (
-    <div className="space-y-1">
-      <span className="block text-sm">
+    <div className="min-w-0 space-y-1">
+      <span className="block text-xs text-muted-foreground">
         {t("dsh.modelAuditView.filterUser")}
       </span>
       <Popover
@@ -111,8 +111,10 @@ export function ModelAuditUserSelect({
       >
         <PopoverTrigger asChild>
           <Button
+            type="button"
+            size="sm"
             variant="outline"
-            className="h-9 w-72 max-w-full justify-between font-normal"
+            className="w-full min-w-0 justify-between text-sm font-normal [@media(pointer:coarse)]:min-h-11"
             aria-label={t("dsh.modelAuditView.selectUser")}
             aria-expanded={open}
           >

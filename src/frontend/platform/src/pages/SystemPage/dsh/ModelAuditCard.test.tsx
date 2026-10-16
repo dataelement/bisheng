@@ -67,12 +67,13 @@ it("keeps request information compact, revealing exact IDs without fetching an o
 
 it("places the original between the request header and the independently colored status footer", () => {
   const navigate = vi.fn();
+  const toggle = vi.fn();
   render(
     <ModelAuditCard
       row={row}
       tenantId={2}
       expanded
-      onToggle={vi.fn()}
+      onToggle={toggle}
       onNavigate={navigate}
     />,
   );
@@ -99,6 +100,11 @@ it("places the original between the request header and the independently colored
     screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
   );
   expect(navigate).toHaveBeenCalledWith(20, "synthetic-conversation");
+  fireEvent.keyDown(body, { key: "Escape" });
+  expect(toggle).toHaveBeenCalledOnce();
+  expect(
+    screen.getByRole("button", { name: "dsh.modelAuditView.collapse" }),
+  ).toHaveFocus();
 });
 
 it("does not make metadata-only or uncaptured records fetchable", () => {

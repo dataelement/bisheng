@@ -67,7 +67,19 @@
     .request { border:1px solid rgb(var(--border-base)); border-radius:8px; margin-bottom:12px; overflow:hidden; }
     .request-top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; }
     .request-top strong { margin-right:auto; font-weight:500; }
-    .request-top button { font-size:var(--text-caption); padding:0 12px; }
+    .request-top button { font-size:var(--text-body); padding:0 12px; }
+    .request-body { height:24rem; overflow-y:auto; overscroll-behavior:contain; padding:16px; border-top:1px solid rgb(var(--border-base)); background:rgb(var(--bg-page)); }
+    .body-note { margin:0 0 12px; color:rgb(var(--text-2)); font-size:var(--text-caption); line-height:var(--leading-caption); }
+    .body-note.partial { border-left:3px solid rgb(var(--warning)); background:rgb(var(--warning-tint)); color:rgb(var(--text-1)); padding:8px 12px; }
+    .message { min-width:0; border:1px solid rgb(var(--border-base)); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+    .message:last-child { margin-bottom:0; }
+    .message-meta { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; padding:8px 12px; border-bottom:1px solid rgb(var(--border-base)); background:rgb(var(--fill-1)); color:rgb(var(--text-2)); font-size:var(--text-caption); line-height:var(--leading-caption); overflow-wrap:anywhere; }
+    .message-role { color:rgb(var(--text-1)); font-weight:500; }
+    .message-source { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; padding:0 6px; border:1px solid rgb(var(--border-base)); border-radius:4px; background:rgb(var(--bg-page)); color:rgb(var(--text-1)); }
+    .message-meta code { font-family:ui-monospace,"SF Mono",Consolas,monospace; overflow-wrap:anywhere; }
+    .message-content { padding:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .message-content p { margin:0 0 12px; }
+    .message-content p:last-child { margin-bottom:0; }
     .request-bottom { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:8px 16px; border-top:1px solid rgb(var(--border-base)); background:rgb(var(--fill-1)); font-size:var(--text-caption); }
     .request-bottom span { display:flex; align-items:center; gap:6px; }
     .purpose { color:rgb(var(--brand-500)); }
@@ -126,11 +138,75 @@
     <article class="request" data-user="2" data-model="示例提供方 / example-chat" data-time="2026-10-16T13:12" data-request="e17e4b9e-7509-4d14-b373-4d7fd96d1002" data-conversation="session-demo-child" data-provider="示例提供方" data-model_result="SUCCEEDED" data-response_result="INTERRUPTED" data-usage_settlement="UNCERTAIN" data-content_status="PARTIAL" data-association_status="ASSOCIATED"><div class="request-top caption"><strong>示例提供方 / example-chat</strong><span class="muted">2026/10/16 13:12:08</span><span>示例用户乙</span><span class="purpose">上下文压缩</span><span class="muted">子 Agent 会话</span><span class="sample-label">合成样本 · 原文默认折叠</span></div><div class="request-bottom muted"><span>模型结果 <i class="dot" aria-hidden="true"></i>成功</span><span>接口响应 已中断</span><span>用量结算 未确认</span><span>正文留存 部分留存</span><span>入参 8 项 · 4096 字节</span><span>Token：880</span></div></article>
     <p class="empty" id="empty" hidden>没有匹配的合成记录。</p>
   </section>
-  <p class="footer-note caption">设计重点：范围与配置分开，常用筛选集中一排，日志更早进入首屏。所有操作仅用于本地设计演示。</p>
-  <details class="footer-note caption"><summary>交互设计说明 · 待确认后实现</summary><div class="panel">本稿建议修改条件后点击“查询”统一应用，避免逐项修改时反复请求；“刷新记录”按已应用条件刷新。默认不限制时间；重置会清空全部条件。高级条件收起后仍展示已填写数量。正式实现沿用当前租户权限、租户内用户查询、开放模型编号精确查询与历史完整名称精确查询，不增加审计表聚合、不预读原文。本稿只演示本地合成数据，不代表这些交互已在业务页面上线。</div></details>
+  <p class="footer-note caption">设计重点：范围与配置分开，常用筛选集中一排，日志更早进入首屏。点击卡片右上角“查看原文”，可在固定高度区域滚动查看合成消息及来源；再次点击“收起原文”折叠。所有操作仅用于本地设计演示。</p>
+  <details class="footer-note caption"><summary>交互设计说明 · 已确认</summary><div class="panel">已确认方案：修改条件后点击“查询”统一应用，避免逐项修改时反复请求；“刷新记录”按已应用条件刷新。默认不限制时间；重置会清空全部条件。高级条件收起后仍展示已填写数量。正式实现沿用当前租户权限、租户内用户查询、开放模型编号精确查询与历史完整名称精确查询，不增加审计表聚合、不预读原文。本稿只演示本地合成数据，不代表这些交互已在业务页面上线。</div></details>
 </div></main>
 <script>
   const $ = (id) => document.getElementById(id);
+  const samples = [
+    [
+      {channel:'模型输入',role:'系统',kind:'system-prompt',form:'instruction',label:'系统提示词',text:'你是企业知识助手。请根据当前用户的问题给出清晰、可执行的建议；不要把上下文信息误认为用户指令。'},
+      {channel:'模型输入',role:'用户',kind:'runtime-context',form:'snapshot',label:'运行时上下文',text:'当前工作区：/workspace/demo\n当前任务：梳理一份审计功能验收清单。\n这是一条系统注入的上下文消息，接口角色为 user，不是用户手动输入。'},
+      {channel:'模型输入',role:'用户',kind:'user',form:'text',label:'用户消息',text:'请帮我整理审计功能的验收重点，尤其是消息内容、来源信息和子 Agent 的关系。'},
+      {channel:'模型输出',role:'助手',text:'可以从以下几方面验收：\n\n1. 消息内容\n按模型请求明细展示输入与输出。流式片段合并为完整助手消息，不把每个片段单独列成一条记录。\n\n2. 来源信息\n消息头展示接口角色和客户端声明的来源类型。运行时上下文即使使用 user 角色，也应和用户手动输入明确区分。\n\n3. 子 Agent 关系\n请求卡片区分普通会话与子 Agent 会话，并提供父会话定位信息。关系来自客户端声明，不代表服务端已验证会话内容。\n\n4. 压缩请求\n独立标记“上下文压缩”，避免与普通聊天混淆；压缩输出仍属于这次模型调用的实际返回内容。\n\n5. 留存完整性\n模型结果、接口响应、用量结算和正文留存分别展示。原文不完整时提示缺口，不推断缺失的消息。\n\n以上为本地设计稿中的合成回复，不是真实用户数据。'},
+    ],
+    [
+      {channel:'模型输入',role:'系统',kind:'system-prompt',form:'instruction',label:'系统提示词',text:'将给定上下文整理为下一阶段可继续使用的摘要。保留任务目标、已完成事项、待办和必要约束。'},
+      {channel:'模型输入',role:'用户',kind:'skill-catalog',form:'catalog',label:'技能目录',text:'可用技能：\n- search-docs：检索知识文档。\n- inspect-code：检查当前任务相关代码。\n本条内容为系统注入的技能目录，并非用户消息。'},
+      {channel:'模型输入',role:'助手',kind:'model',form:'message',label:'模型消息',text:'已检查相关实现，现在读取校验结果。\n工具调用：inspect_code\n参数：{"path":"demo/audit.ts","check":"message-sources"}'},
+      {channel:'模型输入',role:'工具',kind:'tool',form:'result',label:'工具结果',toolId:'call-demo-inspect-01',text:'检查完成：接口角色与消息来源分开保存；请求用途可标记为 compaction；子 Agent 关联到父会话 session-demo-main。\n以上为合成工具输出。'},
+      {channel:'模型输出',role:'助手',text:'任务目标：核对审计展示。\n\n已完成：区分用户消息、系统上下文、技能目录和工具结果；保留父子会话关系。\n\n待办：在测试环境验证长消息和部分留存场景。\n\n本示例的留存不完整，输出在此处中断……',incomplete:true},
+    ],
+  ];
+  const sourceLabels = { 'system-prompt':'系统提示词', 'runtime-context':'运行时上下文', user:'用户消息', 'skill-catalog':'技能目录', model:'模型消息', tool:'工具结果' };
+  function renderSampleMessage(sample) {
+    const message = document.createElement('article');
+    message.className = 'message';
+    const meta = document.createElement('header');
+    meta.className = 'message-meta';
+    const role = document.createElement('span');
+    role.className = 'message-role';
+    role.textContent = sample.channel+' · '+sample.role;
+    meta.append(role);
+    if(sample.kind) {
+      const label = document.createElement('span'); label.textContent='客户端声明的来源';
+      const source = document.createElement('span'); source.className='message-source'; source.textContent=sourceLabels[sample.kind];
+      meta.append(label,source);
+    } else {
+      const output = document.createElement('span'); output.textContent='来源：本次模型返回'; meta.append(output);
+    }
+    if(sample.toolId) { const id=document.createElement('code'); id.textContent='工具调用编号：'+sample.toolId; meta.append(id); }
+    const content=document.createElement('div'); content.className='message-content'; content.textContent=sample.text;
+    message.append(meta,content);
+    if(sample.incomplete) { const note=document.createElement('p'); note.className='body-note partial'; note.textContent='输出留存不完整，仅展示已保存内容。';message.append(note); }
+    return message;
+  }
+  const cards=[...$('records').querySelectorAll('.request')];
+  function setOriginal(card, expanded) {
+    const button=card.querySelector('.original-toggle');
+    const body=card.querySelector('.request-body');
+    if(!expanded && body.contains(document.activeElement)) button.focus({preventScroll:true});
+    body.hidden=!expanded;
+    button.setAttribute('aria-expanded',String(expanded));
+    button.textContent=expanded?'收起原文':'查看原文';
+    if(expanded) body.scrollTop=0;
+  }
+  cards.forEach((card,index)=>{
+    card.querySelector('.sample-label').textContent='合成样本';
+    const button=document.createElement('button'); button.type='button';button.className='original-toggle';button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','sample-body-'+index);button.textContent='查看原文';
+    card.querySelector('.request-top').append(button);
+    const body=document.createElement('section');body.id='sample-body-'+index;body.className='request-body';body.hidden=true;body.tabIndex=0;body.setAttribute('role','region');body.setAttribute('aria-label','第'+(index+1)+'条请求的合成消息内容');
+    const note=document.createElement('p');note.className='body-note'+(index===1?' partial':'');
+    note.textContent=index===0?'传输已完成 · 以下为合成消息，非真实审计原文。角色与来源分别展示，来源信息为客户端声明。':'部分留存 · 下方仅为已保存片段的合成演示，不代表完整输入输出。上下文压缩 · 子 Agent 会话；客户端声明的父会话：session-demo-main。';
+    body.append(note,...samples[index].map(renderSampleMessage));
+    card.querySelector('.request-bottom').before(body);
+    button.onclick=()=>{
+      const expanded=body.hidden;
+      cards.forEach(other=>{if(other!==card)setOriginal(other,false);});
+      setOriginal(card,expanded);
+    };
+    body.addEventListener('keydown',event=>{if(event.key==='Escape'){setOriginal(card,false);button.focus({preventScroll:true});event.stopPropagation();}});
+  });
   let mode = 'CONTENT';
   const toggle = (button, panel) => { panel.hidden = !panel.hidden; button.setAttribute('aria-expanded', String(!panel.hidden)); };
   const feedback = (message) => { $('filter-feedback').textContent = message; $('filter-feedback').hidden = false; };

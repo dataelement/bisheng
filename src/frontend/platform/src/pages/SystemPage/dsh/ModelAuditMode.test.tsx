@@ -22,6 +22,10 @@ beforeEach(() => {
 });
 
 function openModes() {
+  if (!screen.queryByRole("combobox"))
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
+    );
   fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
 }
 
@@ -29,6 +33,10 @@ describe("audit encryption readiness", () => {
   it("explains missing keys, disables content selection and still allows metadata", async () => {
     render(<ModelAuditMode tenantId={2} canConfigure />);
     await screen.findByText("dsh.modelAuditView.contentKeyMissing");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
+    ).toHaveAttribute("aria-expanded", "false");
     openModes();
     expect(
       await screen.findByRole("option", {
@@ -46,6 +54,13 @@ describe("audit encryption readiness", () => {
         "METADATA",
       ),
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
+    );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      screen.getByText("dsh.modelAuditView.contentKeyMissing"),
+    ).toBeVisible();
   });
 
   it("keeps an existing content policy visible with a key-loss alert and allows disabling it", async () => {
@@ -61,6 +76,9 @@ describe("audit encryption readiness", () => {
     });
     render(<ModelAuditMode tenantId={2} canConfigure />);
     await screen.findByText("dsh.modelAuditView.contentKeyLost");
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
+    );
     expect(screen.getByRole("combobox")).toHaveTextContent(
       "dsh.modelAuditView.modes.CONTENT",
     );
@@ -91,6 +109,9 @@ describe("audit encryption readiness", () => {
       content_available: true,
     });
     render(<ModelAuditMode tenantId={2} canConfigure />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.configure" }),
+    );
     await screen.findByText("dsh.modelAuditView.contentKeyReady");
     openModes();
     fireEvent.click(
@@ -134,10 +155,15 @@ describe("audit encryption readiness", () => {
         content_available: false,
       });
     render(<ModelAuditMode tenantId={2} canConfigure={false} />);
-    await screen.findByText("dsh.modelAuditView.contentKeyReady");
-    fireEvent.click(screen.getByRole("button", { name: "dsh.refresh" }));
+    await screen.findByText("dsh.modelAuditView.modes.CONTENT");
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.refresh_mode" }),
+    );
     await screen.findByText("dsh.modelAuditView.contentKeyLost");
-    expect(screen.getByRole("combobox")).toBeDisabled();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "dsh.modelAuditView.configure" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });

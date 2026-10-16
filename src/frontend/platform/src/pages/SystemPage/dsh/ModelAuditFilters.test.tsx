@@ -26,6 +26,12 @@ vi.mock("@/controllers/API/dshModelAudit", () => ({
 vi.mock("@/controllers/API/tenant", () => ({ getTenantsApi: api.tenants }));
 import { ModelAuditPanel, ModelAuditRequests } from "./ModelAuditPanel";
 
+function applyFilters() {
+  fireEvent.click(
+    screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
+  );
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   api.models.mockResolvedValue({
@@ -52,6 +58,110 @@ beforeEach(() => {
 });
 
 describe("simplified audit filters", () => {
+  it("keeps draft edits local, applies once, and refreshes only the applied query", async () => {
+    render(<ModelAuditRequests tenantId={2} />);
+    await screen.findByText("dsh.modelAuditView.empty");
+    const model = screen.getByLabelText(
+      "dsh.modelAuditView.filters.model_name",
+    );
+    fireEvent.change(model, { target: { value: "Applied model" } });
+    expect(screen.getByText("dsh.modelAuditView.pending_filters")).toBeVisible();
+    expect(api.page).toHaveBeenCalledTimes(1);
+    expect(api.models).not.toHaveBeenCalled();
+    applyFilters();
+    await waitFor(() => expect(api.page).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("dsh.modelAuditView.pending_filters")).toBeNull();
+    await screen.findByText("dsh.modelAuditView.empty");
+    fireEvent.change(model, { target: { value: "Unsaved draft" } });
+    expect(api.page).toHaveBeenCalledTimes(2);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "dsh.modelAuditView.refresh_records",
+      }),
+    );
+    await waitFor(() => expect(api.page).toHaveBeenCalledTimes(3));
+    expect(api.page).toHaveBeenLastCalledWith(
+      expect.objectContaining({ model_name: "Applied model" }),
+      expect.any(AbortSignal),
+    );
+    expect(model).toHaveValue("Unsaved draft");
+  });
+
+  it("validates the half-open time interval before searching and restores trigger focus", async () => {
+    render(<ModelAuditRequests tenantId={2} />);
+    await screen.findByText("dsh.modelAuditView.empty");
+    const trigger = screen.getByLabelText("dsh.modelAuditView.time_range");
+    fireEvent.click(trigger);
+    const start = screen.getByLabelText("dsh.modelAuditView.filters.start_at");
+    const end = screen.getByLabelText("dsh.modelAuditView.filters.end_at");
+    fireEvent.change(start, { target: { value: "2026-10-16T10:00" } });
+    fireEvent.change(end, { target: { value: "2026-10-16T10:00" } });
+    applyFilters();
+    expect(api.page).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("dsh.modelAuditView.invalid_time_range"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "dsh.modelAuditView.confirm_time" }),
+    ).toBeDisabled();
+    fireEvent.change(end, { target: { value: "2026-10-16T11:00" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.confirm_time" }),
+    );
+    expect(trigger).toHaveFocus();
+    expect(start).not.toBeVisible();
+    expect(api.page).toHaveBeenCalledTimes(1);
+    applyFilters();
+    await waitFor(() => expect(api.page).toHaveBeenCalledTimes(2));
+    expect(api.page).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        start_at: new Date("2026-10-16T10:00").toISOString(),
+        end_at: new Date("2026-10-16T11:00").toISOString(),
+      }),
+      expect.any(AbortSignal),
+    );
+    fireEvent.click(trigger);
+    fireEvent.keyDown(end, { key: "Escape" });
+    expect(start).not.toBeVisible();
+    expect(trigger).toHaveFocus();
+    fireEvent.click(trigger);
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.clear_time" }),
+    );
+    expect(start).toHaveValue("");
+    expect(end).toHaveValue("");
+    fireEvent.pointerDown(document.body);
+    expect(start).not.toBeVisible();
+  });
+
+  it("clears advanced draft conditions without changing common filters or querying", async () => {
+    render(<ModelAuditRequests tenantId={2} />);
+    await screen.findByText("dsh.modelAuditView.empty");
+    fireEvent.change(
+      screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
+      { target: { value: "Exact model" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "dsh.modelAuditView.advancedFilters",
+      }),
+    );
+    fireEvent.change(
+      screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
+      { target: { value: "request" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.clear_advanced" }),
+    );
+    expect(
+      screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
+    ).toHaveValue("");
+    expect(
+      screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
+    ).toHaveValue("Exact model");
+    expect(api.page).toHaveBeenCalledTimes(1);
+  });
+
   it("clears a selected model ID when typing an exact historical name and resets both filters", async () => {
     render(<ModelAuditRequests tenantId={2} />);
     fireEvent.click(
@@ -60,6 +170,7 @@ describe("simplified audit filters", () => {
     fireEvent.click(
       await screen.findByRole("option", { name: "Available model" }),
     );
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({ model_id: 42, model_name: undefined }),
@@ -70,6 +181,7 @@ describe("simplified audit filters", () => {
       "dsh.modelAuditView.filters.model_name",
     );
     fireEvent.change(input, { target: { value: "Provider / Deleted model" } });
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -110,6 +222,7 @@ describe("simplified audit filters", () => {
     expect(options).toHaveLength(2);
     expect(screen.queryByRole("option", { name: "Invalid" })).toBeNull();
     fireEvent.click(options[1]);
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({ model_id: 43, model_name: undefined }),
@@ -122,9 +235,12 @@ describe("simplified audit filters", () => {
     expect(
       screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
     ).toHaveValue("");
-    await waitFor(() => expect(api.page).toHaveBeenLastCalledWith(
-      { tenant_id: 2, limit: 20 }, expect.any(AbortSignal),
-    ));
+    await waitFor(() =>
+      expect(api.page).toHaveBeenLastCalledWith(
+        { tenant_id: 2, limit: 20 },
+        expect.any(AbortSignal),
+      ),
+    );
   });
 
   it("selects an available model by ID and can clear the selection", async () => {
@@ -136,6 +252,7 @@ describe("simplified audit filters", () => {
     fireEvent.click(
       await screen.findByRole("option", { name: "Available model" }),
     );
+    applyFilters();
     expect(api.models).toHaveBeenCalledWith(
       { tenant_id: 2, page: 1, page_size: 20, keyword: undefined },
       expect.any(AbortSignal),
@@ -155,6 +272,7 @@ describe("simplified audit filters", () => {
     fireEvent.click(
       screen.getByRole("option", { name: "dsh.modelAuditView.allModels" }),
     );
+    applyFilters();
     expect(
       screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
     ).toHaveValue("");
@@ -180,6 +298,7 @@ describe("simplified audit filters", () => {
       screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
       { target: { value: "Unavailable old model" } },
     );
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({ model_name: "Unavailable old model" }),
@@ -224,8 +343,10 @@ describe("simplified audit filters", () => {
       "dsh.modelAuditView.filters.model_name",
     );
     const start = screen.getByLabelText("dsh.modelAuditView.filters.start_at");
+    fireEvent.click(screen.getByText("dsh.modelAuditView.all_time"));
     fireEvent.change(model, { target: { value: "Synthetic" } });
     fireEvent.change(start, { target: { value: "2026-10-15T10:00" } });
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -258,9 +379,10 @@ describe("simplified audit filters", () => {
     expect(
       screen.getByLabelText("dsh.modelAuditView.filters.model_name"),
     ).toBeTruthy();
+    expect(screen.getByText("dsh.modelAuditView.all_time")).toBeTruthy();
     expect(
       screen.getByLabelText("dsh.modelAuditView.filters.start_at"),
-    ).toBeTruthy();
+    ).not.toBeVisible();
     expect(
       screen.queryByLabelText("dsh.modelAuditView.filters.user_keyword"),
     ).toBeNull();
@@ -313,6 +435,7 @@ describe("simplified audit filters", () => {
       screen.getByRole("button", { name: "dsh.modelAuditView.selectUser" }),
     );
     fireEvent.click(await screen.findByRole("option", { name: "Alice" }));
+    applyFilters();
     expect(api.users).toHaveBeenCalledWith(
       { tenant_id: 2, page: 1, page_size: 20, keyword: undefined },
       expect.any(AbortSignal),
@@ -332,6 +455,7 @@ describe("simplified audit filters", () => {
     fireEvent.click(
       screen.getByRole("option", { name: "dsh.modelAuditView.allUsers" }),
     );
+    applyFilters();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         expect.objectContaining({ user_id: undefined }),

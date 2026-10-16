@@ -323,6 +323,9 @@ describe("request-card audit UI", () => {
       screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
       { target: { value: "missing" } },
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
+    );
     await screen.findByText("dsh.modelAuditView.missing.MODE_UNKNOWN");
     expect(api.body).not.toHaveBeenCalled();
   });
@@ -337,6 +340,9 @@ describe("request-card audit UI", () => {
     fireEvent.change(
       screen.getByLabelText("dsh.modelAuditView.filters.request_id"),
       { target: { value: "one" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
     );
     await screen.findByText("Synthetic");
     fireEvent.click(
@@ -382,7 +388,11 @@ describe("request-card audit UI", () => {
   });
   it("cannot change modes when the tenant administrator is read-only", async () => {
     render(<ModelAuditMode tenantId={2} canConfigure={false} />);
-    await waitFor(() => expect(screen.getByRole("combobox")).toBeDisabled());
+    await screen.findByText("dsh.modelAuditView.modes.METADATA");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "dsh.modelAuditView.configure" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "dsh.save" })).toBeNull();
     expect(api.save).not.toHaveBeenCalled();
   });
