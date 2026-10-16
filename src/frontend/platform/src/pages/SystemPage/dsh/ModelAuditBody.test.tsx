@@ -83,6 +83,17 @@ it("shows role and producer independently without calling partial sources a body
     screen.getByText("dsh.modelAuditView.sources.status.PARTIAL"),
   ).toBeVisible();
   expect(screen.queryByText("dsh.modelAuditView.gap")).toBeNull();
+  const region = screen.getByRole("region", {
+    name: "dsh.modelAuditView.message_content",
+  });
+  expect(region).toHaveAttribute("tabindex", "0");
+  expect(region).toHaveClass("h-96", "overflow-y-auto");
+  const metadata = screen
+    .getByText("dsh.modelAuditView.sources.kinds.runtime-context")
+    .closest("header")!;
+  expect(metadata).toHaveClass("border-b", "bg-muted/50", "text-xs");
+  expect(within(metadata).getByText("/ snapshot")).toBeVisible();
+  expect(metadata).not.toContainElement(screen.getByText("Synthetic context"));
 });
 
 describe("audit body NDJSON-to-message UI", () => {

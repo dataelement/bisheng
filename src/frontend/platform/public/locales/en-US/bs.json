@@ -2633,7 +2633,10 @@
   },
   "dsh": {
     "modelAudit": "Model audit",
+    "auditTab": "Audit",
     "modelAuditView": {
+      "message_content": "Message content",
+      "request_details": "Request details",
       "sources": {
         "label": "Message source",
         "missing": "Source not provided",

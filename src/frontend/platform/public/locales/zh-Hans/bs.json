@@ -2578,7 +2578,10 @@
   },
   "dsh": {
     "modelAudit": "模型审计",
+    "auditTab": "审计",
     "modelAuditView": {
+      "message_content": "消息正文",
+      "request_details": "请求详情",
       "sources": {
         "label": "消息来源",
         "missing": "来源未提供",

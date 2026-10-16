@@ -11,8 +11,7 @@ import type { ModelAuditQuery } from "@/types/dshModelAudit";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshChoice, DshPager, dshTime } from "./common";
-import { ModelAuditBody } from "./ModelAuditBody";
-import { ModelAuditParent } from "./ModelAuditParent";
+import { ModelAuditCard } from "./ModelAuditCard";
 import { ModelAuditMode } from "./ModelAuditMode";
 import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
 import { ModelAuditUserSelect } from "./ModelAuditUserSelect";
@@ -257,106 +256,25 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
         <p>{t("dsh.modelAuditView.empty")}</p>
       ) : (
         page.items.map((row) => (
-          <article
+          <ModelAuditCard
             key={row.request_id}
-            className="space-y-3 rounded-lg border p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="font-medium">{row.model_name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {dshTime(row.started_at)} · {t("dsh.modelAuditView.user")} #
-                  {row.user_id} ·{" "}
-                  {t(
-                    "dsh.modelAuditView.kinds." +
-                      (row.request_kind || "unknown"),
-                  )}
-                </p>
-                <p className="break-all font-mono text-sm">{row.request_id}</p>
-              </div>
-              <Button
-                variant="outline"
-                aria-expanded={expanded === row.request_id}
-                disabled={
-                  row.content_status === "NOT_CAPTURED" ||
-                  row.effective_mode !== "CONTENT"
-                }
-                onClick={() =>
-                  setExpanded(
-                    expanded === row.request_id ? null : row.request_id,
-                  )
-                }
-              >
-                {t(
-                  expanded === row.request_id
-                    ? "dsh.modelAuditView.collapse"
-                    : "dsh.modelAuditView.original",
-                )}
-              </Button>
-            </div>
-            <p className="break-all text-sm">
-              {t("dsh.modelAuditView.conversation")}:{" "}
-              {row.conversation_id ??
-                t("dsh.modelAuditView.states.UNASSOCIATED")}
-            </p>
-            {row.conversation_id !== null && (
-              <Button
-                variant="link"
-                onClick={() => {
-                  setHistory([]);
-                  setExpanded(null);
-                  setQuery({
-                    tenant_id: tenantId,
-                    limit: 20,
-                    user_id: row.user_id,
-                    conversation_id: row.conversation_id || undefined,
-                  });
-                }}
-              >
-                {t("dsh.modelAuditView.timeline")}
-              </Button>
-            )}
-            {row.context_invalid && (
-              <p className="text-sm">
-                {t("dsh.modelAuditView.invalidContext")}
-              </p>
-            )}
-            <ModelAuditParent
-              row={row}
-              tenantId={tenantId}
-              onNavigate={(userId, conversationId) => {
-                setHistory([]);
-                setExpanded(null);
-                setQuery({
-                  tenant_id: tenantId,
-                  limit: 20,
-                  user_id: userId,
-                  conversation_id: conversationId,
-                });
-              }}
-            />
-            <dl className="grid gap-2 text-sm md:grid-cols-2">
-              {axes.map(([key]) => (
-                <div key={key} className="flex gap-2">
-                  <dt>{t("dsh.modelAuditView.axes." + key)}</dt>
-                  <dd>{t("dsh.modelAuditView.states." + row[key])}</dd>
-                </div>
-              ))}
-              <div>
-                {t("dsh.modelAuditView.size", {
-                  count: row.input_units,
-                  bytes: row.input_bytes + row.output_bytes,
-                })}
-              </div>
-              <div>
-                {t("dsh.modelAuditView.tokens")}:{" "}
-                {row.usage?.total_tokens ?? t("dsh.modelAuditView.unknown")}
-              </div>
-            </dl>
-            {expanded === row.request_id && (
-              <ModelAuditBody requestId={row.request_id} tenantId={tenantId} />
-            )}
-          </article>
+            row={row}
+            tenantId={tenantId}
+            expanded={expanded === row.request_id}
+            onToggle={() =>
+              setExpanded(expanded === row.request_id ? null : row.request_id)
+            }
+            onNavigate={(userId, conversationId) => {
+              setHistory([]);
+              setExpanded(null);
+              setQuery({
+                tenant_id: tenantId,
+                limit: 20,
+                user_id: userId,
+                conversation_id: conversationId,
+              });
+            }}
+          />
         ))
       )}
       <DshPager

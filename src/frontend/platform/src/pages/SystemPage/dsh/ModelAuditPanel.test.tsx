@@ -291,11 +291,16 @@ describe("request-card audit UI", () => {
     await screen.findByText("dsh.modelAuditView.transfer.completed");
     expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(screen.queryByText("segment-fragment-999")).toBeNull();
+    const region = screen.getByRole("region", {
+      name: "dsh.modelAuditView.message_content",
+    });
+    region.scrollTop = 200;
     for (let index = 0; index < 9; index++)
       fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
     await screen.findByText("segment-fragment-999");
     expect(container.querySelectorAll("article")).toHaveLength(100);
     expect(api.body).toHaveBeenCalledTimes(1);
+    expect(region.scrollTop).toBe(0);
   });
   it("shows evidence-based missing status instead of claiming no model call", async () => {
     api.page.mockResolvedValue({

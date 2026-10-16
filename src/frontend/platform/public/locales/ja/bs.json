@@ -2578,7 +2578,10 @@
   },
   "dsh": {
     "modelAudit": "モデル監査",
+    "auditTab": "監査",
     "modelAuditView": {
+      "message_content": "メッセージ本文",
+      "request_details": "リクエスト詳細",
       "sources": {
         "label": "メッセージの出所",
         "missing": "出所は未提供",

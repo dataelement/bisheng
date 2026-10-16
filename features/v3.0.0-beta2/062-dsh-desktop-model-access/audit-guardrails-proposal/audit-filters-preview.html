@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>审计 · 筛选区域设计预览</title>
+  <link rel="stylesheet" href="../../../../src/frontend/packages/ui/src/styles/tokens.css" />
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; color:rgb(var(--text-1)); background:rgb(var(--fill-1)); font:400 var(--text-body)/var(--leading-body) -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    button,input,select,summary { font:inherit; }
+    button,summary { cursor:pointer; }
+    button,input,select { color:inherit; }
+    button { display:inline-flex; align-items:center; justify-content:center; gap:8px; height:32px; padding:0 16px; border:1px solid rgb(var(--border-base)); border-radius:6px; background:rgb(var(--bg-page)); white-space:nowrap; }
+    button:disabled { cursor:not-allowed; color:rgb(var(--text-4)); background:rgb(var(--fill-2)); }
+    button.primary { background:rgb(var(--brand-500)); border-color:transparent; color:white; }
+    button.text { background:transparent; border-color:transparent; padding:0 8px; color:rgb(var(--text-2)); }
+    :focus-visible { outline:2px solid rgb(var(--border-deep)); outline-offset:2px; }
+    input,select,.range-trigger { width:100%; min-width:0; height:32px; border:1px solid rgb(var(--border-base)); border-radius:6px; background:rgb(var(--bg-page)); padding:0 12px; outline:none; }
+    input::placeholder { color:rgb(var(--text-3)); }
+    input:focus,select:focus,.range-trigger:focus-visible { border-color:rgb(var(--border-deep)); box-shadow:0 0 0 2px rgb(var(--fill-2)); }
+    label.field { display:flex; min-width:0; flex-direction:column; gap:6px; }
+    label.field > span,.field-label { font-size:var(--text-caption); line-height:var(--leading-caption); color:rgb(var(--text-2)); }
+    .muted { color:rgb(var(--text-2)); }
+    .caption { font-size:var(--text-caption); line-height:var(--leading-caption); }
+    .flex { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+    .space { justify-content:space-between; }
+    .demo { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:10px 24px; border-bottom:1px dashed rgb(var(--border-base)); color:rgb(var(--text-2)); }
+    .demo select { width:auto; }
+    .demo input[type=checkbox] { width:16px; height:16px; padding:0; accent-color:rgb(var(--brand-500)); }
+    .page { max-width:1440px; margin:auto; padding:24px; }
+    .surface { padding:24px; background:rgb(var(--bg-page)); border-radius:12px; }
+    .tabs { display:flex; width:max-content; max-width:100%; flex-wrap:wrap; gap:4px; padding:4px; background:rgb(var(--brand-500)); border-radius:6px; margin-bottom:24px; }
+    .tabs span { padding:4px 12px; white-space:nowrap; color:white; }
+    .tabs .active { color:rgb(var(--text-1)); background:rgb(var(--bg-page)); border-radius:4px; }
+    .scope { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding-bottom:16px; border-bottom:1px solid rgb(var(--border-base)); }
+    .scope select { width:240px; }
+    .policy-mode { display:inline-flex; align-items:center; gap:6px; color:rgb(var(--text-2)); }
+    .dot { width:6px; height:6px; border-radius:100%; display:inline-block; flex-shrink:0; background:rgb(var(--success)); }
+    .dot.off { background:rgb(var(--text-3)); }
+    .panel { border-radius:8px; background:rgb(var(--fill-1)); padding:16px; margin-top:12px; }
+    .panel h3 { margin:0 0 8px; font-size:var(--text-body); font-weight:500; }
+    .panel p { margin:0 0 12px; }
+    .panel select { width:240px; }
+    .warning { margin:12px 0 0; padding:10px 12px; border-left:3px solid rgb(var(--warning)); background:rgb(var(--warning-tint)); color:rgb(var(--text-1)); }
+    .log-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:20px 0 12px; }
+    h2 { font-size:var(--text-h4); line-height:var(--leading-h4); font-weight:500; margin:0; }
+    .filters { display:grid; grid-template-columns:minmax(140px,.8fr) minmax(200px,1.3fr) minmax(220px,1.2fr) auto; gap:12px; align-items:end; }
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+    .range { position:relative; min-width:0; }
+    summary { list-style:none; }
+    summary::-webkit-details-marker { display:none; }
+    .range-trigger { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .range-trigger span { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .popup { position:absolute; right:0; top:calc(100% + 4px); width:320px; max-width:calc(100vw - 48px); z-index:2; background:rgb(var(--bg-page)); padding:16px; border:1px solid rgb(var(--border-base)); box-shadow:0 8px 24px rgb(var(--text-1) / .12); border-radius:12px; }
+    .popup .field { margin-bottom:12px; }
+    .popup .actions { justify-content:flex-end; }
+    .advanced { margin-top:16px; padding:16px; background:rgb(var(--fill-1)); border-radius:8px; }
+    .advanced-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; justify-content:space-between; margin-bottom:12px; }
+    .advanced h3 { margin:0; font-size:var(--text-body); font-weight:500; }
+    .advanced-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+    .state-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-top:12px; }
+    .filter-note { margin:10px 0 0; color:rgb(var(--text-2)); }
+    .results-head { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin:16px 0 12px; padding-top:12px; border-top:1px solid rgb(var(--border-base)); }
+    .results-head p { margin:0; }
+    .info { max-width:760px; margin-bottom:12px; }
+    .request { border:1px solid rgb(var(--border-base)); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+    .request-top { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 16px; }
+    .request-top strong { margin-right:auto; font-weight:500; }
+    .request-top button { font-size:var(--text-caption); padding:0 12px; }
+    .request-bottom { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:8px 16px; border-top:1px solid rgb(var(--border-base)); background:rgb(var(--fill-1)); font-size:var(--text-caption); }
+    .request-bottom span { display:flex; align-items:center; gap:6px; }
+    .purpose { color:rgb(var(--brand-500)); }
+    .sample-label { font-size:var(--text-caption); color:rgb(var(--text-3)); }
+    .empty { padding:32px; text-align:center; color:rgb(var(--text-2)); }
+    .footer-note { margin:16px 0 0; color:rgb(var(--text-2)); }
+    svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7; vertical-align:middle; flex-shrink:0; }
+    [hidden] { display:none !important; }
+    @media(hover:hover) { button:not(:disabled):hover { background:rgb(var(--fill-1)); } button.primary:not(:disabled):hover { background:rgb(var(--brand-400)); } }
+    @media(max-width:1024px) { .filters { grid-template-columns:repeat(3,minmax(0,1fr)); } .filters .actions { grid-column:1/-1; } }
+    @media(max-width:768px) { .page { padding:12px; } .surface { padding:16px; } .scope,.scope > .flex { align-items:flex-start; } .scope > .flex { width:100%; } .scope select { width:min(100%,280px); } .filters { grid-template-columns:1fr 1fr; } .filters .time-field { grid-column:1/-1; } .advanced-grid,.state-grid { grid-template-columns:1fr 1fr; } .request-top strong { width:100%; overflow-wrap:anywhere; } }
+    @media(max-width:575px) { .filters,.advanced-grid,.state-grid { grid-template-columns:1fr; } .demo { padding:10px 12px; } .scope .caption { flex-basis:100%; } .tabs { margin-bottom:16px; } .range .popup { position:static; width:100%; max-width:none; margin-top:8px; box-shadow:none; } }
+    @media(pointer:coarse) { button,input,select,.range-trigger { min-height:44px; } input,select { font-size:16px; } }
+    @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; } }
+  </style>
+</head>
+<body>
+<svg aria-hidden="true" style="display:none"><symbol id="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol><symbol id="calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></symbol><symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></symbol></svg>
+<aside class="demo caption" aria-label="设计预览控制">
+  <span>设计预览 · 合成数据 · 不连接业务服务</span>
+  <div class="flex"><label>角色 <select id="role"><option value="platform">平台管理员</option><option value="tenant">租户管理员</option></select></label><label class="flex"><input id="no-key" type="checkbox"/>演示缺少密钥</label><button id="theme" class="text" type="button">切换深色</button></div>
+</aside>
+<main class="page"><div class="surface">
+  <nav class="tabs" aria-label="客户端管理栏目"><span>授权与席位</span><span>模型与额度</span><span>使用统计</span><span class="active" aria-current="page">审计</span><span>接入设置</span><span>企业插件</span></nav>
+  <section id="filter-area" aria-label="审计范围及筛选">
+    <div class="scope">
+      <div class="flex"><label for="tenant" class="muted">租户</label><select id="tenant"><option value="1">默认租户（default）</option><option value="2">示例租户（demo）</option></select><span id="tenant-static" hidden>默认租户（default）</span></div>
+      <div class="flex"><span class="caption muted">采集状态</span><span class="policy-mode"><i class="dot" id="mode-dot" aria-hidden="true"></i><span id="mode-status">元数据与原文</span></span><button id="policy-toggle" class="text" type="button" aria-expanded="false" aria-controls="policy-panel">配置审计</button></div>
+    </div>
+    <p id="key-warning" class="warning" role="alert" hidden>当前未配置有效的审计加密密钥，新的请求无法保存原文。模型调用不受影响；关闭和仅元数据仍可配置。</p>
+    <section id="policy-panel" class="panel" hidden aria-labelledby="policy-title">
+      <h3 id="policy-title">采集设置 · 当前租户</h3><p class="caption muted">配置只影响新请求，已保存记录仍可查看；原文会持续占用存储。</p>
+      <div class="flex"><label for="mode">采集模式</label><select id="mode"><option value="OFF">关闭</option><option value="METADATA">仅元数据</option><option value="CONTENT" selected>元数据与原文</option></select><button id="save-mode" class="primary" type="button" disabled>保存策略</button><span class="caption muted" id="key-status">当前服务的审计加密密钥可用</span></div>
+      <p class="caption muted" id="policy-feedback" role="status" style="margin:8px 0 0" hidden></p>
+    </section>
+    <div class="log-header"><h2>审计日志</h2><button id="info-toggle" class="text" type="button" aria-expanded="false" aria-controls="info-panel">范围与查询说明</button></div>
+    <div id="info-panel" class="panel info caption" hidden>仅审计经过毕昇客户端专用模型入口的请求，不包含客户端直连第三方的调用。记录异步到达且可能缺失，不代表完整聊天历史。模型候选来自当前开放目录；手填历史模型名称时按完整值精确匹配。原文只在明确展开单次请求后读取，并记录查看日志。</div>
+    <form id="filter-form">
+      <div class="filters">
+        <label class="field"><span>用户</span><select id="user" name="user"><option value="">全部用户</option><option value="1">示例用户甲</option><option value="2">示例用户乙</option></select></label>
+        <label class="field"><span>模型名称</span><input id="model" name="model" list="models" placeholder="选择模型，或填写完整历史名称" autocomplete="off"/><datalist id="models"><option value="volces / deepseek-v4-1-flash-260910"></option><option value="示例提供方 / example-chat"></option></datalist></label>
+        <div class="field time-field"><span class="field-label">时间范围</span><details class="range" id="range"><summary class="range-trigger" aria-label="选择时间范围"><span class="flex"><svg aria-hidden="true"><use href="#calendar"/></svg><span id="range-label">全部时间</span></span><svg aria-hidden="true"><use href="#chevron"/></svg></summary><div class="popup"><label class="field"><span>开始时间（包含）</span><input type="datetime-local" id="start" name="start"/></label><label class="field"><span>结束时间（不包含）</span><input type="datetime-local" id="end" name="end"/></label><p id="time-error" role="alert" class="caption" hidden>结束时间必须晚于开始时间。</p><div class="actions"><button id="clear-time" type="button" class="text">清空</button><button id="apply-time" type="button" class="primary">确定</button></div></div></details></div>
+        <div class="actions"><button type="submit" class="primary">查询</button><button type="reset">重置</button><button id="advanced-toggle" class="text" type="button" aria-expanded="false" aria-controls="advanced-panel"><svg aria-hidden="true"><use href="#sliders"/></svg><span id="advanced-label">高级筛选</span></button></div>
+      </div>
+      <section id="advanced-panel" class="advanced" hidden aria-labelledby="advanced-title">
+        <div class="advanced-head"><div class="flex"><h3 id="advanced-title">高级排查</h3><span class="caption muted">仅在定位异常请求时使用</span></div><button id="clear-advanced" class="text" type="button">清空高级条件</button></div>
+        <div class="advanced-grid"><label class="field"><span>请求编号</span><input name="request" placeholder="完整请求编号，精确匹配"/></label><label class="field"><span>会话编号</span><input name="conversation" placeholder="完整会话编号，精确匹配"/></label><label class="field"><span>模型提供方</span><input name="provider" placeholder="完整提供方名称"/></label></div>
+        <div class="state-grid"><label class="field"><span>模型结果</span><select name="model_result"><option value="">全部结果</option><option value="SUCCEEDED">成功</option><option value="FAILED">失败</option></select></label><label class="field"><span>接口响应</span><select name="response_result"><option value="">全部响应</option><option value="COMPLETED">已完成发送</option><option value="INTERRUPTED">已中断</option></select></label><label class="field"><span>用量结算</span><select name="usage_settlement"><option value="">全部结算状态</option><option value="SETTLED">已结算</option><option value="UNCERTAIN">未确认</option></select></label><label class="field"><span>正文留存</span><select name="content_status"><option value="">全部留存状态</option><option value="COMPLETE">完整留存</option><option value="PARTIAL">部分留存</option></select></label><label class="field"><span>会话关联</span><select name="association_status"><option value="">全部关联状态</option><option value="ASSOCIATED">已关联会话</option><option value="UNASSOCIATED">未关联会话</option></select></label></div>
+      </section>
+      <p class="caption filter-note" id="filter-feedback" role="status" hidden></p>
+    </form>
+  </section>
+  <div class="results-head caption"><p class="muted">最近写入：2026/10/16 14:08:05 · 异步记录，可能存在缺口</p><button id="refresh" class="text" type="button">刷新记录</button></div>
+  <section id="records" aria-label="审计记录合成样本">
+    <article class="request" data-user="1" data-model="volces / deepseek-v4-1-flash-260910" data-time="2026-10-16T14:07" data-request="e17e4b9e-7509-4d14-b373-4d7fd96d1001" data-conversation="session-demo-main" data-provider="volces" data-model_result="SUCCEEDED" data-response_result="COMPLETED" data-usage_settlement="SETTLED" data-content_status="COMPLETE" data-association_status="ASSOCIATED"><div class="request-top caption"><strong>volces / deepseek-v4-1-flash-260910</strong><span class="muted">2026/10/16 14:07:20</span><span>示例用户甲</span><span class="purpose">聊天</span><span class="muted">普通会话</span><span class="sample-label">合成样本 · 原文默认折叠</span></div><div class="request-bottom muted"><span>模型结果 <i class="dot" aria-hidden="true"></i>成功</span><span>接口响应 已完成发送</span><span>用量结算 已结算</span><span>正文留存 完整留存</span><span>入参 4 项 · 2272 字节</span><span>Token：216</span></div></article>
+    <article class="request" data-user="2" data-model="示例提供方 / example-chat" data-time="2026-10-16T13:12" data-request="e17e4b9e-7509-4d14-b373-4d7fd96d1002" data-conversation="session-demo-child" data-provider="示例提供方" data-model_result="SUCCEEDED" data-response_result="INTERRUPTED" data-usage_settlement="UNCERTAIN" data-content_status="PARTIAL" data-association_status="ASSOCIATED"><div class="request-top caption"><strong>示例提供方 / example-chat</strong><span class="muted">2026/10/16 13:12:08</span><span>示例用户乙</span><span class="purpose">上下文压缩</span><span class="muted">子 Agent 会话</span><span class="sample-label">合成样本 · 原文默认折叠</span></div><div class="request-bottom muted"><span>模型结果 <i class="dot" aria-hidden="true"></i>成功</span><span>接口响应 已中断</span><span>用量结算 未确认</span><span>正文留存 部分留存</span><span>入参 8 项 · 4096 字节</span><span>Token：880</span></div></article>
+    <p class="empty" id="empty" hidden>没有匹配的合成记录。</p>
+  </section>
+  <p class="footer-note caption">设计重点：范围与配置分开，常用筛选集中一排，日志更早进入首屏。所有操作仅用于本地设计演示。</p>
+  <details class="footer-note caption"><summary>交互设计说明 · 待确认后实现</summary><div class="panel">本稿建议修改条件后点击“查询”统一应用，避免逐项修改时反复请求；“刷新记录”按已应用条件刷新。默认不限制时间；重置会清空全部条件。高级条件收起后仍展示已填写数量。正式实现沿用当前租户权限、租户内用户查询、开放模型编号精确查询与历史完整名称精确查询，不增加审计表聚合、不预读原文。本稿只演示本地合成数据，不代表这些交互已在业务页面上线。</div></details>
+</div></main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let mode = 'CONTENT';
+  const toggle = (button, panel) => { panel.hidden = !panel.hidden; button.setAttribute('aria-expanded', String(!panel.hidden)); };
+  const feedback = (message) => { $('filter-feedback').textContent = message; $('filter-feedback').hidden = false; };
+  function updateMode() {
+    const missing = $('no-key').checked;
+    $('mode-status').textContent = {OFF:'关闭',METADATA:'仅元数据',CONTENT:'元数据与原文'}[mode];
+    $('mode-dot').classList.toggle('off', mode === 'OFF');
+    $('key-warning').hidden = !missing || mode !== 'CONTENT';
+    $('mode').querySelector('[value=CONTENT]').disabled = missing;
+    $('save-mode').disabled = $('mode').value === mode || (missing && $('mode').value === 'CONTENT');
+    $('key-status').textContent = missing ? '密钥未就绪：可关闭或使用仅元数据模式' : '当前服务的审计加密密钥可用';
+  }
+  $('policy-toggle').onclick = () => toggle($('policy-toggle'), $('policy-panel'));
+  $('info-toggle').onclick = () => toggle($('info-toggle'), $('info-panel'));
+  $('advanced-toggle').onclick = () => toggle($('advanced-toggle'), $('advanced-panel'));
+  $('mode').onchange = updateMode;
+  $('no-key').onchange = updateMode;
+  $('save-mode').onclick = () => { mode = $('mode').value; updateMode(); $('policy-feedback').hidden = false; $('policy-feedback').textContent = '演示：已保存当前租户的采集设置，未向服务端提交。'; };
+  $('role').onchange = () => { const admin = $('role').value === 'platform'; $('tenant').hidden = !admin; $('tenant-static').hidden = admin; $('policy-toggle').hidden = !admin; $('policy-panel').hidden = true; $('policy-toggle').setAttribute('aria-expanded','false'); };
+  $('theme').onclick = () => { document.documentElement.classList.toggle('dark'); $('theme').textContent = document.documentElement.classList.contains('dark') ? '切换浅色' : '切换深色'; };
+  function validTime() { const valid = !$('start').value || !$('end').value || $('start').value < $('end').value; $('time-error').hidden = valid; return valid; }
+  function updateRange() { const start = $('start').value, end = $('end').value; $('range-label').textContent = !start && !end ? '全部时间' : (start.replace('T',' ') || '不限开始') + ' — ' + (end.replace('T',' ') || '不限结束'); }
+  $('apply-time').onclick = () => { if(validTime()) {updateRange(); $('range').open=false; $('range').querySelector('summary').focus();} };
+  $('clear-time').onclick = () => { $('start').value=''; $('end').value=''; $('time-error').hidden=true; updateRange(); };
+  document.addEventListener('keydown', event => { if(event.key === 'Escape' && $('range').open) {$('range').open=false; $('range').querySelector('summary').focus();} });
+  document.addEventListener('click', event => { if(!$('range').contains(event.target)) $('range').open=false; });
+  function countAdvanced() { const count=[...$('advanced-panel').querySelectorAll('input,select')].filter(el=>el.value !== '').length; $('advanced-label').textContent='高级筛选'+(count?'（'+count+'）':''); }
+  $('advanced-panel').addEventListener('input', countAdvanced);
+  $('clear-advanced').onclick = () => { $('advanced-panel').querySelectorAll('input,select').forEach(el=>el.value=''); countAdvanced(); };
+  $('filter-form').onsubmit = event => {
+    event.preventDefault();
+    if(!validTime()) {$('range').open=true; return;}
+    updateRange();
+    const values = Object.fromEntries(new FormData($('filter-form')));
+    let found=0;
+    $('records').querySelectorAll('.request').forEach(card => {
+      const match = Object.entries(values).every(([key,value]) => !value || (key==='start' ? card.dataset.time >= value : key==='end' ? card.dataset.time < value : card.dataset[key] === value));
+      card.hidden=!match; if(match) found++;
+    });
+    $('empty').hidden=found>0;
+    feedback('演示：已应用 '+Object.values(values).filter(Boolean).length+' 个筛选条件，匹配 '+found+' 条合成记录；未请求业务接口。');
+  };
+  $('filter-form').onreset = () => { setTimeout(()=>{updateRange();countAdvanced();$('records').querySelectorAll('.request').forEach(el=>el.hidden=false);$('empty').hidden=true;$('filter-feedback').hidden=true;$('time-error').hidden=true;},0); };
+  $('refresh').onclick = () => feedback('演示：已刷新合成记录；未访问业务数据。');
+  $('tenant').onchange = () => { $('filter-form').reset(); feedback('演示：切换租户后清空用户、模型及其他条件；实际用户和模型必须从所选租户读取。'); };
+</script>
+</body>
+</html>

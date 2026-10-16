@@ -46,18 +46,19 @@ export function ModelAuditParent({
     }
   };
   return (
-    <div className="space-y-2">
-      <p className="text-sm text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span className="whitespace-nowrap">
         {t(
           "dsh.modelAuditView.sources.origin." +
             (row.session_origin || "unknown"),
         )}
-      </p>
+      </span>
       {row.session_origin === "subagent" &&
         row.conversation_id &&
         row.parent_conversation_id && (
           <Button
             variant="link"
+            className="h-7 p-0 text-xs dark:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
             disabled={state === "loading"}
             onClick={handleNavigate}
           >
@@ -65,9 +66,9 @@ export function ModelAuditParent({
           </Button>
         )}
       {state && (
-        <p role={state === "error" ? "alert" : "status"} className="text-sm">
+        <span role={state === "error" ? "alert" : "status"}>
           {t("dsh.modelAuditView.sources.parent_" + state)}
-        </p>
+        </span>
       )}
     </div>
   );
