@@ -118,7 +118,7 @@ export function SaveAsButton({ file, versionId, variant = 'labeled', className, 
         useSaveArtifactToKnowledge(file, versionId, citations);
 
     // Markdown is the only type with a local format choice (md / pdf / docx).
-    const isMarkdown = getFileExtension(file.file_name) === 'md';
+    const isMarkdown = !file.directUrl && getFileExtension(file.file_name) === 'md';
     const canSaveToKnowledge = !getShareTokenFromPath();
     const hasMenu = isMarkdown || canSaveToKnowledge;
     const label = hasMenu ? localize('com_linsight_save_as') : localize('com_ui_download');

@@ -32,7 +32,7 @@ export const ThemeProvider = ({ initialTheme, children }) => {
 
   const rawSetTheme = (rawTheme: string) => {
     const root = window.document.documentElement;
-    const darkMode = false // isDark(rawTheme);
+    const darkMode = isDark(rawTheme);
 
     root.classList.remove(darkMode ? 'light' : 'dark');
     root.classList.add(darkMode ? 'dark' : 'light');
@@ -43,8 +43,7 @@ export const ThemeProvider = ({ initialTheme, children }) => {
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const changeThemeOnSystemChange = () => {
-      // rawSetTheme(mediaQuery.matches ? 'dark' : 'light');
-      rawSetTheme('light');
+      if (theme === 'system') rawSetTheme('system');
     };
 
     mediaQuery.addEventListener('change', changeThemeOnSystemChange);
@@ -52,7 +51,7 @@ export const ThemeProvider = ({ initialTheme, children }) => {
     return () => {
       mediaQuery.removeEventListener('change', changeThemeOnSystemChange);
     };
-  }, []);
+  }, [theme]);
 
   // Apply the persisted brand (accent) color on startup, before the menu mounts.
   useEffect(() => {

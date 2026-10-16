@@ -1,64 +1,34 @@
 import { useMemo, memo } from 'react';
 import { parseISO, isToday } from 'date-fns';
 import { TConversation } from '~/types/chat';
-import { useLocalize, TranslationKeys } from '~/hooks';
-import { cn, groupConversationsByDate } from '~/utils';
+import { useLocalize } from '~/hooks';
 import Convo from './Convo';
 
-const Conversations = ({
-  conversations,
-  moveToTop,
-  toggleNav,
-}: {
+interface ConversationsProps {
   conversations: Array<TConversation | null>;
   moveToTop: () => void;
   toggleNav: () => void;
-}) => {
+}
+
+const Conversations = ({ conversations, moveToTop, toggleNav }: ConversationsProps) => {
   const localize = useLocalize();
-  const groupedConversations = useMemo(
-    () => groupConversationsByDate(conversations),
-    [conversations],
-  );
-  const firstTodayConvoId = useMemo(
-    () =>
-      conversations.find((convo) => convo && convo.updatedAt && isToday(parseISO(convo.updatedAt)))
-        ?.conversationId,
-    [conversations],
-  );
+  const recent = useMemo(() => conversations.filter((convo): convo is TConversation => !!convo)
+    .sort((a, b) => (Date.parse(b.updatedAt || '') || 0) - (Date.parse(a.updatedAt || '') || 0)), [conversations]);
+  const firstTodayConvoId = recent.find(convo => convo.updatedAt && isToday(parseISO(convo.updatedAt)))?.conversationId;
 
   return (
-    <div className="text-token-text-primary flex flex-col gap-2 pb-2 text-sm">
-      <div>
-        {groupedConversations.map(([groupName, convos], groupIdx) => (
-          <div key={groupName}>
-            <div
-              className={cn(
-                'text-text-3 text-[12px] mb-1 pl-1',
-                groupIdx === 0 ? 'pt-0' : 'pt-4',
-              )}
-            >
-              {/* Date group label */}
-              {localize(groupName as TranslationKeys) || groupName}
-            </div>
-            {convos.map((convo, i) => (
-              <Convo
-                key={`${groupName}-${convo.conversationId}-${i}`}
-                isLatestConvo={convo.conversationId === firstTodayConvoId}
-                conversation={convo}
-                retainView={moveToTop}
-                toggleNav={toggleNav}
-              />
-            ))}
-            <div
-              style={{
-                marginTop: '5px',
-                marginBottom: '5px',
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
+    <section aria-label={localize('chat.sidebar.recent')} className="dsh-history-list">
+      <div className="dsh-history-group text-caption text-text-3">{localize('chat.sidebar.recent')}</div>
+      {recent.map(convo => (
+        <Convo
+          key={convo.conversationId}
+          isLatestConvo={convo.conversationId === firstTodayConvoId}
+          conversation={convo}
+          retainView={moveToTop}
+          toggleNav={toggleNav}
+        />
+      ))}
+    </section>
   );
 };
 

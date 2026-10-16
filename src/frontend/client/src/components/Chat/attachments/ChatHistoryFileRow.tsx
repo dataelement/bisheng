@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { OGDialog, OGDialogContent } from '~/components/ui';
-import { getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
+import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { getViewerType } from '~/pages/knowledge/FilePreview/viewers';
 import { downloadFile } from '~/utils';
@@ -8,9 +8,11 @@ import {
     getChatAttachmentFileName,
     resolveChatAttachmentUrl,
 } from './chatAttachmentUtils';
-import { FileUploadThumbnail } from './UploadAttachmentThumbnail';
+import { toChatArtifact } from './collectChatAttachments';
+import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 
 interface ChatHistoryFileRowProps {
+    onPreviewFile?: (file: ArtifactFile) => void;
     file: {
         name?: string;
         file_name?: string;
@@ -24,8 +26,8 @@ interface ChatHistoryFileRowProps {
     };
 }
 
-/** Square history attachment card for non-media files (doc/pdf/image/etc.). */
-export function ChatHistoryFileRow({ file }: ChatHistoryFileRowProps) {
+/** Horizontal history attachment card with a shared workspace preview. */
+export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowProps) {
     const [previewOpen, setPreviewOpen] = useState(false);
     const fileName = getChatAttachmentFileName(file);
     const fileType = getFileTypebyFileName(fileName);
@@ -34,9 +36,13 @@ export function ChatHistoryFileRow({ file }: ChatHistoryFileRowProps) {
     const canPreview = !!fileUrl && viewerType !== 'unsupported';
     const canDownload = !!fileUrl && !canPreview;
     const isInteractive = canPreview || canDownload;
-    const previewUrl = viewerType === 'image' ? fileUrl : undefined;
 
     const handleClick = () => {
+        const artifact = toChatArtifact(file);
+        if (artifact && onPreviewFile) {
+            onPreviewFile(artifact);
+            return;
+        }
         if (canPreview) {
             setPreviewOpen(true);
             return;
@@ -48,12 +54,14 @@ export function ChatHistoryFileRow({ file }: ChatHistoryFileRowProps) {
 
     return (
         <>
-            <FileUploadThumbnail
-                fileName={fileName}
-                previewUrl={previewUrl}
-                variant="message"
-                onClick={isInteractive ? handleClick : undefined}
-            />
+            <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
+                title={fileName}>
+                <FileIcon type={fileType || 'txt'} className="size-8 shrink-0" />
+                <span className="min-w-0 flex-1">
+                    <span className="block truncate text-body-sm font-medium text-text-1">{fileName}</span>
+                    <span className="block text-caption text-text-3">{fileType.toUpperCase()}</span>
+                </span>
+            </button>
 
             {canPreview && fileUrl && (
                 <OGDialog open={previewOpen} onOpenChange={setPreviewOpen}>

@@ -243,9 +243,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 11
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -266,14 +263,6 @@
       "count": 3
     },
     "no-misleading-character-class": {
-      "count": 1
-    }
-  },
-  "src/components/Chat/AiModelSelect.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -325,9 +314,6 @@
   "src/components/Chat/Input/AttachmentBar.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 13
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 1
     }
   },
   "src/components/Chat/Input/AudioRecorder.tsx": {
@@ -490,10 +476,7 @@
   },
   "src/components/Chat/Landing.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "no-console": {
-      "count": 1
+      "count": 2
     }
   },
   "src/components/Chat/Menus/BookmarkMenu.tsx": {
@@ -739,7 +722,7 @@
   },
   "src/components/Chat/Messages/MessagesView.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 7
+      "count": 5
     },
     "no-restricted-imports": {
       "count": 1
@@ -792,11 +775,6 @@
       "count": 2
     },
     "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/components/Chat/attachments/MediaAttachmentChip.tsx": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -1134,19 +1112,10 @@
   },
   "src/components/Nav/Nav.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
+      "count": 2
     }
   },
   "src/components/Nav/NewChat.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     }

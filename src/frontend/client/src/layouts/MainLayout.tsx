@@ -1,4 +1,5 @@
 import Cookies from 'js-cookie';
+import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 import { getBysConfigApi } from '~/api/apps';
 import { Filled, Outlined } from 'bisheng-icons';
 import { X } from 'lucide-react';
@@ -230,7 +231,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'dsh-system-sidebar h-[100dvh] flex flex-col justify-between py-4 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // Rail: let the content column shrink to its 44px width instead of stretching the track.
         // Expanded drawer keeps the stretched full-width layout.
         showExpandedHubSidebar ? undefined : 'items-center',
@@ -350,6 +351,7 @@ export default function MainLayout() {
     isSettingsRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
+  const showPlatformNavigation = !isDesktopEmbedded();
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -358,7 +360,7 @@ export default function MainLayout() {
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
   const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
-  const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
+  const systemMenuRevealing = showPlatformNavigation && systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
   // Route change auto-closes the revealed system menu (covers nav-link clicks).
   useEffect(() => {
@@ -420,7 +422,7 @@ export default function MainLayout() {
   // hand-off shows no size/position jump, instead of a blank flash.
   if (isUserLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-white">
+      <div className="dsh-chat-startup flex h-full w-full items-center justify-center">
         <LoadingIcon className="w-48 text-primary" />
       </div>
     );
@@ -477,11 +479,12 @@ export default function MainLayout() {
     <div
       className={cn(
         'relative flex w-screen bg-fill-1',
+        (isChatHomeRoute || !showPlatformNavigation) && 'dsh-web-chat',
         isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
       )}
     >
       <WorkbenchAccessGuard />
-      {shouldHideSidebarOnMobileAppsArea ? (
+      {showPlatformNavigation && (shouldHideSidebarOnMobileAppsArea ? (
         systemMenuRevealing ? (
           <div className="absolute inset-y-0 left-0 z-30">
             <Sidebar
@@ -495,8 +498,8 @@ export default function MainLayout() {
           mobileSidebarOpen={mobileSidebarOpen}
           onCloseMobileApps={() => setMobileSidebarOpen(false)}
         />
-      )}
-      {isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
+      ))}
+      {showPlatformNavigation && isMobile && isAppsArea && !isAppChatRoute && mobileSidebarOpen ? (
         <div
           className="fixed inset-0 z-[55] flex"
           role="dialog"

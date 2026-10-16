@@ -86,7 +86,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     <div className="min-w-0 flex-1">
                         <p
                             ref={nameRef}
-                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-slate-700')}
+                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-text-1')}
                         >
                             {skill.display_name}
                         </p>
@@ -207,7 +207,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             >
             {isFetching && skills.length === 0 ? (
                 <div className="flex justify-center py-4">
-                    <Loader2 size={16} className="animate-spin text-slate-300" />
+                    <Loader2 size={16} className="animate-spin text-text-3" />
                 </div>
             ) : filtered.length === 0 ? (
                 // Inline tier (组件-State状态页.md §3): a selector with no
@@ -225,7 +225,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                         aria-hidden
                         className={cn(
                             'pointer-events-none absolute left-0 right-0 top-0 z-10 h-3 transition-opacity duration-150',
-                            'bg-gradient-to-b from-white to-transparent',
+                            'bg-gradient-to-b from-[rgb(var(--dsh-menu-bg,var(--bg-page)))] to-transparent',
                             canScrollUp ? 'opacity-100' : 'opacity-0',
                         )}
                     />
@@ -234,7 +234,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                         aria-hidden
                         className={cn(
                             'pointer-events-none absolute bottom-0 left-0 right-0 z-10 h-3 transition-opacity duration-150',
-                            'bg-gradient-to-t from-white to-transparent',
+                            'bg-gradient-to-t from-[rgb(var(--dsh-menu-bg,var(--bg-page)))] to-transparent',
                             canScrollDown ? 'opacity-100' : 'opacity-0',
                         )}
                     />
@@ -248,7 +248,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                             {/* Hairline between rows — a standalone element rather than a
                                 border on the row, so it sits centred in the 4px gutter and
                                 never cuts across a selected row's tinted background. */}
-                            {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-slate-100" />}
+                            {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-fill-2" />}
                             <SkillRow
                                 skill={skill}
                                 isChecked={selected.some((s) => s.name === skill.name)}

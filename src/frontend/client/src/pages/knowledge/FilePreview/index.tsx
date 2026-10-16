@@ -26,6 +26,8 @@ const DocxViewer = lazy(() => import("./viewers/DocxViewer").then((m) => ({ defa
 const XlsxViewer = lazy(() => import("./viewers/XlsxViewer").then((m) => ({ default: m.XlsxViewer })));
 
 export interface FilePreviewProps {
+    /** Standalone viewers own the browser title; embedded viewers use their host title. */
+    manageDocumentTitle?: boolean;
     /** File display name (with extension) */
     fileName: string;
     /** File extension, e.g. "pdf", "docx" */
@@ -64,6 +66,7 @@ export interface FilePreviewProps {
 }
 
 export default function FilePreview({
+    manageDocumentTitle = true,
     fileName,
     fileType,
     fileUrl,
@@ -132,10 +135,13 @@ export default function FilePreview({
         };
     }, [fileUrl, viewerType]);
 
-    // Update document title
     useEffect(() => {
-        document.title = fileName;
-    }, [fileName]);
+        if (manageDocumentTitle) {
+            const previousTitle = document.title;
+            document.title = fileName;
+            return () => { document.title = previousTitle; };
+        }
+    }, [fileName, manageDocumentTitle]);
 
     const handleZoomIn = useCallback(() => {
         setZoomLevel((prev) => Math.min(500, prev + 25));
