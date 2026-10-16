@@ -1,12 +1,12 @@
-"""AC-05, AC-13, AC-14, AC-15, AC-22, AC-26, AC-31: saved schema boundaries."""
+"""API argument validation and destination boundaries; no tool persistence tests."""
 
 import json
 from types import SimpleNamespace
 
 import pytest
 
-from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolPublicationInvalidError
-from bisheng.tool.domain.services.published_schema import PublishedSchema, validate_destination
+from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolUnsupportedError
+from bisheng.tool.domain.services.saved_schema import SavedToolSchema, validate_destination
 
 
 def saved_schema(properties=None, **schema_options):
@@ -38,7 +38,7 @@ def saved_schema(properties=None, **schema_options):
 
 def test_saved_enum_required_and_extras():
     """AC-13, AC-14: full schema constraints survive the imported representation."""
-    schema = PublishedSchema.from_saved(*saved_schema())
+    schema = SavedToolSchema.from_saved(*saved_schema())
     assert schema.validate({"query": "yes"}) == {"query": "yes"}
     for value in ({}, {"query": "invalid"}, {"query": True}, {"query": "yes", "proxy": "secret"}):
         with pytest.raises(DshToolArgumentsInvalidError):
@@ -55,7 +55,7 @@ def test_saved_enum_required_and_extras():
         {"oneOf": [{"type": "string"}]},
     ],
 )
-def test_unsupported_schema_fails_publish(spec):
+def test_api_rejects_unsupported_schema(spec):
     """AC-05: unsupported constraints are not silently discarded."""
     tool, category = saved_schema({"query": {"type": "string"}})
     doc = json.loads(category.openapi_schema)
@@ -63,18 +63,40 @@ def test_unsupported_schema_fails_publish(spec):
         spec
     )
     category.openapi_schema = json.dumps(doc)
-    with pytest.raises(DshToolPublicationInvalidError):
-        PublishedSchema.from_saved(tool, category)
+    with pytest.raises(DshToolUnsupportedError):
+        SavedToolSchema.from_saved(tool, category)
+
+
+def test_declared_string_and_numeric_bounds():
+    """AC-14, AC-22: input bounds come from OpenAPI, without query normalization."""
+    schema = SavedToolSchema.from_saved(
+        *saved_schema(
+            {
+                "query": {"type": "string", "minLength": 1, "maxLength": 8},
+                "maxResults": {"type": "integer", "minimum": 1, "maximum": 30},
+            }
+        )
+    )
+    arguments = {"query": " hello ", "maxResults": 30}
+    assert schema.validate(arguments) == arguments
+    for invalid in (
+        {"query": "", "maxResults": 1},
+        {"query": "123456789", "maxResults": 1},
+        {"query": "x", "maxResults": 31},
+        {"query": "x", "maxResults": True},
+    ):
+        with pytest.raises(DshToolArgumentsInvalidError):
+            schema.validate(invalid)
 
 
 def test_strict_integer_and_reserved_arguments():
     """AC-14, AC-15: booleans/floats are not integers; wrapper controls are not inputs."""
-    schema = PublishedSchema.from_saved(*saved_schema({"count": {"type": "integer", "minimum": 1}}))
+    schema = SavedToolSchema.from_saved(*saved_schema({"count": {"type": "integer", "minimum": 1}}))
     for value in (True, 1.0, "1", 0):
         with pytest.raises(DshToolArgumentsInvalidError):
             schema.validate({"count": value})
-    with pytest.raises(DshToolPublicationInvalidError):
-        PublishedSchema.from_saved(*saved_schema({"proxy": {"type": "string"}}))
+    with pytest.raises(DshToolUnsupportedError):
+        SavedToolSchema.from_saved(*saved_schema({"proxy": {"type": "string"}}))
 
 
 @pytest.mark.parametrize(
@@ -90,6 +112,6 @@ def test_strict_integer_and_reserved_arguments():
     ],
 )
 def test_destination_rejects_recursion_and_ambiguity(url):
-    """AC-31: aliases and ambiguous destinations cannot invoke the published API."""
-    with pytest.raises(DshToolPublicationInvalidError):
+    """AC-31: aliases and ambiguous destinations cannot recursively invoke the API."""
+    with pytest.raises(DshToolUnsupportedError):
         validate_destination(url)

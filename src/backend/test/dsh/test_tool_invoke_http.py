@@ -12,9 +12,13 @@ from starlette.requests import ClientDisconnect
 from bisheng.common.errcode.dsh import DshInvalidAccessTokenError
 from bisheng.dsh.api.dependencies import get_runtime
 from bisheng.dsh.api.endpoints import tools
-from bisheng.dsh.domain.schemas.tool_publications import ToolLimits
+from bisheng.dsh.domain.schemas.tool_invocation import ToolLimits
+from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.tool_runtime import get_tool_service
-from test.dsh.test_tool_publications import principal
+
+
+def principal():
+    return DshPrincipal(tenant_id="2", user_id="3", seat_id="s", session_id="x", grant_version=1)
 
 
 @pytest.fixture
@@ -23,7 +27,7 @@ def http_setup():
     app.include_router(tools.router, prefix="/api/v1")
     runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())))
     service = SimpleNamespace(
-        preflight=AsyncMock(return_value=ToolLimits()),
+        limits=ToolLimits(),
         invoke=AsyncMock(return_value={"tool": "bs_web_search", "result": {"results": [], "truncated": False}}),
     )
     app.dependency_overrides[get_runtime] = lambda: runtime
@@ -43,6 +47,24 @@ async def test_top_level_contract(http_setup):
     assert set(response.json()) == {"tool", "result"}
     assert response.headers["cache-control"] == "no-store"
     assert service.invoke.await_args.args[:3] == (principal(), "bs_web_search", {"query": "x"})
+
+
+async def test_full_saved_tool_key_and_no_management_api(http_setup):
+    """AC-01, AC-07: accept existing keys without a registration or management step."""
+    from bisheng.utils.http_middleware import owns_dsh_credential
+
+    app, _, service = http_setup
+    key = "Tool_" + "x" * 119 + "1"
+    path = f"/api/v1/dsh/tools/{key}/invoke"
+    assert owns_dsh_credential("POST", path)
+    assert not owns_dsh_credential("GET", path)
+    assert not owns_dsh_credential("POST", path + "/other")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test") as client:
+        response = await client.post(path, headers={"Authorization": "Bearer verified"}, json={"arguments": {}})
+    assert response.status_code == 200 and service.invoke.await_args.args[1] == key
+    from bisheng.dsh.api.router import router
+
+    assert not any("tool-publications" in route.path for route in router.routes)
 
 
 @pytest.mark.parametrize(
@@ -139,10 +161,10 @@ async def test_unknown_failure_uses_safe_real_error_envelope(http_setup):
     assert "private" not in response.text and response.headers["cache-control"] == "no-store"
 
 
-async def test_published_body_cap_and_openapi(http_setup):
+async def test_body_cap_and_openapi(http_setup):
     """AC-27, AC-28: tighten the streaming cap before buffering the request."""
     app, _, service = http_setup
-    service.preflight.return_value = ToolLimits(max_input_bytes=10)
+    service.limits = ToolLimits(max_input_bytes=10)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test") as client:
         response = await client.post(
             "/api/v1/dsh/tools/search/invoke",

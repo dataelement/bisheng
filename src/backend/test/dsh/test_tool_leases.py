@@ -58,7 +58,6 @@ async def lease_redis(tmp_path):
 async def test_atomic_cap_and_owner_cleanup(lease_redis):
     """AC-27, AC-30: distinct service instances share one capacity bucket."""
     first, second = ToolLeases(lease_redis), ToolLeases(lease_redis)
-    await first.initialize(2, "search")
     outcomes = await asyncio.gather(
         *(service.acquire(2, "search", 2) for service in (first, second, first, second)), return_exceptions=True
     )
@@ -74,20 +73,25 @@ async def test_atomic_cap_and_owner_cleanup(lease_redis):
     await first.release(2, "search", owner)
 
 
-async def test_missing_state_cooldown_does_not_extend(lease_redis):
-    """AC-30: losing existing admission state is not an empty-capacity assumption."""
+async def test_first_use_expiry_and_tenant_isolation(lease_redis):
+    """AC-30: first use needs no registration; expired owners cannot release successors."""
     service = ToolLeases(lease_redis)
-    with pytest.raises(DshToolServiceUnavailableError):
-        await service.acquire(3, "search", 1)
-    marker = await lease_redis.hget(service.key(3, "search"), "ready_after")
-    with pytest.raises(DshToolServiceUnavailableError):
-        await service.acquire(3, "search", 1)
-    assert await lease_redis.hget(service.key(3, "search"), "ready_after") == marker
-    await lease_redis.hset(service.key(3, "search"), "ready_after", "0")
     owner = await service.acquire(3, "search", 1)
+    assert 0 < await lease_redis.pttl(service.key(3, "search")) <= 65000
+    other = await service.acquire(4, "search", 1)
+    await service.release(4, "search", other)
     await lease_redis.hset(service.key(3, "search"), owner, "0")
     replacement = await service.acquire(3, "search", 1)
     await service.release(3, "search", owner)
     with pytest.raises(DshToolConcurrencyExceededError):
         await service.acquire(3, "search", 1)
     await service.release(3, "search", replacement)
+
+
+async def test_redis_outage_rejects_admission():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    service = ToolLeases(SimpleNamespace(eval=AsyncMock(side_effect=RedisConnectionError())))
+    with pytest.raises(DshToolServiceUnavailableError):
+        await service.acquire(2, "search", 1)

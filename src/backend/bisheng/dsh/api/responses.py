@@ -45,7 +45,7 @@ class DshRoute(APIRoute):
         )
 
 
-class PublishedToolRoute(DshRoute):
+class ToolInvocationRoute(DshRoute):
     """Contain unexpected tool failures without logging provider payloads."""
 
     def get_route_handler(self):
@@ -61,7 +61,7 @@ class PublishedToolRoute(DshRoute):
                     raise
                 response = self.error(DshInternalErrorError())
                 logger.error(
-                    "Published tool internal failure type={} request_id={}",
+                    "Tool internal failure type={} request_id={}",
                     type(error).__name__,
                     json.loads(response.body)["request_id"],
                 )

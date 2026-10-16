@@ -1,4 +1,4 @@
-"""Faithful flat OpenAPI input validation for explicitly published saved tools."""
+"""Faithful flat OpenAPI input validation for existing saved tools."""
 
 import math
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ import yaml
 from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import SchemaError
 
-from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolPublicationInvalidError
+from bisheng.common.errcode.dsh import DshToolArgumentsInvalidError, DshToolUnsupportedError
 from bisheng.utils.bounded_json import check_tree, strict_json
 
 RESERVED = frozenset({"proxy", "callbacks", "config", "run_manager", "tool_call_id", "self"})
@@ -73,7 +73,7 @@ def validate_destination(url):
             raise ValueError("Invalid destination")
         _ = parsed.port
     except (ValueError, TypeError):
-        raise DshToolPublicationInvalidError() from None
+        raise DshToolUnsupportedError() from None
     return url
 
 
@@ -103,7 +103,7 @@ def _document(raw):
 
 
 @dataclass(frozen=True)
-class PublishedSchema:
+class SavedToolSchema:
     schema: dict
     parameters: list
     destination: str
@@ -200,7 +200,7 @@ class PublishedSchema:
             if auth.get("parameter_name") in properties:
                 raise ValueError("Authentication parameter is not caller controlled")
             return cls(schema, parameters, destination, method)
-        except DshToolPublicationInvalidError:
+        except DshToolUnsupportedError:
             raise
         except (ValueError, TypeError, KeyError, AttributeError, RecursionError, yaml.YAMLError, SchemaError):
-            raise DshToolPublicationInvalidError() from None
+            raise DshToolUnsupportedError() from None

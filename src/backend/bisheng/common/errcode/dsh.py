@@ -247,11 +247,11 @@ class DshOperationConflictError(BaseErrorCode):
     ErrorType: str = "conflict_error"
 
 
-class DshToolPublicationNotFoundError(BaseErrorCode):
+class DshToolNotFoundError(BaseErrorCode):
     Code: int = 26131
-    Msg: str = "Tool publication is not available"
+    Msg: str = "Tool is not available"
     HttpStatus: int = 404
-    ClientCode: str = "tool_publication_not_found"
+    ClientCode: str = "tool_not_found"
 
 
 class DshToolPermissionDeniedError(BaseErrorCode):
@@ -261,11 +261,11 @@ class DshToolPermissionDeniedError(BaseErrorCode):
     ClientCode: str = "tool_permission_denied"
 
 
-class DshToolPublicationInvalidError(BaseErrorCode):
+class DshToolUnsupportedError(BaseErrorCode):
     Code: int = 26133
-    Msg: str = "Tool publication is invalid or unsupported"
+    Msg: str = "Tool type or saved OpenAPI schema is unsupported"
     HttpStatus: int = 400
-    ClientCode: str = "tool_publication_invalid"
+    ClientCode: str = "tool_unsupported"
 
 
 class DshToolArgumentsInvalidError(BaseErrorCode):
@@ -325,9 +325,9 @@ class DshToolOutputTooLargeError(BaseErrorCode):
 
 
 DSH_ERROR_TYPES = (
-    DshToolPublicationNotFoundError,
+    DshToolNotFoundError,
     DshToolPermissionDeniedError,
-    DshToolPublicationInvalidError,
+    DshToolUnsupportedError,
     DshToolArgumentsInvalidError,
     DshToolConcurrencyExceededError,
     DshToolUpstreamFailedError,

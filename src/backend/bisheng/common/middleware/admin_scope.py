@@ -60,7 +60,6 @@ from bisheng.utils.http_middleware import (
 # so it never matched. Both prefixes were removed; scope now only affects
 # the LLM management surface (and the admin endpoints used to set it).
 MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
-    "/api/v1/dsh/admin/tool-publications",
     "/api/v1/llm",
     "/api/v1/workstation",
     "/api/v1/linsight",

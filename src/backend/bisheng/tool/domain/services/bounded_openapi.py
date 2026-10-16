@@ -1,4 +1,4 @@
-"""Opt-in saved OpenAPI execution with bounded, non-logging transport."""
+"""Saved OpenAPI execution with bounded, non-logging transport."""
 
 import httpx
 from pydantic import Field
@@ -9,12 +9,12 @@ from bisheng.common.errcode.dsh import (
     DshToolResultInvalidError,
     DshToolUpstreamFailedError,
 )
-from bisheng.tool.domain.services.published_schema import validate_destination
+from bisheng.tool.domain.services.saved_schema import validate_destination
 from bisheng.utils.private_http_logs import private_http_logs
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
 
 
-class PublishedOpenApiTools(OpenApiTools):
+class BoundedOpenApiTools(OpenApiTools):
     input_schema: dict = Field(exclude=True)
     max_output_bytes: int = Field(ge=1, le=1048576)
 

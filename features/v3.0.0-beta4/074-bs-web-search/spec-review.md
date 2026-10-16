@@ -1,1 +1,1 @@
-LGTM
+Local self-review: direct existing-tool-key contract matches the user-confirmed corrections of 2026-10-15; no separate publication or search-specific requirements. Deployment acceptance remains pending.

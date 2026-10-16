@@ -1,14 +1,14 @@
-"""AC-16, AC-19, AC-21, AC-28, AC-29, AC-31, AC-32: bounded opt-in transport."""
+"""API execution: upstream failures, bounded streams and credential-safe logging."""
 
 import httpx
 import pytest
 
 from bisheng.common.errcode.dsh import DshToolOutputTooLargeError, DshToolUpstreamFailedError
-from bisheng.tool.domain.services.published_openapi import PublishedOpenApiTools
+from bisheng.tool.domain.services.bounded_openapi import BoundedOpenApiTools
 
 
 def implementation():
-    return PublishedOpenApiTools(
+    return BoundedOpenApiTools(
         url="https://fixture.example",
         params={
             "path": "/search",
@@ -31,7 +31,7 @@ async def test_bounded_success_and_saved_argument_mapping(monkeypatch):
     impl = implementation()
     original = httpx.AsyncClient
     monkeypatch.setattr(
-        "bisheng.tool.domain.services.published_openapi.httpx.AsyncClient",
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
         lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
     )
     assert await impl.arun(query="hello") == '{"results":[],"truncated":false}'
@@ -52,7 +52,7 @@ async def test_transport_failures_do_not_return_sensitive_text(monkeypatch, stat
     """AC-19, AC-21, AC-28, AC-31: fail before converting errors into results."""
     original = httpx.AsyncClient
     monkeypatch.setattr(
-        "bisheng.tool.domain.services.published_openapi.httpx.AsyncClient",
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
         lambda **kwargs: original(
             transport=httpx.MockTransport(lambda _: httpx.Response(status, headers=headers, text=text)), **kwargs
         ),
@@ -68,7 +68,7 @@ async def test_http_library_logging_does_not_reveal_query_credentials(monkeypatc
 
     original = httpx.AsyncClient
     monkeypatch.setattr(
-        "bisheng.tool.domain.services.published_openapi.httpx.AsyncClient",
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
         lambda **kwargs: original(transport=httpx.MockTransport(lambda _: httpx.Response(200, text="ok")), **kwargs),
     )
     impl = implementation()
@@ -103,7 +103,7 @@ async def test_stream_cap_stops_consumption_and_closes(monkeypatch):
     stream = Stream()
     original = httpx.AsyncClient
     monkeypatch.setattr(
-        "bisheng.tool.domain.services.published_openapi.httpx.AsyncClient",
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
         lambda **kwargs: original(
             transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=stream)), **kwargs
         ),

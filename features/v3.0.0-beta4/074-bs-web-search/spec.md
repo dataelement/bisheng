@@ -1,234 +1,99 @@
-# F074 - Published Tool Invocation for Work
+# F074 - Existing OpenAPI Tool Invocation for Work
 
-Status: confirmed by the user on 2026-10-15. Discovery and spec are confirmed;
-design confirmation and implementation remain pending.
+Status: user confirmed on 2026-10-15. The latest corrections remove search-specific
+constraints and separate publication management. All supported saved API tools
+are callable through the common entry point, subject to existing tenant/use rights.
+This supersedes the earlier publication-management requirements.
+Release: v3.0.0-beta4. Dependencies: existing F062 identity, tool records/executor,
+business authorization. See [design](./design.md) and [release contract](../release-contract.md).
 
-**Related PRD**: [Confirmed discovery](./discovery.md), including the latest user
-correction from fixed search to published-tool invocation.
-**Priority**: P0 for authentication, isolation and bounded execution; P1 overall.
-**Release**: v3.0.0-beta4.
-**Dependencies**: existing F062 Desktop identity/session admission; saved OpenAPI
-tool management/execution; existing business-resource authorization.
-**Release contract**: [v3.0.0-beta4](../release-contract.md).
+## 1. Scope
 
-This specification defines observable requirements. Wire formats, endpoints,
-storage, module boundaries and exact limit/error definitions belong to the
-subsequent design. Confirmed discovery remains the input to that design.
-
-## 1. Scope and User Stories
-
-As a tenant administrator, I want to publish selected saved tools under stable
-codes, control their availability and limits, and verify the saved publication,
-so that enterprise clients can use approved capabilities.
-
-As an authenticated enterprise user, I want to invoke a published tool with its
-business arguments and receive a predictable result or identifiable failure,
-so that Work can use my authorized tenant capabilities.
-
-As a tool administrator, I want to publish another supported OpenAPI tool without
-changing application code, so that the integration can grow beyond search.
-
-Included: tenant-scoped publication management, authenticated invocation, saved
-schema validation, current resource authorization, execution limits, generic
-result normalization and the first search business contract.
-
-Excluded: a management UI (the first release has functional management APIs),
-Gateway/Work source changes (separate repositories), standalone search routing
-(replaced by published invocation), MCP/preset/other unsupported protocols
-(first-release support is limited to executable OpenAPI tools), provider service
-hosting or Sub2API protocol conversion (owned by configured tools/adapters),
-permission-grant editing, new token issuance, and automatic retries of potentially
-side-effecting tools (retry semantics are outside this contract).
+Expose existing API tools using their existing tool_key. No registration, alias
+mapping, extra publication state, revision or DSH-specific enable step is required.
+Use the saved OpenAPI input schema, server destination and credentials.
+No Gateway/Work edits, management UI, provider service hosting, permission grants,
+new token issuance or automatic upstream retries. MCP/preset execution and expanded
+OpenAPI forms remain outside this first implementation; unsupported tools fail explicitly.
 
 ## 2. Acceptance Criteria
 
-### 2.1 Publication Management
+### 2.1 Existing Tool Lifecycle
 
-**AC-01** - WHEN a current tenant administrator or appropriately scoped global
-administrator manages publications, THE SYSTEM SHALL provide functional create,
-read, list, replace and disable operations within that verified tenant.
+**AC-01** - THE SYSTEM SHALL invoke existing tools without separate publication.
+**AC-02** - THE SYSTEM SHALL reuse current tool use authorization; invoking SHALL
+NOT require tool edit rights or tenant-admin status.
+**AC-03** - THE SYSTEM SHALL reuse existing saved schema, destination and credentials,
+without a second mapping/configuration store.
+**AC-04** - THE SYSTEM SHALL resolve the existing tool_key within the verified tenant,
+including when the same key exists in other tenants.
+**AC-05** - Unsupported tool types or OpenAPI forms SHALL fail explicitly.
+**AC-06** - Deleted tools/categories SHALL NOT admit new executions; previously
+admitted executions may finish.
+**AC-07** - THE SYSTEM SHALL provide no separate tool-publication management API,
+enable state, mapping revision or DSH registration step.
 
-**AC-02** - IF an actor lacks current administration authority for the verified
-tenant, THEN THE SYSTEM SHALL deny publication management without changing state
-or disclosing another tenant's publication data.
+### 2.2 Identity and Resource Access
 
-**AC-03** - WHEN an administrator creates or replaces a publication, THE SYSTEM
-SHALL require current edit authority on its bound saved tool category; an existing
-publication SHALL NOT bypass that authorization on subsequent changes.
+**AC-08** - Invocation SHALL require the existing verified DSH access credential.
+**AC-09** - Forged credentials, browser cookies and other unsupported credential
+forms SHALL NOT authorize invocation.
+**AC-10** - Tenant/user identity SHALL derive from verified credentials, without
+request-controlled identity overrides or inherited administrative bypass.
+**AC-11** - Tool and category tenant/deletion/parent facts SHALL be checked before
+permission shortcuts. Missing or out-of-scope resources SHALL return unavailable.
+**AC-12** - Each invocation SHALL check current saved-tool state and use permission.
 
-**AC-04** - THE SYSTEM SHALL identify a publication by a stable code unique within
-one tenant and retain its concrete saved-tool binding, availability and execution
-limits across requests and application restarts. The same code in another tenant
-SHALL identify an independent publication.
+### 2.3 Inputs and Execution
 
-**AC-05** - IF a publication code, target or limit is invalid, or its target is
-deleted, outside the tenant or of an unsupported tool kind/schema, THEN THE SYSTEM
-SHALL reject the change without replacing the previous valid publication.
+**AC-13** - Requests SHALL contain only an arguments object; duplicates, identity,
+destination, credentials and executable wrapper controls SHALL be rejected.
+**AC-14** - Supported saved OpenAPI constraints SHALL validate arguments without
+coercion or default injection. Unknown arguments SHALL be rejected.
+**AC-15** - Execution SHALL use the same verified saved tool/category snapshot;
+caller inputs SHALL NOT alter credentials, transport controls or destinations.
+**AC-16** - Different supported OpenAPI schemas SHALL use the same invocation route.
+**AC-17** - Success SHALL return top-level tool/result using the requested tool_key.
+**AC-18** - JSON SHALL be parsed once; ordinary text SHALL use a stable text wrapper.
+**AC-19** - Transport/execution failures SHALL remain failures; business fields
+SHALL NOT be interpreted as generic failure indicators.
+**AC-20** - Invalid input, authentication, denial, unavailable tool, unsupported
+schema, concurrency, upstream, dependency and timeout errors SHALL be distinguishable
+by HTTP status and safe error code with a correlation identifier.
+**AC-21** - Client errors/logs/traces SHALL NOT disclose saved credentials,
+configuration dumps, authorization headers or raw sensitive provider bodies.
 
-**AC-06** - WHEN a publication is disabled, THE SYSTEM SHALL reject invocations
-admitted after the completed disable operation; re-enabling a valid publication
-SHALL allow new authorized invocations. Disabling SHALL NOT imply cancellation
-of work already admitted before the operation completed.
+### 2.4 Business Contract Ownership
 
-**AC-07** - WHEN concurrent administrators update the same tenant/code, THE SYSTEM
-SHALL retain one complete valid update without mixing bindings, availability or
-limits from different updates; it SHALL NOT create duplicate publications.
+**AC-22** - All keys, including bs_web_search if it is an actual saved key, SHALL
+use their OpenAPI argument schema without name-specific field restrictions or trimming.
+**AC-23** - No tool key SHALL require a search-specific result shape.
+**AC-24** - Tool services SHALL own business result/error validation; generic
+normalization SHALL preserve bounded JSON fields and ordinary text.
+**AC-25** - The invocation layer SHALL NOT truncate collections or change business
+truncation flags according to tool names or argument names.
+**AC-26** - Operators SHALL configure a real service matching the saved schema;
+schema import SHALL NOT be represented as creating or hosting that service.
 
-### 2.2 Trusted Identity and Authorization
+### 2.5 Execution Bounds and Compatibility
 
-**AC-08** - WHEN an invocation is admitted, THE SYSTEM SHALL authenticate the
-existing enterprise Desktop access credential, including cryptographic validity,
-issuer, audience, expiry, current user/tenant activity and active session/seat.
+**AC-27** - All tools SHALL use common input/output/timeout/concurrency limits;
+no per-publication settings are required.
+**AC-28** - Oversized input/output SHALL stop with an identifiable failure, including
+streamed bodies and serialized result expansion.
+**AC-29** - Deadline and disconnect cancellation SHALL close upstream resources
+and release this request's capacity; upstream effects cannot be undone.
+**AC-30** - Concurrent API replicas SHALL share per-tenant/tool_key admission state.
+Redis outages SHALL reject new work; first use SHALL require no initialization.
+Expired owners SHALL NOT release successor leases. State-loss recovery requires
+the documented operational drain.
+**AC-31** - Destinations/redirects that invoke this tool API itself SHALL be rejected.
+**AC-32** - Existing Agent/workflow tool and Desktop identity/model behavior SHALL
+remain compatible; neighboring routes SHALL NOT gain DSH-credential bypass.
 
-**AC-09** - IF credentials are absent, duplicated, forged, expired, for the wrong
-audience, or refer to a revoked session or inactive identity, THEN THE SYSTEM SHALL
-reject invocation before the upstream tool is contacted. IF identity/session
-verification is unavailable, THEN THE SYSTEM SHALL reject admission.
+## 3. Acceptance Evidence
 
-**AC-10** - THE SYSTEM SHALL derive invocation user and tenant exclusively from
-verified identity and prevent request arguments, browser credentials or inherited
-administrative context from substituting another identity or tenant.
-
-**AC-11** - WHEN an invocation resolves a code, THE SYSTEM SHALL require an enabled
-publication in that user's tenant and current use authority on its saved tool;
-knowing a code or saved tool identifier SHALL NOT grant invocation authority.
-
-**AC-12** - IF publication, tool or authorization state becomes unavailable,
-deleted, unsupported, foreign to the tenant or denied before admission completes,
-THEN THE SYSTEM SHALL reject invocation without falling back to another tenant,
-unpublished tool or permissive authorization path.
-
-### 2.3 Arguments and Generic Invocation
-
-**AC-13** - WHEN a caller invokes a published tool, THE SYSTEM SHALL accept only
-the generic argument envelope with an argument object and validate it against
-the actual supported saved input schema before contacting the upstream service.
-
-**AC-14** - IF input violates required fields, types, enumerations or supported
-property constraints, contains unsupported extra fields or cannot be validated
-faithfully, THEN THE SYSTEM SHALL return an identifiable validation failure
-without executing the tool.
-
-**AC-15** - THE SYSTEM SHALL read execution destinations, authentication and tool
-definitions only from authorized server-side saved configuration and SHALL NOT
-allow caller arguments to override internal execution configuration or identity.
-
-**AC-16** - WHEN administrators publish at least two saved supported OpenAPI tools
-with distinct input schemas, THE SYSTEM SHALL invoke both through the same generic
-capability without application code or route additions and return each tool's
-result without imposing search-specific input or output fields on other tools.
-
-### 2.4 Generic Results and Failures
-
-**AC-17** - WHEN a tool completes successfully, THE SYSTEM SHALL return the stable
-published tool code and a structured result at the top level without an additional
-business-data wrapper.
-
-**AC-18** - WHEN a successful tool returns JSON text, THE SYSTEM SHALL parse it once
-and preserve its JSON value, including object, array, scalar and null. WHEN an
-ordinary tool returns non-JSON text, THE SYSTEM SHALL expose a stable text-result
-representation rather than guessing a business result from that text.
-
-**AC-19** - IF the invocation or upstream transport/executor reports failure,
-THEN THE SYSTEM SHALL return an identifiable non-success response rather than
-disguising it as successful tool output or successful empty search results.
-Business-level result validation SHALL apply where the published business
-contract defines it; the generic layer SHALL NOT guess arbitrary tools' semantics.
-
-**AC-20** - WHEN a request fails, THE SYSTEM SHALL distinguish invalid input,
-authentication failure, denied access, unavailable publication, concurrency
-exhaustion, upstream failure, unavailable dependencies and timeout using documented
-non-success status and error identifiers plus a correlation identifier.
-
-**AC-21** - THE SYSTEM SHALL exclude credentials, saved configuration dumps,
-authorization headers and raw sensitive upstream responses from client errors
-and invocation diagnostics.
-
-### 2.5 Search Business Contract
-
-**AC-22** - WHEN `bs_web_search` is published, THE SYSTEM SHALL accept a nonempty
-trimmed query within the confirmed input bound; optional result-count arguments
-SHALL be accepted only when explicitly supported by its published input schema.
-
-**AC-23** - WHEN search completes successfully, THE SYSTEM SHALL return the
-confirmed search business result: a required result collection and truncation
-indicator, optional output, and individual results with a required absolute HTTP(S)
-URL and optional title, snippet and publication-time strings.
-
-**AC-24** - WHEN a valid search returns no results, THE SYSTEM SHALL report a
-successful empty collection. IF it returns malformed data, an error result,
-ordinary text or opaque encrypted output, THEN THE SYSTEM SHALL report failure
-without manufacturing search results.
-
-**AC-25** - WHEN valid search results exceed the confirmed result bound, THE SYSTEM
-SHALL validate all supplied results before trimming the collection and report
-truncation; existing upstream truncation SHALL remain visible.
-
-**AC-26** - WHEN an administrator configures search, THE SYSTEM SHALL support a
-saved tool pointing to a real service that accepts the declared search arguments
-and returns the confirmed search contract. Operator instructions SHALL distinguish
-schema import from service creation and explain that raw Sub2API requires a
-compatible tool/provider adapter rather than receiving a bare search query.
-
-### 2.6 Bounded Execution and Operational Behavior
-
-**AC-27** - THE SYSTEM SHALL enforce each publication's configured input size,
-output size, execution timeout and simultaneous-invocation limits within the
-confirmed hard caps; publication updates SHALL reject out-of-range limits.
-
-**AC-28** - IF a request or upstream response exceeds its applicable size bound,
-THEN THE SYSTEM SHALL stop its processing with an identifiable failure before
-unbounded buffering; limiting only the final serialized result SHALL NOT satisfy
-the upstream response bound.
-
-**AC-29** - WHEN the execution deadline expires or a request is cancelled, THE
-SYSTEM SHALL stop the invocation and release its admission capacity; a timeout
-SHALL be distinguishable from an upstream failure. THE SYSTEM SHALL NOT report
-that external side effects have been rolled back.
-
-**AC-30** - WHILE invocations run on multiple application replicas, THE SYSTEM
-SHALL enforce one shared concurrency limit per tenant/code. IF admission state
-is unavailable, THEN THE SYSTEM SHALL reject new work. Capacity retained by an
-abnormally terminated request SHALL become available again within a documented
-bounded recovery period without allowing an expired owner to release a newer
-invocation's capacity.
-
-**AC-31** - IF a tool destination or followed redirect invokes this published-tool
-capability itself, including another tool code or a configured local service alias,
-THEN THE SYSTEM SHALL reject it without recursive tool execution.
-
-**AC-32** - WHEN the feature is introduced, THE SYSTEM SHALL preserve existing
-Agent/workflow saved-tool usage and existing Desktop identity/model functionality;
-new routes SHALL NOT grant unauthenticated access to neighboring routes.
-
-## 3. Boundaries and Acceptance Evidence
-
-AC-06 defines admission behavior for disable races; already admitted work may
-finish. AC-07 defines complete-update semantics without prescribing a storage
-mechanism. AC-12 covers current target and permission revalidation. AC-29 does
-not promise to undo upstream actions after cancellation or timeout.
-
-Validation must include ordinary non-admin callers for allowed/denied invocation,
-tenant A/B isolation, root-resource visibility and inherited administrative context.
-An administrator-only smoke run cannot establish resource-authorization correctness.
-
-Local deterministic acceptance must exercise the complete HTTP admission path,
-at least two supported OpenAPI schemas, representative failures and the shared
-concurrency behavior. Database compatibility and environment-dependent middleware
-checks must state their actual execution environment and any untested dialect.
-
-Real Work/Gateway/upstream acceptance must separately prove credential forwarding,
-filter/license compatibility, Work's argument wrapping/result extraction and one
-actual compatible configured search service. Fixtures or HTTP 200 alone cannot
-establish deployed readiness. Missing environments or an absent provider adapter
-must remain explicit unverified delivery items.
-
-## 4. Design and Execution Pointers
-
-The next gated artifact is design.md, which will own wire contracts, exact numeric
-limits, error mapping, supported schema subset, persistence and concurrency
-decisions, effective-destination checks and module/file boundaries. tasks.md will
-subsequently map every AC to implementation and validation work.
-
-No implementation, regression-test result, push, deployment or final acceptance
-is asserted by this specification.
+Use ordinary users for allow/deny, tenant A/B isolation, current deletion and
+permission checks. Local HTTP stories must invoke two real saved schemas through
+ToolExecutor with no publication fixture. Real Gateway, Work, account/FGA, MySQL/DM8
+and provider evidence remain separate deployment checks.

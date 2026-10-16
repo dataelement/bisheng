@@ -11,13 +11,13 @@ from bisheng.common.errcode.dsh import (
     DshToolExecutionTimeoutError,
 )
 from bisheng.dsh.api.dependencies import desktop_principal
-from bisheng.dsh.api.responses import PublishedToolRoute
+from bisheng.dsh.api.responses import ToolInvocationRoute
 from bisheng.dsh.api.tool_bodies import read_tool_body
-from bisheng.dsh.domain.schemas.tool_publications import ToolCode, ToolInvocationInput
+from bisheng.dsh.domain.schemas.tool_invocation import ToolCode, ToolInvocationInput
 from bisheng.dsh.domain.services.access import DshPrincipal
 from bisheng.dsh.tool_runtime import get_tool_service
 
-router = APIRouter(route_class=PublishedToolRoute)
+router = APIRouter(route_class=ToolInvocationRoute)
 
 
 async def read_invocation(request, limit=65536):
@@ -53,7 +53,7 @@ async def invoke(
     started_at = getattr(request.state, "dsh_verified_at", asyncio.get_running_loop().time())
     try:
         async with asyncio.timeout_at(started_at + 60) as deadline:
-            limits = await service.preflight(principal, toolCode)
+            limits = service.limits
             deadline.reschedule(started_at + limits.timeout_seconds)
             body, size = await read_invocation(request, limits.max_input_bytes)
             execution = asyncio.create_task(
@@ -81,4 +81,4 @@ async def invoke(
                     raise outcome
                 if not observed_execution:
                     # The client has left or timed out; retain safe failure evidence.
-                    logger.warning("Published tool cancelled execution ended type={}", type(outcome).__name__)
+                    logger.warning("Tool cancelled execution ended type={}", type(outcome).__name__)

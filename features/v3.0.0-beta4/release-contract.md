@@ -1,44 +1,35 @@
 # Release Contract - v3.0.0-beta4
 
-Status: F074 discovery and spec confirmed by the user on 2026-10-15; design pending.
-Scope: additions on the
-`codex/bs-web-search` branch; this does not redefine previously shipped features.
+Status: user confirmed F074 discovery/spec/design and subsequent corrections on
+2026-10-15. Local branch codex/bs-web-search; deployment acceptance pending.
+Baseline beta4: db23811133b397eff1f572c8e5404c262a8f1332.
+Existing release contracts and docs/constitution.md remain authoritative.
 
-## Baseline
+## Ownership
 
-- `origin/feat/3.0.0-beta4` and `v3.0.0-beta4` resolve to
-  `db23811133b397eff1f572c8e5404c262a8f1332` (verified 2026-10-15).
-- Existing feature contracts remain authoritative, including F062 in
-  `features/v3.0.0-beta2/062-dsh-desktop-model-access/`.
-- Architecture laws: `docs/constitution.md`.
-
-## Domain Ownership
-
-| Object | Owner | Boundary |
-| --- | --- | --- |
-| Tenant tool publication mapping | F074 bs-web-search | Manage stable tool codes, saved-tool bindings, publication state and limits |
-| Desktop identity, access token, session | Existing F062 | F074 consumes authenticated identity; no token issuance changes |
-| Saved OpenAPI tool and credentials | Existing tool module | F074 references saved records and invokes the existing executor |
-| Tool authorization | Existing permission module | F074 requires the current tool `use` decision |
+- Existing tool module owns tool_key, saved OpenAPI, destination, credentials and
+  lifecycle. No new publication object, mapping, enable state or revision exists.
+- F074 owns the DSH-authenticated invocation entry and common execution limits.
+- Existing permission facade owns current category use authorization.
+- Existing F062 owns Desktop identity/access/session. No new token issuance.
+- Gateway and Work repositories remain outside this branch's write scope.
 
 ## Invariants
 
 | ID | Invariant |
 | --- | --- |
-| INV-SEARCH-1 | Invocation accepts arguments only; publication selects the saved tool, credentials and argument schema. |
-| INV-SEARCH-2 | Every execution uses a verified DSH identity, its tenant publication and current saved-tool permission. |
-| INV-SEARCH-3 | Success is top-level tool/result; bs_web_search validates its result contract and never disguises failure as empty results. |
-| INV-SEARCH-4 | Gateway and Work repositories are outside this branch's write scope. |
+| INV-SEARCH-1 | Arguments only; actual saved tool_key selects saved schema/destination/credentials without extra registration. |
+| INV-SEARCH-2 | Verified Desktop identity, strict tenant facts and current saved-tool use permission precede execution. |
+| INV-SEARCH-3 | All keys use the same OpenAPI validation and bounded generic tool/result normalization; tools own business semantics. |
+| INV-SEARCH-4 | No Gateway/Work edits or production provider claims in this change. |
 
-## Dependencies
+No new database table, mapping/config persistence or management API.
+Supported protocols remain the first implementation's OpenAPI subset. No extra
+publication prerequisite applies to supported existing tools.
 
-F074 depends on the existing F062 credential/runtime and saved OpenAPI tool
-execution. No new database table is proposed. Error codes will extend the
-existing DSH module (261), with unused codes verified before allocation; this
-draft allocates no new numeric codes.
+## Confirmed Corrections
 
-## History
-
-2026-10-15: Initial draft for F074 discovery.
-2026-10-15: Record user confirmation of the revised published-tool discovery.
-2026-10-15: Record user confirmation of F074 spec.
+2026-10-15: Replace fixed search endpoint with generic tool invocation.
+2026-10-15: Remove bs_web_search-specific argument/schema/result constraints.
+2026-10-15: Remove independent publication management; invoke all supported
+existing API tools through their existing keys and authorization.

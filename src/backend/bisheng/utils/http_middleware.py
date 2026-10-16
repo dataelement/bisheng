@@ -71,7 +71,7 @@ DSH_CREDENTIAL_ROUTES = frozenset(
 def owns_dsh_credential(method: str, path: str) -> bool:
     return (
         (method, path) in DSH_CREDENTIAL_ROUTES
-        or (method == "POST" and re.fullmatch(r"/api/v1/dsh/tools/[a-z][a-z0-9_]{0,63}/invoke", path) is not None)
+        or (method == "POST" and re.fullmatch(r"/api/v1/dsh/tools/[A-Za-z0-9_-]{1,125}/invoke", path) is not None)
         or (
             method == "GET"
             and re.fullmatch(r"/api/v1/dsh/market/plugins/[a-f0-9]{32}/versions/[a-f0-9]{32}/artifact", path)
