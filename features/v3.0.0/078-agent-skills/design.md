@@ -169,9 +169,13 @@
 
 ### 决策 10：未配置代码执行器时的判定与提示
 
-- **判定**：按租户读取内置工具 `bisheng_code_interpreter` 的配置。没有配置行或配置为空，视为「未配置」。构建过程抛出异常视为「配置错误」，记 ERROR 日志，并按「未配置」处理。不能像任务模式那样只记日志后继续运行（`B/linsight/domain/services/workbench_impl.py:2362-2371`），因为 C8 要求不能静默降级。
+- **判定**（`B/agent_runtime/domain/services/code_tool.py`）：读取内置工具 `bisheng_code_interpreter` 的工具行，结果分三种状态。
+  - `missing`：没有工具行，视为平台未配置代码执行器。
+  - `ready`：工具行存在即可构建。配置为空时，执行器类型默认是 `local`，与任务模式一致，所以「配置为空」不算未配置。
+  - `error`：构建时抛出异常，包括配置错误和运行用户没有该工具的使用权限（`ToolExecutor.init_by_tool_id` 会校验 `use` 权限）。记 ERROR 日志，对外表现与 `missing` 相同。
+  - 任务模式遇到构建异常只记日志、继续运行（`B/linsight/domain/services/workbench_impl.py` 的 `init_linsight_config_tools`）。F078 不这样做，因为 C8 要求不能静默降级：两种不可用状态都要向用户提示。
 - **提示**（AC-09）：在输出事件和消息的 `extra.agent_notices` 里放提示代码，前端按 i18n 渲染提示条；workflow 运行日志和助手工具调用记录各加一条同样的提示。模型的回答文字和 AC-16 输出变量保持不变，下游节点不受污染。
-- **复用**：把任务模式的 `_init_bisheng_code_tool`（`workbench_impl.py:2224`）里注入工作区的部分抽成通用函数 `build_workspace_code_tool(file_dir, workspace_prefix, user_id, app_type)`，任务模式和 F078 共用。
+- **复用**：任务模式 `_init_bisheng_code_tool` 里「把执行器配置指向工作区」的部分，已抽成纯函数 `bind_code_config_to_workspace(code_config, file_dir, workspace_prefix)`（`B/linsight/domain/services/code_tool_config.py`），任务模式和 F078 共用。查工具行、选择工具、构建工具仍由各自的调用方负责。F078 的入口是 `abuild_workspace_code_tool(...)`，返回 `CodeToolResult(tool, status, reason)`。
 - **E2B 执行器**：它的文件列表在构建工具时就固定了（`e2b_executor.py:297-379`），所以代码执行工具必须在水合和拷技能之后构建。
 
 ### 决策 11：技能相关提示词由 F078 自己的 middleware 追加
