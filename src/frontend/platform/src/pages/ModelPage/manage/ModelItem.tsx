@@ -1,318 +1,388 @@
-import { Badge } from "@/components/bs-ui/badge";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/bs-ui/select";
 import { Switch } from "@/components/bs-ui/switch";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import { getAdvancedParamsTemplate, templateToJsonString } from "@/util/advancedParamsTemplates";
-import { Trash2Icon } from "lucide-react";
-import { useState, type ChangeEvent } from "react";
+import { ModelType } from "@/controllers/API/modelDiscovery";
+import {
+  ChevronDown,
+  ChevronUp,
+  Settings,
+  Trash2Icon,
+} from "lucide-react";
+import { ChangeEvent, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { availableModelTypes } from "./modelDiscoveryState";
 
-export interface ModelItemConfig {
-    enable_web_search?: boolean;
-    max_tokens?: number;
-    // Saved by this UI as a JSON string; models created through the API or
-    // older versions may store a plain object instead. The backend accepts both.
-    user_kwargs?: string | Record<string, unknown>;
-    voice?: string;
-    [key: string]: unknown;
-}
-
-export interface ModelItemData {
-    id: string | number;
-    name: string;
-    model_name: string;
-    model_type: string;
-    voice?: string;
-    config?: ModelItemConfig | null;
-}
+import {
+  ModelItemConfig,
+  advancedParamsPlaceholder,
+  advancedParamsText,
+  parseAdvancedParams,
+  withAdvancedParams,
+} from "./modelAdvancedParams";
 
 interface ModelItemProps {
-    data: ModelItemData;
-    /** Provider value of the parent server, e.g. `qwen`. */
-    type: string;
-    onDelete: () => void;
-    /** Returns a truthy value when the name duplicates a sibling model. */
-    onInput: (name: string, modelType: string) => unknown;
-    onConfig: (config: ModelItemConfig) => void;
+  data: {
+    name: string;
+    model_name: string;
+    model_type: ModelType;
+    config?: ModelItemConfig;
+  };
+  type: string;
+  onDelete: () => void;
+  onInput: (name: string, type: ModelType) => unknown;
+  onConfig: (config: ModelItemConfig) => void;
 }
 
-// Providers whose backend params handler consumes `enable_web_search`
-// (see bisheng/llm/domain/llm/llm.py). Each provider runs the search in a
-// different way, so each one gets its own tooltip copy.
-const WEB_SEARCH_TIP_KEYS: Record<string, string> = {
-    qwen: 'model.webSearchTipQwen',
-    moonshot: 'model.webSearchTipMoonshot',
-    tencent: 'model.webSearchTipTencent',
-};
+export function ModelItem({
+  data,
+  type,
+  onDelete,
+  onInput,
+  onConfig,
+}: ModelItemProps) {
+  const { t } = useTranslation(["bs", "model"]);
+  const { t: tModel } = useTranslation("model");
+  const controlId = useId();
+  const [expanded, setExpanded] = useState(!data.model_name);
+  const [model, setModel] = useState({
+    ...data,
+    voice: data.config?.voice || "",
+  });
+  const [error, setError] = useState("");
+  const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(
+    data.config?.enable_web_search || false,
+  );
+  const [voiceError, setVoiceError] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [inputAdvancedParams, setInputAdvancedParams] = useState("");
+  const [savedInputParams, setSavedInputParams] = useState(
+    advancedParamsText(data.config, type, data.model_type),
+  );
+  const [advancedParams, setAdvancedParams] = useState(() =>
+    advancedParamsPlaceholder(type, data.model_type),
+  );
+  const [jsonError, setJsonError] = useState(false);
 
-const MODEL_TYPE_LABELS: Record<string, string> = {
-    llm: 'LLM',
-    embedding: 'Embedding',
-    rerank: 'Rerank',
-    asr: 'ASR',
-    tts: 'TTS',
-};
+  useEffect(() => {
+    setModel({ ...data, voice: data.config?.voice || "" });
+    setIsWebSearchEnabled(data.config?.enable_web_search || false);
+    const userSavedParams = advancedParamsText(
+      data.config,
+      type,
+      data.model_type,
+    );
+    setSavedInputParams(userSavedParams);
+    setAdvancedParams(advancedParamsPlaceholder(type, data.model_type));
+    if (dialogOpen) setInputAdvancedParams(userSavedParams);
+    setJsonError(false);
+  }, [data, dialogOpen, type]);
 
-const ASR_TTS_PROVIDERS = ['azure_openai', 'openai', 'qwen', 'qianfan'];
+  const handleInput = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const updatedModel = { ...model, model_name: value };
+    setModel(updatedModel);
+    const repeated = onInput(value, model.model_type);
 
-// The UI field is always stored as `max_tokens`; the backend renames it per
-// provider, and for ollama it becomes the context window, not an output cap.
-function maxTokensParamName(provider: string): string {
-    if (provider === 'qianfan') return 'max_output_tokens';
-    if (provider === 'ollama') return 'num_ctx';
-    return 'max_tokens';
-}
+    setError("");
+    if (!value) setError(t("model.modelNameEmpty"));
+    if (value.length > 100) setError(t("model.modelNameLength"));
+    if (repeated) setError(t("model.modelNameDuplicate"));
+  };
 
-// Normalize `user_kwargs` to the JSON text shown in the editor.
-function userKwargsToText(value: unknown): string {
-    if (value === undefined || value === null) return '';
-    if (typeof value === 'string') return value.trim();
-    return JSON.stringify(value, null, 2);
-}
+  const handleVoiceInput = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const updatedModel = { ...model, voice: value };
+    setModel(updatedModel);
+    onConfig({ ...model.config, voice: value });
+    setVoiceError("");
+  };
 
-function parseParamsObject(text: string): Record<string, unknown> | null {
+  const handleSelectChange = (val: ModelType) => {
+    const updatedModel = { ...model, model_type: val };
+    setModel(updatedModel);
+    onInput(model.model_name, val);
+  };
+
+  const handleDelClick = () => {
+    bsConfirm({
+      desc: t("model.deleteModelConfirmation"),
+      onOk(next) {
+        onDelete();
+        next();
+      },
+    });
+  };
+
+  const handleSwitchChange = (checked: boolean) => {
+    setIsWebSearchEnabled(checked);
+    onConfig({
+      ...model.config,
+      enable_web_search: checked,
+    });
+  };
+
+  const handleSaveAdvancedParams = () => {
+    let config: ReturnType<typeof withAdvancedParams>;
     try {
-        const parsed: unknown = JSON.parse(text);
-        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-        return parsed as Record<string, unknown>;
+      config = withAdvancedParams(
+        model.config,
+        inputAdvancedParams,
+        model.model_type,
+      );
     } catch {
-        return null;
+      setJsonError(true);
+      return;
     }
-}
+    onConfig(config);
+    setSavedInputParams(config.user_kwargs || "");
+    setInputAdvancedParams(config.user_kwargs || "");
+    setDialogOpen(false);
+    setJsonError(false);
+  };
 
-export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItemProps) {
-    const { t } = useTranslation();
-    const [nameError, setNameError] = useState('');
-    const [dialogOpen, setDialogOpen] = useState(false);
-    const [draftParams, setDraftParams] = useState('');
-    const [jsonError, setJsonError] = useState(false);
+  const handleCloseDialog = () => {
+    setInputAdvancedParams(savedInputParams);
+    setJsonError(false);
+    setDialogOpen(false);
+  };
 
-    const config: ModelItemConfig = data.config ?? {};
-    const modelType = data.model_type;
-    const hasAdvancedParams = modelType === 'llm' || modelType === 'embedding';
-    const webSearchTipKey = modelType === 'llm' ? WEB_SEARCH_TIP_KEYS[type] : undefined;
-    const paramName = maxTokensParamName(type);
+  const needsConfiguration =
+    !model.model_name.trim() ||
+    model.model_name.length > 100 ||
+    (model.model_type === "tts" && !model.voice.trim());
+  const hasParameters = Object.values(model.config || {}).some(
+    (value) => value !== undefined && value !== "" && value !== false,
+  );
 
-    const savedParams = userKwargsToText(config.user_kwargs);
-    const savedParamCount = savedParams ? Object.keys(parseParamsObject(savedParams) ?? {}).length : 0;
-    const paramsTemplate = hasAdvancedParams
-        ? templateToJsonString(getAdvancedParamsTemplate(type, modelType as 'llm' | 'embedding'))
-        : '';
-
-    // Merge a partial change into the model config; `undefined` drops the key.
-    const applyConfig = (patch: Partial<ModelItemConfig>) => {
-        const next: ModelItemConfig = { ...config, ...patch };
-        Object.keys(patch).forEach(key => {
-            if (next[key] === undefined) delete next[key];
-        });
-        onConfig(next);
-    };
-
-    const handleNameChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        const repeated = onInput(value, modelType);
-        if (!value) setNameError(t('model.modelNameEmpty'));
-        else if (value.length > 100) setNameError(t('model.modelNameLength'));
-        else if (repeated) setNameError(t('model.modelNameDuplicate'));
-        else setNameError('');
-    };
-
-    const handleMaxTokensChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        applyConfig({ max_tokens: value === '' ? undefined : parseInt(value, 10) });
-    };
-
-    const handleDeleteClick = () => {
-        bsConfirm({
-            desc: t('model.deleteModelConfirmation'),
-            onOk(next: () => void) {
-                onDelete();
-                next();
-            }
-        });
-    };
-
-    // Opening the dialog must not touch the config: the draft is local until
-    // the user clicks save. The provider template is only a placeholder.
-    const handleOpenParams = () => {
-        setDraftParams(savedParams);
-        setJsonError(false);
-        setDialogOpen(true);
-    };
-
-    const handleDraftChange = (value: string) => {
-        setDraftParams(value);
-        setJsonError(value.trim() !== '' && parseParamsObject(value.trim()) === null);
-    };
-
-    const handleSaveParams = () => {
-        const value = draftParams.trim();
-        if (value && parseParamsObject(value) === null) {
-            setJsonError(true);
-            return;
-        }
-        applyConfig({ user_kwargs: value });
-        setDialogOpen(false);
-    };
-
-    const displayName = data.model_name.trim() || t('model.untitledModel');
-
-    return (
-        <div className="rounded-md border p-4">
-            <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
-                    <span className={`truncate text-sm font-medium ${data.model_name.trim() ? '' : 'text-muted-foreground'}`}>
-                        {displayName}
-                    </span>
-                    <Badge variant="gray" className="shrink-0">{MODEL_TYPE_LABELS[modelType] ?? modelType}</Badge>
-                </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    aria-label={t('model.deleteModel')}
-                    onClick={handleDeleteClick}
-                >
-                    <Trash2Icon className="size-4" />
-                </Button>
+  return (
+    <div className="group w-full">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium" title={model.model_name}>
+            {model.model_name || tModel("model.unnamedModel")}
+          </p>
+          <p
+            className={`mt-0.5 text-xs ${needsConfiguration || error ? "text-amber-600" : "text-muted-foreground"}`}
+          >
+            {error ||
+              tModel(
+                needsConfiguration
+                  ? "model.configurationRequired"
+                  : hasParameters
+                    ? "model.parametersConfigured"
+                    : "model.defaultParameters",
+              )}
+          </p>
+        </div>
+        <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+          {tModel(`model.type_${model.model_type}`)}
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-expanded={expanded}
+          aria-controls={controlId}
+          onClick={() => setExpanded((previous) => !previous)}
+        >
+          {expanded ? (
+            <ChevronUp className="mr-1 size-4" />
+          ) : (
+            <ChevronDown className="mr-1 size-4" />
+          )}
+          {tModel(
+            expanded ? "model.collapseConfiguration" : "model.configureModel",
+          )}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={tModel("model.removeConfiguredModel", {
+            name: model.model_name || model.name,
+          })}
+          onClick={handleDelClick}
+        >
+          <Trash2Icon className="size-4 text-muted-foreground" />
+        </Button>
+      </div>
+      {expanded && (
+        <div id={controlId} className="space-y-3 border-t bg-muted/20 p-3">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="min-w-0 flex-[1_1_16rem]">
+              <Label htmlFor={`${controlId}-name`} className="bisheng-label">
+                <span>{t("model.modelName")}</span>
+                <QuestionTooltip
+                  className="relative top-0.5 ml-1"
+                  content={t("model.modelNameTooltip")}
+                />
+              </Label>
+              <Input
+                id={`${controlId}-name`}
+                value={model.model_name}
+                onChange={handleInput}
+                className="h-8"
+              ></Input>
+              {error && <span className="text-red-500 text-xs">{error}</span>}
             </div>
-
-            <div className="mt-3 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-                <div className="space-y-2">
-                    <Label className="bisheng-label">
-                        <span>{t('model.modelName')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.modelNameTooltip')} />
-                    </Label>
-                    <Input value={data.model_name} onChange={handleNameChange} className="h-8" />
-                    {nameError && <span className="text-xs text-red-500">{nameError}</span>}
-                </div>
-                <div className="space-y-2">
-                    <Label className="bisheng-label">{t('model.modelType')}</Label>
-                    <Select value={modelType} onValueChange={(val: string) => onInput(data.model_name, val)}>
-                        <SelectTrigger className="h-8">
-                            <SelectValue placeholder="" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectGroup>
-                                <SelectItem value="llm">LLM</SelectItem>
-                                <SelectItem value="embedding">Embedding</SelectItem>
-                                <SelectItem value="rerank">Rerank</SelectItem>
-                                {ASR_TTS_PROVIDERS.includes(type) && (
-                                    <>
-                                        <SelectItem value="asr">ASR</SelectItem>
-                                        <SelectItem value="tts">TTS</SelectItem>
-                                    </>
-                                )}
-                            </SelectGroup>
-                        </SelectContent>
-                    </Select>
-                </div>
+            <div className="w-full shrink-0 sm:w-40">
+              <Label htmlFor={`${controlId}-type`} className="bisheng-label">
+                {t("model.modelType")}
+              </Label>
+              <Select
+                value={model.model_type}
+                onValueChange={(value) => handleSelectChange(value as ModelType)}
+              >
+                <SelectTrigger id={`${controlId}-type`} className="h-8">
+                  <SelectValue placeholder="" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {availableModelTypes(type).map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {tModel(`model.type_${value}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
-
-            {modelType === 'tts' && (
-                <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
-                        <span>{t('model.voiceType')}</span>
-                        <span className="text-red-500">*</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.voiceTypeTooltip')} />
-                    </Label>
-                    <Input
-                        value={config.voice ?? data.voice ?? ''}
-                        onChange={(e) => applyConfig({ voice: e.target.value })}
-                        className="h-8"
-                    />
-                </div>
-            )}
-
-            {modelType === 'llm' && (
-                <div className="mt-4 space-y-2">
-                    <Label className="bisheng-label">
-                        <span>{paramName === 'num_ctx' ? t('model.contextLength') : t('model.maxOutputTokens')}</span>
-                        <QuestionTooltip
-                            className="relative top-0.5 ml-1"
-                            content={t('model.maxTokensTip', { param: paramName })}
-                        />
-                    </Label>
-                    <Input
-                        type="number"
-                        value={config.max_tokens ?? ''}
-                        onChange={handleMaxTokensChange}
-                        placeholder={t('model.maxTokensPlaceholder')}
-                        className="h-8"
-                    />
-                </div>
-            )}
-
-            {webSearchTipKey && (
-                <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
-                    <Label className="bisheng-label">
-                        <span>{t('model.webSearch')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t(webSearchTipKey)} />
-                    </Label>
-                    <Switch
-                        checked={!!config.enable_web_search}
-                        onCheckedChange={(checked: boolean) => applyConfig({ enable_web_search: checked })}
-                    />
-                </div>
-            )}
-
-            {hasAdvancedParams && (
-                <div className="mt-4 flex items-center justify-between gap-4 border-t pt-4">
-                    <div className="flex min-w-0 items-center gap-2">
-                        <Label className="bisheng-label">{t('model.advancedParams')}</Label>
-                        <span className="truncate text-xs text-muted-foreground">
-                            {savedParamCount > 0
-                                ? t('model.advancedParamsCount', { count: savedParamCount })
-                                : t('model.advancedParamsNone')}
-                        </span>
+            <div className="grid min-h-8 w-80 max-w-full shrink-0 grid-cols-[9rem_minmax(0,1fr)] items-center gap-4 self-end">
+              <div className="flex min-h-8 items-center">
+                {model.model_type === "llm" &&
+                  ["qwen", "tencent", "moonshot", "minimax"].includes(type) && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Label
+                        htmlFor={`${controlId}-search`}
+                        className="text-xs text-muted-foreground whitespace-nowrap"
+                      >
+                        {t("model.webSearch")}
+                      </Label>
+                      <QuestionTooltip
+                        className="shrink-0"
+                        content={t(`model.webSearchTip${{ qwen: "Qwen", tencent: "Tencent", moonshot: "Moonshot", minimax: "Minimax" }[type]}`)}
+                      />
+                      <Switch
+                        id={`${controlId}-search`}
+                        checked={isWebSearchEnabled}
+                        onCheckedChange={handleSwitchChange}
+                      />
                     </div>
-                    <Button variant="link" size="sm" className="h-auto shrink-0 px-0" onClick={handleOpenParams}>
-                        {t('model.edit')}
-                    </Button>
-                </div>
-            )}
+                  )}
+              </div>
+              <div className="min-w-0">
+                {(model.model_type === "llm" ||
+                  model.model_type === "embedding") && (
+                  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                    <DialogTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={t("model.advancedParamsConfig")}
+                        className="flex min-h-8 items-center gap-1 text-left text-primary text-xs"
+                      >
+                        <Settings size={16} strokeWidth={2} className="shrink-0" />
+                        <span>{t("model.advancedParamsConfig")}</span>
+                      </button>
+                    </DialogTrigger>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="sm:max-w-[625px]">
-                    <DialogHeader>
-                        <DialogTitle>{t('model.advancedParamsConfig')}</DialogTitle>
-                    </DialogHeader>
-                    <div className="mt-4 text-gray-500">
+                    <DialogContent className="sm:max-w-[625px]">
+                      <DialogHeader>
+                        <DialogTitle>
+                          {t("model.advancedParamsConfig")}
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-4 text-gray-500">
+                        {model.model_type === "llm" && (
+                          <p className="mb-3 text-xs text-muted-foreground">
+                            {tModel(
+                              type === "ollama"
+                                ? "model.advancedContextHint"
+                                : "model.advancedTokenHint",
+                            )}
+                          </p>
+                        )}
                         <div className="flex items-center justify-between gap-4">
-                            <Label>{t('model.pasteAdvancedParamsHere')}</Label>
-                            <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto shrink-0 px-0"
-                                onClick={() => handleDraftChange(paramsTemplate)}
-                            >
-                                {t('model.insertParamsExample')}
-                            </Button>
+                          <Label>{t("model.pasteAdvancedParamsHere")}</Label>
+                          <Button variant="link" size="sm" className="h-auto shrink-0 px-0"
+                            onClick={() => { setInputAdvancedParams(advancedParams); setJsonError(false); }}>
+                            {t("model.insertParamsExample")}
+                          </Button>
                         </div>
                         <Textarea
-                            value={draftParams}
-                            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)}
-                            className={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                            rows={10}
-                            placeholder={paramsTemplate}
+                          value={inputAdvancedParams}
+                          onChange={(event) => {
+                            setInputAdvancedParams(event.target.value);
+                            try {
+                              parseAdvancedParams(event.target.value);
+                              setJsonError(false);
+                            } catch {
+                              setJsonError(true);
+                            }
+                          }}
+                          className={`mt-1 font-mono text-sm ${jsonError ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          rows={10}
+                          placeholder={advancedParams}
                         />
                         {jsonError && (
-                            <span className="mt-1 inline-block text-xs text-red-500">
-                                {t('model.errorInvalidJsonFormat')}
-                            </span>
+                          <span className="text-red-500 text-xs mt-1 inline-block">
+                            {t("model.errorInvalidJsonFormat")}
+                          </span>
                         )}
-                    </div>
-                    <DialogFooter className="mt-4">
-                        <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('model.cancel')}</Button>
-                        <Button onClick={handleSaveParams}>{t('model.save')}</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                      </div>
+                      <DialogFooter className="mt-4">
+                        <Button variant="outline" onClick={handleCloseDialog}>
+                          {t("model.cancel")}
+                        </Button>
+                        <Button onClick={handleSaveAdvancedParams}>
+                          {t("model.save")}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                )}
+              </div>
+            </div>
+          </div>
+          {model.model_type === "tts" && (
+            <div className="sm:max-w-sm">
+              <Label className="bisheng-label">
+                <span>{t("model.voiceType")}</span>
+                <span className="text-red-500">*</span>
+                <QuestionTooltip
+                  className="relative top-0.5 ml-1"
+                  content={t("model.voiceTypeTooltip")}
+                />
+              </Label>
+              <Input
+                value={model.voice || ""}
+                onChange={handleVoiceInput}
+                className="h-8"
+              ></Input>
+
+              {voiceError && (
+                <span className="text-red-500 text-xs">{voiceError}</span>
+              )}
+            </div>
+          )}
         </div>
-    );
+      )}
+    </div>
+  );
 }

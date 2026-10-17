@@ -511,5 +511,6 @@
   "26201": "Offline plugin bundle validation failed",
   "26202": "Plugin state changed; refresh and retry",
   "26203": "Plugin or published version not found",
-  "26204": "Tenant administrator access is required"
+  "26204": "Tenant administrator access is required",
+  "10812": "Model discovery failed. Check the connection settings and retry, or configure models manually."
 }
