@@ -38,6 +38,7 @@ import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
+import { useVoiceDraft } from "~/hooks/Input/useVoiceDraft";
 import AiModelSelect from "./AiModelSelect";
 
 export interface AiChatInputFeatures {
@@ -167,7 +168,6 @@ const AiChatInput = memo(
         const { showToast } = useToastContext();
         const {
             modelSelect = true,
-            knowledgeBase = true,
             tools = true,
             fileUpload = true,
             voiceInput = true,
@@ -209,6 +209,7 @@ const AiChatInput = memo(
             [isControlled, onExternalChange]
         );
         const textAreaRef = useRef<HTMLTextAreaElement>(null);
+        const voice = useVoiceDraft(textAreaRef, text, setText);
         const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
@@ -327,7 +328,6 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
         const fileAccept = buildChatAccept({
@@ -358,8 +358,6 @@ const AiChatInput = memo(
             }
         }, [externalValue, isControlled]);
 
-        const hasAttachedFiles =
-            (chatFiles?.length ?? 0) > 0 || uploadingFiles.length > 0;
         const filesParsing = (chatFiles ?? []).some(
             (file) => file?.parsing_status && !['completed', 'failed'].includes(file.parsing_status),
         );
@@ -367,7 +365,7 @@ const AiChatInput = memo(
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
-            if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
+            if (voice.busy || !trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
             // The selected model may have changed since these files were attached.
             if (chatFiles?.some((file) => !isFileNameAccepted(file.name || file.filename || '', fileAccept))) {
                 showToast({ message: localize('com_ui_upload_file_type_error'), status: 'error' });
@@ -396,7 +394,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
+        }, [voice.busy, text, disabled, sendDisabled, isStreaming, isParsingMedia, fileUploading, filesParsing, fileAccept, onSend, chatFiles, setText, showToast, localize]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -612,10 +610,10 @@ const AiChatInput = memo(
                     <TextareaAutosize
                         ref={textAreaRef}
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
+                        onChange={(e) => { voice.handleEdit(e.target.value); setText(e.target.value); }}
                         onKeyDown={handleKeyDown}
-                        onCompositionStart={handleCompositionStart}
-                        onCompositionEnd={handleCompositionEnd}
+                        onCompositionStart={() => { voice.compositionStart(); handleCompositionStart(); }}
+                        onCompositionEnd={() => { voice.compositionEnd(); handleCompositionEnd(); }}
                         onPaste={handlePaste}
                         onScroll={handleTextareaScroll}
                         onHeightChange={updateTextareaScrollable}
@@ -796,24 +794,19 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
-                            ) : showVoice && !text?.trim() && !hasAttachedFiles ? (
-                                // Empty input → voice button (default); typing any
-                                // text flips it to the send button below.
-                                // When files are attached, keep the send button visible
-                                // (disabled until text is entered).
-                                <SpeechToTextComponent
-                                    disabled={disabled}
-                                    onChange={(e) => {
-                                        const newText = (text || "") + e;
-                                        setText(newText);
-                                    }}
-                                />
                             ) : (
+                                <>
+                                {showVoice && <SpeechToTextComponent
+                                    {...voice.props}
+                                    disabled={disabled || isParsingMedia}
+                                    realtime={!!modelData?.asr_model?.realtime}
+                                    modelId={modelData?.asr_model?.id}
+                                />}
                                 <button
                                     type="button"
                                     onClick={handleSend}
                                     disabled={
-                                        !text?.trim() ||
+                                        voice.busy || !text?.trim() ||
                                         disabled ||
                                         sendDisabled ||
                                         isParsingMedia ||
@@ -826,6 +819,7 @@ const AiChatInput = memo(
                                 >
                                     <SendIcon size={18} />
                                 </button>
+                                </>
                             )}
                         </div>
                     </div>
