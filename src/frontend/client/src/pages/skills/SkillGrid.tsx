@@ -1,14 +1,14 @@
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
-import type { CenterSkill } from '~/components/Skills/types';
+import type { SkillRecord } from '~/components/Skills/types';
 import { DemoTag } from '~/mock/demo/DemoTag';
 
 /** Same card grid as the other module homes: fills the 1000px column, 3-up at full width. */
 const GRID = 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3';
 
 interface SkillCardProps {
-  skill: CenterSkill;
-  onSelect: (skill: CenterSkill) => void;
+  skill: SkillRecord;
+  onSelect: (skill: SkillRecord) => void;
 }
 
 function SkillCard({ skill, onSelect }: SkillCardProps) {
@@ -42,8 +42,8 @@ function SkillCard({ skill, onSelect }: SkillCardProps) {
 }
 
 interface SkillGridProps {
-  skills: CenterSkill[];
-  onSelect: (skill: CenterSkill) => void;
+  skills: SkillRecord[];
+  onSelect: (skill: SkillRecord) => void;
 }
 
 export function SkillGrid({ skills, onSelect }: SkillGridProps) {

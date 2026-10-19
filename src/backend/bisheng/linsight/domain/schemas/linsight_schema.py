@@ -65,6 +65,11 @@ class LinsightQuestionSubmitSchema(BaseModel):
     # missing/None field mean "no skills this run"; skills are opt-in via an
     # explicit non-empty list.
     skills: list[str] | None = Field(None, description="Selected skill names for this run")
+    # Ids of the skills the user checked. Provisioning replaces each id with the
+    # directory that was actually copied (a same-named personal skill wins) and
+    # stores those directory names in the session ``skills`` column. Absent on
+    # older clients, which keep sending names only.
+    skill_ids: list[int] | None = Field(None, description="Selected skill ids for this run")
     # F035: continue an existing session (a follow-up round in the same 会话).
     # None creates a brand-new session.
     session_id: str | None = Field(None, description="Existing session id to continue; None creates a new session")

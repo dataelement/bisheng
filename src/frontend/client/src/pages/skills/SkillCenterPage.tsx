@@ -1,17 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
 import { Button, SearchInput, StateView, Tabs, Tooltip } from '@bisheng/ui';
+import { translateApiErrorMessage } from '~/api/request';
 import { NotificationSeverity } from '~/common';
 import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
 import { MODULE_HOME_COLUMN, MODULE_HOME_FRAME, ModuleHomeHeader } from '~/components/ModuleHome';
 import { SkillDetails } from '~/components/Skills/SkillDetails';
 import { SkillUploadDialog } from '~/components/Skills/SkillUploadDialog';
-import type { CenterSkill, PersonalSkill } from '~/components/Skills/types';
+import { SkillRequestError, type SkillRecord } from '~/components/Skills/types';
 import { useSkillCenter } from '~/components/Skills/useSkillCenter';
 import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
 import { useLocalize } from '~/hooks';
-import { isDemoId } from '~/mock/demo/ids';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
 import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
@@ -19,45 +19,43 @@ import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
 import { SkillSquareBanner } from './SkillSquareBanner';
 
 /**
- * 技能 module home, in the shared 我的 / 广场 frame (see ~/components/ModuleHome):
+ * 技能 module home, in the shared 我的 / 广场 frame:
  *   我的  — every skill this account can use, as one list in two groups: what the user
  *           uploaded (a switch per row; update / delete in the details) and what the
  *           enterprise provides (always on).
  *   广场  — 技能广场: the enterprise skills as a card showcase, read-only.
- * The view and the open detail live in the URL (`?view=square`, `?skill=<id>`) so the
- * chat input's skill menu can deep-link here.
+ * The view and the open detail live in the URL (`?view=square`, `?skill=<id>`).
  */
 type ModuleView = 'mine' | 'square';
 
 export function SkillCenterPage() {
   const localize = useLocalize();
   const { showToast } = useToastContext();
-  const { identity, platform, personal, mutation } = useSkillCenter();
+  const { platform, personal, mutation, personalCount, enterpriseCount } = useSkillCenter();
   const [search, setSearch] = useState('');
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [target, setTarget] = useState<PersonalSkill>();
-  // DEV sample rows are not in the store; their switch flips this session-only override.
-  const [demoEnabled, setDemoEnabled] = useState<Record<string, boolean>>({});
+  const [target, setTarget] = useState<SkillRecord>();
+  const [enabledOverride, setEnabledOverride] = useState<Record<number, boolean>>({});
+  const [notice, setNotice] = useState('');
   const [sort, setSort] = useState<SkillSort>('recent');
   const [params, setParams] = useSearchParams();
 
-  const skills = useMemo<CenterSkill[]>(() => [
+  const skills = useMemo<SkillRecord[]>(() => [
     ...(platform.data ?? []),
-    ...(personal.data ?? []).map((skill) => (skill.id in demoEnabled ? { ...skill, enabled: demoEnabled[skill.id] } : skill)),
-  ].sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, demoEnabled]);
-  const selected = skills.find((skill) => skill.id === params.get('skill'));
+    ...(personal.data ?? []),
+  ].map((skill) => (skill.id in enabledOverride ? { ...skill, enabled: enabledOverride[skill.id] } : skill))
+    .sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, enabledOverride]);
+  const requestedId = Number(params.get('skill'));
+  const selected = Number.isInteger(requestedId) ? skills.find((skill) => skill.id === requestedId) : undefined;
   // A deep link that only names a skill lands on the view that skill belongs to.
   const viewParam = params.get('view');
   const view: ModuleView = (viewParam ? viewParam === 'square' : selected?.source === 'platform') ? 'square' : 'mine';
-
   const keyword = search.trim().toLocaleLowerCase();
   const viewSkills = view === 'square' ? skills.filter((skill) => skill.source === 'platform') : skills;
   const filtered = viewSkills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
-  // 我的 lists both sources; its error banner speaks for the personal store, and a failed
-  // enterprise query there only leaves that group out.
   const viewQuery = view === 'square' ? platform : personal;
-  const loading = identity.isLoading || viewQuery.isFetching || (view === 'mine' && platform.isLoading);
-  const failed = identity.isError || viewQuery.isError;
+  const loading = viewQuery.isLoading || viewQuery.isFetching;
+  const failed = viewQuery.isError;
 
   const updateParams = (nextView: ModuleView, skillId?: string) => {
     const next = new URLSearchParams(params);
@@ -75,20 +73,49 @@ export function SkillCenterPage() {
     setSearch('');
   };
   const handleStartUpload = () => { setTarget(undefined); setUploadOpen(true); };
-  const handleRetry = () => { void identity.refetch(); void viewQuery.refetch(); };
-  const handleToggle = (skill: PersonalSkill, enabled: boolean) => {
-    if (isDemoId(skill.id)) {
-      setDemoEnabled((prev) => ({ ...prev, [skill.id]: enabled }));
-      return;
-    }
+  const handleRetry = () => { void personal.refetch(); };
+  const handleToggle = (skill: SkillRecord, enabled: boolean) => {
+    setEnabledOverride((prev) => ({ ...prev, [skill.id]: enabled }));
     mutation.mutate({ kind: 'toggle', target: skill, enabled }, {
-      onError: () => showToast({ message: localize('com_skill_center_error_storage'), severity: NotificationSeverity.ERROR }),
+      onError: (error) => {
+        setEnabledOverride((prev) => ({ ...prev, [skill.id]: skill.enabled }));
+        // skip403Redirect already toasts the translated business error and rejects
+        // with status_code set. A maintenance overlay covers HTTP 500.
+        const explained = typeof error === 'object' && error !== null && 'status_code' in error
+          && !(error instanceof SkillRequestError);
+        const httpStatus = typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { status?: number } }).response?.status
+          : undefined;
+        if (explained || httpStatus === 500) return;
+        const message = error instanceof SkillRequestError
+          ? translateApiErrorMessage({
+            status_code: error.statusCode,
+            status_message: error.statusMessage,
+            data: error.data,
+          })
+          : '';
+        showToast({
+          message: message || localize('com_skill_center_error_storage'),
+          severity: NotificationSeverity.ERROR,
+        });
+      },
     });
   };
   const handleSaved = () => {
     handleViewChange('mine');
     showToast({ message: localize('com_skill_center_saved'), severity: NotificationSeverity.SUCCESS });
   };
+  useEffect(() => {
+    if (!params.get('skill') || personal.isLoading || personal.isFetching) return;
+    if (selected) {
+      setNotice('');
+      return;
+    }
+    setNotice(localize('com_skill_center_unavailable'));
+    updateParams(view);
+    // updateParams is stable enough for this URL cleanup; including it retriggers the clear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, selected, personal.isLoading, personal.isFetching, view]);
 
   const searchInput = (
     <SearchInput
@@ -101,15 +128,14 @@ export function SkillCenterPage() {
     />
   );
 
-  // 我的技能 / 技能广场 switch, in flow above either view.
   const viewTabs = (
     <Tabs
       className="w-full shrink-0"
       activeKey={view}
       onChange={(key) => handleViewChange(key as ModuleView)}
       items={[
-        { key: 'mine', label: localize('com_skill_center_my_skills'), badge: personal.data?.length },
-        { key: 'square', label: localize('com_skill_center_square_title'), badge: platform.data?.length },
+        { key: 'mine', label: localize('com_skill_center_my_skills'), badge: personalCount },
+        { key: 'square', label: localize('com_skill_center_square_title'), badge: enterpriseCount },
       ]}
     />
   );
@@ -135,7 +161,7 @@ export function SkillCenterPage() {
           </ActionMenuCheckboxItem>
         </ActionMenuContent>
       </DropdownMenu>
-      <Button disabled={!identity.data || identity.isError} onClick={handleStartUpload} className="max-[575px]:w-full">
+      <Button disabled={personal.isError || personal.isLoading} onClick={handleStartUpload} className="max-[575px]:w-full">
         <Outlined.Plus />{localize('com_skill_center_upload')}
       </Button>
     </>
@@ -144,9 +170,10 @@ export function SkillCenterPage() {
   const emptyKind = keyword ? 'search' : failed ? 'failed' : view;
   const content = (
     <>
+      {notice && <p role="alert" className="mb-4 text-body-sm text-text-2">{notice}</p>}
       {failed && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-base p-3 text-body-sm text-text-2">
-          <p>{localize(identity.isError ? 'com_skill_center_error_identity' : view === 'square' ? 'com_skill_center_error_platform' : 'com_skill_center_error_storage')}</p>
+          <p>{localize(view === 'square' ? 'com_skill_center_error_platform' : 'com_skill_center_load_failed')}</p>
           <Button color="default" variant="outlined" size="small" loading={loading} onClick={handleRetry}>{localize('com_skill_center_retry')}</Button>
         </div>
       )}
@@ -155,15 +182,17 @@ export function SkillCenterPage() {
           <SkillList
             skills={filtered}
             sort={sort}
+            createdCount={personalCount}
+            providedCount={enterpriseCount}
             pendingId={mutation.isLoading ? mutation.variables?.target?.id : undefined}
-            onSelect={(skill) => updateParams('mine', skill.id)}
+            onSelect={(skill) => updateParams('mine', String(skill.id))}
             onToggle={handleToggle}
             createdEmptyHint={keyword ? undefined : (
               <p className="px-2 py-3 text-body-sm text-text-3">{localize('com_skill_center_empty_hint')}</p>
             )}
           />
         ) : (
-          <SkillGrid skills={filtered} onSelect={(skill) => updateParams(view, skill.id)} />
+          <SkillGrid skills={filtered} onSelect={(skill) => updateParams('square', String(skill.id))} />
         )
       ) : (
         <div className="flex flex-1 items-center justify-center py-10">
@@ -178,7 +207,7 @@ export function SkillCenterPage() {
             }[emptyKind])}
             action={emptyKind === 'search'
               ? <Button color="default" variant="outlined" onClick={() => setSearch('')}>{localize('com_skill_center_clear')}</Button>
-              : emptyKind === 'mine' && <Button onClick={handleStartUpload} disabled={!identity.data}>{localize('com_skill_center_upload')}</Button>}
+              : emptyKind === 'mine' && <Button onClick={handleStartUpload} disabled={personal.isError}>{localize('com_skill_center_upload')}</Button>}
           />
         </div>
       )}

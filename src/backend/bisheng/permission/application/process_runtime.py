@@ -93,6 +93,7 @@ def register_f048_permission_runtime_context(
         # deployment; an upgrade raised above until the operator migrates.
         from bisheng.common.services.config_service import settings
         from bisheng.permission.application.catalog_bootstrap import (
+            ensure_linsight_skill_action_scopes,
             seed_initial_permission_catalog,
         )
 
@@ -103,6 +104,10 @@ def register_f048_permission_runtime_context(
             model_checksum=str(readiness.get("model_checksum") or ""),
             environment=settings.environment,
         )
+        try:
+            await ensure_linsight_skill_action_scopes()
+        except Exception:
+            logger.exception("Failed to attach linsight_skill to the CURRENT permission catalog")
         try:
             runtime = await initializer(client)
         except (

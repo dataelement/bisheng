@@ -1,36 +1,22 @@
-describe('Skill Center deployment config', () => {
-  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const originalBuildFlag = process.env.VITE_SKILL_CENTER_PREVIEW;
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-  afterEach(() => {
-    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
-    else Reflect.deleteProperty(globalThis, 'window');
-    if (originalBuildFlag === undefined) delete process.env.VITE_SKILL_CENTER_PREVIEW;
-    else process.env.VITE_SKILL_CENTER_PREVIEW = originalBuildFlag;
-    jest.resetModules();
-  });
+const root = resolve(__dirname, '../../..');
 
-  it.each([
-    ['enables a generic build for the preview deployment', true, undefined, true],
-    ['honors an explicit runtime disable', false, 'true', false],
-    ['retains build-time opt-in for other deployments', undefined, 'true', true],
-    ['defaults to disabled without either opt-in', undefined, undefined, false],
-  ])('%s', async (_name, runtimeFlag, buildFlag, expected) => {
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: { APP_CONFIG: { skillCenterPreviewEnabled: runtimeFlag } },
-    });
-    if (buildFlag === undefined) delete process.env.VITE_SKILL_CENTER_PREVIEW;
-    else process.env.VITE_SKILL_CENTER_PREVIEW = buildFlag;
+function source(path: string) {
+  return readFileSync(resolve(root, path), 'utf8');
+}
 
-    const { skillCenterPreviewEnabled } = await import('../types');
-    expect(skillCenterPreviewEnabled).toBe(expected);
-  });
-
-  it('supports file and persistence code in a Node environment', async () => {
-    Reflect.deleteProperty(globalThis, 'window');
-    delete process.env.VITE_SKILL_CENTER_PREVIEW;
-    const { skillCenterPreviewEnabled } = await import('../types');
-    expect(skillCenterPreviewEnabled).toBe(false);
-  });
+it('does not read the retired skill center preview flag', () => {
+  const files = [
+    'components/Skills/types.ts',
+    'layouts/MainLayout.tsx',
+    'routes/index.tsx',
+    'components/Chat/Input/ChatKnowledge.tsx',
+    'components/Linsight/Input/PlusMenu.tsx',
+    'components/Skills/SkillMenuEntries.tsx',
+  ];
+  for (const file of files) {
+    expect(source(file)).not.toContain('skillCenterPreviewEnabled');
+  }
 });

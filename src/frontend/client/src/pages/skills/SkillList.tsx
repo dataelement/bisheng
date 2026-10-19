@@ -1,7 +1,7 @@
-import { Switch, Tag, Tooltip } from '@bisheng/ui';
+import { Switch, Tag } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
-import type { CenterSkill, PersonalSkill } from '~/components/Skills/types';
+import type { SkillRecord } from '~/components/Skills/types';
 import { useLocalize } from '~/hooks';
 import { DemoTag } from '~/mock/demo/DemoTag';
 import { cn } from '~/utils';
@@ -9,16 +9,14 @@ import { cn } from '~/utils';
 export type SkillSort = 'recent' | 'name';
 
 /** Enterprise sample rows are keyed by name (the id is derived); personal ones by id. */
-const demoKey = (skill: CenterSkill) => (skill.source === 'platform' ? skill.name : skill.id);
-
-const byName = (left: CenterSkill, right: CenterSkill) => left.displayName.localeCompare(right.displayName);
+const byName = (left: SkillRecord, right: SkillRecord) => left.displayName.localeCompare(right.displayName);
 
 interface SkillRowProps {
-  skill: CenterSkill;
+  skill: SkillRecord;
   /** Id of the skill whose toggle is being saved — its switch shows the spinner. */
-  pendingId?: string;
-  onSelect: (skill: CenterSkill) => void;
-  onToggle: (skill: PersonalSkill, enabled: boolean) => void;
+  pendingId?: number;
+  onSelect: (skill: SkillRecord) => void;
+  onToggle: (skill: SkillRecord, enabled: boolean) => void;
 }
 
 function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
@@ -45,7 +43,7 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           <h3 className={cn('min-w-0 truncate text-body font-medium', personal?.enabled === false ? 'text-text-3' : 'text-text-1')}>
             {skill.displayName}
           </h3>
-          <DemoTag id={demoKey(skill)} className="shrink-0" />
+          <DemoTag id={String(skill.id)} className="shrink-0" />
           {personal?.enabled === false && (
             <Tag className="shrink-0">{localize('com_skill_center_disabled_tag')}</Tag>
           )}
@@ -57,11 +55,6 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
         </p>
       </div>
       {personal && (
-        <time dateTime={personal.updatedAt} className="pointer-events-none shrink-0 text-caption text-text-3 max-[575px]:hidden">
-          {new Date(personal.updatedAt).toLocaleDateString()}
-        </time>
-      )}
-      {personal ? (
         <Switch
           size="small"
           className="relative z-[1] shrink-0"
@@ -71,14 +64,6 @@ function SkillRow({ skill, pendingId, onSelect, onToggle }: SkillRowProps) {
           aria-label={switchLabel}
           onCheckedChange={(enabled) => onToggle(personal, enabled)}
         />
-      ) : (
-        // Enterprise skills are maintained by the enterprise and always on; the wrapper
-        // keeps the tooltip reachable, a disabled button fires no pointer events.
-        <Tooltip content={localize('com_skill_center_platform_always_on')}>
-          <span className="relative z-[1] flex shrink-0 items-center">
-            <Switch size="small" checked disabled aria-label={switchLabel} />
-          </span>
-        </Tooltip>
       )}
     </li>
   );
@@ -104,8 +89,10 @@ function SkillGroup({ title, count, children }: SkillGroupProps) {
 
 interface SkillListProps extends Omit<SkillRowProps, 'skill'> {
   /** Already filtered by the search keyword. */
-  skills: CenterSkill[];
+  skills: SkillRecord[];
   sort: SkillSort;
+  createdCount?: number;
+  providedCount?: number;
   /** Shown under 我创建的 while it is empty (and nothing is being searched for). */
   createdEmptyHint?: ReactNode;
 }
@@ -113,21 +100,20 @@ interface SkillListProps extends Omit<SkillRowProps, 'skill'> {
 /**
  * 我的技能 as one list in two groups — what the user made, then what the enterprise gave
  * this account — so "every skill I can use" reads top to bottom in one place. Rows are
- * dense on purpose: name, where it came from, one line of description, last change, and
- * the on / off switch. Clicking a row opens its details.
+ * dense on purpose: name, where it came from, and one line of description. Only a skill
+ * the user created has an on / off switch. Clicking a row opens its details.
  */
-export function SkillList({ skills, sort, createdEmptyHint, ...rowProps }: SkillListProps) {
+export function SkillList({ skills, sort, createdCount, providedCount, createdEmptyHint, ...rowProps }: SkillListProps) {
   const localize = useLocalize();
   const created = skills
-    .filter((skill): skill is PersonalSkill => skill.source === 'personal')
-    .sort((left, right) => (sort === 'recent' ? right.updatedAt.localeCompare(left.updatedAt) : byName(left, right)));
-  // Enterprise skills carry no dates, so they are always by name.
+    .filter((skill) => skill.source === 'personal')
+    .sort(sort === 'name' ? byName : byName);
   const provided = skills.filter((skill) => skill.source === 'platform').sort(byName);
 
   return (
     <div className="flex w-full flex-col gap-6">
       {(created.length > 0 || createdEmptyHint) && (
-        <SkillGroup title={localize('com_skill_center_group_created')} count={created.length}>
+        <SkillGroup title={localize('com_skill_center_group_created')} count={createdCount ?? created.length}>
           {created.length > 0 ? (
             <ul className="flex w-full flex-col">
               {created.map((skill) => <SkillRow key={skill.id} skill={skill} {...rowProps} />)}
@@ -138,7 +124,7 @@ export function SkillList({ skills, sort, createdEmptyHint, ...rowProps }: Skill
         </SkillGroup>
       )}
       {provided.length > 0 && (
-        <SkillGroup title={localize('com_skill_center_group_platform')} count={provided.length}>
+        <SkillGroup title={localize('com_skill_center_group_platform')} count={providedCount ?? provided.length}>
           <ul className="flex w-full flex-col">
             {provided.map((skill) => <SkillRow key={skill.id} skill={skill} {...rowProps} />)}
           </ul>

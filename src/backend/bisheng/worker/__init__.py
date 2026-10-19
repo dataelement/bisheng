@@ -33,6 +33,10 @@ from bisheng.worker.knowledge.scheduler import (
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
+from bisheng.worker.linsight.personal_skill_sweep import (
+    dispatch_personal_skill_orphan_sweep,
+    sweep_personal_skill_orphans,
+)
 from bisheng.worker.main import bisheng_celery
 from bisheng.worker.permission.retry_failed_tuples import (
     cleanup_succeeded_failed_tuples,
@@ -58,6 +62,7 @@ __all__ = [
     "copy_qa_knowledge_celery",
     "dispatch_information_article_poll",
     "dispatch_information_subscription_reconcile",
+    "dispatch_personal_skill_orphan_sweep",
     "execute_approval_outbox",
     "execute_workflow",
     "file_copy_celery",
@@ -74,6 +79,7 @@ __all__ = [
     "retry_failed_tuples",
     "retry_knowledge_file_celery",
     "stop_workflow",
+    "sweep_personal_skill_orphans",
     "sync_information_articles",
     "sync_mid_app_increment",
     "sync_mid_knowledge_increment",

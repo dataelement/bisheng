@@ -9,7 +9,7 @@ import { useRecoilState } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { skillCenterPath, skillCenterPreviewEnabled } from '~/components/Skills/types';
+import { skillCenterPath } from '~/components/Skills/types';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
@@ -159,7 +159,6 @@ function Sidebar({
   });
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
-  const skillCenterLabel = localize('com_skill_center_title');
   const links = useMemo<Array<{
     section: 'home' | 'apps' | 'channel' | 'knowledge' | 'skills';
     to: string;
@@ -223,7 +222,7 @@ function Sidebar({
       },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
-      if (l.section === 'skills') return showHomeTab && skillCenterPreviewEnabled;
+      if (l.section === 'skills') return showHomeTab;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;

@@ -39,6 +39,7 @@ MIGRATED_RESOURCE_TYPES: frozenset[str] = frozenset(
         "tool",
         "channel",
         "dashboard",
+        "linsight_skill",
     }
 )
 
@@ -54,6 +55,7 @@ ACTION_RESOURCE_SCOPES: Mapping[str, frozenset[str]] = {
             "tool",
             "channel",
             "dashboard",
+            "linsight_skill",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),

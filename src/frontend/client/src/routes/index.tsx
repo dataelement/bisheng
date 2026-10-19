@@ -23,7 +23,6 @@ import MenuApprovalPluginGate from '@/layouts/MenuApprovalPluginGate';
 import { appsSectionLinkTarget } from '@/layouts/appModuleNavPaths';
 import { canOpenWorkbench } from '@/utils/platformAccess';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { skillCenterPreviewEnabled } from '~/components/Skills/types';
 
 // Route-level code splitting (ledger #27): only the primary landing path
 // (login + main layout + chat home) ships in the entry chunk; every other
@@ -154,9 +153,9 @@ export const router = createBrowserRouter([
               { index: true, element: <HomeEntryRedirect /> },
               {
                 path: 'c/skills',
-                element: skillCenterPreviewEnabled ? (
+                element: (
                   <MenuApprovalPluginGate pluginId="home">{suspended(<SkillCenterPage />)}</MenuApprovalPluginGate>
-                ) : <Navigate to="/404" replace />,
+                ),
               },
               {
                 path: 'c/media-playback',
@@ -224,11 +223,11 @@ export const router = createBrowserRouter([
           {
             // 技能 module home (我的技能 / 技能广场) — preview-gated, rides on 首页's menu grant.
             path: 'skills',
-            element: skillCenterPreviewEnabled ? suspended(
+            element: suspended(
               <MenuApprovalPluginGate pluginId="home">
                 <SkillCenterPage />
               </MenuApprovalPluginGate>
-            ) : <Navigate to="/404" replace />,
+            ),
           },
           { path: 'channel', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">

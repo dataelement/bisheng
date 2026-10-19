@@ -137,7 +137,7 @@ async def fetch_skill_files(target: GithubTarget) -> dict[str, bytes]:
                 # Raw file sizes — unpacked semantics, so this shares the upload path's
                 # unpacked limit rather than the (compressed) upload payload limit.
                 if total_size > max_unpacked:
-                    raise SkillBundleTooLargeError()
+                    raise SkillBundleTooLargeError(limit_mb=max_unpacked // (1024 * 1024))
                 files[rel] = await _download_raw(client, item.get("download_url"))
             # symlinks / submodules are intentionally ignored — not portable as bundle assets.
 

@@ -25,6 +25,10 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeContainerDaoPermissionLoader,
     KnowledgeFileDaoPermissionLoader,
 )
+from bisheng.linsight.domain.services.f048_skill_permission import (
+    F048SkillPermissionAdapter,
+    SkillDaoPermissionLoader,
+)
 from bisheng.linsight.domain.services.skill_service import (
     configure_linsight_skill_owner_projection,
 )
@@ -164,6 +168,10 @@ def build_f048_resource_composition(
         loader=DashboardDaoPermissionLoader(runtime),
         permission=runtime,
     )
+    skill = F048SkillPermissionAdapter(
+        loader=SkillDaoPermissionLoader(runtime),
+        permission=runtime,
+    )
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,
@@ -174,6 +182,7 @@ def build_f048_resource_composition(
         "knowledge_file": knowledge_file,
         "tool": tool,
         "dashboard": dashboard,
+        "linsight_skill": skill,
     }
     registry = ResourceAuthorizationRegistry()
     for resource_type in (
@@ -194,6 +203,7 @@ def build_f048_resource_composition(
     registry.register("channel", channel)
     registry.register("tool", tool)
     registry.register("dashboard", dashboard)
+    registry.register("linsight_skill", skill)
     return adapters, registry
 
 

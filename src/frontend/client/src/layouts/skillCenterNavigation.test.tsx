@@ -4,7 +4,6 @@ import { Link, MemoryRouter, Route, Routes, useSearchParams } from 'react-router
 import MainLayout from './MainLayout';
 import { lastSectionPaths } from './appModuleNavPaths';
 
-let mockEnabled = true;
 let mockPlugins = ['home', 'knowledge_space'];
 let mockApproval = false;
 const mockMenuNames = { home: 'Home', knowledge: 'Knowledge', channel: 'Subscriptions', apps: 'Apps' };
@@ -18,7 +17,7 @@ jest.mock('~/hooks', () => ({
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetBsConfig: () => ({ data: {} }) }));
 jest.mock('~/utils', () => ({ cn: (...values: unknown[]) => values.filter(Boolean).join(' ') }));
 jest.mock('~/utils/platformAccess', () => ({ canOpenWorkbench: () => true, canShowPlatformAdminEntry: () => false }));
-jest.mock('~/components/Skills/types', () => ({ skillCenterPath: '/c/skills', get skillCenterPreviewEnabled() { return mockEnabled; } }));
+jest.mock('~/components/Skills/types', () => ({ skillCenterPath: '/c/skills' }));
 jest.mock('bisheng-icons', () => {
   const icons = new Proxy({}, { get: () => () => null });
   return { Outlined: icons, Filled: icons, Colored: icons };
@@ -55,7 +54,6 @@ function openRoute(path = '/c/skills') {
   </AliveScope></MemoryRouter>);
 }
 beforeEach(() => {
-  mockEnabled = true;
   mockPlugins = ['home', 'knowledge_space'];
   mockApproval = false;
   for (const key of Object.keys(lastSectionPaths)) delete lastSectionPaths[key];
@@ -67,11 +65,9 @@ it('adds Skill Center to the release sidebar while preserving the last chat dest
   expect(await screen.findByRole('link', { name: 'com_skill_center_title' })).toHaveAttribute('href', '/c/skills');
   expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/c/existing-chat');
 });
-it('keeps the entry behind the deployment flag', async () => {
-  mockEnabled = false;
+it('shows Skill Center when the retired preview field is absent', async () => {
   openRoute('/c/new');
-  await screen.findByText('Conversation');
-  expect(screen.queryByRole('link', { name: 'com_skill_center_title' })).not.toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'com_skill_center_title' })).toHaveAttribute('href', '/c/skills');
 });
 it('respects the home menu permission', async () => {
   mockPlugins = ['knowledge_space'];

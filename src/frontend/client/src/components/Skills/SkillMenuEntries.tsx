@@ -3,7 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import { PlusMenuSub } from '~/components/Chat/Input/PlusMenuSub';
 import { DropdownMenuItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
-import { skillCenterPreviewEnabled } from './types';
+import type { TaskModeSkill } from '~/store/linsight';
 import { SkillMenuPanel } from './SkillMenuPanel';
 
 const UploadDialog = lazy(() => import('./SkillUploadDialog').then((module) => ({ default: module.SkillUploadDialog })));
@@ -15,18 +15,19 @@ export function SkillUploadHost({ children }: SkillUploadHostProps) {
   const [open, setOpen] = useState(false);
   return <>
     {children(() => setOpen(true))}
-    {open && skillCenterPreviewEnabled && <Suspense fallback={null}><UploadDialog open onOpenChange={setOpen} /></Suspense>}
+    {open && <Suspense fallback={null}><UploadDialog open onOpenChange={setOpen} /></Suspense>}
   </>;
 }
 
 interface SkillMenuEntriesProps {
+  selected: TaskModeSkill[];
+  onChange: (skills: TaskModeSkill[]) => void;
   onUpload: () => void;
   onOpenMobile?: () => void;
 }
 
-export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesProps) {
+export function SkillMenuEntries({ selected, onChange, onUpload, onOpenMobile }: SkillMenuEntriesProps) {
   const localize = useLocalize();
-  if (!skillCenterPreviewEnabled) return null;
   const icon = <Outlined.Skill size={16} className="text-text-2" />;
   const label = localize('com_skill_center_menu');
   if (onOpenMobile) return (
@@ -37,10 +38,9 @@ export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesPro
       <Outlined.Right className="size-4 shrink-0 text-slate-400" />
     </DropdownMenuItem>
   );
-  // The panel ends in two menu rows rather than a scroll list, so it keeps its bottom padding.
   return (
     <PlusMenuSub icon={icon} label={label} panelClassName="w-[280px] max-w-[calc(100vw-24px)] gap-0 pb-3">
-      <SkillMenuPanel onUpload={onUpload} />
+      <SkillMenuPanel selected={selected} onChange={onChange} onUpload={onUpload} />
     </PlusMenuSub>
   );
 }

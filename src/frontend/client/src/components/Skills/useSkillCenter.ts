@@ -1,33 +1,35 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuthContext } from '~/hooks';
-import { getAvailableCenterSkills, getSkillScope } from '~/api/skillCenter';
-import { changePersonalSkill, listPersonalSkills } from './skillPreviewStore';
-import { SkillError, type PersonalSkill } from './types';
+import { deletePersonalSkill, getSkillCenter, setPersonalSkillEnabled } from '~/api/skillCenter';
+import type { SkillRecord } from './types';
 
-async function loadPersonalSkills(scope: string): Promise<PersonalSkill[]> {
-  const rows = await listPersonalSkills(scope);
-  // DEV only, opt-in sample rows (~/mock/demo). The DEV guard is a build-time constant, so
-  // the branch — and the dynamic import's chunk with it — is dropped from production bundles.
-  if (!import.meta.env.DEV) return rows;
-  const { demoPersonalSkills } = await import('~/mock/demo/skills');
-  return [...rows, ...demoPersonalSkills(scope)];
-}
+const centerKey = ['skill-center'];
 
 export function useSkillCenter() {
-  const { user } = useAuthContext();
   const client = useQueryClient();
-  const identity = useQuery(['skill-center', 'scope', user?.id], () => getSkillScope(String(user?.id)), {
-    enabled: !!user?.id, retry: false, staleTime: 0,
-  });
-  const scope = identity.data;
-  const platform = useQuery(['skill-center', scope, 'platform'], getAvailableCenterSkills, { enabled: !!scope, retry: false });
-  const personal = useQuery(['skill-center', scope, 'personal'], () => loadPersonalSkills(scope ?? ''), { enabled: !!scope, retry: false });
+  const center = useQuery(centerKey, () => getSkillCenter(), { retry: false });
+  const refresh = () => client.invalidateQueries(centerKey);
   const mutation = useMutation({
-    mutationFn: (change: Parameters<typeof changePersonalSkill>[1]) => {
-      if (!scope || identity.isError) throw new SkillError('identity');
-      return changePersonalSkill(scope, change);
+    mutationFn: (change: { kind: 'toggle'; target: SkillRecord; enabled: boolean } | { kind: 'delete'; target: SkillRecord }) => {
+      if (change.kind === 'delete') return deletePersonalSkill(change.target.id);
+      return setPersonalSkillEnabled(change.target.id, change.enabled);
     },
-    onSettled: () => client.invalidateQueries(['skill-center', scope, 'personal']),
+    onSettled: refresh,
   });
-  return { scope, identity, platform, personal, mutation };
+  const queryOf = (rows: SkillRecord[] | undefined) => ({
+    data: rows,
+    isLoading: center.isLoading,
+    isFetching: center.isFetching,
+    isError: center.isError,
+    isSuccess: center.isSuccess,
+    refetch: center.refetch,
+  });
+  return {
+    center,
+    personal: queryOf(center.data?.personal),
+    platform: queryOf(center.data?.enterprise),
+    personalCount: center.data?.personalCount ?? 0,
+    enterpriseCount: center.data?.enterpriseCount ?? 0,
+    mutation,
+    refresh,
+  };
 }

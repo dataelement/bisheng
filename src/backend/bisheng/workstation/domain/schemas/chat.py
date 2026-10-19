@@ -45,6 +45,7 @@ class APIChatCompletion(BaseModel):
     tools: list[ToolPayload] | None = None
     task_mode: bool | None = False
     skills: list[str] | None = None
+    skill_ids: list[int] | None = None
     use_knowledge_base: UseKnowledgeBaseParam | None = None
     files: list[dict] | None = None
     search_enabled: bool | None = False
@@ -58,4 +59,3 @@ class APIChatCompletion(BaseModel):
         if value is None or isinstance(value, str):
             return value
         return str(value)
-

@@ -8,5 +8,5 @@ window.APP_CONFIG = {
     disableJa: true,
     // Skill Center preview (我的技能 / 技能广场 + the chat input's 技能 entry).
     // Off unless the deployment opts in; also honours VITE_SKILL_CENTER_PREVIEW at build time.
-    skillCenterPreviewEnabled: false
+    skillCenterPreviewEnabled: true
 };

@@ -15,7 +15,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { buildChatAccept, isFileNameAccepted } from "~/common/chatAccept";
-import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
 import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -672,26 +671,14 @@ const AiChatInput = memo(
                                     showTaskModeEntry={taskModeEntry || taskMode}
                                     onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
-                                    skillSelected={taskMode && dailySkills.length > 0}
-                                    renderSkillSubmenu={showAddSkill ? () => (
-                                        <SkillSelector
-                                            selected={dailySkills}
-                                            onChange={(next) => {
-                                                setDailySkills(next);
-                                                // Keep the panel open on toggle (matches the
-                                                // knowledge-space panel); it closes on outside click.
-                                                // Picking a skill ENTERS task mode only when not
-                                                // already in it. onToggleTaskMode is a toggle, so
-                                                // calling it while already active would flip it OFF —
-                                                // selecting a skill must never exit task mode.
-                                                if (taskMode) return;
-                                                // Daily welcome page enters in place (callback);
-                                                // otherwise navigate to the linsight landing.
-                                                if (onToggleTaskMode) onToggleTaskMode();
-                                                else navigate('/linsight/new');
-                                            }}
-                                        />
-                                    ) : undefined}
+                                    selectedSkills={dailySkills}
+                                    onSkillsChange={(next) => {
+                                        const added = next.length > dailySkills.length;
+                                        setDailySkills(next);
+                                        if (!added || taskMode) return;
+                                        if (onToggleTaskMode) onToggleTaskMode();
+                                        else navigate('/linsight/new');
+                                    }}
                                 />
                             )}
                             {/* Knowledge-space pill — separate "+"-menu sibling that

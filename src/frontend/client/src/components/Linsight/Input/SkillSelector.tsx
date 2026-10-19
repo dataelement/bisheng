@@ -17,7 +17,6 @@ import { useLocalize } from '~/hooks';
 import { useIsClipped } from '~/hooks/useIsClipped';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
-import { useIsClipped } from '~/hooks/useIsClipped';
 
 interface SkillSelectorProps {
     selected: TaskModeSkill[];
