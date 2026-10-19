@@ -136,6 +136,21 @@ export function ModelAuditCard({
             </dt>
             <dd className="min-w-0 break-all">{row.model_name}</dd>
           </div>
+          {statusAxes.map((key) => (
+            <div key={key} className="flex gap-2">
+              <dt>{t("dsh.modelAuditView.axes." + key)}</dt>
+              <dd className={statusColor(row[key])}>
+                {t("dsh.modelAuditView.states." + row[key])}
+              </dd>
+            </div>
+          ))}
+          {(row.status_reasons || []).map((reason) => (
+            <div key={reason}>
+              {t("dsh.modelAuditView.reasons." + reason.replace(":", "_"), {
+                defaultValue: t("dsh.modelAuditView.reasons.INVALID_STATE"),
+              })}
+            </div>
+          ))}
         </dl>
       )}
       {row.context_invalid && (
@@ -162,17 +177,61 @@ export function ModelAuditCard({
       )}
       <footer className="border-t bg-muted/30 px-4 py-2">
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          {statusAxes.map((key) => (
-            <div
-              key={key}
-              className="flex items-center gap-1 whitespace-nowrap"
+          <div className="flex flex-wrap items-center gap-2">
+            <dt>{t("dsh.modelAuditView.summary_status")}</dt>
+            <dd
+              className={
+                row.audit_status === "ABNORMAL"
+                  ? row.status_reasons?.some((reason) =>
+                      [
+                        "model_result:FAILED",
+                        "model_result:CANCELLED",
+                        "response_result:ERROR",
+                        "response_result:INTERRUPTED",
+                        "CAPTURE_FAILED",
+                      ].includes(reason),
+                    )
+                    ? "text-destructive"
+                    : "text-status-yellow"
+                  : row.audit_status === "NORMAL" && !row.status_pending
+                    ? "text-success-foreground"
+                    : "text-muted-foreground"
+              }
             >
-              <dt>{t("dsh.modelAuditView.axes." + key)}</dt>
-              <dd className={statusColor(row[key])}>
-                {t("dsh.modelAuditView.states." + row[key])}
-              </dd>
-            </div>
-          ))}
+              {t(
+                "dsh.modelAuditView.summary." +
+                  (row.audit_status || "PREPARING"),
+              )}
+            </dd>
+            {row.status_pending && (
+              <span>{t("dsh.modelAuditView.status_pending")}</span>
+            )}
+            {!!row.status_reasons?.length && (
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto p-0 text-xs [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
+                aria-expanded={detailsOpen}
+                aria-controls={detailsOpen ? detailsId : undefined}
+                onClick={() => setDetailsOpen((old) => !old)}
+              >
+                {t(
+                  "dsh.modelAuditView.reasons." +
+                    row.status_reasons[0].replace(":", "_"),
+                  {
+                    defaultValue: t("dsh.modelAuditView.reasons.INVALID_STATE"),
+                  },
+                )}
+                {row.status_reasons.length > 1
+                  ? " · " +
+                    t("dsh.modelAuditView.more_reasons", {
+                      count: row.status_reasons.length - 1,
+                    })
+                  : ""}
+              </Button>
+            )}
+          </div>
           <div className="tabular-nums">
             <dt className="sr-only">{t("dsh.modelAuditView.input")}</dt>
             <dd>

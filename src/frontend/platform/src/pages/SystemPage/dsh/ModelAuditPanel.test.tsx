@@ -15,6 +15,24 @@ const api = vi.hoisted(() => ({
 vi.mock("@/controllers/API/tenant", () => ({ getTenantsApi: api.tenants }));
 vi.mock("@/controllers/API/dshModelAudit", () => ({
   getModelAudit: api.page,
+  getAuditReadiness: async () => ({
+    status_ready: true,
+    name_ready: true,
+    indexing_pending: false,
+  }),
+  getAuditGroups: async (q: unknown, s: AbortSignal) => {
+    await api.page(q, s);
+    return {
+      items: [],
+      next_cursor: null,
+      scan_limited: false,
+      progress: {
+        status_ready: true,
+        name_ready: true,
+        indexing_pending: false,
+      },
+    };
+  },
   readAuditBody: api.body,
   getAuditMode: api.mode,
   saveAuditMode: api.save,
@@ -153,6 +171,12 @@ describe("audit tenant selection", () => {
         <ModelAuditPanel />
       </userContext.Provider>,
     );
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     expect(api.page).toHaveBeenCalledWith(
       { tenant_id: 2, limit: 20 },
@@ -167,6 +191,12 @@ describe("audit tenant selection", () => {
     renderPanel();
     await screen.findByText("First tenant (first)");
     expect(screen.queryByLabelText("dsh.modelAuditView.tenant")).toBeNull();
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.original" }),
@@ -242,6 +272,12 @@ describe("audit tenant selection", () => {
 
   it("keeps tenant administrators scoped to their tenant without loading the global list", async () => {
     renderPanel(false, 2);
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     expect(api.tenants).not.toHaveBeenCalled();
     expect(
@@ -313,7 +349,7 @@ describe("request-card audit UI", () => {
       audit_record_missing: true,
       gap: "MODE_UNKNOWN",
     });
-    render(<ModelAuditRequests tenantId={2} />);
+    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "dsh.modelAuditView.advancedFilters",
@@ -330,7 +366,13 @@ describe("request-card audit UI", () => {
     expect(api.body).not.toHaveBeenCalled();
   });
   it("clears the exact-request filter when opening the full user conversation", async () => {
-    render(<ModelAuditRequests tenantId={2} />);
+    render(<ModelAuditRequests tenantId={2} initialView="requests" />);
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     fireEvent.click(
       screen.getByRole("button", {
@@ -344,6 +386,12 @@ describe("request-card audit UI", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.search" }),
     );
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     fireEvent.click(
       screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
@@ -361,10 +409,23 @@ describe("request-card audit UI", () => {
     );
   });
   it("does not prefetch originals; explicitly opened originals render as text and clear on pagination", async () => {
-    const { container } = render(<ModelAuditRequests tenantId={2} />);
+    const { container } = render(
+      <ModelAuditRequests tenantId={2} initialView="requests" />,
+    );
+    if (!screen.queryByText("Synthetic"))
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "dsh.modelAuditView.views.requests",
+        }),
+      );
     await screen.findByText("Synthetic");
     expect(api.body).not.toHaveBeenCalled();
     expect(screen.queryByText(/private-original/)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "dsh.modelAuditView.request_details",
+      }),
+    );
     expect(
       screen.getByText("dsh.modelAuditView.states.INTERRUPTED"),
     ).toBeInTheDocument();

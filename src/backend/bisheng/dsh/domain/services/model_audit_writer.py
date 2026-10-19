@@ -5,6 +5,7 @@ from time import perf_counter
 
 from loguru import logger
 
+from bisheng.dsh.domain.schemas.model_audit_status import refresh_audit_status
 from bisheng.dsh.domain.services.model_audit_integrity import verify_content
 from bisheng.dsh.domain.services.profile import profile_scope
 from bisheng.dsh.infrastructure.model_audit_blocking import run_audit_blocking
@@ -104,5 +105,6 @@ class DshModelAuditWriter:
                 else:
                     row.content_status = "PARTIAL"
             row.last_write_at = event.observed_at
+            refresh_audit_status(row)
             row.state_version += 1
             repository.session.add(row)

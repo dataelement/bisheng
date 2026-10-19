@@ -12,8 +12,10 @@ from bisheng.dsh.domain.models.model_audit_content import DshModelAuditBodyAcces
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditEvidence, DshModelAuditRequest
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
+from bisheng.dsh.domain.repositories.model_audit_conversations import AuditConversationRepository
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
 from bisheng.dsh.domain.schemas.model_audit import AuditRequestMetadata
+from bisheng.dsh.domain.schemas.model_audit_status import audit_status_facts
 from bisheng.dsh.infrastructure.model_audit_codec import conversation_key
 
 
@@ -21,7 +23,7 @@ def as_utc(value):
     return value.replace(tzinfo=UTC) if isinstance(value, datetime) and value.tzinfo is None else value
 
 
-class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
+class DshModelAuditQueryRepository(AuditConversationRepository, DshModelAuditWriteRepository):
     @staticmethod
     def pending_tenants(session, *, cursor=None):
         from bisheng.core.context.tenant import bypass_tenant_filter
@@ -37,6 +39,7 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
                         DshModelAuditRequest.usage_settlement == "PENDING",
                         DshModelAuditRequest.content_status == "PENDING",
                         DshModelAuditRequest.message_sources_status == "PENDING",
+                        DshModelAuditRequest.group_index_pending.is_(True),
                     ),
                 )
                 .distinct()
@@ -75,7 +78,10 @@ class DshModelAuditQueryRepository(DshModelAuditWriteRepository):
     def metadata(self, row):
         usage = self.one(DshModelCall, DshModelCall.request_id == row.request_id)
         names = AuditRequestMetadata.model_fields
-        data = {key: as_utc(getattr(row, key)) for key in names if key != "usage"}
+        data = {
+            key: as_utc(getattr(row, key)) for key in names if key not in {"usage", "status_reasons", "status_pending"}
+        }
+        _, data["status_reasons"], data["status_pending"] = audit_status_facts(row)
         data["usage"] = (
             {
                 key: as_utc(getattr(usage, key))

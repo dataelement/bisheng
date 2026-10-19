@@ -55,6 +55,9 @@ class AuditRequestMetadata(AuditDTO):
     output_bytes: int
     usage: dict | None = None
     last_write_at: datetime | None = None
+    audit_status: Literal["NORMAL", "ABNORMAL"] | None = None
+    status_reasons: list[str] = Field(default_factory=list)
+    status_pending: bool = False
 
 
 class AuditProgress(AuditDTO):

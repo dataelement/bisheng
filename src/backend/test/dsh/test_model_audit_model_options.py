@@ -32,11 +32,11 @@ async def test_model_options_use_current_catalog_with_tenant_scope_search_and_pa
         harness.queries.repository_scope = lambda: pytest.fail("Audit repository was queried for model candidates")
         response = await client.get(BASE + "/models", headers=LOCAL_ADMIN, params={"page_size": 1})
         assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
-        assert response.json()["data"] == {"data": [{"id": 42, "name": "Provider / Current model"}], "total": 2}
+        assert response.json()["data"] == {"data": [{"id": 42, "name": "Provider / Current model"}], "total": 1}
         next_page = await client.get(BASE + "/models", headers=LOCAL_ADMIN, params={"page_size": 1, "page": 2})
-        assert next_page.json()["data"] == {"data": [{"id": 43, "name": "Provider / Current model"}], "total": 2}
+        assert next_page.json()["data"] == {"data": [], "total": 1}
         searched = await client.get(BASE + "/models", headers=LOCAL_ADMIN, params={"keyword": "current"})
-        assert searched.json()["data"]["total"] == 2
+        assert searched.json()["data"]["total"] == 1
         deleted = await client.get(BASE + "/models", headers=LOCAL_ADMIN, params={"keyword": "Deleted"})
         assert deleted.json()["data"] == {"data": [], "total": 0}
         root = await client.get(BASE + "/models", headers=ADMIN, params={"tenant_id": 3})
@@ -47,7 +47,7 @@ async def test_model_options_use_current_catalog_with_tenant_scope_search_and_pa
         assert loader.await_count == count
 
 
-@pytest.mark.parametrize("params", [{"page": 0}, {"page_size": 101}, {"keyword": "x" * 129}])
+@pytest.mark.parametrize("params", [{"page": 0}, {"page_size": 101}, {"keyword": "x" * 2049}])
 async def test_model_options_bound_pagination_and_search(params):
     async with fixture() as (_harness, client, _objects):
         assert (await client.get(BASE + "/models", headers=ADMIN, params=params)).status_code == 422

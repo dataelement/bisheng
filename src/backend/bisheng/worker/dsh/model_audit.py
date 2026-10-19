@@ -19,6 +19,7 @@ def register_model_audit_tasks(app):
 
         async def execute():
             from bisheng.dsh.audit_admin_runtime import build_audit_administration
+            from bisheng.dsh.domain.services.model_audit_projection import project_audit_groups
             from bisheng.dsh.domain.services.model_audit_states import DshModelAuditStateService
             from bisheng.dsh.infrastructure.model_audit_activity import RedisAuditActivity
             from bisheng.dsh.operations_runtime import operations_worker_runtime
@@ -30,7 +31,16 @@ def register_model_audit_tasks(app):
                     window=runtime.settings.audit_observation_window_seconds,
                     now=lambda: datetime.now(UTC),
                 )
-                next_cursor, changed = await service.inspect(tenant_id, cursor)
+                if isinstance(cursor, str) and cursor.startswith("groups:"):
+                    next_cursor, changed = None, 0
+                    projection_cursor = cursor[len("groups:") :]
+                else:
+                    next_cursor, changed = await service.inspect(tenant_id, cursor)
+                    projection_cursor = ""
+                if next_cursor is None:
+                    position, projected = await project_audit_groups(service.queries, tenant_id, projection_cursor)
+                    changed += projected
+                    next_cursor = "groups:" + position if position else None
                 if next_cursor:
                     inspect.apply_async(args=[tenant_id, next_cursor], headers={"tenant_id": tenant_id})
                 return changed

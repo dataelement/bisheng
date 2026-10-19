@@ -11,9 +11,82 @@ import type {
   ModelAuditRecord,
   AuditUserPage,
   AuditModelOption,
+  AuditGroupPage,
+  AuditQueryReadiness,
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
+export async function getAuditReadiness(
+  tenantId?: number,
+  signal?: AbortSignal,
+): Promise<AuditQueryReadiness> {
+  return await request.get(base + "/query-readiness", {
+    params: { tenant_id: tenantId },
+    signal,
+  });
+}
+function groupQuery(query: ModelAuditQuery) {
+  const {
+    tenant_id,
+    user_id,
+    request_id,
+    conversation_id,
+    model_name,
+    audit_status,
+    start_at,
+    end_at,
+    cursor,
+    limit,
+  } = query;
+  return {
+    tenant_id,
+    user_id,
+    request_id,
+    conversation_id,
+    model_name,
+    audit_status,
+    start_at,
+    end_at,
+    cursor,
+    limit,
+  };
+}
+export async function getAuditGroups(
+  query: ModelAuditQuery,
+  signal?: AbortSignal,
+): Promise<AuditGroupPage> {
+  const result: AuditGroupPage = await request.get(
+    base + "/conversation-groups",
+    { params: groupQuery(query), signal },
+  );
+  if (
+    !result ||
+    !Array.isArray(result.items) ||
+    result.items.length > query.limit ||
+    !result.progress ||
+    (result.next_cursor !== null && typeof result.next_cursor !== "string")
+  )
+    throw new Error("Invalid audit group page");
+  return result;
+}
+export async function getAuditGroupRequests(
+  key: string,
+  query: ModelAuditQuery,
+  signal?: AbortSignal,
+): Promise<ModelAuditPage> {
+  const result: ModelAuditPage = await request.get(
+    base + "/conversation-groups/" + encodeURIComponent(key) + "/requests",
+    { params: groupQuery(query), signal },
+  );
+  if (
+    !result ||
+    !Array.isArray(result.items) ||
+    result.items.length > query.limit ||
+    (result.next_cursor !== null && typeof result.next_cursor !== "string")
+  )
+    throw new Error("Invalid audit group requests");
+  return result;
+}
 export async function getAuditParent(
   requestId: string,
   tenantId?: number,

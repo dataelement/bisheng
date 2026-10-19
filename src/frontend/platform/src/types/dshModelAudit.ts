@@ -34,6 +34,9 @@ export type AuditUserOption = { user_id: number; user_name: string };
 export type AuditModelOption = { id: number; name: string };
 export type AuditUserPage = { data: AuditUserOption[]; total: number };
 export type ModelAuditRecord = {
+  audit_status?: "NORMAL" | "ABNORMAL" | null;
+  status_reasons?: string[];
+  status_pending?: boolean;
   request_id: string;
   user_id: number;
   model_id: number;
@@ -64,6 +67,7 @@ export type ModelAuditRecord = {
   } | null;
 };
 export type ModelAuditQuery = {
+  audit_status?: "NORMAL" | "ABNORMAL";
   tenant_id?: number;
   user_id?: number;
   user_keyword?: string;
@@ -81,6 +85,27 @@ export type ModelAuditQuery = {
   association_status?: "ASSOCIATED" | "UNASSOCIATED";
   cursor?: string;
   limit: number;
+};
+export type AuditQueryReadiness = {
+  status_ready: boolean;
+  name_ready: boolean;
+  indexing_pending: boolean | null;
+};
+export type AuditConversation = {
+  conversation_key: string;
+  user_id: number;
+  conversation_id: string;
+  listed_at: string;
+  last_request_at: string;
+  updated_at: string;
+  request_count: number;
+  abnormal_count: number;
+};
+export type AuditGroupPage = {
+  items: AuditConversation[];
+  next_cursor: string | null;
+  scan_limited: boolean;
+  progress: AuditQueryReadiness;
 };
 export type ModelAuditPage = {
   items: ModelAuditRecord[];

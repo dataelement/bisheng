@@ -1,8 +1,16 @@
 import { Button } from "@/components/bs-ui/button";
 import { userContext } from "@/contexts/userContext";
-import type { ModelAuditQuery } from "@/types/dshModelAudit";
+import type {
+  ModelAuditQuery,
+  AuditGroupPage,
+  AuditQueryReadiness,
+} from "@/types/dshModelAudit";
+import {
+  getAuditGroups,
+  getAuditReadiness,
+} from "@/controllers/API/dshModelAudit";
 import { displayTenantName } from "@/utils/tenantDisplayName";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DshPager, dshTime } from "./common";
 import { ModelAuditCard } from "./ModelAuditCard";
@@ -10,6 +18,7 @@ import { ModelAuditFilters } from "./ModelAuditFilters";
 import { ModelAuditMode } from "./ModelAuditMode";
 import { ModelAuditTenantSelect } from "./ModelAuditTenantSelect";
 import { useModelAudit } from "./useModelAudit";
+import { ModelAuditGroup } from "./ModelAuditGroup";
 
 export function ModelAuditPanel() {
   const { user } = useContext(userContext);
@@ -67,8 +76,12 @@ export function ModelAuditPanel() {
 
 interface ModelAuditRequestsProps {
   tenantId?: number;
+  initialView?: "groups" | "unassociated" | "requests";
 }
-export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
+export function ModelAuditRequests({
+  tenantId,
+  initialView = "groups",
+}: ModelAuditRequestsProps) {
   const { t } = useTranslation();
   const initialQuery = { tenant_id: tenantId, limit: 20 };
   const [query, setQuery] = useState<ModelAuditQuery>(initialQuery);
@@ -77,19 +90,132 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
   const [revision, setRevision] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
-  const { page, loading, failed, missing } = useModelAudit(query, revision);
+  const [view, setView] = useState(initialView);
+  const [groups, setGroups] = useState<AuditGroupPage | null>(null);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [groupFailed, setGroupFailed] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<AuditQueryReadiness | null>(null);
+  const [readinessFailed, setReadinessFailed] = useState(false);
+  const saved = useRef<{
+    view: typeof view;
+    query: ModelAuditQuery;
+    draft: ModelAuditQuery;
+    history: (string | undefined)[];
+    scroll: number;
+    container: HTMLElement | null;
+    openGroup: string | null;
+  } | null>(null);
+  const [hasReturn, setHasReturn] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  const requestQuery = useMemo(
+    () => ({
+      ...query,
+      association_status:
+        view === "unassociated" ? ("UNASSOCIATED" as const) : undefined,
+    }),
+    [query, view],
+  );
+  const {
+    page,
+    loading: requestLoading,
+    failed: requestFailed,
+    missing,
+  } = useModelAudit(requestQuery, revision, undefined, view !== "groups");
+  useEffect(() => {
+    if (view === "groups") return;
+    const abort = new AbortController();
+    setReadiness(null);
+    setReadinessFailed(false);
+    getAuditReadiness(tenantId, abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted) setReadiness(value);
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setReadinessFailed(true);
+      });
+    return () => abort.abort();
+  }, [tenantId, revision, view]);
+  useEffect(() => {
+    if (view !== "groups") return;
+    const abort = new AbortController();
+    setGroups(null);
+    setReadiness(null);
+    setReadinessFailed(false);
+    setGroupLoading(true);
+    setGroupFailed(false);
+    getAuditGroups(query, abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted) {
+          setGroups(value);
+          setReadiness(value.progress);
+        }
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setGroupFailed(true);
+      })
+      .finally(() => {
+        if (!abort.signal.aborted) setGroupLoading(false);
+      });
+    return () => abort.abort();
+  }, [query, revision, view]);
+  const loading = view === "groups" ? groupLoading : requestLoading;
+  const failed = view === "groups" ? groupFailed : requestFailed;
+  const nextCursor =
+    view === "groups" ? groups?.next_cursor : page?.next_cursor;
   const pending = (
     Object.keys({ ...query, ...draft }) as (keyof ModelAuditQuery)[]
   ).some((key) => key !== "cursor" && query[key] !== draft[key]);
-  const handleApply = (next: ModelAuditQuery) => {
+  const handleApply = (next: ModelAuditQuery, preserveReturn = false) => {
+    if (!preserveReturn) {
+      setHasReturn(false);
+      saved.current = null;
+    }
     const firstPage = { ...next, cursor: undefined };
     setHistory([]);
     setExpanded(null);
+    setOpenGroup(null);
     setDraft(firstPage);
     setQuery(firstPage);
   };
+  const handleNavigate = (userId: number, conversationId: string) => {
+    if (!hasReturn) {
+      let container = section.current?.parentElement || null;
+      while (
+        container &&
+        (container.scrollHeight <= container.clientHeight ||
+          !/(auto|scroll)/.test(window.getComputedStyle(container).overflowY))
+      )
+        container = container.parentElement;
+      saved.current = {
+        view,
+        query,
+        draft,
+        history,
+        scroll: container?.scrollTop ?? window.scrollY,
+        container,
+        openGroup,
+      };
+      setHasReturn(true);
+    }
+    setView("requests");
+    handleApply(
+      {
+        tenant_id: tenantId,
+        limit: 20,
+        user_id: userId,
+        conversation_id: conversationId,
+      },
+      true,
+    );
+  };
   return (
-    <section className="min-w-0 space-y-4" aria-label={t("dsh.modelAudit")}>
+    <section
+      ref={section}
+      tabIndex={-1}
+      className="min-w-0 space-y-4"
+      aria-label={t("dsh.modelAudit")}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-medium">{t("dsh.modelAuditView.log_title")}</h2>
         <Button
@@ -118,15 +244,95 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
         pending={pending}
         tenantId={tenantId}
         draft={draft}
+        statusReady={readiness?.status_ready === true}
+        nameReady={readiness?.name_ready === true}
         onChange={(changes) => setDraft((old) => ({ ...old, ...changes }))}
         onApply={() => handleApply(draft)}
         onReset={() => handleApply(initialQuery)}
       />
+      <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        {(["groups", "unassociated", "requests"] as const).map((value) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={view === value ? "default" : "ghost"}
+            aria-pressed={view === value}
+            className="text-sm [@media(pointer:coarse)]:min-h-11"
+            onClick={() => {
+              setHasReturn(false);
+              saved.current = null;
+              setView(value);
+              setHistory([]);
+              setExpanded(null);
+              setOpenGroup(null);
+              setQuery((old) => ({ ...old, cursor: undefined }));
+            }}
+          >
+            {t("dsh.modelAuditView.views." + value)}
+          </Button>
+        ))}
+        {view === "groups" && (
+          <span className="text-xs text-muted-foreground">
+            {t("dsh.modelAuditView.group_order")}
+          </span>
+        )}
+        {hasReturn && (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            onClick={() => {
+              const old = saved.current;
+              if (!old) return;
+              setView(old.view);
+              setQuery(old.query);
+              setDraft(old.draft);
+              setHistory(old.history);
+              setExpanded(null);
+              setOpenGroup(old.openGroup);
+              setHasReturn(false);
+              window.requestAnimationFrame(() => {
+                section.current?.focus({ preventScroll: true });
+                if (old.container?.isConnected)
+                  old.container.scrollTop = old.scroll;
+                else window.scrollTo(0, old.scroll);
+              });
+            }}
+          >
+            {t("dsh.modelAuditView.return_results")}
+          </Button>
+        )}
+      </div>
+      {(readinessFailed ||
+        readiness?.status_ready === false ||
+        readiness?.name_ready === false) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t("dsh.modelAuditView.index_preparing")}
+        </p>
+      )}
+      {view === "groups" && readiness?.indexing_pending !== false && (
+        <p role="status" className="text-xs text-muted-foreground">
+          {t("dsh.modelAuditView.index_delay")}
+        </p>
+      )}
+      {hasReturn && (
+        <p className="text-xs text-muted-foreground">
+          {t("dsh.modelAuditView.all_scope")}
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
         <p>
           {t("dsh.modelAuditView.watermark")}:{" "}
-          {dshTime(page?.progress.last_write_at)} ·{" "}
-          {t("dsh.modelAuditView.async_hint")}
+          {dshTime(
+            view === "groups"
+              ? groups?.items
+                  .map((group) => group.updated_at)
+                  .sort()
+                  .at(-1)
+              : page?.progress.last_write_at,
+          )}{" "}
+          · {t("dsh.modelAuditView.async_hint")}
         </p>
         <Button
           type="button"
@@ -136,19 +342,48 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
           disabled={loading}
           onClick={() => {
             setExpanded(null);
+            setOpenGroup(null);
+            setHistory([]);
+            setQuery((old) => ({ ...old, cursor: undefined }));
             setRevision((old) => old + 1);
           }}
         >
           {t("dsh.modelAuditView.refresh_records")}
         </Button>
       </div>
-      {missing && (
+      {view !== "groups" && missing && (
         <p role="status">{t("dsh.modelAuditView.missing." + missing.gap)}</p>
       )}
       {failed ? (
         <p role="alert">{t("dsh.modelAuditView.loadError")}</p>
       ) : loading ? (
         <p role="status">{t("dsh.loading")}</p>
+      ) : view === "groups" ? (
+        <>
+          {groups?.scan_limited && (
+            <p role="status">{t("dsh.modelAuditView.scan_limited")}</p>
+          )}
+          {groups?.progress.status_ready &&
+            groups.progress.name_ready &&
+            !groups.items.length &&
+            !groups.next_cursor && <p>{t("dsh.modelAuditView.empty")}</p>}
+          {groups?.items.map((group) => (
+            <ModelAuditGroup
+              key={group.conversation_key + ":" + revision}
+              group={group}
+              query={query}
+              expanded={openGroup === group.conversation_key}
+              onToggle={() =>
+                setOpenGroup((old) =>
+                  old === group.conversation_key
+                    ? null
+                    : group.conversation_key,
+                )
+              }
+              onNavigate={handleNavigate}
+            />
+          ))}
+        </>
       ) : !page?.items.length ? (
         <p>{t("dsh.modelAuditView.empty")}</p>
       ) : (
@@ -161,33 +396,28 @@ export function ModelAuditRequests({ tenantId }: ModelAuditRequestsProps) {
             onToggle={() =>
               setExpanded(expanded === row.request_id ? null : row.request_id)
             }
-            onNavigate={(userId, conversationId) =>
-              handleApply({
-                tenant_id: tenantId,
-                limit: 20,
-                user_id: userId,
-                conversation_id: conversationId,
-              })
-            }
+            onNavigate={handleNavigate}
           />
         ))
       )}
       <DshPager
         previous={history.length > 0}
-        next={!!page?.next_cursor}
+        next={!!nextCursor}
         loading={loading}
         onPrevious={() => {
           setExpanded(null);
+          setOpenGroup(null);
           setQuery((old) => ({ ...old, cursor: history[history.length - 1] }));
           setHistory((old) => old.slice(0, -1));
         }}
         onNext={() => {
-          if (!page?.next_cursor) return;
+          if (!nextCursor) return;
           setExpanded(null);
+          setOpenGroup(null);
           setHistory((old) => [...old, query.cursor]);
           setQuery((old) => ({
             ...old,
-            cursor: page.next_cursor || undefined,
+            cursor: nextCursor || undefined,
           }));
         }}
       />

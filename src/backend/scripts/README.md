@@ -1159,3 +1159,7 @@ Dry-run is the default. Repeat per tenant until `has_more=false`; resume with
 check. Only missing digests are filled; original names and bodies remain unchanged.
 Historical exact-name lookup is incomplete until this operation finishes. No fuzzy
 query fallback or automatic startup backfill is performed.
+
+## DSH audit presentation preparation
+
+Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.

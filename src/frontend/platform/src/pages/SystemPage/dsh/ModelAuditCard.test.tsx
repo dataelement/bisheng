@@ -15,6 +15,9 @@ vi.mock("./ModelAuditParent", () => ({
 import { ModelAuditCard } from "./ModelAuditCard";
 
 const row: ModelAuditRecord = {
+  audit_status: "ABNORMAL",
+  status_reasons: ["response_result:INTERRUPTED", "usage_settlement:UNCERTAIN"],
+  status_pending: false,
   request_id: "synthetic-request",
   user_id: 20,
   model_id: 42,
@@ -88,14 +91,17 @@ it("places the original between the request header and the independently colored
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(
-    within(footer).getByText("dsh.modelAuditView.states.SUCCEEDED"),
-  ).toHaveClass("text-success-foreground");
-  expect(
-    within(footer).getByText("dsh.modelAuditView.states.INTERRUPTED"),
+    within(footer).getByText("dsh.modelAuditView.summary.ABNORMAL"),
   ).toHaveClass("text-destructive");
   expect(
-    within(footer).getByText("dsh.modelAuditView.states.COMPLETE"),
-  ).toHaveClass("text-success-foreground");
+    within(footer).queryByText("dsh.modelAuditView.states.COMPLETE"),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }),
+  );
+  expect(
+    screen.getByText("dsh.modelAuditView.states.INTERRUPTED"),
+  ).toBeVisible();
   fireEvent.click(
     screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
   );

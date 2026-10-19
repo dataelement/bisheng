@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, datetime
 
+from bisheng.dsh.domain.schemas.model_audit_status import refresh_audit_status
 from bisheng.dsh.infrastructure.model_audit_telemetry import record_audit_metric
 
 
@@ -65,6 +66,7 @@ class DshModelAuditStateService:
                 for key, value in changes.items():
                     setattr(current, key, value)
                 if changes:
+                    refresh_audit_status(current)
                     if changes.get("message_sources_status") == "UNAVAILABLE":
                         record_audit_metric("annotation_pending_timeout", tenant_id=tenant)
                     current.state_version += 1

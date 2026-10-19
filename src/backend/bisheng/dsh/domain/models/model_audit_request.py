@@ -28,6 +28,9 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
         Index("ix_dma_request_model", "tenant_id", "model_id", "started_at", "request_id"),
         Index("ix_dma_request_name", "tenant_id", "model_name_digest", "started_at", "request_id"),
         Index("ix_dma_request_sources", "tenant_id", "message_sources_status", "started_at", "request_id"),
+        Index("ix_dma_request_status", "tenant_id", "audit_status", "started_at", "request_id"),
+        Index("ix_dma_request_association", "tenant_id", "association_status", "started_at", "request_id"),
+        Index("ix_dma_request_group_pending", "tenant_id", "group_index_pending", "request_id"),
         CheckConstraint("effective_mode IN ('METADATA','CONTENT')", name="ck_dma_request_mode"),
     )
     request_id: str = Field(sa_column=Column(String(36), primary_key=True))
@@ -65,6 +68,11 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
     response_result: str = Field(default="RUNNING", sa_column=Column(String(16), nullable=False))
     usage_settlement: str = Field(default="PENDING", sa_column=Column(String(16), nullable=False))
     content_status: str = Field(default="NOT_CAPTURED", sa_column=Column(String(16), nullable=False))
+    audit_status: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    group_index_pending: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
+    )
+    group_indexed_status: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
     state_version: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     input_units: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     input_bytes: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))

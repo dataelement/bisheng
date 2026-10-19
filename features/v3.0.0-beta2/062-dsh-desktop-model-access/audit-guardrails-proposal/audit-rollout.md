@@ -1,5 +1,14 @@
 # 审计启用与回退说明
 
+## 2026-10-19 会话目录升级（尚未在业务环境执行）
+
+1. 隔离副本预估DDL锁影响，正常Alembic升级唯一头dsh_audit_groups（前序dsh_audit_sources）；模型发现/create_all创建dsh_model_audit_conversation。create_all不能替代旧表加列迁移。
+2. 升级全部API、消费者、巡检/Beat，不改变模式、密钥或正文；旧写入进程可能继续产生NULL状态，必须全部升级再回填。
+3. 在src/backend逐租户预览：`python scripts/backfill_dsh_audit_presentation.py --tenant-id <ID>`。确认后加`--apply --batch-size 200 --max-batches 20`；按输出after_request_id用`--after-request-id`续跑，最后从头复核至examined=0。只补状态/缺失摘要和投影标记；若已有status却缺摘要，仍需原名称回填脚本。
+4. 巡检复用租户header和独立事务投影，失败留pending重试；query-readiness的status_ready/name_ready就绪后开放对应筛选，indexing_pending提示延迟，不表示全覆盖。
+5. 核对目录、未关联请求、同一请求条件、双层分页、查看全部/返回与原文留痕；新UI只传完整名称，旧model_id仅兼容，下文按ID选择的旧口径已替代。
+6. 正式JWT/DM8/真实容量和SQL计划待验收。回退保留新表/列/记录及密钥，旧程序回退后产生NULL状态须重升后再回填，不删除对象或业务数据。
+
 日期：2026-10-14。仅交付运行步骤，本轮没有部署/启用业务租户。正式启用前先完成[验证记录](./validation-results.md)的环境门禁。
 
 ## 启用前

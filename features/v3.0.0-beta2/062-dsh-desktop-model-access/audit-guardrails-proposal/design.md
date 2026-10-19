@@ -1,6 +1,6 @@
 # 客户端模型调用审计技术设计
 
-版本：0.10　日期：2026-10-16　对应 [spec.md](./spec.md) 0.20（已确认）　状态：设计已确认，两端增量代码及本机 HTTP 链路已实现并验证；真实三存储、正式 Electron/供应商/DM8 验收未完成
+版本：0.11　日期：2026-10-19　对应规格 0.21；已确认增量已实现，本机验证通过，正式环境验收待执行
 
 > 本分支两端已实现[契约 0.4](./client-api-audit-extension.md)的五字段扩展，根协议保持 0.5.0。真实桌面适配器/主进程校验器→HTTP→异步审计→管理解密读取在独立 SQLite/内存对象存储通过；本轮 MinIO 镜像下载失败，不能沿用早期三存储联调结论证明新增标注可用。当前实现与验证边界见[验证结果](./validation-results.md)最新增量章节；不代表已提交、部署或正式环境验收。
 
@@ -221,17 +221,20 @@ annotation 不加入原件 input/output occurrence 或 manifest 计数，不改�
 
 ### 6.2 管理 API 与正文访问
 
-筛选区采用用户确认的 audit-filters-preview.html：租户与 ModelAuditMode 位于同一范围栏，模式设置默认折叠且只对超管提供；密钥缺失/未知、读取或保存失败独立于折叠区域显示。ModelAuditRequests 分离 draft 与已应用 query，ModelAuditFilters 只更新 draft，显式查询才替换 query；未应用改动有明确提示，刷新与游标翻页不自动应用 draft。重置与会话导航同步二者、清游标并收起正文。ModelAuditTimeRange 沿确认稿采用原生 details/summary 与既有 Input/Button，桌面轻量浮层、手机内联全宽展开；时间错误直接显示在筛选区并阻止提交，Esc 与外点关闭，确定后归还焦点。用户/模型候选仍按需从授权租户的目录 API 搜索分页；开放模型用编号、历史名称按原值精确查询，未增加审计表聚合或预读。复用 Platform bs-ui 与语义色，不迁移基础组件或引入依赖。
+常用筛选仅用户和时间，模型完整名称、统一正常/异常状态及精确请求/会话编号位于高级筛选。聚焦模型框加载当前租户开放候选，250ms 输入防抖只搜索目录，选择和手填均提交 model_name 完整原值精确查询，不提交 model_id，不 trim 或忽略大小写，同名候选去重。正常表示当前未发现异常，未完成有辅助提示；失败/取消/中断/结果未知/用量不确定/应存正文缺失归异常，METADATA 不保存正文不算异常，四轴保留排障。默认会话目录按首次收录倒序，组内按开始时间和请求编号升序分页；未关联请求独立展示。筛选须在同一请求同时满足，汇总范围为全会话已索引记录；展开会话不读取原文，逐请求显式查看才读取和留痕。草稿、显式查询、半开时间、租户切换和访问权限保持既有边界。
 
-请求卡片展示（2026-10-16 用户要求的布局调整）：ModelAuditCard 将模型、时间、用户、用途与导航放在顶部一行小字，四个独立状态轴、保存大小及 Token 放在底部一行；长编号收进“请求详情”，打开详情不读取正文。仅显式展开原文后在上下两行之间挂载 ModelAuditBody，正文区固定 24rem 高并使用原生纵向滚动、键盘焦点和翻段回顶；不通过默认读取正文制造列表预览。消息以浅色信息栏展示角色、来源的本地化中文标签和工具编号，正文在独立留白区域显示；不展示重复的英文 kind/form 或来源 JSON 展开入口。相同 kind 不因不同 form 重复贴标签，未知 kind 用本地化“其他来源”，保留混合、缺失与不完整提示。Esc 收起原文并归还按钮焦点。窄屏允许元数据自然换行而不横向溢出；触屏文字操作保留 44px 热区。颜色复用 Platform 语义 token，深色模式使用可读前景；成功/中断等仍保留文字，不用颜色替代状态含义。未改基础控件或设计规范。保留原文按需授权、分段及缺口语义；若默认展开策略或高度需要改变，先复核正文访问与长消息浏览要求。
+请求卡片底部以二态状态和原因替代四轴，四轴移入请求详情；正文固定 24rem 原生滚动，仅显式展开加载，来源为本地化标签，Esc 收起归焦。沿用既有组件、语义色及触屏热区。
 
 在既有 `/api/v1/dsh/admin` 下新增 `model-audit` 子路由，路径不用 `config`。Platform 客户端管理页消费以下接口，桌面客户端不调用它们；普通响应 envelope 沿用管理 API 规范：
 
 | API | 输出与限制 |
 |---|---|
 | `GET /model-audit/users` | 复用审计管理员鉴权和目标租户校验；按当前租户现有用户目录查询，支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100）；仅返回 `{data:[{user_id,user_name}],total}`，响应禁止缓存，不放宽原租户用户管理接口权限 |
-| `GET /model-audit/models` | 复用相同审计租户鉴权；复用“模型与额度”的当前开放模型目录读取能力（LLMService 与 read_available_models），在授权 profile_scope 下加载，不按管理员本人调用权限缩小，不读取审计明细；小目录可按名称包含搜索；支持 `tenant_id`、`keyword`（最多 128 字符）、`page`、`page_size`（1–100），返回 `{data:[{id,name}],total}`，分页和计数仅基于当前模型小目录，响应禁止缓存 |
-| `GET /model-audit/requests` | 授权租户内按用户 ID、时间范围、模型 ID 或完整历史名称、提供方、四轴状态与关联状态过滤；model_id 与 model_name 互斥，均为等值条件，冲突返回 26131；兼容保留 API 用户名片段过滤，支持 request_id/conversation_id 精确定位，按 `(started_at,request_id)` 游标稳定分页；只返元数据、模式/写入水位与证据局限 |
+| `GET /model-audit/models` | 复用审计鉴权和当前租户开放模型目录，不读取审计明细；keyword最多2048字符、page/page_size（1–100）；按完整name去重排序，保留兼容结构`{data:[{id,name}],total}`，新前端只提交name |
+| `GET /model-audit/requests` | 新页面使用用户、时间、完整model_name、audit_status和精确请求/会话编号；未关联视图固定association_status=UNASSOCIATED。旧model_id/提供方/四轴仅兼容保留，不在新UI使用；id/name冲突返回26131。相关历史回填未完成拒绝名称/状态筛选而非假空；仅返元数据 |
+| `GET /model-audit/query-readiness` | 授权租户内索引LIMIT 1探测status_ready/name_ready/indexing_pending，不计数 |
+| `GET /model-audit/conversation-groups` | 按不可变listed_at/key倒序，批100、最多1000候选/循环1秒；同一请求EXISTS内匹配全部条件；稀疏匹配返回scan_limited及续查游标，不假称结束 |
+| `GET /model-audit/conversation-groups/{key}/requests` | 先鉴权核对绑定，再固定历史用户/会话；拒绝覆盖；按started_at/request_id升序分页，沿用相同筛选，不默认读取正文 |
 | `GET /model-audit/requests/{request_id}` | 单请求元数据、客户端声明的会话 ID、状态及用量引用；不带原文 |
 | `GET /model-audit/requests/{request_id}/parent-conversation`（增量） | 先授权并读取子请求，按其历史用户及同一授权租户精确定位声明的父会话；返回 `{status:AVAILABLE,user_id,conversation_id}` 或 `{status:NOT_PROVIDED/UNAVAILABLE}`，后两者无目标身份字段。不能由请求参数覆盖 user/parent，不能跨范围搜索或预取正文 |
 | `GET /model-audit/conversations?user_id=...&conversation_id=...` | 在授权租户及目标用户范围按开始时间、request_id 分页给请求卡片；不把 ID 当全局唯一，默认不返回原文 |
@@ -240,7 +243,7 @@ annotation 不加入原件 input/output occurrence 或 manifest 计数，不改�
 
 密钥预检仅在管理配置链路执行，沿用外部密钥环的解析及活动版本 32-byte 校验；不要求 MinIO 探针或集群一致性探针通过。浏览器根据 `content_available` 禁用 CONTENT 并显示具体原因，缺字段的旧接口响应视为就绪状态未知，不能据此开启正文。已配置 CONTENT 但密钥不可用时保持真实配置展示，打开/刷新后提示新原文无法保存；不自动改成 OFF 或 METADATA。业务请求沿用既有非阻断捕获路径，缺密钥时不提交明文正文、尽力保存元数据并标不完整，不修改用量或模型结果。多实例部署仍须按运维清单核验所有采集/读取实例及旧密钥；单实例预检通过不等于集群就绪或原文一定完整。
 
-普通响应使用 resp_200；游标列表 data 为 items、next_cursor、progress，progress 只有模式/最近成功写入时间/积压及证据局限，不含原文。游标绑定查询过滤和目标租户，以 (started_at,request_id) 稳定定位，不为 keyset 页伪造精确总数。模式写命令包含 operation_id、expected_version、mode，冲突沿现有管理错误返回。
+普通响应使用 resp_200；游标列表 data 为 items、next_cursor、progress，请求 progress 包含模式/最近成功写入时间/积压及证据局限，会话目录 progress 包含回填与投影就绪信息，不含原文。游标绑定查询过滤和目标租户，以 (started_at,request_id) 稳定定位，不为 keyset 页伪造精确总数。模式写命令包含 operation_id、expected_version、mode，冲突沿现有管理错误返回。
 
 正文 POST 成功响应使用 application/x-ndjson，Cache-Control: no-store。先返回 meta（request_id、encoding_version、content_state），再返回 part（全局递增 seq、channel=input/output、unit_index、fragment），最后 end（last_seq、content_state、transfer_status）。part.fragment 是同一有序原件单元的连续序列化文本片段，按序拼接是编码原件，而非模型生成摘要；管理页只暂存当前单元的连续片段，单元边界或 end 时解析并释放原始片段，不等整份原文到齐才展示。已解析消息和当前待解析单元合计受20Mi字符展示预算约束，刷新节流40ms；不执行内容。未采集可返回 meta+end，部分按实际留存范围返回。传输开始前失败沿标准管理错误；开始后返回不含正文的 error 事件并结束。缺少 end 仅表示本次浏览传输不完整，不把服务器已留存原件改判缺失。传输日志追加结果不替代传正文前已持久的授权查看日志。
 
@@ -258,13 +261,15 @@ AuditMessageAssembler 增加真实输入 unit_index，按 `message_index=unit_in
 
 现有 Platform Axios 浏览器封装没有 ReadableStream 能力，需要先在共享请求层扩展流式包装，复用 BASE、认证及集中错误策略，并回归会话失效/踢出和权限拒绝；业务组件不直接 import axios、不自行处理 403。普通接口仍走原 request；正文增量走共享 requestStream，支持 AbortSignal，不输出原文到 console。
 
-管理页将同一会话的请求按卡片显示：默认只显示时间、模型、可选的客户端声明调用种类、消息数量/正文大小和独立状态轴；长会话请求分页，长历史默认折叠。管理员显式展开某请求才触发该请求正文 API，显示有序输入和返回；不得在列表、默认卡片或元数据详情放输出原文预览，也不根据文本推断新旧气泡。未知调用种类显示“未知”，不冒充普通聊天回复。
+默认会话目录与独立未关联视图，索引未就绪保留请求明细入口。会话和组内分页分离，子 Agent 不并父会话，不重建跨请求气泡。
 
 管理接口沿用现有 `UserPayload.get_tenant_admin_user` 作为入口身份筛选，并在 DSH 管理 Service 中按现有 `authorize_admin` 路径核对所选租户和记录归属；只有全局超管可切换模式，租户管理员仅能读本租户元数据与原文。此处是固定管理员角色与租户范围规则，不做逐人资源授权，也不新增 F048 审计资源、动作或 Catalog 项；新接口复用既有管理员判定与租户范围校验，不自行新增角色关系表查询，也不以菜单权限放行。目标记录先加载并核验归属，普通用户、其他管理员、越界租户与受限管理范围均拒绝。正文读取先验证对象可读和授权，再持久提交本次读取尝试；日志提交失败拒绝传正文。可追加传输结果，但成功授权日志不表示浏览器已收到全部内容。响应禁缓存、禁原文入普通日志和错误；浏览器只安全渲染文本/媒体，不执行 HTML 或脚本。
 
-页面筛选采用常用与高级两层：常用仅显示用户、时间范围、模型名称；高级中的请求/会话编号、提供方、四轴与关联状态默认收起，生效条件数量始终可见，并支持重置。用户选择复用既有 DSH 可搜索下拉交互，每页 20 人、250ms 搜索防抖，选中后仅用 `user_id` 查询审计；取消旧请求并忽略过时结果。用户目录通过租户 Service 复用主部门归属口径，在已授权的精确 `profile_scope` 下执行；不按当前用户归属重新解释历史审计记录。模型下拉来自当前租户现有开放模型目录，按名称搜索/分页，显示名称而提交 model_id；手填按完整历史名称精确过滤（最多 2048 字符），修改文本须清除 model_id，两种查询不能混用。同名不同 ID 的选项不合并，改名后按 ID 能查到旧名称，配置删除后可手填旧名称。候选加载失败也不禁用手填。切换租户通过子视图重建清空选择、条件、游标和正文；目录加载失败提供重试，不回退为手填用户编号。
+常用筛选仅用户和时间，模型完整名称、统一正常/异常状态及精确请求/会话编号位于高级筛选。聚焦模型框加载当前租户开放候选，250ms 输入防抖只搜索目录，选择和手填均提交 model_name 完整原值精确查询，不提交 model_id，不 trim 或忽略大小写，同名候选去重。正常表示当前未发现异常，未完成有辅助提示；失败/取消/中断/结果未知/用量不确定/应存正文缺失归异常，METADATA 不保存正文不算异常，四轴保留排障。默认会话目录按首次收录倒序，组内按开始时间和请求编号升序分页；未关联请求独立展示。筛选须在同一请求同时满足，汇总范围为全会话已索引记录；展开会话不读取原文，逐请求显式查看才读取和留痕。草稿、显式查询、半开时间、租户切换和访问权限保持既有边界。
 
 租户初始范围：全局超管使用系统默认租户编号 1 作为首选，经现有租户目录确认后自动加载，不采用用户个人归属或返回列表的首项；用户主动切换后保留所选租户。租户管理员直接从当前身份的 `tenant_id` 派生查询范围，不加载全局租户目录；身份延迟加载或范围变化时随当前身份更新，不把最初的空值固化在组件 state。未确认租户时不渲染模式和审计查询子视图。沿用现有选择器及切换时的子视图重建，无新增授权规则或控件样式。
+
+新增状态列及索引、待投影标记、会话表；纯状态计算位于 schemas，查询和投影位于 Repository，Service 负责授权。独立幂等投影不阻塞模型或回滚已有审计；有界批量候选 + EXISTS、严格查询 DTO、双库 DDL 和独立回填按[已确认方案](./audit-query-conversation-proposal.md)实施。新增 query-readiness、conversation-groups 及组内 requests API，旧接口仅兼容旧调用方。
 
 ### 6.3 依赖与变更风险
 
@@ -323,3 +328,10 @@ AuditMessageAssembler 增加真实输入 unit_index，按 `message_index=unit_in
 | 2026-10-14 | 对齐客户端接口 0.3、两字段保护限制及并行任务，补明确管理页增量正文线格式与共享流式请求层 | 用户要求生成任务文档并交付客户端同步开发 |
 | 2026-10-14 | 回写首批入口/仓储/编码/加密模块现状和独立客户端开发，明确尚未接线留存链路 | 用户要求双端分支并行开发 |
 | 2026-10-14 | 接通异步留存、活动/状态收敛、管理员查询和原文日志、Platform 页面；回写有界线程池/HMAC/微秒 UTC/精确 ID/缺口状态与隔离联调证据 | 用户要求完成服务端剩余开发并与客户端联调 |
+
+
+### 2026-10-19 实施与上线约束
+
+新增请求 audit_status、group_index_pending、group_indexed_status 及对应联合索引；新建可重建的 dsh_model_audit_conversation 目录表，不储存正文。请求事实和派生状态同事务，组投影在独立事务锁请求及目录，以已投影状态差值幂等维护计数，失败不撤销审计。复用租户巡检任务；详情超时5秒仅结束等待，底层线程槽保留到实际工作结束，循环预算不承诺单条数据库语句能被终止。
+
+先部署DDL迁移 dsh_audit_groups（前序 dsh_audit_sources）及模型发现建表，再部署所有采集和消费进程；逐租户运行 scripts/backfill_dsh_audit_presentation.py，默认dry-run，显式--apply才写，按输出游标恢复，最后从头检查遗漏。已有status但缺名称摘要的异常历史仍需原 backfill_dsh_audit_model_names.py 修复。目录首次收录时间不代表真实会话创建时间；持续新请求不调整目录位置。状态未完成属于当前未发现异常，不代表请求已成功；元数据模式不存正文不算异常。投影尚待处理必须显示延迟提示。

@@ -3,10 +3,12 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Path, Query, Response
+from fastapi import APIRouter, Depends, Path, Query, Request, Response
 from fastapi.responses import StreamingResponse
+from pydantic import ValidationError
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.dsh_audit import DshAuditQueryInvalidError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh.api.dependencies import get_settings
 from bisheng.dsh.audit_admin_runtime import build_audit_administration
@@ -17,6 +19,7 @@ from bisheng.dsh.domain.schemas.model_audit import (
     ResponseResult,
     UsageSettlement,
 )
+from bisheng.dsh.domain.schemas.model_audit_group import AuditGroupQuery
 
 router = APIRouter(prefix="/dsh/admin/model-audit")
 audit_admin = UserPayload.get_tenant_admin_user
@@ -49,7 +52,7 @@ async def models(
     tenant_id: Tenant = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Limit = 20,
-    keyword: Annotated[str | None, Query(max_length=128)] = None,
+    keyword: Annotated[str | None, Query(max_length=2048)] = None,
     user=Depends(audit_admin),
     service=Depends(get_audit_management),
 ):
@@ -79,6 +82,7 @@ async def requests(
     usage_settlement: UsageSettlement | None = None,
     content_status: ContentStatus | None = None,
     association_status: Literal["ASSOCIATED", "UNASSOCIATED"] | None = None,
+    audit_status: Literal["NORMAL", "ABNORMAL"] | None = None,
     start_at: datetime | None = None,
     end_at: datetime | None = None,
 ):
@@ -101,10 +105,48 @@ async def requests(
             usage_settlement=usage_settlement,
             content_status=content_status,
             association_status=association_status,
+            audit_status=audit_status,
             start_at=start_at,
             end_at=end_at,
         )
     )
+
+
+def strict_group_query(request):
+    try:
+        if len(request.query_params) != len(list(request.query_params.multi_items())):
+            raise ValueError("Duplicate query field")
+        return AuditGroupQuery.model_validate(dict(request.query_params))
+    except (ValueError, ValidationError):
+        raise DshAuditQueryInvalidError() from None
+
+
+@router.get("/query-readiness")
+async def query_readiness(
+    response: Response, tenant_id: Tenant = None, user=Depends(audit_admin), service=Depends(get_audit_management)
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.readiness(user.user_id, tenant_id))
+
+
+@router.get("/conversation-groups")
+async def conversation_groups(
+    request: Request, response: Response, user=Depends(audit_admin), service=Depends(get_audit_management)
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.groups(user.user_id, strict_group_query(request)))
+
+
+@router.get("/conversation-groups/{key}/requests")
+async def group_requests(
+    key: Annotated[str, Path(pattern="^[0-9a-f]{64}$")],
+    request: Request,
+    response: Response,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.groups(user.user_id, strict_group_query(request), key=key))
 
 
 @router.get("/conversations")
