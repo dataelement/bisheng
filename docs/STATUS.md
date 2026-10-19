@@ -1,3 +1,10 @@
+## 2026-10-19 — 技能独立选择菜单与本地发布
+
+- 加号菜单点击技能进入独立列表页，支持搜索、返回和关闭后重置；名称优先占位，描述紧随名称并在空间不足时省略。移除根菜单重复分组标题。
+- 验证：菜单与知识空间 2 套件 / 11 项回归通过，1457 个 strict 文件检查、变更文件 lint、三语言一致性、生产构建通过。实际组件预览确认名称与描述同行显示及独立菜单交互。
+- 3006 已发布上一版 e22312017；本轮发布记录见主工作区 outputs/composer-release-20261019/revision/deployment.json。桌面 V1.2.0 a73f871 / Harness 0.2.0-rc.2 已完成打包、签名及 DMG 完整性校验并安装启动；Chat 使用 3006 内容。首次打包延迟来自 Electron 下载超时，改用本机同版本 43.0.0 后完成。
+- 企业 Work 技能目录同步和本地执行仍按 ENTERPRISE_SKILL_EXECUTION_CONTRACT.md 单独跟进。
+
 ## 2026-10-19 — Chat 输入框上方的能力面板
 
 - 源码基线：`feat/bisheng-work-120@e85f8ef210a035a87309c76c5f2be0816d0edb2b`；工作目录 `.worktrees/bisheng-desktop-navigation`。本轮修改平台 client，桌面嵌入 Chat 加载同一前端。Work 原生参考版本为 bisheng-work `feee3b5b14ced1cead6bcd09ca69b7d777e888c9` / Harness `@deepseek-ai/dsh@0.2.0-rc.2`；桌面共享 V1.2.0 已有后续提交 a73f871，本轮保持桌面代码独立。

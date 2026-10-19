@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ChatResourceMenu } from './ChatResourceMenu';
+import { ComposerSubmenu } from './ComposerSubmenu';
 
 const { RecoilRoot } = jest.requireActual('recoil');
 
@@ -107,4 +108,23 @@ test('all selected platform tools can be removed from the composer', async () =>
   fireEvent.click(await screen.findByRole('button', { name: 'Calculator' }));
   await openMenu();
   expect(screen.getByRole('menuitemcheckbox', { name: 'Calculator' })).toHaveAttribute('aria-checked', 'false');
+});
+
+
+test('skills open a dedicated page and closing resets navigation', async () => {
+  render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()} showFileUpload>
+    <ComposerSubmenu label="Skills" icon={<span />}><input aria-label="Search skills" /></ComposerSubmenu>
+  </ChatResourceMenu></RecoilRoot>);
+  await openMenu();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+  expect(screen.queryByRole('menuitem', { name: 'com_ui_upload_files' })).toBeNull();
+  expect(screen.getByRole('textbox', { name: 'Search skills' })).toHaveFocus();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'dshChat.backToCapabilities' }));
+  expect(screen.getByRole('menuitem', { name: 'com_ui_upload_files' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Skills' }));
+  fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  await openMenu();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.getByRole('menuitem', { name: 'Skills' })).toBeInTheDocument();
 });

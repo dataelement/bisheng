@@ -19,11 +19,13 @@ import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 
 interface SkillSelectorProps {
+    layout?: 'default' | 'command';
     selected: TaskModeSkill[];
     onChange: (skills: TaskModeSkill[]) => void;
 }
 
 interface SkillRowProps {
+    layout?: 'default' | 'command';
     skill: TaskModeSkill;
     isChecked: boolean;
     onToggle: (skill: TaskModeSkill) => void;
@@ -34,7 +36,7 @@ interface SkillRowProps {
  * the full text moves into a tooltip — but only when something actually
  * overflows, which we can only know by measuring, hence the per-row component.
  */
-function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
+function SkillRow({ skill, isChecked, onToggle, layout }: SkillRowProps) {
     const [nameRef, nameClipped] = useIsClipped<HTMLParagraphElement>(skill.display_name);
     const [descRef, descClipped] = useIsClipped<HTMLParagraphElement>(skill.description);
     const showTooltip = nameClipped || descClipped;
@@ -54,19 +56,20 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                         'data-[highlighted]:bg-fill-2 focus:bg-fill-2',
                         // Selected rows carry the state themselves (brand tint + a
                         // trailing check) now that the leading checkbox is gone.
+                        layout === 'command' && 'dsh-command-skill-row',
                         isChecked && 'bg-blue-500/[0.07] data-[highlighted]:bg-blue-500/[0.07] focus:bg-blue-500/[0.07]',
                     )}
                 >
                     {/* Both lines are single-line; the full text lives in the tooltip. */}
-                    <div className="min-w-0 flex-1">
+                    <div className={cn("min-w-0 flex-1", layout === 'command' && 'dsh-command-skill-text')}>
                         <p
                             ref={nameRef}
-                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-text-1')}
+                            className={cn('truncate text-[14px] leading-5', layout === 'command' && 'dsh-command-name', isChecked ? 'text-blue-500' : 'text-text-1')}
                         >
                             {skill.display_name}
                         </p>
                         {skill.description && (
-                            <p ref={descRef} className="truncate text-[12px] leading-4 text-text-3">
+                            <p ref={descRef} className={cn("truncate text-[12px] leading-4 text-text-3", layout === 'command' && 'dsh-command-description')}>
                                 {skill.description}
                             </p>
                         )}
@@ -95,7 +98,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
     );
 }
 
-export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
+export function SkillSelector({ selected, onChange, layout }: SkillSelectorProps) {
     const localize = useLocalize();
     const [keyword, setKeyword] = useState('');
     const { data: skills = [], isFetching } = useQuery({
@@ -225,6 +228,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                                 never cuts across a selected row's tinted background. */}
                             {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-fill-2" />}
                             <SkillRow
+                                layout={layout}
                                 skill={skill}
                                 isChecked={selected.some((s) => s.name === skill.name)}
                                 onToggle={handleToggle}

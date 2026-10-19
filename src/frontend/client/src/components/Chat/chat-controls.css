@@ -85,21 +85,18 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
   max-height:min(360px, var(--radix-dropdown-menu-content-available-height));
   padding:4px; overflow-y:auto; overscroll-behavior:contain;
 }
-.dsh-command-panel .dsh-command-heading {
-  padding:6px 8px; color:rgb(var(--text-3)); font-size:12px; font-weight:400;
-}
 .dsh-command-description {
-  margin-left:auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+  margin-left:0; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis;
   white-space:nowrap; font-size:12px; color:rgb(var(--text-3));
 }
-.dsh-command-panel [role="menuitemcheckbox"] > span:last-child { margin-left:4px; }
 .dsh-command-skills {
   display:flex; flex-direction:column; min-height:0; max-height:260px;
   padding:4px 8px; overflow-y:auto;
 }
-@media (max-width:575px) {
-  .dsh-command-description { display:none; }
-}
+.dsh-command-name { flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsh-command-skill-text { display:flex; align-items:baseline; gap:8px; }
+.dsh-command-panel .dsh-command-skill-row { align-items:center; }
+.dsh-command-panel [role="menuitemcheckbox"] > span:last-child { margin-left:auto; flex:none; }
 
 .dsh-knowledge-columns { display:flex; justify-content:space-between; margin-top:20px; padding:0 8px 10px; color:rgb(var(--text-3)); font-size:12px; border-bottom:1px solid rgb(var(--border-base)); }
 .dsh-knowledge-list { max-height: min(440px, 48vh); margin-top:8px; }

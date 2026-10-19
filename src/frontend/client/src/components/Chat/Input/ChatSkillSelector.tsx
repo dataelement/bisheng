@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { ComposerSubmenu } from './ComposerSubmenu';
 import { Outlined } from 'bisheng-icons';
 import { SkillSelector } from '~/components/Linsight/Input/SkillSelector';
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from '~/components/ui';
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 
@@ -15,17 +15,10 @@ interface Props {
 /** Skill selection shares the existing enterprise list and multi-select state. */
 export function ChatSkillSelector({ selected, disabled, onChange, menu }: Props) {
     const localize = useLocalize();
-    const [expanded, setExpanded] = useState(false);
-    if (menu) return <>
-        <DropdownMenuItem disabled={disabled} aria-expanded={expanded}
-            onSelect={(event) => { event.preventDefault(); setExpanded((current) => !current); }} className="gap-2">
-            <Outlined.Skill size={16} />{localize('com_linsight_add_skill')}
-            <Outlined.Down size={14} className="ml-auto" style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
-        </DropdownMenuItem>
-        {expanded && <div className="dsh-command-skills">
-            <SkillSelector selected={selected} onChange={onChange} />
-        </div>}
-    </>;
+    if (menu) return <ComposerSubmenu label={localize('com_linsight_add_skill')}
+        icon={<Outlined.Skill size={16} />} disabled={disabled}>
+        <SkillSelector selected={selected} onChange={onChange} layout="command" />
+    </ComposerSubmenu>;
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>

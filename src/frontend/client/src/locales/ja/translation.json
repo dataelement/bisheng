@@ -2392,6 +2392,7 @@
     "scroll_to_bottom": "最下部へ移動"
   },
   "dshChat": {
+    "backToCapabilities": "追加メニューに戻る",
     "uploadDescription": "ローカルファイルを会話に追加",
     "knowledgeDescription": "コンテキストに使うナレッジスペースを選択",
     "searchDescription": "ウェブで最新情報を検索",

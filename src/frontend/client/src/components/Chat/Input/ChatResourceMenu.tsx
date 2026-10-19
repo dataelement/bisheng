@@ -1,7 +1,8 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel } from '~/components/ui';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
+import { ComposerMenuContext } from './ComposerSubmenu';
 import { KnowledgeSpaceDialog } from './KnowledgeSpaceDialog';
 import { useComposerMenuAnchor } from './useComposerMenuAnchor';
 import type { KnowledgeItem } from './knowledgeTypes';
@@ -41,10 +42,11 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
     : [];
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const anchor = useComposerMenuAnchor(trigger, open);
   return <>
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={(next) => { setOpen(next); if (!next) setPage(null); }}>
       <DropdownMenuTrigger asChild disabled={disabled}>
         <button ref={trigger} type="button" className="dsh-composer-add" disabled={disabled}
           title={localize('dshChat.addContext')} aria-label={localize('dshChat.addContext')}>
@@ -56,36 +58,38 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
       <DropdownMenuContent side="top" align="start" sideOffset={anchor.sideOffset} alignOffset={anchor.alignOffset} collisionPadding={12}
         style={{ width: anchor.width }}
         className="dsh-chat-menu dsh-add-menu dsh-command-panel" onCloseAutoFocus={(event) => { if (selecting) event.preventDefault(); }}>
-        <DropdownMenuLabel className="dsh-command-heading">{localize('com_ui_add')}</DropdownMenuLabel>
+        <ComposerMenuContext.Provider value={{ page, setPage }}>
+        {!page && <>
         {showFileUpload && <DropdownMenuItem aria-label={localize('com_ui_upload_files')} disabled={fileUploadDisabled} onSelect={onFileUploadClick} className="gap-2">
-          <Outlined.Attachment size={16} />{localize('com_ui_upload_files')}
+          <Outlined.Attachment size={16} /><span className="dsh-command-name">{localize('com_ui_upload_files')}</span>
           <span className="dsh-command-description">{localize('dshChat.uploadDescription')}</span>
         </DropdownMenuItem>}
         {showFileUpload && onFolderUploadClick && <DropdownMenuItem disabled={fileUploadDisabled} onSelect={onFolderUploadClick} className="gap-2">
-          <Outlined.FolderClose size={16} />{localize('com_ui_upload_folder')}
+          <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('com_ui_upload_folder')}</span>
         </DropdownMenuItem>}
         {showKnowledgeSelection && <DropdownMenuItem aria-label={localize('dshChat.selectKnowledge')} onSelect={() => { setOpen(false); setSelecting(true); }} className="gap-2">
-          <Outlined.FolderClose size={16} />{localize('dshChat.selectKnowledge')}
+          <Outlined.FolderClose size={16} /><span className="dsh-command-name">{localize('dshChat.selectKnowledge')}</span>
           <span className="dsh-command-description">{localize('dshChat.knowledgeDescription')}</span>
         </DropdownMenuItem>}
-        {(showTools || showWebSearch || showResearch || children) && <DropdownMenuLabel className="dsh-command-heading">{localize('com_ui_tools')}</DropdownMenuLabel>}
         {showTools && availableTools.map((group) => <DropdownMenuCheckboxItem key={group.id}
           aria-label={labelForGroup(group, localize)} indicatorSide="right" checked={isChecked(group.id)} disabled={disabled}
           onCheckedChange={() => toggle(group)} onSelect={(event) => event.preventDefault()} className="gap-2">
-          {iconForGroup(group)}<span className="min-w-0 truncate">{labelForGroup(group, localize)}</span>
+          {iconForGroup(group)}<span className="dsh-command-name">{labelForGroup(group, localize)}</span>
           <span className="dsh-command-description">{group.description}</span>
         </DropdownMenuCheckboxItem>)}
         {showWebSearch && <DropdownMenuCheckboxItem aria-label={localize('com_tools_web_search')} indicatorSide="right" checked={webSearchActive}
           disabled={disabled} onCheckedChange={onWebSearchChange} onSelect={(event) => event.preventDefault()} className="gap-2">
-          <Outlined.Earth size={16} />{localize('com_tools_web_search')}
+          <Outlined.Earth size={16} /><span className="dsh-command-name">{localize('com_tools_web_search')}</span>
           <span className="dsh-command-description">{localize('dshChat.searchDescription')}</span>
         </DropdownMenuCheckboxItem>}
         {showResearch && <DropdownMenuCheckboxItem aria-label={localize('com_linsight_task_mode')} indicatorSide="right" checked={researchActive}
           disabled={disabled} onCheckedChange={onResearchChange} className="gap-2">
-          <Outlined.ListSuccess size={16} />{localize('com_linsight_task_mode')}
+          <Outlined.ListSuccess size={16} /><span className="dsh-command-name">{localize('com_linsight_task_mode')}</span>
           <span className="dsh-command-description">{localize('dshChat.taskDescription')}</span>
         </DropdownMenuCheckboxItem>}
+        </>}
         {children}
+        </ComposerMenuContext.Provider>
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="dsh-active-capabilities">
