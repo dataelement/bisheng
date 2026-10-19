@@ -27,10 +27,10 @@ DEEPSEEK_PAYLOAD = {
         },
         {
             "rerank_score": 1.1,
-            "title": "No summary page",
+            "title": "No snippet page",
             "url": "https://other.example.org/page",
-            "snippet": "Short abstract only.",
-            "summary": "",
+            "snippet": "",
+            "summary": "Long abstract only.",
             "content": "",
             "site_name": None,
             "site_icon": None,
@@ -75,12 +75,12 @@ def test_results_are_normalized():
     first, second = results
     assert first["title"] == "DeepSeek V4 模型发布"
     assert first["url"] == "https://example.com/deepseek-v4"
-    assert first["snippet"].startswith("DeepSeek 发布了 V4 模型")
+    assert first["snippet"] == "DeepSeek V4 已上线。"
     assert first["source"] == "Example News"
     assert first["siteIcon"] == "https://example.com/favicon.ico"
     assert first["datePublished"] == "2026-06-01T00:00:00+00:00"
-    # Missing summary falls back to the short snippet; missing site name to the host.
-    assert second["snippet"] == "Short abstract only."
+    # Missing snippet falls back to the long summary; missing site name to the host.
+    assert second["snippet"] == "Long abstract only."
     assert second["source"] == "other.example.org"
     assert second["siteIcon"] is None
     assert second["datePublished"] is None

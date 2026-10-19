@@ -379,7 +379,16 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                             error={(formErrors as Record<string, string>).api_key}
                             id="deepseek-api-key"
                         />
-                        {baseUrlField}
+                        {/* Empty base_url falls back to this endpoint on the backend */}
+                        <InputField
+                            label="Base URL"
+                            name="base_url"
+                            value={currentToolMap['base_url'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).base_url}
+                            id="deepseek-base-url"
+                            placeholder="https://api.deepseek.com/v1/tools/search"
+                        />
                     </>
                 );
             case 'searXNG':

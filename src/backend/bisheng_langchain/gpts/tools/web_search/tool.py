@@ -364,8 +364,9 @@ class DeepSeekSearch(SearchTool):
                 item_id=item.get('url') or index,
                 title=item.get('title'),
                 url=item.get('url'),
-                # summary is the long, query-focused abstract meant for model reading
-                snippet=item.get('summary') or item.get('snippet'),
+                # The long `summary` opens with page headings and metadata, which fills
+                # the citation card; the short `snippet` is query-focused body text.
+                snippet=item.get('snippet') or item.get('summary'),
                 site_icon=item.get('site_icon'),
                 source=item.get('site_name') or self.get_host_from_url(item.get('url')),
                 date_published=item.get('date'),
