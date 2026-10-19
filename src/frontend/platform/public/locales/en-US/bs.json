@@ -709,6 +709,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek Web Search",
       "serverUrl": "Server URL",
       "serverUrlPlaceholder": "Enter the searXNG access URL you deployed, e.g., http://localhost:8080"
     },

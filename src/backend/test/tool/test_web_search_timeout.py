@@ -26,6 +26,7 @@ def _ok_response(payload):
         ("serp", {"api_key": "k"}, "get", {"organic_results": []}),
         ("cloudsway", {"api_key": "k", "base_url": "https://cs.example.com"}, "get", {"webPages": {"value": []}}),
         ("searXNG", {"base_url": "https://searx.example.com"}, "get", {"results": []}),
+        ("deepseek", {"api_key": "k"}, "post", {"results": []}),
     ],
 )
 def test_provider_request_has_default_timeout(provider, config, method, payload):

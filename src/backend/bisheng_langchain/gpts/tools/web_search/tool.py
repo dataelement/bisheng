@@ -113,6 +113,7 @@ class SearchTool(ABC):
             'tavily': TavilySearch,
             'cloudsway': CloudswaySearch,
             'searXNG': SearXNGSearch,
+            'deepseek': DeepSeekSearch,
         }
         if name not in tool_class:
             raise ValueError(f"Tool {name} not found.")
@@ -338,5 +339,35 @@ class SearXNGSearch(SearchTool):
                 site_icon=item.get('thumbnail'),
                 source=item.get('engine') or self.get_host_from_url(item.get('url')),
                 date_published=item.get('publishedDate'),
+            ))
+        return web_list
+
+
+class DeepSeekSearch(SearchTool):
+    """DeepSeek web search: https://api-docs.deepseek.com/zh-cn/guides/search/"""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.api_key = kwargs.get('api_key')
+        self.base_url = self._get_optional_str(kwargs, 'base_url') or 'https://api.deepseek.com/v1/tools/search'
+        self.headers = {'Authorization': f'Bearer {self.api_key}'}
+
+    def _invoke(self, query: str, **kwargs) -> (str, list):
+        result = self._requests(self.base_url, method='POST', json={'query': query, 'count': 10},
+                                headers=self.headers)
+
+        answers = result.get('results', [])
+
+        web_list = []
+        for index, item in enumerate(answers):
+            web_list.append(self.normalize_result_item(
+                item_id=item.get('url') or index,
+                title=item.get('title'),
+                url=item.get('url'),
+                # summary is the long, query-focused abstract meant for model reading
+                snippet=item.get('summary') or item.get('snippet'),
+                site_icon=item.get('site_icon'),
+                source=item.get('site_name') or self.get_host_from_url(item.get('url')),
+                date_published=item.get('date'),
             ))
         return web_list
