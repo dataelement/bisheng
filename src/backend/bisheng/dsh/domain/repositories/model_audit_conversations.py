@@ -29,6 +29,19 @@ def group_binding(row, tenant):
 
 
 class AuditConversationRepository:
+    def user_names(self, user_ids):
+        """Resolve only identities already present on an authorized bounded page."""
+        from bisheng.user.domain.models.user import User
+
+        require_tenant()
+        ids = set(user_ids)
+        if not ids:
+            return {}
+        if len(ids) > 100:
+            raise ValueError("Audit user lookup exceeds page bounds")
+        # Historical ownership stays with the audit, even if membership changes.
+        return dict(self.session.exec(select(User.user_id, User.user_name).where(User.user_id.in_(ids))).all())
+
     def readiness(self):
         require_tenant()
         missing_status = self.session.exec(
@@ -216,8 +229,9 @@ class AuditConversationRepository:
                     }
                 ).encode()
             ).decode()
+        names = self.user_names(item["user_id"] for item in items)
         return {
-            "items": items,
+            "items": [{**item, "user_name": names.get(item["user_id"])} for item in items],
             "next_cursor": next_cursor,
             "scan_limited": bool(next_cursor and len(items) < limit),
             "progress": {**ready, "coverage": "OBSERVABLE_ESTIMATE"},

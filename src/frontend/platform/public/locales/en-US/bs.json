@@ -2787,6 +2787,7 @@
       "all": "All",
       "association": "Conversation association",
       "user": "User ID",
+      "user_unavailable": "User unavailable",
       "conversation": "Client-declared conversation",
       "original": "View original",
       "collapse": "Collapse",

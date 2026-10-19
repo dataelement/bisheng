@@ -79,10 +79,14 @@ class DshSettings(BaseModel):
         default=16777216, ge=65536, description="Maximum body bytes captured per request; exhaustion marks incomplete."
     )
     audit_queue_budget_bytes: int = Field(
-        default=67108864, ge=65536, description="Maximum total queued audit body bytes per API process."
+        default=67108864,
+        ge=65536,
+        description="Per-process body budget across active, queued and writing requests, including fragment overhead; control events have a separate bounded queue.",
     )
     audit_queue_max_events: int = Field(
-        default=4096, ge=1, description="Maximum number of buffered audit events per API process."
+        default=4096,
+        ge=1,
+        description="Maximum buffered control events and, independently, active/queued/writing body requests; stream fragments do not consume event slots.",
     )
     audit_mode_read_timeout_seconds: float = Field(
         default=0.1, gt=0, le=5, description="Bounded authoritative tenant-mode read; failure falls back to OFF."

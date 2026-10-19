@@ -60,8 +60,8 @@ export function ModelAuditCard({
         >
           {dshTime(row.started_at)}
         </time>
-        <span className="whitespace-nowrap">
-          {t("dsh.modelAuditView.user")} #{row.user_id}
+        <span className="max-w-48 truncate" title={row.user_name || undefined}>
+          {row.user_name || t("dsh.modelAuditView.user_unavailable")}
         </span>
         <span className="whitespace-nowrap font-medium text-primary dark:text-foreground">
           {t("dsh.modelAuditView.kinds." + (row.request_kind || "unknown"))}

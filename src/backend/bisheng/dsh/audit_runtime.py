@@ -32,6 +32,7 @@ class ModelAuditRuntime:
             max_events=settings.audit_queue_max_events,
             max_bytes=settings.audit_queue_budget_bytes,
             consumer=self.writer.write,
+            body_consumer=self.writer.write_body_batch,
         )
         self.evidence_queue = BoundedAuditQueue(
             max_events=settings.audit_queue_max_events,

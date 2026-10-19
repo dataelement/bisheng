@@ -1,5 +1,20 @@
 # 模型审计开发验证结果
 
+## 2026-10-19 正文延后持久化：本轮验证
+
+对应 spec 0.22 AC-17、AC-35、AC-38 及 design 0.12 §4.1。仅服务端采集/后台写入优化，不变更客户端扩展协议、加密编码、正文读取协议或业务认证；保留前轮用户名展示等未提交改动。本轮没有连接109，没有修补历史缺片，没有提交、推送或部署。
+
+- `pytest test/dsh -q -k model_audit`：**165 passed、3 skipped、573 deselected**。三个opt-in存储套件默认跳过，未算通过。新增9项请求缓冲/批量写入用例、2项HTTP/SSE阻塞和故障用例；现有模型失败、取消、迭代前关闭、ASGI发送失败、用量结算异常、完整性/来源及租户隔离继续通过。
+- 5000个连续统一增量，控制队列只设4个事件名额：没有逐片段排队或存储调用，终止后只有一个正文任务；序号/单元索引/字节保留，终止、响应、用量控制事实不被片段挤占。正文消费者阻塞时控制消费者仍可完成。
+- 共享预算覆盖活跃、等待和消费中的缓冲，包含块对象开销；达到预算停止审计捕获，不改写业务输出；写入完成/失败或关闭超时后退账，重复终止不重投。后台最大4个对象操作、每事务最多32个引用已断言；并发对象仍按序号入引用。
+- 沿用已有隔离HTTP harness，真实FastAPI路由/ChatExecution/审计服务/仓储/加解密逻辑，合成身份与模型。模型暂停时没有正文对象或出现行；释放模型后，即使正文存储持续阻塞，SSE仍返回完整内容、`[DONE]`，模型只调用一次且用量已结算。恢复存储得到COMPLETE；注入存储失败得到PARTIAL，但模型/接口/用量仍成功。管理读取配对普通用户和越租户拒绝。按e2e-test约束不使用109凭证、不把模拟认证当正式JWT/FGA验收。
+- 独立本机Docker MySQL8测试：**1 passed**（`DSH_AUDIT_GROUPS_MYSQL=1 pytest test/dsh/test_model_audit_groups_mysql.py -q`）。覆盖真实双消费者、32引用批次、一次SQL故障后有限重试、整请求重放幂等、内容COMPLETE/状态NORMAL；旧迁移与查询计划回归同时通过。对象存储为加密对象stub，不冒充真实MinIO。仅启动并清理本任务随机命名的临时容器/卷和合成数据，可重新运行创建，不操作业务库。
+- Ruff、架构守卫与`git diff --check`通过；没有新增表或迁移。
+
+**全量套件边界**：另运行完整`pytest test/dsh -q`得到548 passed、114 skipped、75 errors、3 failed（新增最后一项并发上限测试前的快照）。75项错误明确缺少`DSH_TEST_DATABASE_URL`或隔离Redis配置；不连接默认业务库补齐。三项断言失败是`test_admin_policy_view.py::test_candidates_use_configured_ids_and_target_tenant_governance`、`test_shared_trust.py::test_model_catalog_does_not_require_a_deployment_allowlist`、`test_user_grant_switch.py::test_effective_permissions_use_positive_enabled_sources[True-0-True-300]`。已用`git archive 8b79bd3cbec4a83e6192a09133fe99bbbcd9b117 src/backend`到临时目录，在同一venv/config下逐项重跑，三项同样失败，确认是HEAD既有问题；本轮不扩展修复。
+
+**未执行门禁**：109真实模型/正式管理员身份、目标DM8、真实MinIO故障/长流并发、P95/P99和RSS。单请求16MiB与进程正文64MiB是逻辑资源上限，不是实测RSS或延迟SLA。模型终止移交前进程退出仍可丢失全部正文；本次不以同步持久化换取零缺口。
+
 ## 2026-10-19 统一筛选和会话目录：本轮验证
 
 本节为当前实现；早期模型ID选择、四轴筛选和默认请求视图仅属历史。整体 **PARTIAL：功能及本机验证完成，正式环境与容量门禁未执行**。

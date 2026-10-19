@@ -2732,6 +2732,7 @@
       "all": "すべて",
       "association": "会話の関連付け",
       "user": "ユーザー番号",
+      "user_unavailable": "ユーザー情報なし",
       "conversation": "クライアント申告の会話",
       "original": "原文を表示",
       "collapse": "閉じる",

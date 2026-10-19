@@ -2732,6 +2732,7 @@
       "all": "全部",
       "association": "会话关联",
       "user": "用户编号",
+      "user_unavailable": "用户信息不可用",
       "conversation": "客户端声明的会话",
       "original": "查看原文",
       "collapse": "收起",

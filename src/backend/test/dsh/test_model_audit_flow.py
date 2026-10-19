@@ -22,6 +22,7 @@ from bisheng.dsh.infrastructure.model_audit_keys import AuditKeyRing
 from bisheng.dsh.infrastructure.model_audit_storage import EncryptedAuditStorage
 from test.dsh.model_audit_fixtures import NOW, FaultAuditObjects, audit_database, audit_session
 from test.dsh.model_audit_harness import AuditHarness
+from test.e2e.helpers.api import assert_resp_200
 
 
 @asynccontextmanager
@@ -86,6 +87,79 @@ async def test_request_metadata_is_not_original_and_body_access_is_explicit():
             BASE + "/settings/2", headers=LOCAL_ADMIN, json={"operation_id": "no", "expected_version": 1, "mode": "OFF"}
         )
         assert denied.status_code != 200 or denied.json()["status_code"] != 200
+
+
+@pytest.mark.parametrize("storage_failure", [False, True])
+async def test_deferred_body_storage_cannot_gate_sse_or_settlement(storage_failure):
+    """AC-17, AC-35, AC-38: defer originals and keep SSE live during blocked/failed storage."""
+    async with fixture() as (harness, client, objects):
+        model_waiting, finish_model = asyncio.Event(), asyncio.Event()
+        storage_started, release_storage = asyncio.Event(), asyncio.Event()
+        original_put = objects.put
+
+        async def delayed_put(key, value):
+            storage_started.set()
+            await release_storage.wait()
+            if storage_failure:
+                raise OSError("e2e-dsh-audit-storage-fault")
+            await original_put(key, value)
+
+        async def model(_messages, **_kwargs):
+            harness.calls += 1
+            yield AIMessageChunk(content="e2e-dsh-audit-first")
+            model_waiting.set()
+            await finish_model.wait()
+            yield AIMessageChunk(
+                content="-last",
+                response_metadata={"finish_reason": "stop"},
+                usage_metadata={"input_tokens": 10, "output_tokens": 2, "total_tokens": 12},
+            )
+
+        objects.put, harness.astream = delayed_put, model
+        request = asyncio.create_task(call(client, stream=True))
+        try:
+            await asyncio.wait_for(model_waiting.wait(), 2)
+            # Give both control consumers an opportunity to persist while the model is active.
+            for _ in range(200):
+                if not harness.queue.used_bytes and not harness.evidence.used_bytes:
+                    break
+                await asyncio.sleep(0.001)
+            assert not storage_started.is_set() and not objects.data
+            with audit_session(harness.engine) as session:
+                from sqlmodel import select
+
+                from bisheng.dsh.domain.models.model_audit_content import DshModelAuditOccurrence
+
+                assert session.exec(select(DshModelAuditOccurrence)).all() == []
+            finish_model.set()
+            response = await asyncio.wait_for(asyncio.shield(request), 2)
+            await asyncio.wait_for(storage_started.wait(), 2)
+            assert response.status_code == 200 and "e2e-dsh-audit-first" in response.text
+            assert "-last" in response.text and "[DONE]" in response.text and harness.calls == 1
+            request_id = response.headers["x-request-id"]
+            assert not release_storage.is_set()
+            # Do not await the blocked body queue: the independent control path must finish.
+            for _ in range(200):
+                if not harness.queue.used_bytes:
+                    break
+                await asyncio.sleep(0.001)
+            metadata = assert_resp_200(await client.get(BASE + "/requests/" + request_id, headers=ADMIN))
+            assert metadata["model_result"] == "SUCCEEDED"
+            assert metadata["response_result"] == "COMPLETED"
+            assert metadata["usage_settlement"] == "SETTLED"
+            assert (await client.get(BASE + "/requests/" + request_id, headers=USER)).status_code == 403
+            assert (
+                await client.get(BASE + "/requests/" + request_id + "?tenant_id=3", headers=LOCAL_ADMIN)
+            ).status_code == 403
+            release_storage.set()
+            await harness.drain()
+            final = assert_resp_200(await client.get(BASE + "/requests/" + request_id, headers=ADMIN))
+            assert final["content_status"] == ("PARTIAL" if storage_failure else "COMPLETE")
+            assert final["model_result"] == "SUCCEEDED" and final["usage"]["total_tokens"] == 12
+        finally:
+            finish_model.set()
+            release_storage.set()
+            await asyncio.gather(request, return_exceptions=True)
 
 
 @pytest.mark.parametrize("stream", [False, True])

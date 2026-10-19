@@ -35,7 +35,7 @@ export function ModelAuditGroup({
           onClick={onToggle}
         >
           {expanded ? "▾ " : "▸ "}
-          {t("dsh.modelAuditView.user")} #{group.user_id} ·{" "}
+          {group.user_name || t("dsh.modelAuditView.user_unavailable")} ·{" "}
           {group.conversation_id}
         </Button>
         <span>

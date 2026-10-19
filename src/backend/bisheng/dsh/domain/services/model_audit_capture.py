@@ -51,6 +51,7 @@ class AuditCapture:
         self.used_bytes = 0
         self.input_units = self.metadata.get("input_units", 0) if self.mode == "METADATA" else 0
         self.output_units = 0
+        self.body_buffer = None
 
     def _event(self, kind, **kwargs):
         kwargs["metadata"] = {**self.metadata, **kwargs.get("metadata", {})}
@@ -102,6 +103,9 @@ class AuditCapture:
                 logger.warning("DSH audit activity unavailable ({})", type(error).__name__)
         if self.mode == "CONTENT":
             try:
+                if not self.capture_failed:
+                    self.body_buffer = self.queue.open_body_buffer(self._event("entered"))
+                    self.capture_failed = self.body_buffer is None
                 for unit in input_units:
                     self._body("input", self.input_units, unit)
                     self.input_units += 1
@@ -143,7 +147,9 @@ class AuditCapture:
             )
             digest = EncryptedAuditStorage._digest(self.digest_key, scope, block)
             sequence = self.channels[channel].observe_digest(len(block), digest)
-            self._put(self._event("body", channel=channel, sequence=sequence, unit_index=unit_index, body=block))
+            if not self.body_buffer.append(channel, sequence, unit_index, block):
+                self.capture_failed = True
+                record_audit_metric("buffer_rejected", tenant_id=self.metadata["tenant_id"], kind="body")
             if self.capture_failed:
                 return
 
@@ -161,6 +167,16 @@ class AuditCapture:
         if not self.started or self.finished:
             return
         self.finished = True
+        # Ownership moves without copying or waiting for any SQL/object-store operation.
+        if self.body_buffer is not None:
+            try:
+                if not self.body_buffer.submit(self.now()):
+                    self.capture_failed = True
+            except Exception as error:
+                self.capture_failed = True
+                logger.warning("DSH audit body submission failed ({})", type(error).__name__)
+            finally:
+                self.body_buffer = None
         if self.capture_failed:
             record_audit_metric("capture_incomplete", tenant_id=self.metadata["tenant_id"])
         self._put(

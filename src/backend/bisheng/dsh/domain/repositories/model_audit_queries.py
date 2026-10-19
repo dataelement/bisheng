@@ -75,12 +75,16 @@ class DshModelAuditQueryRepository(AuditConversationRepository, DshModelAuditWri
             statement.order_by(DshModelAuditRequest.started_at, DshModelAuditRequest.request_id).limit(100)
         ).all()
 
-    def metadata(self, row):
+    def metadata(self, row, *, user_names=None):
         usage = self.one(DshModelCall, DshModelCall.request_id == row.request_id)
         names = AuditRequestMetadata.model_fields
         data = {
-            key: as_utc(getattr(row, key)) for key in names if key not in {"usage", "status_reasons", "status_pending"}
+            key: as_utc(getattr(row, key))
+            for key in names
+            if key not in {"usage", "status_reasons", "status_pending", "user_name"}
         }
+        names_by_id = self.user_names([row.user_id]) if user_names is None else user_names
+        data["user_name"] = names_by_id.get(row.user_id)
         _, data["status_reasons"], data["status_pending"] = audit_status_facts(row)
         data["usage"] = (
             {
@@ -174,8 +178,9 @@ class DshModelAuditQueryRepository(AuditConversationRepository, DshModelAuditWri
                     {"query": fingerprint, "started_at": last.started_at.isoformat(), "request_id": last.request_id}
                 ).encode()
             ).decode()
+        names_by_id = self.user_names(row.user_id for row in page)
         return {
-            "items": [self.metadata(row) for row in page],
+            "items": [self.metadata(row, user_names=names_by_id) for row in page],
             "next_cursor": next_cursor,
             "progress": {
                 "last_write_at": as_utc(max((row.last_write_at for row in page if row.last_write_at), default=None)),

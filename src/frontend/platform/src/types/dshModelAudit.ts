@@ -34,6 +34,7 @@ export type AuditUserOption = { user_id: number; user_name: string };
 export type AuditModelOption = { id: number; name: string };
 export type AuditUserPage = { data: AuditUserOption[]; total: number };
 export type ModelAuditRecord = {
+  user_name?: string | null;
   audit_status?: "NORMAL" | "ABNORMAL" | null;
   status_reasons?: string[];
   status_pending?: boolean;
@@ -92,6 +93,7 @@ export type AuditQueryReadiness = {
   indexing_pending: boolean | null;
 };
 export type AuditConversation = {
+  user_name?: string | null;
   conversation_key: string;
   user_id: number;
   conversation_id: string;

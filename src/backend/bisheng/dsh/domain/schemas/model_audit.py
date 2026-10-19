@@ -34,6 +34,7 @@ class AuditModeAdminSnapshot(AuditModeSnapshot):
 class AuditRequestMetadata(AuditDTO):
     request_id: str
     user_id: int
+    user_name: str | None = None
     session_id: str
     model_id: int
     model_name: str

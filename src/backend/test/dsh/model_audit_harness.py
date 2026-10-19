@@ -44,7 +44,12 @@ class AuditHarness:
 
         tenant_filter._tenant_aware_tables.add(DshModelCall.__tablename__)
         self.writer = DshModelAuditWriter(lambda: self.scope(DshModelAuditWriteRepository), lambda: storage, attempts=2)
-        self.queue = BoundedAuditQueue(max_events=4096, max_bytes=16 * 1024 * 1024, consumer=self.writer.write)
+        self.queue = BoundedAuditQueue(
+            max_events=4096,
+            max_bytes=16 * 1024 * 1024,
+            consumer=self.writer.write,
+            body_consumer=self.writer.write_body_batch,
+        )
         self.evidence = BoundedAuditQueue(max_events=4096, max_bytes=4 * 1024 * 1024, consumer=self.writer.write)
         self.annotations = BoundedAuditQueue(max_events=64, max_bytes=768 * 1024, consumer=self.writer.write)
         self.modes = DshModelAuditSettingService(
@@ -289,7 +294,12 @@ class AuditHarness:
 
     async def drain(self):
         for _ in range(400):
-            if not self.queue.used_bytes and not self.evidence.used_bytes and not self.annotations.used_bytes:
+            if (
+                not self.queue.used_bytes
+                and not self.queue.bodies.used_bytes
+                and not self.evidence.used_bytes
+                and not self.annotations.used_bytes
+            ):
                 return
             await asyncio.sleep(0.01)
         raise TimeoutError("Controlled audit drain timed out")

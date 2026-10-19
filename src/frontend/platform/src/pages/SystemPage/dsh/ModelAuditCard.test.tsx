@@ -20,6 +20,7 @@ const row: ModelAuditRecord = {
   status_pending: false,
   request_id: "synthetic-request",
   user_id: 20,
+  user_name: "Audit Alice",
   model_id: 42,
   model_name: "Synthetic model",
   provider_name: "Synthetic provider",
@@ -46,6 +47,19 @@ const row: ModelAuditRecord = {
 };
 beforeEach(() => vi.clearAllMocks());
 
+it("uses localized unavailable text when the user no longer exists", () => {
+  render(
+    <ModelAuditCard
+      row={{ ...row, user_name: null }}
+      expanded={false}
+      onToggle={vi.fn()}
+      onNavigate={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("dsh.modelAuditView.user_unavailable")).toBeVisible();
+  expect(screen.queryByText(/#20/)).toBeNull();
+});
+
 it("keeps request information compact, revealing exact IDs without fetching an original", () => {
   render(
     <ModelAuditCard
@@ -59,6 +73,8 @@ it("keeps request information compact, revealing exact IDs without fetching an o
   const header = card.querySelector("header")!;
   expect(header).toHaveClass("text-xs");
   expect(within(header).getByText(row.model_name)).toBeVisible();
+  expect(within(header).getByText("Audit Alice")).toBeVisible();
+  expect(header.textContent).not.toContain("#20");
   expect(screen.queryByText(row.request_id)).toBeNull();
   fireEvent.click(
     screen.getByRole("button", { name: "dsh.modelAuditView.request_details" }),

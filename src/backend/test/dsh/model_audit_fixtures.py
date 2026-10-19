@@ -11,6 +11,8 @@ from bisheng.core.context.tenant import set_current_tenant_id, strict_tenant_fil
 from bisheng.core.database import tenant_filter
 from bisheng.dsh.domain.models import model_audit_content, model_audit_request, model_audit_setting
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation
+from bisheng.dsh.infrastructure.model_audit_body_buffer import AuditBodyBuffer
+from bisheng.user.domain.models.user import User
 
 NOW = datetime(2026, 10, 14, tzinfo=UTC)
 AUDIT_MODELS = (
@@ -38,7 +40,7 @@ def audit_database():
     def begin_transaction(connection):
         connection.exec_driver_sql("BEGIN")
 
-    SQLModel.metadata.create_all(engine, tables=[model.__table__ for model in AUDIT_MODELS])
+    SQLModel.metadata.create_all(engine, tables=[model.__table__ for model in AUDIT_MODELS] + [User.__table__])
     previous_tables = set(tenant_filter._tenant_aware_tables)
     previous_initialized = tenant_filter._initialized
     with Session() as probe:
@@ -96,6 +98,21 @@ class ControlledAuditQueue:
             return False
         self.events.append(value)
         return True
+
+    def open_body_buffer(self, event):
+        return AuditBodyBuffer(self, event)
+
+    @staticmethod
+    def reserve(_cost):
+        return True
+
+    def submit(self, buffer):
+        accepted = True
+        for body_event in buffer.events():
+            if not self.put(body_event):
+                accepted = False
+        buffer.fragments.clear()
+        return accepted
 
     def drain(self):
         events, self.events = self.events, []

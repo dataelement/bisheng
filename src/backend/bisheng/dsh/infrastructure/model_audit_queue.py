@@ -5,11 +5,12 @@ from collections import deque
 
 from loguru import logger
 
+from bisheng.dsh.infrastructure.model_audit_body_buffer import BoundedAuditBodies
 from bisheng.dsh.infrastructure.model_audit_telemetry import record_audit_metric
 
 
 class BoundedAuditQueue:
-    def __init__(self, *, max_events, max_bytes, consumer):
+    def __init__(self, *, max_events, max_bytes, consumer, body_consumer=None):
         self.max_events, self.max_bytes, self.consumer = max_events, max_bytes, consumer
         self.events = deque()
         self.used_bytes = 0
@@ -17,6 +18,16 @@ class BoundedAuditQueue:
         self.wakeup = asyncio.Event()
         self.worker = None
         self.rejected = 0
+        self.bodies = BoundedAuditBodies(
+            max_requests=max_events, max_bytes=max_bytes, consumer=body_consumer or self._write_bodies
+        )
+
+    def open_body_buffer(self, event):
+        return self.bodies.open(event)
+
+    async def _write_bodies(self, buffer):
+        for event in buffer.events():
+            await self.consumer(event)
 
     def put(self, event):
         cost = (
@@ -51,6 +62,9 @@ class BoundedAuditQueue:
                 self.used_bytes -= cost
 
     async def close(self, timeout):
+        await asyncio.gather(self._close_events(timeout), self.bodies.close(timeout))
+
+    async def _close_events(self, timeout):
         self.closed = True
         self.wakeup.set()
         if self.worker is None:

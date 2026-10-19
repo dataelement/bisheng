@@ -25,6 +25,7 @@ const ready = { status_ready: true, name_ready: true, indexing_pending: false };
 const group = {
   conversation_key: "a".repeat(64),
   user_id: 20,
+  user_name: "Audit Alice",
   conversation_id: "session-main",
   listed_at: "2026-10-15T12:00:00Z",
   last_request_at: "2026-10-15T12:08:00Z",
@@ -82,6 +83,10 @@ beforeEach(() => {
 it("AC-QC-08: groups by default, expands metadata and reads only the explicitly opened original", async () => {
   render(<ModelAuditRequests tenantId={2} />);
   await screen.findByText(/session-main/);
+  expect(
+    screen.getByRole("button", { name: /Audit Alice.*session-main/ }),
+  ).toBeVisible();
+  expect(screen.queryByText(/#20/)).toBeNull();
   expect(api.requests).not.toHaveBeenCalled();
   expect(api.groupRequests).not.toHaveBeenCalled();
   expect(api.body).not.toHaveBeenCalled();

@@ -130,7 +130,9 @@ def main():
 
     tokens = {secrets.token_hex(24): user for user in (1, 2, 20, 21, 30)}
     with docker_stores() as (engine, redis, stores):
-        SQLModel.metadata.create_all(engine, tables=[model.__table__ for model in AUDIT_MODELS])
+        from bisheng.user.domain.models.user import User
+
+        SQLModel.metadata.create_all(engine, tables=[model.__table__ for model in AUDIT_MODELS] + [User.__table__])
         tenant_filter.register_tenant_filter_events()
         tenant_filter._tenant_aware_tables.update(model.__tablename__ for model in AUDIT_MODELS)
         storage = EncryptedAuditStorage(
