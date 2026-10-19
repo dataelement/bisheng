@@ -30,6 +30,7 @@ from bisheng.worker.knowledge.scheduler import (
     reconcile_file_scheduler_task,
     trigger_dispatch_task,
 )
+from bisheng.worker.knowledge.space_delete import dispatch_pending_deletes, purge_space_delete
 from bisheng.worker.knowledge.stale_projection_reconciler import (
     reconcile_stale_parent_projections as reconcile_stale_parent_projections,
 )
