@@ -131,6 +131,7 @@ def _client_for(engine, user):
     app.dependency_overrides[UserPayload.get_login_user] = _get_user
     with (
         patch(f"{_SVC}.get_async_db_session", _factory),
+        patch("bisheng.department.domain.repositories.management_search_repository.get_async_db_session", _factory),
         patch("bisheng.database.models.department.get_async_db_session", _factory),
     ):
         with TestClient(app) as c:

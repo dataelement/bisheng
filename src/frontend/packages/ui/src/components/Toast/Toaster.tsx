@@ -72,8 +72,8 @@ const TYPE_META: Record<ToastType, TypeMeta> = {
   },
 };
 
-/** §7 — one easing for every toast transition; faster than dialogs by design. */
-const EASE = 'ease-[cubic-bezier(0.2,0,0,1)]';
+/** §7 — one easing for every toast transition; faster than dialogs by design (preset `ease-notice`). */
+const EASE = 'ease-notice';
 
 function canHover(): boolean {
   // §6/§8: hovering pauses the countdown, but touch has no hover — there the
@@ -147,7 +147,7 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
               entered && !item.closing
                 ? 'translate-y-0 opacity-100 duration-200'
                 : '-translate-y-2 opacity-0',
-              item.closing ? 'duration-[160ms]' : 'duration-200',
+              item.closing ? 'duration-160' : 'duration-200',
             )}
             onMouseEnter={() => {
               if (canHover()) {

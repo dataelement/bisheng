@@ -424,7 +424,7 @@
     "userGroup": "用户组",
     "role": "角色",
     "searchUserGroups": "搜索用户组",
-    "searchUser": "搜索用户",
+    "searchUser": "搜索用户名称或 ID",
     "searchRoles": "搜索角色",
     "reset": "重置",
     "confirm": "确认",
@@ -956,6 +956,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek 网页搜索",
       "serverUrl": "服务器地址",
       "serverUrlPlaceholder": "填写您部署 searXNG 的访问地址，例如：http://localhost:8080"
     },
@@ -2166,7 +2167,7 @@
     "tabException": "异常流程列表",
     "tabFlow": "流程管理",
     "searchRole": "搜索身份 / 角色名…",
-    "searchUser": "搜索用户名…",
+    "searchUser": "搜索用户名称或 ID",
     "menuNeedsApproval": "菜单需审批开通",
     "menuApprovalDesc": "你的角色当前未包含该菜单权限，点击下方按钮发起申请，审批通过后即可访问。",
     "menuApply": "申请菜单权限",
@@ -2984,5 +2985,36 @@
   "request": {
     "session_expired": "登录过期",
     "sign_in_again": "登录过期，请重新登录"
+  },
+  "subjectSearch": {
+    "userPlaceholder": "搜索用户名称或 ID",
+    "departmentPlaceholder": "搜索部门名称或 ID",
+    "groupPlaceholder": "搜索用户组名称或 ID",
+    "tooLong": "搜索内容超过长度限制，请缩短后重试",
+    "failed": "搜索失败，请重试",
+    "retry": "重试",
+    "emptyUsers": "未找到匹配的用户，请核对名称或 ID",
+    "emptySubjects": "未找到可授权对象，请核对名称或 ID",
+    "userId": "人员 ID",
+    "departmentId": "部门 ID",
+    "user_groupId": "用户组 ID",
+    "loadMore": "加载更多",
+    "selectedCount": "已选 {{count}} 人",
+    "routeExample": "如：管理员直接通过",
+    "flowExample": "如：菜单权限审批流程 A",
+    "nodeExample": "如：申请人部门管理员审批",
+    "flowNumber": "流程 #{{id}}",
+    "routeNumber": "分支 #{{id}}",
+    "nextNodeHint": "当前节点通过后，才会生成下一节点任务",
+    "collapseProgress": "收起审批进度",
+    "showProgress": "查看审批进度",
+    "noProgress": "暂无进度数据"
+  },
+  "department": {
+    "searchUsersPlaceholder": "搜索用户名称或 ID",
+    "searchMember": "搜索用户名称或 ID"
+  },
+  "tenant": {
+    "searchUser": "搜索用户名称或 ID"
   }
 }

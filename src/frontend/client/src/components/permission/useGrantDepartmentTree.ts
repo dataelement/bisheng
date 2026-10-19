@@ -1,3 +1,4 @@
+import { useSubjectKeyword } from "./useSubjectKeyword";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { GrantDepartmentNode, GrantDepartmentSearchResult } from "~/api/permission";
@@ -29,17 +30,24 @@ export interface GrantDepartmentTree {
   getChildIds: (id: number) => number[] | undefined;
   expanded: Set<number>;
   loadingIds: Set<number>;
+  failedLayerIds: Set<number>;
+  retryLayer: (id: number) => void;
   initialLoading: boolean;
   /** Expand/collapse a node, loading its child layer on first expand. */
   toggle: (node: GrantDepartmentNode) => void;
   /** Reveal a selected department without loading the complete organization tree. */
   reveal: (departmentId: number) => Promise<void>;
   keyword: string;
+  searchInput: ReturnType<typeof useSubjectKeyword>;
   setKeyword: (kw: string) => void;
   searchMode: boolean;
   searchRoots: GrantDepartmentNode[];
   searching: boolean;
   truncated: boolean;
+  searchError: boolean;
+  rootError: boolean;
+  retrySearch: () => void;
+  retryRoot: () => void;
 }
 
 export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): GrantDepartmentTree {
@@ -52,9 +60,16 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [initialLoading, setInitialLoading] = useState(true);
-  const [keyword, setKeyword] = useState("");
+  const [failedLayerIds, setFailedLayerIds] = useState<Set<number>>(new Set());
+  const searchInput = useSubjectKeyword();
+  const { keyword, setKeyword, normalized, tooLong, composing } = searchInput;
   const [searchResult, setSearchResult] = useState<GrantDepartmentSearchResult | null>(null);
   const [searching, setSearching] = useState(false);
+  const [resolvedKeyword, setResolvedKeyword] = useState("");
+  const [searchError, setSearchError] = useState(false);
+  const [rootError, setRootError] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
+  const [rootAttempt, setRootAttempt] = useState(0);
 
   const childIdsRef = useRef(childIds);
   childIdsRef.current = childIds;
@@ -77,6 +92,13 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
       try {
         const layer = await sourceRef.current.fetchChildren(parentId);
         if (layer) storeLayer(parentId, layer);
+        if (parentId !== null) setFailedLayerIds((previous) => {
+          const next = new Set(previous);
+          next.delete(parentId);
+          return next;
+        });
+      } catch {
+        if (parentId !== null) setFailedLayerIds((previous) => new Set(previous).add(parentId));
       } finally {
         if (parentId !== null) {
           setLoadingIds((prev) => {
@@ -147,11 +169,13 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
     let cancelled = false;
     const controller = new AbortController();
     setInitialLoading(true);
+    setRootError(false);
     sourceRef.current
       .fetchChildren(null, controller.signal)
       .then((roots) => {
         if (!cancelled && roots) storeLayer(null, roots);
       })
+      .catch(() => { if (!cancelled) setRootError(true); })
       .finally(() => {
         if (!cancelled) setInitialLoading(false);
       });
@@ -160,12 +184,15 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
       controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rootAttempt, storeLayer]);
 
   // Debounced server-side search.
   useEffect(() => {
-    const kw = keyword.trim();
-    if (!kw) {
+    let cancelled = false;
+    const kw = normalized;
+    setSearchError(false);
+    setSearchResult(null);
+    if (!kw || tooLong || composing) {
       setSearchResult(null);
       setSearching(false);
       return;
@@ -175,14 +202,21 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
     const timer = window.setTimeout(() => {
       sourceRef.current
         .fetchSearch(kw, controller.signal)
-        .then((res) => setSearchResult(res ?? null))
-        .finally(() => setSearching(false));
+        .then((res) => { if (!cancelled) setSearchResult(res ?? null); })
+        .catch(() => { if (!cancelled && !controller.signal.aborted) setSearchError(true); })
+        .finally(() => {
+          if (!cancelled) {
+            setSearching(false);
+            setResolvedKeyword(kw);
+          }
+        });
     }, SEARCH_DEBOUNCE_MS);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [keyword]);
+  }, [normalized, tooLong, composing, searchAttempt]);
 
   return {
     rootIds: childIds[ROOT_KEY] ?? [],
@@ -190,14 +224,20 @@ export function useGrantDepartmentTree(source: GrantDepartmentTreeSource): Grant
     getChildIds,
     expanded,
     loadingIds,
+    failedLayerIds,
+    retryLayer: (id) => { void loadLayer(id); },
     initialLoading,
     toggle,
     reveal,
     keyword,
+    searchInput,
     setKeyword,
-    searchMode: !!keyword.trim(),
+    searchMode: !!normalized,
     searchRoots: searchResult?.roots ?? [],
-    searching,
+    searching: searching || (!!normalized && normalized !== resolvedKeyword && !tooLong && !composing),
     truncated: searchResult?.truncated ?? false,
+    searchError, rootError,
+    retrySearch: () => setSearchAttempt((attempt) => attempt + 1),
+    retryRoot: () => setRootAttempt((attempt) => attempt + 1),
   };
 }

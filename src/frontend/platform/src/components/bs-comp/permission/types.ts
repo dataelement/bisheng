@@ -18,5 +18,8 @@ export interface SelectedSubject {
   type: SubjectType
   id: number
   name: string
+  externalId?: string | null
+  departmentPath?: string
+  departmentTreePath?: string
   include_children?: boolean
 }

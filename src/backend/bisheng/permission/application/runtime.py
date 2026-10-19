@@ -551,7 +551,6 @@ class F048PermissionRuntime:
         idempotency_key: str | None = None,
     ) -> ProjectionOutcome:
         catalog = await self._runtime_catalog()
-        await self._require_current_target(target)
         plan = build_delete_plan(
             target,
             store_id=catalog.store_id,
@@ -569,6 +568,17 @@ class F048PermissionRuntime:
         operation = await self._projection.prepare(plan)
         if str(operation.status) == ProjectionOperationStatus.PREPARED.value:
             try:
+                mode = await self._state.mode_for_target(target)
+                if (
+                    mode.version != target.resource_version
+                    or mode.parent_type != target.parent_type
+                    or mode.parent_id != target.parent_id
+                    or not (
+                        mode.projection_state == "CURRENT"
+                        or (mode.projection_state == "PROJECTING" and mode.operation_id == int(operation.id))
+                    )
+                ):
+                    raise PermissionPublishNotReadyError(msg="Delete target does not match its projection reservation")
                 await self._state.mark_projecting(
                     target=target,
                     expected_catalog_release_id=catalog.release_id,

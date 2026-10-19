@@ -1,4 +1,7 @@
 // @ts-strict-ignore
+import { useSubjectSearch } from "@/components/bs-comp/selectComponent/useSubjectSearch"
+import { SubjectBusinessId, SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus"
+import type { User } from "@/types/api/user"
 import { Button } from "@/components/bs-ui/button";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
@@ -30,8 +33,12 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
     admin_user_ids: [],
   });
 
-  const [userSearch, setUserSearch] = useState("");
-  const [userOptions, setUserOptions] = useState<any[]>([]);
+  const userQuery = useSubjectSearch<User>({ emptyByDefault: true,
+    fetchPage: (keyword, page, signal) => getUsersApi({ page, pageSize: 10, name: keyword }, { signal }),
+  });
+  const userSearch = userQuery.keyword;
+  const userOptions = userQuery.rows;
+  const setUserSearch = userQuery.changeKeyword;
   const [selectedAdmins, setSelectedAdmins] = useState<any[]>([]);
 
   useEffect(() => {
@@ -52,27 +59,13 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
             res.admin_users?.map((u: any) => ({
               user_id: u.user_id,
               user_name: u.user_name,
+              external_id: u.external_id,
             })) || []
           );
         })
       );
     }
   }, [isEdit, tenant]);
-
-  const searchUsers = (keyword: string) => {
-    setUserSearch(keyword);
-    if (keyword.length < 1) {
-      setUserOptions([]);
-      return;
-    }
-    captureAndAlertRequestErrorHoc(
-      getUsersApi({ page: 1, pageSize: 10, name: keyword }).then(
-        (res: any) => {
-          setUserOptions(res.data || []);
-        }
-      )
-    );
-  };
 
   const addAdmin = (user: any) => {
     if (selectedAdmins.find((a) => a.user_id === user.user_id)) return;
@@ -82,7 +75,6 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
       admin_user_ids: [...form.admin_user_ids, user.user_id],
     });
     setUserSearch("");
-    setUserOptions([]);
   };
 
   const removeAdmin = (userId: number) => {
@@ -199,21 +191,30 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
               </label>
               <input
                 className="w-full border rounded px-3 py-2 bg-background"
-                placeholder={t("tenant.searchUser")}
-                value={userSearch}
-                onChange={(e) => searchUsers(e.target.value)}
+                placeholder={t("subjectSearch.userPlaceholder")}
+                {...userQuery.inputProps}
               />
-              {userOptions.length > 0 && (
-                <div className="border rounded mt-1 max-h-32 overflow-y-auto bg-background">
+              <SubjectSearchStatus tooLong={userQuery.tooLong} failed={userQuery.failed} loading={userQuery.loading} empty={!!userSearch && !userOptions.length} onRetry={userQuery.retry} />
+              {!userQuery.loading && userOptions.length > 0 && (
+                <div
+                  className="border rounded mt-1 max-h-32 overflow-y-auto bg-background"
+                  onScroll={(event) => {
+                    const element = event.currentTarget;
+                    if (element.scrollTop + element.clientHeight >= element.scrollHeight - 40) userQuery.loadMore();
+                  }}
+                >
                   {userOptions.map((user: any) => (
                     <div
                       key={user.user_id}
                       className="px-3 py-2 hover:bg-accent cursor-pointer text-sm"
                       onClick={() => addAdmin(user)}
                     >
-                      {user.user_name}
+                      {user.user_name} <SubjectBusinessId value={user.external_id} />
                     </div>
                   ))}
+                  {!userQuery.failed && !userQuery.tooLong && userOptions.length < userQuery.total && (
+                    <button type="button" onClick={userQuery.loadMore}>{t("subjectSearch.loadMore")}</button>
+                  )}
                 </div>
               )}
               {selectedAdmins.length > 0 && (
@@ -223,7 +224,7 @@ export function CreateTenantDialog({ tenant, onClose, onSuccess }: Props) {
                       key={admin.user_id}
                       className="inline-flex items-center gap-1 px-2 py-1 bg-accent rounded text-sm"
                     >
-                      {admin.user_name}
+                      {admin.user_name} <SubjectBusinessId value={admin.external_id} />
                       <button
                         className="text-muted-foreground hover:text-foreground"
                         onClick={() => removeAdmin(admin.user_id)}

@@ -422,7 +422,7 @@
     "userGroup": "ユーザーグループ",
     "role": "ロール",
     "searchUserGroups": "ユーザーグループ検索",
-    "searchUser": "ユーザー検索",
+    "searchUser": "ユーザー名または ID で検索",
     "searchRoles": "ロール検索",
     "reset": "リセット",
     "confirm": "確定",
@@ -950,6 +950,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek ウェブ検索",
       "serverUrl": "サーバーアドレス",
       "serverUrlPlaceholder": "searXNG をデプロイしたアクセスアドレスを入力してください。例：http://localhost:8080"
     },
@@ -2166,7 +2167,7 @@
     "tabException": "例外フロー一覧",
     "tabFlow": "フロー管理",
     "searchRole": "ロールを検索…",
-    "searchUser": "ユーザー名を検索…",
+    "searchUser": "ユーザー名または ID で検索",
     "menuNeedsApproval": "メニューの承認が必要です",
     "menuApprovalDesc": "あなたのロールにはこのメニュー権限が含まれていません。下のボタンをクリックして申請してください。承認後にアクセスできます。",
     "menuApply": "アクセスを申請",
@@ -2984,5 +2985,36 @@
   "request": {
     "session_expired": "セッションの有効期限が切れました",
     "sign_in_again": "セッションの有効期限が切れました。再度ログインしてください。"
+  },
+  "subjectSearch": {
+    "userPlaceholder": "ユーザー名または ID で検索",
+    "departmentPlaceholder": "部署名または ID で検索",
+    "groupPlaceholder": "ユーザーグループ名または ID で検索",
+    "tooLong": "検索内容が文字数制限を超えています。短くして再試行してください",
+    "failed": "検索に失敗しました。再試行してください",
+    "retry": "再試行",
+    "emptyUsers": "一致するユーザーが見つかりません。名前または ID を確認してください",
+    "emptySubjects": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "userId": "従業員 ID",
+    "departmentId": "部署 ID",
+    "user_groupId": "ユーザーグループ ID",
+    "loadMore": "さらに読み込む",
+    "selectedCount": "{{count}} 人を選択済み",
+    "routeExample": "例：管理者は直接承認",
+    "flowExample": "例：メニュー権限承認フロー A",
+    "nodeExample": "例：申請者の部署管理者による承認",
+    "flowNumber": "フロー #{{id}}",
+    "routeNumber": "分岐 #{{id}}",
+    "nextNodeHint": "現在のノードの承認後に次のノードのタスクが生成されます",
+    "collapseProgress": "承認状況を閉じる",
+    "showProgress": "承認状況を表示",
+    "noProgress": "承認状況はありません"
+  },
+  "department": {
+    "searchUsersPlaceholder": "ユーザー名または ID で検索",
+    "searchMember": "ユーザー名または ID で検索"
+  },
+  "tenant": {
+    "searchUser": "ユーザー名または ID で検索"
   }
 }

@@ -98,7 +98,8 @@ async def list_grant_subject_users(
         page=page,
         page_size=page_size,
     )
-    return resp_200({"data": rows, "total": len(rows)})
+    total = await grant_subject_service.count_candidate_users(scope, keyword=keyword)
+    return resp_200({"data": rows, "total": total})
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/user-groups")
@@ -122,7 +123,8 @@ async def list_grant_subject_user_groups(
         page=page,
         page_size=page_size,
     )
-    return resp_200({"data": rows, "total": len(rows)})
+    total = await grant_subject_service.count_candidate_user_groups(scope, keyword=keyword)
+    return resp_200({"data": rows, "total": total})
 
 
 @router.get("/resources/{resource_type}/{resource_id}/grant-subjects/departments/children")
