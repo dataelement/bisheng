@@ -136,3 +136,97 @@ async def test_number_arguments_keep_integer_precision(monkeypatch):
     )
     assert await impl.arun(id=9007199254740993) == "ok"
     assert requests[0].url.params["id"] == "9007199254740993"
+
+
+async def test_nested_json_body_is_sent_without_transformation_or_defaults(monkeypatch):
+    import json
+
+    received = []
+
+    async def handle(request):
+        received.append(json.loads(request.content))
+        return httpx.Response(200, text="ok")
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    impl = BoundedOpenApiTools(
+        url="https://fixture.example",
+        max_output_bytes=100,
+        params={
+            "path": "/submit",
+            "method": "post",
+            "parameters": [
+                {"name": "request_id", "in": "body", "schema": {"type": "string"}},
+                {"name": "batch", "in": "body", "schema": {"type": "array"}},
+                {"name": "optional", "in": "body", "schema": {"type": "string", "default": "not-inserted"}},
+            ],
+        },
+    )
+    supplied = {"request_id": "client-owned", "batch": [{"count": 9007199254740993, "flags": [False, True]}]}
+    assert await impl.arun(**supplied) == "ok"
+    assert received == [supplied]
+    assert type(received[0]["batch"][0]["count"]) is int
+
+
+def test_legacy_and_bounded_argument_mappers_preserve_the_same_nested_body():
+    from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
+
+    params = {
+        "path": "/submit",
+        "method": "post",
+        "parameters": [
+            {"name": "batch", "in": "body", "schema": {"type": "array"}},
+            {"name": "request_id", "in": "body", "schema": {"type": "string"}},
+        ],
+    }
+    supplied = {"request_id": "unchanged-client-value", "batch": [{"nested": {"text": " exact text "}}]}
+    ordinary = OpenApiTools(url="https://fixture.example", params=params)
+    bounded = BoundedOpenApiTools(url="https://fixture.example", params=params, max_output_bytes=100)
+    assert ordinary.get_params_json(**supplied) == ({}, supplied, {})
+    assert bounded._split_arguments(supplied) == ({}, supplied)
+
+
+@pytest.mark.parametrize("request_id", ["arbitrary-client-owned-id", "c142af6a-e08b-41a8-bb0c-e7c2dbb0a1d0"])
+async def test_actual_imported_protocol_preserves_caller_id_and_omits_default_model(monkeypatch, request_id):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from bisheng.tool.domain.services.saved_schema import SavedToolSchema
+
+    fixture = json.loads((Path(__file__).parent / "fixtures/nested_openapi_input.json").read_text())
+    params = {"path": "/submit", "method": "post", "parameters": fixture["parameters"]}
+    tool = SimpleNamespace(name="submit", extra=json.dumps(params))
+    document = {
+        "openapi": "3.0.3",
+        "paths": {
+            "/submit": {
+                "post": {
+                    "operationId": "submit",
+                    "requestBody": fixture["requestBody"],
+                }
+            }
+        },
+    }
+    category = SimpleNamespace(server_host="https://fixture.example", extra="{}", openapi_schema=json.dumps(document))
+    schema = SavedToolSchema.from_saved(tool, category)
+    supplied = {"id": request_id, "commands": {"search_query": [{"q": " client text "}]}}
+    received = []
+
+    async def handle(request):
+        received.append(json.loads(request.content))
+        return httpx.Response(200, text="ok")
+
+    original = httpx.AsyncClient
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.bounded_openapi.httpx.AsyncClient",
+        lambda **kwargs: original(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    impl = BoundedOpenApiTools(url="https://fixture.example", params=params, max_output_bytes=100)
+    assert await impl.arun(**schema.validate(supplied)) == "ok"
+    assert received == [supplied]
+    assert received[0]["id"] == request_id
+    assert "model" not in received[0]

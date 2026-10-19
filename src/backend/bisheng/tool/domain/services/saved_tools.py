@@ -13,7 +13,7 @@ from bisheng.common.errcode.dsh import (
     DshToolUnsupportedError,
 )
 from bisheng.tool.domain.const import ToolPresetType
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.repositories.saved_tools import SavedToolRepository
 from bisheng.tool.domain.services.bounded_openapi import BoundedOpenApiTools
 from bisheng.tool.domain.services.executor import ToolExecutor, ToolInitializationError
 from bisheng.tool.domain.services.saved_schema import SavedToolSchema
@@ -22,8 +22,7 @@ from bisheng.tool.domain.services.saved_schema import SavedToolSchema
 class SavedToolService:
     async def _load(self, tenant_id, tool_key):
         try:
-            tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key)
-            category = await GptsToolsDao.aget_one_tool_type(tool.type) if tool else None
+            tool, category = await SavedToolRepository.load_by_name(tenant_id, tool_key)
         except SQLAlchemyError:
             raise DshToolServiceUnavailableError() from None
         if (

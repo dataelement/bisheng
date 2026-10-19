@@ -13,12 +13,14 @@ from bisheng.dsh.api.endpoints import tools
 from bisheng.dsh.domain.services.tools import ToolInvocationService
 from bisheng.dsh.tool_runtime import get_tool_service
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
+from bisheng.tool.domain.repositories.saved_tools import SavedToolRepository
 from bisheng.tool.domain.services import bounded_openapi, executor
 from bisheng.tool.domain.services.saved_tools import SavedToolService
 from test.dsh.test_access import service as access_service
 from test.dsh.test_access import token
 
 TOOL_KEY = "tool_type_7_example"
+TOOL_NAME = "bs_web_search"
 
 
 @pytest.fixture
@@ -30,7 +32,7 @@ def api(monkeypatch):
         "openapi": "3.0.3",
         "paths": {
             "/convert": {
-                "post": {"operationId": "convert", "requestBody": {"content": {"application/json": {"schema": schema}}}}
+                "post": {"operationId": TOOL_NAME, "requestBody": {"content": {"application/json": {"schema": schema}}}}
             }
         },
     }
@@ -38,7 +40,7 @@ def api(monkeypatch):
         id=7,
         type=7,
         tool_key=TOOL_KEY,
-        name="convert",
+        name=TOOL_NAME,
         desc="API fixture",
         tenant_id=2,
         is_delete=0,
@@ -87,7 +89,9 @@ def api(monkeypatch):
     monkeypatch.setattr(executor.ToolExecutor, "_build_permission_user", staticmethod(user))
     monkeypatch.setattr(executor, "check_business_action", permission)
     monkeypatch.setattr(
-        GptsToolsDao, "aget_tool_by_tool_key", AsyncMock(side_effect=lambda key: tool if key == tool.tool_key else None)
+        SavedToolRepository,
+        "load_by_name",
+        AsyncMock(side_effect=lambda tenant, name: (tool, state.category) if name == tool.name else (None, None)),
     )
     monkeypatch.setattr(GptsToolsDao, "aget_one_tool_type", AsyncMock(return_value=category))
     monkeypatch.setattr(executor.telemetry_service, "log_event", AsyncMock())
@@ -118,9 +122,6 @@ async def test_api_executes_existing_tool(api, field, scalar, value):
             "parameters": [{"name": field, "in": "body", "required": True, "schema": {"type": scalar}}],
         }
     )
-    # Category metadata cannot replace the validated operation.
-    api.category.extra = json.dumps({"path": "/wrong", "parameters": [], "method": "get"})
-    api.tool.tool_key = "bs_web_search"
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
         response = await client.post(
             "/api/v1/dsh/tools/bs_web_search/invoke", headers=api.headers, json={"arguments": {field: value}}
@@ -138,9 +139,12 @@ async def test_api_executes_existing_tool(api, field, scalar, value):
         ("forged", 401, "invalid_access_token"),
         ("denied", 403, "tool_permission_denied"),
         ("missing", 404, "tool_not_found"),
+        ("key_not_name", 404, "tool_not_found"),
         ("deleted", 404, "tool_not_found"),
         ("tenant", 404, "tool_not_found"),
         ("parent_tenant", 404, "tool_not_found"),
+        ("parent_missing", 404, "tool_not_found"),
+        ("parent_deleted", 404, "tool_not_found"),
         ("unsupported", 400, "tool_unsupported"),
         ("arguments", 400, "tool_arguments_invalid"),
         ("upstream", 502, "tool_upstream_failed"),
@@ -148,19 +152,25 @@ async def test_api_executes_existing_tool(api, field, scalar, value):
 )
 async def test_api_rejects_invalid_calls(api, case, status, code):
     """AC-05, AC-06, AC-09, AC-11, AC-12, AC-14, AC-19, AC-20: safe API failures."""
-    headers, key, arguments = api.headers, TOOL_KEY, {"amount": 3}
+    headers, key, arguments = api.headers, TOOL_NAME, {"amount": 3}
     if case == "forged":
         headers = {"Authorization": "Bearer forged"}
     elif case == "denied":
         api.allowed = False
     elif case == "missing":
         key = "missing"
+    elif case == "key_not_name":
+        key = TOOL_KEY
     elif case == "deleted":
         api.tool.is_delete = 1
     elif case == "tenant":
         headers = {"Authorization": "Bearer " + token(tenant_id="3")}
     elif case == "parent_tenant":
         api.category.tenant_id = 3
+    elif case == "parent_missing":
+        api.category = None
+    elif case == "parent_deleted":
+        api.category.is_delete = 1
     elif case == "unsupported":
         api.tool.is_preset = 2
     elif case == "arguments":
@@ -188,8 +198,97 @@ async def test_api_does_not_capture_ambient_traces(api):
         with collect_runs() as collector:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
                 response = await client.post(
-                    f"/api/v1/dsh/tools/{TOOL_KEY}/invoke", headers=api.headers, json={"arguments": {"amount": 3}}
+                    f"/api/v1/dsh/tools/{TOOL_NAME}/invoke", headers=api.headers, json={"arguments": {"amount": 3}}
                 )
             assert response.status_code == 200 and collector.traced_runs == []
     finally:
         scope.var.reset(scope)
+
+
+async def test_api_forwards_nested_arguments_without_transformation(api):
+    schema = {
+        "type": "object",
+        "properties": {
+            "request_id": {"type": "string"},
+            "options": {
+                "type": "object",
+                "properties": {
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}, "limit": {"type": "integer"}},
+                            "required": ["text", "limit"],
+                        },
+                        "minItems": 1,
+                    }
+                },
+                "required": ["operations"],
+            },
+            "optional": {"type": "string", "default": "do-not-insert"},
+        },
+        "required": ["request_id", "options"],
+    }
+    document = json.loads(api.category.openapi_schema)
+    document["paths"]["/convert"]["post"]["requestBody"]["content"]["application/json"]["schema"] = schema
+    api.category.openapi_schema = json.dumps(document)
+    api.tool.extra = json.dumps(
+        {
+            "path": "/convert",
+            "method": "post",
+            "parameters": [
+                {"name": name, "in": "body", "required": name in schema["required"], "schema": {"type": spec["type"]}}
+                for name, spec in schema["properties"].items()
+            ],
+        }
+    )
+    arguments = {
+        "request_id": "client-provided-value",
+        "options": {"operations": [{"text": " exact text ", "limit": 2}]},
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/dsh/tools/{TOOL_NAME}/invoke", headers=api.headers, json={"arguments": arguments}
+        )
+    assert response.status_code == 200
+    assert response.json() == {"tool": TOOL_NAME, "result": {"converted": 6}}
+    assert api.received == [("/convert", arguments)]
+    api.permission.assert_awaited_once()
+
+
+@pytest.mark.parametrize("operations", [[], [{"text": "x", "limit": True}], [{"text": "x", "limit": 1, "extra": 2}]])
+async def test_api_rejects_nested_invalid_arguments_before_upstream(api, operations):
+    document = json.loads(api.category.openapi_schema)
+    schema = {
+        "type": "object",
+        "properties": {
+            "batch": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}, "limit": {"type": "integer"}},
+                    "required": ["text", "limit"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["batch"],
+    }
+    document["paths"]["/convert"]["post"]["requestBody"]["content"]["application/json"]["schema"] = schema
+    api.category.openapi_schema = json.dumps(document)
+    api.tool.extra = json.dumps(
+        {
+            "path": "/convert",
+            "method": "post",
+            "parameters": [{"name": "batch", "in": "body", "required": True, "schema": {"type": "array"}}],
+        }
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api.app), base_url="http://test") as client:
+        response = await client.post(
+            f"/api/v1/dsh/tools/{TOOL_NAME}/invoke", headers=api.headers, json={"arguments": {"batch": operations}}
+        )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "tool_arguments_invalid"
+    assert api.received == []
+    api.leases.acquire.assert_not_awaited()
