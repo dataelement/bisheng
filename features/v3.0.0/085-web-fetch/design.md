@@ -48,7 +48,7 @@
 ### 决策 3：引用来源用 WEB 类型，不用 ARTICLE
 
 - **备选**：
-  - A. `CitationType.WEB`，一个来源只有一个条目：`itemId="page"`（与搜索摘要的 `1`、`2`… 区分，见坑 12），`snippet` 取正文开头，`title` 取网页标题，`source` 取站点名。
+  - A. `CitationType.WEB`，一个来源只有一个条目：`itemId="0"`（与搜索摘要的 `1`、`2`… 区分，见坑 12；必须是纯数字，见坑 17），`snippet` 取正文开头，`title` 取网页标题，`source` 取站点名。
   - B. `CitationType.ARTICLE`（频道文章就是「整篇一个来源」）。
 - **选定**：A
 - **原因**：ARTICLE 是频道专用类型，必填 `articleDocId`。它没有站点名字段，platform 前端没有 article 分支（会落到文档预览），分享页匿名访问时还会被拒。WEB 的卡片、点击跳转原网页、分享页匿名解析、历史回放全部现成，前端不用改。
@@ -146,7 +146,7 @@
 | 工具 `api_params` | `[{"name":"url","in":"query","required":true,"schema":{"type":"string"}}]` | 工作流工具节点据此渲染输入框 | `flowUtils.ts` |
 | 分类 `extra` | `{"type":"deepseek","config":{"deepseek":{"api_key":"","base_url":""}},"max_chars":20000}` | 秘钥字段名必须叫 `api_key`，才能被现有掩码逻辑覆盖 | `ToolExecutor`、设置表单 |
 | 工具结果（给模型） | JSON 对象 `{"title","url","source","content","truncated","total_chars","citation_key"}` | 失败或未配置时是一段文字而不是 JSON | 模型、日常模式工具卡片（按 `url`/`title` 显示网页条目） |
-| 引用条目 | WEB 类型，单条目 `itemId="page"`，key 形如 `websearch_xxxxxxxx:page`；卡片摘要是去掉 Markdown 标记和标题行后的正文开头，最多 300 字 | 沿用 `websearch_` 前缀，前端、解析服务、持久化都按 WEB 处理 | 引用解析、卡片、历史回放 |
+| 引用条目 | WEB 类型，单条目 `itemId="0"`（常量 `FETCHED_PAGE_ITEM_ID`，定义在 `citation_schema.py`），key 形如 `websearch_xxxxxxxx:0`；卡片摘要是去掉 Markdown 标记和标题行后的正文开头，最多 300 字 | 沿用 `websearch_` 前缀，前端、解析服务、持久化都按 WEB 处理 | 引用解析、卡片、历史回放 |
 
 ### 4.3 关键模块职责
 
@@ -178,10 +178,11 @@
 | 13 | `init_default_data` 里任何未捕获的异常都会让后端启动失败（外层 `raise RuntimeError`） | 补投影或复制子租户时 OpenFGA 未就绪，整个后端起不来 | `_sync_web_fetch_tool` 逐步 `try/except` 只记日志 |
 | 15 | 权限投影的写入链路会查按租户过滤的表；启动阶段没有当前租户，直接调用会抛 `NoTenantContextError`（2026-10-19 首次部署 test 时实测，根租户和全部子租户都失败） | 升级后普通用户用不了网页读取 | `_sync_web_fetch_tool` / `_project_web_fetch_tool_types` 逐个设置 `current_tenant_id` 后再复制、投影 |
 | 16 | 子租户复制函数先提交工具行、再做投影；投影失败时工具行已经存在 | 若按「有没有工具行」判断是否要补，失败的投影永远不会被修 | 补投影按「投影状态是否 `MISSING`」判断，不按工具行 |
+| 17 | client 用 remark-directive 渲染回答，引用 key 里「冒号 + 字母开头」的部分（如 `:page`）会被当成文本指令 | 角标渲染成 `[citationref:websearch_xxx` 加换行 `]` 的原文（2026-10-19 test 实测，最初 itemId 用的是 `page`） | `FETCHED_PAGE_ITEM_ID = "0"`，单测断言其为纯数字 |
 | 14 | `test/sandbox/test_code_interpreter_seed_default.py` 用 AST 禁止 `init_data.py` 出现任何 `extra=` 关键字参数，但它的本意是「升级时不改已有行的 extra」；主线上该测试已因 `_ensure_image_view_tool` 失败 | 误以为是本 feature 引入的回归 | 本 feature 的插入只写新行；该测试的误报留给其维护方处理 |
 | 9 | 旧工具的设置弹窗和 `MANAGED_TOOLS` 按分类的中文名匹配，子租户复制也按名字匹配；在 platform 源码里新增中文字面量会让文件超出 lint 冻结配额 | 设置按钮不出现；lint 失败；子租户复制出重复分类 | 前端改按子工具 `tool_key = web_fetch` 识别（`tools/index.tsx` 的 `hasManagedToolKey`、`ToolSet.tsx`）；分类名只在种子 JSON 里定义一次，补数据函数从种子读取 |
 | 10 | 只有 `api_key` 等固定字段名会被掩码 | 换个字段名，秘钥会明文返回给前端 | 配置字段名固定为 `api_key` |
-| 12 | 短句柄（日常模式、任务模式）按「来源身份」分配，网页类来源的身份原本只看网址 | 同一网址的搜索结果和网页读取拿到同一个句柄，模型引用全文内容时卡片显示的是搜索摘要 | `citation_handle_service.item_identity`：`itemId == "page"` 时身份为 `webpage:<网址>` |
+| 12 | 短句柄（日常模式、任务模式）按「来源身份」分配，网页类来源的身份原本只看网址 | 同一网址的搜索结果和网页读取拿到同一个句柄，模型引用全文内容时卡片显示的是搜索摘要 | `citation_handle_service.item_identity`：`itemId == FETCHED_PAGE_ITEM_ID` 时身份为 `webpage:<网址>` |
 | 11 | 任务模式的引用规则只在 `has_web` 为真时开启，原判断只认 `web_search` | 只勾网页读取时模型不会打角标 | 决策 9 |
 
 ---

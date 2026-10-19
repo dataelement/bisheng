@@ -11,6 +11,7 @@ from bisheng.citation.domain.repositories.implementations.message_citation_repos
     MessageCitationRepositoryImpl,
 )
 from bisheng.citation.domain.schemas.citation_schema import (
+    FETCHED_PAGE_ITEM_ID,
     CitationRegistryItemSchema,
     CitationType,
     TempCitationPayloadSchema,
@@ -381,9 +382,6 @@ def annotate_web_results_with_citations(results: list[dict]) -> list[dict]:
 
 WEB_CITATION_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
 WEB_FETCH_TOOL_NAME = "web_fetch"
-# A fetched page is one source with one item. The item id differs from search
-# snippets ("1", "2", ...) so short handles keep the two apart (F085 decision 4).
-FETCHED_PAGE_ITEM_ID = "page"
 _FETCHED_PAGE_SNIPPET_CHARS = 300
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
@@ -463,7 +461,9 @@ def annotate_fetched_page_with_citation(
             "source": page.get("source"),
         }
         payload = CitationRegistryService._build_web_payload(normalized_url, [result])
-        items = CitationRegistryService._flatten_web_payload(CitationRegistryService.generate_web_citation_id(), payload)
+        items = CitationRegistryService._flatten_web_payload(
+            CitationRegistryService.generate_web_citation_id(), payload
+        )
         registry.put(normalized_url, items)
 
     page["citation_key"] = items[0].key

@@ -164,3 +164,4 @@
 - code review（5 路并行 + 逐条打分）：无 ≥80 分问题；作者仍修复 3 项已核实的问题——200 非 JSON 响应未转成失败文字（AC-11）、日常模式工具初始化失败卡片类型与成功路径不一致、同一网址既被搜索又被读取时报告里贴的网址被连贴两个角标（`attach_web_url_markers` 按网址去重并优先读取来源）
 - 部署 test 实测 → 启动补权限与子租户复制全部报 `NoTenantContextError`；改为在租户上下文里执行、按投影状态自愈，更新 design 决策 8、新增坑 15、16
 - 部署 test 实测 → 工具列表显示 `categories.网页读取.name`：平台按分类名查 `categories.<名>`、按 tool_key 查 `tools.<key>` 的 tool.json 文案，漏补；三语补齐
+- T018 实测 → 日常模式回答角标渲染成原文：itemId `page` 被 client 的 remark-directive 当成指令；改为 `0`，更新 design 决策 3、新增坑 17
