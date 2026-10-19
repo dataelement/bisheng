@@ -1,12 +1,13 @@
 // @ts-strict-ignore
-"use client"
-import { LoadingIcon } from "@/components/bs-icons/loading";
+"use client";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { cn } from "@/util/utils";
+import { Tabs } from "@bisheng/ui";
 import { SearchCheck } from "lucide-react";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import useKnowledgeStore from "../useKnowledgeStore";
@@ -203,6 +204,9 @@ const FileUploadStep2 = forwardRef(({
         handleNext: internalHandleNext
     }));
 
+    const [strategyTab, setStrategyTab] = useState('file');
+    const activeStrategyTab = displayMode === DisplayModeType.Mixed ? strategyTab : displayMode;
+
     const handlePreview = () => {
         if (vildateCell()) return;
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
@@ -226,28 +230,13 @@ const FileUploadStep2 = forwardRef(({
     };
     return (
         <div className="mx-auto flex h-full w-full max-w-[1120px] min-h-0 flex-col gap-6 pt-6">
-            <Tabs
-                defaultValue={displayMode === DisplayModeType.Mixed ? 'file' : displayMode}
-                className="flex min-h-0 flex-1 flex-col gap-4"
-            >
+            <div className="flex min-h-0 flex-1 flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     {displayMode === DisplayModeType.Mixed ? (
-                        <TabsList className="h-auto rounded-md bg-[#f8f8f8] p-1 shadow-none">
-                            <TabsTrigger
-                                id="knowledge_file_tab"
-                                value="file"
-                                className="rounded-[4px] border-none bg-transparent px-3 py-1 text-sm text-[#818181] shadow-none data-[state=active]:border-none data-[state=active]:bg-primary/15 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-none data-[state=inactive]:hover:bg-transparent"
-                            >
-                                {t('defaultStrategy')}
-                            </TabsTrigger>
-                            <TabsTrigger
-                                id="knowledge_table_tab"
-                                value="table"
-                                className="rounded-[4px] border-none bg-transparent px-3 py-1 text-sm text-[#818181] shadow-none data-[state=active]:border-none data-[state=active]:bg-primary/15 data-[state=active]:font-medium data-[state=active]:text-primary data-[state=active]:shadow-none data-[state=inactive]:border-none data-[state=inactive]:hover:bg-transparent"
-                            >
-                                {t('customStrategy')}
-                            </TabsTrigger>
-                        </TabsList>
+                        <Tabs activeKey={strategyTab} onChange={setStrategyTab} items={[
+                            { key: 'file', label: t('defaultStrategy') },
+                            { key: 'table', label: t('customStrategy') },
+                        ]} />
                     ) : <div className="h-9" />}
 
                     {displayStep === 2 && (
@@ -269,7 +258,7 @@ const FileUploadStep2 = forwardRef(({
                 )}>
                     {displayStep === 2 && (
                         <div className="min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
-                            <TabsContent value="file" className="mt-0">
+                            {activeStrategyTab === 'file' && <div>
                                 <RuleFile
                                     rules={rules}
                                     setRules={setRules}
@@ -278,8 +267,8 @@ const FileUploadStep2 = forwardRef(({
                                     isEtl4lm={isEtl4lm}
                                     showPreview={showPreview}
                                 />
-                            </TabsContent>
-                            <TabsContent value="table" className="mt-0">
+                            </div>}
+                            {activeStrategyTab === 'table' && <div>
                                 <RuleTable
                                     rules={rules}
                                     setRules={setRules}
@@ -289,7 +278,7 @@ const FileUploadStep2 = forwardRef(({
                                     setCellGeneralConfig={setCellGeneralConfig}
                                     showPreview={showPreview}
                                 />
-                            </TabsContent>
+                            </div>}
                         </div>
                     )}
 
@@ -297,6 +286,7 @@ const FileUploadStep2 = forwardRef(({
                         <div className="relative min-w-0 min-h-0 h-full overflow-y-auto pb-28 pr-1">
                             <PreviewResult
                                 showPreview={showPreview}
+                                onFileTypeChange={setStrategyTab}
                                 step={step}
                                 previewCount={previewCount}
                                 resultFiles={resultFiles}
@@ -312,7 +302,7 @@ const FileUploadStep2 = forwardRef(({
                         </div>
                     ) : null}
                 </div>
-            </Tabs>
+            </div>
 
             <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
                 <Button
@@ -331,7 +321,7 @@ const FileUploadStep2 = forwardRef(({
                     onClick={internalHandleNext}
                 >
                     {isSubmitting ? (
-                        <LoadingIcon className="h-12 w-12" />
+                        <Outlined.Loading className="animate-spin h-12 w-12" />
                     ) : (
                         t('nextStep')
                     )}

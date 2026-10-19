@@ -1,7 +1,7 @@
 // @ts-strict-ignore
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader } from "@/components/bs-ui/alertDialog";
+import { AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader } from "@/components/bs-ui/alertDialog";
 import { Button } from "@/components/bs-ui/button";
-import { useEffect, useState } from "react";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function Guide() {

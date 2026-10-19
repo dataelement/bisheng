@@ -1,11 +1,11 @@
-import { Tabs, TabsContent } from "@/components/bs-ui/tabs";
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useEffect, useState } from "react";
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import Files from "./components/Files";
 import Header from "./components/Header";
 import Paragraphs from "./components/Paragraphs";
@@ -67,20 +67,12 @@ export default function FilesPage() {
     return <div className="size-full px-2 relative bg-background-login">
         {!permissionChecked && (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
-                <LoadingIcon />
+                <Outlined.Loading  className="size-4 animate-spin"/>
             </div>
         )}
         {/* tab */}
-        <Tabs value={value} onValueChange={(v) => {
-            setValue(v);
-            setFileId('');
-            if (v === 'file') {
-                setFileTitle(true);
-            } else {
-                setFileTitle(false);
-            }
-        }}>
-            <TabsContent value="file" className="mt-0">
+        <div>
+            {value === 'file' && <div>
                 <div className="flex justify-between w-1/2 pt-4">
                     <Header fileTitle={fileTitle} showBackButton={true} />
                 </div>
@@ -89,15 +81,15 @@ export default function FilesPage() {
                     canEditKb={canEditKb}
                     canDeleteKb={canDeleteKb}
                 />
-            </TabsContent>
-            <TabsContent value="chunk" className="mt-0">
+            </div>}
+            {value === 'chunk' && <div>
                 <Paragraphs
                     fileId={fileId}
                     onBack={handleBackFromChunk}
                     canEditKb={canEditKb}
                     canDeleteKb={canDeleteKb}
                 />
-            </TabsContent>
-        </Tabs>
+            </div>}
+        </div>
     </div>
 };

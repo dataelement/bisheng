@@ -1,27 +1,26 @@
 // @ts-strict-ignore
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input, Textarea } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio"
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select"
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
-import { createTool, deleteTool, downloadToolSchema, testToolApi, updateTool } from "@/controllers/API/tools"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { Plus } from "lucide-react"
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { Button } from "@/components/bs-ui/button";
+import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+import { Input,Textarea } from "@/components/bs-ui/input";
+import { Label } from "@/components/bs-ui/label";
+import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
+import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { forwardRef,useEffect,useImperativeHandle,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { AppHint } from "../components/AppHint";
+import { Example,formData } from "./toolSchemaExamples";
 interface TestDialogProps {
     tool: any;
     formState: any;
 }
-
 export const TestDialog = forwardRef<{
     open: (item, tool, formState) => void
 }, TestDialogProps>((props: any, ref) => {
@@ -29,13 +28,11 @@ export const TestDialog = forwardRef<{
     const [testShow, setTestShow] = useState(false)
     const [apiData, setApiData] = useState<any>({})
     const toolRef = useRef<any>({})
-
     const formRef = useRef<{
         values: Record<string, string>;
         rules: Record<string, boolean>;
         state?: any;
     }>({ values: {}, rules: {} });
-
     useImperativeHandle(ref, () => ({
         open: (item, tool, formState) => {
             toolRef.current = tool
@@ -57,7 +54,6 @@ export const TestDialog = forwardRef<{
             formRef.current.rules = {}
         }
     }, [testShow])
-
     const { message } = useToast()
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState('')
@@ -75,12 +71,9 @@ export const TestDialog = forwardRef<{
                 variant: 'warning'
             })
         }
-
         setLoading(true)
-
         const { server_host, children, auth_method, parameter_name } = toolRef.current
         const { apiKey, apiLocation, authMethod, authType, parameter } = formRef.current.state
-
         await captureAndAlertRequestErrorHoc(testToolApi({
             server_host,
             extra: children.find(el => el.name === apiData.name).extra,
@@ -93,7 +86,6 @@ export const TestDialog = forwardRef<{
         }).then(setResult))
         setLoading(false)
     }
-
     return <Dialog open={testShow} onOpenChange={setTestShow}>
         <DialogContent className="sm:max-w-[625px]">
             <DialogHeader>
@@ -139,34 +131,6 @@ export const TestDialog = forwardRef<{
         </DialogContent>
     </Dialog>
 })
-
-const formData = {
-    toolName: "",
-    schemaContent: `{
-        "openapi": "3.1.0",
-        "info": {
-          "title": "Untitled",
-          "description": "Your OpenAPI specification",
-          "version": "v1.0.0"
-        },
-        "servers": [
-          {
-            "url": ""
-          }
-        ],
-        "paths": {},
-        "components": {
-          "schemas": {}
-        }
-      }`,
-    authType: "basic",
-    apiKey: "",
-    authMethod: "none",
-    customHeader: "",
-    apiLocation: "query",
-    parameter: ""
-}
-
 const EditTool = forwardRef((props: any, ref) => {
     const [editShow, setShow] = useState(false)
     const setEditShow = (bln) => {
@@ -178,13 +142,11 @@ const EditTool = forwardRef((props: any, ref) => {
         setShow(bln)
     }
     const [delShow, setDelShow] = useState(false)
-
     const schemaUrl = useRef('')
     const [formState, setFormState] = useState({ ...formData });
     const fromDataRef = useRef<any>({}) // same as formState
     const [tableData, setTableData] = useApiTableData()
     const [canDelete, setCanDelete] = useState(false)
-
     useImperativeHandle(ref, () => ({
         open: () => {
             setEditShow(true)
@@ -204,11 +166,9 @@ const EditTool = forwardRef((props: any, ref) => {
             setCanDelete(tool.delete)
             setEditShow(true)
             setDelShow(true)
-
             setTableData(tool.children)
         }
     }));
-
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormState(prevState => ({
@@ -216,7 +176,6 @@ const EditTool = forwardRef((props: any, ref) => {
             [name]: value
         }));
     };
-
     // sendRequest to backend to get Schema
     const handleImportSchema = () => {
         // http://192.168.106.120:3002/openapi-test.json
@@ -233,15 +192,12 @@ const EditTool = forwardRef((props: any, ref) => {
                 apiLocation: res.api_location,
                 parameter: res.parameter_name
             }))
-
             setTableData(res.children)
         })
     };
-
     // set schemaContent
     const handleSelectTemplate = (key = '') => {
         if (!editShow) return
-
         const file_content = key ? Example[key] : formState.schemaContent
         file_content && captureAndAlertRequestErrorHoc(downloadToolSchema({ file_content })).then(res => {
             schemaUrl.current = ''
@@ -256,18 +212,15 @@ const EditTool = forwardRef((props: any, ref) => {
                 apiLocation: res.api_location,
                 parameter: res.parameter_name
             }));
-
             setTableData(res.children)
         })
     };
-
     const { message } = useToast()
     const [saveLoading, setSaveLoading] = useState(false)
     // save api
     const handleSave = () => {
         if (saveLoading) return
         const errors = [];
-
         if (!formState.toolName) {
             errors.push(t('tools.toolNameCannotBeEmpty'));
         }
@@ -280,7 +233,6 @@ const EditTool = forwardRef((props: any, ref) => {
             } else if (formState.apiKey.length > 1000) {
                 errors.push(t('tools.apiKeyMaxLengthExceeded'));
             }
-
             if (formState.authType === 'custom') {
                 if (!formState.parameter) {
                     errors.push(t('tools.parameterNameCannotBeEmpty'));
@@ -289,14 +241,12 @@ const EditTool = forwardRef((props: any, ref) => {
                 }
             }
         }
-
         if (errors.length > 0) {
             return message({
                 description: errors,
                 variant: "warning"
             });
         }
-
 
         const fromData = fromDataRef.current
         // merge formState
@@ -310,7 +260,6 @@ const EditTool = forwardRef((props: any, ref) => {
             api_location: formState.apiLocation,
             parameter_name: formState.parameter
         }
-
         const methodApi = delShow ? updateTool : createTool
         setSaveLoading(true)
         captureAndAlertRequestErrorHoc(methodApi(data)).then(res => {
@@ -325,7 +274,6 @@ const EditTool = forwardRef((props: any, ref) => {
             })
         })
     };
-
     // del tool
     const handleDelete = () => {
         bsConfirm({
@@ -342,14 +290,12 @@ const EditTool = forwardRef((props: any, ref) => {
             }
         })
     }
-
     // test
     const testDialogRef = useRef(null)
     const handleTest = (obj) => {
         testDialogRef.current.open(obj)
     }
     const { t } = useTranslation()
-
     return <div>
         <Sheet open={editShow} onOpenChange={setEditShow}>
             <SheetContent className="w-[800px] sm:max-w-[800px] p-4 bg-background-login">
@@ -375,7 +321,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         <div className="flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="dark:bg-[#282828]"><Plus /> {t('tools.importFromUrl')}</Button>
+                                    <Button variant="outline" className="dark:bg-[#282828]"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80" align="end">
                                     <div className="flex items-center gap-4">
@@ -440,7 +386,7 @@ const EditTool = forwardRef((props: any, ref) => {
                             <div className="px-6 mb-4" >
                                 <Label htmlFor="open" className="bisheng-label flex items-center gap-1">
                                     {t('tools.authTypeLabel')}
-                                    <QuestionTooltip content={<div>
+                                    <AppHint content={<div>
                                         <p>{t('tools.basicBearerDescription')}</p>
                                         <p>{t('tools.customDescription')}</p>
                                     </div>} />
@@ -470,7 +416,7 @@ const EditTool = forwardRef((props: any, ref) => {
                                 <div className="px-6 mb-4" >
                                     <Label htmlFor="apiLocation" className="bisheng-label flex items-center gap-1">
                                         {t('tools.apiLocationLabel')}
-                                        <QuestionTooltip content={<div>
+                                        <AppHint content={<div>
                                             <p>{t('tools.headerDescription')}</p>
                                             <p>{t('tools.queryDescription')}</p>
                                         </div>} />
@@ -616,12 +562,9 @@ const EditTool = forwardRef((props: any, ref) => {
         <TestDialog ref={testDialogRef} />
     </div>
 })
-
 export default EditTool
-
 const useApiTableData = () => {
     const [tableData, setTableData] = useState([])
-
     const setData = (objs) => {
         const newObjs = objs.map(obj => {
             return {
@@ -629,169 +572,10 @@ const useApiTableData = () => {
                 extra: JSON.parse(obj.extra)
             }
         })
-
         setTableData(newObjs)
     }
-
     return [
         tableData,
         setData
     ] as const
-}
-
-
-// 示例
-const Example = {
-    'json': `{
-        "openapi": "3.1.0",
-        "info": {
-          "title": "Get weather data",
-          "description": "Retrieves current weather data for a location.",
-          "version": "v1.0.0"
-        },
-        "servers": [
-          {
-            "url": "https://weather.example.com"
-          }
-        ],
-        "paths": {
-          "/location": {
-            "get": {
-              "summary": "",
-              "description": "Get temperature for a specific location",
-              "operationId": "GetCurrentWeather",
-              "parameters": [
-                {
-                  "name": "location",
-                  "in": "query",
-                  "description": "The city and state to retrieve the weather for",
-                  "required": true,
-                  "schema": {
-                    "type": "string"
-                  }
-                }
-              ],
-              "deprecated": false
-            }
-          }
-        },
-        "components": {
-          "schemas": {}
-        }
-      }`,
-    'yaml': `# Taken from https://github.com/OAI/OpenAPI-Specification/blob/main/examples/v3.0/petstore.yaml
-
-    openapi: "3.0.0"
-    info:
-      version: 1.0.0
-      title: Swagger Petstore
-      license:
-        name: MIT
-    servers:
-      - url: https://petstore.swagger.io/v1
-    paths:
-      /pets:
-        get:
-          summary: List all pets
-          operationId: listPets
-          tags:
-            - pets
-          parameters:
-            - name: limit
-              in: query
-              description: How many items to return at one time (max 100)
-              required: false
-              schema:
-                type: integer
-                maximum: 100
-                format: int32
-          responses:
-            '200':
-              description: A paged array of pets
-              headers:
-                x-next:
-                  description: A link to the next page of responses
-                  schema:
-                    type: string
-              content:
-                application/json:    
-                  schema:
-                    $ref: "#/components/schemas/Pets"
-            default:
-              description: unexpected error
-              content:
-                application/json:
-                  schema:
-                    $ref: "#/components/schemas/Error"
-        post:
-          summary: Create a pet
-          operationId: createPets
-          tags:
-            - pets
-          responses:
-            '201':
-              description: Null response
-            default:
-              description: unexpected error
-              content:
-                application/json:
-                  schema:
-                    $ref: "#/components/schemas/Error"
-      /pets/{petId}:
-        get:
-          summary: Info for a specific pet
-          operationId: showPetById
-          tags:
-            - pets
-          parameters:
-            - name: petId
-              in: path
-              required: true
-              description: The id of the pet to retrieve
-              schema:
-                type: string
-          responses:
-            '200':
-              description: Expected response to a valid request
-              content:
-                application/json:
-                  schema:
-                    $ref: "#/components/schemas/Pet"
-            default:
-              description: unexpected error
-              content:
-                application/json:
-                  schema:
-                    $ref: "#/components/schemas/Error"
-    components:
-      schemas:
-        Pet:
-          type: object
-          required:
-            - id
-            - name
-          properties:
-            id:
-              type: integer
-              format: int64
-            name:
-              type: string
-            tag:
-              type: string
-        Pets:
-          type: array
-          maxItems: 100
-          items:
-            $ref: "#/components/schemas/Pet"
-        Error:
-          type: object
-          required:
-            - code
-            - message
-          properties:
-            code:
-              type: integer
-              format: int32
-            message:
-              type: string`,
 }

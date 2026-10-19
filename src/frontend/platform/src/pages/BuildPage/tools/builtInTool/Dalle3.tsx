@@ -1,8 +1,8 @@
 // @ts-strict-ignore
 import { Button } from '@/components/bs-ui/button';
-import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
+import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
 import { useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { InputField } from "./InputField";

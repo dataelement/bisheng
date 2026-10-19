@@ -1,12 +1,12 @@
 // @ts-strict-ignore
 import { FlagIcon } from "@/components/bs-icons";
-import { ThunmbIcon } from "@/components/bs-icons/thumbs";
 import { Button } from "@/components/bs-ui/button";
-import { copyTrackingApi, likeChatApi } from "@/controllers/API";
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { copyTrackingApi,likeChatApi } from "@/controllers/API";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 
 const enum ThumbsState {
     Default = 0,
@@ -57,19 +57,16 @@ export default function MessageButtons({ debug, mark = false, id, onCopy, data, 
 
         {!debug && (version === 'v2') &&
             <>
-                <ThunmbIcon
-                    type='copy'
-                    className={`cursor-pointer ${copied && 'text-primary hover:text-primary'}`}
+                <Outlined.Copy
+                    className={`size-4 cursor-pointer ${copied ? 'text-primary' : 'text-text-3 hover:text-text-2'}`}
                     onClick={handleCopy}
                 />
-                <ThunmbIcon
-                    type='like'
-                    className={`cursor-pointer ${state === ThumbsState.ThumbsUp && 'text-primary hover:text-primary'}`}
+                <Outlined.ThumbsUp
+                    className={`size-4 cursor-pointer ${state === ThumbsState.ThumbsUp ? 'text-primary' : 'text-text-3 hover:text-text-2'}`}
                     onClick={() => handleClick(ThumbsState.ThumbsUp)}
                 />
-                <ThunmbIcon
-                    type='unLike'
-                    className={`cursor-pointer ${state === ThumbsState.ThumbsDown && 'text-primary hover:text-primary'}`}
+                <Outlined.ThumbsDown
+                    className={`size-4 cursor-pointer ${state === ThumbsState.ThumbsDown ? 'text-primary' : 'text-text-3 hover:text-text-2'}`}
                     onClick={() => handleClick(ThumbsState.ThumbsDown)}
                 /></>
         }

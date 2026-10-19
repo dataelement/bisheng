@@ -1,33 +1,26 @@
 // @ts-strict-ignore
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
-import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
-import SkillSheet from "@/components/bs-comp/sheets/SkillSheet";
 import ToolsSheet from "@/components/bs-comp/sheets/ToolsSheet";
-import { ToolIcon } from "@/components/bs-icons/tool";
+import { Outlined } from "bisheng-icons";
+
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
+Accordion,
+AccordionContent,
+AccordionItem,
+AccordionTrigger,
 } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
-import { Input, InputList, Textarea } from "@/components/bs-ui/input";
-import { Switch } from "@/components/bs-ui/switch";
-import {
-  QuestionTooltip,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip";
+import { Input,InputList,Textarea } from "@/components/bs-ui/input";
 import { locationContext } from "@/contexts/locationContext";
 import { useAssistantStore } from "@/store/assistantStore";
-import { CircleHelp, CircleMinus, CirclePlus, Plus, RefreshCw } from "lucide-react";
+import { Switch } from "@bisheng/ui";
+import { CircleMinus } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import { AppHint } from "../../components/AppHint";
 import ModelSelect from "./ModelSelect";
 import Temperature from "./Temperature";
 
@@ -77,7 +70,7 @@ export default function Setting() {
             <div className="mb-4 px-6">
               <label htmlFor="slider" className="bisheng-label flex gap-1">
                 {t("build.maxToken")}
-                <QuestionTooltip content={t("build.maxTokenTip")}></QuestionTooltip>
+                <AppHint content={t("build.maxTokenTip")}></AppHint>
               </label>
               <Input value={assistantState.max_token} type="number" className="mt-2" defaultValue={32000} min={0} onChange={e =>
                 dispatchAssistant("setting", { max_token: Number(e.target.value) })
@@ -114,16 +107,7 @@ export default function Setting() {
             <div className="mb-4 px-6">
               <label htmlFor="open" className="bisheng-label flex gap-1">
                 {t("build.guidingQuestions")}
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <CircleHelp className="w-4 h-4" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{t("build.recommendQuestionsForUsers")}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <AppHint content={t("build.recommendQuestionsForUsers")} />
               </label>
               <InputList
                 className="mt-2"
@@ -192,12 +176,12 @@ export default function Setting() {
                     <div className="flex justify-between">
                       <Link to={"/filelib"} target="_blank">
                         <Button variant="link">
-                          <CirclePlus size={16} className="mr-1" />{" "}
+                          <Outlined.Plus size={16} className="mr-1" />{" "}
                           {t("build.createNewKnowledge")}
                         </Button>
                       </Link>
                       <Button variant="link" onClick={() => reload(1, '')}>
-                        <RefreshCw size={16} className="mr-1" /> {t("build.refresh")}
+                        <Outlined.Refresh size={16} className="mr-1" /> {t("build.refresh")}
                       </Button>
                     </div>
                   )}
@@ -208,7 +192,7 @@ export default function Setting() {
               <div className="mt-4 flex items-center gap-2">
                 <label className="bisheng-label flex items-center gap-1">
                   {t("build.userAuthVerification")}
-                  <QuestionTooltip content={t("build.userAuthVerificationTips")} />
+                  <AppHint content={t("build.userAuthVerificationTips")} />
                 </label>
                 <Switch
                   checked={!!assistantState.knowledge_auth}
@@ -245,10 +229,10 @@ export default function Setting() {
                   })
                 }
               >
-                <Plus
+                <Outlined.Plus
                   className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
-                ></Plus>
+                ></Outlined.Plus>
               </ToolsSheet>
             </div>
           </AccordionTrigger>
@@ -261,7 +245,7 @@ export default function Setting() {
                 >
                   <div className="flex items-center gap-2">
                     <TitleIconBg id={tool.id} className="h-7 w-7">
-                      <ToolIcon />
+                      <Outlined.Hammer />
                     </TitleIconBg>
                     <p className="text-sm">{tool.name}</p>
                   </div>
@@ -289,12 +273,12 @@ export default function Setting() {
                 <TooltipProvider delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <CircleHelp className="w-4 h-4" />
+                      <Outlined.Question className="w-4 h-4" />
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-slate-50">{t("build.skillDescription")}</p>
                     </TooltipContent>
-                  </Tooltip>
+                 </Tooltip>
                 </TooltipProvider>
               </span>
               <SkillSheet
@@ -305,10 +289,10 @@ export default function Setting() {
                   })
                 }
               >
-                <Plus
+                <Outlined.Plus
                   className="mr-2 text-primary hover:text-primary/80 dark:text-slate-50"
                   onClick={(e) => e.stopPropagation()}
-                ></Plus>
+                ></Outlined.Plus>
               </SkillSheet>
             </div>
           </AccordionTrigger>
@@ -339,10 +323,10 @@ export default function Setting() {
           </AccordionContent>
         </AccordionItem> */}
         {/* <TaggingSheet>
-          <Plus
+          <Outlined.Plus
             className="mr-2 text-primary hover:text-primary/80"
             onClick={(e) => e.stopPropagation()}
-            ></Plus>
+            ></Outlined.Plus>
         </TaggingSheet> */}
       </Accordion>
     </div>

@@ -1,12 +1,13 @@
 // @ts-strict-ignore
 import FileView from "@/components/bs-comp/FileView";
-import { LoadIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { getFileBboxApi, getFilePathApi, getKnowledgeChunkApi, updateChunkApi, updatePreviewChunkApi } from "@/controllers/API";
+import { getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,updateChunkApi,updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Crosshair, Info, X } from "lucide-react";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Crosshair } from "lucide-react";
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import DocxPreview from "./DocxFileViewer";
@@ -270,7 +271,7 @@ const ParagraphEdit = ({
                 {!value && <p className="absolute left-0 text-red-500 text-xs mt-2">{t('inputNotEmpty')}</p>}
                 {!isUns && <div className="flex justify-end gap-4">
                     <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>
-                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
+                    <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><Outlined.Loading className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>
                 </div>}
             </div>
             {isUns && <>
@@ -287,14 +288,14 @@ const ParagraphEdit = ({
                     <div className="flex justify-between items-center relative h-10 mb-2 text-sm">
                         <span>{fileName}</span>
                         <div className={`${labelChange ? '' : 'hidden'} flex items-center`}>
-                            <Info className='mr-1 text-red-500' />
+                            <Outlined.Info className='mr-1 text-red-500' />
                             <span className="text-red-500">{t('segmentRangeDetected')}</span>
                             <span className="text-primary cursor-pointer" onClick={handleOvergap}>{t('overwriteSegment')}</span>
                         </div>
                         <div className="flex justify-end gap-4">
                             {edit && <Button className="px-6 h-8" variant="outline" onClick={onClose}>{t('cancel', { ns: 'bs' })}</Button>}
-                            {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><LoadIcon className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
-                            {!edit && <X className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
+                            {edit && <Button className="px-6 h-8" disabled={loading} onClick={handleSave}><Outlined.Loading className={`mr-1 ${loading ? '' : 'hidden'}`} />{t('save', { ns: 'bs' })}</Button>}
+                            {!edit && <Outlined.Close className="cursor-pointer size-5 text-gray-500" onClick={onClose} />}
                         </div>
                     </div>
                     {/* file view */}

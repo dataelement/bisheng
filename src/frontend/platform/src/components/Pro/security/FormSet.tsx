@@ -1,12 +1,12 @@
 // @ts-strict-ignore
 
 import { Button } from "@/components/bs-ui/button";
-import { Checkbox } from "@/components/bs-ui/checkBox";
+import { Checkbox } from "@bisheng/ui";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
+import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { t } from "i18next";
-import { Upload } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 
 export default function FormSet({ data, onChange, onSave, onCancel }) {
@@ -94,7 +94,7 @@ export default function FormSet({ data, onChange, onSave, onCancel }) {
                     <input type="file" accept=".txt" id="fileUpload" className="hidden" onChange={handleUploadFile} />
                     {/* @ts-ignore */}
                     <div className="flex items-center absolute right-1 top-1 cursor-pointer" onClick={() => document.querySelector('#fileUpload').click()}>
-                        <Upload id="ul" color="blue" className="w-3 h-3" />
+                        <Outlined.Upload id="ul" color="blue" className="w-3 h-3" />
                         <Label htmlFor="ul"><span className="text-xs text-primary cursor-pointer">{t('build.txtFile')}</span></Label>
                     </div>
                 </div>

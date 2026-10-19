@@ -1,10 +1,11 @@
 // @ts-strict-ignore
-import { DelIcon } from '@/components/bs-icons';
+import { Outlined } from "bisheng-icons";
+
 import { Button } from '@/components/bs-ui/button';
 import { Input } from '@/components/bs-ui/input';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { useState } from 'react';
-import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
+import { DragDropContext,Draggable,Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 export const ruleI18nMap = {
   '\\n': 'singleNewlineRule',
@@ -160,7 +161,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                             <span className='min-w-0 truncate text-sm text-[#4e5969]'>{strategy.rule}</span>
                           </div>
                           <div className="flex items-center">
-                            <DelIcon
+                            <Outlined.Delete
                               onClick={() => handleDelete(strategy.id)}
                               className='cursor-pointer text-[#94a3b8] opacity-0 transition-opacity group-hover:opacity-100'
                             />

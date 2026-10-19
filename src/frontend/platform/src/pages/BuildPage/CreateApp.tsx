@@ -1,22 +1,23 @@
 // @ts-strict-ignore
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+import { Input,Textarea } from "@/components/bs-ui/input";
 import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { locationContext } from "@/contexts/locationContext";
 import { readTempsDatabase } from "@/controllers/API";
 import { createAssistantsApi } from "@/controllers/API/assistant";
-import { getAssistantModelConfig, getLlmDefaultModel } from "@/controllers/API/finetune";
-import { copyReportTemplate, createWorkflowApi } from "@/controllers/API/workflow";
+import { getAssistantModelConfig,getLlmDefaultModel } from "@/controllers/API/finetune";
+import { copyReportTemplate,createWorkflowApi } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
-import { AppType, AppTypeToNum } from "@/types/app";
-import { forwardRef, useContext, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { AppType,AppTypeToNum } from "@/types/app";
+import { forwardRef,useContext,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { assistantRoleExample } from "./assistant/editAssistant/roleExample";
@@ -275,7 +276,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                             </Button>
                         </DialogClose>
                         <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
-                            {loading && <LoadIcon className="mr-2" />}
+                            {loading && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>
                     </DialogFooter>

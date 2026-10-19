@@ -1,17 +1,17 @@
 // @ts-strict-ignore
-"use client"
+"use client";
+import { Outlined } from "bisheng-icons";
+import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
 
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogPortal } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
-import { AlertCircle, CircleQuestionMark, Clock3, Edit2, Hash, Plus, SquarePen, Trash2, Type, X } from "lucide-react"
-import React, { useCallback, useState, useRef, useEffect, memo, useMemo } from "react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { cname } from "@/components/bs-ui/utils"
-import { addMetadata, updateMetadataFields, deleteMetadataFields } from "@/controllers/API"
-import { QuestionTooltip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
-import { useTranslation } from "react-i18next"
+import { Button } from "@/components/bs-ui/button";
+import { Dialog,DialogContent,DialogDescription,DialogHeader,DialogPortal,DialogTitle } from "@/components/bs-ui/dialog";
+import { Input } from "@/components/bs-ui/input";
+import { cname } from "@/components/bs-ui/utils";
+import { addMetadata,deleteMetadataFields,updateMetadataFields } from "@/controllers/API";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Hash } from "lucide-react";
+import React,{ memo,useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type MetadataType = "String" | "Number" | "Time"
 
@@ -45,9 +45,9 @@ const BUILT_IN_METADATA: BuiltInMetadata[] = [
 ]
 
 const TYPE_ICONS = {
-    String: <Type />,
+    String: <Outlined.FontSize />,
     Number: <Hash />,
-    Time: <Clock3 />,
+    Time: <Outlined.Time />,
 }
 
 const TypeSelector = memo(({
@@ -320,7 +320,7 @@ export function MetadataManagementDialog({
                     <div className="absolute bottom-full left-1/2 mb-2 w-56 bg-white border rounded-lg shadow-lg p-3 z-50"
                         style={{ transform: 'translateX(-84%)' }}>
                         <div className="flex">
-                            <CircleQuestionMark size={14} className="text-red-500" />
+                            <Outlined.Question size={14} className="text-red-500" />
                             <div className="flex -mt-1 ml-1 font-medium text-sm">{t('tip')}</div>
                         </div>
                         <div className="flex gap-2 mb-3 mt-2">
@@ -378,7 +378,7 @@ export function MetadataManagementDialog({
                     >
                         {children}
                         <DialogPrimitive.Close className="absolute right-3 top-3 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
-                            <X className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
+                            <Outlined.Close className={isSmallScreen ? "h-3 w-3" : "h-4 w-4"} />
                             <span className="sr-only">Close</span>
                         </DialogPrimitive.Close>
                     </DialogPrimitive.Content>
@@ -408,7 +408,7 @@ export function MetadataManagementDialog({
                             onClick={handleCreateClick} disabled={!hasManagePermission}
                             className={cname("w-full flex items-center justify-center gap-2 rounded-lg bg-muted hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors", isSmallScreen ? "py-2" : "py-3")}
                         >
-                            <Plus size={isSmallScreen ? 16 : 20} />
+                            <Outlined.Plus size={isSmallScreen ? 16 : 20} />
                             <span>{t('createMetadata')}</span>
                         </button>
 
@@ -422,10 +422,8 @@ export function MetadataManagementDialog({
                                         <span className={isSmallScreen ? "text-base" : "text-lg"}>{TYPE_ICONS[metadata.type]}</span>
                                         <span className={cname("text-gray-500", isSmallScreen ? "text-xs" : "text-sm")}>{metadata.type}</span>
                                         <div className=" min-w-0 max-w-64">
-                                            <TooltipProvider>
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <span
+                                            <KnowledgeTooltip content={<><p>{metadata.name}</p></>}>
+<span
                                                             className={cname(
                                                                 "font-medium truncate block",
                                                                 isSmallScreen ? "text-sm" : "",
@@ -440,17 +438,7 @@ export function MetadataManagementDialog({
                                                         >
                                                             {metadata.name}
                                                         </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent className="max-w-[200px] whitespace-normal"
-                                                        style={{
-                                                            whiteSpace: 'normal',
-                                                            wordBreak: 'break-word'
-                                                        }}
-                                                    >
-                                                        <p>{metadata.name}</p>
-                                                    </TooltipContent>
-                                                </Tooltip>
-                                            </TooltipProvider>
+</KnowledgeTooltip>
                                         </div>
                                     </div>
                                     <div className="flex gap-1">
@@ -458,12 +446,12 @@ export function MetadataManagementDialog({
                                             onClick={() => handleEditClick(metadata)} disabled={!hasManagePermission || isLoading}
                                             className="p-1.5 hover:bg-gray-200 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
-                                            <SquarePen size={isSmallScreen ? 16 : 18} />
+                                            <Outlined.Edit size={isSmallScreen ? 16 : 18} />
                                         </button>
                                         <BubbleConfirm
                                             trigger={
                                                 <button disabled={!hasManagePermission || isLoading}>
-                                                    <Trash2 size={isSmallScreen ? 16 : 18} />
+                                                    <Outlined.Delete size={isSmallScreen ? 16 : 18} />
                                                 </button>
                                             }
                                             message={t('confirmDeleteMetadata')}
@@ -478,7 +466,7 @@ export function MetadataManagementDialog({
                             <div className="flex items-center gap-2">
                                 <h3 className={cname("font-semibold", isSmallScreen ? "text-sm" : "")}>{t('builtInMetadata')}</h3>
                                 <div className="group relative">
-                                    <QuestionTooltip className="relative top-0.5 ml-1" content={t('builtInMetadataTooltip')}></QuestionTooltip>
+                                    <KnowledgeHint className="relative top-0.5 ml-1" content={t('builtInMetadataTooltip')}></KnowledgeHint>
                                 </div>
                             </div>
                             <div className="space-y-2">

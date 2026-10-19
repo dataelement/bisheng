@@ -1,10 +1,11 @@
 // @ts-strict-ignore
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown"
-import { copyText } from "@/utils"
-import { Copy } from "lucide-react"
-import { useMemo } from "react"
-import { useTranslation } from "react-i18next"
+import { useToast } from "@/components/bs-ui/toast/use-toast";
+import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
+import { copyText } from "@/utils";
+import { Outlined } from "bisheng-icons";
+
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function MessageSystem({ data }) {
     const { message } = useToast()
@@ -33,7 +34,7 @@ export default function MessageSystem({ data }) {
     return <div className="py-1">
         <div className={`relative rounded-sm px-6 py-4 border text-sm dark:bg-gray-900 ${data.category === 'guide' ? 'bg-[#EDEFF6]' : 'bg-slate-50'} ${border[data.category || 'system']}`}>
             {logMkdown}
-            {data.category === 'report' && <Copy className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></Copy>}
+            {data.category === 'report' && <Outlined.Copy className=" absolute right-4 top-2 cursor-pointer" onClick={(e) => handleCopy(e.target.parentNode)}></Outlined.Copy>}
         </div>
     </div>
 };

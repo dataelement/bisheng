@@ -1,14 +1,15 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
+import { Sheet,SheetContent,SheetTitle,SheetTrigger } from "@/components/bs-ui/sheet";
 import { getToolsApi } from "@/controllers/API/tools";
 import { useMcpRefrensh } from "@/pages/BuildPage/tools";
 import ToolItem from "@/pages/BuildPage/tools/ToolItem";
-import { CpuIcon, Star, User } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CpuIcon,Star } from "lucide-react";
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function ToolsSheet({ select, onSelect, children }) {
@@ -53,7 +54,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === 'default' && 'bg-muted-foreground/10'}`}
                                 onClick={() => setType('default')}
                             >
-                                <User />
+                                <Outlined.PeopleRound />
                                 <span>{t('tools.builtinTools')}</span>
                             </div>
                             <div
@@ -96,7 +97,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                                     loadMData()
                                 }}
                             >
-                                {loading && <LoadIcon className="text-gray-800" />}
+                                {loading && <Outlined.Loading className="animate-spin text-gray-800" />}
                                 {t("tools.refresh")}
                             </Button>}
                         </div>

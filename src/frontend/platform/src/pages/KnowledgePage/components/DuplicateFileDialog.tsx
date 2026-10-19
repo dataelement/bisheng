@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 
 type RepeatFile = {
     id: number | string;

@@ -144,7 +144,7 @@ describe("tool list lazy permissions", () => {
     await screen.findByText("API Tool")
 
     expect(getMyResourcePermissionsApi).not.toHaveBeenCalled()
-    expect(screen.queryByTestId("setting-icon")).toBeNull()
+    expect(screen.queryByLabelText("edit")).toBeNull()
 
     const row = screen.getByText("API Tool").closest(".group")
     expect(row).not.toBeNull()
@@ -152,7 +152,7 @@ describe("tool list lazy permissions", () => {
 
     await waitFor(() => {
       expect(getMyResourcePermissionsApi).toHaveBeenCalledWith("tool", "10")
-      expect(screen.getByTestId("setting-icon")).toBeInTheDocument()
+      expect(screen.getByLabelText("edit")).toBeInTheDocument()
     })
   })
 })

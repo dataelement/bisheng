@@ -1,7 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Dialog } from "@/components/bs-ui/dialog";
 import { getLinsightModelConfig } from "@/controllers/API/finetune";
-import { describe, expect, it, vi } from "vitest";
+import { act,fireEvent,render,screen,waitFor } from "@testing-library/react";
+import { describe,expect,it,vi } from "vitest";
 import { ImageViewForm } from "./ImageView";
 
 vi.mock("@/controllers/API/finetune", () => ({ getLinsightModelConfig: vi.fn() }));

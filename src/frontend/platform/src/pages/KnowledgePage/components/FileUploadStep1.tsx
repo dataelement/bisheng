@@ -2,7 +2,7 @@
 import KnowledgeUploadComponent from "@/components/bs-comp/knowledgeUploadComponent";
 import { Button } from "@/components/bs-ui/button";
 import { locationContext } from "@/contexts/locationContext";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 

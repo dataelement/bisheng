@@ -1,7 +1,8 @@
 // @ts-strict-ignore
-import { ClearIcon } from "@/components/bs-icons/clear";
-import { FormIcon } from "@/components/bs-icons/form";
-import { SendIcon } from "@/components/bs-icons/send";
+import { Outlined } from "bisheng-icons";
+
+
+
 import { Button } from "@/components/bs-ui/button";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -10,11 +11,11 @@ import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
 import { formatDate } from "@/util/utils";
-import { CirclePause } from "lucide-react";
-import { useContext, useEffect, useRef, useState } from "react";
+
+import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import GuideQuestions from "./GuideQuestions";
-import { isBlockingChatError, resolveChatErrorMessage } from "./chatErrorMessage";
+import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
@@ -331,7 +332,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     clear && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => { !inputLock.locked && onClickClear?.() }}
-                    ><ClearIcon className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></ClearIcon></div>
+                    ><Outlined.Delete className={`${!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'} dark:text-slate-50 dark:hover:bg-[#282828]`} ></Outlined.Delete></div>
                 }
             </div>
             {/* form switch */}
@@ -340,7 +341,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     form && <div
                         className={`w-6 h-6 rounded-sm hover:bg-gray-200 cursor-pointer flex justify-center items-center `}
                         onClick={() => (showWhenLocked || !inputLock.locked) && setFormShow(!formShow)}
-                    ><FormIcon className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></FormIcon></div>
+                    ><Outlined.Upload size={32} className={!showWhenLocked && inputLock.locked ? 'text-muted-foreground' : 'text-foreground'}></Outlined.Upload></div>
                 }
             </div>
             {/* send */}
@@ -359,7 +360,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <SendIcon className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <Outlined.Send className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
@@ -372,7 +373,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         setStop({ show: true, disable: true });
                         setAutogenStop(false)
                         sendWsMsg({ "action": "stop" });
-                    }}><CirclePause className="mr-2" />Stop</Button>}
+                    }}><Outlined.PlayerPause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
             <Textarea

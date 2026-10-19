@@ -1,18 +1,19 @@
 // @ts-strict-ignore
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger } from "@/components/bs-ui/dialog";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import {
-    batchAddFileTagsApi,
-    createKnowledgeTagApi,
-    deleteKnowledgeTagApi,
-    getKnowledgeTagsApi,
-    KnowledgeTagItem,
-    setFileTagsApi
+batchAddFileTagsApi,
+createKnowledgeTagApi,
+deleteKnowledgeTagApi,
+getKnowledgeTagsApi,
+KnowledgeTagItem,
+setFileTagsApi
 } from "@/controllers/API/knowledgeTags";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { truncateString } from "@/util/utils";
-import { Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 interface KnowledgeTagSelectProps {
@@ -225,7 +226,7 @@ export default function KnowledgeTagSelect({
                                         toggleTag(tag.id);
                                     }}
                                 >
-                                    <X className="h-3.5 w-3.5" />
+                                    <Outlined.Close className="h-3.5 w-3.5" />
                                 </button>
                             </span>
                         ))}
@@ -277,7 +278,7 @@ export default function KnowledgeTagSelect({
                                             }}
                                             disabled={deletingTagId === tag.id}
                                         >
-                                            <Trash2 className="size-3" />
+                                            <Outlined.Delete className="size-3" />
                                         </button>
                                     </span>
                                 );

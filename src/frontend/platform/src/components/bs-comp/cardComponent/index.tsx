@@ -1,18 +1,18 @@
 // @ts-strict-ignore
 import { cname } from "@/components/bs-ui/utils";
-import { AppNumType, AppType } from "@/types/app";
-import { Copy, FilePlus, Settings, Shield, Trash2 } from "lucide-react";
+import { AppNumType,AppType } from "@/types/app";
+import { Outlined } from "bisheng-icons";
+import { Shield } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SkillIcon } from "../../bs-icons";
-import { GoIcon } from "../../bs-icons/go";
-import { PlusIcon } from "../../bs-icons/plus";
-import { SettingIcon } from "../../bs-icons/setting";
-import { UserIcon } from "../../bs-icons/user";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../bs-ui/dropdownMenu";
-import { Switch } from "../../bs-ui/switch";
-import i18next from "i18next";
+
+
+
+
+
+import { Switch } from "@bisheng/ui";
+import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from "../../bs-ui/card";
+import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger } from "../../bs-ui/dropdownMenu";
 
 interface IProps<T> {
   data: T,
@@ -72,7 +72,7 @@ export const gradients = [
 // 'bg-fuchsia-700',
 // 'bg-pink-600',
 // 'bg-rose-600'
-export function TitleIconBg({ id, className = '', children = <SkillIcon /> }) {
+export function TitleIconBg({ id, className = '', children = <Outlined.Skill /> }) {
   return <div className={cname(`rounded-md flex justify-center items-center ${gradients[parseInt(id + '', 16) % gradients.length]}`, className)}>{children}</div>
 }
 
@@ -127,7 +127,7 @@ export default function CardComponent<T>({
     <CardHeader>
       <CardTitle>
         <div className="flex gap-2 items-center">
-          <div className="justify-between"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+          <div className="justify-between"><Outlined.Plus className="group-hover:text-primary transition-none" /></div>
           <span>{title}</span>
         </div>
       </CardTitle>
@@ -136,7 +136,7 @@ export default function CardComponent<T>({
       <CardDescription className="break-all">{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
-      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none" /></div>
+      <div className="rounded cursor-pointer"><Outlined.ArrowRight className="group-hover:text-primary transition-none" /></div>
     </CardFooter>
   </Card>
 
@@ -144,14 +144,14 @@ export default function CardComponent<T>({
   // 新建卡片
   if (!id) return <Card className="group w-[320px] cursor-pointer border-dashed border-[#BEC6D6] transition hover:border-primary hover:shadow-none bg-background-new" onClick={onClick}>
     <CardHeader>
-      <div className="flex justify-between pb-2"><PlusIcon className="group-hover:text-primary transition-none" /></div>
+      <div className="flex justify-between pb-2"><Outlined.Plus className="group-hover:text-primary transition-none" /></div>
       <CardTitle className="">{title}</CardTitle>
     </CardHeader>
     <CardContent className="h-[140px] overflow-auto scrollbar-hide">
       <CardDescription>{description}</CardDescription>
     </CardContent>
     <CardFooter className="flex justify-end h-10">
-      <div className="rounded cursor-pointer"><GoIcon className="group-hover:text-primary transition-none dark:text-slate-50" /></div>
+      <div className="rounded cursor-pointer"><Outlined.ArrowRight className="group-hover:text-primary transition-none dark:text-slate-50" /></div>
     </CardFooter>
   </Card>
 
@@ -184,9 +184,8 @@ export default function CardComponent<T>({
           {headSelecter}
           {showSwitch && <Switch
             checked={_checked}
-            className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
-            // @ts-ignore
-            texts={[t('skills.online'), t('skills.offline')]}
+            checkedChildren={t('skills.online')}
+            unCheckedChildren={t('skills.offline')}
             onCheckedChange={handleCheckedChange}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
           ></Switch>}
@@ -201,7 +200,7 @@ export default function CardComponent<T>({
       {labelPannel}
       <div className="flex justify-between items-center h-10">
         <div className="flex gap-1 items-center">
-          <UserIcon />
+          <Outlined.PeopleRound className="size-4 shrink-0" />
           <span className="text-sm text-muted-foreground">{t('skills.createdBy')}</span>
           <span className="text-sm font-medium overflow-hidden text-ellipsis max-w-32 ">{user}</span>
         </div>
@@ -214,7 +213,7 @@ export default function CardComponent<T>({
                   className="hover:bg-[#EAEDF3] dark:hover:bg-[#34353A] rounded cursor-pointer p-1 inline-flex items-center justify-center"
                   aria-label={t('more')}
                 >
-                  <Settings className="w-4 h-4" />
+                  <Outlined.Setting className="w-4 h-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
@@ -226,19 +225,19 @@ export default function CardComponent<T>({
                 )}
                 {edit && isAdmin && type !== 'assistant' && onAddTemp && (
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAddTemp(data); }}>
-                    <FilePlus className="w-4 h-4" />
+                    <Outlined.FileAddition className="w-4 h-4" />
                     {t('skills.createTemplate')}
                   </DropdownMenuItem>
                 )}
                 {showCopy && onCopy && (
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onCopy(data); }}>
-                    <Copy className="w-4 h-4" />
+                    <Outlined.Copy className="w-4 h-4" />
                     {i18n.t('copy', { ns: 'flow' })}
                   </DropdownMenuItem>
                 )}
                 {!checked && onDelete && (
                   <DropdownMenuItem variant="destructive" onClick={(e) => { e.stopPropagation(); onDelete(data); }}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
+                    <Outlined.Delete className="w-4 h-4 text-destructive" />
                     {i18n.t('delete', { ns: 'flow' })}
                   </DropdownMenuItem>
                 )}

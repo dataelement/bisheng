@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { AssistantIcon, FlowIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
+
 import { AppNumType } from "@/types/app";
 import { cn } from "@/utils";
 import { useMemo } from "react";
@@ -27,11 +28,11 @@ export default function AppAvator({ id = 1, flowType = '', url = '', className =
     if (url) return <img src={__APP_ENV__.BASE_URL + url} className={cn(`w-6 h-6 rounded-sm object-cover`, className)} />
 
     const flowIcons = {
-        [AppNumType.ASSISTANT]: <AssistantIcon className="" />,
-        [AppNumType.FLOW]: <FlowIcon className="" />
+        [AppNumType.ASSISTANT]: <Outlined.Application className="" />,
+        [AppNumType.FLOW]: <Outlined.BlocksAndArrows className="" />
     }
 
-    return <div className={cn(`size-6 min-w-6 p-0.5 rounded-sm flex justify-center items-center`, color, className)}>
-        {flowIcons[flowType] || <FlowIcon className="" />}
+    return <div className={cn(`size-6 min-w-6 p-0.5 rounded-sm flex justify-center items-center text-white`, color, className)}>
+        {flowIcons[flowType] || <Outlined.BlocksAndArrows className="" />}
     </div>
 };

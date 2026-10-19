@@ -1,18 +1,19 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { retryKnowledgeFileApi, subUploadLibFile } from "@/controllers/API";
+import { retryKnowledgeFileApi,subUploadLibFile } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { ChevronLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
 import FileUploadStep1 from "./components/FileUploadStep1";
-import FileUploadStep2, { Step2PersistState } from "./components/FileUploadStep2";
+import FileUploadStep2,{ Step2PersistState } from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
 import PreviewResult from "./components/PreviewResult";
 
@@ -326,7 +327,7 @@ export default function FilesUpload() {
     <div className="relative h-full flex flex-col">
       {!permissionChecked && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/60">
-          <LoadingIcon />
+          <Outlined.Loading  className="size-4 animate-spin"/>
         </div>
       )}
       <div className="relative px-4 pt-4">
@@ -338,7 +339,7 @@ export default function FilesUpload() {
               className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
               onClick={() => navigate(-1)}
             >
-              <ChevronLeft className="size-4" />
+              <Outlined.Left className="size-4" />
             </Button>
             <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledge')}</span>
           </div>
@@ -426,7 +427,7 @@ export default function FilesUpload() {
                       {t('previousStep')}
                     </Button>
                     <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>
-                      {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                      {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
                       {t('nextStep')}
                     </Button>
                   </div>

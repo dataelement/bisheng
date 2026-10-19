@@ -1,15 +1,16 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
 import StepProgress from "@/components/bs-ui/step";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { rebUploadFile, retryKnowledgeFileApi } from "@/controllers/API";
+import { rebUploadFile,retryKnowledgeFileApi } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { ChevronLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation,useNavigate,useParams } from "react-router-dom";
 import { DialogWithRepeatFiles } from "./components/DuplicateFileDialog";
 import FileUploadStep2 from "./components/FileUploadStep2";
 import FileUploadStep4 from "./components/FileUploadStep4";
@@ -335,7 +336,7 @@ export default function AdjustFilesUpload() {
   if (!permissionChecked || !hasEditPermission) {
     return (
       <div className="relative h-full flex items-center justify-center">
-        <LoadingIcon />
+        <Outlined.Loading  className="size-4 animate-spin"/>
       </div>
     );
   }
@@ -352,7 +353,7 @@ export default function AdjustFilesUpload() {
               className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
               onClick={() => navigate(-1)}
             >
-              <ChevronLeft className="size-4" />
+              <Outlined.Left className="size-4" />
             </Button>
             <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledgeDetail')}</span>
           </div>
@@ -416,7 +417,7 @@ export default function AdjustFilesUpload() {
                     onClick={handleNext}
                     disabled={isNextDisabled || isSubmitting}
                   >
-                    {isSubmitting ? <LoadingIcon className="h-4 w-4 mr-1" /> : null}
+                    {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
                     {t('nextStep')}
                   </Button>
                 </div>

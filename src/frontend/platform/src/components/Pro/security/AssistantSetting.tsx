@@ -1,12 +1,12 @@
 // @ts-strict-ignore
-import { SettingIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
-import { Switch } from "@/components/bs-ui/switch";
+import { Switch } from "@bisheng/ui";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { Tooltip } from "@bisheng/ui";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
-import { CircleHelp } from "lucide-react";
+
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
 import FormSet from "./FormSet";
@@ -70,7 +70,7 @@ const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(
         create: async (saveId?: number) => {
             if (!form.isCheck) return true
             if (!validateForm(form)) return false
-            const res = await sensitiveSaveApi({ ...form, id: saveId, type });
+            await sensitiveSaveApi({ ...form, id: saveId, type });
             return true;
         }
     }));
@@ -98,22 +98,15 @@ const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(
                 <div className="flex flex-1 items-center justify-between">
                     <div className="flex items-center space-x-2">
                         <span>{t('build.contentSecurityR')}</span>
-                        <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                                <TooltipTrigger>
-                                    <CircleHelp className="w-4 h-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
+                        <Tooltip  content={<>
                                     <p className="text-slate-50">{t('build.contentSecurityDesc')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                                 </>}><span className="inline-flex" tabIndex={0}><Outlined.Question className="w-4 h-4" /></span></Tooltip>
                     </div>
                     <div className="h-[20px] flex items-center">
                         <Sheet open={open} onOpenChange={(bln) => setOpen(bln)}>
                             <SheetTrigger>
                                 {/* @ts-ignore */}
-                                {form.isCheck && <SettingIcon onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
+                                {form.isCheck && <Outlined.Setting onClick={(e) => { e.stopPropagation(); setOpen(!open) }} className="w-[32px] h-[32px]" />}
                             </SheetTrigger>
                             <SheetContent className="w-[500px]" onClick={(e) => e.stopPropagation()}>
                                 <SheetTitle className="font-[500] pl-3 pt-2">{t('build.contentSecuritySettings')}</SheetTitle>

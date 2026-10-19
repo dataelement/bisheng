@@ -1,6 +1,6 @@
 // @ts-strict-ignore
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Loader, LoaderCircle, Ellipsis } from 'lucide-react';
+import { Outlined } from "bisheng-icons";
 import i18next from "i18next";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -288,13 +288,13 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       {/* right-12 top-5 绝对定位 */}
       <div className="absolute right-12 top-5 cursor-pointer">
         {isProcessing && (
-          <LoaderCircle className="animate-spin" />
+          <Outlined.Loading className="animate-spin" />
         )}
         {!isProcessing && isRecording && (
           <VoiceRecordingIcon size={18} onClick={stopRecording} />
         )}
         {!isProcessing && !isRecording && (
-          <Mic size={18} className={disabled && 'cursor-not-allowed opacity-40'} onClick={startRecording} />
+          <Outlined.Microphone size={18} className={disabled && 'cursor-not-allowed opacity-40'} onClick={startRecording} />
         )}
       </div>
 

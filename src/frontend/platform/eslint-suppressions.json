@@ -49,9 +49,6 @@
     },
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/Pro/security/FlowSetting.tsx": {
@@ -137,14 +134,11 @@
     }
   },
   "src/components/bs-comp/cardComponent/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "src/components/bs-comp/chatComponent/ChatInput.tsx": {
@@ -175,11 +169,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/chatComponent/CitationReferencesDrawer.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/chatComponent/FileBs.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
@@ -187,9 +176,6 @@
   },
   "src/components/bs-comp/chatComponent/GuideQuestions.tsx": {
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
@@ -202,9 +188,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 5
-    },
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/components/bs-comp/chatComponent/MessageButtons.tsx": {
@@ -227,11 +210,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    }
-  },
-  "src/components/bs-comp/chatComponent/MessageUser.tsx": {
-    "no-restricted-syntax": {
-      "count": 1
     }
   },
   "src/components/bs-comp/chatComponent/citationUtils.ts": {
@@ -902,7 +880,7 @@
   },
   "src/components/voiceFunction/speechToText.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 9
+      "count": 6
     },
     "no-console": {
       "count": 1
@@ -1416,7 +1394,7 @@
       "count": 12
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     },
     "no-restricted-syntax": {
       "count": 1
@@ -1469,11 +1447,6 @@
   "src/pages/BuildPage/assistant/editAssistant/ModelSelect.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1
-    }
-  },
-  "src/pages/BuildPage/assistant/editAssistant/Setting.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
     }
   },
   "src/pages/BuildPage/assistant/editAssistant/TestChat.tsx": {
@@ -2201,11 +2174,6 @@
       "count": 4
     }
   },
-  "src/pages/BuildPage/tools/builtInTool/FinancialData.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/pages/BuildPage/tools/builtInTool/InputField.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -2612,13 +2580,13 @@
       "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 2
     },
     "no-console": {
       "count": 9
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
@@ -2629,7 +2597,7 @@
       "count": 2
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/KnowledgePage/components/AddKnowledgeFileMenu.tsx": {
@@ -2678,7 +2646,7 @@
       "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 15
+      "count": 13
     },
     "no-console": {
       "count": 1
@@ -2727,10 +2695,10 @@
   },
   "src/pages/KnowledgePage/components/Files.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 9
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 7
+      "count": 4
     },
     "no-restricted-syntax": {
       "count": 1
@@ -2744,7 +2712,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 11
+      "count": 4
     }
   },
   "src/pages/KnowledgePage/components/ImportQa.tsx": {
@@ -2772,19 +2740,8 @@
       "count": 1
     }
   },
-  "src/pages/KnowledgePage/components/MetadataDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
-    }
-  },
   "src/pages/KnowledgePage/components/MetadataManagementDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 3
     },
     "no-restricted-syntax": {
@@ -2805,7 +2762,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 3
+      "count": 2
     },
     "no-useless-escape": {
       "count": 1
@@ -2825,7 +2782,7 @@
       "count": 7
     },
     "react-hooks/exhaustive-deps": {
-      "count": 6
+      "count": 5
     }
   },
   "src/pages/KnowledgePage/components/PreviewFile.tsx": {
@@ -2862,9 +2819,6 @@
   "src/pages/KnowledgePage/components/PreviewResult.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3

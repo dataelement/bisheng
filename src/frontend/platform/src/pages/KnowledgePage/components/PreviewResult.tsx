@@ -1,23 +1,23 @@
 // @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
+Select,
+SelectContent,
+SelectItem,
+SelectTrigger,
+SelectValue
 } from "@/components/bs-ui/select";
-import { delChunkInPreviewApi, previewFileSplitApi, updatePreviewChunkApi } from "@/controllers/API";
+import { delChunkInPreviewApi,previewFileSplitApi,updatePreviewChunkApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { cn } from "@/util/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useParams } from "react-router-dom";
+import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 import useKnowledgeStore from "../useKnowledgeStore";
 import PreviewFile from "./PreviewFile";
 import PreviewParagraph from "./PreviewParagraph";
-import { buildMediaUploadPreviewData, isMediaUploadSuffix, type RichPreviewData } from "./RichPreviewFile";
-import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { buildMediaUploadPreviewData,isMediaUploadSuffix,type RichPreviewData } from "./RichPreviewFile";
 
 interface IProps {
   rules: any;
@@ -30,12 +30,13 @@ interface IProps {
   kId?: string | number;
   showPreview?: boolean;
   onDeleteFile?: (filePath: string) => void;
+  onFileTypeChange?: (fileType: 'file' | 'table') => void;
 }
 export type Partition = {
   [key in string]: { text: string, type: string, part_id: string }
 }
 export default function PreviewResult({
-  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile
+  showPreview, previewCount, rules, resultFiles, step, applyEachCell, cellGeneralConfig, kId, handlePreviewResult, onDeleteFile, onFileTypeChange
 }: IProps) {
   const { id } = useParams()
   const { t } = useTranslation(['knowledge', 'bs']);
@@ -51,23 +52,10 @@ export default function PreviewResult({
     const file = rules.fileList[0]
     setSelectId(file.id)
   }, [])
-  const currentFile = useMemo(() => {  // 当前选择文件
-    const _currentFile = rules.fileList.find(file => file.id === selectId)
-    // 触发keydown事件,切换tab
-    if (_currentFile) {
-      const dom = document.getElementById(_currentFile.fileType === 'table' ? 'knowledge_table_tab' : 'knowledge_file_tab')
-      const keydownEvent = new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true,
-        cancelable: true
-      });
-      dom && dom.dispatchEvent(keydownEvent);
-    }
-    return _currentFile
-  }, [selectId])
+  const currentFile = useMemo(() => rules.fileList.find(file => file.id === selectId), [rules.fileList, selectId])
+  useEffect(() => {
+    if (currentFile) onFileTypeChange?.(currentFile.fileType === 'table' ? 'table' : 'file')
+  }, [currentFile?.fileType, selectId, onFileTypeChange])
   const [fileViewUrl, setFileViewUrl] = useState<{ load: boolean; url: string }>({ load: true, url: '' }) // 当前选择文件预览url
 
   const [loading, setLoading] = useState(false)

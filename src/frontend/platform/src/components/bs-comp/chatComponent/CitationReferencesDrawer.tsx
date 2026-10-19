@@ -1,43 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
-import { getCitationDetail, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
-import { cname } from "@/components/bs-ui/utils";
 import { toast } from "@/components/bs-ui/toast/use-toast";
-import {
-  buildCitationDocumentPreview,
-  buildCitationReferenceItems,
-  createCitationDetailMap,
-  getCitationDocumentDownloadUrl,
-  getCitationDocumentFileType,
-  getCitationDocumentName,
-  isFilePreviewCitation,
-  isRagCitationMissingPreviewUrl,
-  normalizeCitationType,
-  toAbsolutePreviewUrl,
-  type CitationPreview,
-  type CitationReferenceItem,
-} from "./citationUtils";
-import CitationDocumentPreviewDrawer, {
-  CitationDocumentPreviewContent,
-  type CitationDocumentPreviewState,
+import { cname } from "@/components/bs-ui/utils";
+import { getCitationDetail,resolveCitationDetails,type ChatCitation } from "@/controllers/API";
+import { Outlined } from "bisheng-icons";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import CitationDocumentPreviewDrawer,{
+CitationDocumentPreviewContent,
+type CitationDocumentPreviewState,
 } from "./CitationDocumentPreviewDrawer";
 import {
-  buildCitationSourceIconStackData,
-  CitationSourceIcon,
-  CitationSourceIconStack,
+buildCitationSourceIconStackData,
+CitationSourceIcon,
+CitationSourceIconStack,
 } from "./CitationSourceIcon";
-
+import {
+buildCitationDocumentPreview,
+buildCitationReferenceItems,
+createCitationDetailMap,
+getCitationDocumentDownloadUrl,
+getCitationDocumentFileType,
+getCitationDocumentName,
+isFilePreviewCitation,
+isRagCitationMissingPreviewUrl,
+normalizeCitationType,
+toAbsolutePreviewUrl,
+type CitationPreview,
+type CitationReferenceItem,
+} from "./citationUtils";
 type CitationReferencesDrawerProps = {
   content: string;
-  webContent?: any;
+  webContent?: unknown;
   citations?: ChatCitation[] | null;
   buttonClassName?: string;
   allowRemoteCitationResolve?: boolean;
 };
-
 type CitationPanelView = "list" | "document-preview";
-
 function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(() => {
     if (typeof window === "undefined") {
@@ -45,12 +42,10 @@ function useMediaQuery(query: string) {
     }
     return window.matchMedia(query).matches;
   });
-
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
-
     const mediaQuery = window.matchMedia(query);
     const handleChange = () => setMatches(mediaQuery.matches);
     handleChange();
@@ -59,10 +54,8 @@ function useMediaQuery(query: string) {
       mediaQuery.removeEventListener("change", handleChange);
     };
   }, [query]);
-
   return matches;
 }
-
 function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
   const { t } = useTranslation();
   const isWeb = normalizeCitationType(preview?.type || type) === "web";
@@ -77,16 +70,13 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
     </div>
   );
 }
-
 function splitDocumentTitle(title: string, detail: ChatCitation | null, preview: CitationPreview | null) {
   const fileType = String(getCitationDocumentFileType(detail) || preview?.sourceMeta || "")
     .toLowerCase()
     .replace(/^\./, "");
-
   if (!fileType) {
     return { name: title, extension: "" };
   }
-
   const normalizedExtension = `.${fileType}`;
   if (title.toLowerCase().endsWith(normalizedExtension)) {
     return {
@@ -94,10 +84,8 @@ function splitDocumentTitle(title: string, detail: ChatCitation | null, preview:
       extension: normalizedExtension,
     };
   }
-
   return { name: title, extension: normalizedExtension };
 }
-
 function CitationReferenceCard({
   item,
   detail,
@@ -118,15 +106,12 @@ function CitationReferenceCard({
   const title = preview?.title || t("citation.untitled");
   const canOpenDocument = !!detail && isFilePreviewCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
-
   const nameRowTextClass = "text-[14px] font-normal leading-[22px] text-[#1D2129]";
-
   return (
     <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
       <div className="flex items-center">
         <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
-
       {canOpenDocument ? (
         <button
           type="button"
@@ -168,11 +153,10 @@ function CitationReferenceCard({
           </span>
         </div>
       )}
-
       {(isLoading || hasError) && <div className="min-h-[20px] text-[12px] leading-5 text-[#4E5969]">
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-[#86909C]">
-            <Loader2 className="size-3.5 animate-spin" />
+            <Outlined.Loading className="animate-spin size-3.5 animate-spin" />
             {t("citation.loadingDetail")}
           </span>
         ) : hasError ? (
@@ -181,7 +165,6 @@ function CitationReferenceCard({
           null
         )}
       </div>}
-
       <div className="flex min-w-0 items-center gap-1 text-[12px] leading-5 text-[#86909C]">
         {isWeb ? (
           <>
@@ -201,7 +184,6 @@ function CitationReferenceCard({
     </div>
   );
 }
-
 export default function CitationReferencesDrawer({
   content,
   webContent,
@@ -220,12 +202,10 @@ export default function CitationReferencesDrawer({
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>("");
   const resolvedIdsRef = useRef<Set<string>>(new Set());
-
   const references = useMemo(
     () => buildCitationReferenceItems({ content, webContent, citations }),
     [content, webContent, citations],
   );
-
   useEffect(() => {
     const nextMap = createCitationDetailMap(citations);
     detailCacheRef.current = {
@@ -237,12 +217,10 @@ export default function CitationReferencesDrawer({
       ...nextMap,
     }));
   }, [citations]);
-
   useEffect(() => {
     if (!allowRemoteCitationResolve) {
       return;
     }
-
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
@@ -253,17 +231,14 @@ export default function CitationReferencesDrawer({
           return !cached || isRagCitationMissingPreviewUrl(cached);
         }),
     ));
-
     if (!citationIds.length) {
       return;
     }
-
     const requestKey = citationIds.sort().join("|");
     if (batchRequestKeyRef.current === requestKey) {
       return;
     }
     batchRequestKeyRef.current = requestKey;
-
     void resolveCitationDetails(citationIds)
       .then((items) => {
         const nextMap: Record<string, ChatCitation> = {};
@@ -274,7 +249,6 @@ export default function CitationReferencesDrawer({
             nextMap[detail.citationId] = detail;
           }
         });
-
         if (Object.keys(nextMap).length) {
           setDetailMap((current) => ({
             ...current,
@@ -287,29 +261,23 @@ export default function CitationReferencesDrawer({
         batchRequestKeyRef.current = "";
       });
   }, [allowRemoteCitationResolve, references]);
-
   const loadCitationDetail = useCallback(async (citationId: string) => {
     if (!citationId || citationId.startsWith("citation:")) {
       return null;
     }
-
     const cachedDetail = detailCacheRef.current[citationId];
     if (cachedDetail) {
       return cachedDetail;
     }
-
     if (!allowRemoteCitationResolve) {
       return null;
     }
-
     const pendingRequest = requestCacheRef.current[citationId];
     if (pendingRequest) {
       return pendingRequest;
     }
-
     setLoadingMap((current) => ({ ...current, [citationId]: true }));
     setErrorMap((current) => ({ ...current, [citationId]: false }));
-
     const request = getCitationDetail(citationId)
       .then((detail) => {
         if (detail?.citationId) {
@@ -323,8 +291,8 @@ export default function CitationReferencesDrawer({
         }));
         return detail;
       })
-      .catch((error: any) => {
-        if (error?.citationForbidden || error?.citationExpired) {
+      .catch((error: unknown) => {
+        if (error && typeof error === "object" && (("citationForbidden" in error && error.citationForbidden) || ("citationExpired" in error && error.citationExpired))) {
           return null;
         }
         console.error("Failed to load citation detail:", error);
@@ -335,16 +303,13 @@ export default function CitationReferencesDrawer({
         delete requestCacheRef.current[citationId];
         setLoadingMap((current) => ({ ...current, [citationId]: false }));
       });
-
     requestCacheRef.current[citationId] = request;
     return request;
   }, [allowRemoteCitationResolve]);
-
   useEffect(() => {
     if (!open || !allowRemoteCitationResolve) {
       return;
     }
-
     const citationIds = Array.from(new Set(
       references
         .map((item) => item.data.citationId)
@@ -355,7 +320,6 @@ export default function CitationReferencesDrawer({
           return !cached || isRagCitationMissingPreviewUrl(cached);
         }),
     ));
-
     citationIds.forEach((citationId) => {
       void loadCitationDetail(citationId).then((detail) => {
         if (detail?.citationId) {
@@ -364,40 +328,33 @@ export default function CitationReferencesDrawer({
       });
     });
   }, [allowRemoteCitationResolve, detailMap, loadCitationDetail, open, references]);
-
   const isPhoneViewport = useMediaQuery("(max-width: 576px)");
   const isNarrowLayout = useMediaQuery("(max-width: 768px)");
   const isFullBleedMobile = isPhoneViewport;
   const [panelView, setPanelView] = useState<CitationPanelView>("list");
-
   useEffect(() => {
     if (!open) {
       setPanelView("list");
       setDocumentPreview(null);
     }
   }, [open]);
-
   useEffect(() => {
     if (!open || !isFullBleedMobile) {
       return;
     }
-
     const originalBodyOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = "hidden";
     document.documentElement.style.overflow = "hidden";
-
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalHtmlOverflow;
     };
   }, [isFullBleedMobile, open]);
-
   useEffect(() => {
     if (!open || isFullBleedMobile) {
       return;
     }
-
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
       if (!target || drawerRef.current?.contains(target)) return;
@@ -407,26 +364,21 @@ export default function CitationReferencesDrawer({
       setDocumentPreview(null);
       setOpen(false);
     };
-
     document.addEventListener("pointerdown", handlePointerDown, true);
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown, true);
     };
   }, [isFullBleedMobile, open]);
-
   if (!references.length) {
     return null;
   }
-
   const referenceEntryIcons = buildCitationSourceIconStackData(references, detailMap);
   const referenceIconCount = Math.min(referenceEntryIcons.length, 3);
   const referenceButtonWidth = referenceIconCount <= 1 ? "w-24 min-w-24" : referenceIconCount === 2 ? "w-[104px] min-w-[104px]" : "w-28 min-w-28";
   const referenceIconStackWidth = referenceIconCount <= 1 ? "w-5" : referenceIconCount === 2 ? "w-7" : "w-9";
-
   const handleClosePanel = () => {
     setOpen(false);
   };
-
   const handleOpenDocumentPreview = (item: CitationReferenceItem, detail: ChatCitation) => {
     setDocumentPreview({
       detail,
@@ -436,12 +388,10 @@ export default function CitationReferencesDrawer({
     });
     setPanelView("document-preview");
   };
-
   const handleDownloadDocument = async () => {
     if (!documentPreview) {
       return;
     }
-
     const detail = documentPreview.detail;
     const fileName = getCitationDocumentName(detail);
     // The panel holds the citation as it arrived with the message, and that
@@ -457,7 +407,6 @@ export default function CitationReferencesDrawer({
       toast({ variant: "error", description: t("citation.noDownloadUrl") });
       return;
     }
-
     const link = document.createElement("a");
     link.href = fileUrl;
     link.download = fileName;
@@ -466,11 +415,9 @@ export default function CitationReferencesDrawer({
     link.click();
     document.body.removeChild(link);
   };
-
   const documentHeaderTitle = documentPreview
     ? splitDocumentTitle(getCitationDocumentName(documentPreview.detail), documentPreview.detail, null)
     : { name: t("citation.documentPreview"), extension: "" };
-
   const referenceListContent = (
     <>
       <div className={cname(
@@ -492,10 +439,9 @@ export default function CitationReferencesDrawer({
           )}
           aria-label={t("citation.closeReferences")}
         >
-          <X className="size-4" strokeWidth={1.5} />
+          <Outlined.Close className="size-4" strokeWidth={1.5} />
         </button>
       </div>
-
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 py-4 [-webkit-overflow-scrolling:touch]">
         {references.map((item) => {
           const detail = detailMap[item.data.citationId] ?? item.detail ?? null;
@@ -513,7 +459,6 @@ export default function CitationReferencesDrawer({
       </div>
     </>
   );
-
   const documentPreviewContent = (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div className="flex h-14 w-full min-w-0 shrink-0 items-center gap-2 border-b border-[#ECECEC] bg-white px-3">
@@ -527,7 +472,7 @@ export default function CitationReferencesDrawer({
             className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#4E5969] hover:bg-[#F2F3F5]"
             aria-label={t("citation.backToReferences")}
           >
-            <ChevronLeft className="size-4" strokeWidth={1.75} />
+            <Outlined.Left className="size-4" strokeWidth={1.75} />
           </button>
           <div className="flex min-w-0 items-center">
             <h2
@@ -549,7 +494,7 @@ export default function CitationReferencesDrawer({
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#024DE3] transition-colors hover:bg-[#F2F7FF]"
           aria-label={t("citation.downloadDocument")}
         >
-          <Download className="size-4" strokeWidth={1.75} />
+          <Outlined.Download className="size-4" strokeWidth={1.75} />
         </button>
         <button
           type="button"
@@ -557,7 +502,7 @@ export default function CitationReferencesDrawer({
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#A9AEB8] transition-colors hover:bg-[#F7F8FA]"
           aria-label={t("citation.closeReferences")}
         >
-          <X className="size-4" strokeWidth={1.5} />
+          <Outlined.Close className="size-4" strokeWidth={1.5} />
         </button>
       </div>
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
@@ -569,9 +514,7 @@ export default function CitationReferencesDrawer({
       </div>
     </div>
   );
-
   const panelContent = panelView === "document-preview" && documentPreview ? documentPreviewContent : referenceListContent;
-
   return (
     <>
       <button
@@ -589,10 +532,9 @@ export default function CitationReferencesDrawer({
         </div>
         <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
           <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">{t("citation.references")}</span>
-          <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
+          <Outlined.Right className="size-4 text-[#818181]" strokeWidth={1.5} />
         </div>
       </button>
-
       {open && (
         isFullBleedMobile ? (
           <aside

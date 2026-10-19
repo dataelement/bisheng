@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { ExcelPreview } from '@bisheng/file-viewers';
+import { render,screen } from '@testing-library/react';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { ExcelPreview } from '@bisheng/file-viewers';
+import { afterEach,beforeAll,describe,expect,it,vi } from 'vitest';
 import sharedZh from '../../../../public/locales/zh-Hans/shared.json';
 
 vi.unmock('react-i18next');

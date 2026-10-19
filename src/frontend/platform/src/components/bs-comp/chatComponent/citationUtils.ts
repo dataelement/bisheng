@@ -1,5 +1,5 @@
-import i18next from "i18next";
 import type { ChatCitation } from "@/controllers/API";
+import i18next from "i18next";
 
 declare const __APP_ENV__: any;
 

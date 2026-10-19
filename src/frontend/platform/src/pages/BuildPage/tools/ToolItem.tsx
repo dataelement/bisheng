@@ -1,16 +1,16 @@
 // @ts-strict-ignore
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
-import { SettingIcon } from "@/components/bs-icons/setting";
-import { ToolIcon } from "@/components/bs-icons/tool";
+import { Outlined } from "bisheng-icons";
+
+
 import {
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
+AccordionContent,
+AccordionItem,
+AccordionTrigger,
 } from "@/components/bs-ui/accordion";
-import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
-import { CircleHelp, Shield } from "lucide-react";
+import { Tag,Tooltip } from "@bisheng/ui";
+import { Shield } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -40,7 +40,7 @@ export default function ToolItem({
                 className="group flex gap-2 text-start relative pr-4 min-w-0"
                 onMouseEnter={() => onHoverPermissions?.(data)}
             >
-                <TitleIconBg className="w-8 h-8 min-w-8" id={data.id} ><ToolIcon /></TitleIconBg>
+                <TitleIconBg className="w-8 h-8 min-w-8" id={data.id} ><Outlined.Hammer size={20} className="text-white" /></TitleIconBg>
                 <div className="flex-1 min-w-0">
                     <div className="w-full text-sm font-medium leading-none flex items-center gap-2 min-w-0">
                         <span className="truncate">
@@ -57,13 +57,13 @@ export default function ToolItem({
                             ['edit', 'mcp'].includes(type) && data.write && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
-                            ><SettingIcon /></div>
+                            ><Outlined.Setting aria-label={t("edit", { ns: "bs" })} /></div>
                         }
                         {
                             onSetClick && data.write && !['mcp'].includes(type) && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={onSetClick}
-                            ><SettingIcon /></div>
+                            ><Outlined.Setting aria-label={t("edit", { ns: "bs" })} /></div>
                         }
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">{type ? data.description : t(`categories.${data.name}.desc`)}</p>
@@ -78,15 +78,10 @@ export default function ToolItem({
                         <p className="text-sm text-muted-foreground mt-2">{type ? api.name : t(`tools.${api.tool_key}.desc`)}</p>
                         {
                             api.api_params?.length > 0 && <p className="text-sm text-muted-foreground mt-2 flex gap-2">
-                                <TooltipProvider>
-                                    <Tooltip delayDuration={100}>
-                                        <TooltipTrigger asChild>
-                                            <span className="text-primary cursor-pointer flex items-center">{t("build.params", { ns: 'bs' })}<CircleHelp className="size-3" /></span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="right" className="bg-gray-50 border shadow-md p-4 text-gray-950 max-w-[520px]">
+                                <Tooltip side="right" content={<>
                                             {/* todo  JSON.parse(api.extra) move to api ctr */}
-                                            <p className="flex gap-2 items-center"><Badge>{JSON.parse(api.extra)?.method || 'http'}</Badge><span className="text-xl">{type ? api.name : t(`tools.${api.tool_key}.name`)}</span></p>
-                                            <p className="text-sm mt-2 text-gray-500">{type ? api.name : t(`tools.${api.tool_key}.desc`)}</p>
+                                            <p className="flex gap-2 items-center"><Tag size="small">{JSON.parse(api.extra)?.method || 'http'}</Tag><span className="text-xl">{type ? api.name : t(`tools.${api.tool_key}.name`)}</span></p>
+                                            <p className="text-sm mt-2 ">{type ? api.name : t(`tools.${api.tool_key}.desc`)}</p>
                                             {
                                                 api.api_params.map(param => (
                                                     <div key={param.name}>
@@ -95,13 +90,11 @@ export default function ToolItem({
                                                             <span>{param.schema?.type}</span>
                                                             {param.required && <span className="text-red-500">{t('report.requiredLabel', { ns: 'bs' })}</span>}
                                                         </p>
-                                                        <p className="text-gray-500">{type ? param.name : t(`tools.${api.tool_key}.params.${param.name}`)}</p>
+                                                        <p className="">{type ? param.name : t(`tools.${api.tool_key}.params.${param.name}`)}</p>
                                                     </div>
                                                 ))
                                             }
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
+                                         </>}><span className="text-primary cursor-pointer flex items-center">{t("build.params", { ns: 'bs' })}<Outlined.Question className="size-3" /></span></Tooltip>
                                 :
                                 {
                                     api.api_params.map(param => (

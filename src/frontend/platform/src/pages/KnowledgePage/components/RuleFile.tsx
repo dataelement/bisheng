@@ -1,12 +1,14 @@
-import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
-import { useMemo, useEffect, useState, useRef, useCallback } from "react";
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import FileUploadSplitStrategy from "./FileUploadSplitStrategy";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { KnowledgeHint } from "./KnowledgeTooltip";
+
 import { cn } from "@/utils";
-import { CheckCircle2, Circle } from "lucide-react";
+
 
 // Utility function: Convert 1/0 or boolean values to standard boolean
 const toBoolean = (value) => {
@@ -193,7 +195,7 @@ export default function RuleFile({
                             />
                             <Label htmlFor="retainImages" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                 {t('keepImages')}
-                                <QuestionTooltip className="text-[#999999]" content={t('retainImagesTooltip')} />
+                                <KnowledgeHint className="text-[#999999]" content={t('retainImagesTooltip')} />
                             </Label>
                         </div>
 
@@ -211,7 +213,7 @@ export default function RuleFile({
                                         />
                                         <Label htmlFor="forceOcr" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                             {t('ocrForce')}
-                                            <QuestionTooltip className="text-[#999999]" content={t('ocrForceTip')} />
+                                            <KnowledgeHint className="text-[#999999]" content={t('ocrForceTip')} />
                                         </Label>
                                     </div>
                                     <div className="flex items-center gap-2">
@@ -230,7 +232,7 @@ export default function RuleFile({
                                         />
                                         <Label htmlFor="pageHeaderFooter" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                             {t('hfFilter')}
-                                            <QuestionTooltip className="text-[#999999]" content={t('hfFilterTooltip')} />
+                                            <KnowledgeHint className="text-[#999999]" content={t('hfFilterTooltip')} />
                                         </Label>
                                     </div>
                                 </div>
@@ -261,8 +263,8 @@ export default function RuleFile({
                                 <div className="mb-1 flex items-start justify-between">
                                     <span className="text-[14px] text-gray-800" style={mediumTitleStyle}>{mode.title}</span>
                                     {internalValues.splitMode === mode.id
-                                        ? <CheckCircle2 className="size-5 shrink-0 text-primary" />
-                                        : <Circle className="size-5 shrink-0 text-gray-200" />
+                                        ? <Outlined.CheckCircle className="size-5 shrink-0 text-primary" />
+                                        : <Outlined.Round className="size-5 shrink-0 text-gray-200" />
                                     }
                                 </div>
                                 <p className="text-[14px] leading-relaxed text-gray-500 break-words">
@@ -400,7 +402,7 @@ export default function RuleFile({
                                                     {t('layer')}
                                                 </div>
                                             </div>
-                                            <QuestionTooltip
+                                            <KnowledgeHint
                                                 className="text-[#999]"
                                                 content={renderTooltipWithImage(
                                                     splitLevelTooltipImageSrc,
@@ -443,7 +445,7 @@ export default function RuleFile({
                                     />
                                     <Label htmlFor="appendTitle" className="text-sm text-gray-700 flex items-center gap-1 cursor-pointer">
                                         {t('appendTitle')}
-                                        <QuestionTooltip
+                                        <KnowledgeHint
                                             className="text-[#999]"
                                             content={renderTooltipWithImage(appendTitleTooltipImageSrc, 'appendTitleTooltipImageAlt')}
                                         />

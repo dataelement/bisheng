@@ -1,13 +1,14 @@
 // @ts-strict-ignore
-import { LoadingIcon } from '@/components/bs-icons/loading';
+import { LoadingIcon } from "@/components/bs-icons/loading";
+
 import { Button } from '@/components/bs-ui/button';
-import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
+import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from '@/components/bs-ui/label';
 import { toast } from '@/components/bs-ui/toast/use-toast';
-import { getToolsApi, updateToolApi } from '@/controllers/API/tools';
-import { useEffect, useRef, useState } from 'react';
+import { getToolsApi,updateToolApi } from '@/controllers/API/tools';
+import { useEffect,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
-import { InputField, SelectField } from "./InputField";
+import { InputField,SelectField } from "./InputField";
 
 const defaultToolParams = {
     bing: {

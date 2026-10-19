@@ -2,17 +2,17 @@
 import CardComponent from "@/components/bs-comp/cardComponent";
 import ProgressItem from "@/components/bs-comp/knowledgeUploadComponent/ProgressItem";
 import { Button } from "@/components/bs-ui/button";
+import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { readFileByLibDatabase } from "@/controllers/API";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";
-import { createWorkflowApi, getWorkflowNodeTemplate } from "@/controllers/API/workflow";
+import { createWorkflowApi,getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { useKnowledgeDetails } from "@/controllers/hooks/knowledge";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { initNode } from "@/util/flowUtils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate,useParams } from "react-router-dom";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
 
 type TranslateFn = (key: string, options?: Record<string, unknown>) => string;

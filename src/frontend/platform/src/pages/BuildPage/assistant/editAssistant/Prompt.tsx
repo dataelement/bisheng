@@ -1,11 +1,12 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
+import { Dialog,DialogTrigger } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { useAssistantStore } from "@/store/assistantStore";
-import { Settings2 } from "lucide-react";
-import { useEffect, useState } from "react";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 import AutoPromptDialog from "./AutoPromptDialog";
 import { assistantRoleExample } from "./roleExample";
@@ -32,13 +33,13 @@ export default function Prompt({ canEdit = false }) {
                 <span className="text-sm font-medium leading-none shrink-0">{t('build.assistantPortrait')}</span>
                 {/* The panel is read-only while generating; a thinking model may stay silent for a minute */}
                 {promptStreaming && <>
-                    <LoadIcon className="ml-2 shrink-0 text-gray-600" />
+                    <Outlined.Loading className="animate-spin ml-2 shrink-0 text-gray-600" />
                     <span className="ml-1 truncate text-xs text-muted-foreground">{t('build.portraitGenerating')}</span>
                 </>}
             </div>
             <Dialog open={open && canEdit} onOpenChange={(next) => canEdit && setOpen(next)}>
                 <DialogTrigger asChild>
-                    <Button variant="link" className="p-0" disabled={!canEdit || streaming}><Settings2 className="mr-1 h-4 w-4" />{t('build.automaticOptimization')}</Button>
+                    <Button variant="link" className="p-0" disabled={!canEdit || streaming}><Outlined.Setting className="mr-1 h-4 w-4" />{t('build.automaticOptimization')}</Button>
                 </DialogTrigger>
                 {open && <AutoPromptDialog onOpenChange={setOpen}></AutoPromptDialog>}
             </Dialog>

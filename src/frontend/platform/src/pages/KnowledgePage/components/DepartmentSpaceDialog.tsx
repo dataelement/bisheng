@@ -2,22 +2,22 @@ import { SubjectSearchDepartment } from "@/components/bs-comp/permission/Subject
 import type { SelectedSubject } from "@/components/bs-comp/permission/types"
 import { Button } from "@/components/bs-ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
 } from "@/components/bs-ui/dialog"
 import { Label } from "@/components/bs-ui/label"
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import {
-  batchCreateDepartmentKnowledgeSpacesApi,
-  getDepartmentKnowledgeSpacesApi,
-  type DepartmentKnowledgeSpaceSummary,
+batchCreateDepartmentKnowledgeSpacesApi,
+getDepartmentKnowledgeSpacesApi,
+type DepartmentKnowledgeSpaceSummary,
 } from "@/controllers/API/departmentKnowledgeSpace"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect,useMemo,useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface DepartmentSpaceDialogProps {

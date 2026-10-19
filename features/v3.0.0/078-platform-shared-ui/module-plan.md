@@ -1,7 +1,7 @@
 # Platform component migration by business module
 
-User-approved cadence (2026-10-19): finish one whole module, then perform user
-acceptance for that module. Do not pause for acceptance after individual pages.
+User-approved cadence (2026-10-19): finish one whole module for user acceptance. Since 2026-10-19, develop the
+next module while the user tests the previous one; acceptance fixes take priority. Do not pause for acceptance after individual pages.
 Use finalized shared components, preserve explicit library gaps, and replace
 business-owned icons with bisheng-icons equivalents; keep an old icon only when
 no suitable equivalent exists. Shared button/input/notice adapters remain the
@@ -10,8 +10,8 @@ accepted foundation, not duplicate implementations.
 | Order | Module | Scope | Status |
 | --- | --- | --- | --- |
 | 1 | Model management | Provider list/editor, system model settings, fine-tuning and its dialogs, API-document viewer | User accepted 2026-10-19 |
-| 2 | Knowledge | Libraries, files, upload/parse, adjustments, Q&A | In development |
-| 3 | Application building | Apps, templates, assistant editor, tools | Pending |
+| 2 | Knowledge | Libraries, files, upload/parse, adjustments, Q&A | Functional testing: no issues found; design review pending |
+| 3 | Application building | Apps, templates, assistant editor, tools | Ready for module acceptance |
 | 4 | Workflow | Canvas, node settings, debug and results | Pending |
 | 5 | Evaluation | Evaluations, creation/results, datasets | Pending |
 | 6 | Annotation | Tasks, task apps, conversation annotation | Pending |
@@ -68,7 +68,8 @@ the accepted adapters. No backend endpoints or shared component styles change.
   JavaScript errors. Light/dark screenshots were captured for review.
   Temporary fixture sources removed and browser closed.
 - Real model calls, credentials, training, publish/stop/delete operations were
-  not exercised against shared 120 data. User module acceptance remains pending.
+  not exercised against shared 120 data during automated checks; user acceptance
+  subsequently completed on 2026-10-19.
 - Dev entry remains http://localhost:3001/model/management and uses the existing
   120:3002 proxy. Fine-tuning route: /model/finetune; API PDF route: /model/doc.
 

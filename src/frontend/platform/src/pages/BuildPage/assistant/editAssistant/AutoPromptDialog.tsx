@@ -1,8 +1,9 @@
 // @ts-strict-ignore
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { Button } from "@/components/bs-ui/button";
-import { DialogClose, DialogContent, DialogFooter } from "@/components/bs-ui/dialog";
+import { DialogClose,DialogContent,DialogFooter } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { getAssistantOptimizeTaskApi } from "@/controllers/API/assistant";
@@ -10,8 +11,8 @@ import { useAssistantStore } from "@/store/assistantStore";
 import { AssistantTool } from "@/types/assistant";
 import { FlowType } from "@/types/flow";
 import { t } from "i18next";
-import { RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect,useRef,useState } from "react";
 import { useParams } from "react-router-dom";
 import { streamErrorMessage } from "./useInitialPromptStream";
 
@@ -193,8 +194,8 @@ export default function AutoPromptDialog({ onOpenChange }) {
                 {/* Prompt */}
                 <div className="w-[50%] relative pr-6">
                     <div className="flex items-center justify-between">
-                        <span className="text-lg font-semibold leading-none tracking-tight flex">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <LoadIcon className="ml-2 text-gray-600" />}</span>
-                        <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><RefreshCw size={14} className="mr-2" />{t('build.retry')}</Button>
+                        <span className="text-lg font-semibold leading-none tracking-tight flex items-center">{t('build.portraitOptimization')}{LoadType.Prompt === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</span>
+                        <Button variant="link" size="sm" onClick={handleReload} disabled={!!loading} ><Outlined.Refresh size={14} className="mr-2" />{t('build.retry')}</Button>
                     </div>
                     <div className="group flex justify-end mt-2 h-[600px] relative">
                         <Textarea ref={areaRef} className="h-full"
@@ -211,13 +212,13 @@ export default function AutoPromptDialog({ onOpenChange }) {
                     <div className="">
                         {/* Opening statement */}
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <div className="text-md mb-2 font-medium leading-none flex items-center">{t('build.openingRemarks')}{LoadType.GuideWord === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</div>
                             <Textarea ref={guideAreaRef} className="bg-transparent border-none bg-gray-50 dark:bg-[#171717]"></Textarea>
                             <Button className="group-hover:flex hidden h-6 absolute bottom-4 right-4" disabled={unfinished(LoadType.GuideWord)} size="sm" onClick={handleUseGuide}>{t('build.use')}</Button>
                         </div>
                         {/* Guide questions */}
                         <div className="group relative pb-12 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <div className="text-md mb-2 font-medium leading-none flex items-center">{t('build.guidingQuestions')}{LoadType.GuideQuestion === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</div>
                             <div className="min-h-32">
                                 {
                                     question.map(qs => (
@@ -229,7 +230,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         </div>
                         {/* Tools */}
                         <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                            <div className="text-md mb-2 font-medium leading-none flex">{t('build.tools')}{LoadType.Tool === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                            <div className="text-md mb-2 font-medium leading-none flex items-center">{t('build.tools')}{LoadType.Tool === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</div>
                             <div className="pt-1 min-h-32">
                                 {
                                     tools.map(tool => (
@@ -248,7 +249,7 @@ export default function AutoPromptDialog({ onOpenChange }) {
                         </div>
                         {/* Skills */}
                         {/* <div className="group relative pb-10 bg-gray-100 dark:bg-[#2A2B2E] mt-4 px-4 py-2 rounded-md">
-                        <div className="text-md mb-2 font-medium leading-none flex">{t('build.skill')}{LoadType.Flow === loading && <LoadIcon className="ml-2 text-gray-600" />}</div>
+                        <div className="text-md mb-2 font-medium leading-none flex items-center">{t('build.skill')}{LoadType.Flow === loading && <Outlined.Loading size={16} className="shrink-0 animate-spin ml-2 text-gray-600" />}</div>
                         <div className="pt-1">
                             {
                                 flows.map(flow => (

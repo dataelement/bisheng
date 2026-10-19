@@ -1,17 +1,18 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+import { Input,Textarea } from "@/components/bs-ui/input";
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
+import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
+import { createTool,deleteTool,getMcpServeByConfig,testMcpApi,updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // test chat
@@ -447,7 +448,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                             {t('cancel')}
                         </Button>
                         <Button disabled={isLoading} onClick={handleSubmit}>
-                            {isLoading && <LoadIcon className="mr-1" />}
+                            {isLoading && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('save')}
                         </Button>
                     </SheetFooter>

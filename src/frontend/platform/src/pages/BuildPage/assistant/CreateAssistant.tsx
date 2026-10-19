@@ -1,14 +1,15 @@
 // @ts-strict-ignore
-import { AssistantIcon } from "@/components/bs-icons";
+import { Outlined } from "bisheng-icons";
+
 import Avator from "@/components/bs-ui/input/avator";
 import { uploadFileWithProgress } from "@/modals/UploadModal/upload";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { LoadIcon } from "../../../components/bs-icons/loading";
+
 import { Button } from "../../../components/bs-ui/button";
-import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/bs-ui/dialog";
-import { Input, Textarea } from "../../../components/bs-ui/input";
+import { DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "../../../components/bs-ui/dialog";
+import { Input,Textarea } from "../../../components/bs-ui/input";
 import { createAssistantsApi } from "../../../controllers/API/assistant";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 
@@ -112,7 +113,7 @@ ${t('build.exampleTwo')}
         <div className="flex flex-col gap-8 py-6">
             <div className="">
                 <label htmlFor="name" className="bisheng-label">{t('build.assistantAvatar')}</label>
-                <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><AssistantIcon className="bg-primary w-9 h-9 rounded-sm" /></Avator>
+                <Avator value={formData.url} className="mt-2" onChange={uploadAvator}><Outlined.Application className="bg-primary w-9 h-9 rounded-sm" /></Avator>
                 {/* {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>} */}
             </div>
             <div className="">
@@ -139,7 +140,7 @@ ${t('build.exampleTwo')}
                 <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ url: '', name: '', roleAndTasks: '' })}>{t('cancle')}</Button>
             </DialogClose>
             <Button disabled={loading} type="submit" className="px-11" onClick={handleSubmit}>
-                {loading && <LoadIcon className="mr-2" />}
+                {loading && <Outlined.Loading className="animate-spin mr-2" />}
                 {t('build.create')}</Button>
         </DialogFooter>
     </DialogContent>

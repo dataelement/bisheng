@@ -1,21 +1,23 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+
 import { Button } from "@/components/bs-ui/button";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import Tip from "@/components/bs-ui/tooltip/tip";
+
 import { locationContext } from "@/contexts/locationContext";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { cn } from "@/util/utils";
 import { debounce } from "lodash-es";
-import { CircleX, FileCode, LocateFixed } from "lucide-react";
-import { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { FileCode,LocateFixed } from "lucide-react";
+import { forwardRef,useCallback,useContext,useEffect,useImperativeHandle,useRef,useState } from "react";
 import AceEditor from "react-ace";
 import Vditor from 'vditor';
 import 'vditor/dist/index.css';
 import useKnowledgeStore from "../useKnowledgeStore";
 // 新增：引入国际化hooks
-import { useTranslation } from "react-i18next";
 import { useMiniDebounce } from "@/util/hook";
+import { useTranslation } from "react-i18next";
 
 export const MarkdownView = ({ noHead = false, data }) => {
     // 新增：使用knowledge命名空间的国际化
@@ -216,35 +218,35 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
                 <span>{data.text.length} {t('characters')}</span>
                 <div className="flex gap-2 justify-center items-center">
                     {
-                        fileSuffix === 'pdf' && appConfig.enableEtl4lm && <Tip content={t('clickLocateOriginalFile')} side={"top"}  >
+                        fileSuffix === 'pdf' && appConfig.enableEtl4lm && <KnowledgeTooltip content={t('clickLocateOriginalFile')} side={"top"}  >
                             <Button
                                 size="icon"
                                 variant="ghost"
                                 className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
                                 onClick={onPositionClick}
                             ><LocateFixed size={18} /></Button>
-                        </Tip>
+                        </KnowledgeTooltip>
                     }
                     {edit && (showSourceEdit
                         ? <div
                             className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", showSourceEdit && 'bg-primary text-gray-50')}
                             onClick={() => setShowSourceEdit(!showSourceEdit)}><FileCode size={18} /></div>
-                        : <Tip content={t('clickShowMarkdownEdit')} side={"top"}  >
+                        : <KnowledgeTooltip content={t('clickShowMarkdownEdit')} side={"top"}  >
                             <div
                                 className={cn("size-6 text-primary flex justify-center items-center rounded-sm cursor-pointer opacity-0 group-hover:opacity-100", showSourceEdit && 'bg-primary text-gray-50')}
                                 onClick={() => setShowSourceEdit(!showSourceEdit)}><FileCode size={18} /></div>
-                        </Tip>)}
+                        </KnowledgeTooltip>)}
                 </div>
             </div>
             {!oneLeft && canDelete &&
-                <Tip content={t('clickDeleteChunk')} side={"top"}  >
+                <KnowledgeTooltip content={t('clickDeleteChunk')} side={"top"}  >
                     <Button
                         size="icon"
                         variant="ghost"
                         className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
                         onClick={() => onDel(data.chunkIndex, data.text)}
-                    ><CircleX size={18} /></Button>
-                </Tip>
+                    ><Outlined.CloseCircle size={18} /></Button>
+                </KnowledgeTooltip>
             }
         </div>
 
@@ -310,7 +312,7 @@ export default function PreviewParagraph({ fileId, page = 1, previewCount, edit,
     return <div className="pt-3 relative w-full flex-1 min-h-0 flex flex-col">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <LoadingIcon />
+                <Outlined.Loading  className="size-4 animate-spin"/>
             </div>
         )}
         <div ref={containerRef} className={`${className} overflow-y-auto`}

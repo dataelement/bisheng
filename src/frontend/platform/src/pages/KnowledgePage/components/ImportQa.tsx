@@ -1,16 +1,16 @@
 // @ts-strict-ignore
 import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { Button, LoadButton } from "@/components/bs-ui/button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
+import { Button,LoadButton } from "@/components/bs-ui/button";
+import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
-import { Table, TableBody, TableCell, TableHead, TableRow } from "@/components/bs-ui/table";
+import { Table,TableBody,TableCell,TableHead,TableRow } from "@/components/bs-ui/table";
 import { message } from "@/components/bs-ui/toast/use-toast";
 import SimpleUpload from "@/components/bs-ui/upload/simple";
-import { getQaFile, getQaFilePreview, postImportQaFile } from "@/controllers/API";
+import { getQaFile,getQaFilePreview,postImportQaFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { downloadFile } from "@/util/utils";
 import { generateUUID } from "@/utils";
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import * as XLSX from 'xlsx';

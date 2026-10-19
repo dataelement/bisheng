@@ -1,15 +1,15 @@
 // @ts-strict-ignore
 import { Input } from "@/components/bs-ui/input";
 import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue
+Select,
+SelectContent,
+SelectGroup,
+SelectItem,
+SelectTrigger,
+SelectValue
 } from "@/components/bs-ui/select";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { useTranslation } from "react-i18next";
+import { AppHint } from "../../components/AppHint";
 
 export const InputField = ({
     label,
@@ -30,7 +30,7 @@ export const InputField = ({
         <div key={id}>
             <label htmlFor={id} className="bisheng-label flex items-center gap-1">
                 {label}
-                {tooltip && <QuestionTooltip content={tooltip} />}
+                {tooltip && <AppHint content={tooltip} />}
                 {required && <span className="bisheng-tip">*</span>}
             </label>
 
@@ -75,7 +75,7 @@ export const SelectField = ({
         <div key={id}>
             <label htmlFor={id} className="bisheng-label flex items-center gap-1">
                 {label}
-                {tooltip && <QuestionTooltip content={tooltip} />}
+                {tooltip && <AppHint content={tooltip} />}
                 {required && <span className="bisheng-tip">*</span>}
             </label>
 
