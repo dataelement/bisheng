@@ -399,6 +399,11 @@
   "siliconflowApiKeyLabel": "SiliconFlow API Key",
   "imageViewModelLabel": "視覚モデル",
   "imageViewNoVisualModel": "視覚モデルとして指定されたモデルがありません。ワークベンチのモデルで視覚スイッチを先にオンにしてください。",
+  "webFetchEngine": "読み取りエンジン",
+  "webFetchEngineDeepseek": "DeepSeek ウェブ読み取り",
+  "webFetchMaxChars": "本文の最大文字数",
+  "webFetchMaxCharsHint": "本文がこの文字数を超える場合は先頭部分のみを返し、内容が途中で切れていることをモデルに伝えます。",
+  "webFetchMaxCharsRange": "1000～200000 の整数を入力してください",
   "uploadFile": "ファイルをアップロード",
   "个人知识库": "個人ナレッジベース"
 }

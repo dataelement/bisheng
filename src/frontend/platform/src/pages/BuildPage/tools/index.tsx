@@ -25,6 +25,11 @@ const MANAGED_TOOLS = [
     'Firecrawl', 'Jina AI', 'SiliconFlow',
     '发送邮件', '飞书消息', '联网搜索', '代码执行器', '经济金融数据', 'Image View'
 ];
+// Newer built-in tools are matched by a child tool_key instead of the stored type name.
+export const MANAGED_TOOL_KEYS = ['web_fetch'];
+
+export const hasManagedToolKey = (children?: { tool_key?: string }[]) =>
+    (children || []).some((child) => MANAGED_TOOL_KEYS.includes(child.tool_key || ''));
 
 interface TabToolsProps {
     select?: any;
@@ -98,9 +103,9 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         }));
     }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
 
-    const hasSet = (name) => {
+    const hasSet = (el) => {
         if (!user?.is_global_super) return false
-        return MANAGED_TOOLS.includes(name)
+        return MANAGED_TOOLS.includes(el.name) || hasManagedToolKey(el.children)
     }
 
     const toolsetRef = useRef(null)
@@ -194,7 +199,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         select={select}
                                         data={el}
                                         onSelect={onSelect}
-                                        onSetClick={hasSet(el.name) ? () => toolsetRef.current.edit(el) : null}
+                                        onSetClick={hasSet(el) ? () => toolsetRef.current.edit(el) : null}
                                         onEdit={(id) => {
                                             type === 'mcp' ? mcpDialogRef.current.open(el) :
                                                 editRef.current.edit(el)

@@ -25,12 +25,17 @@ from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItem
 from bisheng.citation.domain.services.citation_handle_service import drop_web_citation_keys
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CitationRegistryCollector,
+    FetchedPageCitationRegistry,
+    annotate_fetched_page_with_citation,
     annotate_rag_documents_with_citations,
     annotate_web_results_with_citations,
     cache_citation_registry_items,
     cache_citation_registry_items_sync,
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
+    exclude_known_registry_items,
+    is_web_citation_tool,
+    is_web_fetch_tool,
     save_message_citations,
     save_message_citations_sync,
 )
@@ -265,6 +270,9 @@ class DailyChatCitationToolWrapper(BaseTool):
     kb_image_stage: Any = PydanticField(default=None, exclude=True)
     # F075: session handle table mirror; results show [Sn] handles, not registry keys
     citation_scope: Any = PydanticField(default=None, exclude=True)
+    fetched_pages: FetchedPageCitationRegistry = PydanticField(
+        default_factory=FetchedPageCitationRegistry, exclude=True
+    )
 
     @classmethod
     def wrap(
@@ -287,10 +295,23 @@ class DailyChatCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
+        return is_web_citation_tool(self.tool) and not is_web_fetch_tool(self.tool)
 
     def _has_knowledge_rag_tool(self) -> bool:
         return hasattr(self.tool, "knowledge_retriever_tool")
+
+    def _append_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        self._extend_citation_registry_items(exclude_known_registry_items(self.citation_collector.list_items(), items))
+        # Sync calls cannot await the handle allocator: show no source id.
+        return drop_web_citation_keys(output) if self.citation_scope is not None else output
+
+    async def _aappend_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        await self._aextend_citation_registry_items(
+            exclude_known_registry_items(self.citation_collector.list_items(), items)
+        )
+        return await handles_for_web_results(self.citation_scope, items, output)
 
     def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -358,7 +379,9 @@ class DailyChatCitationToolWrapper(BaseTool):
         await cache_citation_registry_items(items)
         self.citation_collector.extend(items)
 
-    def _run(self, query: str, config=None, **kwargs: Any) -> Any:
+    def _run(self, query: str = "", config=None, **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return self._append_fetch_citation(self.tool.invoke({"url": kwargs.get("url", "")}, config=config))
         if self._is_web_search_tool():
             return self._append_web_citation(self.tool.invoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
@@ -370,7 +393,11 @@ class DailyChatCitationToolWrapper(BaseTool):
         retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
-    async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
+    async def _arun(self, query: str = "", config=None, **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return await self._aappend_fetch_citation(
+                await self.tool.ainvoke({"url": kwargs.get("url", "")}, config=config)
+            )
         if self._is_web_search_tool():
             return await self._aappend_web_citation(await self.tool.ainvoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
@@ -421,7 +448,7 @@ def _wrap_daily_chat_citation_tool(
     citation_scope: DailyCitationScope | None = None,
     kb_image_stage: KbImageStage | None = None,
 ) -> BaseTool:
-    if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
+    if is_web_citation_tool(tool) or hasattr(tool, "knowledge_retriever_tool"):
         return DailyChatCitationToolWrapper.wrap(
             tool,
             citation_collector,
@@ -615,7 +642,7 @@ def _parse_tool_results(raw_output, tool_name: str):
     return [{"text": str(raw_output)}]
 
 
-_WEB_SEARCH_TOOL_NAMES = {"web_search", "search_web", "bing_search", "tavily_search"}
+_WEB_SEARCH_TOOL_NAMES = {"web_search", "search_web", "bing_search", "tavily_search", "web_fetch"}
 
 
 def _extract_tool_error(raw_output) -> str | None:
@@ -653,7 +680,7 @@ def _build_tool_meta(tool: BaseTool) -> dict:
 
     Localisation lives on the frontend (`BUILTIN_TOOL_I18N` in
     `ToolCallDisplay.tsx`), so we just forward the raw tool.name here —
-    the client maps known keys (search_knowledge_bases, web_search) to
+    the client maps known keys (search_knowledge_bases, web_search, web_fetch) to
     translated labels and falls back to tool.name for everything else.
     """
     name = tool.name or ""
@@ -1248,7 +1275,7 @@ async def _prepare_tools(
             failures.append(
                 {
                     "tool_key": tool_key or str(tool_id or ""),
-                    "tool_type": "web" if tool_key == "web_search" else "tool",
+                    "tool_type": "web" if tool_key in _WEB_SEARCH_TOOL_NAMES else "tool",
                     # display_name is resolved on the frontend via i18n — just
                     # advertise the raw tool_key so the client can map it.
                     "display_name": tool_key or "",
