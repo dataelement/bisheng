@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 
 declare global {
   interface Window {
-    dshChatPresentation?: { reportLanding: (landing: boolean) => void };
+    dshChatPresentation?: { reportLanding: (landing: boolean) => void; reportNavigation?: (navigation: unknown) => void };
   }
 }
 

@@ -7,7 +7,7 @@ jest.mock('react', () => ({ useEffect: (effect: () => (() => void)) => { cleanup
 jest.mock('react-router-dom', () => ({ useNavigate: () => mockNavigate }));
 jest.mock('./desktopEmbedding', () => ({ isDesktopEmbedded: () => mockEmbedded }));
 
-it('handles only conversation routes in an embedded client and removes its listener', () => {
+it('handles conversation and explicit module routes in an embedded client and removes its listener', () => {
   const listeners = new Map<string, (event: unknown) => void>();
   const prior = Object.getOwnPropertyDescriptor(globalThis, 'window');
   Object.defineProperty(globalThis, 'window', { configurable: true, value: {
@@ -17,7 +17,7 @@ it('handles only conversation routes in an embedded client and removes its liste
   try {
     useDesktopNavigation();
     const receive = listeners.get('dsh:navigate');
-    for (const path of ['/c/new', '/c/cloud-a', '/linsight/task-a', '/chat/app-a/flow-a/10']) {
+    for (const path of ['/c/new', '/c/cloud-a', '/linsight/task-a', '/chat/app-a/flow-a/10', '/knowledge', '/channel', '/apps', '/skills', '/square', '/menu-unavailable?plugin=knowledge_space']) {
       const preventDefault = jest.fn();
       receive?.({ detail: { path }, preventDefault });
       expect(preventDefault).toHaveBeenCalledTimes(1);

@@ -17,12 +17,8 @@ import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
 import store from '~/store';
 import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 
-import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
-import { useDesktopAppearance } from '~/components/Chat/useDesktopAppearance';
 
 export default function Root() {
-  useDesktopAppearance();
-  useDesktopNavigation();
   const [, setBannerHeight] = useState(0);
   const embedded = isDesktopEmbedded();
   const isSmallScreen = usePrefersMobileLayout();

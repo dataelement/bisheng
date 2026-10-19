@@ -1,3 +1,4 @@
+import { DesktopShellBridge } from './DesktopShellBridge';
 import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 import { getBysConfigApi } from '~/api/apps';
 import { Outlined } from 'bisheng-icons';
@@ -357,6 +358,7 @@ export default function MainLayout() {
         isMobile ? 'min-h-[100dvh] overflow-x-clip bg-fill-1' : 'h-[100dvh] overflow-hidden bg-white',
       )}
     >
+      <DesktopShellBridge />
       <WorkbenchAccessGuard />
       {showPlatformNavigation && (shouldHideSidebarOnMobileAppsArea ? (
         systemMenuRevealing ? (

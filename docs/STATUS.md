@@ -1,3 +1,7 @@
+## 2026-10-19 — 桌面导航桥接
+
+基于 4269304db 接入桌面共享菜单；功能页沿用设计师最新实现，导航入口沿用既有账号权限及开关。生产构建、strict typecheck 与改动文件 lint 通过。详见 DESKTOP_NAVIGATION_CONTRACT.md。部署与原生验收进行中。
+
 ## 2026-10-19 — Desktop Chat session exchange restored
 
 - Shared baseline: `feat/bisheng-work-120@562ee4e6a`. The full-stack migration omitted the prior desktop session exchange route and its HTTP/WebSocket validators, causing desktop Chat to receive 404 while browser login remained available.
