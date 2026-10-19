@@ -832,8 +832,11 @@ async def ask_user(
     return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
 
 
-def _is_web_search_tool(tool: object) -> bool:
-    return getattr(tool, "name", None) == "web_search" or getattr(tool, "tool_name", None) == "web_search"
+def _is_web_citation_tool(tool: object) -> bool:
+    """web_search and web_fetch (F085) both return citable web pages."""
+    from bisheng.citation.domain.services.citation_prompt_helper import is_web_citation_tool
+
+    return is_web_citation_tool(tool)
 
 
 def _with_citation_rules(prompt: str, enabled: bool, handles: bool = False) -> str:
@@ -892,7 +895,7 @@ async def _annotate_web_search_output(output: Any) -> Any:
 
 
 class _LinsightWebCitationWrapper(BaseTool):
-    """Register web_search hits into the citation runtime cache (F047).
+    """Register web_search hits and web_fetch pages into the citation runtime cache (F047, F085).
 
     F069: when a per-run ``scope`` (LinsightCitationScope) is bound, every hit is
     also reported to it so the completion audit can count the sources this run
@@ -904,6 +907,8 @@ class _LinsightWebCitationWrapper(BaseTool):
     args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
     scope: Any = None
+    # F085: one source per fetched URL for this run, the researcher included
+    fetched_pages: Any = PydanticField(default=None, exclude=True)
 
     @classmethod
     def wrap(cls, inner: BaseTool, scope: Any = None) -> BaseTool:
@@ -923,21 +928,44 @@ class _LinsightWebCitationWrapper(BaseTool):
         # validation error, so one search timeout or upstream 5xx would abort the
         # whole run. Hand the failure to the model as the tool result instead; it
         # can retry with another query or finish with what it already has.
+        is_fetch = self._is_fetch()
         try:
             output = await self.tool.ainvoke(kwargs, config=config)
         except Exception as e:
-            logger.warning(f"web_search failed, returning the error to the model: {e!r}")
-            return f"联网搜索失败：{e}"
+            logger.warning(f"{self.tool.name} failed, returning the error to the model: {e!r}")
+            return f"网页读取失败：{e}" if is_fetch else f"联网搜索失败：{e}"
         try:
-            annotated, items = await _annotate_web_search_items(output)
+            if is_fetch:
+                annotated, items = await self._annotate_fetched_page(output)
+            else:
+                annotated, items = await _annotate_web_search_items(output)
             if self.scope is not None and items:
                 await self.scope.record_seen(items)
                 if getattr(self.scope, "enabled", False):
                     annotated = await _rewrite_web_results_with_handles(self.scope, annotated, items)
             return annotated
         except Exception:
-            logger.opt(exception=True).warning("web_search citation annotate failed; returning bare result")
+            logger.opt(exception=True).warning(f"{self.tool.name} citation annotate failed; returning bare result")
             return output
+
+    def _is_fetch(self) -> bool:
+        from bisheng.citation.domain.services.citation_prompt_helper import is_web_fetch_tool
+
+        return is_web_fetch_tool(self.tool)
+
+    async def _annotate_fetched_page(self, output: Any) -> tuple[Any, list]:
+        from bisheng.citation.domain.services.citation_prompt_helper import (
+            FetchedPageCitationRegistry,
+            annotate_fetched_page_with_citation,
+            cache_citation_registry_items,
+        )
+
+        if self.fetched_pages is None:
+            self.fetched_pages = FetchedPageCitationRegistry()
+        annotated, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        if items:
+            await cache_citation_registry_items(items)
+        return annotated, list(items)
 
 
 async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: list) -> Any:
@@ -958,7 +986,7 @@ async def _rewrite_web_results_with_handles(scope: Any, annotated: Any, items: l
 def _wrap_linsight_web_citation_tools(tools: Sequence, scope: Any = None) -> list:
     wrapped = []
     for tool_obj in tools:
-        if _is_web_search_tool(tool_obj) and isinstance(tool_obj, BaseTool):
+        if _is_web_citation_tool(tool_obj) and isinstance(tool_obj, BaseTool):
             wrapped.append(_LinsightWebCitationWrapper.wrap(tool_obj, scope=scope))
         else:
             wrapped.append(tool_obj)
@@ -1031,7 +1059,7 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
     """
     sub_tools = _subagent_tools(tools)
     has_kb = any(t.name == _KB_TOOL_NAME for t in sub_tools)
-    has_web = any(_is_web_search_tool(t) for t in sub_tools)
+    has_web = any(_is_web_citation_tool(t) for t in sub_tools)
     return {
         "name": "general-purpose",
         "description": (
@@ -1129,7 +1157,7 @@ async def create_linsight_agent(
     # "knowledge_id: Field required" error when no KB is selected). Computed here
     # because the citation tail middleware below needs the same gate.
     has_kb = any(t.name == _KB_TOOL_NAME for t in tools)
-    has_web = any(_is_web_search_tool(t) for t in tools)
+    has_web = any(_is_web_citation_tool(t) for t in tools)
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
@@ -1226,7 +1254,7 @@ async def create_linsight_agent(
     # continue with the remaining steps (Layer B partial-result win).
     researcher = _build_researcher_subagent(tools, citation_handles=citation_handles)
     researcher_tools = researcher.get("tools") or []
-    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_search_tool(t) for t in researcher_tools)
+    researcher_citable = any(t.name == _KB_TOOL_NAME or _is_web_citation_tool(t) for t in researcher_tools)
     researcher["middleware"] = [
         build_resilience_middleware(linsight_conf, is_subagent=True),
         # Same tool-loop breaker on the subagent's own graph (its tool calls run in

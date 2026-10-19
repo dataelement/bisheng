@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔄 进行中 | 10 / 18 完成 |
+| 实现 | 🔄 进行中 | 12 / 18 完成 |
 
 ---
 
@@ -96,13 +96,13 @@
   **覆盖 AC**: AC-18, AC-19, AC-23
   **依赖**: T009
 
-- [ ] **T011**: 任务模式接入测试
+- [x] **T011**: 任务模式接入测试
   **文件**: `src/backend/test/citation/test_web_fetch_linsight.py`
   **逻辑**: `_LinsightWebCitationWrapper` 包装 `web_fetch` 后结果带 key 并 `record_seen`；短句柄模式改写为 `ref`；引擎失败时返回文字不抛异常；只有 `web_fetch` 时研究员提示词和主图的 `has_web` 为真（断言研究员提示词包含来源交回要求）。
   **覆盖 AC**: AC-11, AC-17, AC-19
   **依赖**: T005
 
-- [ ] **T012**: 任务模式接入实现
+- [x] **T012**: 任务模式接入实现
   **文件**: `src/backend/bisheng/linsight/domain/services/agent_factory.py`, `src/backend/bisheng/core/prompts/yaml/citation.yaml`
   **逻辑**: `_is_web_search_tool` 改用 `is_web_citation_tool`（影响 `has_web` 三处和包装选择）；包装层对 `web_fetch` 做单页标注；`citation.yaml`「来源 ID」一节补网页读取结果的说明（design 决策 9）。
   **测试**: T011 全部通过
