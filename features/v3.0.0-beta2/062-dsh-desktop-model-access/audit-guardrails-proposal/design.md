@@ -1,8 +1,8 @@
 # 客户端模型调用审计技术设计
 
-版本：0.12　日期：2026-10-19　对应规格 0.22；正文延后持久化增量已实现，验证范围见 validation-results.md，正式环境验收待执行
+版本：0.13　日期：2026-10-19　对应规格0.23；用户已确认，父子会话嵌套已实现并完成本机定向验证；尚未部署109，验证边界见audit-hierarchy-e2e.md
 
-> 待设计增量：用户已要求将子 Agent 会话折叠放到父会话历史内，细化目标见 [spec.md](./spec.md) 0.23 §4.2.1 与 AC-H01 至 AC-H09。本文件仍描述0.22已实现的平铺目录/父会话跳转；本轮尚未设计或实施层级查询、关系索引与历史准备，旧“不合并”仅继续约束原始请求归属和去重，不能作为拒绝嵌套展示的依据。按 SDD 先确认新版规格，再更新设计并确认，不将文档目标写成线上事实。
+> 本轮增量：§4.6的层级目录、独立分页、历史准备及Platform嵌套已实现，替代顶层平铺展示。§4.5的客户端采集与单次父会话定位继续保留；原始请求归属、正文去重和用量账本不合并。开发基线为f0b54cdcb（该提交本身只有文档）；本次不改桌面客户端，不操作109，已实现不等于已上线。
 
 > 本分支两端已实现[契约 0.4](./client-api-audit-extension.md)的五字段扩展，根协议保持 0.5.0。真实桌面适配器/主进程校验器→HTTP→异步审计→管理解密读取在独立 SQLite/内存对象存储通过；本轮 MinIO 镜像下载失败，不能沿用早期三存储联调结论证明新增标注可用。当前实现与验证边界见[验证结果](./validation-results.md)最新增量章节；不代表已提交、部署或正式环境验收。
 
@@ -23,9 +23,9 @@
 | 本分支启用的 config 已公布五字段能力；路由解析一次 JSON、剥离扩展后严格校验业务 DTO；协议仍 0.5.0 | `dsh/domain/schemas/model_audit_context.py`、`api/endpoints/identity.py:config`、`api/endpoints/models.py:complete` | 只证明字段可接收，不保证留存；旧部署仍可能无能力或仅两字段，不得通过错误重放探测 |
 | 既有调用与用量按 `request_id` 关联，但不保存模型输入输出正文 | `dsh/domain/schemas/usage.py`、`domain/models/model_call.py` | 审计另建索引和原件，不建立第二套额度账本 |
 
-8 张审计表已接入模型发现与租户过滤。模型入口已装配 `audit_runtime.ModelAuditRuntime`，独立队列消费器异步写 SQL/MinIO；历史状态由 Celery 扫描收敛。管理接口和 Platform 新 model-audit 页签已实现，旧 operations 仍隐藏。桌面客户端在独立工作树基于 main 实现协商、sessionId/purpose 组装与主进程净化。正常 CONTENT 请求已在本机真实存储验证完整留存；正式 CONTENT 启用仍须满足 §8 的环境及运维门禁。
+原8张审计原件/管理表、会话目录及本轮3张可重建树目录表已接入模型发现与租户过滤。模型入口装配audit_runtime.ModelAuditRuntime，独立队列异步写SQL/MinIO；历史状态由Celery收敛。管理接口与Platform审计页已实现，旧operations仍隐藏。桌面客户端在独立工作树实现协商、sessionId/purpose及主进程净化，本次未修改客户端。既有CONTENT真实存储验证见历史记录，本轮树目录的实际验证与未完成环境门禁见audit-hierarchy-e2e.md。
 
-本轮实现基线：服务端 `5ee9aca1d9`、桌面客户端审计分支 `0367d8e674`，本轮改动尚未提交。公开 sessions 服务提供存活会话 header，企业序列化器在最终 push 处保留来源对应关系；两端规范化器已允许五字段并独立限制标注预算。内置 purpose 区分聊天/压缩/标题，会话来源及父会话由客户端公开 header 提供，不升级依赖、不合并其他分支、不修改 Harness 核心。
+本轮服务端代码基线为 `997447482`；其后的 `f0b54cdcb` 只有规格等文档改动，未增加层级查询。桌面客户端五字段增量的既有验证基线为 `0367d8e674`，不是本次重新核验的客户端远端状态。公开 sessions 服务提供存活会话 header，企业序列化器在最终 push 处保留来源对应关系；两端规范化器已允许五字段并独立限制标注预算。内置 purpose 区分聊天/压缩/标题，会话来源及父会话由客户端公开 header 提供，不升级依赖、不合并其他分支、不修改 Harness 核心。
 
 本功能特有约束：租户模式读取失败按 OFF 降级；CONTENT 不截断审计正文；审计内存与排队资源有界，远程 SQL/MinIO 不在模型首字路径上；完全失写可能留下不可逐条发现的缺口；正文不进入可检索 SQL 列、普通日志或未授权列表。全局架构遵循 [constitution](../../../../docs/constitution.md) C1–C8；F062 客户端契约变更遵循 [release contract](../../release-contract.md) B2-INV-7。
 
@@ -41,6 +41,8 @@
 | 权限与保留 | 超管按所选租户、租户管理员按本租户查看原文，正文每次读取先持久留痕；一期不做自动删除 | 不以菜单可见代替业务授权，不做逐人授权或旧草案 TTL。角色或期限政策改变须重新确认 D-04、D-06 |
 | 增量：客户端扩展层 | 企业插件经公开 sessions.get 读取已加载 header；企业适配器读取 purpose/source，并在最终消息 push 时生成索引标注；Electron 用可信能力再次校验。公开 API 已具备所需数据 | 不改 Harness 核心、不维护全量事件镜像、不按原消息 ID 数组直接 zip。若未来公开 API 不再提供来源或需要精确消息身份，再评估最小上游接缝 |
 | 增量：三个维度独立 | request_kind 不变；新增 session_origin/parent_conversation_id 与 message_sources。子 Agent 压缩可同时表达，父子不合并 | 不把 compaction 当独立会话，不凭 parentSession 判断子 Agent，不从正文分类。若要精确因果链/任务图需重开需求 |
+| 增量：浏览层级与原件分离 | 在独立、可重建的 SQL 目录快照上组织父子层级；顶层、直接子节点和节点请求各自分页。筛选通过目录祖先路径定位命中分支 | 不把当前前端页拼树，也不改写子请求的 conversation_id；109样本的父子会话已分别有62/38个请求，平铺代码只能提供父导航。若目录构建实测成本不可承受，重评读侧结构，不退回审计大表实时扫描 |
+| 增量：发布完整目录代次 | 后台分批构建、校验后发布一个完整代次；游标绑定代次，旧代次不可读时明确要求刷新 | 不分批直接改在线根节点，否则同一子会话可能先顶层出现、后又出现在另一页父节点内。若高频新建会话导致构建持续被结构变更打断，须以实测重评增量版本化，不假称已实时收敛 |
 | 增量：独立受限标注 | 12KiB 消息标注预算独立于 4KiB 请求级字段；CONTENT 中以请求专属加密对象保存，只有 body-access 可读取。标注状态与正文完整性分开 | 不复制 source 全对象、不将数组明文放 SQL、不让标注超限清空会话 ID；不把附加信息作为模型输入。若受控长历史确有大量标注不足，再以实测重评上限而非改正文 |
 
 ## 4 目标数据流与状态
@@ -133,7 +135,7 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 
 #### 数据结构与模式
 
-不新增审计表或来源边。对 dsh_model_audit_request 增加以下可空/带安全默认的字段，需 DDL-only Alembic 迁移；旧行不扫描正文或回填猜测：
+本来源标注增量不新增审计原件表或来源边；本轮浏览目录新增投影表另见§4.6。对dsh_model_audit_request增加以下可空/安全默认字段，需DDL-only迁移；旧行不扫描正文或回填猜测：
 
 | 新字段 | SQL/内部类型 | 用途与暴露范围 |
 |---|---|---|
@@ -142,7 +144,7 @@ CONTENT 的 PENDING 只在 SQL 审计行已经提交、但正文或终止事实�
 | message_sources_status | String(16)，默认 NOT_PROVIDED | 标注单独状态，见下表；默认列表/详情不扩展逐消息信息，仅 body-access 按需返回此状态 |
 | message_sources_ref | dialect_helpers.JsonType，可空 | 受限 StoredAuditBlock 引用（对象键、密钥版本、HMAC、长度、scope_key、encoding_version），不含标注正文，不通过普通 DTO 返回 |
 
-仅按现有租户/历史用户/目标 conversation_key 查询父会话，复用现有联合索引，不新增 parent_id 索引、反向子会话扫描、DISTINCT/GROUP BY 或全量计数。标注 PENDING 巡检单独增加 `(tenant_id,message_sources_status,started_at,request_id)` 联合索引，以等值状态和时间范围、游标有界扫描，不能为新巡检全表扫描审计大表。新列和 JsonType 使用当前双库约定；迁移基于实施时的唯一 Alembic head，不在设计阶段假设主线未变化。旧 CONTENT 行无来源显示 NOT_PROVIDED；METADATA 的读取状态按生效模式固定为 NOT_CAPTURED，不回填旧来源、不改变原会话及正文。
+单次父导航仅按现有租户/历史用户/目标 conversation_key 查询父会话，复用现有联合索引，不在请求大表新增 parent_id 反向检索或 DISTINCT/GROUP BY；新浏览层级的反向索引放在 §4.6 的目录投影，不扫描请求大表找所有子会话。标注 PENDING 巡检单独增加 `(tenant_id,message_sources_status,started_at,request_id)` 联合索引，以等值状态和时间范围、游标有界扫描，不能为新巡检全表扫描审计大表。新列和 JsonType 使用当前双库约定；迁移基于实施时的唯一 Alembic head，不在设计阶段假设主线未变化。旧 CONTENT 行无来源显示 NOT_PROVIDED；METADATA 的读取状态按生效模式固定为 NOT_CAPTURED，不回填旧来源、不改变原会话及正文。
 
 | message_sources_status | 含义 |
 |---|---|
@@ -167,6 +169,73 @@ annotation 不加入原件 input/output occurrence 或 manifest 计数，不改�
 新增管理 Service 的 `parent_conversation(actor,tenant,request_id)`：先以现有 authorize_admin/目标租户范围读取子请求，再取其历史 user_id、有效父编号；在同一 profile_scope 内按该 user_id + conversation_key + 原值核验精确查最多 1 条父请求。不能使用调用方自填的 user_id/parent_id 扩展范围，也不能按管理员当前个人租户或被审计用户今日组织归属改写历史范围。
 
 没有有效自身 ID、来源非 subagent、缺父编号或自指时无导航；有合法声明但当前范围无记录只返回 UNAVAILABLE，不泄露其他范围是否存在同名编号。A→B→A 等循环不会自动展开或加载树，单次人工导航只走一跳；不同请求的声明保持各自事实，不维护权威会话父节点。普通列表只展示子 Agent / 压缩等独立标签；用户点击父会话才查询目标，没有每张卡片的 N+1 查父请求，更不预取父正文。
+
+### 4.6 已实现：父子会话嵌套目录
+
+本节覆盖AC-H01至AC-H09，新增model_audit_hierarchy/tree_build/tree_queries仓储及独立DshAuditTreeProjectionService，接入Platform ModelAuditTree。桌面客户端已存的session_origin、parent_conversation_id足够使用，不改线协议、不要求重新发模型请求。原group_page保留为旧客户端/未准备目录的兼容入口；parent_conversation继续一跳定位，不充当递归树接口。
+
+#### 4.6.1 关系事实与目录结构
+
+保留 `dsh_model_audit_request` 的原始身份、编号、状态、用量及正文作用域。对同一个 `(tenant_id,user_id,conversation_key)`，后台独立折叠已存请求的合法声明：未知来源/缺失字段不充当反证；已知 main 与 subagent 同时出现、两个不同有效父编号均视为冲突，不选第一条。仅有 subagent 但无有效父编号标缺父信息；相同父声明重复出现不增加关系数。普通 main/Fork 不建立父子边。
+
+现有会话目录增加受限关系摘要：`origin_state`、`declared_parent_key`、`parent_declaration_missing`、`relation_conflict`。父 key 仍按同一认证租户和历史用户计算，且读后核对原值。请求增加独立 `hierarchy_indexed` 标记及 `(tenant_id,hierarchy_indexed,request_id)` 待处理索引；关系折叠与标记在同一事务完成，避免正文/状态反复更新时重复处理声明。`group_index_pending` 继续负责原计数，不能混用两者的进度。
+
+新增可重建的读侧对象，均为普通关系列、现有双库兼容类型，不存正文/来源数组：
+
+| 对象 | 关键内容 | 索引与职责 |
+|---|---|---|
+| `dsh_audit_tree_state` | tenant、active/building generation、结构修订号、阶段与游标、租约及摘要进度 | 每租户唯一；后台持久任务进度和发布指针，不用进程内锁代表跨节点完成 |
+| `dsh_audit_tree_node` | tenant、generation、conversation_key、user、原会话编号、直接 parent_key、root_key、relation_state、固定 listed_at、自身和分支计数快照 | 唯一 `(tenant,generation,key)`；索引 `(tenant,generation,parent_key,listed_at,key)` 和 `(tenant,generation,user_id,parent_key,listed_at,key)`，查根节点/直接子节点；根节点统一使用空 parent_key 哨兵，不将其用于外部 ID |
+| `dsh_audit_tree_path` | tenant、generation、user、ancestor_key、descendant_key、depth | 唯一 `(tenant,generation,ancestor,descendant)`；同时建 descendant 方向索引。包含 depth=0 的自己，用于筛选命中分支和定位祖先路径 |
+
+独立整表由模型发现创建；现有请求/会话列及索引用 DDL-only Alembic 迁移，基于实施时唯一 head。历史数据处理不放进迁移脚本。索引长度、约束及实际查询须经过 MySQL/DM8 编译检查；DM8 真库仍由 Linux 中央回归验证。
+
+#### 4.6.2 独立构建、发布与故障处理
+
+1. 所有当前写入进程升级后，独立维护命令按租户、request_id 游标每批最多100条折叠未处理历史声明；输出进度并支持 dry-run/继续。只读请求元数据，不读 MinIO、解密正文或写用量；无会话编号的请求只推进独立处理标记，不制造目录节点。普通后台任务持续处理新记录，不在模型入口增加查询或等待。租户扫描须同时覆盖存在未处理关系标记或脏目录的租户，不能只依赖旧“在途请求”枚举；全部终态或当前OFF也应能推进。
+2. 每次新建目录节点或关系摘要改变，在独立投影事务中递增租户结构修订号；同声明重复和仅请求状态变化不递增结构修订。迟到父节点也会触发重建。失败保留待处理标记，正常请求状态不受影响。
+3. 持租约的后台任务以修订号 R 建立影子代次，按目录稳定 key 游标分页复制元数据，不一次加载整个租户。通过持久阶段/节点游标计算直接关系、祖先路径及快照汇总，每次工作单元最多100节点，任务间交还执行权；重试使用同一 generation 幂等写入。数据库租约支持续租、过期接管及旧持有者 fencing，不能只用 Celery task id 防并发。
+4. 只在同历史用户范围解析父节点。缺父节点、自指、循环、冲突分别为 `PARENT_UNAVAILABLE`、`SELF_REFERENCE`、`CYCLE`、`CONFLICT`，这些节点独立作为根入口；不能挂到一个不可解析的祖先下面。祖先解析最多32跳，超限标 `DEPTH_LIMIT` 并保留精确定位继续查看入口，不静默截断、无限递归或伪称真实执行树。
+5. 发布前再次核对结构修订仍为 R、输入准备完成、全部目录节点恰有一个可访问归属、路径无跨用户边/循环、计数非负且无重复归集，最后在租户状态行事务中 CAS 切换 active generation。结构变更则放弃本代发布并重新排队，不能发布读了一半的新旧关系。构建失败保留上一完整代次和明确“关系更新中/失败”状态；没有完整代次则继续提供旧平铺目录和请求明细入口，而非空列表。
+6. 数量快照在复制时记录 `summary_as_of`。任何目录计数变化都递增单独的摘要修订号并标脏，调度合并后的下一轮快照构建，不能只在父关系变化时刷新数量。关系准备与状态/计数准备分离：发布时摘要修订若与开始时不同、状态仍待投影或汇总不完整，summary.ready=false且未知计数为null，显示“汇总更新中”；已有明确异常仍标异常，不把未知显示0/正常。结构发布只要求结构修订一致，不依赖模型调用停止；高频更新下可先提供完整层级、摘要继续等待，不能承诺实时正常统计。
+7. 新请求及关系变化在下一代次反映；刷新拿当前完整代次并提示准备进度。已打开的旧代次游标可在保留期内继续读；代次已不可用时明确返回刷新要求，不悄悄切代混页。仅保留 active、building 和一个 retired 代次；再发布导致更老游标失效。后台有界清理退休的可重建目录行，不删除任何原始审计、正文或查看日志，不把旧代次永远堆积在库里。
+
+首次准备失败时仍可查看旧平铺和请求明细；准备成功后正常子节点仅在父节点内出现。请求无 conversation_id 的既有“未关联请求”视图不变；有 ID 但父关系不可用的会话仍在会话目录中独立展示及注明原因，不能混为未关联请求。
+
+#### 4.6.3 分页、筛选与精确定位
+
+新增 `/model-audit/conversation-tree` 及 `/{key}/children` 管理查询，旧 `conversation-groups` 和节点 requests 接口保持兼容。三个分页相互独立：顶层根节点按固定 `(listed_at,key)` 倒序，子节点同序，节点自身请求继续按 `(started_at,request_id)` 升序，不将子请求插入父请求分页中。前端在父会话展开区分别展示“本会话请求”和折叠的“子 Agent 会话”，子节点可继续展开；不是把所有正文拼成一条时间线。
+
+查询继续采用既有严格用户/模型名称/时间/状态/请求编号/会话编号条件。检查某分支命中时，分批取得 path 的 descendant_key，再对这些 key 的请求使用同一个 EXISTS，所有条件必须由同一请求满足；不能在根节点会话 ID 上先应用子会话编号筛选。请求表无 GROUP BY/DISTINCT/LIKE，不把整棵树的所有 key 一次塞入 IN。
+
+每次最多探测1000个目录节点、每批100个，时间预算1秒；到界限返回 `scan_limited`、可继续的游标，即使当页为空也不能伪称无匹配。游标须包含租户、代次、查询指纹、当前根/子候选位置及该候选内尚未扫描完的后代位置；没有判定完的候选不能直接跳过。有匹配即返回一次该根/子节点并推进到下一候选，避免同一根重复出页。空候选页和重试必须覆盖测试。SQL/驱动超时与独立执行池沿用既有约束，async timeout 不释放仍执行线程的容量。
+
+`GET /model-audit/conversation-tree/{key}/location` 在已授权租户、历史用户及本代次中返回最多32段祖先路径，供精确子会话定位及当前“查看父会话”导航使用；键不是访问凭证，不可覆盖节点 owner。只命中子分支时返回路径父节点 `match_scope=DESCENDANT`，标注“仅用于展示路径”，其非命中自身请求不显示。子节点继续保留过滤后的自身 requests 分页，不能取消条件后混入无关请求。
+
+节点DTO保留身份和用户真名，新增generation、parent_key、root_key、relation_state、has_children、match_scope、own_summary、branch_summary、summary_as_of。两个summary包含ready、request_count、abnormal_count、known_abnormal；未齐时数量及summary_as_of为null，不将未知显示正常。自身统计是本节点，分支统计是本节点及本代次全部后代，每请求只计一次，界面不相加。summary_as_of取目录快照写入时间而非父会话最后请求时间；摘要修订变化时整份统计只作待更新。SELF表示自身已确定命中，不代表穷尽排除了子命中；DESCENDANT表示自身不命中，仅作父路径。BOTH为兼容预留，本版不为确定它额外扫描整棵分支。
+
+新树接口响应含 `items/next_cursor/scan_limited/progress`；progress包括 `hierarchy_ready`、`phase:PREPARING|READY|UPDATING|FAILED`、`generation` 和 `refresh_required`。代次已退休不可读时返回空items、无next_cursor且refresh_required=true，前端显示刷新按钮，不自动当成空结果或回退到另一代。非法/跨租户游标继续使用现有 DshAuditQueryInvalidError，节点不可访问使用既有 unavailable 错误；不回显其他范围对象是否存在。旧后端不提供树能力时仍走原平铺，不拿空响应猜测支持与否；query-readiness显式增加可选 `hierarchy_available` 能力字段。
+
+#### 4.6.4 接线与页面边界
+
+| 位置 | 本轮职责 | 保持不变 |
+|---|---|---|
+| Repository 新 hierarchy 模块 | 声明折叠、影子目录/路径、代次发布、树查询与游标 | 不直接调用模型、MinIO或权限引擎 |
+| DSH Query Service / 管理 Endpoint | 复用 authorize_admin、profile_scope，校验节点与 generation 后查询 | 不自行查询角色关系，不以父声明扩展管理员范围 |
+| `worker/dsh/model_audit.py` | 注册独立有界关系准备/续跑阶段，OFF租户仍能整理历史 | 不把关系失败并入模型结果/正文缺口，不阻塞原收敛与正文队列 |
+| `ModelAuditPanel/ModelAuditGroup`及独立层级 hook | 按需根/子分页、路径展开、准备/重试提示、三语文案 | 复用现有 Button/折叠和卡片风格，不新增UI库、不改变组件视觉规范 |
+
+节点折叠按钮提供 aria-expanded/aria-controls；窄屏不依赖无限横向缩进，32层渲染边界提供继续查看。展开根或子节点只查元数据，不发 body-access，不预取下一层或所有后代。正文仍逐请求点击授权和留痕。租户/条件/刷新/定位变化须取消旧查询并重建游标、展开状态和正文缓存；旧响应不能覆盖新范围。
+
+已知陷阱：只在当前页组装会丢跨页父节点；先按根应用请求筛选会丢只命中子的分支；只看父异常数会把异常子会话标正常；分批原地改 root 会跨页重复。这四项分别由持久目录/祖先路径、同请求 EXISTS、分支快照汇总、完整代次与游标绑定处理，不能以 UI 标签代替。
+
+#### 4.6.5 验证、操作与回滚
+
+单元/Repository覆盖声明未知与冲突、缺父/父迟到、跨租户/历史用户同编号、自指/环、多层和深度边界、重复投影及状态回写。隔离HTTP测试贯穿根/子/请求分页、子单独命中、精确定位、目录半途失败/抢租约/新代次发布、旧游标失效和正文零预取；分页断言须比较完整期望集合，不只检查没有重复。Platform覆盖折叠、子独立翻页、路径提示、异常汇总、空但可继续的页、重试及旧响应隔离。
+
+操作验收：在隔离测试租户产生主→子→孙三级合成请求，再按正常/异常、时间及精确子编号筛选；只展开关系时 body-access 次数为0，点击单条原文后才增加1，且内容仍属于该原始子请求。后台命令先 dry-run、再按指定租户执行并核对进度；不能把109历史回填视为本次开发授权。正式账号和环境现场指定，不写入文档。
+
+指标只记录准备批数/节点数、失败类型、代次年龄、结构重试、查询 scan_limited、刷新要求；不将会话编号、父编号、generation或来源内容作为指标标签。部署故障可切回旧平铺查询或旧镜像；新增可空/安全默认列保留，停止关系任务即可，不逆向合并/删除请求和用量。容量、高频新建会话造成构建饥饿、DM8真库及实际浏览器验收为明确待验证门禁，不能以文档检查冒充通过。
 
 ## 5 已知坑与防护位置
 
@@ -238,7 +307,8 @@ annotation 不加入原件 input/output occurrence 或 manifest 计数，不改�
 | `GET /model-audit/conversation-groups` | 按不可变listed_at/key倒序，批100、最多1000候选/循环1秒；同一请求EXISTS内匹配全部条件；稀疏匹配返回scan_limited及续查游标，不假称结束 |
 | `GET /model-audit/conversation-groups/{key}/requests` | 先鉴权核对绑定，再固定历史用户/会话；拒绝覆盖；按started_at/request_id升序分页，沿用相同筛选，不默认读取正文 |
 | `GET /model-audit/requests/{request_id}` | 单请求元数据、客户端声明的会话 ID、状态及用量引用；不带原文 |
-| `GET /model-audit/requests/{request_id}/parent-conversation`（增量） | 先授权并读取子请求，按其历史用户及同一授权租户精确定位声明的父会话；返回 `{status:AVAILABLE,user_id,conversation_id}` 或 `{status:NOT_PROVIDED/UNAVAILABLE}`，后两者无目标身份字段。不能由请求参数覆盖 user/parent，不能跨范围搜索或预取正文 |
+| `GET /model-audit/requests/{request_id}/parent-conversation`（既有） | 先授权并读取子请求，按其历史用户及同一授权租户精确定位声明的父会话；返回 `{status:AVAILABLE,user_id,conversation_id}` 或 `{status:NOT_PROVIDED/UNAVAILABLE}`，后两者无目标身份字段。不能由请求参数覆盖 user/parent，不能跨范围搜索或预取正文 |
+| `GET /model-audit/conversation-tree`、`/{key}/children`、`/{key}/location`（已实现） | 分别查询根目录、直接子目录和精确祖先路径；字段、三层分页、同请求筛选、代次/刷新要求以 §4.6.3 为准。query-readiness增加可选hierarchy_available，旧接口继续兼容；节点展开仅元数据，正文接口不变 |
 | `GET /model-audit/conversations?user_id=...&conversation_id=...` | 在授权租户及目标用户范围按开始时间、request_id 分页给请求卡片；不把 ID 当全局唯一，默认不返回原文 |
 | `POST /model-audit/requests/{request_id}/body-access` | 校验授权并先提交查看日志，再以有界流按原始顺序返回该请求正文；一次展开不预取其他请求，不提供批量导出或对象直链 |
 | `GET /model-audit/settings`、`PUT /model-audit/settings/{tenant_id}` | 两类管理员可查看本范围模式；返回 `{mode,version,content_available}`，其中可用性为本实例密钥实时校验结果、不持久化、不返回密钥。只有全局超管可切换所选租户并原子留痕；新 CONTENT 变更须提交前校验合法活动密钥，缺失/无效返回 `26135` 且不写模式/版本/历史；OFF/METADATA 不要求密钥。幂等重放保持原操作结果，附当前可用性 |
@@ -263,7 +333,7 @@ AuditMessageAssembler 增加真实输入 unit_index，按 `message_index=unit_in
 
 现有 Platform Axios 浏览器封装没有 ReadableStream 能力，需要先在共享请求层扩展流式包装，复用 BASE、认证及集中错误策略，并回归会话失效/踢出和权限拒绝；业务组件不直接 import axios、不自行处理 403。普通接口仍走原 request；正文增量走共享 requestStream，支持 AbortSignal，不输出原文到 console。
 
-默认会话目录与独立未关联视图，索引未就绪保留请求明细入口。会话和组内分页分离，子 Agent 不并父会话，不重建跨请求气泡。
+默认会话目录与独立未关联视图，索引未齐保留请求明细。§4.6使合法子Agent折叠在父会话内，根/直接子/节点自身请求分别分页；只合并浏览入口，不合并原始审计或重建跨请求气泡。目录未准备可回旧平铺且有提示；后台完成期间如果分页方式改变，前端要求刷新，不把平铺游标传给树接口。
 
 管理接口沿用现有 `UserPayload.get_tenant_admin_user` 作为入口身份筛选，并在 DSH 管理 Service 中按现有 `authorize_admin` 路径核对所选租户和记录归属；只有全局超管可切换模式，租户管理员仅能读本租户元数据与原文。此处是固定管理员角色与租户范围规则，不做逐人资源授权，也不新增 F048 审计资源、动作或 Catalog 项；新接口复用既有管理员判定与租户范围校验，不自行新增角色关系表查询，也不以菜单权限放行。目标记录先加载并核验归属，普通用户、其他管理员、越界租户与受限管理范围均拒绝。正文读取先验证对象可读和授权，再持久提交本次读取尝试；日志提交失败拒绝传正文。可追加传输结果，但成功授权日志不表示浏览器已收到全部内容。响应禁缓存、禁原文入普通日志和错误；浏览器只安全渲染文本/媒体，不执行 HTML 或脚本。
 
@@ -321,6 +391,7 @@ AuditMessageAssembler 增加真实输入 unit_index，按 `message_index=unit_in
 
 | 日期 | 改动 | 触发原因 |
 |---|---|---|
+| 2026-10-19 | 用户确认0.13后实现 §4.6；迁移f062_dsh_audit_tree、独立任务/维护命令、代次绑定分页、父子嵌套及三语、单元/HTTP/MySQL/浏览器验证 | 用户要求功能完成后再提交推送；109部署及DM8真库/容量门禁仍未执行 |
 | 2026-10-16 | 请求元数据收敛为上下紧凑信息行、长编号按需展开，正文固定 24rem 可滚；消息来源和正文分栏分层，增加触屏热区、翻段回顶和三语文案 | 用户根据 109 截图提出展示优化；不变更采集、权限或接口，合成页面浏览器验证不替代线上验收 |
 | 2026-10-16 | 用户确认后实现两端五字段、独立加密标注与队列、父会话定位、opt-in 帧和三语展示；修正巡检翻页饥饿与 JS 正则末尾换行差异 | 实施与代码审查；本机 HTTP 实际客户端链路通过，真实三存储因镜像不可取未通过 |
 | 2026-10-16 | 规格 0.20 确认后拟定五字段契约、最终消息来源映射、独立加密标注/预算/状态及直接父会话导航；补齐新旧 body-access 与发布兼容 | 用户确认消息类型、压缩请求、子 Agent 关系增量；设计待确认，新代码未实施 |

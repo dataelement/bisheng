@@ -13,6 +13,7 @@ from bisheng.dsh.domain.models.model_audit_request import DshModelAuditEvidence,
 from bisheng.dsh.domain.models.model_call import DshModelCall
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
 from bisheng.dsh.domain.repositories.model_audit_conversations import AuditConversationRepository
+from bisheng.dsh.domain.repositories.model_audit_tree_queries import AuditTreeQueryRepository
 from bisheng.dsh.domain.repositories.model_audit_write import DshModelAuditWriteRepository
 from bisheng.dsh.domain.schemas.model_audit import AuditRequestMetadata
 from bisheng.dsh.domain.schemas.model_audit_status import audit_status_facts
@@ -23,7 +24,7 @@ def as_utc(value):
     return value.replace(tzinfo=UTC) if isinstance(value, datetime) and value.tzinfo is None else value
 
 
-class DshModelAuditQueryRepository(AuditConversationRepository, DshModelAuditWriteRepository):
+class DshModelAuditQueryRepository(AuditTreeQueryRepository, AuditConversationRepository, DshModelAuditWriteRepository):
     @staticmethod
     def pending_tenants(session, *, cursor=None):
         from bisheng.core.context.tenant import bypass_tenant_filter

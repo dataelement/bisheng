@@ -11,11 +11,15 @@ from bisheng.core.context.tenant import set_current_tenant_id, strict_tenant_fil
 from bisheng.core.database import tenant_filter
 from bisheng.dsh.domain.models import model_audit_content, model_audit_request, model_audit_setting
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation
+from bisheng.dsh.domain.models.model_audit_tree import DshAuditTreeNode, DshAuditTreePath, DshAuditTreeState
 from bisheng.dsh.infrastructure.model_audit_body_buffer import AuditBodyBuffer
 from bisheng.user.domain.models.user import User
 
 NOW = datetime(2026, 10, 14, tzinfo=UTC)
 AUDIT_MODELS = (
+    DshAuditTreeState,
+    DshAuditTreeNode,
+    DshAuditTreePath,
     DshModelAuditConversation,
     model_audit_setting.DshModelAuditSetting,
     model_audit_setting.DshModelAuditSettingChange,

@@ -21,6 +21,10 @@ redis_backend_health_check_interval = 5
 beat_schedule = dict(settings.celery_task.beat_schedule)
 if settings.dsh.enabled:
     beat_schedule.setdefault(
+        "dsh-audit-tree-preparation",
+        {"task": "dsh.scan_audit_trees", "schedule": settings.dsh.audit_state_scan_interval_seconds},
+    )
+    beat_schedule.setdefault(
         "dsh-model-audit-inspection",
         {"task": "dsh.scan_model_audit", "schedule": settings.dsh.audit_state_scan_interval_seconds},
     )

@@ -63,7 +63,7 @@ export function ModelAuditGroup({
           <p className="text-xs text-muted-foreground">
             {t("dsh.modelAuditView.group_scope")}
           </p>
-          <GroupRequests
+          <ModelAuditGroupRequests
             key={JSON.stringify(query)}
             group={group}
             query={query}
@@ -87,7 +87,11 @@ interface GroupRequestsProps {
   query: ModelAuditQuery;
   onNavigate: (userId: number, conversationId: string) => void;
 }
-function GroupRequests({ group, query, onNavigate }: GroupRequestsProps) {
+export function ModelAuditGroupRequests({
+  group,
+  query,
+  onNavigate,
+}: GroupRequestsProps) {
   const { t } = useTranslation();
   const [cursor, setCursor] = useState<string>();
   const [history, setHistory] = useState<(string | undefined)[]>([]);

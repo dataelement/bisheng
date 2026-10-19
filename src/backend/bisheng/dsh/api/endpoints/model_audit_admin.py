@@ -19,7 +19,7 @@ from bisheng.dsh.domain.schemas.model_audit import (
     ResponseResult,
     UsageSettlement,
 )
-from bisheng.dsh.domain.schemas.model_audit_group import AuditGroupQuery
+from bisheng.dsh.domain.schemas.model_audit_group import AuditGroupQuery, AuditTreeQuery
 
 router = APIRouter(prefix="/dsh/admin/model-audit")
 audit_admin = UserPayload.get_tenant_admin_user
@@ -135,6 +135,47 @@ async def conversation_groups(
 ):
     response.headers["Cache-Control"] = "no-store"
     return resp_200(data=await service.queries.groups(user.user_id, strict_group_query(request)))
+
+
+def strict_tree_query(request):
+    try:
+        if len(request.query_params) != len(list(request.query_params.multi_items())):
+            raise ValueError("Duplicate tree query field")
+        return AuditTreeQuery.model_validate(dict(request.query_params))
+    except (ValueError, ValidationError):
+        raise DshAuditQueryInvalidError() from None
+
+
+@router.get("/conversation-tree")
+async def conversation_tree(
+    request: Request, response: Response, user=Depends(audit_admin), service=Depends(get_audit_management)
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.tree(user.user_id, strict_tree_query(request)))
+
+
+@router.get("/conversation-tree/{key}/children")
+async def tree_children(
+    key: Annotated[str, Path(pattern="^[0-9a-f]{64}$")],
+    request: Request,
+    response: Response,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.tree(user.user_id, strict_tree_query(request), parent_key=key))
+
+
+@router.get("/conversation-tree/{key}/location")
+async def tree_location(
+    key: Annotated[str, Path(pattern="^[0-9a-f]{64}$")],
+    request: Request,
+    response: Response,
+    user=Depends(audit_admin),
+    service=Depends(get_audit_management),
+):
+    response.headers["Cache-Control"] = "no-store"
+    return resp_200(data=await service.queries.tree(user.user_id, strict_tree_query(request), location_key=key))
 
 
 @router.get("/conversation-groups/{key}/requests")

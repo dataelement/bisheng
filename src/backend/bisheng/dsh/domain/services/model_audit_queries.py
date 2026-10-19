@@ -78,7 +78,31 @@ class DshModelAuditQueryService:
 
     async def readiness(self, actor_id, tenant_id):
         tenant = await self.target(actor_id, tenant_id)
-        return await self.execute(tenant, lambda repository: repository.readiness())
+        return await self.execute(tenant, lambda repository: {**repository.readiness(), **repository.tree_progress()})
+
+    async def tree(self, actor_id, command, *, parent_key="", location_key=None):
+        query = command.model_dump(exclude_none=True)
+        tenant = await self.target(actor_id, query.pop("tenant_id", None))
+        for name in ("start_at", "end_at"):
+            if query.get(name) is not None:
+                value = query[name]
+                query[name] = value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
+
+        def read(repository):
+            if location_key is not None:
+                generation = query.pop("generation", None)
+                query.pop("limit", None)
+                if query:
+                    raise ValueError("Location accepts only tenant and generation")
+                return repository.tree_location(location_key, generation=generation)
+            return repository.tree_page(parent_key=parent_key, **query)
+
+        try:
+            return await asyncio.wait_for(self.execute(tenant, read), timeout=5)
+        except LookupError:
+            raise DshAuditRequestUnavailableError() from None
+        except ValueError:
+            raise DshAuditQueryInvalidError() from None
 
     async def groups(self, actor_id, command, *, key=None):
         query = command.model_dump(exclude_none=True)

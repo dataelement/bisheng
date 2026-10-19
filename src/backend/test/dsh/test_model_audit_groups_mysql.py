@@ -70,7 +70,7 @@ def test_owned_mysql_upgrade_projection_and_exact_query_plan():
                 if attempt == 159:
                     raise RuntimeError("Isolated MySQL did not become ready") from None
                 time.sleep(0.25)
-        fields = {"audit_status", "group_index_pending", "group_indexed_status"}
+        fields = {"audit_status", "group_index_pending", "group_indexed_status", "hierarchy_indexed"}
         legacy = sa.Table(
             "dsh_model_audit_request",
             sa.MetaData(),
@@ -83,15 +83,36 @@ def test_owned_mysql_upgrade_projection_and_exact_query_plan():
         with engine.begin() as connection:
             legacy.create(connection)
             User.__table__.create(connection)
-            DshModelAuditConversation.__table__.create(connection)
+            group_fields = {"origin_state", "declared_parent_key", "parent_declaration_missing", "relation_conflict"}
+            legacy_group = sa.Table(
+                "dsh_model_audit_conversation",
+                sa.MetaData(),
+                *[
+                    column._copy()
+                    for column in DshModelAuditConversation.__table__.columns
+                    if column.name not in group_fields
+                ],
+            )
+            legacy_group.create(connection)
             with Operations.context(MigrationContext.configure(connection)):
                 revision.upgrade()
                 revision.upgrade()
+            tree_path = path.with_name("v3_0_0_dsh_audit_tree.py")
+            tree_spec = importlib.util.spec_from_file_location("audit_tree_upgrade", tree_path)
+            tree_revision = importlib.util.module_from_spec(tree_spec)
+            tree_spec.loader.exec_module(tree_revision)
+            with Operations.context(MigrationContext.configure(connection)):
+                tree_revision.upgrade()
+                tree_revision.upgrade()
             assert fields <= {c["name"] for c in sa.inspect(connection).get_columns(legacy.name)}
+            assert group_fields <= {c["name"] for c in sa.inspect(connection).get_columns(legacy_group.name)}
             indexes = {index["name"] for index in sa.inspect(connection).get_indexes(legacy.name)}
             assert {"ix_dma_request_status", "ix_dma_request_association", "ix_dma_request_group_pending"} <= indexes
         # Reuse the fixture's scoped listener registration and teardown, not its SQLite data.
         with audit_database():
+            from sqlmodel import SQLModel
+
+            SQLModel.metadata.create_all(engine, tables=[model.__table__ for model in AUDIT_MODELS])
             with audit_session(engine) as session, session.begin():
                 session.add(row("e2e-mysql-one", model_result="FAILED"))
             with audit_session(engine) as session:
@@ -119,10 +140,60 @@ def test_owned_mysql_upgrade_projection_and_exact_query_plan():
                 )
                 assert "ix_dma_request_status" in str(plan)
             asyncio.run(validate_deferred_bodies(engine))
+            validate_tree(engine)
     finally:
         if engine is not None:
             engine.dispose()
         subprocess.run(["docker", "rm", "-f", "-v", name], check=True, stdout=subprocess.DEVNULL)
+
+
+def validate_tree(engine):
+    """AC-H01/H02/H05/H07: actual committed checkpoints and nested indexed lookups."""
+    from test.dsh.test_model_audit_tree import add
+
+    with audit_session(engine) as session, session.begin():
+        add(session, "mysql-parent", "e2e-mysql-parent")
+        add(
+            session,
+            "mysql-child",
+            "e2e-mysql-child",
+            origin="subagent",
+            parent="e2e-mysql-parent",
+            model_result="FAILED",
+            name="e2e-tree / mysql-model",
+        )
+    for _ in range(20):
+        with audit_session(engine) as session, session.begin():
+            result = DshModelAuditQueryRepository(session).fold_hierarchy_batch()
+        if not result["has_more"]:
+            break
+    owner = None
+    for _ in range(100):
+        with audit_session(engine) as session, session.begin():
+            result = DshModelAuditQueryRepository(session).tree_step(owner=owner)
+        owner = result.get("owner")
+        if not result["has_more"]:
+            break
+    with audit_session(engine) as session:
+        repo = DshModelAuditQueryRepository(session)
+        parents = repo.tree_page(model_name="e2e-tree / mysql-model", audit_status="ABNORMAL")
+        assert len(parents["items"]) == 1
+        parent = parents["items"][0]
+        assert parent["conversation_id"] == "e2e-mysql-parent"
+        assert parent["branch_summary"]["abnormal_count"] == 1
+        children = repo.tree_page(parent_key=parent["conversation_key"], generation=parent["generation"])
+        assert [c["conversation_id"] for c in children["items"]] == ["e2e-mysql-child"]
+        plan = (
+            session.execute(
+                sa.text(
+                    "EXPLAIN SELECT conversation_key FROM dsh_audit_tree_node WHERE tenant_id=:tenant AND generation=:generation AND parent_key=:parent ORDER BY listed_at DESC,conversation_key DESC LIMIT 20"
+                ),
+                {"tenant": 2, "generation": parent["generation"], "parent": parent["conversation_key"]},
+            )
+            .mappings()
+            .all()
+        )
+        assert "ix_dat_parent" in str(plan)
 
 
 async def validate_deferred_bodies(engine):

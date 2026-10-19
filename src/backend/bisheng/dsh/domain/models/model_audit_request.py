@@ -31,6 +31,7 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
         Index("ix_dma_request_status", "tenant_id", "audit_status", "started_at", "request_id"),
         Index("ix_dma_request_association", "tenant_id", "association_status", "started_at", "request_id"),
         Index("ix_dma_request_group_pending", "tenant_id", "group_index_pending", "request_id"),
+        Index("ix_dma_request_tree_pending", "tenant_id", "hierarchy_indexed", "request_id"),
         CheckConstraint("effective_mode IN ('METADATA','CONTENT')", name="ck_dma_request_mode"),
     )
     request_id: str = Field(sa_column=Column(String(36), primary_key=True))
@@ -73,6 +74,7 @@ class DshModelAuditRequest(SQLModelSerializable, table=True):
         default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
     )
     group_indexed_status: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    hierarchy_indexed: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0")))
     state_version: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     input_units: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     input_bytes: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))

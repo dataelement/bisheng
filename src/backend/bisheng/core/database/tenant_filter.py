@@ -40,6 +40,7 @@ _EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 # kept writing child-tenant resources to root in v2.5.
 _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.model_audit_conversation",
+    "bisheng.dsh.domain.models.model_audit_tree",
     "bisheng.dsh_market.domain.models",
     # Already on the main router import chain — listed for completeness so
     # _force_import_all_models() guarantees them even if a future refactor

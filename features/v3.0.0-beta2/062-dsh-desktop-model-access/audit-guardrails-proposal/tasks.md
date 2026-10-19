@@ -2,18 +2,49 @@
 
 版本：1.2　日期：2026-10-19　服务端工作树：`feat/3.0.0-dsh-audit`
 
-## 2026-10-19 父子会话嵌套展示：规格确认阶段
+## 2026-10-19 父子会话嵌套展示：实施阶段
 
-本节优先于下文既有交付状态。用户已确认“父会话内折叠子会话、原始审计不合并、父关系不可用时保留独立入口”的方向；spec 0.23补齐可验收边界，当前停在规格确认点，不把旧平铺实现标作本轮已完成。
+本节优先于下文既有交付状态。用户已确认设计0.13，按下表实施；功能和验证完成后才提交推送，不单独提交文档，不部署109。所有新文件均在bisheng本分支，客户端不变。
 
 | 交付 | 当前状态 | 说明 |
 |---|---|---|
-| spec.md 0.23 | 增量检查完成，待用户确认 | AC-H01 至 AC-H09；跨页、筛选、统计、冲突、权限和按需正文边界已补充 |
-| design.md 下一版 | 未开始 | 规格确认后设计可索引关系查询、顶层/子层分页、资料准备与故障降级；随后按SDD确认 |
-| 增量任务拆解 | 未开始 | 设计确认后拆解、追溯验收条件；不预先选定数据库结构 |
-| 服务端/Platform实现与测试 | 未开始 | 当前线上仍是997447482；客户端已保存字段可复用，不要求新增补报 |
+| spec.md 0.23 | ✅ 已评审，用户确认继续 | AC-H01 至 AC-H09；跨页、筛选、统计、冲突、权限和按需正文边界已补充 |
+| design.md 0.13 | ✅ 已评审，用户确认 | §4.6：目录关系摘要、影子代次及路径索引、三层分页、筛选路径、历史准备和失败降级 |
+| 增量任务拆解 | ✅ 已拆解，增量检查通过 | 基础设施先行；后端先测试后实现；不跨前后端任务、不增加客户端范围 |
+| 服务端/Platform实现与测试 | ✅ 代码及本机定向验证完成 | 后端246通过/12跳过，相关页面24通过，独立MySQL通过；全量既有lint/License失败另记，109未部署 |
 
-规格审查记录见 [audit-hierarchy-spec-review.md](./audit-hierarchy-spec-review.md)。本轮只改文档，不操作109、不回填线上、不提交或推送。
+规格与设计已确认，实施/验证记录见[audit-hierarchy-e2e.md](./audit-hierarchy-e2e.md)。本轮功能完成后与文档一起提交推送，不操作109；DM8真库、生产鉴权和容量门禁不冒充已完成。
+
+### 层级增量执行清单
+
+以下后端路径相对src/backend，Platform路径相对src/frontend/platform；依赖按顺序，测试用独立合成数据，不接109。实施阶段按task-review检查分层、租户、泄露和设计同步；新增读侧投影失败不得改变原始审计及业务。回滚停独立任务、恢复平铺查询，保留新列和原始数据。
+
+| 状态/任务 | 类型、文件（最多2个）与交付 | 依赖/覆盖 |
+|---|---|---|
+| [x] H001 | 基础设施：domain/models/model_audit_request.py、model_audit_conversation.py；独立hierarchy标记、关系摘要，默认安全，不改原归属 | 无 |
+| [x] H002 | 基础设施：domain/models/model_audit_tree.py、core/database/alembic/versions/v3_0_0_dsh_audit_tree.py；代次/节点/路径，DDL-only列及索引，唯一head；MySQL实测/双库类型审查完成，DM8编译器和真库本机不可用 | H001 |
+| [x] H003 | 后端测试：test/dsh/test_model_audit_tree.py；折叠幂等、缺父/冲突/环、代次构建、历史/租约/摘要；先失败 | H002；覆盖 AC: AC-H01, AC-H02, AC-H03, AC-H05, AC-H07, AC-H08 |
+| [x] H004 | 后端Domain：domain/repositories/model_audit_hierarchy.py、model_audit_tree_build.py；每批100、持久游标、租约fencing、完整代次CAS发布、摘要未知不标正常 | H003 |
+| [x] H005 | 后端测试：test/dsh/test_model_audit_tree_queries.py；根/子/路径分页、只中子、同请求筛选、跨租户、游标与预算；先失败 | H004；覆盖 AC: AC-H02, AC-H03, AC-H04, AC-H05, AC-H06, AC-H08 |
+| [x] H006 | 后端Domain：domain/repositories/model_audit_tree_queries.py、model_audit_queries.py；有界路径扫描、续扫游标、过滤指纹及代次、接口能力，原请求查询保持 | H005 |
+| [x] H007 | 后端API：domain/services/model_audit_queries.py、api/endpoints/model_audit_admin.py；复用授权/ContextVar，树/children/location，不读正文 | H006；H010补HTTP验证 |
+| [x] H008 | Worker：domain/repositories/model_audit_conversations.py、worker/dsh/model_audit_tree.py；计数标脏、独立树任务，可信Celery tenant header→profile_scope，包括终态/OFF租户 | H004；H010验证 |
+| [x] H009 | 维护：scripts/prepare_dsh_audit_tree.py、scripts/README.md；默认dry-run，按租户/有界步数继续，只有--apply写，不读原文或改业务状态 | H008 |
+| [x] H010 | 后端测试：test/dsh/test_model_audit_tree_http.py、test/dsh/test_model_audit_tree_worker.py；隔离HTTP授权允许/拒绝、返回envelope、无正文预取、独立调度失败隔离 | H007,H008；覆盖 AC: AC-H01, AC-H02, AC-H04, AC-H06, AC-H07, AC-H08 |
+| [x] H011 | Platform：types/dshModelAudit.ts、controllers/API/dshModelAudit.ts；树类型、根/子/路径API及显式能力协商，旧服务端平铺兼容 | H007 |
+| [x] H012 | Platform：pages/SystemPage/dsh/ModelAuditTree.tsx、useModelAuditTree.ts；折叠/子分页、汇总范围、加载/重试、键盘和深度定位、旧响应隔离 | H011；H015验证 |
+| [x] H013 | Platform：pages/SystemPage/dsh/ModelAuditPanel.tsx、ModelAuditGroup.tsx；接树查询与本节点请求，根/子不读正文，原卡片不变 | H012 |
+| [x] H014 | Platform国际化：public/locales/zh-Hans/bs.json；tree中文标签、状态与说明，不改其他文案 | H012；覆盖 AC: AC-H05, AC-H09 |
+| [x] H021 | Platform国际化：public/locales/en-US/bs.json；同一tree命名空间英文与复数键，与中文一致 | H014；覆盖 AC: AC-H05, AC-H09 |
+| [x] H022 | Platform国际化：public/locales/ja/bs.json；同一tree命名空间日文，三语check-i18n一致 | H014；覆盖 AC: AC-H05, AC-H09 |
+| [x] H015 | Platform测试：pages/SystemPage/dsh/ModelAuditTree.test.tsx、ModelAuditGroup.test.tsx；独立分页、路径父不冒充命中、异常子/汇总未知、键盘/重试/刷新失效；原Panel测试同时回归 | H013,H014,H021,H022；覆盖 AC: AC-H01, AC-H02, AC-H04, AC-H05, AC-H06, AC-H09 |
+| [x] H016 | 验证文档：validation-results.md、audit-hierarchy-e2e.md；定向/既有回归、迁移head、lint/typecheck/i18n、隔离存储与浏览器证据，未跑门禁明确标注 | H010,H015；覆盖 AC: AC-H01, AC-H02, AC-H03, AC-H04, AC-H05, AC-H06, AC-H07, AC-H08, AC-H09 |
+| [x] H017 | 基础设施补充：core/database/tenant_filter.py、test/dsh/model_audit_fixtures.py；模型强制发现/租户隔离注册及合成库建表，不改其他领域归属 | H002；H010验证 |
+| [x] H018 | Worker编排补充：domain/services/model_audit_tree.py；独立事务step及带owner的失败标记，旧租约异常不得清掉新租约；H010增加真实Service/SQL测试 | H004；覆盖 AC: AC-H07, AC-H08 |
+| [x] H019 | Worker注册补充：worker/config.py、worker/dsh/registry.py；独立任务注册和Beat调度，不改变原审计/用量任务函数或队列 | H008,H018 |
+| [x] H020 | 后端集成测试：test/dsh/test_model_audit_groups_mysql.py；新旧模型/DDL兼容及重复升级，独立容器、逐步提交、根/子实际索引查询；只清理本套件新建容器 | H019；覆盖 AC: AC-H01, AC-H02, AC-H05, AC-H07, AC-H08 |
+
+任务级L1检查及增量七维代码审查记录在audit-hierarchy-e2e.md。仓储测试先失败再实现；HTTP/页面回归按实际执行顺序记录，不追认所有任务都严格Test-First。H017至H020补列实际接线文件，非新增产品范围。勾选表示本机交付已执行并记录边界，不表示全量存量门禁或正式环境验收全部通过。
 
 ## 2026-10-19 统一筛选和会话目录增量
 

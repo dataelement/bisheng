@@ -14,6 +14,7 @@
 | DSH UserPolicy | F062-dsh-desktop-model-access | BiSheng 一条用户策略保存强类型逐模型配置，每个用户/模型独立月 token 上限，不拥有或复制既有模型供应商配置 |
 | DSH MonthlyUsage / ModelCall / AdminOperation | F062-dsh-desktop-model-access | BiSheng 持有已累计用量准入与实际用量入账、调用记录、策略变更不可变审计、可靠用量补记和跨服务管理操作进度；月汇总按用户、模型、月份分行，明细保留 model_id，Redis 实时执行当前用户与所选模型的独立月额度，SQL 为批量投影 |
 | DSH ModelAuditSetting / SettingChange / Request / Evidence / Manifest / Content / Occurrence / BodyAccess | F062 审计扩展（开发登记，非 beta2 已发布能力） | 开发基线见 audit-guardrails-proposal；仅持有模型审计模式、请求事实、加密原件及查看记录，不接管 ModelCall/MonthlyUsage 写入、不改席位/身份/配额真相。实际发布版本另行登记 |
+| DSH ModelAuditConversation / AuditTreeState / AuditTreeNode / AuditTreePath | F062 审计扩展的可重建查询投影（非发布声明） | 仅组织历史租户/用户范围内的会话目录及客户端声明的父子浏览关系；原请求归属、正文作用域和用量不合并，不持有客户端真实任务树或新身份/授权真相 |
 
 User、Tenant、LLMServer、LLMModel、PermissionActor 和 F053 ApiCredential 继续由原模块持有；F062 通过原模块业务入口读取、鉴权或调用。User 拟增 dsh_profile_version，由原用户/主部门业务事务递增并在同事务通过 DSH 服务登记 SYNC_PROFILE；不迁移用户领域所有权，不改变 F012/F048 权限及回滚语义。
 

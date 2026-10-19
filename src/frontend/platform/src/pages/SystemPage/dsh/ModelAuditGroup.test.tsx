@@ -5,6 +5,7 @@ const api = vi.hoisted(() => ({
   requests: vi.fn(),
   groupRequests: vi.fn(),
   readiness: vi.fn(),
+  tree: vi.fn(),
   body: vi.fn(),
 }));
 vi.mock("@/controllers/API/dshModelAudit", () => ({
@@ -12,6 +13,7 @@ vi.mock("@/controllers/API/dshModelAudit", () => ({
   getModelAudit: api.requests,
   getAuditGroupRequests: api.groupRequests,
   getAuditReadiness: api.readiness,
+  getAuditTree: api.tree,
 }));
 vi.mock("./ModelAuditBody", () => ({
   ModelAuditBody: (p: unknown) => {
@@ -170,5 +172,28 @@ it("AC-QC-10: empty scan batches and unready indexes do not claim that no logs e
   });
   fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
   await screen.findByText("dsh.modelAuditView.index_preparing");
+  expect(screen.queryByText("dsh.modelAuditView.empty")).toBeNull();
+});
+
+it("AC-H07: publication during legacy pagination explicitly requires a refresh instead of reusing its cursor", async () => {
+  api.readiness
+    .mockResolvedValueOnce(ready)
+    .mockResolvedValue({
+      ...ready,
+      hierarchy_available: true,
+      hierarchy_ready: true,
+      phase: "READY",
+    });
+  api.groups.mockResolvedValueOnce({
+    items: [group],
+    next_cursor: "legacy-next",
+    scan_limited: false,
+    progress: ready,
+  });
+  render(<ModelAuditRequests tenantId={2} />);
+  await screen.findByRole("button", { name: /session-main/ });
+  fireEvent.click(screen.getByRole("button", { name: "dsh.next" }));
+  await screen.findByText("dsh.modelAuditView.tree.refresh_required");
+  expect(api.tree).not.toHaveBeenCalled();
   expect(screen.queryByText("dsh.modelAuditView.empty")).toBeNull();
 });

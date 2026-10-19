@@ -26,3 +26,7 @@ class AuditGroupQuery(BaseModel):
         if start and end and start >= end:
             raise ValueError("Invalid audit time range")
         return self
+
+
+class AuditTreeQuery(AuditGroupQuery):
+    generation: str | None = Field(default=None, min_length=36, max_length=36, pattern="^[0-9a-f-]{36}$")

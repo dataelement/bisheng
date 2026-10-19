@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, Index, String, text
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Index, String, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -34,3 +34,9 @@ class DshModelAuditConversation(SQLModelSerializable, table=True):
     updated_at: datetime = Field(sa_column=Column(PreciseDateTime(), nullable=False))
     request_count: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
     abnormal_count: int = Field(default=0, sa_column=Column(BigInteger, nullable=False))
+    origin_state: str = Field(default="UNKNOWN", sa_column=Column(String(16), nullable=False, server_default="UNKNOWN"))
+    declared_parent_key: str | None = Field(default=None, sa_column=Column(String(64)))
+    parent_declaration_missing: bool = Field(
+        default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0"))
+    )
+    relation_conflict: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, server_default=text("0")))

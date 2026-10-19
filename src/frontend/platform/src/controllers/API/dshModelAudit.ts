@@ -13,9 +13,69 @@ import type {
   AuditModelOption,
   AuditGroupPage,
   AuditQueryReadiness,
+  AuditTreePage,
 } from "@/types/dshModelAudit";
 
 const base = "/api/v1/dsh/admin/model-audit";
+export async function getAuditTree(
+  query: ModelAuditQuery,
+  signal?: AbortSignal,
+  parentKey?: string,
+  generation?: string,
+): Promise<AuditTreePage> {
+  const url =
+    base +
+    "/conversation-tree" +
+    (parentKey ? "/" + encodeURIComponent(parentKey) + "/children" : "");
+  const result: AuditTreePage = await request.get(url, {
+    params: { ...groupQuery(query), generation },
+    signal,
+  });
+  if (
+    !result ||
+    !Array.isArray(result.items) ||
+    result.items.length > query.limit ||
+    !result.progress ||
+    (result.next_cursor !== null &&
+      (typeof result.next_cursor !== "string" ||
+        result.next_cursor.length > 2048)) ||
+    result.items.some(
+      (node) =>
+        !node ||
+        !/^[a-f0-9]{64}$/.test(node.conversation_key) ||
+        !/^[a-f0-9-]{36}$/.test(node.generation) ||
+        !node.own_summary ||
+        !node.branch_summary ||
+        !["SELF", "DESCENDANT", "BOTH"].includes(node.match_scope),
+    )
+  ) {
+    throw new Error("Invalid audit tree page");
+  }
+  return result;
+}
+
+export async function getAuditTreeLocation(
+  key: string,
+  tenantId?: number,
+  signal?: AbortSignal,
+  generation?: string,
+): Promise<Pick<AuditTreePage, "items" | "progress">> {
+  const result: Pick<AuditTreePage, "items" | "progress"> = await request.get(
+    base + "/conversation-tree/" + encodeURIComponent(key) + "/location",
+    {
+      params: { tenant_id: tenantId, generation },
+      signal,
+    },
+  );
+  if (
+    !result ||
+    !Array.isArray(result.items) ||
+    result.items.length > 33 ||
+    !result.progress
+  )
+    throw new Error("Invalid audit tree location");
+  return result;
+}
 export async function getAuditReadiness(
   tenantId?: number,
   signal?: AbortSignal,

@@ -1163,3 +1163,19 @@ query fallback or automatic startup backfill is performed.
 ## DSH audit presentation preparation
 
 Run from `src/backend/` using the live service config. `python scripts/backfill_dsh_audit_presentation.py --tenant-id 1` previews one bounded batch; add `--apply --max-batches 20` to prepare historical presentation statuses and mark conversation projection. Resume with the reported `--after-request-id`, then rerun from the start to catch late rows. The independent audit inspection task projects groups; no model bodies, policy or keys are changed.
+
+## Audit conversation hierarchy
+
+After upgrading all audit writers and preparing legacy audit status/group data,
+run from `src/backend/` using the live service's `config` environment variable:
+
+```bash
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1
+python scripts/prepare_dsh_audit_tree.py --tenant-id 1 --apply --max-steps 100
+```
+
+The default is read-only. Each applied step handles at most 100 records/nodes;
+SQL checkpoints allow rerunning to continue. This rebuilds navigation only and
+never reads model bodies, replays requests, or merges audit/billing records.
+An active background lease returns BUSY; do not override it. Terminal histories
+and tenants currently in OFF mode are also processed by the independent worker.

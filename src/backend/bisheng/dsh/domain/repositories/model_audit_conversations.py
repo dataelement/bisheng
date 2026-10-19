@@ -85,6 +85,7 @@ class AuditConversationRepository:
         now = naive_utc(now or datetime.now(UTC))
         started = naive_utc(row.started_at)
         group = self.group(row.conversation_key, lock=True)
+        created = group is None
         if group is None:
             group = Group(
                 conversation_key=row.conversation_key,
@@ -108,6 +109,7 @@ class AuditConversationRepository:
         row.group_indexed_status, row.group_index_pending = row.audit_status, False
         self.session.add(group)
         self.session.add(row)
+        self.tree_dirty(structure=created)
         return True
 
     def group_page(self, *, cursor=None, limit=20, **filters):

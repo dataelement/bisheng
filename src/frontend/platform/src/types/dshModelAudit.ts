@@ -91,6 +91,12 @@ export type AuditQueryReadiness = {
   status_ready: boolean;
   name_ready: boolean;
   indexing_pending: boolean | null;
+  hierarchy_available?: boolean;
+  hierarchy_ready?: boolean;
+  generation?: string | null;
+  phase?: "PREPARING" | "READY" | "UPDATING" | "FAILED";
+  summary_ready?: boolean;
+  refresh_required?: boolean;
 };
 export type AuditConversation = {
   user_name?: string | null;
@@ -108,6 +114,35 @@ export type AuditGroupPage = {
   next_cursor: string | null;
   scan_limited: boolean;
   progress: AuditQueryReadiness;
+};
+export type AuditTreeSummary = {
+  ready: boolean;
+  request_count: number | null;
+  abnormal_count: number | null;
+  known_abnormal: boolean;
+};
+export type AuditTreeNode = AuditConversation & {
+  generation: string;
+  parent_key: string;
+  root_key: string;
+  relation_state:
+    | "MAIN"
+    | "UNKNOWN"
+    | "LINKED"
+    | "MISSING_PARENT"
+    | "PARENT_UNAVAILABLE"
+    | "SELF_REFERENCE"
+    | "CYCLE"
+    | "CONFLICT"
+    | "DEPTH_LIMIT";
+  has_children: boolean;
+  match_scope: "SELF" | "DESCENDANT" | "BOTH";
+  own_summary: AuditTreeSummary;
+  branch_summary: AuditTreeSummary;
+  summary_as_of: string | null;
+};
+export type AuditTreePage = Omit<AuditGroupPage, "items"> & {
+  items: AuditTreeNode[];
 };
 export type ModelAuditPage = {
   items: ModelAuditRecord[];
