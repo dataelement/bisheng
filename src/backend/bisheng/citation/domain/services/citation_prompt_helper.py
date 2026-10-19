@@ -468,6 +468,15 @@ def annotate_fetched_page_with_citation(
     return json.dumps(page, ensure_ascii=False), items
 
 
+def exclude_known_registry_items(
+    known: list[CitationRegistryItemSchema],
+    items: list[CitationRegistryItemSchema],
+) -> list[CitationRegistryItemSchema]:
+    """Drop items whose key is already collected, so a re-read page is stored once."""
+    known_keys = {item.key for item in known}
+    return [item for item in items if item.key not in known_keys]
+
+
 def annotate_article_with_citation(
     article_doc_id: str,
     title: str | None = None,

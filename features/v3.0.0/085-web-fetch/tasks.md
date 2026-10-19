@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔄 进行中 | 5 / 18 完成 |
+| 实现 | 🔄 进行中 | 8 / 18 完成 |
 
 ---
 
@@ -63,20 +63,20 @@
 
 ### Wave 2 — 各场景接入与升级
 
-- [ ] **T006**: 助手和工作流引用包装层测试
+- [x] **T006**: 助手和工作流引用包装层测试
   **文件**: `src/backend/test/citation/test_web_fetch_scenarios_agent.py`
   **逻辑**: 用假的 `web_fetch` 工具（返回固定网页对象）分别包进 `AssistantCitationToolWrapper`、`WorkflowCitationToolWrapper`，以 `{"url": ...}` 调用（同步和异步），断言内层工具收到 `url`、结果带 `citation_key`、注册条目进入收集器；同一包装实例重复读取同一网址复用 key；`web_search` 的原有行为（列表标注）不变；工作流工具节点 `ToolNode` 对 `web_fetch` 输出做同样标注。
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-19
   **依赖**: T005
 
-- [ ] **T007**: 助手和工作流 agent 节点接入
+- [x] **T007**: 助手和工作流 agent 节点接入
   **文件**: `src/backend/bisheng/api/services/assistant_agent.py`, `src/backend/bisheng/workflow/nodes/agent/agent.py`
   **逻辑**: 识别改用 `is_web_citation_tool`；`_run/_arun` 改为 `**kwargs` 透传；按工具名分派：`web_search` 走原列表标注，`web_fetch` 走 `annotate_fetched_page_with_citation`，`FetchedPageCitationRegistry` 挂在包装实例上（design 决策 5）。
   **测试**: T006 中助手和工作流 agent 用例通过
   **覆盖 AC**: AC-14, AC-15, AC-19
   **依赖**: T006
 
-- [ ] **T008**: 工作流工具节点接入
+- [x] **T008**: 工作流工具节点接入
   **文件**: `src/backend/bisheng/workflow/nodes/tool/tool.py`
   **逻辑**: `_is_web_search_tool` 改用 `is_web_citation_tool`；`web_fetch` 输出为 JSON 对象时做单页标注并写入 `WORKFLOW_CITATION_REGISTRY_ITEMS_KEY`。
   **测试**: T006 中工具节点用例通过
