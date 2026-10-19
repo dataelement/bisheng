@@ -31,6 +31,7 @@ from typing import Any
 
 from loguru import logger
 
+from bisheng.citation.domain.schemas.citation_schema import FETCHED_PAGE_ITEM_ID
 from bisheng.core.cache.redis_manager import get_redis_client
 
 HANDLE_RULES_HEADER = "# 来源编号"
@@ -98,7 +99,7 @@ def item_identity(item: Any) -> str | None:
             return None
         # A fetched page (F085) is a different source from a search snippet of the
         # same URL: its full text is not what the snippet card shows.
-        return f"webpage:{normalized}" if str(item_id) == "page" else f"web:{normalized}"
+        return f"webpage:{normalized}" if str(item_id) == FETCHED_PAGE_ITEM_ID else f"web:{normalized}"
     document_id = getattr(payload, "documentId", None)
     if document_id is None or item_id is None:
         return None
@@ -501,7 +502,7 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
             candidates.append((url, key))
     if not candidates:
         return text
-    candidates.sort(key=lambda item: (-len(item[0]), not item[1].endswith(":page")))
+    candidates.sort(key=lambda item: (-len(item[0]), not item[1].endswith(f":{FETCHED_PAGE_ITEM_ID}")))
     used: set[str] = set()
     marked_urls: set[str] = set()
     out: list[str] = []
