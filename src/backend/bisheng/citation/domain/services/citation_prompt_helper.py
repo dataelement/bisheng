@@ -1,3 +1,4 @@
+import json
 import re
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Sequence
@@ -376,6 +377,95 @@ def annotate_web_results_with_citations(results: list[dict]) -> list[dict]:
             annotated_result["citation_key"] = citation_key
         annotated_results.append(annotated_result)
     return annotated_results
+
+
+WEB_CITATION_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
+WEB_FETCH_TOOL_NAME = "web_fetch"
+# A fetched page is one source with one item. The item id differs from search
+# snippets ("1", "2", ...) so short handles keep the two apart (F085 decision 4).
+FETCHED_PAGE_ITEM_ID = "page"
+_FETCHED_PAGE_SNIPPET_CHARS = 300
+_MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+_MARKDOWN_LINE_PREFIX_RE = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+)")
+
+
+def _tool_name(tool: Any) -> str:
+    return getattr(tool, "tool_name", None) or getattr(tool, "name", None) or ""
+
+
+def is_web_citation_tool(tool: Any) -> bool:
+    """Whether a tool returns web pages that become WEB citation sources."""
+    if tool is None:
+        return False
+    return getattr(tool, "name", None) in WEB_CITATION_TOOL_NAMES or _tool_name(tool) in WEB_CITATION_TOOL_NAMES
+
+
+def is_web_fetch_tool(tool: Any) -> bool:
+    return getattr(tool, "name", None) == WEB_FETCH_TOOL_NAME or _tool_name(tool) == WEB_FETCH_TOOL_NAME
+
+
+def _fetched_page_snippet(content: str, title: str) -> str:
+    """Plain-text opening of a fetched page for the citation card."""
+    lines = []
+    for raw_line in _MARKDOWN_IMAGE_RE.sub("", content).split("\n"):
+        line = _MARKDOWN_LINE_PREFIX_RE.sub("", _MARKDOWN_LINK_RE.sub(r"\1", raw_line)).strip()
+        if not line or line == title:
+            continue
+        lines.append(line)
+        if sum(len(item) for item in lines) >= _FETCHED_PAGE_SNIPPET_CHARS:
+            break
+    return " ".join(lines)[:_FETCHED_PAGE_SNIPPET_CHARS]
+
+
+class FetchedPageCitationRegistry:
+    """Per-wrapper memory of fetched pages: the same URL keeps one source."""
+
+    def __init__(self) -> None:
+        self._items_by_url: dict[str, list[CitationRegistryItemSchema]] = {}
+
+    def get(self, normalized_url: str) -> list[CitationRegistryItemSchema] | None:
+        return self._items_by_url.get(normalized_url)
+
+    def put(self, normalized_url: str, items: list[CitationRegistryItemSchema]) -> None:
+        self._items_by_url[normalized_url] = items
+
+
+def annotate_fetched_page_with_citation(
+    output: Any,
+    registry: FetchedPageCitationRegistry,
+) -> tuple[Any, list[CitationRegistryItemSchema]]:
+    """Register a web_fetch result as one WEB source and add its citation key.
+
+    ``output`` is the JSON object string the web_fetch tool returns. Failure and
+    empty-page text is returned unchanged with no registry items.
+    """
+    if not isinstance(output, str):
+        return output, []
+    try:
+        page = json.loads(output)
+    except json.JSONDecodeError:
+        return output, []
+    if not isinstance(page, dict) or not page.get("url") or not page.get("content"):
+        return output, []
+
+    normalized_url = CitationRegistryService.normalize_url(str(page["url"]))
+    items = registry.get(normalized_url)
+    if items is None:
+        title = str(page.get("title") or "").strip()
+        result = {
+            "itemId": FETCHED_PAGE_ITEM_ID,
+            "title": title or None,
+            "url": page["url"],
+            "snippet": _fetched_page_snippet(str(page["content"]), title),
+            "source": page.get("source"),
+        }
+        payload = CitationRegistryService._build_web_payload(normalized_url, [result])
+        items = CitationRegistryService._flatten_web_payload(CitationRegistryService.generate_web_citation_id(), payload)
+        registry.put(normalized_url, items)
+
+    page["citation_key"] = items[0].key
+    return json.dumps(page, ensure_ascii=False), items
 
 
 def annotate_article_with_citation(

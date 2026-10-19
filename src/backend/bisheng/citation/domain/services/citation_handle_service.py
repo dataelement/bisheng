@@ -94,7 +94,11 @@ def item_identity(item: Any) -> str | None:
 
         url = getattr(payload, "url", None) or ""
         normalized = CitationRegistryService.normalize_url(url) if url else ""
-        return f"web:{normalized}" if normalized else None
+        if not normalized:
+            return None
+        # A fetched page (F085) is a different source from a search snippet of the
+        # same URL: its full text is not what the snippet card shows.
+        return f"webpage:{normalized}" if str(item_id) == "page" else f"web:{normalized}"
     document_id = getattr(payload, "documentId", None)
     if document_id is None or item_id is None:
         return None
@@ -310,9 +314,11 @@ def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], en
     if not handles or not isinstance(annotated, str):
         return annotated
     try:
-        results = json.loads(annotated)
+        parsed = json.loads(annotated)
     except json.JSONDecodeError:
         return annotated
+    # web_search returns a list of results; web_fetch returns one page object.
+    results = [parsed] if isinstance(parsed, dict) else parsed
     if not isinstance(results, list):
         return annotated
     changed = False
@@ -329,7 +335,7 @@ def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], en
         result.pop("citation_key", None)
         result.pop("itemId", None)
         changed = True
-    return json.dumps(results, ensure_ascii=False) if changed else annotated
+    return json.dumps(parsed, ensure_ascii=False) if changed else annotated
 
 
 def drop_web_citation_keys(annotated: Any) -> Any:
@@ -337,16 +343,17 @@ def drop_web_citation_keys(annotated: Any) -> Any:
     if not isinstance(annotated, str):
         return annotated
     try:
-        results = json.loads(annotated)
+        parsed = json.loads(annotated)
     except json.JSONDecodeError:
         return annotated
+    results = [parsed] if isinstance(parsed, dict) else parsed
     if not isinstance(results, list):
         return annotated
     for result in results:
         if isinstance(result, dict):
             result.pop("citation_key", None)
             result.pop("itemId", None)
-    return json.dumps(results, ensure_ascii=False)
+    return json.dumps(parsed, ensure_ascii=False)
 
 
 # --------------------------------------------------------------------------

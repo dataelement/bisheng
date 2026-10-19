@@ -48,7 +48,7 @@
 ### 决策 3：引用来源用 WEB 类型，不用 ARTICLE
 
 - **备选**：
-  - A. `CitationType.WEB`，一个来源只有一个条目：`itemId="1"`，`snippet` 取正文开头，`title` 取网页标题，`source` 取站点名。
+  - A. `CitationType.WEB`，一个来源只有一个条目：`itemId="page"`（与搜索摘要的 `1`、`2`… 区分，见坑 12），`snippet` 取正文开头，`title` 取网页标题，`source` 取站点名。
   - B. `CitationType.ARTICLE`（频道文章就是「整篇一个来源」）。
 - **选定**：A
 - **原因**：ARTICLE 是频道专用类型，必填 `articleDocId`。它没有站点名字段，platform 前端没有 article 分支（会落到文档预览），分享页匿名访问时还会被拒。WEB 的卡片、点击跳转原网页、分享页匿名解析、历史回放全部现成，前端不用改。
@@ -145,7 +145,7 @@
 | 工具 `api_params` | `[{"name":"url","in":"query","required":true,"schema":{"type":"string"}}]` | 工作流工具节点据此渲染输入框 | `flowUtils.ts` |
 | 分类 `extra` | `{"type":"deepseek","config":{"deepseek":{"api_key":"","base_url":""}},"max_chars":20000}` | 秘钥字段名必须叫 `api_key`，才能被现有掩码逻辑覆盖 | `ToolExecutor`、设置表单 |
 | 工具结果（给模型） | JSON 对象 `{"title","url","source","content","truncated","total_chars","citation_key"}` | 失败或未配置时是一段文字而不是 JSON | 模型、日常模式工具卡片（按 `url`/`title` 显示网页条目） |
-| 引用条目 | WEB 类型，单条目 `itemId="1"`，key 形如 `websearch_xxxxxxxx:1` | 沿用 `websearch_` 前缀，前端、解析服务、持久化都按 WEB 处理 | 引用解析、卡片、历史回放 |
+| 引用条目 | WEB 类型，单条目 `itemId="page"`，key 形如 `websearch_xxxxxxxx:page`；卡片摘要是去掉 Markdown 标记和标题行后的正文开头，最多 300 字 | 沿用 `websearch_` 前缀，前端、解析服务、持久化都按 WEB 处理 | 引用解析、卡片、历史回放 |
 
 ### 4.3 关键模块职责
 
@@ -176,6 +176,7 @@
 | 8 | 子租户只在缺少默认工具时懒复制根租户的预置工具 | 老环境的已有子租户永远看不到网页读取 | 决策 8，升级时主动复制 |
 | 9 | 设置弹窗和 `MANAGED_TOOLS` 都按分类的中文名匹配，子租户复制也按名字匹配 | 分类名写错一个字，设置按钮不出现，子租户会复制出重复分类 | 种子、补数据函数、前端三处使用同一个名字 `网页读取` |
 | 10 | 只有 `api_key` 等固定字段名会被掩码 | 换个字段名，秘钥会明文返回给前端 | 配置字段名固定为 `api_key` |
+| 12 | 短句柄（日常模式、任务模式）按「来源身份」分配，网页类来源的身份原本只看网址 | 同一网址的搜索结果和网页读取拿到同一个句柄，模型引用全文内容时卡片显示的是搜索摘要 | `citation_handle_service.item_identity`：`itemId == "page"` 时身份为 `webpage:<网址>` |
 | 11 | 任务模式的引用规则只在 `has_web` 为真时开启，原判断只认 `web_search` | 只勾网页读取时模型不会打角标 | 决策 9 |
 
 ---

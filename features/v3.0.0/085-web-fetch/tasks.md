@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔲 未开始 | 0 / 18 完成 |
+| 实现 | 🔄 进行中 | 5 / 18 完成 |
 
 ---
 
@@ -30,31 +30,31 @@
 
 ### Wave 1 — 基础设施与工具本体
 
-- [ ] **T001**: 种子数据新增「网页读取」
+- [x] **T001**: 种子数据新增「网页读取」
   **文件**: `src/backend/bisheng/database/data/t_gpts_tools_type.json`, `src/backend/bisheng/database/data/t_gpts_tools.json`
   **逻辑**: 分类行 id=18，`name="网页读取"`，`is_preset=1`，`user_id=null`，`extra` 为 `{"type":"deepseek","config":{"deepseek":{"api_key":"","base_url":""}},"max_chars":20000}`。工具行 id=40，`tool_key="web_fetch"`，`type=18`，`is_preset=1`，`user_id=null`，`api_params` 为单个必填参数 `url`（`in: query`，`schema.type: string`）。名称和描述与 T014 的补数据函数保持一致（design 坑 9）。
   **依赖**: 无
 
-- [ ] **T002**: 网页读取工具本体单元测试
+- [x] **T002**: 网页读取工具本体单元测试
   **文件**: `src/backend/test/tool/test_web_fetch_tool.py`
   **逻辑**: mock `requests.post`，覆盖：请求地址、Bearer 头、请求体 `{"url"}`、超时 (10, 60)；Base URL 覆盖与留空回退默认地址；去转义（普通文本还原、代码块内保持原样）；截断（超过上限截断并带 `truncated`/`total_chars`/提示，等于上限不截断）；网址校验（非 http/https、带用户名密码时不发请求）；引擎错误体（HTTP 404 + `not_found_error`）和超时都返回文字而不抛异常；空正文返回提示；未配置秘钥返回「尚未配置」提示；`load_tools({"web_fetch": extra})` 能构建出 `name == "web_fetch"` 的工具。
   **覆盖 AC**: AC-05, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13
   **依赖**: 无
 
-- [ ] **T003**: 网页读取工具本体实现
+- [x] **T003**: 网页读取工具本体实现
   **文件**: `src/backend/bisheng_langchain/gpts/tools/web_fetch/tool.py`（新，含 `__init__.py`）, `src/backend/bisheng_langchain/gpts/load_tools.py`
   **逻辑**: `FetchTool` 引擎基类（`request_timeout=(10, 60)`、`init_fetch_tool(type, **cfg)` 注册表）+ `DeepSeekFetch`（默认地址 `https://api.deepseek.com/v1/tools/fetch`）。`WebFetchTool(BaseTool)`：`name="web_fetch"`，参数 `url`，持有 `api_wrapper` 和 `max_chars`（默认 20000，限定 1000～200000）。成功时返回 JSON 对象 `{"title","url","source","content","truncated","total_chars"}`；失败、未配置、网址不合法、空正文返回文字。`load_tools.py` 在 `_EXTRA_PARAM_TOOLS` 注册 `"web_fetch": (_get_web_fetch, [], ["type","config","max_chars"])`，配置缺失也能构建工具（design 决策 7）。
   **测试**: T002 全部通过
   **覆盖 AC**: AC-05, AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13
   **依赖**: T002
 
-- [ ] **T004**: 网页读取引用标注单元测试
+- [x] **T004**: 网页读取引用标注单元测试
   **文件**: `src/backend/test/citation/test_web_fetch_citation.py`
   **逻辑**: `is_web_citation_tool` 识别 `web_search`、`web_fetch` 及包装后的工具（`tool_name` 属性）；`annotate_fetched_page_with_citation` 生成单条目 WEB 注册项（`itemId="1"`，title/source/snippet 正确，key 前缀 `websearch_`）；同一规范化网址第二次调用复用同一引用 ID 并再次返回注册条目；不同网址得到不同 ID；`rewrite_web_results_with_handles` 和 `drop_web_citation_keys` 接受单个网页对象。
   **覆盖 AC**: AC-19, AC-21
   **依赖**: 无
 
-- [ ] **T005**: 网页读取引用标注实现
+- [x] **T005**: 网页读取引用标注实现
   **文件**: `src/backend/bisheng/citation/domain/services/citation_prompt_helper.py`, `src/backend/bisheng/citation/domain/services/citation_handle_service.py`
   **逻辑**: 新增 `WEB_CITATION_TOOL_NAMES`、`is_web_citation_tool(tool)`；新增 `FetchedPageCitationRegistry`（以规范化网址为键缓存注册条目）和 `annotate_fetched_page_with_citation(page, registry)`，返回 `(带 citation_key 的网页对象, 注册条目)`，复用 `CitationRegistryService` 的 WEB 构建函数。句柄改写和去 key 函数对 dict 做与列表单项相同的处理（design 决策 3、决策 4）。
   **测试**: T004 全部通过
@@ -156,4 +156,4 @@
 
 ## 实际偏差记录
 
-（暂无）
+- T005 偏离 → 网页读取条目的 itemId 用 `page` 而不是 `1`，句柄身份区分 `web:` / `webpage:`，更新 design 决策 3、新增坑 12（同网址的搜索结果和网页读取在短句柄模式下会被合并）

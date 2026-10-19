@@ -1127,5 +1127,27 @@
     "is_delete": 0,
     "user_id": null,
     "id": 39
+  },
+  {
+    "name": "网页读取",
+    "logo": null,
+    "desc": "读取指定网址的网页，返回网页标题和 Markdown 正文。",
+    "api_params": [
+      {
+        "name": "url",
+        "description": "要读取的网页地址，必须是 http 或 https 开头的完整网址",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ],
+    "tool_key": "web_fetch",
+    "type": 18,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "id": 40
   }
 ]
