@@ -177,3 +177,32 @@ async def test_registered_exchange_route_owns_desktop_credentials(monkeypatch, h
         exchange.assert_awaited_once_with(runtime, "Bearer desktop")
     else:
         exchange.assert_not_awaited()
+
+
+async def test_exchange_uses_real_jwt_signer_with_bounded_lifetime(monkeypatch):
+    import json
+
+    from bisheng.user.domain.services.auth import AuthJwt
+
+    secret = "fixture-signing-key-long-enough-32"
+    signer = AuthJwt.__new__(AuthJwt)
+    signer.jwt_secret = secret
+    signer.cookie_conf = SimpleNamespace(jwt_token_expire_time=86400, jwt_iss="fixture")
+    signer._encode_algorithm = "HS256"
+    now = int(time.time())
+    access = "Bearer " + jwt.encode({"exp": now + 3600}, secret, algorithm="HS256")
+    redis = SimpleNamespace(set=AsyncMock())
+    monkeypatch.setattr(web_session, "session_store", AsyncMock(return_value=redis))
+    runtime = SimpleNamespace(access=SimpleNamespace(authenticate=AsyncMock(return_value=principal())))
+    user = SimpleNamespace(user_name="Alice", token_version=3, delete=0)
+    with (
+        patch("bisheng.user.domain.models.user.UserDao.aget_user", AsyncMock(return_value=user)),
+        patch("bisheng.user.domain.services.auth.AuthJwt", return_value=signer),
+    ):
+        result = await web_session.create_web_session(runtime, access)
+    assert result["expires_in"] == 300
+    claims = jwt.decode(result["cookie"], secret, algorithms=["HS256"], issuer="fixture")
+    assert now + 300 <= claims["exp"] <= int(time.time()) + 300
+    assert json.loads(claims["sub"])["tenant_id"] == 2
+    browser_claims = jwt.decode(signer.create_access_token({"user_id": 42}), secret, algorithms=["HS256"])
+    assert now + 86400 <= browser_claims["exp"] <= int(time.time()) + 86400

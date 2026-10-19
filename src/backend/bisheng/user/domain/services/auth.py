@@ -140,13 +140,14 @@ class AuthJwt:
         self._encode_algorithm = "HS256"
         self._decode_algorithms = [self._encode_algorithm]
 
-    def create_access_token(self, subject: dict) -> str:
+    def create_access_token(self, subject: dict, *, expires_in: int | None = None) -> str:
         """create jwt token"""
         if isinstance(subject, dict):
             subject = json.dumps(subject)
         payload = {
             "sub": subject,
-            "exp": int(datetime.now(UTC).timestamp()) + self.cookie_conf.jwt_token_expire_time,
+            "exp": int(datetime.now(UTC).timestamp())
+            + (expires_in if expires_in is not None else self.cookie_conf.jwt_token_expire_time),
             "iss": self.cookie_conf.jwt_iss,
         }
         token = jwt.encode(payload, self.jwt_secret, algorithm=self._encode_algorithm)

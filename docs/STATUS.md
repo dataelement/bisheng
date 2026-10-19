@@ -2,7 +2,8 @@
 
 - Shared baseline: `feat/bisheng-work-120@562ee4e6a`. The full-stack migration omitted the prior desktop session exchange route and its HTTP/WebSocket validators, causing desktop Chat to receive 404 while browser login remained available.
 - Restored `POST /api/v1/dsh/web-session`: authenticate the desktop access grant, issue a browser JWT for at most 300 seconds, and retain the original credential only in server-side Redis. Browser requests and WebSocket connection authorization recheck the desktop identity, tenant, seat and grant. Ordinary browser session policy remains separate; HTTP token-version checks remain active for both.
-- Automated verification: 50 tests passed in an isolated container using the deployed backend dependencies, covering exchange, expiration, revoked grants, tenant changes, credential routing and HTTP/WebSocket integration. Changed-file Ruff checks and architecture guard passed; the existing auth.py lint findings match the baseline.
+- Automated verification: 51 tests passed in an isolated container using the deployed backend dependencies, covering exchange, expiration, revoked grants, tenant changes, credential routing and HTTP/WebSocket integration. Changed-file Ruff checks and architecture guard passed; the existing auth.py lint findings match the baseline.
+- Real-client validation exposed the companion JWT signer lifetime parameter omitted during migration. `AuthJwt.create_access_token` now accepts the explicit short lifetime while keeping the configured default for ordinary browser login; a real-signer regression verifies both expiration contracts.
 - Deployment and real desktop acceptance are recorded separately in the deployment evidence. No schema or dependency change is required.
 
 # 2026-10-16 Chat 交付到 feat/bisheng-work-120
