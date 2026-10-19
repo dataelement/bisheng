@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRecoilState } from "recoil";
 import { Outlined } from "bisheng-icons";
-import { TextareaAutosize } from "~/components/ui";
 import {
     Tooltip,
     TooltipContent,
@@ -9,9 +9,6 @@ import {
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
 import { ArticleQAIllustration } from "~/components/illustrations";
-import AiModelSelect from "~/components/Chat/AiModelSelect";
-import SpeechToTextComponent from "~/components/Voice/SpeechToText";
-import { SendIcon } from "~/components/svg";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
@@ -21,164 +18,48 @@ import {
     type ChatModelOption,
 } from "~/hooks/useChatModelResolution";
 import { useSurfaceModel } from "~/hooks/useSurfaceModel";
+import type { Article } from "~/api/channels";
+import { ArticleAskBar } from "./ArticleAskBar";
+import { DockInput, type ModelSelectProps } from "./ArticleDockInput";
 import { useConfirm } from "~/Providers";
 import { cn } from "~/utils";
+import store from "~/store";
 
 interface ArticleAiDockProps {
     /** ES article document id — drives the channel chat. */
     articleDocId: string;
+    /** The article itself. With it, desktop hands questions to the main chat (ArticleAskBar);
+     *  without it there is nothing to attach, so the in-place dock stays. */
+    article?: Article;
 }
 
-interface ModelSelectProps {
-    options?: any[];
-    value?: any;
-    onChange: (val: string) => void;
-    /** Value repair by AiModelSelect — applied but never remembered. */
-    onAutoChange?: (val: string) => void;
-    disabled?: boolean;
+/** Model select wiring over the shared chat-model state (same model the main chat uses). */
+function useDockModel(): ModelSelectProps {
+    const { data: bsConfig } = useGetBsConfig();
+    const [chatModel, setChatModel] = useRecoilState(store.chatModel);
+    const modelOptions = bsConfig?.models;
+    return {
+        options: modelOptions,
+        value: chatModel.id,
+        disabled: !modelOptions?.length,
+        onChange: (val) => {
+            const m = modelOptions?.find((x) => x.id === val);
+            setChatModel({ id: Number(val), name: m?.displayName || "", manual: true, mode: 'daily' });
+        },
+    };
 }
 
 /**
- * The dock input: model select · auto-grow textarea (≤180px) · mic · send.
- * `variant` controls both the frame and the layout:
- *   - 'box'  collapsed: a white rounded bordered box. Single row while the text
- *            fits one line; restacks (textarea on top, model + send below) on wrap.
- *   - 'line' expanded: no box; sits inside the chat card on a white fill with a top
- *            divider. Always two rows — full-width textarea over a model + send row.
+ * Entry point. Desktop: ArticleAskBar — the question is answered on the 对话 page, so its
+ * history joins the workbench conversation list. Mobile: the in-place dock, unchanged.
  */
-function DockInput({
-    value,
-    onChange,
-    onSend,
-    model,
-    disabled,
-    isStreaming,
-    placeholder,
-    variant,
-    fixedHeight,
-    onFocusChange,
-}: {
-    value: string;
-    onChange: (v: string) => void;
-    onSend: (text: string) => void;
-    model: ModelSelectProps;
-    disabled: boolean;
-    isStreaming: boolean;
-    placeholder: string;
-    variant: "box" | "line";
-    /** When set, force the input container to this px height (e.g. mobile-expanded = 120). */
-    fixedHeight?: number;
-    /** Forward textarea focus/blur so the panel can dim the page while typing. */
-    onFocusChange?: (focused: boolean) => void;
-}) {
-    const [multiline, setMultiline] = useState(false);
-    const taRef = useRef<HTMLTextAreaElement>(null);
-    const { data: modelData } = useGetWorkbenchModelsQuery();
-    const showVoice = !!modelData?.asr_model?.id;
-
-    // Expanded ('line') is always two rows; collapsed ('box') restacks only on wrap.
-    const stacked = variant === "line" || multiline;
-
-    // Reset to single row when the text is cleared (incl. parent-driven clears on send).
-    useEffect(() => {
-        if (!value) setMultiline(false);
-    }, [value]);
-
-    const submit = () => {
-        const trimmed = value.trim();
-        if (!trimmed || disabled || isStreaming) return;
-        onSend(trimmed);
-        if (taRef.current) taRef.current.style.height = "auto";
-    };
-
-    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            if (!isStreaming) submit();
-        }
-    };
-
-    const modelSelect = model.options ? (
-        <AiModelSelect
-            disabled={!!disabled}
-            value={model.value}
-            options={model.options}
-            onChange={model.onChange}
-            onAutoChange={model.onAutoChange}
-        />
-    ) : null;
-
-    const sendControls = (
-        <div className="flex shrink-0 items-center gap-1.5">
-            {showVoice && (
-                <SpeechToTextComponent
-                    disabled={disabled}
-                    onChange={(e) => onChange(value + e)}
-                />
-            )}
-            <button
-                type="button"
-                onClick={submit}
-                disabled={!value.trim() || disabled || isStreaming}
-                className="btn-brand-primary flex h-8 w-8 items-center justify-center rounded-full bg-primary transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 [&>svg]:text-white disabled:[&>svg]:text-text-2"
-                aria-label="Send message"
-            >
-                <SendIcon size={18} />
-            </button>
-        </div>
-    );
-
-    return (
-        <div
-            className={cn(
-                "flex bg-white",
-                variant === "box"
-                    ? "rounded-[20px] border border-border-base p-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
-                    : "border-t border-[#EBEBEB] p-3",
-                stacked ? "flex-col gap-2" : "items-center gap-2",
-            )}
-            style={fixedHeight ? { height: `${fixedHeight}px` } : undefined}
-        >
-            {/* Single-row only: model select sits to the left of the textarea. */}
-            {!stacked && modelSelect && (
-                <div key="model-inline" className="shrink-0">{modelSelect}</div>
-            )}
-
-            {/* Textarea — keyed so it stays mounted across the layout switch. */}
-            <div key="textarea" className={cn(stacked ? "w-full" : "min-w-0 flex-1", fixedHeight && "min-h-0 flex-1")}>
-                <TextareaAutosize
-                    ref={taRef}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onHeightChange={(h: number, meta?: { rowHeight?: number }) => {
-                        // Only escalate to multi-row; collapsing back on height would
-                        // oscillate (wider row re-fits to one line → infinite loop).
-                        if (h > (meta?.rowHeight ?? 24) * 1.4) setMultiline(true);
-                    }}
-                    onFocus={() => onFocusChange?.(true)}
-                    onBlur={() => onFocusChange?.(false)}
-                    disabled={disabled}
-                    placeholder={placeholder}
-                    rows={1}
-                    className={cn(
-                        "m-0 block w-full resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder-text-3",
-                        fixedHeight ? "h-full max-h-full overflow-y-auto" : "max-h-[180px]",
-                    )}
-                />
-            </div>
-
-            {/* Controls. Single-row: mic + send on the right. Two-row: model left, mic + send right. */}
-            <div
-                key="controls"
-                className={cn("flex items-center", stacked ? "w-full justify-between" : "shrink-0")}
-            >
-                {stacked && modelSelect && <div className="shrink-0">{modelSelect}</div>}
-                {sendControls}
-            </div>
-        </div>
-    );
+export function ArticleAiDock({ articleDocId, article }: ArticleAiDockProps) {
+    const isH5 = usePrefersMobileLayout();
+    const model = useDockModel();
+    if (!isH5 && article) return <ArticleAskBar article={article} model={model} />;
+    return <ArticleAiInPlaceDock articleDocId={articleDocId} />;
 }
+
 
 /**
  * Subscription article AI dock (PC). A persistent input bar pinned to the bottom of
@@ -190,7 +71,7 @@ function DockInput({
  * Self-contained (channel chat only) so the shared AiAssistantPanel — still used by
  * the knowledge-space file preview — stays untouched.
  */
-export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
+function ArticleAiInPlaceDock({ articleDocId }: Pick<ArticleAiDockProps, "articleDocId">) {
     const localize = useLocalize();
     const confirm = useConfirm();
     const { user } = useAuthContext();

@@ -44,6 +44,8 @@ interface KnowledgeAiInputProps {
     /** Notifies parent when the textarea gains/loses focus — used by the dock to
      *  drive the mobile keyboard-up grey overlay. */
     onFocusChange?: (focused: boolean) => void;
+    /** Overrides the default placeholder (which advertises the `#` tag picker). */
+    placeholder?: string;
 }
 
 const TAG_TEXT_GAP_PX = 4;
@@ -64,6 +66,7 @@ export function KnowledgeAiInput({
     onStop,
     variant = "box",
     onFocusChange,
+    placeholder,
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
@@ -136,7 +139,7 @@ export function KnowledgeAiInput({
     // 已选 tag 时仅用短文案；部分浏览器不会随 React placeholder 属性刷新，需同步到 DOM
     const resolvedPlaceholder = selectedTag
         ? localize("com_knowledge.ai_input_placeholder_short")
-        : localize("com_knowledge.ai_input_placeholder");
+        : placeholder ?? localize("com_knowledge.ai_input_placeholder");
     useLayoutEffect(() => {
         const el = textareaRef.current;
         if (el) {

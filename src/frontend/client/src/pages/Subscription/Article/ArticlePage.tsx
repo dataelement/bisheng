@@ -250,7 +250,7 @@ export default function ArticlePage() {
                 it inside the relative container is enough; collapsed it shows a
                 floating input box with a gradient fade above, expanded it grows a
                 440px chat panel upward over the iframe content. */}
-            <ArticleAiDock articleDocId={article.id} />
+            <ArticleAiDock articleDocId={article.id} article={article} />
 
             <AddToKnowledgeModal
                 open={showKnowledgeModal}

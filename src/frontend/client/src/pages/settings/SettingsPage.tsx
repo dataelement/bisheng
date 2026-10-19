@@ -214,7 +214,7 @@ export default function SettingsPage() {
 
   // Every content pane carries the active section's name as its title (desktop only —
   // the mobile top bar + tabs already announce the section). Style and top spacing
-  // mirror the nav's 设置 heading (text-base leading-8 at 16px from the top).
+  // mirror the nav's 设置 heading (text-base leading-8, 20px from the top on desktop).
   const activeNavItem = SETTINGS_NAV_ITEMS.find((item) => item.key === section);
   const sectionTitle = activeNavItem ? localize(activeNavItem.labelKey) : "";
   const paneTitleClass = "text-base font-semibold leading-8 text-text-1";
@@ -231,7 +231,7 @@ export default function SettingsPage() {
         setCompactView={setCompactView}
         onPendingCountMaybeChanged={refreshCount}
         listHeader={
-          <h2 className={cn("hidden shrink-0 px-3 pt-4 md:block", paneTitleClass)}>
+          <h2 className={cn("hidden shrink-0 px-3 pt-4 md:block md:pt-5", paneTitleClass)}>
             {sectionTitle}
           </h2>
         }
@@ -240,7 +240,7 @@ export default function SettingsPage() {
   ) : isNotifications ? (
     // Same single-block shell as 账号信息 / 通用: one padded pane with a centered
     // 720px column holding title, search row and list together.
-    <div className="flex min-h-0 flex-1 flex-col px-5 pb-3 pt-4">
+    <div className="flex min-h-0 flex-1 flex-col px-5 pb-3 pt-4 md:pt-5">
       <div className="mx-auto flex min-h-0 w-full max-w-[720px] flex-1 flex-col">
         <h2 className={cn("hidden shrink-0 pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
         <NotificationPane
@@ -260,7 +260,7 @@ export default function SettingsPage() {
       </div>
     </div>
   ) : (
-    <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+    <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-[720px]">
         <h2 className={cn("hidden pb-3 md:block", paneTitleClass)}>{sectionTitle}</h2>
         {section === "account" && <AccountPane />}
@@ -294,11 +294,12 @@ export default function SettingsPage() {
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {/* Desktop: vertical nav on the left — padding mirrors the home (Seedmind) sidebar:
-            panel pt-4 px-3 pb-3, title pl-3 leading-8, 12px gap before the item groups.
-            Group captions reuse the home sidebar's date-label style. */}
-        <nav className="hidden w-[200px] shrink-0 flex-col border-r border-fill-2 px-3 pb-3 pt-4 md:flex">
-          <div className="flex items-center gap-1 pl-2">
+        {/* Desktop: this nav REPLACES the workbench sidebar (MainLayout hides that one on
+            /settings), so it copies its box — 240px, hairline right border, px-3 pt-5 pb-3,
+            a 32px head row, 8px row padding — and the swap reads as one sidebar changing
+            content. Group captions reuse the workbench sidebar's section-label style. */}
+        <nav className="hidden w-[240px] shrink-0 flex-col border-r-[0.5px] border-border-base px-3 pb-3 pt-5 md:flex">
+          <div className="flex h-8 items-center gap-1 px-1">
             {/* Leaves settings entirely: section switches replace their history entry, so
                 one step back lands on the page the user opened settings from. */}
             <button
@@ -319,7 +320,7 @@ export default function SettingsPage() {
               <div key={group.labelKey} className="flex flex-col gap-1">
                 <div
                   className={cn(
-                    "mb-1 pl-3 text-[12px] text-text-3",
+                    "mb-1 px-2 text-[12px] text-text-3",
                     groupIdx === 0 ? "pt-0" : "pt-4",
                   )}
                 >
@@ -333,7 +334,7 @@ export default function SettingsPage() {
                       type="button"
                       className={cn(
                         // 32px row: 22px content line + 5px vertical padding, matching the home sidebar rows.
-                        "flex items-center justify-between gap-2 rounded-lg px-3 py-[5px] text-left text-[14px] leading-[22px] transition-colors",
+                        "flex items-center justify-between gap-2 rounded-lg px-2 py-[5px] text-left text-[14px] leading-[22px] transition-colors",
                         section === item.key
                           ? "bg-fill-2 font-medium text-text-1"
                           : "text-text-2 hover:bg-fill-1",

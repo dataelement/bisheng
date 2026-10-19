@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
@@ -11,6 +12,8 @@ import {
     actionMenuLabelClassName,
 } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { SpaceBreadcrumb } from "./SpaceBreadcrumb";
+import { SpaceActionMenuItems, getSpaceActionFlags } from "./SpaceActionMenuItems";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
@@ -18,10 +21,10 @@ import { useRecoilValue } from "recoil";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 
 /**
- * Space header: identity (name / info / share) on the left, batch + add actions
- * on the right. Search, filter, sort and the view toggle used to live here too;
- * they moved into FileListToolbar so list and card views share one bar
- * (Figma 13198:75829).
+ * Space header: location trail (space anchor + folder path, with the space action
+ * menu hanging off the first segment) on the left, share / batch / add actions on
+ * the right. Search, filter, sort and the view toggle used to live here too; they
+ * moved into FileListToolbar so list and card views share one bar (Figma 13198:75829).
  */
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -60,6 +63,17 @@ interface KnowledgeSpaceHeaderProps {
     onProcessSimilar?: () => void;
     /** Whether the current user can manage members (gates the process-similar entry). */
     canManageMembers?: boolean;
+
+    // ── Space-level actions (breadcrumb menu; available at every folder depth) ──
+    /** Opens the space settings page/drawer. */
+    onOpenSettings?: () => void;
+    /** Deletes the space (owns its own confirm) and returns to the space list. */
+    onDeleteSpace?: () => void;
+    /** Leaves a joined space (owns its own confirm). */
+    onLeaveSpace?: () => void;
+    canEditSpace?: boolean;
+    canDeleteSpace?: boolean;
+    canLeaveSpace?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -89,13 +103,35 @@ export function KnowledgeSpaceHeader({
     hasSimilarSelected = false,
     onProcessSimilar,
     canManageMembers = false,
+    onOpenSettings,
+    onDeleteSpace,
+    onLeaveSpace,
+    canEditSpace = false,
+    canDeleteSpace = false,
+    canLeaveSpace = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
+    const navigate = useNavigate();
     const bishengConfig = useRecoilValue(bishengConfState);
     const isH5 = usePrefersMobileLayout();
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
+    const spaceActions = {
+        space,
+        onOpenSettings,
+        onDeleteSpace,
+        onLeaveSpace,
+        canEditSpace,
+        canManageMembers,
+        canDeleteSpace,
+        canLeaveSpace,
+    };
+    // Root only: deeper in, the same actions hang off the breadcrumb's space
+    // segment, and a second copy up here would read as the current folder's.
+    // Also hidden when every row is permission-gated away — an empty menu.
+    const showSpaceSettingsButton =
+        currentPath.length === 0 && getSpaceActionFlags(spaceActions).hasAny;
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
     // Filter / sort / search / view-toggle all moved into FileListToolbar.
@@ -238,59 +274,46 @@ export function KnowledgeSpaceHeader({
     return (
         <div className="flex min-h-8 items-center justify-between gap-3 px-4 pb-4 pt-4 max-[767px]:gap-2 max-[767px]:pb-3">
 
-            {/* 左侧：根目录显示空间标题 + 信息；进入文件夹后显示当前文件夹名（设计稿 11772:70584） */}
-            <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                {currentPath.length > 0 ? (
-                    <>
-                        {/* 返回按钮 + 分隔线先隐藏，后续可能恢复（设计稿 11772:70584）
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const parent = currentPath[currentPath.length - 2];
-                                onNavigateFolder(parent?.id);
-                            }}
-                            aria-label={localize("com_ui_go_back")}
-                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
-                        >
-                            <Outlined.ArrowLeft className="size-4" />
-                        </button>
-                        <div className="mx-1 h-4 w-px shrink-0 bg-border-base" aria-hidden />
-                        */}
-                        <h1 className="min-w-0 truncate text-base font-normal leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
-                            {currentPath[currentPath.length - 1]?.name || space.name}
-                        </h1>
-                    </>
-                ) : (
-                    <div className="flex min-w-0 flex-1 items-center gap-1">
-                        <h1 className="min-w-0 truncate text-base leading-8 text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
-                            {space.name}
-                        </h1>
-                        <Tooltip>
-                            <TooltipTrigger className="shrink-0 cursor-pointer">
-                                <Outlined.Info className="size-4 text-text-3 outline-none hover:text-blue-500" />
-                            </TooltipTrigger>
-                            <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
-                                <div className="space-y-1.5 text-gray-800 text-sm">
-                                    <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
-                                        <p>{space.description || "-"}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
-                                        <p>{space.creator}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
-                                        <p>{space.memberCount || 0}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
-                                        <p>{space.totalFileCount || 0}</p>
-                                    </div>
-                                </div>
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-                )}
+            {/* 左侧：返回 + 位置面包屑。首段永远是空间本身，空间级操作挂在它的下拉里，
+                所以下钻到任意层级都不会丢失「我在哪个空间」和空间级操作（设计稿 11772:70584） */}
+            {/* -ml-2 pulls the whole group 8px left on its own, without touching the
+                row's px-4 — that padding is shared with the right-hand actions, so
+                shrinking it there would drag those 8px right along with it. */}
+            <div className="-ml-2 flex min-w-0 flex-1 items-center gap-1 text-sm">
+                {/* Desktop back button. The module has no space / folder column any more,
+                    so this is the way up: folder → parent folder → space root → the
+                    知识空间 home. Mobile keeps its own top bar and Title ▾ drawer. */}
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (currentPath.length === 0) {
+                            navigate("/knowledge");
+                            return;
+                        }
+                        const parent = currentPath[currentPath.length - 2];
+                        onNavigateFolder(parent?.id);
+                    }}
+                    aria-label={localize("com_ui_go_back")}
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1 max-[767px]:hidden"
+                >
+                    <Outlined.ArrowLeft className="size-4" />
+                </button>
+                <div className="mx-1 h-4 w-px shrink-0 bg-border-base max-[767px]:hidden" aria-hidden />
+                <SpaceBreadcrumb
+                    space={space}
+                    currentPath={currentPath}
+                    onNavigateFolder={onNavigateFolder}
+                    onOpenSettings={onOpenSettings}
+                    onDeleteSpace={onDeleteSpace}
+                    onLeaveSpace={onLeaveSpace}
+                    canEditSpace={canEditSpace}
+                    canManageMembers={canManageMembers}
+                    canDeleteSpace={canDeleteSpace}
+                    canLeaveSpace={canLeaveSpace}
+                />
             </div>
 
-            {/* 右侧：分享 + 批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
+            {/* 右侧：分享 + 设置 + 批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
             <div className="flex shrink-0 items-center gap-3">
                 {showShare && (
                     <CopyShareLinkButton
@@ -303,6 +326,22 @@ export function KnowledgeSpaceHeader({
                         icon={<Outlined.Share className="size-4 text-text-2" />}
                         aria-label={localize("com_knowledge.share")}
                     />
+                )}
+                {showSpaceSettingsButton && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label={localize("com_knowledge.space_settings")}
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border-base bg-white text-text-2 transition-colors hover:bg-fill-1 data-[state=open]:bg-fill-1"
+                            >
+                                <Outlined.MoreCircle className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <ActionMenuContent align="end" width={180}>
+                            <SpaceActionMenuItems {...spaceActions} />
+                        </ActionMenuContent>
+                    </DropdownMenu>
                 )}
                 {batchAndAddActions}
             </div>

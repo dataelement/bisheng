@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/Button";
 import NavToggle from "~/components/Nav/NavToggle";
 import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import KnowledgeSpaceCardItem from "./KnowledgeSpaceCardItem";
+import { KnowledgeSpaceGhostTile } from "./KnowledgeSpaceGhostTile";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from "~/hooks";
@@ -50,6 +51,8 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
     /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
     mobilePageMode?: boolean;
+    /** With mobilePageMode: lay each section's spaces out as a card grid (desktop home). */
+    pageGrid?: boolean;
     /** The URL already names a space, so there is nothing to choose a default for.
      *  Auto-select must stand down until the host's own route effect lands, or it
      *  navigates to the first space in the list and takes the URL with it. */
@@ -73,6 +76,7 @@ export function KnowledgeSpaceSidebar({
     onDrawerClose,
     compactMode = false,
     mobilePageMode = false,
+    pageGrid = false,
     suppressAutoSelect = false,
     onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
@@ -214,7 +218,9 @@ export function KnowledgeSpaceSidebar({
     const departmentEmpty = !departmentSpaces.length;
     const createdEmpty = !filteredCreatedSpaces.length;
     const joinedEmpty = !filteredJoinedSpaces.length;
-    const fillListHeight = !compactMode;
+    // The desktop home grid keeps natural heights too: a stretched last section
+    // would turn its grid into a flex column.
+    const fillListHeight = !compactMode && !pageGrid;
     const stretchJoined = fillListHeight && !joinedCollapsed;
     const permissionSpaceIds = useMemo(
         () => Array.from(new Set([
@@ -320,6 +326,7 @@ export function KnowledgeSpaceSidebar({
                 space={s}
                 type={sectionType}
                 isActive={s.id === activeSpaceId}
+                card={pageGrid}
                 onSelect={onSpaceSelect}
                 onDelete={handleDeleteSpace}
                 onLeave={handleLeaveSpace}
@@ -350,7 +357,10 @@ export function KnowledgeSpaceSidebar({
     // w-[100cqi] pins the area to the scroll container's visible inline width (it has
     // container-type:inline-size) even inside the shared w-max wrapper, so card rows
     // truncate instead of overflowing horizontally — preserving the v1 vertical scroll.
-    const listRowClassName = mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
+    const listRowClassName = pageGrid
+        // No side padding: cards run the full width of the home's 1000px column.
+        ? "grid w-[100cqi] grid-cols-[repeat(auto-fill,minmax(128px,1fr))] gap-x-5 gap-y-5 py-3"
+        : mobilePageMode ? "w-[100cqi] px-4 py-2" : "space-y-0.5 px-3";
     // Mobile: 8px gap above each section group.
     const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
 
@@ -391,6 +401,7 @@ export function KnowledgeSpaceSidebar({
         <div className={cn(
             "flex items-center justify-center text-center text-sm text-text-3",
             !mobilePageMode && pinnedEmptyClassName,
+            pageGrid && "col-span-full",
             stretch ? "flex-1 py-6" : "h-24",
         )}>
             {localize("com_knowledge.no_data")}
@@ -472,7 +483,13 @@ export function KnowledgeSpaceSidebar({
                 >
                     <div
                         ref={listScrollRef}
-                        className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5 [container-type:inline-size]"
+                        className={cn(
+                            "h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5",
+                            // Desktop home: this container spans the whole page so its scrollbar sits on
+                            // the page edge; the query container moves to the centred column below, and
+                            // the gutter is reserved on both edges so that column stays truly centred.
+                            pageGrid ? "![scrollbar-gutter:stable_both-edges]" : "[container-type:inline-size]",
+                        )}
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
@@ -482,7 +499,18 @@ export function KnowledgeSpaceSidebar({
                             scroll container's visible width — that lets sticky-left/top
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
-                        <div className={cn("w-max min-w-full", fillListHeight && "flex min-h-full flex-col")}>
+                        <div
+                            className={cn(
+                                // Desktop home: the 1000px column (same maths as MODULE_HOME_COLUMN inside the
+                                // frame's 12px gutters — 100% here already excludes the two 8px scrollbar
+                                // gutters). Being the nearest query container, every `100cqi` below resolves
+                                // to this column instead of the page-wide scroll container.
+                                pageGrid
+                                    ? "mx-auto w-[min(1000px,calc(100%_-_8px))] [container-type:inline-size]"
+                                    : "w-max min-w-full",
+                                fillListHeight && "flex min-h-full flex-col",
+                            )}
+                        >
                             {compactMode ? (
                                 /* File-page title dropdown: same 3-section tree as the PC sidebar,
                                    ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
@@ -590,14 +618,27 @@ export function KnowledgeSpaceSidebar({
                                     sortOptions={sortOptions}
                                     sortFieldLabel={localize("com_knowledge.sort_field")}
                                     onSortChange={(v) => setSort("created", v as SpaceSortType)}
-                                    onAdd={onCreateSpace}
+                                    // The home grid opens with a dashed create tile, so the header
+                                    // would offer the same action twice. Every other mode keeps its
+                                    // "+" — that is their only create entry.
+                                    onAdd={pageGrid ? undefined : onCreateSpace}
                                     addLabel={localize("com_knowledge.create")}
                                     mobile={mobilePageMode}
                                 />
                                 {!createdCollapsed && (
                                     <div className={listRowClassName}>
+                                        {/* The grid opens with a dashed folder instead of an empty state:
+                                            it is the invitation AND the create action, so an empty 我创建的
+                                            still shows something to do rather than "暂无数据". */}
+                                        {pageGrid && (
+                                            <KnowledgeSpaceGhostTile
+                                                tone="created"
+                                                label={localize("com_knowledge.create_knowledge_space")}
+                                                onClick={onCreateSpace}
+                                            />
+                                        )}
                                         {filteredCreatedSpaces.map(s => renderSpaceItem(s, "created"))}
-                                        {createdEmpty && renderEmptyState(false)}
+                                        {createdEmpty && !pageGrid && renderEmptyState(false)}
                                     </div>
                                 )}
                             </div>
@@ -618,8 +659,17 @@ export function KnowledgeSpaceSidebar({
                                 />
                                 {!joinedCollapsed && (
                                     <div className={cn(listRowClassName, stretchJoined && "flex flex-1 flex-col")}>
+                                        {/* Same idea as 我创建的, but you don't create a space you join —
+                                            the dashed folder sends you to 广场 to find one. */}
+                                        {pageGrid && (
+                                            <KnowledgeSpaceGhostTile
+                                                tone="joined"
+                                                label={localize("com_knowledge.go_to_knowledge_square")}
+                                                onClick={() => onKnowledgeSquare?.()}
+                                            />
+                                        )}
                                         {filteredJoinedSpaces.map(s => renderSpaceItem(s, "joined"))}
-                                        {joinedEmpty && renderEmptyState(stretchJoined)}
+                                        {joinedEmpty && !pageGrid && renderEmptyState(stretchJoined)}
                                     </div>
                                 )}
                             </div>

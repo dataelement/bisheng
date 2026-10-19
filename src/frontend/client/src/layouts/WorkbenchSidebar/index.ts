@@ -1,0 +1,1 @@
+export { WorkbenchSidebar } from './WorkbenchSidebar';

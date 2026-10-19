@@ -161,7 +161,7 @@ export default function ExplorePlaza() {
     return (
         <div
             className={cn(
-                'flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
+                'relative flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white',
                 // Mobile explore is not innerScrollShell in MainLayout (h-auto shell) and
                 // html/body scrolling is globally disabled (WebView bottom-strip fix in
                 // index.html), so h-full/flex-1 collapse to content height and nothing can
@@ -191,7 +191,9 @@ export default function ExplorePlaza() {
                         maskRepeat: "no-repeat",
                     }}
                 />
-                <div className="absolute left-4 top-4 z-10">
+                {/* Desktop hosts this page inside 广场 (~/pages/square), whose tabs are the way
+                    around; the back arrow is the mobile way out. */}
+                <div className="absolute left-4 top-4 z-10 md:hidden">
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}

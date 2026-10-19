@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+import Cookies from "js-cookie";
 // Language state moved verbatim from UserPopMenu — store.lang is a frozen
 // legacy atom (ledger #5), no new atoms added.
 // eslint-disable-next-line no-restricted-imports
@@ -64,6 +66,15 @@ function normalizeLang(lang: string | undefined): string {
 export function GeneralSection() {
     const localize = useLocalize();
     const [langcode, setLangcode] = useRecoilState(store.lang);
+    // Same persistence as the legacy language switch: the cookie keeps the choice
+    // across reloads and lets the server pick the locale for the first paint.
+    const handleLangChange = useCallback((value: string) => {
+        requestAnimationFrame(() => {
+            document.documentElement.lang = value;
+        });
+        setLangcode(value);
+        Cookies.set("lang", value, { expires: 365 });
+    }, [setLangcode]);
 
     const languages = [
         { value: "zh-Hans", label: localize("com_settings_lang_zh") },
@@ -81,7 +92,7 @@ export function GeneralSection() {
             <div className="flex items-center justify-between gap-4">
                 <span className="text-[14px] text-[#1d2129]">{localize("com_nav_language")}</span>
                 <div className="w-[160px] shrink-0">
-                    <SettingSelect value={normalizeLang(langcode)} options={languages} onValueChange={setLangcode} />
+                    <SettingSelect value={normalizeLang(langcode)} options={languages} onValueChange={handleLangChange} />
                 </div>
             </div>
         </section>
