@@ -1,6 +1,6 @@
 ## 2026-10-19 — 桌面导航桥接
 
-基于 4269304db 接入桌面共享菜单；功能页沿用设计师最新实现，导航入口沿用既有账号权限及开关。生产构建、strict typecheck 与改动文件 lint 通过。详见 DESKTOP_NAVIGATION_CONTRACT.md。部署与原生验收进行中。
+基于 4269304db 接入桌面共享菜单；功能页沿用设计师最新实现，导航入口沿用既有账号权限及开关。生产构建、strict typecheck 与改动文件 lint 通过。详见 DESKTOP_NAVIGATION_CONTRACT.md。3006 已部署首轮导航桥接 93d4df622，原生窗口已成功打开订阅、应用与技能中心。实测发现嵌入内容区触发 H5 布局，统一布局策略现明确使用桌面布局，浏览器保持原有响应式规则；回归 3 套件通过，构建与变更 lint 通过。知识空间 mine/department 接口返回 500，后端日志显示历史 auth_type=review 与当前枚举 PUBLIC/PRIVATE/APPROVAL 不匹配，作为独立服务端问题记录。
 
 ## 2026-10-19 — Desktop Chat session exchange restored
 
