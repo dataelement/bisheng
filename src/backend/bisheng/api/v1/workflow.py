@@ -34,6 +34,7 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, requir
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import generate_uuid
+from bisheng.workflow.domain.services.subflow_service import SubflowService
 from bisheng_langchain.utils.requests import Requests
 
 router = APIRouter(prefix="/workflow", tags=["Workflow"])
@@ -433,6 +434,8 @@ async def create_flow(
     db_flow.flow_type = FlowType.WORKFLOW.value
     # Create New Skill
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
+    # F086: a copied workflow may already contain subflow nodes.
+    await SubflowService.sync_refs(db_flow.id, db_flow.data)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)
     ret = FlowRead.model_validate(db_flow)
@@ -551,6 +554,10 @@ async def update_flow(
     ):
         raise WorkFlowOnlineEditError.http_exception()
 
+    # F086: the app list goes online through this entry as well (design pitfall 2).
+    if flow_data.get("status") == FlowStatus.ONLINE.value and db_flow.status != FlowStatus.ONLINE.value:
+        await SubflowService.check_online(db_flow.data)
+
     for key, value in flow_data.items():
         if key in ["data", "create_time", "update_time"]:
             continue
@@ -575,6 +582,51 @@ async def update_flow_status(
 ):
     await WorkFlowService.update_flow_status(login_user, flow_id, version_id, status)
     return resp_200()
+
+
+# F086: at most this many list pages are scanned per candidates request.
+SUBFLOW_CANDIDATE_MAX_PAGES = 5
+
+
+@router.get("/subflow/candidates", status_code=200)
+async def list_subflow_candidates(
+    *,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    name: str | None = Query(default=None, description="Fuzzy match on the workflow name"),
+    cursor: str | None = Query(default=None, description="`cursor` of the previous response; omit for the first page"),
+    page_size: int = Query(default=20, ge=1, le=100),
+    exclude_flow_id: str | None = Query(default=None, description="The workflow being edited"),
+):
+    """F086: editable workflows that can be used as a subflow.
+
+    Pages through the managed workflow list and keeps eligible rows; scans at
+    most SUBFLOW_CANDIDATE_MAX_PAGES pages, then returns the cursor so the
+    caller can continue.
+    """
+    data: list[dict] = []
+    next_cursor = cursor
+    for _ in range(SUBFLOW_CANDIDATE_MAX_PAGES):
+        page = await WorkFlowService.get_all_flows_envelope(
+            login_user,
+            name,
+            None,
+            None,
+            FlowType.WORKFLOW.value,
+            cursor=next_cursor,
+            page_size=page_size,
+            managed=True,
+        )
+        data.extend(await SubflowService.filter_candidates(page.data, exclude_flow_id))
+        next_cursor = page.next_cursor if page.has_more else None
+        if next_cursor is None or len(data) >= page_size:
+            break
+    return resp_200(data={"data": data, "cursor": next_cursor})
+
+
+@router.get("/subflow/{flow_id}/interface", status_code=200)
+async def get_subflow_interface(*, flow_id: str, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """F086: input parameters and return names of a workflow, for configuring a subflow node."""
+    return resp_200(data=await SubflowService.get_interface(login_user, flow_id))
 
 
 @router.get("/list", status_code=200)

@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 18 / 35 完成（Wave 0–2） |
+| 实现 | 🔄 进行中 | 24 / 35 完成（Wave 0–3，后端完成） |
 
 ---
 
@@ -155,7 +155,7 @@
 
 ## Wave 3：引用关系、校验与接口
 
-- [ ] **T19**：`SubflowService` 测试
+- [x] **T19**：`SubflowService` 测试
   **文件**: `T/workflow/test_subflow_service.py`
   **测试**:
   - 引用同步：按父工作流当前版本整体替换；删除工作流时清除以它为父的记录。
@@ -168,28 +168,28 @@
   **覆盖 AC**: AC-03、AC-04、AC-05、AC-11、AC-12
   **依赖**: T04、T07
 
-- [ ] **T20**：`SubflowService` 实现
+- [x] **T20**：`SubflowService` 实现
   **文件**: `B/workflow/domain/services/subflow_service.py`
   **逻辑**: 方法：`sync_refs(flow_id, data)`、`check_online(data)`、`build_save_warning(flow_id, old_data, new_data)`、`check_delete(flow_id)`、`filter_candidates(rows, exclude_flow_id)`、`get_interface(login_user, flow_id)`。不调用 `B/api/services/`；`Flow.data` 用现有 `FlowDao.aget_flow_by_ids` 读取；接口查询用 `require_business_action(action="edit")`（C4）。决策见 design 决策 7、决策 8。
   **测试**: T19 通过。
   **依赖**: T19
 
-- [ ] **T21**：接入保存与切换版本
+- [x] **T21**：接入保存与切换版本
   **文件**: `B/api/services/flow.py`
   **逻辑**: `update_version_info`：**在覆盖 `version_info.data` 之前**留存旧数据（`B/api/services/flow.py:220`）；写入后若 `is_current == 1`，调用 `sync_refs` 与 `build_save_warning(旧数据, 新数据)`，把 `subflow_warning` 附在响应中。`change_current_version`：**切换前**读出旧 `Flow.data`，切换后同样处理。见 design §4.1「保存」。
   **依赖**: T20
 
-- [ ] **T22**：接入上线、新建与删除
+- [x] **T22**：接入上线、新建与删除
   **文件**: `B/api/services/workflow.py`、`B/api/v1/workflow.py`、`B/api/v1/flows.py`
   **逻辑**: `update_flow_status` 上线时用待上线版本数据调用 `check_online`，切换版本后调用 `sync_refs`；`PATCH /workflow/update/{id}` 带 `status=2` 时用 `Flow.data` 调用 `check_online`（坑 2）；`POST /workflow/create` 创建后调用 `sync_refs`；`DELETE /flows/{id}` 在 `project_flow_delete` **之前**调用 `check_delete`，删除成功后清除以它为父的记录（坑 10）。写入口清单以 design §4.3 为准。
   **依赖**: T20
 
-- [ ] **T23**：候选与接口查询端点
+- [x] **T23**：候选与接口查询端点
   **文件**: `B/api/v1/workflow.py`
   **逻辑**: 新增 `GET /workflow/subflow/candidates` 与 `GET /workflow/subflow/{flow_id}/interface`。候选端点调用 `get_all_flows_envelope(flow_type=WORKFLOW, managed=True)` 分页取行，交给 `filter_candidates`；一页不满时继续取下一页，每次请求最多 5 页，返回游标（design 决策 8）。路径不含 `config`。
   **依赖**: T20、T22
 
-- [ ] **T24**：API 集成测试（测试降级，见「开发模式」）
+- [x] **T24**：API 集成测试（测试降级，见「开发模式」）
   **文件**: `T/workflow/test_subflow_api.py`
   **测试**: 保存与切换版本的 `subflow_warning`；两个上线入口的拦截；删除拦截早于权限投影删除；新建后引用表有记录；候选列表凑页与 5 页上限；候选列表与接口查询用非管理员账号验证权限过滤。需要数据库，CI 运行。
   **覆盖 AC**: AC-03、AC-04、AC-05、AC-11、AC-12
@@ -276,3 +276,7 @@
 - T13：`Workflow` 只新增 `subflow_depth`；`start_node_id` 由 `GraphEngine` 在构建节点前从原始数据找出，不作为 `Workflow` 参数（design 决策 12 已同步）。
 - T18：`parse_workflow_failed` 最先识别子工作流标记，再判断 `stop by user`，与 design 决策 10 原写的顺序相反；用户中止从不包装，两种顺序结果相同，先认标记不会吞掉内部错误文本（design 决策 10 已同步）。
 - T14：本地「执行次数超限」的用例用测试节点抛出同样的文本代替真实循环，构造真实循环需要条件节点，与本任务要验证的包装逻辑无关。
+- T20：10564 的 `reasons`、10565 的 `referenced_by` 改为用「, 」连接的名称字符串，另附机器可读字段 `reason_codes`、`referrers: [{id, name}]`。原因：前端沿用通用错误提示，文案插值只能放字符串；10564 三语文案随之改为「含有不能在子工作流里使用的节点或返回结果：{名称}」（design §6.3 已同步）。
+- T20：上线时子工作流已被删除抛 10561。引用表只记录当前版本，草稿版本指向的工作流可能已被删除，上线校验必须覆盖这种情况。
+- T20：新增 `clear_refs(flow_id)`，删除工作流后由 T22 调用。
+- T24：拆成两部分，都在本地运行：`test_subflow_ref_repository.py` 用 SQLite 实测 Repository；`test_subflow_api.py` 直接调用各入口函数、mock 协作方，断言调用顺序（删除拦截早于权限投影删除、两个上线入口、保存与切换版本用写入前的旧数据、新建后同步、候选凑页与 5 页上限）。真实 HTTP、MySQL 建表与非管理员权限过滤由 T34 E2E 覆盖：测试夹具是手写 SQLite DDL，不含 OpenFGA。

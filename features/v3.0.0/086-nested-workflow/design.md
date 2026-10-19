@@ -260,10 +260,10 @@
 |---|---|---|
 | `GET /api/v1/workflow/subflow/candidates?name&cursor&page_size&exclude_flow_id` | HTTP API，返回 `{data: [{id, name, description, logo}], cursor}` | platform 子工作流选择组件 |
 | `GET /api/v1/workflow/subflow/{flow_id}/interface` | HTTP API，需编辑权限，返回 `{id, name, inputs: [{name, value}], outputs: [name], eligible, ineligible_reasons}` | platform 节点配置面板 |
-| `PUT /workflow/versions/{id}`、`POST /workflow/change_version` 响应新增 `subflow_warning` | 向后兼容的新增字段 | platform 编辑页 |
+| `PUT /workflow/versions/{id}`、`POST /workflow/change_version` 响应新增 `subflow_warning` | 向后兼容的新增字段：保存版本时 `data` 为原版本对象加 `subflow_warning`；切换版本时 `data` 为 `{subflow_warning}`；无提醒时响应与改动前相同 | platform 编辑页 |
 | 【结束】节点 v2 参数 `return_enabled` / `return_results` | 工作流数据格式 | 引擎、`inspect_flow_data` |
 | 运行日志类型 `subflow_logs` | `node_run` 事件 `log_data` | platform `RunLog` |
-| `SubflowService.sync_refs(flow_id, data)` | 内部 Python API | 所有 `Flow.data` 写入口（坑 4） |
+| `SubflowService.sync_refs(flow_id, data)`、`clear_refs(flow_id)` | 内部 Python API | 所有 `Flow.data` 写入口（坑 4）；删除入口 |
 | `inspect_flow_data(data)` | 内部 Python API | `SubflowService`、`SubflowNode` |
 | `SUBFLOW_ERROR_MARKER` 与解析函数 | 内部字符串格式 | `RedisCallback.parse_workflow_failed` |
 | `BaseNode.parse_failed_log` | 节点基类钩子 | 其它节点可覆写以在失败时附带日志 |
@@ -286,11 +286,11 @@
 | 码 | 类 | 场景 | AC |
 |---|---|---|---|
 | 10560 | `WorkFlowSubflowRunError` | 子工作流内部节点失败或构造失败；`data: {subflow_name, node_name, reason}` | AC-20 |
-| 10561 | `WorkFlowSubflowNotFoundError` | 运行时子工作流不存在 | spec §3 |
+| 10561 | `WorkFlowSubflowNotFoundError` | 运行时或上线时子工作流不存在（引用表只记录当前版本，待上线版本可能指向已删除的工作流） | spec §3 |
 | 10562 | `WorkFlowSubflowOutputMissingError` | 引用的返回结果不存在；`data: {subflow_name, output_name}` | AC-14 |
 | 10563 | `WorkFlowSubflowForbiddenNodeError` | 运行期执行到【子工作流】、【输入】或交互型【输出】节点；`data: {subflow_name, node_name}` | AC-06 |
-| 10564 | `WorkFlowSubflowOnlineCheckError` | 上线时子工作流不满足条件；`data: {subflow_name, reasons}` | AC-04 |
-| 10565 | `WorkFlowReferencedDeleteError` | 删除被引用的工作流；`data: {referenced_by: [name]}` | AC-11 |
+| 10564 | `WorkFlowSubflowOnlineCheckError` | 上线时子工作流不满足条件；`data: {subflow_name, reasons, reason_codes}`，`reasons` 为不合规节点名称与返回名称，用「, 」连接 | AC-04 |
+| 10565 | `WorkFlowReferencedDeleteError` | 删除被引用的工作流；`data: {referenced_by, referrers: [{id, name}]}`，`referenced_by` 为引用方名称，用「, 」连接 | AC-11 |
 
 文案三语写在 `src/frontend/packages/locales` 的 `api_errors` 域。2026-10-19 已核对 `feat/3.0.0`、`feat/3.0.0-vibe` 与本分支均未占用 1056x。T01 负责登记到 `features/v3.0.0/release-contract.md`，同时登记表 1 的领域对象「子工作流引用关系」和一条跨 Feature 不变量：【结束】节点「返回结果」开关关闭时，工作流行为与改动前一致。
 
@@ -329,3 +329,4 @@
 | 2026-10-19 | 按 `/sdd-review design` 修订：补中止传递、失败日志、当前时间、租户过滤登记、删除拦截时机、预扫规格、运行上下文（决策 12）、各决策的备选与重新考虑条件、写入口核实结论；R-7.6 改为只算耗时、消耗记父工作流 | 独立审查 22 条意见；用户拍板两项 |
 | 2026-10-19 | Wave 0 实现：引用表补 `update_time` 列（task-review 数据库约定）；Repository 只返回父工作流 id，名称由服务补齐 | T03、T04 实现 |
 | 2026-10-19 | Wave 1–2 实现：标记识别改为最先进行（决策 10）；`start_node_id` 由引擎预扫得出；`inspect_flow_data` 补 `subflow_ids` 与原因代码；记录 `subflow` 节点日志格式 | T07、T13、T16、T18 实现 |
+| 2026-10-19 | Wave 3 实现：10564、10565 的名称字段改为字符串并附机器可读字段；上线时子工作流不存在抛 10561；记录 `subflow_warning` 的响应形态 | T20–T24 实现 |

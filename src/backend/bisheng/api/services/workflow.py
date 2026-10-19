@@ -43,6 +43,7 @@ from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
+from bisheng.workflow.domain.services.subflow_service import SubflowService
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
 
@@ -956,8 +957,11 @@ class WorkFlowService(BaseService):
                 _ = Workflow(flow_id, db_flow.name, login_user.user_id, version_info.data, False, 10, 10, None)
             except Exception as e:
                 raise WorkFlowInitError(msg=str(e))
+            # F086: every workflow used as a subflow must be able to run as one.
+            await SubflowService.check_online(version_info.data)
 
             await FlowVersionDao.change_current_version(flow_id, version_info)
+            await SubflowService.sync_refs(flow_id, version_info.data)
         db_flow.status = status
         await FlowDao.aupdate_flow(db_flow)
         await telemetry_service.log_event(

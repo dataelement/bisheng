@@ -43,6 +43,7 @@ from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.public_endpoints.domain.services.guest_link import delete_app_guest_link
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.utils import get_request_ip
+from bisheng.workflow.domain.services.subflow_service import SubflowService
 
 from .f048_application_permission import ApplicationPermissionRecord
 
@@ -157,12 +158,20 @@ class FlowService(BaseService):
         if version_info.is_current == 1:
             return resp_200()
 
+        # F086: Flow.data still holds the old current version here.
+        old_data = flow_info.data
+
         # Modify the version selected by the user for the current version
         changed = await FlowVersionDao.change_current_version(flow_id, version_info)
         if not changed:
             return NotFoundVersionError.return_resp()
 
+        await SubflowService.sync_refs(flow_id, version_info.data)
+        subflow_warning = await SubflowService.build_save_warning(flow_id, old_data, version_info.data)
+
         await cls.update_flow_hook(request, login_user, flow_info)
+        if subflow_warning:
+            return resp_200(data={"subflow_warning": subflow_warning})
         return resp_200()
 
     @classmethod
@@ -215,6 +224,8 @@ class FlowService(BaseService):
         if version_info.is_current == 1 and flow_info.status == FlowStatus.ONLINE.value and flow_version.data:
             return WorkFlowOnlineEditError.return_resp()
 
+        # F086: keep the data being replaced; the save warning compares against it.
+        old_data = version_info.data
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
         version_info.data = flow_version.data if flow_version.data else version_info.data
@@ -222,7 +233,15 @@ class FlowService(BaseService):
 
         flow_version = await FlowVersionDao.aupdate_version(version_info)
 
+        # F086: only the current version is what other workflows run as a subflow.
+        subflow_warning = None
+        if flow_version.is_current == 1:
+            await SubflowService.sync_refs(flow_version.flow_id, flow_version.data)
+            subflow_warning = await SubflowService.build_save_warning(flow_version.flow_id, old_data, flow_version.data)
+
         await cls.update_flow_hook(request, user, flow_info)
+        if subflow_warning:
+            return resp_200(data={**jsonable_encoder(flow_version), "subflow_warning": subflow_warning})
         return resp_200(data=flow_version)
 
     @classmethod

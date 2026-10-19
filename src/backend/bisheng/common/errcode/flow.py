@@ -113,7 +113,7 @@ class WorkFlowSubflowForbiddenNodeError(BaseErrorCode):
 
 class WorkFlowSubflowOnlineCheckError(BaseErrorCode):
     Code: int = 10564
-    Msg: str = "Subflow {subflow_name} cannot be used: {reasons}"
+    Msg: str = "Subflow {subflow_name} contains nodes or return results that cannot be used in a subflow: {reasons}"
 
 
 class WorkFlowReferencedDeleteError(BaseErrorCode):
