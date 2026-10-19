@@ -1,13 +1,13 @@
 // @ts-strict-ignore
-import { HelpCircle, Loader2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "../../../components/bs-ui/badge";
+import { Tag, Checkbox } from "@bisheng/ui";
 import { Button } from "../../../components/bs-ui/button";
-import { Checkbox } from "../../../components/bs-ui/checkBox";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
+import { Tooltip } from "@bisheng/ui";
 import { PopUpContext } from "../../../contexts/popUpContext";
 import { getFileUrlApi, getPresetFileApi, uploadTaskFileApi } from "../../../controllers/API/finetune";
 import { downloadFile, downloadJson } from "../../../util/utils";
@@ -47,18 +47,13 @@ export default function CreateTaskList({ onChange }) {
                 <Button variant="link" onClick={() => downloadJson(sampleData)}>{t('finetune.downloadSampleFile')}</Button>
             </div>
             <div className="flex gap-2 items-center">
-                <Checkbox checked={isCustom} onCheckedChange={(val: boolean) => setIsCustom(val)} />
+                <Checkbox checked={isCustom} onCheckedChange={(val) => setIsCustom(val === true)} />
                 <Label>{t('finetune.customSampleSize')}</Label>
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger><HelpCircle size={16} /></TooltipTrigger>
-                        <TooltipContent>
-                            <p>{t('finetune.customSampleSizeTooltip1')}</p>
+                <Tooltip content={<><p>{t('finetune.customSampleSizeTooltip1')}</p>
                             <p>{t('finetune.customSampleSizeTooltip2')}</p>
-                            <p>{t('finetune.customSampleSizeTooltip3')}</p>
-                        </TooltipContent>
+                            <p>{t('finetune.customSampleSizeTooltip3')}</p></>}>
+                        <Button type="button" variant="ghost" size="icon" aria-label={t('finetune.customSampleSizeTooltip1')}><Outlined.Question size={16} /></Button>
                     </Tooltip>
-                </TooltipProvider>
             </div>
         </div>
         <div className="border rounded-md p-2 overflow-y-auto max-h-[400px] mt-4 shadow-md bg-gray-100 dark:bg-gray-800">
@@ -75,7 +70,7 @@ export default function CreateTaskList({ onChange }) {
                                 disabled={downloadMap[data.id]}
                                 onClick={() => handleDownloadFile(data)}
                                 className="rounded-lg h-7 px-4 ml-auto">
-                                {downloadMap[data.id] && <Loader2 className="animate-spin mr-2" size={14} />}
+                                {downloadMap[data.id] && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                                 {t('finetune.download')}</Button>
                             {isCustom ?
                                 <Input
@@ -85,7 +80,7 @@ export default function CreateTaskList({ onChange }) {
                                     onChange={(e) => handleChangePrsetList(data.id, 'sampleSize', e.target.value)}
                                     className="bg-[#fff] rounded-full w-28 h-6"
                                 ></Input> :
-                                <Badge variant="outline" className="text-sm">{t('finetune.sampleSize')}:{data.sampleSize}</Badge>}
+                                <Tag size="small">{t('finetune.sampleSize')}:{data.sampleSize}</Tag>}
                         </div>
                     </div>)
                     : <div className=" text-gray-400 text-sm mt-4 indent-2">{t('finetune.noData')}</div>
@@ -119,7 +114,7 @@ export default function CreateTaskList({ onChange }) {
                                     onChange={(e) => handleChangeUserList(data.id, 'sampleSize', e.target.value)}
                                     className="bg-[#fff] rounded-full w-28 h-6"
                                 ></Input> :
-                                <Badge variant="outline" className="text-sm">{t('finetune.sampleSize')}:{data.sampleSize}</Badge>}
+                                <Tag size="small">{t('finetune.sampleSize')}:{data.sampleSize}</Tag>}
                         </div>
                     </div>)
                     : <div className=" text-gray-400 text-sm mt-4 indent-2">{t('finetune.noData')}</div>

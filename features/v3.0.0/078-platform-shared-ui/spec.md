@@ -27,3 +27,17 @@ Other component families are outside this batch.
 Implementation: retain old entry points; adapt props and behavior at the boundary.
 No backend changes. Shared components already have approved styles; migration is
 not a redesign. Estimate and rollout approval are in the chat preceding this file.
+
+## Page-by-page rollout
+
+User-approved on 2026-10-19: subsequent batches migrate by business module, with
+each of the 13 business modules developed completely and accepted together,
+including its pages and related dialogs/drawers. Individual pages are not
+separate user acceptance checkpoints. Missing or unfinalized
+shared components retain their existing implementations and are listed explicitly
+in the page acceptance checklist.
+
+During this migration, also replace business-owned page icons with suitable
+`bisheng-icons` equivalents. When the new library has no suitable equivalent,
+retain the existing icon; no additional approval is required for that fallback.
+This applies to the current model-list slice as well as subsequent pages.

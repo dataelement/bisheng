@@ -1,21 +1,20 @@
 // @ts-strict-ignore
-import { LoadingIcon } from "@/components/bs-icons/loading";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button, LoadButton } from "@/components/bs-ui/button";
 import { Input } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Switch } from "@/components/bs-ui/switch";
+import { Button as SharedButton, Switch, Tooltip as SharedTooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { ModelFieldHint } from "./ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
-import ShadTooltip from "@/components/ShadTooltipComponent";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { addLLmServer, deleteLLmServer, getLLmServerDetail, updateLLmServer } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
-import { ArrowLeft, Plus } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CustomForm from "./CustomForm";
@@ -246,16 +245,16 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const providerInfo = useModelProviderInfo(formData.type)
 
     if (!formData) return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
+        <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
 
     return <div className="relative size-full py-4">
         <div className="flex ml-6 items-center gap-x-3">
-            <ShadTooltip content={t('back', { ns: 'bs' })} side="right">
-                <button className="extra-side-bar-buttons w-[36px]" onClick={() => onBack()}>
-                    <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
-                </button>
-            </ShadTooltip>
+            <SharedTooltip content={t('back', { ns: 'bs' })} side="right">
+                <SharedButton variant="ghost" size="icon" aria-label={t('back', { ns: 'bs' })} onClick={() => onBack()}>
+                    <Outlined.ArrowLeft />
+                </SharedButton>
+            </SharedTooltip>
             <span>{id === -1 ? t('model.addModel') : t('model.modelConfiguration')}</span>
         </div>
         <div className="mx-auto mt-6 h-[calc(100vh-220px-var(--license-banner-h,0px))] w-full max-w-[720px] overflow-y-auto px-4 pb-10">
@@ -264,7 +263,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 <div className="space-y-2">
                     <Label className="bisheng-label">
                         <span>{t('model.providerType')}</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.providerTypeTip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.providerTypeTip')} />
                     </Label>
                     <Select value={formData.type} disabled={id !== -1} onValueChange={handleTypeChange}>
                         <SelectTrigger>
@@ -281,7 +280,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     <Label className="bisheng-label">
                         <span>{t('model.serviceProviderName')}</span>
                         <span className="text-red-500">*</span>
-                        <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.serviceProviderNameTooltip')} />
+                        <ModelFieldHint className="ml-1" content={t('model.serviceProviderNameTooltip')} />
                     </Label>
                     <Input value={formData.name} onChange={(e) => {
                         const name = e.target.value
@@ -306,20 +305,19 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <div className="flex items-center justify-between gap-4">
                             <Label className="bisheng-label">
                                 <span>{t('model.dailyCallLimit')}</span>
-                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.dailyCallLimitTip')} />
+                                <ModelFieldHint className="ml-1" content={t('model.dailyCallLimitTip')} />
                             </Label>
                             <Switch checked={formData.limit_flag} onCheckedChange={(val) => setFormData(form => ({ ...form, limit_flag: val }))} />
                         </div>
                         {formData.limit_flag && (
-                            <div className="flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-                                <span>{t('model.dailyLimitPrefix')}</span>
+                            <div className="flex flex-nowrap items-center gap-2 text-sm text-text-3">
                                 <div className="w-28 shrink-0">
-                                    <Input type="number" min={1} value={formData.limit}
+                                    <Input type="number" size="medium" min={1} value={formData.limit}
+                                        aria-label={t('model.dailyCallLimit')}
                                         onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                        className="h-8"
                                     ></Input>
                                 </div>
-                                <span>{t('model.dailyLimitSuffix')}</span>
+                                <span className="shrink-0 whitespace-nowrap">{t('model.timesPerDay')}</span>
                             </div>
                         )}
                     </div>
@@ -327,7 +325,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         <div className="flex items-center justify-between gap-4">
                             <Label className="bisheng-label">
                                 <span>{t('model.shareToChildren')}</span>
-                                <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.shareToChildrenTip')} />
+                                <ModelFieldHint className="ml-1" content={t('model.shareToChildrenTip')} />
                             </Label>
                             <Switch
                                 checked={formData.share_to_children}
@@ -357,7 +355,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                             ))
                         }
                         <Button className="w-full border-dashed border-border" variant="outline" onClick={handleAddModel}>
-                            <Plus className="size-5 text-primary mr-1" />
+                            <Outlined.Plus />
                             <span>{t('model.addModel')}</span>
                         </Button>
                     </div>

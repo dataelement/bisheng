@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { HelpCircle } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+
 import { useContext, useEffect, useRef, useState } from "react";
 import { Button } from "../../../components/bs-ui/button";
 import {
@@ -10,12 +11,12 @@ import {
     SelectTrigger,
     SelectValue
 } from "../../../components/bs-ui/select";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/bs-ui/tooltip";
+import { Tooltip } from "@bisheng/ui";
 
 import { useTranslation } from "react-i18next";
 import { Input } from "../../../components/bs-ui/input";
 import { Label } from "../../../components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "../../../components/bs-ui/radio-group";
+import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/bs-ui/table";
 import { alertContext } from "../../../contexts/alertContext";
 import { getFTServicesApi, getServicesApi } from "../../../controllers/API";
@@ -89,14 +90,9 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.rtService')}</span>
-                    {/* <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger><HelpCircle size={18} /></TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('finetune.rtServiceTooltip')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider> */}
+                    {/* <Tooltip content={<><p>{t('finetune.rtServiceTooltip')}</p></>}>
+                        <Button type="button" variant="ghost" size="icon" aria-label={t('finetune.rtServiceTooltip')}><Outlined.Question size={18} /></Button>
+                    </Tooltip> */}
                 </small>
                 <div className="flex gap-4 items-center">
                     <Select onValueChange={handleRtChange}>
@@ -161,14 +157,9 @@ export default function CreateTask({ rtClick, gpuClick, onCancel, onCreate }) {
             <div className="flex gap-4 flex-col mt-4">
                 <small className="text-sm font-medium leading-none text-gray-500 flex gap-2 items-center">
                     <span>{t('finetune.parameterConfiguration')}</span>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger><HelpCircle size={16} /></TooltipTrigger>
-                            <TooltipContent>
-                                <p>{t('finetune.parameterConfigurationTooltip')}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <Tooltip content={<><p>{t('finetune.parameterConfigurationTooltip')}</p></>}>
+                        <Button type="button" variant="ghost" size="icon" aria-label={t('finetune.parameterConfigurationTooltip')}><Outlined.Question size={16} /></Button>
+                    </Tooltip>
                 </small>
                 <div>
                     <Table>

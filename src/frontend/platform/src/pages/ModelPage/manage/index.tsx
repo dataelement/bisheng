@@ -1,25 +1,22 @@
 // @ts-strict-ignore
-import { SettingIcon } from "@/components/bs-icons"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import { Switch } from "@/components/bs-ui/switch"
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table"
+import { Outlined } from "bisheng-icons";
+
+import { Button } from "@bisheng/ui"
 import { locationContext } from "@/contexts/locationContext"
 import { userContext } from "@/contexts/userContext"
 import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
-import { LoadingIcon } from "@/components/bs-icons/loading"
+
 import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { CircleMinus, CirclePlus } from "lucide-react"
 import { useQuery } from "react-query"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import ModelConfig from "./ModelConfig"
 import { canManageModelSettings } from "./permissions"
 import { ScopeBar } from "./ScopeBar"
+import { ModelProviderRow } from "./ModelProviderRow"
 import SystemModelConfig from "./SystemModelConfig"
 
 // Saving a provider returns before its model probes finish: they run in the
@@ -29,122 +26,6 @@ import SystemModelConfig from "./SystemModelConfig"
 const PROBE_POLL_MS = 3000
 const PROBE_WINDOW_MS = 45000
 const STATUS_UNKNOWN = 2
-
-function CustomTableRow({ data, index, user, probing, onModel, onCheck, onVerified }) {
-    const { t } = useTranslation()
-    const { message } = useToast()
-    const { appConfig } = useContext(locationContext)
-    const [expand, setExpand] = useState(false)
-    const [verifyingId, setVerifyingId] = useState(null)
-    const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
-
-    // A probe is one real call to the model; keep it to the row the user asked
-    // for, and let other rows stay clickable while it runs.
-    const handleVerify = async (modelId) => {
-        if (verifyingId === modelId) return
-        setVerifyingId(modelId)
-        const res = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
-        setVerifyingId(null)
-        if (res?.id) {
-            onVerified(data.id, res)
-            message({ description: t('model.statusUpdated'), variant: 'success' })
-        }
-    }
-
-    // Root-shared rows are read-only for the current caller; the backend
-    // sets `is_root_shared_readonly` on the list API so Child Admins do
-    // not hit the 403 + 19801 write path.
-    const isRootShared = !!data.is_root_shared_readonly
-    const canEdit = !isRootShared && canManage
-
-    return <div className="text-sm bs-table-row">
-        <div className={`grid grid-cols-2 transition-colors hover:bg-muted/50 items-center mt-1 mx-2 h-[52px] rounded-sm`}>
-            <div className="bs-table-td h-full p-2 flex items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
-                {
-                    expand ?
-                        <CircleMinus className="cursor-pointer min-w-4 w-4 h-4" onClick={() => setExpand(false)} />
-                        : <CirclePlus onClick={() => setExpand(true)} className="cursor-pointer min-w-4 w-4 h-4" />
-                }
-                <span>{data.name}</span>
-                {isRootShared && (
-                    <Badge variant="secondary" className="ml-2">
-                        {t('model.tenantSharedReadonly', {
-                            tenantName: data.tenant_name || 'Root',
-                        })}
-                    </Badge>
-                )}
-            </div>
-            <div className="bs-table-td h-full p-2 flex justify-end items-center gap-x-3 first:rounded-l-md last:rounded-r-md font-medium">
-                <Button variant="link" onClick={() => onModel(data.id)}
-                    disabled={!canEdit}
-                    className={`link px-0 pl-6`}>
-                    {t('model.modelConfiguration')}
-                </Button>
-            </div>
-        </div>
-        {
-            expand && <div className="px-12 py-2 m-auto border-collapse">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[200px]">{t('model.modelName')}</TableHead>
-                            <TableHead className="w-[200px] min-w-[100px]">{t('model.modelType')}</TableHead>
-                            <TableHead className="w-[200px] min-w-[100px]">{t('model.status')}</TableHead>
-                            <TableHead className="w-[180px] min-w-[140px]">{t('model.statusUpdateTime')}</TableHead>
-                            <TableHead className="w-[100px] min-w-[100px]">{t('model.onlineOfflineOperation')}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {data.models.map(m => (
-                            <TableRow key={m.id} className="group">
-                                <TableCell>{m.model_name}</TableCell>
-                                <TableCell>{m.model_type}</TableCell>
-                                <TableCell>
-                                    {probing && m.status === STATUS_UNKNOWN
-                                        ? <span className="inline-flex items-center gap-1 align-middle text-gray-500">
-                                            <LoadingIcon className="size-3" />
-                                            {t('model.modelStatusChecking')}
-                                        </span>
-                                        : <span className={['text-green-500', 'text-orange-500', 'text-gray-500'][m.status]}>
-                                            {[t('model.available'), t('model.abnormal'), t('model.unknown')][m.status]}
-                                        </span>}
-                                    {m.status === 1 && <QuestionTooltip className=" align-middle" content={m.remark} />}
-                                    {/* Verifying is a real call to the model, so it stays an
-                                        explicit per-row action rather than anything automatic. */}
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={verifyingId === m.id}
-                                        onClick={() => handleVerify(m.id)}
-                                        className={`ml-2 h-6 rounded-md border-primary/30 bg-primary/5 px-2 align-middle text-xs font-normal text-primary shadow-none transition-opacity hover:bg-primary/10 hover:text-primary ${verifyingId === m.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                                    >
-                                        {verifyingId === m.id && <LoadingIcon className="mr-1 size-3" />}
-                                        {t('model.updateStatus')}
-                                    </Button>
-                                </TableCell>
-                                <TableCell className="text-gray-500">
-                                    {m.status_update_time?.replace('T', ' ') || '—'}
-                                </TableCell>
-                                <TableCell>
-                                    <Switch
-                                        disabled={!canEdit}
-                                        checked={m.online}
-                                        onCheckedChange={(bool) => onCheck(index, bool, m.id)}
-                                    />
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                    {!data.models.length && <TableFooter>
-                        <TableRow>
-                            <TableCell colSpan={9} className="text-center text-gray-400">{t('model.empty')}</TableCell>
-                        </TableRow>
-                    </TableFooter>}
-                </Table>
-            </div>
-        }
-    </div >
-}
 
 export default function Management() {
     const { t, i18n } = useTranslation();
@@ -217,12 +98,25 @@ export default function Management() {
     const { message } = useToast()
 
     // off & online
-    const handleCheck = (index, bool, id) => {
-        captureAndAlertRequestErrorHoc(changeLLmServerStatus(id, bool).then(res => {
-            refetch()
-        }))
-        data[index].models = data[index].models.map(el => el.id === id ? { ...el, online: bool } : el)
-        setData([...data])
+    const handleCheck = async (serverId: number, modelId: number, online: boolean) => {
+        const result = await captureAndAlertRequestErrorHoc(
+            changeLLmServerStatus(String(modelId), Number(online)).then(() => {
+                setData(prev => prev.map(server => server.id === serverId
+                    ? { ...server, models: server.models.map(model => model.id === modelId ? { ...model, online } : model) }
+                    : server))
+                void refetch()
+                return true
+            })
+        )
+        return result === true
+    }
+
+    const handleVerify = async (serverId: number, modelId: number) => {
+        const result = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
+        if (result?.id) {
+            handleVerified(serverId, result)
+            message({ description: t('model.statusUpdated'), variant: 'success' })
+        }
     }
 
     // Patch the verified row from the response rather than refetching the whole
@@ -262,7 +156,7 @@ export default function Management() {
     return <div className="relative bg-background-login h-full px-2 py-4">
         {loading && (
             <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-                <LoadingIcon />
+                <Outlined.Loading  className="size-4 animate-spin"/>
             </div>
         )}
         <div className="h-full overflow-y-auto">
@@ -274,12 +168,13 @@ export default function Management() {
                     {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
                 <div className="flex gap-4">
-                    {canManage && <Button className="text-red-500" onClick={() => setSystemModel(true)} variant="secondary">
-                        <SettingIcon className="text-red-500" />
+                    {canManage && <Button onClick={() => setSystemModel(true)} variant="secondary"
+                        className="gap-1 text-danger hover:text-danger">
+                        <Outlined.Setting className="text-danger" />
                         {t('model.systemModelSettings')}
                     </Button>}
                     {canManage && <Button onClick={() => setModelId(-1)}>{t('model.addModel')}</Button>}
-                    <Button className="bg-black-button" onClick={reload}>{t('model.refresh')}</Button>
+                    <Button variant="solid" color="default" onClick={reload}>{t('model.refresh')}</Button>
                 </div>
             </div>
             <div className="h-[85%]">
@@ -289,14 +184,13 @@ export default function Management() {
                 </div>
                 <div className="pb-20">
                     {
-                        data.map((d, index) => <CustomTableRow
+                        data.map(d => <ModelProviderRow
                             key={d.id}
-                            user={user}
+                            canManage={canManage}
                             data={d}
-                            index={index}
                             probing={probeUntil > 0}
-                            onCheck={handleCheck}
-                            onVerified={handleVerified}
+                            onToggle={(modelId, online) => handleCheck(d.id, modelId, online)}
+                            onVerify={modelId => handleVerify(d.id, modelId)}
                             onModel={setModelId}
                         />)
                     }

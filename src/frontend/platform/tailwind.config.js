@@ -100,7 +100,6 @@ module.exports = {
         "chat-bot-icon": "var(--chat-bot-icon)",
         "chat-user-icon": "var(--chat-user-icon)",
         "black-button": "hsl(var(--black-button))",
-        white: "var(--white)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input)/0.15)",
         ring: "hsl(var(--ring))",

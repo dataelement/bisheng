@@ -12,17 +12,17 @@ import { type ClassValue, clsx } from 'clsx';
  * 16px. Registering them in the `font-size` group makes cn() preserve size +
  * color together, and collapse size-vs-size correctly.
  *
- * NOTE: this uses the tailwind-merge **v1.x** config shape (`classGroups` at the
- * top level). v2+ nests it under `extend` — do not copy a v2 snippet here while
- * the dependency is pinned to ^1.14.0 (kept in the workspace catalog).
+ * Support both v1's top-level classGroups and v2's nested extend.classGroups.
+ * Source-shipped consumers can prebundle our import with their own v2 copy
+ * (platform does this in Vite), even though the workspace catalog pins v1.
  */
-const twMerge = extendTailwindMerge({
-  classGroups: {
-    'font-size': [
-      { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
-    ],
-  },
-});
+const classGroups = {
+  'font-size': [
+    { text: ['caption-sm', 'caption', 'body-sm', 'body', 'h1', 'h2', 'h3', 'h4', 'display', 'metric'] },
+  ],
+};
+const mergeConfig = { classGroups, extend: { classGroups } };
+const twMerge = extendTailwindMerge(mergeConfig);
 
 /**
  * Merges the tailwind classes (using twMerge). Conditionally removes false values

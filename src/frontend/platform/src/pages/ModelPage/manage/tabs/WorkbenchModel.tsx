@@ -1,11 +1,12 @@
 // @ts-strict-ignore
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -41,7 +42,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText}></QuestionTooltip>}
+                {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText}></ModelFieldHint>}
             </Label>
             <Cascader
                 key={`model-select-${value}-${options.length}`}
@@ -226,7 +227,7 @@ export default function WorkbenchModel({ onBack }) {
 
     if (loading) return (
         <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
+            <Outlined.Loading  className="size-4 animate-spin"/>
         </div>
     );
     // console.log('ASR Model Options structure:', JSON.stringify(asrModel, null, 2));
@@ -333,7 +334,7 @@ export default function WorkbenchModel({ onBack }) {
                     disabled={saveload}
                     onClick={handleSave}
                 >
-                    {saveload && <LoadIcon className="mr-2" />}
+                    {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>
             </div>

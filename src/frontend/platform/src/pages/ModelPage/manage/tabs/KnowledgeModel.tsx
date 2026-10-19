@@ -1,18 +1,19 @@
 // @ts-strict-ignore
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
 import { Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { Switch } from "@/components/bs-ui/switch";
+import { Switch } from "@bisheng/ui";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { ModelFieldHint } from "../ModelFieldHint";
+import { Tooltip as Tip } from "@bisheng/ui";
 import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { Settings } from "lucide-react";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { defalutPrompt } from "./WorkbenchModel";
@@ -43,7 +44,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
             <Label className="bisheng-label">
                 <span>{label}</span>
                 {required && <span className="text-red-500 text-xs">*</span>}
-                {tooltipText && <QuestionTooltip className="relative top-0.5 ml-1" content={tooltipText} />}
+                {tooltipText && <ModelFieldHint className="ml-1" content={tooltipText} />}
             </Label>
             <Cascader
                 defaultValue={defaultValue}
@@ -258,7 +259,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
     }
 
     if (loading) return <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-        <LoadingIcon />
+        <Outlined.Loading  className="size-4 animate-spin"/>
     </div>
 
     return (
@@ -310,7 +311,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         >
                             <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side="top">
                                 <Button variant="link" size="sm" className="h-auto px-0">
-                                    <Settings size={14} className="mr-1" />
+                                    <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
                             </Tip>
@@ -333,7 +334,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                         >
                             <Tip content={t('model.autoTagPromptTooltip')} side="top">
                                 <Button variant="link" size="sm" className="h-auto px-0">
-                                    <Settings size={14} className="mr-1" />
+                                    <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
                             </Tip>
@@ -368,7 +369,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                     disabled={saveload}
                     onClick={handleSave}
                 >
-                    {saveload && <LoadIcon className="mr-2" />}
+                    {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>
             </div>

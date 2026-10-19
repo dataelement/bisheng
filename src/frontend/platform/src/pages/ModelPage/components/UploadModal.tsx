@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Outlined } from "bisheng-icons";
 
 
 import { useContext, useEffect, useRef, useState } from "react";
@@ -8,7 +9,7 @@ import { Button } from "../../../components/bs-ui/button";
 import { Progress } from "../../../components/bs-ui/progress";
 import { alertContext } from "../../../contexts/alertContext";
 import { generateUUID } from "../../../utils";
-import { UploadIcon } from "@/components/bs-icons/upload";
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 
 interface IProps {
@@ -49,7 +50,7 @@ export default function UploadModal({
                     {/* 拖拽区 */}
                     <div {...getRootProps()} className="group h-[100px] border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">
                         <input {...getInputProps()} />
-                        <UploadIcon className="group-hover:text-primary" />
+                        <Outlined.Upload className="group-hover:text-primary" />
                         {isDragActive ? <p className="text-gray-400 text-sm">{t('code.dropFileHere')}</p> : <p className="text-gray-400 text-sm">{t('code.clickOrDragHere')}</p>}
                     </div>
                     {/* 进度条 */}

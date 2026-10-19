@@ -11,7 +11,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "../../../components/bs-ui/select";
-import { ToggleGroup, ToggleGroupItem } from "../../../components/bs-ui/toggle-group";
+import { Segmented } from "@bisheng/ui";
 import { getAllServicesApi } from "../../../controllers/API";
 import { useDebounce } from "../../../util/hook";
 
@@ -55,32 +55,32 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
         onSearch(inputRef.current.value)
     }
 
-    return <div className="flex justify-between pb-4 border-b ml-2">
-        <div className="flex gap-4">
-            <ToggleGroup type="single" defaultValue={type} onValueChange={handleTypeChange} className="border rounded-md">
-                <ToggleGroupItem value="all">{t('finetune.all')}</ToggleGroupItem>
-                <ToggleGroupItem value="4">{t('finetune.successful')}</ToggleGroupItem>
-                <ToggleGroupItem value="1">{t('finetune.inProgress')}</ToggleGroupItem>
-                <ToggleGroupItem value="2">{t('finetune.failedAborted')}</ToggleGroupItem>
-            </ToggleGroup>
+    return <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b ml-2">
+        <div className="flex flex-wrap items-center gap-4">
+            <Segmented className="shrink-0" value={type} onChange={handleTypeChange} options={[
+                { value: 'all', label: t('finetune.all') },
+                { value: '4', label: t('finetune.successful') },
+                { value: '1', label: t('finetune.inProgress') },
+                { value: '2', label: t('finetune.failedAborted') },
+            ]} />
             <Select defaultValue={rt} onValueChange={handleRtChange}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-[180px] shrink-0">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                     <SelectGroup>
                         <SelectItem value="all">{t('finetune.all')}</SelectItem>
                         {
-                            services.map(service => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)
+                            services.filter(service => service.id != null && String(service.id) !== "").map(service => <SelectItem key={service.id} value={String(service.id)}>{service.name}</SelectItem>)
                         }
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
+            <SearchInput boxClassName="w-56 shrink-0" ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
         </div>
-        <div className="flex gap-4 mr-2">
-            <Button className="dark:text-[#ECECEC]" onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button variant="black" className="dark:text-[#ECECEC] dark:bg-[#34353A]" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+        <div className="flex flex-wrap items-center gap-4 mr-2">
+            <Button onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
+            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

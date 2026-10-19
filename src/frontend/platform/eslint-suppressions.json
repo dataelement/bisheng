@@ -3233,9 +3233,6 @@
   "src/pages/ModelPage/manage/ScopeBar.tsx": {
     "no-restricted-imports": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 9
     }
   },
   "src/pages/ModelPage/manage/SystemConfigBanners.tsx": {
@@ -3249,9 +3246,6 @@
     }
   },
   "src/pages/ModelPage/manage/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     },
