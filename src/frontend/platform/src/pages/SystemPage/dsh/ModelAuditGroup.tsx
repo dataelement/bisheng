@@ -69,13 +69,6 @@ export function ModelAuditGroup({
             query={query}
             onNavigate={onNavigate}
           />
-          <Button
-            type="button"
-            variant="link"
-            onClick={() => onNavigate(group.user_id, group.conversation_id)}
-          >
-            {t("dsh.modelAuditView.group_all")}
-          </Button>
         </div>
       )}
     </article>

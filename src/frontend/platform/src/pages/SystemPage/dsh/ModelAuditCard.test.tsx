@@ -70,6 +70,8 @@ it("keeps request information compact, revealing exact IDs without fetching an o
     />,
   );
   const card = screen.getByRole("article");
+  expect(card).toHaveClass("relative");
+  expect(card.querySelector("dt.sr-only")).toBeTruthy();
   const header = card.querySelector("header")!;
   expect(header).toHaveClass("text-xs");
   expect(within(header).getByText(row.model_name)).toBeVisible();

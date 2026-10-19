@@ -161,13 +161,6 @@ export function ModelAuditTree({
               )}
             </section>
           )}
-          <Button
-            type="button"
-            variant="link"
-            onClick={() => onNavigate(node.user_id, node.conversation_id)}
-          >
-            {t("dsh.modelAuditView.group_all")}
-          </Button>
         </div>
       )}
     </article>

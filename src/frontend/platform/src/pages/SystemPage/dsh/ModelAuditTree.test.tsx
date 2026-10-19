@@ -110,6 +110,9 @@ it("AC-H01/AC-H06: collapsed tree fetches no requests/children/originals; childr
   expect(api.requests).not.toHaveBeenCalled();
   rendered.rerender(tree(parent));
   const child = await screen.findByRole("button", { name: /conversation-b/ });
+  expect(
+    screen.queryByRole("button", { name: "dsh.modelAuditView.group_all" }),
+  ).toBeNull();
   expect(child.getAttribute("aria-expanded")).toBe("false");
   await waitFor(() => expect(api.requests).toHaveBeenCalledTimes(1));
   expect(api.tree.mock.calls[0][2]).toBe(parent.conversation_key);
@@ -117,6 +120,9 @@ it("AC-H01/AC-H06: collapsed tree fetches no requests/children/originals; childr
   fireEvent.click(child);
   await waitFor(() => expect(api.requests).toHaveBeenCalledTimes(2));
   expect(child.getAttribute("aria-expanded")).toBe("true");
+  expect(
+    screen.queryByRole("button", { name: "dsh.modelAuditView.group_all" }),
+  ).toBeNull();
   expect(api.body).not.toHaveBeenCalled();
 });
 

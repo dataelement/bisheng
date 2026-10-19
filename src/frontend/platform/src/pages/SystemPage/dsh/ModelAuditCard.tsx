@@ -45,8 +45,9 @@ export function ModelAuditCard({
   const detailsId = useId();
   const bodyId = useId();
   const originalButton = useRef<HTMLButtonElement>(null);
+  // Contain absolute screen-reader labels so they cannot expand the document scroll area.
   return (
-    <article className="min-w-0 overflow-hidden rounded-lg border">
+    <article className="relative min-w-0 overflow-hidden rounded-lg border">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
         <p
           className="w-full min-w-0 truncate font-medium text-foreground md:w-auto md:flex-1"

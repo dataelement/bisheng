@@ -94,6 +94,9 @@ it("AC-QC-08: groups by default, expands metadata and reads only the explicitly 
   expect(api.body).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: /session-main/ }));
   await screen.findByText("Provider / A");
+  expect(
+    screen.queryByRole("button", { name: "dsh.modelAuditView.group_all" }),
+  ).toBeNull();
   expect(api.groupRequests).toHaveBeenCalledTimes(1);
   expect(api.body).not.toHaveBeenCalled();
   fireEvent.click(
@@ -115,13 +118,13 @@ it("AC-QC-08: groups by default, expands metadata and reads only the explicitly 
   );
   expect(screen.queryByText("Saved body")).toBeNull();
 });
-it("AC-QC-07: all-requests navigation clears filters and can return to the saved group view", async () => {
+it("AC-QC-07: request-level conversation navigation can still return to the saved group view", async () => {
   render(<ModelAuditRequests tenantId={2} />);
   await screen.findByText(/session-main/);
   fireEvent.click(screen.getByRole("button", { name: /session-main/ }));
   await screen.findByText("Provider / A");
   fireEvent.click(
-    screen.getByRole("button", { name: "dsh.modelAuditView.group_all" }),
+    screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
   );
   await waitFor(() =>
     expect(api.requests).toHaveBeenCalledWith(
