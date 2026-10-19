@@ -399,6 +399,11 @@
   "siliconflowApiKeyLabel": "SiliconFlow API 密钥",
   "imageViewModelLabel": "视觉模型",
   "imageViewNoVisualModel": "模型管理里还没有标为视觉模型的条目。请先在工作台模型中打开视觉开关。",
+  "webFetchEngine": "读取引擎",
+  "webFetchEngineDeepseek": "DeepSeek 网页读取",
+  "webFetchMaxChars": "正文长度上限（字）",
+  "webFetchMaxCharsHint": "网页正文超过上限时只返回前面部分，并告诉模型内容已截断。",
+  "webFetchMaxCharsRange": "请输入 1000～200000 之间的整数",
   "uploadFile": "上传文件",
   "个人知识库": "个人知识库"
 }
