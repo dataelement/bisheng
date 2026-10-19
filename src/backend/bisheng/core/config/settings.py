@@ -615,6 +615,7 @@ class Etl4lmConf(BaseModel):
     url: str = Field(default="", description="etl4lmService Address")
     timeout: int = Field(default=600, description="etl4lmService Request Timeout (sec)")
     ocr_sdk_url: str = Field(default="", description="etl4lm ocr sdkService Address")
+    request_kwargs: dict = Field(default_factory=dict, description="etl4lmService Request Arguments")
 
 
 class MineruConf(BaseModel):
@@ -622,6 +623,41 @@ class MineruConf(BaseModel):
     timeout: int = Field(default=60, description="MineruService Request Timeout (sec)")
     headers: dict = Field(default_factory=dict, description="MineruService Request Headers")
     request_kwargs: dict = Field(default_factory=dict, description="MineruService Request Arguments")
+
+
+class MineruV4Conf(BaseModel):
+    api_url: str = Field(default="", description="MinerU V1 API root URL")
+    api_key_env: str = Field(default="", description="Environment variable containing the API key")
+    tier: str = Field(default="standard", min_length=1, description="Requested parse tier")
+    ocr_mode: str = Field(default="auto", description="auto, txt, or ocr")
+    request_kwargs: dict = Field(default_factory=dict, description="Extra parse-job JSON fields")
+    connect_timeout_seconds: float = Field(default=10, gt=0)
+    request_timeout_seconds: float = Field(default=60, gt=0)
+    transfer_timeout_seconds: float = Field(default=300, gt=0)
+    job_timeout_seconds: float = Field(default=1800, gt=0)
+    poll_interval_seconds: float = Field(default=3, gt=0)
+
+    @field_validator("ocr_mode")
+    @classmethod
+    def validate_ocr_mode(cls, value: str) -> str:
+        if value not in {"auto", "txt", "ocr"}:
+            raise ValueError("MinerU V1 ocr_mode must be auto, txt, or ocr")
+        return value
+
+    @field_validator("request_kwargs")
+    @classmethod
+    def validate_request_kwargs(cls, value: dict) -> dict:
+        if not all(isinstance(key, str) for key in value):
+            raise ValueError("MinerU V1 request_kwargs keys must be strings")
+        reserved = {"files", "tier", "ocr_mode", "output_formats"}
+        conflicts = reserved.intersection(value)
+        if conflicts:
+            raise ValueError(f"MinerU V1 request_kwargs contains managed fields: {', '.join(sorted(conflicts))}")
+        try:
+            json.dumps(value, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("MinerU V1 request_kwargs must be JSON serializable") from exc
+        return value
 
 
 class PaddleOcrConf(BaseModel):
@@ -654,6 +690,7 @@ class KnowledgeConf(BaseModel):
     loader_provider: str = Field(default="etl4lm", description="Knowledge Config Provide Settings")
     etl4lm: Etl4lmConf = Field(default_factory=Etl4lmConf, description="Etl4lm Configure")
     mineru: MineruConf = Field(default_factory=MineruConf, description="Mineru Configure")
+    mineru_v4: MineruV4Conf = Field(default_factory=MineruV4Conf, description="MinerU V1 API Configure")
     paddle_ocr: PaddleOcrConf = Field(default_factory=PaddleOcrConf, description="PaddleOcr Config")
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
@@ -665,15 +702,17 @@ class KnowledgeConf(BaseModel):
         """Whether the active loader_provider can parse images (and richer PDFs).
 
         Mirrors the loader-selection logic in `knowledge/rag/base_file_pipeline.py`:
-        an external OCR/ETL service is used only when `loader_provider` matches a
-        provider whose `url` is configured. Otherwise the pipeline falls back to
-        the local PDF loader, which does not support images.
+        an external OCR/ETL service is available only when `loader_provider`
+        matches a configured provider. Legacy providers fall back to local PDF
+        parsing when their URL is missing; explicit mineru_v4 selection fails.
         """
         provider = (self.loader_provider or "").strip()
         if provider == "etl4lm":
             return bool(self.etl4lm.url)
         if provider == "mineru":
             return bool(self.mineru.url)
+        if provider == "mineru_v4":
+            return bool(self.mineru_v4.api_url)
         if provider == "paddle_ocr":
             return bool(self.paddle_ocr.url)
         return False
@@ -685,7 +724,7 @@ class IntelligenceCenterConf(BaseModel):
     base_url: str = Field(default="", description="Intelligence Center Service Address")
     api_key: str = Field(default="", description="Intelligence Center Service API Key")
     kwargs: dict = Field(default_factory=dict, description="Additional Arguments")
-    information_initial_article_limit: int = Field(default=20, ge=1, le=100)
+    information_initial_article_limit: int = Field(default=36, ge=1, le=100)
     information_sync_jitter_seconds: int = Field(default=600, ge=0)
     information_subscription_auto_unsubscribe_enabled: bool = Field(default=True)
     information_knowledge_delivery_enabled: bool = Field(default=True)
@@ -866,7 +905,30 @@ class SandboxConf(BaseModel):
         default=0,
         description="Total bytes of knowledge-base images written per run; 0 means 5 x max_copy_in_bytes",
     )
-    code_node_enabled: bool = Field(default=False, description="Run workflow code nodes in the isolation environment")
+
+    # --- type=local isolation (LocalExecutor) ---
+    local_isolation: str = Field(
+        default="off",
+        description="type=local child processes: 'uid' runs them as a throwaway uid in a private run dir; "
+        "'off' keeps the legacy same-user execution",
+    )
+    local_run_root: str = Field(default="/tmp/bisheng-local-run", description="Parent dir of per-run dirs")
+    local_rlimit_as_bytes: int = Field(default=2 * 1024**3, description="RLIMIT_AS of the child")
+    local_rlimit_nproc: int = Field(default=256, description="RLIMIT_NPROC of the child uid")
+    local_rlimit_cpu_s: int = Field(default=600, description="RLIMIT_CPU of the child (seconds)")
+    local_rlimit_fsize_bytes: int = Field(default=1024**3, description="RLIMIT_FSIZE; also the copy-back file cap")
+    local_rlimit_nofile: int = Field(default=1024, description="RLIMIT_NOFILE of the child")
+    local_disk_limit_bytes: int = Field(default=2 * 1024**3, description="Total size of one run dir")
+    local_copy_in_file_bytes: int = Field(default=1024**3, description="Skip a copy-in file above this size")
+    local_copy_in_total_bytes: int = Field(default=1024**3, description="Stop copying in above this total")
+
+    @field_validator("local_isolation", mode="before")
+    @classmethod
+    def validate_local_isolation(cls, value: object) -> str:
+        # Anything but an explicit 'off' means isolation: a typo must not be
+        # the thing that turns it off.
+        text = str(value or "").strip().lower()
+        return "off" if text in ("", "off") else "uid"
 
     @model_validator(mode="after")
     def overlay_env(self):

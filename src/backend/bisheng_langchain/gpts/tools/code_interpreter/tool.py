@@ -1,21 +1,18 @@
+import asyncio
 import itertools
 import os
 import sys
-from typing import List, Type, Any
+from typing import Any
 
-from langchain_community.tools import Tool
-from pydantic import BaseModel, Field
 from langchain_core.tools import BaseTool
-
-from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import E2bCodeExecutor
-from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
+from pydantic import BaseModel, Field
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
 DEFAULT_TIMEOUT = 600
-WIN32 = sys.platform == 'win32'
-PATH_SEPARATOR = WIN32 and '\\' or '/'
-WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'extensions')
-TIMEOUT_MSG = 'Timeout'
+WIN32 = sys.platform == "win32"
+PATH_SEPARATOR = (WIN32 and "\\") or "/"
+WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
+TIMEOUT_MSG = "Timeout"
 UNKNOWN = "unknown"
 
 
@@ -35,10 +32,10 @@ def infer_lang(code):
         return UNKNOWN
 
 
-def head_file(path: str, n: int) -> List[str]:
+def head_file(path: str, n: int) -> list[str]:
     """Get the first n lines of a file."""
     try:
-        with open(path, 'r') as f:
+        with open(path) as f:
             return [str(line) for line in itertools.islice(f, n)]
     except Exception:
         return []
@@ -51,9 +48,9 @@ class CodeInterpreterToolArguments(BaseModel):
         ...,
         examples=["print('Hello World')"],
         description=(
-            'The pure python script to be evaluated. '
-            'The contents will be in main.py. '
-            'It should not be in markdown format.'
+            "The pure python script to be evaluated. "
+            "The contents will be in main.py. "
+            "It should not be in markdown format."
         ),
     )
 
@@ -61,13 +58,21 @@ class CodeInterpreterToolArguments(BaseModel):
 class CodeInterpreterTool(BaseTool):
     """Tool for evaluating python code in native environment."""
 
-    name: str = 'bisheng_code_interpreter'
+    name: str = "bisheng_code_interpreter"
     description: str = "code interpreter"
-    args_schema: Type[BaseModel] = CodeInterpreterToolArguments
+    args_schema: type[BaseModel] = CodeInterpreterToolArguments
     executor: Any = None
 
     def _run(self, python_code: str) -> dict:
         return self.executor.run(python_code)
+
+    async def _arun(self, python_code: str) -> dict:
+        # Serialization of calls on one workspace lives in the executor, not on
+        # this object: deep agents shallow-copy tools and share the executor.
+        arun = getattr(self.executor, "arun", None)
+        if arun is None:
+            return await asyncio.to_thread(self._run, python_code)
+        return await arun(python_code)
 
     def close(self) -> None:
         self.executor.close()

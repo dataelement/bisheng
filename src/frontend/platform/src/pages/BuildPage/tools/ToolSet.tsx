@@ -17,6 +17,7 @@ import WebSearchForm from "./builtInTool/WebSearchFrom";
 import { useWebSearchStore } from './webSearchStore';
 import FinancialDataToolForm from "./builtInTool/FinancialData";
 import { ImageViewForm } from "./builtInTool/ImageView";
+import { WebFetchForm } from "./builtInTool/WebFetchForm";
 const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     const [open, setOpen] = useState(false);
     const { t } = useTranslation();
@@ -36,6 +37,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     // });
     const idRef = useRef('');
     const [name, setName] = useState('');
+    const [toolKeys, setToolKeys] = useState<string[]>([]);
     const { setConfig } = useWebSearchStore()
 
     useImperativeHandle(ref, () => ({
@@ -43,6 +45,7 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
         edit: (item) => {
 
             setName(item.name);
+            setToolKeys((item.children || []).map((child) => child.tool_key));
             idRef.current = item.id;
             let config = {};
             try {
@@ -95,6 +98,9 @@ const ToolSet = forwardRef(function ToolSet({ onChange }, ref) {
     };
 
     const renderFormContent = () => {
+        if (toolKeys.includes('web_fetch')) {
+            return <WebFetchForm formData={formData} onSubmit={handleSubmit} />;
+        }
         switch (name) {
             case 'Dalle3绘画':
                 return <Dalle3ToolForm formData={formData} onSubmit={handleSubmit} />;

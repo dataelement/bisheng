@@ -33,7 +33,7 @@ function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
     // Heuristics for legacy rows / server variants:
     const name = (tc.tool_name || "").toLowerCase();
     if (name.includes("knowledge") || name.includes("kb")) return "knowledge";
-    if (name === "web_search" || name.includes("search")) return "web";
+    if (name === "web_search" || name === "web_fetch" || name.includes("search")) return "web";
     return "tool";
 }
 
@@ -42,6 +42,7 @@ function classifyToolType(tc: AgentToolCall): "knowledge" | "web" | "tool" {
 const BUILTIN_TOOL_I18N: Record<string, string> = {
     search_knowledge_bases: "com_tools_knowledge_search",
     web_search: "com_tools_web_search",
+    web_fetch: "com_tools_web_fetch",
 };
 
 function resolveToolName(
@@ -69,7 +70,7 @@ function parseResults(raw: any): any[] {
     return [{ text: String(raw) }];
 }
 
-function extractChipLabel(item: any, variant: string): string {
+function extractChipLabel(item: any, variant: string, localize: ReturnType<typeof useLocalize>): string {
     if (!item) return "";
     if (typeof item === "string") {
         return item.slice(0, 24);
@@ -79,7 +80,7 @@ function extractChipLabel(item: any, variant: string): string {
             item.title ||
             item.name ||
             item.source ||
-            (item.url ? safeHostname(item.url) : "网页")
+            (item.url ? safeHostname(item.url) : localize("com_tools_web_page_fallback"))
         )
             .toString()
             .slice(0, 24);
@@ -93,7 +94,7 @@ function extractChipLabel(item: any, variant: string): string {
         item.output ||
         item.result ||
         item.value ||
-        "结果";
+        localize("com_tools_result_fallback");
     return String(value).slice(0, 48);
 }
 
@@ -171,6 +172,7 @@ function normaliseWebResults(items: any[]): any[] {
  */
 function normaliseKnowledgeResults(
     items: any[],
+    localize: ReturnType<typeof useLocalize>,
 ): { id: string; name: string; error?: string }[] {
     const seen = new Map<string, { id: string; name: string; error?: string }>();
     const order: string[] = [];
@@ -204,7 +206,7 @@ function normaliseKnowledgeResults(
                 return "";
             })()
             : name;
-        const finalName = fallbackName || "知识库";
+        const finalName = fallbackName || localize("com_tools_knowledge_base_fallback");
         const key = id || finalName;
         const existing = seen.get(key);
         if (existing) {
@@ -244,7 +246,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
     //   web       → dedupe by hostname, default expanded
     //   tool      → no result list; pill only conveys "已使用 {name}"
     const knowledgeChips =
-        variant === "knowledge" ? normaliseKnowledgeResults(rawResults) : [];
+        variant === "knowledge" ? normaliseKnowledgeResults(rawResults, localize) : [];
     const webResults = variant === "web" ? normaliseWebResults(rawResults) : [];
     const resultCount =
         variant === "knowledge"
@@ -254,19 +256,15 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                 : 0;
     const name = resolveToolName(toolCall, localize);
     const label = (() => {
-        if (variant === "knowledge") {
-            if (toolCall.inflight) return "正在检索知识";
-            if (toolCall.error) return "检索知识失败";
-            return "已检索知识";
-        }
-        if (variant === "web") {
-            if (toolCall.inflight) return "正在联网搜索";
-            if (toolCall.error) return "联网搜索失败";
-            return "已联网搜索";
-        }
-        if (toolCall.inflight) return `正在调用 ${name}`;
-        if (toolCall.error) return `${name} 失败`;
-        return `已使用 ${name}`;
+        // web_fetch shares the web card but reads one page instead of searching.
+        const phase =
+            variant === "knowledge"
+                ? "knowledge"
+                : variant === "web"
+                    ? ((toolCall.tool_name || "").toLowerCase() === "web_fetch" ? "web_fetch" : "web_search")
+                    : "tool";
+        const state = toolCall.inflight ? "running" : toolCall.error ? "failed" : "done";
+        return localize(`com_tools_state_${phase}_${state}`, { name });
     })();
     const style = variantStyles[variant];
     // Panel only renders when there is actual content: errors, or finished
@@ -366,7 +364,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
                                                 : "bg-[#F7F7F7] text-text-1",
                                         )}
-                                        title={kb.error ? `${kb.name} 检索失败：${kb.error}` : kb.name}
+                                        title={kb.error ? localize("com_tools_knowledge_base_search_failed", { name: kb.name, error: kb.error }) : kb.name}
                                     >
                                         {kb.error ? (
                                             <AlertCircle className="size-[14px] shrink-0 text-red-500" />
@@ -385,7 +383,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                     <WebResultChip
                                         key={i}
                                         item={item}
-                                        chip={extractChipLabel(item, variant)}
+                                        chip={extractChipLabel(item, variant, localize)}
                                     />
                                 ))}
                             </div>

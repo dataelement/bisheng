@@ -1,3 +1,4 @@
+import { SubjectSelectionSummary } from "./SubjectSelectionSummary";
 import { Outlined } from "bisheng-icons";
 // `LockKeyhole` stays on lucide: bisheng-icons has no lock glyph.
 import { LockKeyhole } from "lucide-react";
@@ -268,10 +269,6 @@ export function PermissionGrantTab({
   const canEdit =
     context.mode === "CUSTOM" && context.can_manage_permission;
 
-  const subjectLabel = localize(`f048_permission.subject.${subjectType}`);
-  const selectedSummaryText = selectedSubjects
-    .map((subject) => subject.name)
-    .join("、");
   const subjectPicker = (
     <>
       {subjectType === "user" && (
@@ -344,11 +341,9 @@ export function PermissionGrantTab({
         <div className="mt-4 flex h-10 shrink-0 items-center gap-4 pr-1">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span className="shrink-0 text-sm font-normal leading-[22px] text-[#999999]">
-              {`${localize("com_permission.selected_prefix")}${subjectLabel}:`}
+              {`${localize("com_permission.selected_prefix")}:`}
             </span>
-            <span className="truncate text-sm leading-[22px] text-[#4E5969]">
-              {selectedSummaryText}
-            </span>
+            <SubjectSelectionSummary subjects={selectedSubjects} />
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
@@ -512,7 +507,6 @@ export function PermissionGrantTab({
                   className="min-h-10 rounded px-3 text-sm text-[#818181] aria-pressed:bg-white aria-pressed:text-blue-500"
                   onClick={() => {
                     setSubjectType(type);
-                    setSelectedSubjects([]);
                   }}
                 >
                   {localize(`f048_permission.subject.${type}`)}
@@ -524,6 +518,7 @@ export function PermissionGrantTab({
           <div className="min-h-40">
             {subjectPicker}
           </div>
+          <SubjectSelectionSummary subjects={selectedSubjects} />
 
           {subjectType === "department" && (
             <label className="flex min-h-10 items-center gap-2 text-sm">

@@ -115,8 +115,8 @@ export function KnowledgeSpaceSettingsPage() {
         getCreationDepartmentChildren("knowledge_space", parentId, config),
       departmentSearchApi: (_type, _id, keyword, limit, config) =>
         searchCreationDepartments("knowledge_space", keyword, limit, config),
-      userGroupsApi: (_type, _id, config) =>
-        getCreationUserGroups("knowledge_space", config),
+      userGroupsApi: (_type, _id, config, params) =>
+        getCreationUserGroups("knowledge_space", config, params),
     } : undefined,
     [settings.mode],
   );

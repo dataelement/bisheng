@@ -423,7 +423,7 @@
     "userGroup": "userGroup",
     "role": "Role",
     "searchUserGroups": "Search user groups",
-    "searchUser": "Search user",
+    "searchUser": "Search user name or ID",
     "searchRoles": "Search roles",
     "reset": "Reset",
     "confirm": "Confirm",
@@ -709,6 +709,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek Web Search",
       "serverUrl": "Server URL",
       "serverUrlPlaceholder": "Enter the searXNG access URL you deployed, e.g., http://localhost:8080"
     },
@@ -2290,7 +2291,7 @@
     "tabException": "Exception List",
     "tabFlow": "Flow Management",
     "searchRole": "Search role…",
-    "searchUser": "Search username…",
+    "searchUser": "Search user name or ID",
     "menuNeedsApproval": "Menu requires approval",
     "menuApprovalDesc": "Your role does not include this menu permission. Click the button below to apply; access will be granted after approval.",
     "menuApply": "Apply for Access",
@@ -3457,5 +3458,36 @@
   "request": {
     "session_expired": "Session expired",
     "sign_in_again": "Session expired. Please sign in again."
+  },
+  "subjectSearch": {
+    "userPlaceholder": "Search user name or ID",
+    "departmentPlaceholder": "Search department name or ID",
+    "groupPlaceholder": "Search user group name or ID",
+    "tooLong": "Search exceeds the length limit. Shorten it and try again.",
+    "failed": "Search failed. Please try again.",
+    "retry": "Retry",
+    "emptyUsers": "No matching users. Check the name or ID.",
+    "emptySubjects": "No grantable subjects found. Check the name or ID.",
+    "userId": "Personnel ID",
+    "departmentId": "Department ID",
+    "user_groupId": "User group ID",
+    "loadMore": "Load more",
+    "selectedCount": "{{count}} users selected",
+    "routeExample": "e.g. Administrators bypass approval",
+    "flowExample": "e.g. Menu access approval A",
+    "nodeExample": "e.g. Approval by applicant’s department administrator",
+    "flowNumber": "Flow #{{id}}",
+    "routeNumber": "Route #{{id}}",
+    "nextNodeHint": "Tasks for the next node are created after this node is approved.",
+    "collapseProgress": "Collapse approval progress",
+    "showProgress": "View approval progress",
+    "noProgress": "No progress available"
+  },
+  "department": {
+    "searchUsersPlaceholder": "Search user name or ID",
+    "searchMember": "Search user name or ID"
+  },
+  "tenant": {
+    "searchUser": "Search user name or ID"
   }
 }

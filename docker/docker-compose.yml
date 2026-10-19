@@ -84,7 +84,7 @@ services:
 
   backend:
     container_name: bisheng-backend
-    image: dataelement/bisheng-backend:v3.0.0-beta3
+    image: dataelement/bisheng-backend:v3.0.0-beta4
     ports:
       - "7860:7860"
     environment:
@@ -100,6 +100,10 @@ services:
       BS_MINIO_SHAREPOINT: 'minio:9000'
       BS_MINIO_ACCESS_KEY: '${MINIO_ROOT_USER:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
+      # Shared with code-runner-*; editor "run once" executes in this process.
+      BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
+      BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
@@ -107,6 +111,9 @@ services:
     security_opt:
       - seccomp:unconfined
     command: sh entrypoint.sh api  # 启动api服务
+    networks:
+      - default
+      - sandbox_net
     restart: on-failure
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
@@ -125,7 +132,7 @@ services:
 
   backend_worker:
     container_name: bisheng-backend-worker
-    image: dataelement/bisheng-backend:v3.0.0-beta3
+    image: dataelement/bisheng-backend:v3.0.0-beta4
     environment:
       TZ: Asia/Shanghai
       BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
@@ -141,6 +148,8 @@ services:
       BS_MINIO_SECRET_KEY: '${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_USER and MINIO_ROOT_PASSWORD in docker/.env (see .env.example)}'
       # Shared with code-runner-*; override SANDBOX_TOKEN in .env for non-dev.
       BS_SANDBOX_CONF__TOKEN: ${SANDBOX_TOKEN:-bisheng-sandbox-local}
+      # Run local code execution under a throwaway uid; set LOCAL_ISOLATION=off in .env to disable.
+      BS_SANDBOX_CONF__LOCAL_ISOLATION: ${LOCAL_ISOLATION:-uid}
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config.yaml:/app/bisheng/config.yaml:ro
       - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh:ro
@@ -164,7 +173,7 @@ services:
 
   frontend:
     container_name: bisheng-frontend
-    image: dataelement/bisheng-frontend:v3.0.0-beta3
+    image: dataelement/bisheng-frontend:v3.0.0-beta4
     ports:
       - "3001:3001"
     environment:

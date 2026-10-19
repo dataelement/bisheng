@@ -68,7 +68,9 @@ def test_compose_named_runners_and_hardening():
     backend = data["services"]["backend"]
     assert backend["volumes"][0].endswith(":ro")
     assert backend["volumes"][1].endswith(":ro")
-    assert "sandbox_net" not in (backend.get("networks") or ["default"])
+    assert "sandbox_net" in backend["networks"]
+    assert "default" in backend["networks"]
+    assert "BS_SANDBOX_CONF__TOKEN" in backend["environment"]
 
     for name in ("code-runner-1", "code-runner-2"):
         svc = data["services"][name]

@@ -20,6 +20,7 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
+from bisheng.tenant.domain.repositories.grant_subject_search_repository import GrantSubjectSearchRepository
 from bisheng.user.domain.models.user import UserDao
 
 
@@ -28,6 +29,22 @@ class TenantPermissionSubjectDirectory:
 
     def __init__(self) -> None:
         self._sources = GrantSourceService()
+        self._candidate_queries = GrantSubjectSearchRepository()
+
+    async def candidate_users(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.users(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_users(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_users(scope, keyword=keyword)
+
+    async def candidate_groups(self, scope, *, keyword: str, page: int, page_size: int):
+        return await self._candidate_queries.groups(scope, keyword=keyword, page=page, page_size=page_size)
+
+    async def count_candidate_groups(self, scope, *, keyword: str):
+        return await self._candidate_queries.count_groups(scope, keyword=keyword)
+
+    async def candidate_departments(self, scope, *, keyword: str, limit: int):
+        return await self._candidate_queries.departments(scope, keyword=keyword, limit=limit)
 
     @staticmethod
     def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:

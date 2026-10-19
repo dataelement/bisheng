@@ -24,7 +24,7 @@ def test_sandbox_conf_defaults_without_yaml_section(clean_sandbox_env: None) -> 
     assert conf.discover_host_pattern == "code-runner-{n}"
     assert conf.discover_index_start == 1
     assert conf.discover_ttl_s == 60
-    assert conf.code_node_enabled is False
+    assert "code_node_enabled" not in SandboxConf.model_fields
     assert conf.endpoints == []
 
 

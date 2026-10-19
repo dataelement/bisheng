@@ -45,6 +45,7 @@ from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLo
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.linsight.domain.services.workspace_backend import LARGE_TOOL_RESULTS_DIR, UPLOADS_DIR
 from bisheng.tool.domain.services.tool import ToolServices
+from bisheng_langchain.gpts.tools.code_interpreter.local_run_registry import release_local_run
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
 
@@ -330,6 +331,15 @@ class LinsightWorkflowTask:
 
     async def _cleanup_resources(self):
         """Clean up resources"""
+        # First and in its own try: a failure further down must not skip it, and it
+        # must run even when file_dir is already gone (the run dir lives elsewhere).
+        try:
+            if self.file_dir:
+                # Shielded: a second cancel during cleanup must not abandon a half-done
+                # release (it kills the task's leftover processes and frees the uid).
+                await asyncio.shield(asyncio.to_thread(release_local_run, self.file_dir))
+        except Exception as e:
+            logger.error(f"Local code run release failed: {e}")
         try:
             # Stop Terminating Monitoring
             await self._stop_termination_monitor()

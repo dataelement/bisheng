@@ -1,3 +1,4 @@
+import asyncio
 import glob
 import os
 import re
@@ -12,12 +13,21 @@ from typing import Any
 import matplotlib
 from loguru import logger
 
+from bisheng_langchain.gpts.tools.code_interpreter import local_run_registry
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     EXECUTION_BOUNDARY_RULES,
     OUTPUT_DIR_NAME,
     BaseExecutor,
     clip_middle,
     path_namespace_rules,
+)
+from bisheng_langchain.gpts.tools.code_interpreter.local_isolation import (
+    IsolatedOutcome,
+    LocalIsolationUnavailable,
+    RunClosed,
+    isolation_mode,
+    run_isolated,
+    run_retained,
 )
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
@@ -38,6 +48,20 @@ UNKNOWN = "unknown"
 MAX_FAILURE_LOG_CHARS = 8000
 LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
 PARTIAL_OUTPUT_HEADER = "\nOutput captured before the kill:\n"
+DISK_LIMIT_MSG = (
+    "Disk limit: this script wrote more data into its working directory than allowed and was killed. "
+    "Nothing it wrote was kept. Write less, or process the data in smaller pieces."
+)
+OUTPUT_LIMIT_MSG = (
+    "Output limit: this script printed far more than can be returned and was killed. Print a summary, "
+    "or write the bulk to a file under `scratch/` instead."
+)
+COPY_IN_SKIPPED_NOTICE = "These workspace files exceed the size limit and were not available to this run"
+ISOLATION_UNAVAILABLE_MSG = (
+    "The local code execution environment is not ready, so nothing was executed. Do not retry; "
+    "tell the user that code execution is currently unavailable."
+)
+TASK_ENDED_MSG = "The task has ended, so this code was not run."
 
 LOCAL_DESCRIPTION = (
     """Evaluates python code in native environment. \
@@ -68,10 +92,19 @@ exists; do NOT run `pip install` (this environment is offline)."""
 
 class LocalExecutor(BaseExecutor):
     supports_kb_stage = True
+    # Subclasses that replace execute_code (ContainerExecutor) must not be routed
+    # into the retained local run dir.
+    supports_retained_run = True
 
     def __init__(self, minio: dict = None, **kwargs):
         super().__init__(minio, **kwargs)
         self.minio = minio
+        # Set by the Linsight binder: keep one run dir for the task workspace
+        # (local_sync_path) instead of a fresh copy per call.
+        self.keep_run_dir = bool(kwargs.get("keep_run_dir", False))
+        self._run_entry: local_run_registry.RunEntry | None = None
+        if self.keep_run_dir and self.local_sync_path and self.supports_retained_run and isolation_mode() == "uid":
+            self._run_entry = local_run_registry.register(self.local_sync_path)
 
     @property
     def description(self) -> str:
@@ -94,15 +127,20 @@ class LocalExecutor(BaseExecutor):
             return UNKNOWN
 
     @staticmethod
+    def _drop_font_cache() -> None:
+        # Legacy behaviour, kept only for local_isolation=off. Isolated runs get a
+        # private copy of the cache instead, so deleting the shared one there would
+        # only race with concurrent runs.
+        for cache in glob.glob(f"{matplotlib.get_cachedir()}/fontlist*"):
+            os.remove(cache)
+
+    @staticmethod
     def insert_set_font_code(code: str) -> str:
         """判断python代码中是否导入了matplotlib库，如果有则插入设置字体的代码"""
 
         split_code = code.split("\n")
-        cache_file = matplotlib.get_cachedir()
-        font_cache = glob.glob(f"{cache_file}/fontlist*")
-
-        for cache in font_cache:
-            os.remove(cache)
+        if isolation_mode() == "off":
+            LocalExecutor._drop_font_cache()
 
         # todo: 如果生成的代码中已经有了设置字体的代码，可能会导致该段代码失效
         if "matplotlib" in code:
@@ -276,9 +314,9 @@ class LocalExecutor(BaseExecutor):
         timeout = timeout or DEFAULT_TIMEOUT
 
         if filename is None:
-            code_hash = md5(code.encode()).hexdigest()
-            # create a file with a automatically generated name
-            filename = f"tmp_code_{code_hash}.{'py' if lang.startswith('python') else lang}"
+            filename = cls._script_name(code, lang)
+        if isolation_mode() == "uid":
+            return cls._execute_isolated(code=code, timeout=timeout, filename=filename, work_dir=work_dir, lang=lang)
         if work_dir is None:
             work_dir = WORKING_DIR
         filepath = os.path.join(work_dir, filename)
@@ -296,6 +334,82 @@ class LocalExecutor(BaseExecutor):
             if filepath is not None:
                 os.remove(filepath)
 
+    @classmethod
+    def _execute_isolated(
+        cls,
+        code: str | None,
+        timeout: int,
+        filename: str,
+        work_dir: str | None,
+        lang: str,
+    ) -> tuple[int, str, str]:
+        """``local_isolation=uid``: run as a pool uid in a private copy of ``work_dir``."""
+        if work_dir is None:
+            raise AssertionError("local isolation needs a work_dir; the shared extensions/ dir is not a workspace")
+        if code is None:
+            with open(os.path.join(work_dir, filename), encoding="utf-8") as fh:
+                code = fh.read()
+        outcome = run_isolated(
+            code=code,
+            filename=filename,
+            work_dir=work_dir,
+            lang=lang,
+            interpreter=cls._interpreter(lang),
+            timeout=timeout,
+        )
+        return cls._format_isolated(outcome, timeout, filename, work_dir)
+
+    @staticmethod
+    def _script_name(code: str, lang: str) -> str:
+        return f"tmp_code_{md5(code.encode()).hexdigest()}.{'py' if lang.startswith('python') else lang}"
+
+    @classmethod
+    def _interpreter(cls, lang: str) -> list[str]:
+        if lang.startswith("python"):
+            return [sys.executable, "-s", "-B", "-X", "utf8"]
+        return [cls._cmd(lang)]
+
+    def _execute_in_dir(self, code: str, dir_path: str, lang: str) -> tuple[int, str, str]:
+        entry = self._run_entry
+        if entry is None or os.path.realpath(dir_path) != entry.work_dir or isolation_mode() != "uid":
+            return super()._execute_in_dir(code, dir_path, lang)
+        filename = self._script_name(code, lang)
+        outcome = run_retained(
+            entry,
+            code=code,
+            filename=filename,
+            work_dir=dir_path,
+            lang=lang,
+            interpreter=self._interpreter(lang),
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._format_isolated(outcome, DEFAULT_TIMEOUT, filename, dir_path)
+
+    @classmethod
+    def _format_isolated(
+        cls, outcome: IsolatedOutcome, timeout: int, filename: str, work_dir: str
+    ) -> tuple[int, str, str]:
+        notice = ""
+        if outcome.skipped:
+            notice = f"\n\n[SYSTEM NOTICE] {COPY_IN_SKIPPED_NOTICE}: {', '.join(outcome.skipped)}"
+        if outcome.disk_exceeded or outcome.output_overflow:
+            logger.warning("code interpreter run exceeded the disk or output limit and was killed")
+            return 1, (DISK_LIMIT_MSG if outcome.disk_exceeded else OUTPUT_LIMIT_MSG) + notice, ""
+        if outcome.timed_out:
+            logger.warning("code interpreter run exceeded {}s and was killed", timeout)
+            message = TIMEOUT_MSG.format(timeout=timeout)
+            partial = f"{outcome.stdout}{outcome.stderr}"
+            if not partial.strip():
+                return 1, message + notice, ""
+            budget = MAX_FAILURE_LOG_CHARS - len(message) - len(PARTIAL_OUTPUT_HEADER) - len(LOG_TRUNCATED_NOTICE)
+            return 1, f"{message}{PARTIAL_OUTPUT_HEADER}{cls._tail(partial, budget)}{notice}", ""
+        if outcome.returncode:
+            abs_path = str(Path(os.path.join(work_dir, filename)).absolute())
+            logs = outcome.stderr.replace(abs_path, "").replace(filename, "")
+        else:
+            logs = outcome.stdout
+        return outcome.returncode, logs + notice, ""
+
     @staticmethod
     def _tail(logs: str, limit: int = MAX_FAILURE_LOG_CHARS) -> str:
         """Keep the last ``limit`` characters of a failing run's log."""
@@ -312,7 +426,37 @@ class LocalExecutor(BaseExecutor):
         if escape_notice:
             logger.warning("code interpreter: rejected a run that reaches outside the working directory")
             return {"exitcode": 1, "log": escape_notice, "file_list": []}
-        code_blocks = self.extract_code(code)
+        entry = self._run_entry
+        if entry is not None and not entry.acquire_inner():
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        try:
+            return self._run_blocks(original_code)
+        except LocalIsolationUnavailable:
+            # The reason is already in the server log; the model only needs to stop retrying.
+            return {"exitcode": 1, "log": ISOLATION_UNAVAILABLE_MSG, "file_list": []}
+        except RunClosed:
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        finally:
+            if entry is not None:
+                entry.inner.release()
+
+    async def arun(self, code: str) -> Any:
+        """Async entry of the code tool.
+
+        Calls on one retained workspace queue on an asyncio lock in the order the
+        model issued them, so waiting does not hold a thread; ``run`` then takes
+        the inner lock that guarantees one run at a time even after a cancel.
+        """
+        entry = self._run_entry
+        if entry is None:
+            return await asyncio.to_thread(self.run, code)
+        if entry.closing:
+            return {"exitcode": 1, "log": TASK_ENDED_MSG, "file_list": []}
+        async with entry.queue:
+            return await asyncio.to_thread(self.run, code)
+
+    def _run_blocks(self, original_code: str) -> dict:
+        code_blocks = self.extract_code(original_code)
         logs_all = ""
         all_file_list = []
         stage_notices = ""

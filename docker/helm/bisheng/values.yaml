@@ -82,7 +82,6 @@ sandbox:
   discoverHostPattern: "code-runner-{n}.code-runner.bisheng-sandbox.svc.cluster.local"
   discoverIndexStart: 0
   discoverTtlS: 60
-  codeNodeEnabled: false
 
 middleware:
   milvus:

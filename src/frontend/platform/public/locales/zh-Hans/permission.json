@@ -19,9 +19,9 @@
     "remove": "移除"
   },
   "search": {
-    "user": "搜索用户...",
-    "department": "搜索部门...",
-    "userGroup": "搜索用户组..."
+    "user": "搜索用户名称或 ID",
+    "department": "搜索部门名称或 ID",
+    "userGroup": "搜索用户组名称或 ID"
   },
   "includeChildren": "包含子部门",
   "list": {
@@ -29,9 +29,9 @@
   },
   "empty": {
     "permissions": "暂无权限记录",
-    "departments": "暂无部门数据",
-    "userGroups": "暂无用户组",
-    "searchResults": "无匹配结果"
+    "departments": "未找到可授权对象，请核对名称或 ID",
+    "userGroups": "未找到可授权对象，请核对名称或 ID",
+    "searchResults": "未找到可授权对象，请核对名称或 ID"
   },
   "comingSoon": "即将推出",
   "managePermission": "权限管理",

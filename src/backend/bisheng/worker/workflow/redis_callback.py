@@ -629,8 +629,6 @@ class RedisCallback(BaseCallback):
                         user_id=self.user_id,
                     )
                 )
-                thread_pool.submit(f"workflow_generate_title_{self.chat_id}", self.generate_session_title)
-
                 # RecordTelemetryJournal
                 telemetry_service.log_event_sync(
                     user_id=self.user_id,
@@ -646,6 +644,11 @@ class RedisCallback(BaseCallback):
                 )
 
             self.create_session = True
+
+        # A greeting can create the session before the user submits anything.
+        # Only a persisted question contains content suitable for its title.
+        if chat_response.category == "question":
+            thread_pool.submit(f"workflow_generate_title_{self.chat_id}", self.generate_session_title)
 
         return message.id
 
@@ -753,16 +756,16 @@ class RedisCallback(BaseCallback):
         return json.dumps(message, ensure_ascii=False)
 
     def generate_session_title(self):
-        if not self.new_session:
+        session = MessageSessionDao.get_one(self.chat_id)
+        if not session:
             return
-        if self.new_session.name:
+        if session.name and session.name != "New Chat":
             return
-        self.new_session.name = "New Chat"
 
-        question = ""
-        input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, [WorkflowEventType.UserInput.value], 1)
-        if input_message:
-            question = input_message[0].message
+        input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, ["question"], 1)
+        if not input_message or not input_message[0].message:
+            return
+        question = input_message[0].message
 
         llm_conf = LLMService.get_workbench_llm_sync(tenant_id=self.tenant_id)
         if not llm_conf or not llm_conf.chat_title_llm or not llm_conf.chat_title_llm.id:
@@ -775,8 +778,11 @@ class RedisCallback(BaseCallback):
             user_id=self.user_id,
         )
         title = generate_conversation_title_sync(question=question, llm=llm)
-        MessageSessionDao.update_session_name_sync(self.new_session.chat_id, title)
-        self.new_session.name = title
+        updated = MessageSessionDao.update_session_name_sync(
+            session.chat_id, title, only_if_default=True, tenant_id=session.tenant_id
+        )
+        if updated and self.new_session:
+            self.new_session.name = title
 
     def on_node_start(self, data: NodeStartData):
         """node start event"""

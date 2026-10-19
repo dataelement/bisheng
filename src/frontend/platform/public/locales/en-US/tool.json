@@ -361,8 +361,8 @@
   "refreshSuccess": "Refresh Successful",
   "toolFetchFailed": "Failed to fetch tool",
   "executionModeLabel": "Code execution mode",
-  "executionLocalLabel": "Run locally",
-  "executionContainerLabel": "Isolated execution",
+  "executionLocalLabel": "Run with local isolation",
+  "executionContainerLabel": "Run in sandbox",
   "executionContainerHint": "Connection settings are managed in system configuration. You do not need to enter them here.",
   "executionE2bLabel": "Run in E2B sandbox",
   "serviceProviderLabel": "Service provider",
@@ -399,6 +399,11 @@
   "siliconflowApiKeyLabel": "SiliconFlow API Key",
   "imageViewModelLabel": "Vision model",
   "imageViewNoVisualModel": "No model is marked as a vision model yet. Turn on the vision switch for a workbench model first.",
+  "webFetchEngine": "Reading engine",
+  "webFetchEngineDeepseek": "DeepSeek Web Fetch",
+  "webFetchMaxChars": "Maximum body length (characters)",
+  "webFetchMaxCharsHint": "When a page body is longer than this, only the beginning is returned and the model is told that the content was cut.",
+  "webFetchMaxCharsRange": "Enter a whole number from 1000 to 200000",
   "uploadFile": "Upload File",
   "个人知识库": "Personal Knowledge Base"
 }

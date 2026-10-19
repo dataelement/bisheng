@@ -273,6 +273,7 @@ async def initialize_f048_api_runtime(
         runtime,
         resource_adapters=adapters,
         resource_registry=registry,
+        subject_directory=TenantPermissionSubjectDirectory(),
     )
     configure_linsight_skill_owner_projection(F048IdentityOwnerProjection(runtime))
     return F048ApiRuntime(
@@ -319,6 +320,7 @@ async def initialize_f048_worker_runtime(
         runtime,
         resource_adapters=adapters,
         resource_registry=registry,
+        subject_directory=TenantPermissionSubjectDirectory(),
     )
     configure_linsight_skill_owner_projection(F048IdentityOwnerProjection(runtime))
     return components

@@ -47,6 +47,8 @@ class ContainerExecutor(LocalExecutor):
     expansion supplies the pool (T016). Sticky binds skip rediscovery.
     """
 
+    supports_retained_run = False
+
     def __init__(self, minio: dict | None = None, **kwargs):
         super().__init__(minio, **kwargs)
         conf = kwargs.get("sandbox_conf")

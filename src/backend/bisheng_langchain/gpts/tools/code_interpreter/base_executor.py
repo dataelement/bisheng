@@ -262,6 +262,10 @@ class BaseExecutor(ABC):
         """
         raise NotImplementedError()
 
+    def _execute_in_dir(self, code: str, dir_path: str, lang: str) -> tuple[int, str, str]:
+        """The ``execute_code`` call of ``run_with_dir``; executors with per-instance run state override it."""
+        return self.execute_code(code, work_dir=dir_path, lang=lang)
+
     @staticmethod
     def _snapshot_files(dir_path: str) -> dict[str, tuple[float, int]]:
         """Map every non-hidden file under ``dir_path`` to ``(mtime, size)``.
@@ -318,11 +322,7 @@ class BaseExecutor(ABC):
     def run_with_dir(self, code: str, dir_path: str, lang: str) -> tuple[int, str, list]:
         """Run ``code`` under ``dir_path`` and return logs plus this run's files."""
         pre_snapshot = self._snapshot_files(dir_path)
-        exitcode, logs, _ = self.execute_code(
-            code,
-            work_dir=dir_path,
-            lang=lang,
-        )
+        exitcode, logs, _ = self._execute_in_dir(code, dir_path, lang)
         file_list = []
         if exitcode != 0:
             return exitcode, logs, file_list

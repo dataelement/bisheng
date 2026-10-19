@@ -1,3 +1,4 @@
+import { SubjectBusinessId } from "../selectComponent/SubjectSearchStatus"
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
@@ -87,7 +88,7 @@ export function SubjectSearchDepartment({
   const departmentSubjects = value.filter((s) => s.type === "department")
   const selectedIdSet = new Set(departmentSubjects.map((s) => s.id))
   const selectedPaths = departmentSubjects
-    .map((s) => tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
+    .map((s) => s.departmentTreePath ?? tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
     .filter((p): p is string => !!p)
 
   // A node is implicitly selected when "include children" is on and one of the
@@ -98,17 +99,30 @@ export function SubjectSearchDepartment({
     !!node.path &&
     selectedPaths.some((sp) => node.path !== sp && node.path.startsWith(sp))
 
-  // Summary = the explicit department picks (decision 10: the subtree coverage is
-  // conveyed by the include-children flag, not enumerated).
+  // Return every explicit pick so summary consumers preserve other subject types.
+  // Subtree coverage remains a flag rather than enumerated descendant picks.
   useEffect(() => {
-    onSelectionSummaryChange?.(departmentSubjects)
+    onSelectionSummaryChange?.(value)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, onSelectionSummaryChange])
 
+  const displayPath = (node: DepartmentTreeNode): string => {
+    const findPath = (nodes: DepartmentTreeNode[], ancestors: string[]): string | undefined => {
+      for (const current of nodes) {
+        const names = [...ancestors, current.name]
+        if (current.id === node.id) return names.join(" / ")
+        const found = findPath(current.children || [], names)
+        if (found) return found
+      }
+      return undefined
+    }
+    return findPath(tree.searchRoots, []) || node.path.split("/").filter(Boolean).map(id => tree.getNode(Number(id))?.name).filter(Boolean).join(" / ") || node.name
+  }
+
   const handleToggle = (node: DepartmentTreeNode) => {
-    if (disabledIdSet.has(node.id)) return
+    if (tree.searching || tree.searchFailed || tree.searchTooLong || disabledIdSet.has(node.id)) return
     if (selectedIdSet.has(node.id)) {
-      onChange(value.filter((s) => s.id !== node.id))
+      onChange(value.filter((s) => s.type !== "department" || s.id !== node.id))
       return
     }
     // Implicitly-selected children can't be picked/unpicked individually; the
@@ -117,7 +131,7 @@ export function SubjectSearchDepartment({
     selectedPathRef.current.set(node.id, node.path)
     onChange([
       ...value,
-      { type: "department", id: node.id, name: node.name, include_children: includeChildren },
+      { type: "department", id: node.id, name: node.name, externalId: node.external_id, departmentPath: displayPath(node), departmentTreePath: node.path, include_children: includeChildren },
     ])
   }
 
@@ -136,7 +150,7 @@ export function SubjectSearchDepartment({
     )
   }
 
-  const renderRowSuffix = (node: DepartmentTreeNode) =>
+  const renderRowSuffix = (node: DepartmentTreeNode) => <><SubjectBusinessId kind="department" value={node.external_id} />{
     disabledIdSet.has(node.id) && disabledLabel ? (
       <span
         className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground"
@@ -144,7 +158,7 @@ export function SubjectSearchDepartment({
       >
         {disabledLabel}
       </span>
-    ) : null
+    ) : null}</>
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

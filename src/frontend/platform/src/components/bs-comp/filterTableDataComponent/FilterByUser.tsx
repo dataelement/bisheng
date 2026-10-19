@@ -1,134 +1,34 @@
-// @ts-strict-ignore
-import MultiSelect from "@/components/bs-ui/select/multi";
-import { getUsersApi } from "@/controllers/API/user";
-import { debounce } from "lodash-es";
-import { useCallback, useEffect, useRef, useState } from "react";
+import MultiSelect from "@/components/bs-ui/select/multi"
+import { getUsersApi } from "@/controllers/API/user"
+import { useSubjectSearch } from "../selectComponent/useSubjectSearch"
+import { SubjectSearchStatus } from "../selectComponent/SubjectSearchStatus"
+import { useTranslation } from "react-i18next"
+import type { User } from "@/types/api/user"
 
-interface UserOption {
-    label: string;
-    value: string;
-    placeholder?: string;
+interface UserOption { label: string; value: number }
+interface FilterByUserProps {
+  value: UserOption[]
+  placeholder?: string
+  onChange: (value: UserOption[]) => void
 }
 
-export default function FilterByUser({ value, placeholder = 'Username', onChange }) {
-    const { users, loadUsers, searchUser, loadMoreUsers } = useUsers();
-
-    return (
-        <div className="w-[200px] relative">
-            <MultiSelect
-                contentClassName="overflow-y-auto max-w-[200px]"
-                options={users}
-                value={value}
-                placeholder={placeholder}
-                onLoad={() => loadUsers("")}
-                onSearch={searchUser}
-                onScrollLoad={loadMoreUsers}
-                onChange={onChange}
-            />
-        </div>
-    );
+export default function FilterByUser({ value, placeholder, onChange }: FilterByUserProps) {
+  const { t } = useTranslation("bs")
+  const search = useSubjectSearch<User>({
+    delay: 500,
+    fetchPage: (keyword, page, signal) => getUsersApi({ name: keyword, page, pageSize: 20 }, { signal }),
+  })
+  const options = search.loading || search.failed || search.tooLong ? [] : search.rows.map(user => ({
+    label: user.external_id ? `${user.user_name} (${t("subjectSearch.userId")}: ${user.external_id})` : user.user_name,
+    value: String(user.user_id),
+  }))
+  return <div className="w-[200px] relative">
+    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" options={options} value={value.map(option => ({ ...option, value: String(option.value) }))}
+      placeholder={placeholder || t("subjectSearch.userPlaceholder")}
+      searchPlaceholder={t("subjectSearch.userPlaceholder")}
+      searchInputProps={search.inputProps}
+      onLoad={() => search.changeKeyword("")} onScrollLoad={search.loadMore} onChange={options => onChange(options.map(option => ({ ...option, value: Number(option.value) })))}>
+      <SubjectSearchStatus tooLong={search.tooLong} failed={search.failed} loading={search.loading} empty={!search.rows.length} onRetry={search.retry} />
+    </MultiSelect>
+  </div>
 }
-
-const useUsers = () => {
-    const [users, setUsers] = useState<UserOption[]>([]);
-    const pageRef = useRef(1);
-    const hasMoreRef = useRef(true);
-    const loadLock = useRef(false);
-    const keywordRef = useRef("");
-    const abortControllerRef = useRef<AbortController>();
-
-    // 通用数据映射
-    const mapUserData = (data: any[]): UserOption[] =>
-        data.map(u => ({ label: u.user_name, value: u.user_id }));
-
-    // 统一请求处理
-    const fetchUsers = async (params: {
-        name: string;
-        page: number;
-        pageSize: number
-    }) => {
-        abortControllerRef.current?.abort();
-        abortControllerRef.current = new AbortController();
-
-        try {
-            const res = await getUsersApi(
-                {
-                    name: params.name,
-                    page: params.page,
-                    pageSize: params.pageSize
-                },
-                { signal: abortControllerRef.current.signal }
-            );
-            return res.data;
-        } catch (error) {
-            if (error.name === 'AbortError') return [];
-            throw error;
-        }
-    };
-
-    // 加载用户（初始/搜索）
-    const loadUsers = useCallback(async (name: string) => {
-        if (loadLock.current) return;
-
-        loadLock.current = true;
-        keywordRef.current = name;
-
-        try {
-            const data = await fetchUsers({
-                name,
-                page: 1,
-                pageSize: 20  // 统一分页大小
-            });
-
-            setUsers(mapUserData(data));
-            pageRef.current = 1;
-            hasMoreRef.current = data.length === 20;
-        } catch (error) {
-            console.error("用户加载失败:", error);
-        } finally {
-            loadLock.current = false;
-        }
-    }, []);
-
-    // 滚动加载更多
-    const loadMoreUsers = useCallback(async () => {
-        if (!hasMoreRef.current || loadLock.current) return;
-
-        loadLock.current = true;
-
-        try {
-            const nextPage = pageRef.current + 1;
-            const data = await fetchUsers({
-                name: keywordRef.current,
-                page: nextPage,
-                pageSize: 20
-            });
-
-            setUsers(prev => [...prev, ...mapUserData(data)]);
-            pageRef.current = nextPage;
-            hasMoreRef.current = data.length === 20;
-        } catch (error) {
-            console.error("加载更多用户失败:", error);
-        } finally {
-            loadLock.current = false;
-        }
-    }, []);
-
-    // 防抖搜索
-    const searchUser = useCallback(
-        debounce((name: string) => loadUsers(name), 500),
-        [loadUsers]
-    );
-
-    // 组件卸载时取消请求
-    useEffect(() => {
-        return () => abortControllerRef.current?.abort();
-    }, []);
-
-    return {
-        users,
-        loadUsers,
-        searchUser,
-        loadMoreUsers
-    };
-};

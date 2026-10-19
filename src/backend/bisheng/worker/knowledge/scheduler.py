@@ -63,7 +63,7 @@ def needs_ocr_queue(file_ext_or_name: str) -> bool:
     ext = _extract_ext(raw) if "." in raw else raw
     if ext in _IMAGE_EXTS:
         return True
-    if ext == "pdf":
+    if ext in {"pdf", "ofd"}:
         return _loader_configured()
     return False
 
