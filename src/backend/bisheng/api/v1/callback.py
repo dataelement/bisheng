@@ -397,6 +397,34 @@ def _dump_run_log(payload: dict) -> str:
 
 
 class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
+    def _is_nested_tool_run(self, kwargs: dict[str, Any]) -> bool:
+        """Whether this tool run was started by another tool run.
+
+        A citation wrapper calls the real tool with its own config, so the inner
+        call reports here too, with the wrapper's run as its parent. Showing both
+        put two identical cards in the run log; only the wrapper's is shown, since
+        its output is what the model read (it carries the citation keys).
+        """
+        nested: set[str] = self.__dict__.setdefault("_nested_tool_runs", set())
+        run_id = kwargs.get("run_id")
+        if run_id is not None and run_id.hex in nested:
+            return True
+        parent_run_id = kwargs.get("parent_run_id")
+        if parent_run_id is None or (parent_run_id.hex not in self.tool_cache and parent_run_id.hex not in nested):
+            return False
+        if run_id is not None:
+            nested.add(run_id.hex)
+        return True
+
+    def _forget_nested_tool_run(self, kwargs: dict[str, Any]) -> bool:
+        """Drop a finished nested run; returns True when the run was nested."""
+        run_id = kwargs.get("run_id")
+        nested: set[str] = self.__dict__.setdefault("_nested_tool_runs", set())
+        if run_id is None or run_id.hex not in nested:
+            return False
+        nested.discard(run_id.hex)
+        return True
+
     @staticmethod
     def parse_tool_category(tool_name) -> (str, str):
         """
@@ -444,8 +472,9 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
         logger.debug(f"on_tool_start serialized={serialized} input_str={input_str} kwargs={kwargs}")
+        if self._is_nested_tool_run(kwargs):
+            return
 
-        input_str = input_str
         tool_name, tool_category = self.parse_tool_category(serialized["name"])
         input_info = {"tool_key": tool_name, "serialized": serialized, "input_str": input_str}
         self.tool_cache[kwargs.get("run_id").hex] = {
@@ -467,6 +496,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_end(self, output: ToolMessage, **kwargs: Any) -> Any:
         """Run when tool ends running."""
         logger.debug(f"on_tool_end output={output} kwargs={kwargs}")
+        if self._forget_nested_tool_run(kwargs):
+            return
         observation_prefix = kwargs.get("observation_prefix", "Tool output: ")
 
         result = output if isinstance(output, str) else getattr(output, "content", output)
@@ -516,6 +547,8 @@ class AsyncGptsDebugCallbackHandler(AsyncGptsLLMCallbackHandler):
     async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when tool errors."""
         logger.debug(f"on_tool_error error={error} kwargs={kwargs}")
+        if self._forget_nested_tool_run(kwargs):
+            return
         input_info = self.tool_cache.get(kwargs.get("run_id").hex)
         if input_info:
             output_info = {"output": "Error: " + str(error)}
