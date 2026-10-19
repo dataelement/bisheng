@@ -12,6 +12,7 @@ interface WebSearchConfig {
     tavily: { api_key: string; base_url: string }
     cloudsway?: { api_key: string; endpoint: string; base_url: string }
     searXNG?: { server_url: string }
+    deepseek?: { api_key: string; base_url: string }
   }
 }
 

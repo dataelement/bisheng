@@ -40,6 +40,10 @@ const defaultToolParams = {
     searXNG: {
         server_url: ''
     },
+    deepseek: {
+        api_key: '',
+        base_url: ''
+    },
 };
 
 interface WebSearchFormProps {
@@ -137,6 +141,9 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
         },
         searXNG: {
             server_url: (value) => !value && 'The server address cannot be empty'
+        },
+        deepseek: {
+            api_key: (value) => !value && 'API Key ' + t('chatConfig.errors.required')
         }
     };
 
@@ -186,6 +193,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
             tavily: (allToolsConfig as any).tavily || defaultToolParams.tavily,
             cloudsway: (allToolsConfig as any).cloudsway || defaultToolParams.cloudsway,
             searXNG: (allToolsConfig as any).searXNG || defaultToolParams.searXNG,
+            deepseek: allToolsConfig.deepseek || defaultToolParams.deepseek,
         };
 
         const newConfig = {
@@ -359,6 +367,31 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         {baseUrlField}
                     </>
                 );
+            case 'deepseek':
+                return (
+                    <>
+                        <InputField
+                            required
+                            label="API Key"
+                            type="password"
+                            name="api_key"
+                            value={currentToolMap['api_key'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).api_key}
+                            id="deepseek-api-key"
+                        />
+                        {/* Empty base_url falls back to this endpoint on the backend */}
+                        <InputField
+                            label="Base URL"
+                            name="base_url"
+                            value={currentToolMap['base_url'] || ''}
+                            onChange={handleParamChange}
+                            error={(formErrors as Record<string, string>).base_url}
+                            id="deepseek-base-url"
+                            placeholder="https://api.deepseek.com/v1/tools/search"
+                        />
+                    </>
+                );
             case 'searXNG':
                 return (
                     <InputField
@@ -404,6 +437,7 @@ const WebSearchForm = ({ formData, onSubmit, isApi = false }: WebSearchFormProps
                         { value: 'tavily', label: t('chatConfig.webSearch.tavily') },
                         { value: 'searXNG', label: t('chatConfig.webSearch.searXNG') },
                         { value: 'cloudsway', label: t('chatConfig.webSearch.cloudsway') },
+                        { value: 'deepseek', label: t('chatConfig.webSearch.deepseek') },
                     ]}
                     id="search-tool-selector"
                     name="search_tool"

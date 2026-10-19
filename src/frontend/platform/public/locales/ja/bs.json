@@ -950,6 +950,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek ウェブ検索",
       "serverUrl": "サーバーアドレス",
       "serverUrlPlaceholder": "searXNG をデプロイしたアクセスアドレスを入力してください。例：http://localhost:8080"
     },

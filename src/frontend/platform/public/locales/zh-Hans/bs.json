@@ -956,6 +956,7 @@
       "tavily": "Tavily",
       "cloudsway": "cloudsway",
       "searXNG": "searXNG",
+      "deepseek": "DeepSeek 网页搜索",
       "serverUrl": "服务器地址",
       "serverUrlPlaceholder": "填写您部署 searXNG 的访问地址，例如：http://localhost:8080"
     },

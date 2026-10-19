@@ -259,5 +259,20 @@
     "is_delete": 0,
     "extra": "{\"model_id\": \"\"}",
     "openapi_schema": null
+  },
+  {
+    "id": 18,
+    "name": "网页读取",
+    "logo": "",
+    "description": "读取指定网址的网页正文，可配置使用不同的读取引擎，目前支持 DeepSeek。",
+    "server_host": "",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "extra": "{\"type\": \"deepseek\", \"config\": {\"deepseek\": {\"api_key\": \"\", \"base_url\": \"\"}}, \"max_chars\": 20000}",
+    "openapi_schema": null
   }
 ]
