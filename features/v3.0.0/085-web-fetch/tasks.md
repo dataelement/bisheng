@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔄 进行中 | 12 / 18 完成 |
+| 实现 | 🔄 进行中 | 14 / 18 完成 |
 
 ---
 
@@ -109,13 +109,13 @@
   **覆盖 AC**: AC-17, AC-19
   **依赖**: T011
 
-- [ ] **T013**: 升级补数据测试
+- [x] **T013**: 升级补数据测试
   **文件**: `src/backend/test/tool/test_ensure_web_fetch_tool.py`
   **逻辑**: 用 SQLite 内存库：空库执行 `_ensure_web_fetch_tool` 后出现一个分类行和一个工具行，字段与种子一致，返回「本次新插入」；再执行一次不重复插入、返回「已存在」；分类 `extra` 与联网搜索分类互相独立。mock 投影和子租户复制函数，断言仅在新插入且 OpenFGA 开启时调用，多租户关闭时不复制。
   **覆盖 AC**: AC-01, AC-04, AC-26
   **依赖**: T001
 
-- [ ] **T014**: 升级补数据实现
+- [x] **T014**: 升级补数据实现
   **文件**: `src/backend/bisheng/common/init_data.py`
   **逻辑**: 新增 `_ensure_web_fetch_tool(session) -> bool`（照 `_ensure_image_view_tool`），在其后调用；释放租户过滤绕过后，若新插入且 `settings.openfga.enabled`：为根租户新分类调用 `reconcile_system_owned_resources`（规格同 `acopy_root_builtin_tools_to_tenant` 末尾）；多租户开启时对每个已有子租户调用 `acopy_root_builtin_tools_to_tenant`，单个租户失败只记日志（design 决策 8）。
   **测试**: T013 全部通过
@@ -157,3 +157,4 @@
 ## 实际偏差记录
 
 - T005 偏离 → 网页读取条目的 itemId 用 `page` 而不是 `1`，句柄身份区分 `web:` / `webpage:`，更新 design 决策 3、新增坑 12（同网址的搜索结果和网页读取在短句柄模式下会被合并）
+- T014 偏离 → 投影和子租户复制改为每次启动补缺口、失败只记日志，更新 design 决策 8、新增坑 13
