@@ -89,6 +89,8 @@ class PortalCourseService:
             organization=payload.organization,
             description=payload.description,
             tags_json=serialize_tags(payload.tags),
+            # 第三方课程没有视频, 列表和详情的时长读这一列.
+            duration_seconds=max(0, payload.duration_seconds),
             enabled=bool(payload.enabled and payload.course_type == "external" and payload.external_url),
             show_on_home=payload.show_on_home,
             sort_order=payload.sort_order,
@@ -161,6 +163,8 @@ class PortalCourseService:
             course.cover_url = payload.cover_url or ""
         if "source_updated_at" in fields:
             course.source_updated_at = payload.source_updated_at
+        if "duration_seconds" in fields and payload.duration_seconds is not None:
+            course.duration_seconds = payload.duration_seconds
         if next_type != "external":
             course.external_id = None
         course.course_type = next_type
@@ -511,6 +515,7 @@ class PortalCourseService:
         include_videos: bool = False,
         catalog_ids: list[str] | None = None,
         keyword: str | None = None,
+        course_type: str | None = None,
     ) -> list[CourseRead]:
         courses = await self.repository.list_courses(
             tenant_id=tenant_id,
@@ -518,6 +523,7 @@ class PortalCourseService:
             home_only=home_only,
             catalog_ids=catalog_ids,
             keyword=keyword,
+            course_type=course_type,
         )
         catalog_map = await self._catalog_map(
             tenant_id=tenant_id,
@@ -646,7 +652,12 @@ class PortalCourseService:
             instructor=course.instructor,
             organization=course.organization,
             description=course.description,
-            total_duration_seconds=sum(video.duration_seconds for video in videos if video.enabled),
+            # 本地课程时长是已启用视频合计; 第三方课程时长来自导入的标准时长.
+            total_duration_seconds=(
+                max(0, int(course.duration_seconds or 0))
+                if self._course_type(course) == "external"
+                else sum(video.duration_seconds for video in videos if video.enabled)
+            ),
             video_count=len(videos),
             sort_order=course.sort_order,
             created_at=course.create_time,

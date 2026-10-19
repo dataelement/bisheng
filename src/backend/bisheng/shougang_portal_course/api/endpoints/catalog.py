@@ -45,12 +45,14 @@ async def list_catalogs(
 @router.get("/list-catalogs")
 async def list_course_list_catalogs(
     keyword: str | None = Query(default=None, max_length=100),
+    course_type: Literal["local", "external"] | None = Query(default=None),
     service_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     async with get_async_db_session() as session:
         items = await PortalCourseCatalogService(session).list_course_list_nav(
             tenant_id=_tenant_id(service_user),
             keyword=keyword,
+            course_type=course_type,
         )
     return resp_200({"items": [item.model_dump(mode="json", exclude_none=True) for item in items]})
 
@@ -75,6 +77,7 @@ async def list_courses(
     catalog_id: str | None = Query(default=None, min_length=32, max_length=32),
     include_descendants: bool = Query(default=True),
     keyword: str | None = Query(default=None, max_length=100),
+    course_type: Literal["local", "external"] | None = Query(default=None),
     service_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     tenant_id = _tenant_id(service_user)
@@ -93,6 +96,7 @@ async def list_courses(
             home_only=placement == "home",
             catalog_ids=catalog_ids,
             keyword=keyword,
+            course_type=course_type,
         )
     return resp_200({"items": [item.model_dump(mode="json", exclude_none=True) for item in items]})
 

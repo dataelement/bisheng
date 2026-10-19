@@ -243,18 +243,28 @@ class PortalCourseCatalogService:
         *,
         tenant_id: int,
         keyword: str | None = None,
+        course_type: str | None = None,
     ) -> list[CatalogRead]:
         catalogs = await self.repository.list_catalogs(tenant_id=tenant_id)
         enabled_counts = await self.repository.count_courses_by_ids(
             tenant_id=tenant_id,
             catalog_ids=[item.id for item in catalogs],
             enabled_only=True,
+            course_type=course_type,
         )
-        visible = [
-            item
-            for item in catalogs
-            if item.opened or enabled_counts.get(item.id, 0) > 0
-        ]
+        # 指定本地或第三方时, 只保留该类已启用课程所在目录及其上级, 避免空目录冒充可查询类别.
+        if course_type:
+            visible = [
+                item
+                for item in catalogs
+                if enabled_counts.get(item.id, 0) > 0
+            ]
+        else:
+            visible = [
+                item
+                for item in catalogs
+                if item.opened or enabled_counts.get(item.id, 0) > 0
+            ]
         catalogs = self._with_ancestors(catalogs, {item.id for item in visible})
         needle = (keyword or "").strip()
         if needle:
