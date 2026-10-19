@@ -2,7 +2,17 @@
 export const skillCenterPreviewEnabled =
   (typeof window === 'undefined' ? undefined : window.APP_CONFIG?.skillCenterPreviewEnabled) ??
   (import.meta.env.VITE_SKILL_CENTER_PREVIEW === 'true');
-export const skillCenterPath = '/c/skills';
+/** 技能 module home: 我的技能 by default, `?view=square` is the 技能广场, `?skill=<id>` opens a detail. */
+export const skillCenterPath = '/skills';
+export const skillSquarePath = `${skillCenterPath}?view=square`;
+
+/** Deep link to one skill's detail dialog. Enterprise skills live in the square view. */
+export function skillDetailPath(skill: { id: string; source: 'personal' | 'platform' }): string {
+  const params = new URLSearchParams();
+  if (skill.source === 'platform') params.set('view', 'square');
+  params.set('skill', skill.id);
+  return `${skillCenterPath}?${params.toString()}`;
+}
 
 export interface SkillManifest {
   name: string;

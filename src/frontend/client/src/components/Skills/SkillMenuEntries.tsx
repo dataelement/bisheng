@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '~/components/ui';
+import { PlusMenuSub } from '~/components/Chat/Input/PlusMenuSub';
+import { DropdownMenuItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { skillCenterPreviewEnabled } from './types';
 import { SkillMenuPanel } from './SkillMenuPanel';
@@ -26,24 +27,20 @@ interface SkillMenuEntriesProps {
 export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesProps) {
   const localize = useLocalize();
   if (!skillCenterPreviewEnabled) return null;
-  const label = <span className="flex min-w-0 items-center gap-2 text-body-sm text-text-1">
-    <Outlined.Newspaper className="size-4 shrink-0 text-text-2" />{localize('com_skill_center_menu')}
-  </span>;
+  const icon = <Outlined.Skill size={16} className="text-text-2" />;
+  const label = localize('com_skill_center_menu');
   if (onOpenMobile) return (
-    <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-2">
-      {label}<Outlined.Right className="size-4 shrink-0 text-text-3" />
+    <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none">
+      <div className="flex min-w-0 items-center gap-2">
+        {icon}<span className="truncate text-[14px] font-normal text-slate-700">{label}</span>
+      </div>
+      <Outlined.Right className="size-4 shrink-0 text-slate-400" />
     </DropdownMenuItem>
   );
+  // The panel ends in two menu rows rather than a scroll list, so it keeps its bottom padding.
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="cursor-pointer rounded-lg px-2 py-2">{label}</DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        align="center"
-        collisionPadding={12}
-        className="ml-2 flex max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[280px] max-w-[calc(100vw-24px)] flex-col gap-0 rounded-2xl bg-bg-page p-3"
-      >
-        <SkillMenuPanel onUpload={onUpload} />
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
+    <PlusMenuSub icon={icon} label={label} panelClassName="w-[280px] max-w-[calc(100vw-24px)] gap-0 pb-3">
+      <SkillMenuPanel onUpload={onUpload} />
+    </PlusMenuSub>
   );
 }

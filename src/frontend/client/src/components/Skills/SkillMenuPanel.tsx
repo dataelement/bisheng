@@ -3,7 +3,7 @@ import { Outlined } from 'bisheng-icons';
 import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { useSkillCenter } from './useSkillCenter';
-import { skillCenterPath } from './types';
+import { skillCenterPath, skillDetailPath } from './types';
 import { SkillMenuRow } from './SkillMenuRow';
 
 interface SkillMenuPanelProps {
@@ -36,7 +36,7 @@ export function SkillMenuPanel({ onUpload, onBack }: SkillMenuPanelProps) {
           <SkillMenuRow
             key={skill.id}
             skill={skill}
-            onSelect={() => navigate(`${skillCenterPath}?skill=${encodeURIComponent(skill.id)}`)}
+            onSelect={() => navigate(skillDetailPath(skill))}
           />
         )) : !failed && <p className="px-2 py-5 text-body-sm text-text-3">{localize('com_skill_center_empty')}</p>}
         {failed && <div className="px-2 py-2">

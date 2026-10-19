@@ -14,6 +14,7 @@ import { DropdownMenuItem } from '~/components/ui';
 import { SearchInput, StateView } from '@bisheng/ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
+import { useIsClipped } from '~/hooks/useIsClipped';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 import { useIsClipped } from '~/hooks/useIsClipped';

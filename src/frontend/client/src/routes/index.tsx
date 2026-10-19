@@ -34,6 +34,9 @@ const AppChatEntry = lazy(() => import('@/pages/appChat/AppChatEntry'));
 const AgentCenter = lazy(() => import('@/pages/apps'));
 const ExplorePlaza = lazy(() => import('@/pages/apps/explore'));
 const Share = lazy(() => import('@/pages/share'));
+const SkillCenterPage = lazy(() =>
+  import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })),
+);
 const Sop = lazy(() => import('@/components/Sop'));
 const Subscription = lazy(() => import('~/pages/Subscription'));
 const Knowledge = lazy(() => import('~/pages/knowledge'));
@@ -53,7 +56,6 @@ const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
 const MediaPlaybackPage = lazy(() => import('~/pages/media/MediaPlaybackPage'));
 const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
-const SkillCenterPage = lazy(() => import('~/pages/skills/SkillCenterPage').then((module) => ({ default: module.SkillCenterPage })));
 
 function RouteLoading() {
   return (
@@ -218,6 +220,15 @@ export const router = createBrowserRouter([
                 <ExplorePlaza />
               </MenuApprovalPluginGate>
             ),
+          },
+          {
+            // 技能 module home (我的技能 / 技能广场) — preview-gated, rides on 首页's menu grant.
+            path: 'skills',
+            element: skillCenterPreviewEnabled ? suspended(
+              <MenuApprovalPluginGate pluginId="home">
+                <SkillCenterPage />
+              </MenuApprovalPluginGate>
+            ) : <Navigate to="/404" replace />,
           },
           { path: 'channel', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">

@@ -20,6 +20,9 @@ import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hoo
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
+import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
+import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 import { SkillMenuEntries, SkillUploadHost } from '~/components/Skills/SkillMenuEntries';
 import { SkillMenuPanel } from '~/components/Skills/SkillMenuPanel';
@@ -260,6 +263,7 @@ export const ChatKnowledge = ({
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
       const raw = (preferBottom ? below : above) - 8;
+      // The unified skill panel lists skills plus two footer rows, so it gets the desktop cap.
       const heightCap = mobilePanel === 'skill' && skillCenterPreviewEnabled ? 440 : MAX_SUB_HEIGHT;
       const capped = Math.min(heightCap, Math.max(80, Math.floor(raw)));
       setMobileDrillMaxH(capped);
@@ -511,6 +515,15 @@ export const ChatKnowledge = ({
               />
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+        )}
+
+        {/* 技能 — preview-gated unified entry (list + upload + manage); replaces 添加 Skill below.
+            Desktop: side panel. Mobile: drill row on the root, panel in place of it. */}
+        {variant === 'plus' && (!isMobile || mobilePanel === 'root') && (
+          <SkillMenuEntries onUpload={openSkillUpload} onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined} />
+        )}
+        {variant === 'plus' && isMobile && mobilePanel === 'skill' && skillCenterPreviewEnabled && (
+          <SkillMenuPanel onUpload={openSkillUpload} onBack={() => setMobilePanel('root')} />
         )}
 
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
