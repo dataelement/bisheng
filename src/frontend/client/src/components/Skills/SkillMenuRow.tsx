@@ -27,9 +27,9 @@ export function SkillMenuRow({ skill, onSelect }: SkillMenuRowProps) {
         onSelect={onSelect}
         className="flex cursor-pointer items-start rounded-lg px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-fill-2 focus:bg-fill-2"
       >
-        <div className="min-w-0 flex-1">
-          <p ref={nameRef} className="truncate text-body-sm font-normal text-text-1">{skill.displayName}</p>
-          {skill.description && <p ref={descriptionRef} className="truncate text-caption font-normal text-text-3">{skill.description}</p>}
+        <div className="skill-menu-text min-w-0 flex-1">
+          <p ref={nameRef} className="skill-menu-name truncate text-body-sm font-normal text-text-1">{skill.displayName}</p>
+          {skill.description && <p ref={descriptionRef} className="skill-menu-description truncate text-caption font-normal text-text-3">{skill.description}</p>}
         </div>
       </DropdownMenuItem>
     </Tooltip>
