@@ -1,9 +1,7 @@
-import base64
 import hashlib
 import io
 import json
 import stat
-import time
 import zipfile
 from contextlib import contextmanager
 
@@ -20,7 +18,6 @@ from bisheng.core.database.model_discovery import discover_sqlmodel_module_names
 from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin
 from bisheng.dsh_market.api.endpoints import router
 from bisheng.dsh_market.domain.bundle import BundleError, validate_bundle
-from bisheng.dsh_market.domain.lease import sign_policy
 from bisheng.dsh_market.domain.models import MarketVersion
 from bisheng.dsh_market.domain.repository import ConflictError, MarketRepository
 from bisheng.dsh_market.domain.service import MarketService
@@ -243,7 +240,7 @@ def test_api_contract_and_admin_boundary(service):
         return JSONResponse(error.to_dict())
 
     app.dependency_overrides[get_market_service] = lambda: service
-    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
     client = TestClient(app)
     assert client.get("/api/v1/dsh/market/admin/plugins").json()["status_code"] == 26204
     app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
@@ -256,7 +253,7 @@ def test_api_contract_and_admin_boundary(service):
     response = client.get(f"/api/v1/dsh/market/plugins/{row['id']}/versions/{row['current_version_id']}/artifact")
     assert response.headers["content-type"] == "application/zip"
     assert hashlib.sha256(response.content).hexdigest() == row["versions"][0]["digest"]
-    app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30)
+    app.dependency_overrides[market_actor] = lambda: MarketActor(3, 30, desktop=True)
     assert client.get("/api/v1/dsh/market/catalog").json()["data"]["total"] == 0
 
 
@@ -290,34 +287,36 @@ def test_legacy_disabled_plugins_use_unpublished_state_and_remain_revoked(servic
     assert service.repository.policies(2)[0]["disabled"]
 
 
-def test_policy_is_signed_by_deployment_key(monkeypatch):
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
-
-    key = Ed25519PrivateKey.generate()
-    pem = key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
-    monkeypatch.setenv("BISHENG_DSH_MARKET_SIGNING_KEY", pem)
-    payload = {"tenant_id": "2", "user_id": "20", "expires_at": int(time.time()) + 3600}
-    receipt = sign_policy(payload)
-
-    def decode(value):
-        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
-
-    from cryptography.hazmat.primitives.serialization import load_pem_public_key
-
+@pytest.mark.parametrize("legacy_key", [None, "retired-unused-market-key"])
+def test_market_sync_uses_online_identity_without_signing_key(service, monkeypatch, legacy_key):
+    if legacy_key is None:
+        monkeypatch.delenv("BISHENG_DSH_MARKET_SIGNING_KEY", raising=False)
+    else:
+        monkeypatch.setenv("BISHENG_DSH_MARKET_SIGNING_KEY", legacy_key)
+    plugin = published(service)
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
+    app.dependency_overrides[get_market_service] = lambda: service
+    with TestClient(app) as client:
+        response = client.get("/api/v1/dsh/market/capabilities")
+        assert response.headers["cache-control"] == "no-store"
+        capability = response.json()["data"]
+        assert capability["enabled"] is True and capability["contract_version"] == 2
+        assert capability["tenant_id"] == "2"
+        assert "public_key" not in capability and "lease_seconds" not in capability
+        result = client.post("/api/v1/dsh/market/sync", json={"device_id": "device-1", "plugins": []})
+        assert result.headers["cache-control"] == "no-store"
+        snapshot = result.json()["data"]
+        assert snapshot["tenant_id"] == "2" and snapshot["user_id"] == "20"
+        assert snapshot["device_id"] == "device-1" and isinstance(snapshot["synced_at"], int)
+        assert snapshot["policies"][0]["plugin_id"] == plugin["id"]
+        assert "signature" not in snapshot and "payload" not in snapshot
     app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
     with TestClient(app) as client:
-        capabilities = client.get("/api/v1/dsh/market/capabilities").json()["data"]
-        assert capabilities["enabled"] and capabilities["tenant_id"] == "2"
-        assert "PRIVATE" not in capabilities["public_key"]
-        advertised_key = load_pem_public_key(capabilities["public_key"].encode())
-        advertised_key.verify(decode(receipt["signature"]), decode(receipt["payload"]))
-        monkeypatch.delenv("BISHENG_DSH_MARKET_SIGNING_KEY")
-        capabilities = client.get("/api/v1/dsh/market/capabilities").json()["data"]
-        assert capabilities["enabled"] is False and capabilities["public_key"] is None
-    assert json.loads(decode(receipt["payload"])) == payload
+        denied = client.get("/api/v1/dsh/market/capabilities")
+        assert denied.status_code == 403
+        assert denied.json()["detail"]["code"] == "desktop_seat_required"
 
 
 def test_admin_scope_requires_role_and_active_tenant(monkeypatch):

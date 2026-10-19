@@ -24,6 +24,6 @@
 | client 构建 | 本次复用现场构建，源码/共享包/依赖锁与 b37d227db 一致 |
 | 登录用户完整上传删除流程、原生 Desktop UI、DM8、断外网设备 | NOT_RUN |
 
-后端在独立 Python 3.11 环境执行；跨仓库联调显式替换身份和对象存储。实际 3006 的迁移、MySQL/MinIO/签名和容器健康见 deployment.md。Desktop 运行代码与安装包保持原版本；企业 HTTPS/网关绑定按用户决定留待后续。
+后端在独立 Python 3.11 环境执行；跨仓库联调显式替换身份和对象存储。实际 3006 的迁移、MySQL/MinIO 和容器健康见 deployment.md。上表记录的是首版交付证据。后续契约改为在线席位与未签名发布快照，不再部署 `BISHENG_DSH_MARKET_SIGNING_KEY`。Desktop 运行代码与安装包保持原版本；企业 HTTPS/网关绑定按用户决定留待后续。
 
 复跑：仓库根 PYTHONPATH=src/backend python -m pytest --confcutdir=src/backend/test/dsh_market src/backend/test/dsh_market src/backend/test/database/test_alembic_single_head.py -q；前端 pnpm --filter bisheng exec vitest run src/test/dshMarket.test.tsx src/test/headerMenuChildAdmin.test.tsx；pnpm --filter bisheng lint、pnpm check-i18n、pnpm build:platform、pnpm typecheck。Desktop 运行 scripts/test-enterprise-market-integration.mjs 并传入 BISHENG 路径与 Python。

@@ -1,6 +1,6 @@
 {
   "title": "Enterprise plugin market",
-  "intro": "Administrators import plugins. Employees can install validated plugins from Client.",
+  "intro": "Administrators import plugins. Employees with an active seat can install and use validated plugins while connected to the enterprise service.",
   "import": "Import plugin",
   "name": "Plugin",
   "version": "Current version",
@@ -21,7 +21,7 @@
   "resume": "Resume validation",
   "uploadHint": "Complete offline ZIP, up to 512 MiB; extracted size up to 1 GiB. Higher versions can update an existing plugin.",
   "cancel": "Cancel",
-  "invalidFile": "Select a ZIP bundle up to 512 MiB",
+  "invalidFile": "Select a ZIP or npm tgz bundle up to 512 MiB",
   "validationFailed": "Bundle validation failed",
   "imported": "Import complete",
   "versions": "Version history",
@@ -31,14 +31,14 @@
   "services": "Network services",
   "forbidden": "Tenant administrator access is required",
   "delete": "Delete",
-  "deleteConfirm": "Delete {{name}}? New installations and updates will stop. Existing installations can continue running. You can import the plugin again later.",
+  "deleteConfirm": "Delete {{name}}? New installations and updates will stop. Installed plugins pause when the seat is revoked or the connection drops, and resume from the previous switch after reconnect if the seat is still valid. You can import the plugin again later.",
   "deleted": "Plugin deleted",
-  "bundleHelp": "Obtain a Client offline bundle from the plugin provider. Include manifest.json, platform files and dependencies. Use versions such as 1.2.3.",
+  "bundleHelp": "Import an offline bundle that contains manifest.json, or a ZIP / npm tgz that contains package.json. Use standard SemVer.",
   "previewing": "Validating bundle and reading versions…",
   "previewFailed": "Preview failed. Check ZIP format, size and connection, then select the file again.",
   "newPlugin": "New plugin",
   "lowerVersion": "Choose a higher version; older versions are unsupported.",
   "versionConflict": "This version already has different content. Use a new version number.",
   "duplicateVersion": "Already imported. The existing version will be reused.",
-  "versionReady": "Confirm import to make this version available to employees."
+  "versionReady": "After confirmation, employees with an active seat can install this version from Client."
 }

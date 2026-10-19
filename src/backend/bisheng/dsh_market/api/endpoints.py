@@ -1,18 +1,18 @@
-import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from bisheng.common.errcode.dsh_market import MarketBundleError, MarketConflictError, MarketNotFoundError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES, BundleError
-from bisheng.dsh_market.domain.lease import verification_key
 from bisheng.dsh_market.domain.repository import ConflictError
 from bisheng.dsh_market.infrastructure import get_market_service
 
-from .auth import MarketActor, market_actor, market_admin
+from .auth import MarketActor, market_admin, market_employee
 
 router = APIRouter(prefix="/dsh/market", tags=["DSH enterprise plugin market"])
 
@@ -46,19 +46,22 @@ class DeviceReport(BaseModel):
     plugins: list[InstalledPlugin] = Field(max_length=500)
 
 
+def no_store(body):
+    return JSONResponse(content=jsonable_encoder(body), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/capabilities")
-async def capabilities(actor: MarketActor = Depends(market_actor)):
-    enabled = bool(os.environ.get("BISHENG_DSH_MARKET_SIGNING_KEY"))
-    return resp_200(
-        {
-            "enabled": enabled,
-            "public_key": verification_key() if enabled else None,
-            "contract_version": 1,
-            "tenant_id": str(actor.tenant_id),
-            "max_upload_bytes": MAX_UPLOAD_BYTES,
-            "lease_seconds": 3600,
-            "sync_seconds": 60,
-        }
+async def capabilities(actor: MarketActor = Depends(market_employee)):
+    return no_store(
+        resp_200(
+            {
+                "enabled": True,
+                "contract_version": 2,
+                "tenant_id": str(actor.tenant_id),
+                "max_upload_bytes": MAX_UPLOAD_BYTES,
+                "sync_seconds": 60,
+            }
+        )
     )
 
 
@@ -67,31 +70,36 @@ async def catalog(
     q: str = Query(default="", max_length=200),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
-    actor: MarketActor = Depends(market_actor),
+    actor: MarketActor = Depends(market_employee),
     service=Depends(get_market_service),
 ):
-    return resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), page=page, size=size, employee=True))
+    return no_store(
+        resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), page=page, size=size, employee=True))
+    )
 
 
 @router.get("/plugins/{plugin_id}/versions/{version_id}/artifact")
 async def artifact(
-    plugin_id: str, version_id: str, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
+    plugin_id: str, version_id: str, actor: MarketActor = Depends(market_employee), service=Depends(get_market_service)
 ):
     data, digest = await call(service.download, actor.tenant_id, plugin_id, version_id)
+    gzip_archive = data.startswith(b"\x1f\x8b")
     return Response(
         data,
-        media_type="application/zip",
+        media_type="application/gzip" if gzip_archive else "application/zip",
         headers={
             "ETag": f'"{digest}"',
             "Cache-Control": "no-store",
-            "Content-Disposition": 'attachment; filename="plugin.zip"',
+            "Content-Disposition": 'attachment; filename="plugin.tgz"'
+            if gzip_archive
+            else 'attachment; filename="plugin.zip"',
             "X-Content-Type-Options": "nosniff",
         },
     )
 
 
 @router.post("/sync")
-async def sync(report: DeviceReport, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)):
+async def sync(report: DeviceReport, actor: MarketActor = Depends(market_employee), service=Depends(get_market_service)):
     receipt = await call(
         service.synchronize,
         actor.tenant_id,
@@ -99,7 +107,7 @@ async def sync(report: DeviceReport, actor: MarketActor = Depends(market_actor),
         report.device_id,
         [v.model_dump() for v in report.plugins],
     )
-    return resp_200(receipt)
+    return no_store(resp_200(receipt))
 
 
 @router.get("/admin/plugins")
