@@ -684,18 +684,16 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Skill entry: the skill-center preview replaces the legacy
-                                        skill picker; otherwise picking a skill enters task mode. */}
-                                    {skillCenterPreviewEnabled
-                                        ? <SkillMenuEntries onUpload={openSkillUpload} />
-                                        : showSkillPicker && <ChatSkillSelector menu
+                                    {/* Executable skills use the platform picker and task submission path. */}
+                                    {showSkillPicker ? <ChatSkillSelector menu
                                             selected={taskMode ? dailySkills : []} disabled={!!disabled}
                                             onChange={(next) => {
                                                 setDailySkills(next);
                                                 if (taskMode) return;
                                                 if (onToggleTaskMode) onToggleTaskMode();
                                                 else navigate('/linsight/new');
-                                            }} />}
+                                            }} />
+                                        : skillCenterPreviewEnabled && <SkillMenuEntries inline onUpload={openSkillUpload} />}
                                 </ChatResourceMenu>
                             )}</SkillUploadHost>}
 

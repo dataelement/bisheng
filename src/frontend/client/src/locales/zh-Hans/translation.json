@@ -2398,6 +2398,12 @@
     "scroll_to_bottom": "回到底部"
   },
   "dshChat": {
+    "uploadDescription": "添加本地文件到当前对话",
+    "knowledgeDescription": "选择参与上下文的知识空间",
+    "searchDescription": "检索互联网中的实时信息",
+    "taskDescription": "进入任务模式，执行多步任务",
+    "knowledgeColumn": "知识空间",
+    "modifiedColumn": "修改时间",
     "addContext": "添加上下文",
     "selectKnowledge": "选择知识空间",
     "searchKnowledge": "搜索知识空间",

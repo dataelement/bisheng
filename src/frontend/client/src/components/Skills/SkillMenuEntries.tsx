@@ -22,13 +22,24 @@ export function SkillUploadHost({ children }: SkillUploadHostProps) {
 interface SkillMenuEntriesProps {
   onUpload: () => void;
   onOpenMobile?: () => void;
+  inline?: boolean;
 }
 
-export function SkillMenuEntries({ onUpload, onOpenMobile }: SkillMenuEntriesProps) {
+export function SkillMenuEntries({ onUpload, onOpenMobile, inline }: SkillMenuEntriesProps) {
   const localize = useLocalize();
+  const [expanded, setExpanded] = useState(false);
   if (!skillCenterPreviewEnabled) return null;
   const icon = <Outlined.Skill size={16} className="text-text-2" />;
   const label = localize('com_skill_center_menu');
+  if (inline) return <>
+    <DropdownMenuItem aria-expanded={expanded} onSelect={(event) => {
+      event.preventDefault(); setExpanded((current) => !current);
+    }} className="gap-2">
+      {icon}<span>{label}</span>
+      <Outlined.Down size={14} className="ml-auto" style={{ transform: expanded ? 'rotate(180deg)' : undefined }} />
+    </DropdownMenuItem>
+    {expanded && <div className="dsh-command-skills"><SkillMenuPanel onUpload={onUpload} /></div>}
+  </>;
   if (onOpenMobile) return (
     <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onOpenMobile(); }} className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none">
       <div className="flex min-w-0 items-center gap-2">

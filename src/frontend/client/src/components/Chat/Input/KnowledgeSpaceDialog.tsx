@@ -47,7 +47,11 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
     >
       <SearchInput value={keyword} onChange={(event) => setKeyword(event.target.value)}
         placeholder={localize('dshChat.searchKnowledge')} aria-label={localize('dshChat.searchKnowledge')} />
-      <div className="mt-4 min-h-[200px] overflow-y-auto" aria-busy={isFetching}>
+      <div className="dsh-knowledge-columns">
+        <span>{localize('dshChat.knowledgeColumn')}</span>
+        <span>{localize('dshChat.modifiedColumn')}</span>
+      </div>
+      <div className="dsh-knowledge-list mt-4 min-h-[200px] overflow-y-auto" aria-busy={isFetching}>
         {isError ? (
           <div role="alert" className="flex flex-col items-center gap-3 py-10 text-text-3">
             <span>{localize('dshChat.knowledgeLoadError')}</span>
@@ -64,11 +68,15 @@ export function KnowledgeSpaceDialog({ value, onConfirm, onClose }: KnowledgeSpa
               const id = String(space.id);
               const checked = selectedIds.has(id);
               return (
-                <label key={id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-3 hover:bg-fill-2">
+                <label key={id} className="dsh-knowledge-row flex cursor-pointer items-center gap-3 rounded-lg px-2 py-3 hover:bg-fill-2" data-selected={checked}>
                   <Checkbox checked={checked} disabled={!checked && draft.length >= MAX_SPACES}
                     onCheckedChange={() => handleToggle(id, space.name)} aria-label={space.name} />
-                  <BookOpen size={18} aria-hidden className="shrink-0 text-text-3" />
-                  <span className="min-w-0 truncate text-body text-text-1" title={space.name}>{space.name}</span>
+                  <span className="dsh-knowledge-icon"><BookOpen size={18} aria-hidden /></span>
+                  <span className="min-w-0 flex-1 truncate text-body text-text-1" title={space.name}>{space.name}</span>
+                  <time className="dsh-knowledge-modified" dateTime={space.updatedAt}>
+                    {space.updatedAt && !Number.isNaN(Date.parse(space.updatedAt))
+                      ? new Date(space.updatedAt).toLocaleDateString() : '—'}
+                  </time>
                 </label>
               );
             })}

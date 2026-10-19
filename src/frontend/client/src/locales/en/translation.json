@@ -2469,6 +2469,12 @@
     "scroll_to_bottom": "Scroll to bottom"
   },
   "dshChat": {
+    "uploadDescription": "Add local files to this conversation",
+    "knowledgeDescription": "Choose knowledge spaces for context",
+    "searchDescription": "Search the web for current information",
+    "taskDescription": "Enter task mode for multi-step work",
+    "knowledgeColumn": "Knowledge space",
+    "modifiedColumn": "Modified",
     "addContext": "Add context",
     "selectKnowledge": "Select knowledge spaces",
     "searchKnowledge": "Search knowledge spaces",

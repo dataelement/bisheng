@@ -80,3 +80,31 @@ test('selected capabilities appear beside add and removing them updates menu che
   expect(screen.getByRole('menuitemcheckbox', { name: 'com_tools_web_search' })).toHaveAttribute('aria-checked', 'false');
   expect(screen.getByRole('menuitemcheckbox', { name: 'com_linsight_task_mode' })).toHaveAttribute('aria-checked', 'false');
 });
+
+test('panel follows composer width after resizing and positions above attached resources', async () => {
+  let width = 720;
+  const originalObserver = global.ResizeObserver;
+  global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  const bounds = jest.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    return (this.classList.contains('dsh-chat-composer')
+      ? { width, height: 180, top: 300, left: 100, bottom: 480, right: 100 + width }
+      : { width: 28, height: 28, top: 440, left: 112, bottom: 468, right: 140 }) as DOMRect;
+  });
+  const view = render(<RecoilRoot><div className="dsh-chat-composer"><ChatResourceMenu
+    value={[]} onChange={jest.fn()} showFileUpload /></div></RecoilRoot>);
+  try {
+    await openMenu();
+    expect(screen.getByRole('menu')).toHaveStyle({ width: '720px' });
+    width = 480;
+    fireEvent(window, new Event('resize'));
+    expect(screen.getByRole('menu')).toHaveStyle({ width: '480px' });
+  } finally { view.unmount(); bounds.mockRestore(); global.ResizeObserver = originalObserver; }
+});
+
+test('all selected platform tools can be removed from the composer', async () => {
+  const configured = [{ id: 3, name: 'Calculator', default_checked: true, children: [{ id: 4, tool_key: 'calculator' }] }];
+  render(<RecoilRoot><ChatResourceMenu value={[]} onChange={jest.fn()} availableTools={configured} showTools /></RecoilRoot>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Calculator' }));
+  await openMenu();
+  expect(screen.getByRole('menuitemcheckbox', { name: 'Calculator' })).toHaveAttribute('aria-checked', 'false');
+});

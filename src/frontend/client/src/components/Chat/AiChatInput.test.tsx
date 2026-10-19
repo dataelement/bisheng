@@ -23,7 +23,7 @@ jest.mock('~/components/ui', () => {
     TextareaAutosize: React.forwardRef(({ onHeightChange, ...props }, ref) => { void onHeightChange; return <textarea ref={ref} {...props} />; }),
   };
 });
-jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: () => <button>skills</button> }));
+jest.mock('./Input/ChatSkillSelector', () => ({ ChatSkillSelector: ({ onChange }) => <button onClick={() => onChange(mockSkills)}>skills</button> }));
 jest.mock('./Input/AgentToolSelector', () => () => <button>tools</button>);
 jest.mock('./Input/ChatFormTools', () => ({ ChatToolDown: () => <button>legacy tools</button> }));
 jest.mock('~/components/Linsight/Input/TaskModeToggle', () => ({ TaskModeToggle: () => <button>research</button> }));
@@ -114,4 +114,17 @@ test('media parsing keeps drafting available while blocking send until parsing c
   view.rerender(<AiChatInput {...input} isParsingMedia={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Draft while parsing', null);
+});
+
+
+test('selecting an enterprise skill preserves its selection and enters platform task mode', () => {
+  const toggle = jest.fn();
+  const input = props();
+  const view = render(<AiChatInput {...input} features={{ ...input.features, taskMode: false }} onToggleTaskMode={toggle} />);
+  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
+  expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
+  expect(toggle).toHaveBeenCalledTimes(1);
+  view.rerender(<AiChatInput {...input} onToggleTaskMode={toggle} />);
+  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
+  expect(toggle).toHaveBeenCalledTimes(1);
 });
