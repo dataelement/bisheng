@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔄 进行中 | 8 / 18 完成 |
+| 实现 | 🔄 进行中 | 10 / 18 完成 |
 
 ---
 
@@ -83,13 +83,13 @@
   **覆盖 AC**: AC-16, AC-19
   **依赖**: T006
 
-- [ ] **T009**: 日常模式接入测试
+- [x] **T009**: 日常模式接入测试
   **文件**: `src/backend/test/citation/test_web_fetch_daily_chat.py`
   **逻辑**: `DailyChatCitationToolWrapper` 包装 `web_fetch`，同步和异步调用都透传 `url`；异步短句柄模式下结果里是 `ref`（如 `S1`）而不是原始 key；`_build_tool_meta` 对 `web_fetch` 返回 `tool_type="web"`。
   **覆盖 AC**: AC-18, AC-19, AC-23
   **依赖**: T005
 
-- [ ] **T010**: 日常模式接入实现
+- [x] **T010**: 日常模式接入实现
   **文件**: `src/backend/bisheng/workstation/domain/services/chat_service.py`, `src/backend/bisheng/core/prompts/yaml/citation_handles.yaml`
   **逻辑**: 包装层识别、透传、分派同 T007；`_build_tool_meta` 把 `web_fetch` 归为 `web`；短句柄规则文字补「网页读取结果」（design 决策 9）。
   **测试**: T009 全部通过
