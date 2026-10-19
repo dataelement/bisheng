@@ -67,6 +67,10 @@
     "时间": {
       "name": "Time",
       "desc": "Get the current time"
+    },
+    "网页读取": {
+      "name": "Web Fetch",
+      "desc": "Read the body of a web page by URL, with a configurable reading engine. DeepSeek is supported."
     }
   },
   "tools": {
@@ -354,6 +358,13 @@
       "name": "Current Time",
       "desc": "Return the current time (defaults to UTC+8)",
       "params": {}
+    },
+    "web_fetch": {
+      "name": "Web Fetch",
+      "desc": "Read one web page and return its title and Markdown body.",
+      "params": {
+        "url": "Full address of the page to read, starting with http or https"
+      }
     }
   },
   "addMcpServer": "Add MCP Server",
