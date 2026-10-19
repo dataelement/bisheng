@@ -27,29 +27,29 @@ Desktop 的企业登录基于另外已有的网关登录工作；本次 API 接�
 
 | 方法/路径 | 身份 | 内容 |
 | --- | --- | --- |
-| GET /capabilities | 登录员工 | contract_version=1、配置状态、tenant_id、上限与周期 |
-| GET /catalog?q=&page=&size= | 登录员工 | 仅本租户当前发布版本，授权过滤后分页 |
-| GET /plugins/{id}/versions/{version_id}/artifact | 登录员工 | 复核发布状态和摘要，返回 ZIP；禁止共享缓存 |
-| POST /sync | 登录员工 | 设备运行状态报告，返回 Ed25519 签名策略 |
+| GET /capabilities | 持有桌面席位的员工 | contract_version=2、tenant_id、上限与同步周期；响应 `Cache-Control: no-store` |
+| GET /catalog?q=&page=&size= | 持有桌面席位的员工 | 仅本租户当前发布版本，授权过滤后分页 |
+| GET /plugins/{id}/versions/{version_id}/artifact | 持有桌面席位的员工 | 复核发布状态和摘要，返回制品；禁止共享缓存 |
+| POST /sync | 持有桌面席位的员工 | 设备运行状态报告，返回未签名发布快照；响应 `Cache-Control: no-store` |
 | GET /admin/context | 租户管理员 | 当前登录租户 |
 | GET /admin/plugins | 租户管理员 | 本登录租户列表及分页；旧搜索/状态参数保留协议兼容 |
 | GET /admin/plugins/{id} | 租户管理员 | 插件状态和全部版本；操作记录保留在后台 |
 | DELETE /admin/plugins/{id}?revision= | 租户管理员 | 删除本租户市场记录，保留历史及已有安装授权 |
 | POST /admin/plugins/{id}/transition | 租户管理员 | 旧 publish/unpublish/disable 协议保留兼容；当前页面使用导入和删除 |
-| POST /admin/imports | 租户管理员 | multipart file，单 ZIP；上传后校验，新版本校验成功即可安装；已有可用版本重复包保持现状，已删除记录重导入恢复 |
+| POST /admin/imports | 租户管理员 | multipart file，manifest ZIP 或含 package.json 的 ZIP / npm tgz；上传后校验，新版本校验成功即可安装；已有可用版本重复包保持现状，已删除记录重导入恢复 |
 | GET /admin/imports | 租户管理员 | 导入任务与失败原因 |
 | POST /admin/imports/{id}/resume | 租户管理员 | 恢复 validating 任务 |
 | GET /admin/devices | 租户管理员 | 兼容已有设备状态读取；首版管理页面使用插件与版本详情 |
 
 错误码 26101：发布包校验；26102：并发/版本状态冲突；26103：记录或可发布制品缺失；26104：管理权限。多语言错误码遵循 locales SSOT 生成。
 
-## 签名与离线运行
+## 在线席位与发布快照
 
-服务端环境变量 `BISHENG_DSH_MARKET_SIGNING_KEY` 载入 PKCS#8 PEM Ed25519 私钥，建议通过部署 secret 注入。Desktop 预置对应 SPKI PEM 公钥。私钥缺失时能力声明 enabled=false；错误密钥使签名失败。
+分发不使用独立签名密钥。`BISHENG_DSH_MARKET_SIGNING_KEY` 不再读取；能力声明不返回 `public_key` 或 `lease_seconds`。员工目录、制品和同步要求当前请求来自已通过席位校验的桌面访问；平台登录不能代为分发。
 
-`/sync` 返回 `{payload, signature}`，均为 base64url；签名覆盖原始 JSON 字节。payload 包含 tenant_id、user_id、device_id、issued_at、expires_at，以及各插件 disabled/revision/current_version_id/曾发布版本摘要。
+`/sync` 直接返回 `{tenant_id, user_id, device_id, synced_at, policies}`。`policies` 含各插件 disabled、revision、current_version_id 及曾发布版本摘要。`synced_at` 为服务端秒级时间。响应禁止缓存。
 
-Desktop 用部署公钥验证签名，绑定账号与设备，设置授权到期定时器。已有启用版本在有效缓存授权内可离线恢复；新增安装、更新与新增启用要求在线复核。新安装还需匹配当前发布版本，历史已发布资格只用于已有安装。
+席位撤销或会话到期后停止使用；短暂断网只停止进程并保留安装记录，恢复连接后按用户开关重新启用。服务端确认下架、禁用或摘要变化时关闭用户开关。制品仍按 SHA-256、路径和平台校验。新安装还需匹配当前发布版本，历史已发布资格只用于已有安装。
 
 部署代理应支持 256 MiB 文件加 multipart 开销，限制整体请求体、并发和临时上传空间。应用在读取文件时再次执行大小限制；框架可能先把 multipart 暂存到磁盘，因此反向代理限制仍需配置。
 
@@ -84,7 +84,7 @@ ZIP 根目录 `manifest.json`，平台文件位于 `bundles/{os}-{arch}/node_mod
 
 ## Constitution Check
 
-C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应用协议并校验目标租户；C5 登记 261；C6 私钥通过 secret 注入；C7 前端 API 统一封装；C8 共享数据持久化到数据库及 MinIO。租户模型已登记自动过滤，同时仓库保留显式租户参数与谓词，约束设备身份和管理视图的独立范围；批量写入遵循 backend/AGENTS.md 的显式租户要求。查询范围先确定再分页，管理变更使用 CAS。3006 的 MySQL/MinIO 与签名基础检查已通过；DM8、完整认证中间件及登录用户流程验收单独列为 NOT_RUN。
+C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应用协议并校验目标租户；C5 登记 261；C6 分发依赖已有桌面访问与席位，不另存市场签名私钥；C7 前端 API 统一封装；C8 共享数据持久化到数据库及 MinIO。租户模型已登记自动过滤，同时仓库保留显式租户参数与谓词，约束设备身份和管理视图的独立范围；批量写入遵循 backend/AGENTS.md 的显式租户要求。查询范围先确定再分页，管理变更使用 CAS。DM8、完整认证中间件及登录用户流程验收单独列为 NOT_RUN。
 
 
 ## 删除字段升级与分支

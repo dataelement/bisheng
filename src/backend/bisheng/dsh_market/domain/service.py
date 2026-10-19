@@ -2,7 +2,6 @@ import hashlib
 import time
 
 from .bundle import BundleError, validate_bundle
-from .lease import sign_policy
 from .repository import ConflictError
 
 
@@ -28,17 +27,13 @@ class MarketService:
 
     def synchronize(self, tenant, user, device, plugins):
         self.repository.report(tenant, user, device, plugins)
-        current = int(time.time())
-        return sign_policy(
-            {
-                "tenant_id": str(tenant),
-                "user_id": str(user),
-                "device_id": device,
-                "issued_at": current,
-                "expires_at": current + 3600,
-                "policies": self.repository.policies(tenant),
-            }
-        )
+        return {
+            "tenant_id": str(tenant),
+            "user_id": str(user),
+            "device_id": device,
+            "synced_at": int(time.time()),
+            "policies": self.repository.policies(tenant),
+        }
 
     def preview_bundle(self, tenant, data):
         manifest = validate_bundle(data)

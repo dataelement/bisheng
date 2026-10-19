@@ -90,11 +90,19 @@ class MarketRepository:
             if plugin
             else []
         )
-        highest = max(versions, key=lambda row: tuple(map(int, row.version.split("."))), default=None)
+        from functools import cmp_to_key
+
+        from .community_bundle import compare_semver
+
+        highest = max(
+            versions,
+            key=cmp_to_key(lambda left, right: compare_semver(left.version, right.version)),
+            default=None,
+        )
         current = next((row for row in versions if row.id == plugin.current_version_id), None) if plugin else None
         same = next((row for row in versions if row.version == meta["version"]), None)
         reason = ""
-        if highest and tuple(map(int, meta["version"].split("."))) < tuple(map(int, highest.version.split("."))):
+        if highest and compare_semver(meta["version"], highest.version) < 0:
             reason = "lower_version"
         elif same and same.digest != digest:
             reason = "version_conflict"
