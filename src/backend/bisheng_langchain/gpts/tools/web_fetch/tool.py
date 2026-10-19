@@ -115,8 +115,13 @@ class DeepSeekFetch(FetchTool):
             raise FetchError(f"请求读取引擎失败（{type(e).__name__}）") from e
         if response.status_code != 200:
             raise FetchError(self._error_message(response))
-        result = response.json()
-        return {"title": result.get("title") or "", "content": result.get("content") or ""}
+        try:
+            result = response.json()
+        except ValueError as e:
+            raise FetchError("读取引擎返回的内容不是 JSON") from e
+        if not isinstance(result, dict):
+            raise FetchError("读取引擎返回的内容格式不正确")
+        return {"title": str(result.get("title") or ""), "content": str(result.get("content") or "")}
 
     @staticmethod
     def _error_message(response) -> str:

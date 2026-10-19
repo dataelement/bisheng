@@ -143,6 +143,22 @@ def test_engine_error_is_returned_as_text():
     assert "failed to fetch URL" in output
 
 
+def test_non_json_success_body_is_returned_as_text():
+    response = MagicMock(status_code=200, text="<html>captive portal</html>")
+    response.json.side_effect = ValueError("not json")
+
+    with patch.object(web_fetch_tool.requests, "post", return_value=response):
+        output = _build().invoke({"url": "https://example.com/a"})
+
+    assert output.startswith("网页读取失败")
+
+
+def test_non_object_json_body_is_returned_as_text():
+    output, _ = _fetch(_build(), "https://example.com/a", ["unexpected"])
+
+    assert output.startswith("网页读取失败")
+
+
 def test_timeout_is_returned_as_text():
     tool = _build()
 

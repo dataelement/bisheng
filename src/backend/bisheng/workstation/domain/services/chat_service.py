@@ -680,7 +680,7 @@ def _build_tool_meta(tool: BaseTool) -> dict:
 
     Localisation lives on the frontend (`BUILTIN_TOOL_I18N` in
     `ToolCallDisplay.tsx`), so we just forward the raw tool.name here —
-    the client maps known keys (search_knowledge_bases, web_search) to
+    the client maps known keys (search_knowledge_bases, web_search, web_fetch) to
     translated labels and falls back to tool.name for everything else.
     """
     name = tool.name or ""
@@ -1275,7 +1275,7 @@ async def _prepare_tools(
             failures.append(
                 {
                     "tool_key": tool_key or str(tool_id or ""),
-                    "tool_type": "web" if tool_key == "web_search" else "tool",
+                    "tool_type": "web" if tool_key in _WEB_SEARCH_TOOL_NAMES else "tool",
                     # display_name is resolved on the frontend via i18n — just
                     # advertise the raw tool_key so the client can map it.
                     "display_name": tool_key or "",

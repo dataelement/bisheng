@@ -55,7 +55,7 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
     const verb = TOOL_VERB_I18N[key];
     if (step.running) {
         // Mirror ToolCallDisplay inflight phrasing; verb maps are past-tense, so
-        // running steps use the generic "正在调用 X" form against the raw name.
+        // running steps use the generic "Calling X" form against the raw name.
         return localize('com_tools_state_tool_running', { name: step.name || localize('com_tools_generic_fallback') });
     }
     if (verb) return localize(verb);

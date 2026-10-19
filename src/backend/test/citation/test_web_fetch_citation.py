@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from bisheng.citation.domain.schemas.citation_schema import CitationType
 from bisheng.citation.domain.services.citation_handle_service import (
+    attach_web_url_markers,
     drop_web_citation_keys,
     item_identity,
     rewrite_web_results_with_handles,
@@ -103,6 +104,19 @@ def test_fetch_and_search_of_the_same_url_stay_separate_sources():
     assert search_items[0].citationId != fetch_items[0].citationId
     # Short handles are allocated by identity; the two must not share one handle.
     assert item_identity(search_items[0]) != item_identity(fetch_items[0])
+
+
+def test_url_searched_and_fetched_gets_one_marker_for_the_fetched_page():
+    url = "https://example.com/report-source"
+    entries = [
+        {"type": "web", "key": "websearch_aaaa0001:1", "url": url, "urls": [url]},
+        {"type": "web", "key": "websearch_bbbb0002:page", "url": url, "urls": [url]},
+    ]
+
+    marked = attach_web_url_markers(f"See {url} for details.", entries)
+
+    assert marked.count("\ue200") == 1
+    assert "websearch_bbbb0002:page" in marked
 
 
 def test_handle_rewrite_accepts_a_single_page():

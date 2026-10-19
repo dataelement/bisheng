@@ -307,7 +307,8 @@ def drop_chunk_ids(chunk: str) -> str:
 def rewrite_web_results_with_handles(annotated: Any, handles: dict[str, str], entries: list[dict] | None = None) -> Any:
     """Show the model ``"ref": "S7"`` instead of the registry key on web results.
 
-    ``annotated`` is the JSON string a web-search tool returns. Results without
+    ``annotated`` is the JSON string a web tool returns: a result list from
+    web_search or one page object from web_fetch. Results without
     a handle keep their shape. ``entries`` (the task-mode scope mirror) records
     the URL the model saw, for the task mode's URL-marker pass.
     """
@@ -478,7 +479,9 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
 
     Only URLs registered for this run are marked, and only the first
     occurrence of each source. A source whose marker is already in the text
-    is left alone. Code spans are not rewritten.
+    is left alone. One URL gets one marker even when it was both searched and
+    fetched (F085); the fetched page wins, since its full text backs the report.
+    Code spans are not rewritten.
     """
     if not text or not entries:
         return text or ""
@@ -498,8 +501,9 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
             candidates.append((url, key))
     if not candidates:
         return text
-    candidates.sort(key=lambda item: len(item[0]), reverse=True)
+    candidates.sort(key=lambda item: (-len(item[0]), not item[1].endswith(":page")))
     used: set[str] = set()
+    marked_urls: set[str] = set()
     out: list[str] = []
     for is_code, segment in _split_code(text):
         if is_code:
@@ -510,6 +514,8 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
                 if key in segment:
                     used.add(key)
                 continue
+            if url in marked_urls:
+                continue
             idx = _find_bounded_url(segment, url)
             if idx < 0:
                 continue
@@ -518,6 +524,7 @@ def attach_web_url_markers(text: str, entries: list[dict] | None) -> str:
                 end += 1
             segment = segment[:end] + _CITATION_START + key + _CITATION_END + segment[end:]
             used.add(key)
+            marked_urls.add(url)
         out.append(segment)
     return "".join(out)
 
