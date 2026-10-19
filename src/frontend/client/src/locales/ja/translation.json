@@ -2345,6 +2345,12 @@
   "com_voice": {
     "playback_unavailable": "音声を再生できません。管理者にお問い合わせください。"
   },
+  "com_citation": {
+    "close_preview": "ドキュメントプレビューを閉じる",
+    "document_preview": "ドキュメントプレビュー",
+    "no_preview_url": "プレビュー可能なドキュメントがありません",
+    "preview_loading": "ドキュメントプレビューを読み込み中..."
+  },
   "com_ai_access": {
     "action_failed": "操作に失敗しました。もう一度お試しください。",
     "address_mismatch_admin": "スキルパックに書き込まれるプラットフォームのアドレス（{{packOrigin}}）が、現在アクセスしているアドレス（{{browserOrigin}}）と一致しません。ここでコピーした設定コマンドを実行する従業員には影響ありません。パック内のアドレスも正しくするには、バックエンドで open_api.public_base_url を設定するか、リバースプロキシで X-Forwarded-Proto と X-Forwarded-Host を転送してください。",

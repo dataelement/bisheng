@@ -135,6 +135,40 @@ def _write_store(module, profiles: dict) -> Path:
     return path
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--query", "q", "--knowledge-base-id", "7"),
+        ("--list-knowledge-bases", "space"),
+    ],
+)
+def test_script_allows_sixty_second_network_wait_without_retry(script, monkeypatch, args):
+    timeouts = []
+
+    def respond(request, timeout):
+        timeouts.append(timeout)
+        return _Response(OK_LIST_BODY)
+
+    monkeypatch.setattr(script, "urlopen", respond)
+    monkeypatch.setenv("KNOWLEDGE_API_KEY", KEY)
+
+    assert _run(script, monkeypatch, "--base-url", "https://kb.test", *args) == 0
+    assert timeouts == [60]
+
+
+def test_key_verification_allows_sixty_second_network_wait(script, monkeypatch):
+    timeouts = []
+
+    def respond(request, timeout):
+        timeouts.append(timeout)
+        return _Response(OK_LIST_BODY)
+
+    monkeypatch.setattr(script, "urlopen", respond)
+
+    assert script._verify_key("https://kb.test", KEY)[0] == "ok"
+    assert timeouts == [60]
+
+
 def test_script_surfaces_business_error_bodies(script, monkeypatch, capsys):
     def deny(request, timeout=30):
         raise _http_error(

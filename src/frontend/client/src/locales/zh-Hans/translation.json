@@ -2351,6 +2351,12 @@
   "com_voice": {
     "playback_unavailable": "播放功能不可用，请联系管理员"
   },
+  "com_citation": {
+    "close_preview": "关闭文档预览",
+    "document_preview": "文档预览",
+    "no_preview_url": "暂无可预览文件地址",
+    "preview_loading": "正在加载文件预览..."
+  },
   "com_ai_access": {
     "action_failed": "操作未完成，请重试。",
     "address_mismatch_admin": "技能包里写入的平台地址（{{packOrigin}}）与你当前访问的地址（{{browserOrigin}}）不一致。员工运行这里复制的配置命令不受影响；如需包内地址也正确，请在后端配置 open_api.public_base_url，或让反向代理转发 X-Forwarded-Proto 和 X-Forwarded-Host。",

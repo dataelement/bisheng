@@ -12,6 +12,8 @@ type ErrorOptions = {
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
   skip403Redirect?: boolean;
+  /** Best-effort requests may fail without covering the entire workbench. */
+  skipServiceMaintenance?: boolean;
 };
 
 const customAxios = axios.create({
@@ -170,6 +172,9 @@ customAxios.interceptors.response.use(
     // HTTP-500 branch below and raise the global maintenance overlay here too.
     // Return early — the overlay covers the screen, no toast needed underneath.
     if (response.data?.status_code === 500) {
+      if ((response.config as ErrorOptions).skipServiceMaintenance) {
+        return Promise.reject(new Error(response.data.status_message || 'Service exception'));
+      }
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
       return response;
     }
@@ -217,7 +222,7 @@ customAxios.interceptors.response.use(
 
     // Gateway/backend service exception → surface the global maintenance overlay.
     // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
-    if (error.response.status === 500) {
+    if (error.response.status === 500 && !originalRequest?.skipServiceMaintenance) {
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
     }
 

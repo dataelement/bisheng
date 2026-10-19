@@ -109,6 +109,7 @@ export type TBackupCode = {
 
 export type TUser = {
   id: string;
+  external_id?: string | null;
   username: string;
   email: string;
   name: string;
