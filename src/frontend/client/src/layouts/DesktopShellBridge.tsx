@@ -6,11 +6,13 @@ import { useDesktopAppearance } from '~/components/Chat/useDesktopAppearance';
 import { useWorkbenchNavLinks } from './useWorkbenchNavLinks';
 import { splitSidebarEntries, useSidebarEntries } from './WorkbenchSidebar/useSidebarEntries';
 import { useSidebarPrefs } from './WorkbenchSidebar/sidebarPrefs';
+import { useDesktopLocale } from './useDesktopLocale';
 
 /** The web app owns grants, labels and ordering; the host owns desktop navigation chrome. */
 export function DesktopShellBridge() {
   useDesktopNavigation();
   useDesktopAppearance();
+  useDesktopLocale();
   const { pathname, search } = useLocation();
   const entries = useSidebarEntries();
   const { links } = useWorkbenchNavLinks();

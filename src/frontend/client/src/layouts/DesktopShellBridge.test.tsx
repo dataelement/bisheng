@@ -6,6 +6,7 @@ jest.mock('react-router-dom', () => ({ useLocation: () => ({ pathname: '/knowled
 jest.mock('~/components/Chat/desktopEmbedding', () => ({ isDesktopEmbedded: () => true }));
 jest.mock('~/components/Chat/useDesktopNavigation', () => ({ useDesktopNavigation: () => {} }));
 jest.mock('~/components/Chat/useDesktopAppearance', () => ({ useDesktopAppearance: () => {} }));
+jest.mock('./useDesktopLocale', () => ({ useDesktopLocale: () => {} }));
 jest.mock('./useWorkbenchNavLinks', () => ({ useWorkbenchNavLinks: () => ({ links: [{ section: 'home', label: 'Welcome' }] }) }));
 jest.mock('./WorkbenchSidebar/sidebarPrefs', () => ({ useSidebarPrefs: () => ({}) }));
 jest.mock('./WorkbenchSidebar/useSidebarEntries', () => ({
