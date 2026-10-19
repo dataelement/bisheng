@@ -1,6 +1,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { isNativeDesktop, readDesktopLocale, rememberDesktopLocale } from './desktopLocale';
 
 // Import your JSON translations
 import translationEn from './en/translation.json';
@@ -25,11 +26,13 @@ export const resources = {
 } as const;
 
 const config = window.BRAND_CONFIG || {};
+const desktopLocale = readDesktopLocale();
+if (desktopLocale) rememberDesktopLocale(desktopLocale === 'zh-Hans' ? 'zh' : 'en');
 
 // APP_CONFIG.disableJa (config.js): drop any saved Japanese choice so
 // LanguageDetector below doesn't auto-restore it on this load.
 const jaDisabled = !!(window.APP_CONFIG && window.APP_CONFIG.disableJa);
-if (jaDisabled) {
+if (jaDisabled && !isNativeDesktop()) {
   try {
     const saved = localStorage.getItem('i18nextLng');
     if (saved && saved.toLowerCase().startsWith('ja')) {
@@ -42,6 +45,9 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    lng: desktopLocale,
+    // The host's temporary choice must never become the standalone website's preference.
+    ...(isNativeDesktop() ? { detection: { caches: [] } } : {}),
     fallbackLng: {
       'zh-TW': ['zh-Hant', 'en'],
       'zh-HK': ['zh-Hant', 'en'],
