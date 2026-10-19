@@ -62,6 +62,7 @@ DSH_CREDENTIAL_ROUTES = frozenset(
         ("GET", "/api/v1/dsh/market/catalog"),
         ("POST", "/api/v1/dsh/market/sync"),
         ("POST", "/api/v1/dsh/chat/completions"),
+        ("POST", "/api/v1/dsh/web-session"),
         ("POST", "/api/v1/internal/dsh/identity/redeem"),
         ("POST", "/api/v1/internal/dsh/identity/check"),
     }
@@ -316,6 +317,18 @@ async def _apply_token_version_and_visible(
     if subject is None:
         return None  # Undecodable tokens fall through to existing logic.
 
+    desktop_session = "dsh_web_session" in subject
+    if desktop_session:
+        from bisheng.common.errcode.base import BaseErrorCode
+        from bisheng.dsh.domain.services.web_session import validate_web_session
+
+        try:
+            await validate_web_session(request, subject)
+        except BaseErrorCode:
+            return JSONResponse(
+                status_code=401,
+                content={"status_code": 19103, "status_message": "Enterprise session expired", "data": None},
+            )
     user_id = subject.get("user_id")
     payload_tv = int(subject.get("token_version", 0) or 0)
     if user_id and not await _validate_token_version(user_id, payload_tv):
@@ -327,7 +340,7 @@ async def _apply_token_version_and_visible(
                 "data": None,
             },
         )
-    if user_id and not await _validate_current_session_token(user_id, token):
+    if user_id and not desktop_session and not await _validate_current_session_token(user_id, token):
         from bisheng.common.errcode.user import UserLoginOfflineError
 
         return JSONResponse(

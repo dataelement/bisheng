@@ -1,3 +1,10 @@
+## 2026-10-19 — Desktop Chat session exchange restored
+
+- Shared baseline: `feat/bisheng-work-120@562ee4e6a`. The full-stack migration omitted the prior desktop session exchange route and its HTTP/WebSocket validators, causing desktop Chat to receive 404 while browser login remained available.
+- Restored `POST /api/v1/dsh/web-session`: authenticate the desktop access grant, issue a browser JWT for at most 300 seconds, and retain the original credential only in server-side Redis. Browser requests and WebSocket connection authorization recheck the desktop identity, tenant, seat and grant. Ordinary browser session policy remains separate; HTTP token-version checks remain active for both.
+- Automated verification: 50 tests passed in an isolated container using the deployed backend dependencies, covering exchange, expiration, revoked grants, tenant changes, credential routing and HTTP/WebSocket integration. Changed-file Ruff checks and architecture guard passed; the existing auth.py lint findings match the baseline.
+- Deployment and real desktop acceptance are recorded separately in the deployment evidence. No schema or dependency change is required.
+
 # 2026-10-16 Chat 交付到 feat/bisheng-work-120
 
 - 当前协作仓库：`dataelement/bisheng`，共享分支：`feat/bisheng-work-120`。已确认当前账号具有 push 权限，按用户要求直接提交到该分支。
