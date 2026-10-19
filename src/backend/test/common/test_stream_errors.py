@@ -30,13 +30,57 @@ def test_model_error_uses_safe_title_and_never_exposes_raw_exception():
     payload = stream_error_payload(error, stage="model")
 
     assert info.kind == "model"
-    assert info.title == "模型调用失败"
-    assert info.retryable is True
-    assert payload["title"] == "模型调用失败"
-    assert payload["reason"] == "模型服务暂时不可用，请稍后重试。"
+    assert info.title == "模型请求被拒绝"
+    assert info.retryable is False
+    assert payload["title"] == "模型请求被拒绝"
+    assert payload["reason"] == "这次模型请求被拒绝，暂时无法判断具体原因。"
+    assert len(payload["reason"]) <= 160
     assert "secret" not in str(payload)
     assert "internal.example" not in str(payload)
     assert "exception" not in payload.get("data", {})
+
+
+@pytest.mark.parametrize(
+    ("message", "title", "retryable"),
+    [
+        (
+            "Error code: 400 - Range of input length should be [1, 30720]",
+            "内容超出模型长度",
+            False,
+        ),
+        (
+            "Error code: 404 - {'error': {'message': 'Model not exist.', 'code': 'model_not_found'}}",
+            "当前模型不可用",
+            False,
+        ),
+        (
+            "Error code: 403 - {'error': {'message': 'Access denied.', 'code': 'access_denied'}}",
+            "模型没有调用权限",
+            False,
+        ),
+    ],
+)
+def test_provider_model_rejections_use_specific_copy(message, title, retryable):
+    info = classify_stream_error(RuntimeError(message), stage="model")
+
+    assert info.title == title
+    assert info.retryable is retryable
+    assert info.kind == "model"
+    assert len(info.reason) <= 160
+    assert "token" not in info.reason.lower()
+
+
+def test_unknown_model_rejection_appends_safe_trace_id():
+    from bisheng.core.logger import trace_id_var
+
+    token = trace_id_var.set("trace-1")
+    try:
+        payload = stream_error_payload(RuntimeError("upstream rejected"), stage="model")
+    finally:
+        trace_id_var.reset(token)
+
+    assert payload["reason"] == "这次模型请求被拒绝，暂时无法判断具体原因。追踪号：trace-1。"
+    assert payload["retryable"] is False
 
 
 @pytest.mark.parametrize(
@@ -44,8 +88,9 @@ def test_model_error_uses_safe_title_and_never_exposes_raw_exception():
     [
         (TimeoutError("timed out"), "model", "network", "网络连接失败", True),
         (ProviderRateLimitError("rate limit"), "model", "rate_limit", "请求过于频繁", True),
-        (ProviderAuthenticationError("api_key=secret"), "model", "auth", "认证或权限失败", False),
-        (ProviderRequestError("bad request"), "model", "model", "模型调用失败", False),
+        (ProviderAuthenticationError("api_key=secret"), "model", "model", "模型没有调用权限", False),
+        (ProviderAuthenticationError("api_key=secret"), "system", "auth", "认证或权限失败", False),
+        (ProviderRequestError("bad request"), "model", "model", "模型请求被拒绝", False),
         (RuntimeError("vector unavailable"), "retrieval", "retrieval", "知识检索失败", False),
         (RuntimeError("not ready"), "document", "document", "文档暂不可用", False),
         (RuntimeError("missing model"), "config", "config", "问答配置异常", False),

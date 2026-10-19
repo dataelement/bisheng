@@ -175,6 +175,15 @@ class PortalCourse(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(DateTime, nullable=True),
     )
+    duration_seconds: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="课程时长秒数",
+        ),
+    )
     name: str = Field(sa_column=Column(String(200), nullable=False))
     instructor: str = Field(
         default="",

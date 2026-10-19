@@ -187,6 +187,7 @@ class PortalCourseCatalogRepository:
         tenant_id: int,
         catalog_ids: list[str],
         enabled_only: bool = False,
+        course_type: str | None = None,
     ) -> dict[str, int]:
         if not catalog_ids:
             return {}
@@ -200,6 +201,8 @@ class PortalCourseCatalogRepository:
         )
         if enabled_only:
             statement = statement.where(PortalCourse.enabled.is_(True))
+        if course_type:
+            statement = statement.where(PortalCourse.course_type == course_type)
         for course in (await self.session.exec(statement)).all():
             if course.catalog_id:
                 key = str(course.catalog_id).strip()

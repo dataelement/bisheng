@@ -19,6 +19,9 @@ from bisheng.shougang_portal_course.domain.schemas.portal_course_schema import (
 from bisheng.shougang_portal_course.domain.services.catalog_service import (
     PortalCourseCatalogService,
 )
+from bisheng.shougang_portal_course.domain.services.course_import_service import (
+    PortalCourseImportService,
+)
 
 router = APIRouter(
     prefix="/shougang-portal/course-admin",
@@ -84,8 +87,16 @@ async def _read_excel_upload(file: UploadFile) -> bytes:
 async def download_catalog_template(
     admin_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
-    async with get_async_db_session() as session:
-        data = PortalCourseCatalogService(session).build_template()
+    """下载与第三方课程相同的在线课堂空表.
+
+    Args:
+        admin_user: 当前后台管理员.
+
+    Returns:
+        只含表头的 xlsx.
+    """
+    del admin_user
+    data = PortalCourseImportService.build_template()
     return StreamingResponse(
         BytesIO(data),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -103,9 +114,18 @@ async def preview_catalog_import(
     file: UploadFile = File(...),
     admin_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
+    """预检在线课堂表. 与第三方课程导入使用同一份解析.
+
+    Args:
+        file: 在线课堂导出的 xlsx.
+        admin_user: 当前后台管理员.
+
+    Returns:
+        可导入课程数, 将确保的目录数, 以及失败行.
+    """
     content = await _read_excel_upload(file)
     async with get_async_db_session() as session:
-        result = await PortalCourseCatalogService(session).preview_excel(
+        result = await PortalCourseImportService(session).preview_excel(
             tenant_id=_tenant_id(admin_user),
             content=content,
         )
@@ -118,10 +138,20 @@ async def import_catalogs(
     force: bool = Query(default=False),
     admin_user: UserPayload = Depends(UserPayload.get_admin_user),
 ):
+    """按在线课堂表同时保存目录和第三方课程.
+
+    Args:
+        file: 在线课堂导出的 xlsx.
+        force: 兼容旧前端. 无效行会跳过, 不再把缺目录的课程改到未分类.
+        admin_user: 当前后台管理员.
+
+    Returns:
+        成功课程行数, 失败行, 以及成功行确保的目录节点数.
+    """
     content = await _read_excel_upload(file)
     async with get_async_db_session() as session:
         async with session.begin():
-            result = await PortalCourseCatalogService(session).import_excel(
+            result = await PortalCourseImportService(session).import_excel(
                 tenant_id=_tenant_id(admin_user),
                 user_id=admin_user.user_id,
                 content=content,

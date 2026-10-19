@@ -28,6 +28,7 @@ class PortalCourseRepository:
         home_only: bool = False,
         catalog_ids: list[str] | None = None,
         keyword: str | None = None,
+        course_type: str | None = None,
     ) -> list[PortalCourse]:
         statement = select(PortalCourse).where(PortalCourse.tenant_id == tenant_id)
         if public_only:
@@ -36,6 +37,9 @@ class PortalCourseRepository:
                 statement = statement.where(PortalCourse.show_on_home.is_(True))
         if catalog_ids is not None:
             statement = statement.where(PortalCourse.catalog_id.in_(catalog_ids))
+        # 前台按本地或第三方查询时只看对应课程, 不传则两类都返回.
+        if course_type:
+            statement = statement.where(PortalCourse.course_type == course_type)
         needle = (keyword or "").strip()
         if needle:
             statement = statement.where(
@@ -88,6 +92,37 @@ class PortalCourseRepository:
         if for_update:
             statement = statement.with_for_update()
         return (await self.session.exec(statement)).first()
+
+    async def list_by_external_ids(
+        self,
+        *,
+        tenant_id: int,
+        external_ids: list[str],
+    ) -> list[PortalCourse]:
+        """按平台课程编号一次查出已有课程.
+
+        导入用这次结果区分新增和更新, 不再按编号逐行加锁.
+
+        Args:
+            tenant_id: 当前租户.
+            external_ids: 本次要导入的平台课程编号.
+
+        Returns:
+            已存在的课程. 编号为空或没有匹配时返回空列表.
+        """
+        unique = list(dict.fromkeys(item.strip() for item in external_ids if item and item.strip()))
+        if not unique:
+            return []
+        # 单次 IN 不超过 500, 避免达梦参数过多. 导入上限 2000 行, 最多 4 次查询.
+        found: list[PortalCourse] = []
+        for start in range(0, len(unique), 500):
+            chunk = unique[start:start + 500]
+            statement = select(PortalCourse).where(
+                PortalCourse.tenant_id == tenant_id,
+                PortalCourse.external_id.in_(chunk),
+            )
+            found.extend((await self.session.exec(statement)).all())
+        return found
 
     async def list_videos(
         self,
