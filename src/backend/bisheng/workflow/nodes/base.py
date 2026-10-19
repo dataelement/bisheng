@@ -57,6 +57,10 @@ class BaseNode(ABC):
         # single-node test. Other nodes ignore both.
         self.chat_id: str | None = kwargs.get("chat_id") or None
         self.tmp_session_id: str | None = kwargs.get("tmp_session_id") or None
+        # F086: 0 for a top-level run, 1 inside a subflow node; and the id of the
+        # start node of the same engine.
+        self.subflow_depth: int = kwargs.get("subflow_depth") or 0
+        self.start_node_id: str | None = kwargs.get("start_node_id")
 
         # Data of all nodes
         self.node_data = node_data
@@ -126,6 +130,10 @@ class BaseNode(ABC):
         ]
         """
         return []
+
+    def parse_failed_log(self, unique_id: str) -> Any:
+        """Log data sent with the node end event when ``_run`` raised; the default is none."""
+        return None
 
     def get_other_node_variable(self, variable_key: str) -> Any:
         """Get the variable values of other nodes from the global variable"""
@@ -236,6 +244,7 @@ class BaseNode(ABC):
             self.current_step += 1
         except Exception as e:
             reason = str(e)
+            log_data = self.parse_failed_log(exec_id)
             raise e
         finally:
             # The end log of the output node is created byfakeNode Output, Because it is necessary to wait for the user to complete the input before the log can be displayed correctly

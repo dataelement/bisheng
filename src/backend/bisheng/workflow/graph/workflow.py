@@ -21,6 +21,7 @@ class Workflow:
         flow_user_id: int = None,
         chat_id: str | None = None,
         tmp_session_id: str | None = None,
+        subflow_depth: int = 0,
     ):
 
         # Unique identifier of the run, unique saved to the databaseID
@@ -53,6 +54,7 @@ class Workflow:
             flow_user_id=flow_user_id,
             chat_id=chat_id,
             tmp_session_id=tmp_session_id,
+            subflow_depth=subflow_depth,
         )
 
     def save_user_input_history(self, input_data: dict | None):

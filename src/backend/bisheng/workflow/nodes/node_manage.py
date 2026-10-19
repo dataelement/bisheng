@@ -11,6 +11,7 @@ from bisheng.workflow.nodes.qa_retriever.qa_retriever import QARetrieverNode
 from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
 from bisheng.workflow.nodes.start.start import StartNode
+from bisheng.workflow.nodes.subflow.subflow import SubflowNode
 from bisheng.workflow.nodes.tool.tool import ToolNode
 
 NODE_CLASS_MAP = {
@@ -27,17 +28,18 @@ NODE_CLASS_MAP = {
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
     NodeType.KNOWLEDGE_RETRIEVER.value: KnowledgeRetriever,
+    NodeType.SUBFLOW.value: SubflowNode,
 }
 
 
 class NodeFactory:
     @classmethod
-    def get_node_class(cls, node_type: str) -> 'BaseNode':
+    def get_node_class(cls, node_type: str) -> "BaseNode":
         return NODE_CLASS_MAP.get(node_type)
 
     @classmethod
-    def instance_node(cls, node_type: str, **kwargs) -> 'BaseNode':
+    def instance_node(cls, node_type: str, **kwargs) -> "BaseNode":
         node_class = cls.get_node_class(node_type)
         if node_class is None:
-            raise Exception(f'Unknown node type:{node_type}')
+            raise Exception(f"Unknown node type:{node_type}")
         return node_class(**kwargs)

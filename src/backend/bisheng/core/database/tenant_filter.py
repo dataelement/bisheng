@@ -109,6 +109,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.dsh.domain.models.model_call",
     "bisheng.dsh.domain.models.subject_policy",
     "bisheng.dsh.domain.models.subject_grant",
+    "bisheng.workflow.domain.models.subflow_ref",
 )
 
 

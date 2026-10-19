@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔲 未开始 | 0 / 35 完成 |
+| 实现 | 🔄 进行中 | 18 / 35 完成（Wave 0–2） |
 
 ---
 
@@ -31,66 +31,66 @@
 
 ## Wave 0：基础设施（无测试配对）
 
-- [ ] **T01**：错误码
+- [x] **T01**：错误码
   **文件**: `B/common/errcode/flow.py`、`features/v3.0.0/release-contract.md`
   **逻辑**: 新增 10560–10565 六个错误码类，消息参数见 design §6.3。release-contract 中：「已分配模块编码」登记六个码；表 1 登记领域对象「子工作流引用关系」；表 2 新增不变量「【结束】节点返回结果开关关闭时，工作流行为与改动前一致」。动手前按 constitution C5 的命令重新扫描占用。
   **依赖**: 无
 
-- [ ] **T02**：错误码文案三语
+- [x] **T02**：错误码文案三语
   **文件**: `F/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`
   **逻辑**: 为 10560–10565 写三语文案，参数名与 design §6.3 的 `data` 字段一致；运行生成脚本，不手改生成产物。
   **验证**: `pnpm check-i18n` 通过。
   **依赖**: T01
 
-- [ ] **T03**：引用表模型与租户登记
+- [x] **T03**：引用表模型与租户登记
   **文件**: `B/workflow/domain/models/__init__.py`、`B/workflow/domain/models/subflow_ref.py`、`B/core/database/tenant_filter.py`
   **逻辑**: SQLModel `table=True`，列见 design §4.2，带 `tenant_id`，只用通用列类型（C2）；新表由 `create_all` 建，不写 alembic 迁移。回滚：新表独立，旧代码不读它，回滚代码后留存的空表无影响，必要时手工 `DROP`。把模块路径 `bisheng.workflow.domain.models.subflow_ref` 登记进 `_TENANT_AWARE_MODEL_MODULES`（design 坑 9）。
   **验证**: `T/workflow/test_subflow_ref_model.py` 断言新表在租户过滤的表集合中。
   **依赖**: 无
 
-- [ ] **T04**：引用表 Repository
+- [x] **T04**：引用表 Repository
   **文件**: `B/workflow/domain/repositories/interfaces/subflow_ref_repository.py`、`B/workflow/domain/repositories/implementations/subflow_ref_repository_impl.py`（含两级 `__init__.py`）
-  **逻辑**: 异步方法：`replace_for_parent(parent_flow_id, child_flow_ids)`、`delete_for_parent(parent_flow_id)`、`list_referrers(child_flow_id) -> list[(parent_flow_id, parent_name)]`。结构参照 `B/knowledge/domain/repositories/`。不读 `Flow` 表——`Flow` 的读取沿用现有 `FlowDao`（design §4.3）。
+  **逻辑**: 异步方法：`replace_for_parent(parent_flow_id, child_flow_ids)`、`delete_for_parent(parent_flow_id)`、`list_referrer_ids(child_flow_id) -> list[parent_flow_id]`（见偏差记录）。结构参照 `B/knowledge/domain/repositories/`。不读 `Flow` 表——`Flow` 的读取沿用现有 `FlowDao`（design §4.3）。
   **依赖**: T03
 
-- [ ] **T05**：节点类型注册与空骨架
+- [x] **T05**：节点类型注册与空骨架
   **文件**: `B/workflow/common/node.py`、`B/workflow/nodes/node_manage.py`、`B/workflow/nodes/subflow/__init__.py`、`B/workflow/nodes/subflow/subflow.py`
   **逻辑**: `NodeType.SUBFLOW = "subflow"`；新建 `SubflowNode(BaseNode)` 空骨架（`_run` 抛 `NotImplementedError`）并登记进 `NODE_CLASS_MAP`。
   **依赖**: 无
 
 ## Wave 1：后端基础能力
 
-- [ ] **T06**：`inspect_flow_data` 测试
+- [x] **T06**：`inspect_flow_data` 测试
   **文件**: `T/workflow/test_subflow_inspect.py`
   **测试**: 判定含【输入】节点、含交互型【输出】节点（`input`、`choose`）、普通【输出】节点不算交互、含【子工作流】节点；提取开始节点变量名称；提取所有【结束】节点开关打开时的返回名称；返回名称为 `chat_history` 时判为不合规；数据为空或缺字段时不报错。
   **覆盖 AC**: AC-03、AC-04、AC-05
   **依赖**: 无
 
-- [ ] **T07**：`inspect_flow_data` 实现
+- [x] **T07**：`inspect_flow_data` 实现
   **文件**: `B/workflow/domain/services/subflow_inspect.py`
   **逻辑**: 纯函数，不访问数据库。决策见 design 决策 8。
   **测试**: T06 通过。
   **依赖**: T06
 
-- [ ] **T08**：【结束】节点返回结果测试
+- [x] **T08**：【结束】节点返回结果测试
   **文件**: `T/workflow/test_end_node_return.py`
   **测试**: 开关关闭时 `_run` 返回 `None`、日志与改动前一致；开关打开时按引用解析出 `{名称: 值}`，列表值原样保留；旧数据（无新参数）按关闭处理。
   **覆盖 AC**: AC-19
   **依赖**: 无
 
-- [ ] **T09**：【结束】节点返回结果实现
+- [x] **T09**：【结束】节点返回结果实现
   **文件**: `B/workflow/nodes/end/end.py`
   **逻辑**: 读取 `return_enabled`、`return_results`，经 `get_other_node_variable` 取值；补 `parse_log` 展示返回结果。决策见 design 决策 4。
   **测试**: T08 通过。
   **依赖**: T08
 
-- [ ] **T10**：`SubflowCallback` 测试
+- [x] **T10**：`SubflowCallback` 测试
   **文件**: `T/workflow/test_subflow_callback.py`
   **测试**: 会话类事件（流式、输出、开场白、引导问题、用户输入）不产生任何外部调用；`on_node_start`/`on_node_end` 按执行顺序记录，含耗时、`reason`、`log_data`、`input_data`；能取出最后一个失败节点的名称；每个内部节点开始和结束时调用传入的中止检查，返回 true 时触发传入的中止动作。
   **覆盖 AC**: AC-15、AC-17、AC-20
   **依赖**: 无
 
-- [ ] **T11**：`SubflowCallback` 实现
+- [x] **T11**：`SubflowCallback` 实现
   **文件**: `B/workflow/callback/subflow_callback.py`
   **逻辑**: 继承 `BaseCallback`；构造参数接收中止检查函数（父回调有 `get_workflow_stop` 时用它，否则恒为 false）和中止动作。决策见 design 决策 6、坑 6。
   **测试**: T10 通过。
@@ -98,19 +98,19 @@
 
 ## Wave 2：引擎与子工作流节点
 
-- [ ] **T12**：引擎与基类改动测试
+- [x] **T12**：引擎与基类改动测试
   **文件**: `T/workflow/test_subflow_engine.py`
   **测试**: 引擎为【子工作流】节点预扫出 `referenced_outputs`，覆盖 `<id>.<名>`、`<id>.<名>#0`、`{{#<id>.<名>#}}` 三种形态，且不误匹配以该 id 为后缀的其它 id；`subflow_depth`、`start_node_id` 透传到节点；`BaseNode` 失败路径用 `parse_failed_log` 的返回值作为 `on_node_end` 的 `log_data`，默认仍为 `None`。
   **覆盖 AC**: AC-14、AC-17
   **依赖**: 无
 
-- [ ] **T13**：引擎与基类改动实现
+- [x] **T13**：引擎与基类改动实现
   **文件**: `B/workflow/graph/graph_engine.py`、`B/workflow/graph/workflow.py`、`B/workflow/nodes/base.py`
   **逻辑**: `GraphEngine`、`Workflow` 新增 `subflow_depth`（默认 0）、`start_node_id` 并透传给节点；实例化节点之前预扫原始 nodes JSON 算出 `referenced_outputs`（正则见 design 决策 5）；`BaseNode` 新增 `parse_failed_log` 钩子。决策见 design 决策 5、决策 6、决策 9、决策 12。
   **测试**: T12 通过。
   **依赖**: T12
 
-- [ ] **T14**：`SubflowNode` 运行测试
+- [x] **T14**：`SubflowNode` 运行测试
   **文件**: `T/workflow/test_subflow_node.py`
   **测试**:
   - 按名称覆盖子工作流变量；多传的参数被忽略；未传的取子工作流自身值；「输入」方式为字符串、「引用」方式原样传递列表（AC-01、AC-13、AC-19）。
@@ -125,7 +125,7 @@
   **覆盖 AC**: AC-01、AC-13、AC-14、AC-17、AC-19、AC-20、AC-21
   **依赖**: T05、T07、T09、T11、T13
 
-- [ ] **T15**：`SubflowNode` 兜底、上下文与中止测试
+- [x] **T15**：`SubflowNode` 兜底、上下文与中止测试
   **文件**: `T/workflow/test_subflow_node_guard.py`
   **测试**:
   - `subflow_depth >= 1` 时抛 10563；执行到【输入】节点（含表单为空的）或交互型【输出】节点时抛 10563（AC-06、design 决策 9）。
@@ -135,19 +135,19 @@
   **覆盖 AC**: AC-06、AC-09、AC-16、AC-21
   **依赖**: T05、T07、T09、T11、T13
 
-- [ ] **T16**：`SubflowNode` 实现
+- [x] **T16**：`SubflowNode` 实现
   **文件**: `B/workflow/nodes/subflow/subflow.py`
   **逻辑**: 按 design §4.1「运行」八步实现。用同步的 `FlowDao.get_flow_by_id` 读子工作流，依赖 worker 已设置的租户上下文自动过滤；用 `Workflow.run()`（决策 2）；运行上下文按决策 12；子引擎构造完成后再拷入聊天记录、设置 `current_time`（坑 5、坑 8）；`stop()` 同时停止子引擎；不做权限检查（决策 11）。本文件同时定义 `SUBFLOW_ERROR_MARKER`、包装函数与解析函数（决策 10），供 T18 使用。
   **测试**: T14、T15 通过。
   **依赖**: T14、T15
 
-- [ ] **T17**：失败信息识别测试
+- [x] **T17**：失败信息识别测试
   **文件**: `T/workflow/test_subflow_failed_parse.py`
   **测试**: `parse_workflow_failed` 对带子工作流标记的文本返回 10560 错误事件；子工作流内部「执行次数超限」和 F078 技能错误的文本被包在标记里时，仍识别为 10560；`stop by user` 仍返回 `None`。
   **覆盖 AC**: AC-20
   **依赖**: T16
 
-- [ ] **T18**：失败信息识别实现
+- [x] **T18**：失败信息识别实现
   **文件**: `B/worker/workflow/redis_callback.py`
   **逻辑**: `parse_workflow_failed` 先判断 `stop by user`，再用 T16 的解析函数识别子工作流标记，最后走其它子串分支。决策见 design 决策 10。
   **测试**: T17 通过。
@@ -271,4 +271,8 @@
 
 > 只留一行指针，论证在 design.md。推翻已 ★ 确认的决策时，先停下与用户重新确认。
 
-- （暂无）
+- T04：Repository 的 `list_referrers` 改为 `list_referrer_ids`，只返回父工作流 id；引用方名称由 `SubflowService` 用 `FlowDao.aget_flow_by_ids` 补齐。原写法要求 Repository 读 `Flow` 表，与同一任务「不读 `Flow` 表」的约束冲突。
+- T04：`replace_for_parent` 先查出已有行再逐行删除，不用批量 `DELETE`：批量删除不经过租户自动过滤（`src/backend/AGENTS.md` Known Pitfalls）。
+- T13：`Workflow` 只新增 `subflow_depth`；`start_node_id` 由 `GraphEngine` 在构建节点前从原始数据找出，不作为 `Workflow` 参数（design 决策 12 已同步）。
+- T18：`parse_workflow_failed` 最先识别子工作流标记，再判断 `stop by user`，与 design 决策 10 原写的顺序相反；用户中止从不包装，两种顺序结果相同，先认标记不会吞掉内部错误文本（design 决策 10 已同步）。
+- T14：本地「执行次数超限」的用例用测试节点抛出同样的文本代替真实循环，构造真实循环需要条件节点，与本任务要验证的包装逻辑无关。

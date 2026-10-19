@@ -88,3 +88,34 @@ class AppWriteAuthError(BaseErrorCode):
 class AppInvalidCursorError(BaseErrorCode):
     Code: int = 10550
     Msg: str = "Invalid pagination cursor"
+
+
+# F086: nested workflow (subflow node)
+class WorkFlowSubflowRunError(BaseErrorCode):
+    Code: int = 10560
+    Msg: str = "Subflow {subflow_name} failed at node {node_name}: {reason}"
+
+
+class WorkFlowSubflowNotFoundError(BaseErrorCode):
+    Code: int = 10561
+    Msg: str = "The subflow does not exist or has been deleted"
+
+
+class WorkFlowSubflowOutputMissingError(BaseErrorCode):
+    Code: int = 10562
+    Msg: str = "Subflow {subflow_name} did not return the result {output_name}"
+
+
+class WorkFlowSubflowForbiddenNodeError(BaseErrorCode):
+    Code: int = 10563
+    Msg: str = "Subflow {subflow_name} reached node {node_name}, which cannot run inside a subflow"
+
+
+class WorkFlowSubflowOnlineCheckError(BaseErrorCode):
+    Code: int = 10564
+    Msg: str = "Subflow {subflow_name} cannot be used: {reasons}"
+
+
+class WorkFlowReferencedDeleteError(BaseErrorCode):
+    Code: int = 10565
+    Msg: str = "This workflow is used as a subflow by {referenced_by} and cannot be deleted"

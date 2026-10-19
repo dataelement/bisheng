@@ -109,7 +109,7 @@
   - B. 前端用现有列表接口取回后自行过滤——列表接口不返回 `data`，前端无法判断节点构成。
 - **选定**：A
 - **原因**：`flow_type` 不传时 `get_all_flows_envelope` 会同时返回助手（`B/api/services/workflow.py:597-630`）。分页由端点层组织，`SubflowService` 只接收行数据，避免 `B/workflow/domain/` 反向依赖 `B/api/services/`。5 页上限防止可编辑工作流很多时单次请求扫描全部数据。
-- **纯函数 `inspect_flow_data(data)`**：返回是否含【输入】节点、交互型【输出】节点（`output_result.type in ('input', 'choose')`，`B/workflow/nodes/output/output.py:22,54`）、【子工作流】节点，以及开始节点变量名称和开关打开的【结束】节点返回名称。候选接口、上线校验、保存提醒共用它，保证口径一致。
+- **纯函数 `inspect_flow_data(data)`**：返回是否含【输入】节点、交互型【输出】节点（`output_result.type in ('input', 'choose')`，`B/workflow/nodes/output/output.py:22,54`）、【子工作流】节点，以及开始节点变量名称和开关打开的【结束】节点返回名称；另返回【子工作流】节点指向的工作流 id（`subflow_ids`，供 `sync_refs` 使用）和不合规原因代码 `ineligible_reasons`（`input_node`、`interactive_output_node`、`subflow_node`、`invalid_output_name`）。候选接口、上线校验、保存提醒共用它，保证口径一致。
 - **何时该重新考虑**：工作流数量增长到 5 页上限经常取空时，改为在引用表旁登记「节点构成」摘要列。
 
 ### 决策 9：运行期兜底按「实际执行过的节点类型」判定
@@ -125,7 +125,7 @@
 ### 决策 10：失败信息用标记前缀携带错误码与三项信息；用户中止不包装
 
 - **备选**：
-  - A. 父节点失败时抛出的异常文本为 `<SUBFLOW_ERROR_MARKER>{json}`，json 为 `{status_code, status_message, data}`；`RedisCallback.parse_workflow_failed` 先判断「stop by user」，再识别该标记，最后才走其它子串分支。
+  - A. 父节点失败时抛出的异常文本为 `<SUBFLOW_ERROR_MARKER>{json}`，json 为 `{status_code, status_message, data}`；`RedisCallback.parse_workflow_failed` 最先识别该标记，然后才走「stop by user」和其它子串分支。用户中止从不包装（见下），所以先认标记与先判中止结果相同，而先认标记不会让子工作流内部恰好含「stop by user」的错误文本被吞掉。
   - B. 直接抛出子引擎的原始失败文本。
 - **选定**：A
 - **原因**：沿用 F078 技能错误的做法（`B/workflow/nodes/agent/skill_support.py:60-67`）。按 B，子工作流内部的 `-- has run more than ...` 等子串会被父工作流的子串匹配误判（`B/worker/workflow/redis_callback.py:194-226`）。
@@ -148,7 +148,7 @@
   - B. `workflow_id`、`workflow_name` 取子工作流的值。
 - **选定**：A（2026-10-19 用户拍板：消耗记在父工作流名下）
 - **原因**：助手节点和大模型节点用 `workflow_id` 作为模型调用记录的应用 id（`B/workflow/nodes/llm/llm.py:42,126`、`B/workflow/nodes/agent/agent.py:236,377`）；R-7.6 要求子工作流的消耗随调用方计入父工作流。不透传 `tmp_session_id` 时，调试运行中子工作流内的每个助手节点会各自生成工作区 id（`B/workflow/nodes/agent/skill_support.py:92`）。
-- **聊天记录与当前时间（R-6.2）**：引擎新参数 `start_node_id` 透传给节点。子引擎构造完成后，父节点把父引擎 `graph_state.history_memory` 的消息拷入子引擎开始节点新建的记忆窗口（坑 5），并把子开始节点的 `current_time` 参数设为父开始节点的 `current_time` 变量（坑 8）。`user_info` 由同一个 `user_id` 计算，天然一致。
+- **聊天记录与当前时间（R-6.2）**：引擎在构建节点前从原始数据找出开始节点 id，作为 `start_node_id` 透传给节点（`Workflow` 不需要这个参数）。子引擎构造完成后，父节点把父引擎 `graph_state.history_memory` 的消息拷入子引擎开始节点新建的记忆窗口（坑 5），并把子开始节点的 `current_time` 参数设为父开始节点的 `current_time` 变量（坑 8）。`user_info` 由同一个 `user_id` 计算，天然一致。
 - **何时该重新考虑**：需要在子工作流名下统计被调用消耗时，改为同时记录父子两个 id。
 
 ---
@@ -189,9 +189,10 @@
 | `subflow` 节点参数 `subflow_inputs` | `[{key: 参数名, type: "ref"\|"input", value, label}]` | 与代码节点 `code_input` 同形 | 节点运行 |
 | `subflow` 节点参数 `subflow_outputs` | `[{key: 返回名称}]`，`global: "code:value.map(...)"` | 配置时的返回名称快照，供变量选择器列出 | 前端变量选择器 |
 | `end` 节点参数 `return_enabled` / `return_results` | `bool` / `[{key, type: "ref", value, label}]` | 【结束】节点 v2 新增；旧数据无此参数时按关闭处理 | `EndNode._run`、`inspect_flow_data` |
+| `subflow` 节点运行日志 | `[[{key: "subflow_inputs", type: "params"}, {key: "subflow_outputs", type: "params"}, subflow_logs 项]]`；失败时没有 `subflow_outputs` | 实际传入的参数、返回结果与嵌套日志 | 前端 `RunLog` |
 | 运行日志项 `subflow_logs` | `{key, type: "subflow_logs", value: [{node_id, name, type, duration_ms, reason, log_data, input_data}]}` | 嵌套日志；成功和失败时都有 | 前端 `RunLog` |
-| 保存响应 `subflow_warning` | `{referenced_by: [{id, name}], forbidden_nodes: [{name, type}], interface_changes: {inputs_added, inputs_removed, outputs_added, outputs_removed}}` | 仅在有需要提醒的内容时出现 | 前端保存弹窗 |
-| 表 `workflow_subflow_ref` | `id, tenant_id, parent_flow_id, child_flow_id, create_time`；唯一 `(parent_flow_id, child_flow_id)` | 引用关系 | 删除拦截、保存提醒 |
+| 保存响应 `subflow_warning` | `{referenced_by: [{id, name}], forbidden_nodes: [{id, name, type}], interface_changes: {inputs_added, inputs_removed, outputs_added, outputs_removed}}` | 仅在有需要提醒的内容时出现 | 前端保存弹窗 |
+| 表 `workflow_subflow_ref` | `id, tenant_id, parent_flow_id, child_flow_id, create_time, update_time`；唯一 `(parent_flow_id, child_flow_id)` | 引用关系 | 删除拦截、保存提醒 |
 
 ### 4.3 关键模块职责
 
@@ -199,11 +200,11 @@
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `B/workflow/nodes/subflow/subflow.py` `SubflowNode` | 运行子引擎、传参、取结果、组织失败信息与嵌套日志；定义 `SUBFLOW_ERROR_MARKER` 与解析函数 | 不查权限，不写引用表 |
+| `B/workflow/nodes/subflow/subflow.py` `SubflowNode` | 运行子引擎、传参、取结果、组织失败信息与嵌套日志；定义 `SUBFLOW_ERROR_MARKER`、`SubflowRunError` 与 `parse_subflow_error`；运行中的子引擎放在 `sub_workflow` 属性上，`stop()` 经它停止子引擎 | 不查权限，不写引用表 |
 | `B/workflow/callback/subflow_callback.py` `SubflowCallback` | 丢弃会话事件，记录内部节点执行顺序与日志，检查中止 | 不写 Redis 事件流 |
 | `B/workflow/nodes/base.py` | 新增 `parse_failed_log` 钩子 | 不改成功路径 |
 | `B/workflow/nodes/end/end.py` | 开关打开时解析并返回返回结果 | 开关关闭时行为不变 |
-| `B/workflow/graph/graph_engine.py`、`workflow.py` | 新参数 `subflow_depth`、`start_node_id` 透传；预扫 `referenced_outputs` | — |
+| `B/workflow/graph/graph_engine.py`、`workflow.py` | `GraphEngine`、`Workflow` 新参数 `subflow_depth`；引擎预扫开始节点 id 与 `referenced_outputs`（`scan_referenced_outputs`）并透传给节点 | — |
 | `B/workflow/domain/services/subflow_inspect.py` `inspect_flow_data` | 纯函数：节点构成、开始节点变量名、返回名称 | 不访问数据库 |
 | `B/workflow/domain/models/subflow_ref.py` | 引用表模型；模块路径登记进 `_TENANT_AWARE_MODEL_MODULES` | — |
 | `B/workflow/domain/repositories/` | 引用表读写（异步） | 不读 `Flow`：`Flow` 的读取沿用现有 `FlowDao`（同步 `get_flow_by_id` 供节点使用，异步 `aget_flow_by_ids` 供服务使用） |
@@ -326,3 +327,5 @@
 |---|---|---|
 | 2026-10-19 | 初版 | PRD 澄清完成 |
 | 2026-10-19 | 按 `/sdd-review design` 修订：补中止传递、失败日志、当前时间、租户过滤登记、删除拦截时机、预扫规格、运行上下文（决策 12）、各决策的备选与重新考虑条件、写入口核实结论；R-7.6 改为只算耗时、消耗记父工作流 | 独立审查 22 条意见；用户拍板两项 |
+| 2026-10-19 | Wave 0 实现：引用表补 `update_time` 列（task-review 数据库约定）；Repository 只返回父工作流 id，名称由服务补齐 | T03、T04 实现 |
+| 2026-10-19 | Wave 1–2 实现：标记识别改为最先进行（决策 10）；`start_node_id` 由引擎预扫得出；`inspect_flow_data` 补 `subflow_ids` 与原因代码；记录 `subflow` 节点日志格式 | T07、T13、T16、T18 实现 |

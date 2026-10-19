@@ -56,6 +56,7 @@ from bisheng.workflow.callback.event import (
 )
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.nodes.agent.skill_support import parse_agent_skill_error
+from bisheng.workflow.nodes.subflow.subflow import parse_subflow_error
 
 
 class RedisCallback(BaseCallback):
@@ -192,6 +193,11 @@ class RedisCallback(BaseCallback):
         )
 
     def parse_workflow_failed(self, status_info: dict) -> ChatResponse | None:
+        # F086: a subflow failure carries its own code; read it before the
+        # substring rules below, which could match text from inside the subflow.
+        # A user stop is never wrapped, so it still ends up returning None.
+        if subflow_error := parse_subflow_error(status_info["reason"]):
+            return self.build_chat_response(WorkflowEventType.Error.value, "over", message=subflow_error)
         if status_info["reason"].find("-- has run more than the maximum number of times") != -1:
             return self.build_chat_response(
                 WorkflowEventType.Error.value,

@@ -1,4 +1,6 @@
+import json
 import operator
+import re
 from typing import Annotated, Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -24,6 +26,47 @@ class TempState(TypedDict):
     flag: Annotated[bool, operator.and_]
 
 
+def scan_referenced_outputs(nodes: list[dict]) -> dict[str, list[str]]:
+    """F086: for each subflow node, the return names that other nodes reference.
+
+    Variable references appear as ``<node_id>.<key>[#index]`` in params and as
+    ``{{#<node_id>.<key>#}}`` in templates, so a text scan of every other node's
+    data finds them. The look-behind keeps ``xsubflow_1.a`` from matching
+    ``subflow_1``.
+    """
+    subflow_ids = []
+    texts = {}
+    for node in nodes:
+        node_data = (node or {}).get("data") or {}
+        node_id = node_data.get("id")
+        if not node_id:
+            continue
+        if node_data.get("type") == NodeType.SUBFLOW.value:
+            subflow_ids.append(node_id)
+        texts[node_id] = json.dumps(node_data, ensure_ascii=False)
+
+    result = {}
+    for subflow_id in subflow_ids:
+        pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(subflow_id)}\.([A-Za-z_][A-Za-z0-9_]*)")
+        names = []
+        for node_id, text in texts.items():
+            if node_id == subflow_id:
+                continue
+            for name in pattern.findall(text):
+                if name not in names:
+                    names.append(name)
+        result[subflow_id] = names
+    return result
+
+
+def find_start_node_id(nodes: list[dict]) -> str | None:
+    for node in nodes:
+        node_data = (node or {}).get("data") or {}
+        if node_data.get("type") == NodeType.START.value:
+            return node_data.get("id")
+    return None
+
+
 class GraphEngine:
     def __init__(
         self,
@@ -38,6 +81,7 @@ class GraphEngine:
         flow_user_id: int = None,
         chat_id: str | None = None,
         tmp_session_id: str | None = None,
+        subflow_depth: int = 0,
     ):
         self.user_id = user_id
         self.workflow_id = workflow_id
@@ -59,6 +103,9 @@ class GraphEngine:
         # has only a temporary session id.
         self.chat_id = chat_id
         self.tmp_session_id = tmp_session_id
+        # F086: 0 for a top-level run, 1 inside a subflow node.
+        self.subflow_depth = subflow_depth
+        self.start_node_id: str | None = None
 
         # node_id: NodeInstance
         self.nodes_map = {}
@@ -216,6 +263,9 @@ class GraphEngine:
         start_node = None
         end_nodes = []
         interrupt_nodes = []
+        # F086: computed before any node is built, since init_nodes builds as it scans.
+        referenced_outputs = scan_referenced_outputs(nodes)
+        self.start_node_id = find_start_node_id(nodes)
         for node in nodes:
             node_data = BaseNodeData(**node.get("data", {}))
             if not node_data.id:
@@ -237,6 +287,13 @@ class GraphEngine:
                 flow_user_id=self.flow_user_id,
                 chat_id=self.chat_id,
                 tmp_session_id=self.tmp_session_id,
+                subflow_depth=self.subflow_depth,
+                start_node_id=self.start_node_id,
+                **(
+                    {"referenced_outputs": referenced_outputs.get(node_data.id, [])}
+                    if node_data.type == NodeType.SUBFLOW.value
+                    else {}
+                ),
             )
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)
