@@ -388,6 +388,7 @@ _FETCHED_PAGE_SNIPPET_CHARS = 300
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _MARKDOWN_LINE_PREFIX_RE = re.compile(r"^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+)")
+_MARKDOWN_EMPHASIS_RE = re.compile(r"\*\*|__|`")
 
 
 def _tool_name(tool: Any) -> str:
@@ -409,7 +410,8 @@ def _fetched_page_snippet(content: str, title: str) -> str:
     """Plain-text opening of a fetched page for the citation card."""
     lines = []
     for raw_line in _MARKDOWN_IMAGE_RE.sub("", content).split("\n"):
-        line = _MARKDOWN_LINE_PREFIX_RE.sub("", _MARKDOWN_LINK_RE.sub(r"\1", raw_line)).strip()
+        line = _MARKDOWN_LINE_PREFIX_RE.sub("", _MARKDOWN_LINK_RE.sub(r"\1", raw_line))
+        line = _MARKDOWN_EMPHASIS_RE.sub("", line).strip()
         if not line or line == title:
             continue
         lines.append(line)

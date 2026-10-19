@@ -17,8 +17,9 @@ NOT_CONFIGURED_TEXT = "网页读取尚未配置：请联系管理员在内置工
 INVALID_URL_TEXT = "网页读取失败：网址必须是以 http:// 或 https:// 开头的完整网址，且不能包含用户名或密码。"
 EMPTY_CONTENT_TEXT = "该网页没有可读正文。"
 
-# A backslash in front of any character that is not a letter, digit or whitespace.
-_ESCAPE_PATTERN = re.compile(r"\\([^\w\s])")
+# A backslash in front of an underscore or any character that is not a letter,
+# digit or whitespace.
+_ESCAPE_PATTERN = re.compile(r"\\([^\w\s]|_)")
 _FENCE_PATTERN = re.compile(r"^\s*(```|~~~)")
 
 

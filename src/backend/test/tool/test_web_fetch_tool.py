@@ -78,9 +78,9 @@ def test_base_url_override():
 
 
 def test_engine_escapes_are_removed_outside_code_blocks():
-    content = "\\# Title\n\nA\\-B\\: c\\, d\\.\n\n```\npath\\-keep \\#\n```\n\nend\\!"
+    content = "\\# Title\n\nA\\-B\\: c\\, d\\. snake\\_case\n\n```\npath\\-keep \\#\n```\n\nend\\!"
 
-    assert unescape_markdown(content) == "# Title\n\nA-B: c, d.\n\n```\npath\\-keep \\#\n```\n\nend!"
+    assert unescape_markdown(content) == "# Title\n\nA-B: c, d. snake_case\n\n```\npath\\-keep \\#\n```\n\nend!"
 
 
 def test_escaped_letters_and_cjk_are_kept():

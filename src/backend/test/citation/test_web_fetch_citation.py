@@ -21,7 +21,10 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 
 def _page_output(url="https://example.com/a/", title="Example page", content=None) -> str:
     if content is None:
-        content = "# Example page\n\n![logo](https://example.com/logo.png)\n\nFirst paragraph of the body.\n\nSecond."
+        content = (
+            "# Example page\n\n![logo](https://example.com/logo.png)\n\n"
+            "**First** paragraph of the [body](https://example.com/b).\n\nSecond."
+        )
     return json.dumps(
         {
             "title": title,
