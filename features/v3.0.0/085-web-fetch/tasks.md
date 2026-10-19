@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 用户确认 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 sdd-review tasks 自查通过 |
-| 实现 | 🔄 进行中 | 14 / 18 完成 |
+| 实现 | 🔄 进行中 | 16 / 18 完成 |
 
 ---
 
@@ -124,14 +124,14 @@
 
 ### Wave 3 — 前端
 
-- [ ] **T015**: Platform 设置表单
+- [x] **T015**: Platform 设置表单
   **文件**: `src/frontend/platform/src/pages/BuildPage/tools/builtInTool/WebFetchForm.tsx`（新）, `src/frontend/platform/src/pages/BuildPage/tools/ToolSet.tsx`, `src/frontend/platform/src/pages/BuildPage/tools/index.tsx`, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`
   **逻辑**: 表单含引擎选择（DeepSeek）、API Key（必填、password）、Base URL（选填，占位提示默认地址）、正文长度上限（默认 20000，1000～200000 校验）；提交 `{type, config, max_chars}`。`ToolSet` 按分类名「网页读取」分派，`MANAGED_TOOLS` 加入该名。新文案三语齐全，不新增 `any`。
   **覆盖 AC**: AC-02, AC-03, AC-06, AC-25
   **手动验证**: 超级管理员打开 构建 → 工具 → 内置工具 →「网页读取」→ 设置；不填 API Key 提交出现必填提示；长度上限填 500 出现范围提示；保存后重新打开，秘钥显示为掩码，其他字段回显；联网搜索设置不受影响。
   **依赖**: T001
 
-- [ ] **T016**: Client 调用展示
+- [x] **T016**: Client 调用展示
   **文件**: `src/frontend/client/src/components/Chat/Messages/ToolCallDisplay.tsx`, `src/frontend/client/src/components/Linsight/Execution/ToolRowLite.tsx`, `src/frontend/client/src/components/Linsight/Execution/activity.ts`, `src/frontend/client/src/components/Linsight/Execution/execTokens.ts`, `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
   **逻辑**: `BUILTIN_TOOL_I18N` 加 `web_fetch`，网页条目显示网页标题和站点图标；任务模式动作文案「已读取网页」、统计分类「读取 N 个网页」。`ToolRowLite` 的动作文案表含遗留中文，按仓库规则一并抽到 i18n。
   **覆盖 AC**: AC-23, AC-24, AC-25
@@ -158,3 +158,5 @@
 
 - T005 偏离 → 网页读取条目的 itemId 用 `page` 而不是 `1`，句柄身份区分 `web:` / `webpage:`，更新 design 决策 3、新增坑 12（同网址的搜索结果和网页读取在短句柄模式下会被合并）
 - T014 偏离 → 投影和子租户复制改为每次启动补缺口、失败只记日志，更新 design 决策 8、新增坑 13
+- T015 偏离 → 设置弹窗与 MANAGED_TOOLS 改按子工具 tool_key（web_fetch）识别，不按分类中文名；原因：新增中文字面量会让文件超出 lint 冻结配额，更新 design 坑 9
+- T016 → 按仓库规则一并把 ToolCallDisplay.tsx、ToolRowLite.tsx 的遗留中文抽到 i18n，并收缩对应 lint 配额

@@ -13,6 +13,7 @@ import type { MergedStep } from './execTypes';
  */
 export type ActivityCategory =
     | 'web_search'
+    | 'web_fetch'
     | 'knowledge'
     | 'read_file'
     | 'write_file'
@@ -48,6 +49,7 @@ function classifyActivity(name: string): ActivityCategory | null {
     // knowledge before web_search: search_knowledge_base must not match web_search
     if (n.includes('knowledge') || n.includes('search_knowledge')) return 'knowledge';
     if (n.includes('web_search') || n.includes('search')) return 'web_search';
+    if (n === 'web_fetch') return 'web_fetch';
     if (n.includes('export')) return 'export';
     // write/edit family before read so `read` doesn't swallow add_text_to_file etc.
     if (

@@ -125,7 +125,7 @@
 
 ### 4.1 数据流
 
-**配置**：管理员打开内置工具「网页读取」的设置 → `ToolSet.tsx` 按分类名分派到 `WebFetchForm` → `POST /api/v1/tool/config` → `ToolServices.update_tool_config` 合并掩码后写分类行 `extra`。
+**配置**：管理员打开内置工具「网页读取」的设置 → `ToolSet.tsx` 按子工具 `tool_key` 分派到 `WebFetchForm` → `POST /api/v1/tool/config` → `ToolServices.update_tool_config` 合并掩码后写分类行 `extra`。
 
 **执行**（以助手为例，其他场景相同，只是包装类不同）：
 1. `ToolExecutor` 读分类 `extra` → `load_tools({"web_fetch": extra})` → `_get_web_fetch` → `FetchTool.init_fetch_tool(type, **engine_config)` → `WebFetchTool(api_wrapper=..., max_chars=...)`，工具名 `web_fetch`。
@@ -177,7 +177,7 @@
 | 8 | 子租户只在缺少默认工具时懒复制根租户的预置工具 | 老环境的已有子租户永远看不到网页读取 | 决策 8，升级时主动复制 |
 | 13 | `init_default_data` 里任何未捕获的异常都会让后端启动失败（外层 `raise RuntimeError`） | 补投影或复制子租户时 OpenFGA 未就绪，整个后端起不来 | `_sync_web_fetch_tool` 逐步 `try/except` 只记日志 |
 | 14 | `test/sandbox/test_code_interpreter_seed_default.py` 用 AST 禁止 `init_data.py` 出现任何 `extra=` 关键字参数，但它的本意是「升级时不改已有行的 extra」；主线上该测试已因 `_ensure_image_view_tool` 失败 | 误以为是本 feature 引入的回归 | 本 feature 的插入只写新行；该测试的误报留给其维护方处理 |
-| 9 | 设置弹窗和 `MANAGED_TOOLS` 都按分类的中文名匹配，子租户复制也按名字匹配 | 分类名写错一个字，设置按钮不出现，子租户会复制出重复分类 | 种子、补数据函数、前端三处使用同一个名字 `网页读取` |
+| 9 | 旧工具的设置弹窗和 `MANAGED_TOOLS` 按分类的中文名匹配，子租户复制也按名字匹配；在 platform 源码里新增中文字面量会让文件超出 lint 冻结配额 | 设置按钮不出现；lint 失败；子租户复制出重复分类 | 前端改按子工具 `tool_key = web_fetch` 识别（`tools/index.tsx` 的 `hasManagedToolKey`、`ToolSet.tsx`）；分类名只在种子 JSON 里定义一次，补数据函数从种子读取 |
 | 10 | 只有 `api_key` 等固定字段名会被掩码 | 换个字段名，秘钥会明文返回给前端 | 配置字段名固定为 `api_key` |
 | 12 | 短句柄（日常模式、任务模式）按「来源身份」分配，网页类来源的身份原本只看网址 | 同一网址的搜索结果和网页读取拿到同一个句柄，模型引用全文内容时卡片显示的是搜索摘要 | `citation_handle_service.item_identity`：`itemId == "page"` 时身份为 `webpage:<网址>` |
 | 11 | 任务模式的引用规则只在 `has_web` 为真时开启，原判断只认 `web_search` | 只勾网页读取时模型不会打角标 | 决策 9 |
