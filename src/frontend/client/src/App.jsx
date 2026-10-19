@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router-dom';
 import { RecoilRoot } from 'recoil';
 import { LiveAnnouncer } from '~/a11y';
 import Toast from './components/ui/Toast';
+import Notification from './components/ui/Notification';
 import { SystemMaintenanceOverlay } from './components/SystemMaintenanceOverlay';
 import { ScreenshotProvider, ThemeProvider, useApiErrorBoundary } from './hooks';
 import { ToastProvider, ConfirmProvider } from './Providers';
@@ -44,6 +45,8 @@ const App = () => {
                   {/* Single toast container, always mounted — its live regions
                       have to pre-exist the messages they announce. */}
                   <Toast />
+                  {/* Same for the top-right notification stack. */}
+                  <Notification />
                 </DndProvider>
               </ToastProvider>
             </ConfirmProvider>

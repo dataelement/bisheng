@@ -908,6 +908,7 @@
   "com_ui_client_id": "Client ID",
   "com_ui_client_secret": "Client Secret",
   "com_ui_close": "Close",
+  "com_ui_close_notification": "Close notification",
   "com_ui_close_menu": "Close Menu",
   "com_ui_code": "Code",
   "com_ui_collapse": "Collapse",
