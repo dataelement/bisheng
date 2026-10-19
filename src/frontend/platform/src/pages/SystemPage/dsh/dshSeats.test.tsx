@@ -61,8 +61,9 @@ describe('DSH seat pagination and commands', () => {
         await screen.findByText('User 1')
         expect(vi.mocked(getDshSeats).mock.calls.at(-1)![0].seat_state).toBeUndefined()
         const search = screen.getByLabelText('dsh.searchUsers')
-        const filters = search.parentElement!.parentElement!
-        expect(search.parentElement!.classList.contains('w-56')).toBe(true)
+        const searchShell = search.closest('.w-56')!
+        const filters = searchShell.parentElement!
+        expect(searchShell).not.toBeNull()
         expect(filters.classList.contains('justify-end')).toBe(true)
         expect(filters.classList.contains('items-center')).toBe(true)
         expect(filters.contains(screen.getByLabelText('dsh.seatState'))).toBe(true)

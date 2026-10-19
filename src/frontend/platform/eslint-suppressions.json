@@ -692,11 +692,6 @@
       "count": 1
     }
   },
-  "src/components/bs-ui/button/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/components/bs-ui/calendar/datePicker.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
@@ -732,26 +727,6 @@
   "src/components/bs-ui/input/editTitle.tsx": {
     "@typescript-eslint/no-unused-expressions": {
       "count": 2
-    }
-  },
-  "src/components/bs-ui/input/index.tsx": {
-    "@typescript-eslint/no-empty-object-type": {
-      "count": 1
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 7
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/components/bs-ui/input/textInput.tsx": {
@@ -810,11 +785,6 @@
   "src/components/bs-ui/step/index.tsx": {
     "no-restricted-syntax": {
       "count": 2
-    }
-  },
-  "src/components/bs-ui/toast/use-toast.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/bs-ui/upload/simple.tsx": {

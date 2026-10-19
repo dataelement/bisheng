@@ -3015,5 +3015,16 @@
   },
   "tenant": {
     "searchUser": "ユーザー名または ID で検索"
+  },
+  "sharedUi": {
+    "showPassword": "パスワードを表示",
+    "hidePassword": "パスワードを非表示",
+    "required": "必須項目です",
+    "nonNegativeInteger": "0以上の整数を入力してください",
+    "minimum": "{{min}}以上にしてください",
+    "maximum": "{{max}}以下にしてください",
+    "addItem": "項目を追加",
+    "removeItem": "項目を削除",
+    "expand": "展開"
   }
 }

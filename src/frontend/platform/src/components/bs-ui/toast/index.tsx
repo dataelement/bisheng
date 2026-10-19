@@ -1,38 +1,10 @@
-// @ts-strict-ignore
-import { ToastIcon } from "../../bs-icons/toast"
-import {
-    Toast,
-    ToastClose,
-    ToastDescription,
-    ToastProvider,
-    ToastTitle,
-    ToastViewport,
-} from "./toast"
-import { useToast } from "./use-toast"
+import { Notifier, Toaster as SharedToaster } from '@bisheng/ui';
+import { useTranslation } from 'react-i18next';
 
 export function Toaster() {
-    const { toasts } = useToast()
-
-    return (
-        <ToastProvider>
-            {toasts.map(function ({ id, title, description, action, ...props }) {
-                return (
-                    <Toast key={id} {...props} duration={4000}>
-                        <div className=" self-start">
-                            <ToastIcon type={props.variant} />
-                        </div>
-                        <div className="grid gap-1">
-                            {title && <ToastTitle>{title}</ToastTitle>}
-                            {description && (
-                                <ToastDescription className="whitespace-pre-wrap">{description}</ToastDescription>
-                            )}
-                        </div>
-                        {action}
-                        <ToastClose />
-                    </Toast>
-                )
-            })}
-            <ToastViewport />
-        </ToastProvider>
-    )
+    const { t } = useTranslation('bs');
+    return <>
+        <SharedToaster closeLabel={t('close')} />
+        <Notifier closeLabel={t('close')} expandLabel={t('sharedUi.expand')} />
+    </>;
 }

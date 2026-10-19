@@ -1,209 +1,92 @@
-import * as React from "react"
+import * as React from 'react';
+import { notification, toast as sharedToast } from '@bisheng/ui';
+import type { ToastType } from '@bisheng/ui';
 
-import type {
-    ToastActionElement,
-    ToastProps,
-} from "./toast"
-
-const TOAST_LIMIT = 1
-const TOAST_OPEN_DURATION = 4 * 1000
-const TOAST_REMOVE_DELAY = 6 * 1000
-
-type ToasterToast = ToastProps & {
-    id: string
-    isAlert?: boolean,
-    title?: React.ReactNode
-    description?: React.ReactNode
-    action?: ToastActionElement
+interface LegacyActionProps {
+    children?: React.ReactNode;
+    altText?: string;
+    onClick?: () => void;
 }
 
-const actionTypes = {
-    ADD_TOAST: "ADD_TOAST",
-    UPDATE_TOAST: "UPDATE_TOAST",
-    DISMISS_TOAST: "DISMISS_TOAST",
-    REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
-let count = 0
-
-function genId() {
-    count = (count + 1) % Number.MAX_SAFE_INTEGER
-    return count.toString()
+interface LegacyToastOptions {
+    /** Position is now fixed by the shared design system. */
+    className?: string;
+    title?: React.ReactNode;
+    description?: React.ReactNode | string[];
+    variant?: ToastType | null;
+    action?: React.ReactElement<LegacyActionProps>;
+    duration?: number;
+    onOpenChange?: (open: boolean) => void;
+    isAlert?: boolean;
 }
 
-type ActionType = typeof actionTypes
-
-type Action =
-    | {
-        type: ActionType["ADD_TOAST"]
-        toast: ToasterToast
-    }
-    | {
-        type: ActionType["UPDATE_TOAST"]
-        toast: Partial<ToasterToast>
-    }
-    | {
-        type: ActionType["DISMISS_TOAST"]
-        toastId?: ToasterToast["id"]
-    }
-    | {
-        type: ActionType["REMOVE_TOAST"]
-        toastId?: ToasterToast["id"]
-    }
-
-interface State {
-    toasts: ToasterToast[]
+function noticeText(node: React.ReactNode): string {
+    if (node === null || node === undefined || typeof node === 'boolean') return '';
+    if (Array.isArray(node)) return node.map(noticeText).filter(Boolean).join('\n');
+    if (React.isValidElement<{ children?: React.ReactNode }>(node)) return noticeText(node.props.children);
+    return String(node);
 }
 
-const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
-
-const addToRemoveQueue = (toastId: string) => {
-    if (toastTimeouts.has(toastId)) {
-        return
-    }
-
-    const timeout = setTimeout(() => {
-        toastTimeouts.delete(toastId)
-        dispatch({
-            type: "REMOVE_TOAST",
-            toastId: toastId,
-        })
-    }, TOAST_REMOVE_DELAY)
-
-    toastTimeouts.set(toastId, timeout)
-}
-
-export const reducer = (state: State, action: Action): State => {
-    switch (action.type) {
-        case "ADD_TOAST":
-            return {
-                ...state,
-                toasts: [action.toast, ...state.toasts].slice(0, TOAST_LIMIT),
-            }
-
-        case "UPDATE_TOAST":
-            return {
-                ...state,
-                toasts: state.toasts.map((t) =>
-                    t.id === action.toast.id ? { ...t, ...action.toast } : t
-                ),
-            }
-
-        case "DISMISS_TOAST": {
-            const { toastId } = action
-
-            // ! Side effects ! - This could be extracted into a dismissToast() action,
-            // but I'll keep it here for simplicity
-            if (toastId) {
-                addToRemoveQueue(toastId)
-            } else {
-                state.toasts.forEach((toast) => {
-                    addToRemoveQueue(toast.id)
-                })
-            }
-
-            return {
-                ...state,
-                toasts: state.toasts.map((t) =>
-                    t.id === toastId || toastId === undefined
-                        ? {
-                            ...t,
-                            open: false,
-                        }
-                        : t
-                ),
-            }
+function showNotice(options: LegacyToastOptions, centered: boolean) {
+    let current = options;
+    const type = options.variant ?? 'info';
+    const title = noticeText(options.title);
+    const description = noticeText(options.description);
+    // Stable keys let the shared queues coalesce repeated interceptor errors.
+    const id = `platform:${centered ? 'message' : 'toast'}:${type}:${title}:${description}`;
+    const show = () => {
+        const nextType = current.variant ?? 'info';
+        const nextTitle = noticeText(current.title);
+        const nextDescription = noticeText(current.description);
+        const action = current.action ? {
+            label: current.action.props.altText || noticeText(current.action.props.children),
+            onClick: () => current.action?.props.onClick?.(),
+        } : undefined;
+        if (centered) {
+            sharedToast.show({ id, type: nextType, message: [nextTitle, nextDescription].filter(Boolean).join('\n'),
+                duration: current.duration, action });
+        } else {
+            notification.open({ id, type: nextType, title: nextTitle || undefined, description: nextDescription,
+                duration: current.duration, actions: action ? [action] : undefined,
+                onClose: () => current.onOpenChange?.(false) });
         }
-        case "REMOVE_TOAST":
-            if (action.toastId === undefined) {
-                return {
-                    ...state,
-                    toasts: [],
-                }
-            }
-            return {
-                ...state,
-                toasts: state.toasts.filter((t) => t.id !== action.toastId),
-            }
-    }
-}
-
-const listeners: Array<(state: State) => void> = []
-
-let memoryState: State = { toasts: [] }
-
-function dispatch(action: Action) {
-    memoryState = reducer(memoryState, action)
-    listeners.forEach((listener) => {
-        listener(memoryState)
-    })
-}
-
-type Toast = Omit<ToasterToast, "id" | "isAlert"> & { description: string[] | string }
-
-function toast({ description: descs = [], ...props }: Toast & { isAlert?: boolean }) {
-    const id = genId()
-
-    const update = (props: ToasterToast) =>
-        dispatch({
-            type: "UPDATE_TOAST",
-            toast: { ...props, id },
-        })
-    const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
-
-    const description = Array.isArray(descs) ? descs.map(msg => <p>{msg}</p>) : descs
-
-    dispatch({
-        type: "ADD_TOAST",
-        toast: {
-            ...props,
-            description,
-            id,
-            open: true,
-            onOpenChange: (open) => {
-                if (!open) dismiss()
-            },
+    };
+    show();
+    return {
+        id,
+        dismiss: () => {
+            if (centered) {
+                sharedToast.dismiss(id);
+                current.onOpenChange?.(false);
+            } else notification.close(id);
         },
-    })
+        update: (next: Partial<LegacyToastOptions>) => {
+            current = { ...current, ...next };
+            show();
+        },
+    };
+}
 
-    // Radix handles duration-based close in most cases, but this extra timeout
-    // keeps message toasts from getting stuck open when the underlying timer
-    // fails to fire in long-lived dev sessions.
-    setTimeout(() => {
-        dismiss()
-    }, TOAST_OPEN_DURATION)
+export function toast(options: LegacyToastOptions) {
+    return showNotice(options, options.isAlert ?? false);
+}
 
-    return {
-        id: id,
-        dismiss,
-        update,
+export function message(options: LegacyToastOptions) {
+    return showNotice(options, true);
+}
+
+function dismiss(id?: string) {
+    if (id) {
+        sharedToast.dismiss(id);
+        notification.close(id);
+    } else {
+        sharedToast.clear();
+        notification.closeAll();
     }
 }
 
-function message(props: Toast) {
-    return toast({ ...props, isAlert: true })
+// All live callers use these imperative handles. Rendering and queue lifetime
+// belong exclusively to the shared containers, including interceptor notices.
+export function useToast() {
+    return { toast, message, dismiss };
 }
-
-function useToast() {
-    const [state, setState] = React.useState<State>(memoryState)
-
-    React.useEffect(() => {
-        listeners.push(setState)
-        return () => {
-            const index = listeners.indexOf(setState)
-            if (index > -1) {
-                listeners.splice(index, 1)
-            }
-        }
-    }, [])
-
-    return {
-        ...state,
-        message,
-        toast,
-        dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
-    }
-}
-
-// message中间提示，toast右侧告警
-export { useToast, toast, message }

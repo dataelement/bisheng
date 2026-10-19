@@ -3015,5 +3015,16 @@
   },
   "tenant": {
     "searchUser": "搜索用户名称或 ID"
+  },
+  "sharedUi": {
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "required": "不能为空",
+    "nonNegativeInteger": "请输入非负整数",
+    "minimum": "不能小于{{min}}",
+    "maximum": "不能大于{{max}}",
+    "addItem": "添加一项",
+    "removeItem": "删除此项",
+    "expand": "展开"
   }
 }

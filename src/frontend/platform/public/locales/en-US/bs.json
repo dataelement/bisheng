@@ -3070,5 +3070,16 @@
   },
   "tenant": {
     "searchUser": "Search user name or ID"
+  },
+  "sharedUi": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "required": "This field is required",
+    "nonNegativeInteger": "Enter a nonnegative integer",
+    "minimum": "Must be at least {{min}}",
+    "maximum": "Must be at most {{max}}",
+    "addItem": "Add item",
+    "removeItem": "Remove item",
+    "expand": "Expand"
   }
 }
