@@ -104,7 +104,7 @@
   - A. 只改种子 JSON。
   - B. 照 `_ensure_image_view_tool` 在启动时补根租户的分类行和工具行，只做这一步。
   - C. 在 B 的基础上，仅当本次新插入了行时：（1）为根租户的新分类做 F048 系统资源权限投影；（2）多租户开启时，对每个已有子租户调用 `acopy_root_builtin_tools_to_tenant`。
-  - D. 在 B 的基础上，每次启动都执行一次「补缺口」：OpenFGA 开启时为根租户分类补投影（只写缺失的投影）；多租户开启时只对还没有 `web_fetch` 行的活跃子租户执行复制。每一步失败只记日志。
+  - D. 在 B 的基础上，每次启动都执行一次「补缺口」：多租户开启时只对还没有 `web_fetch` 行的活跃子租户执行复制；OpenFGA 开启时一次查询找出所有租户里还没有投影的网页读取分类，逐个在该租户的上下文里补投影。每一步失败只记日志。
 - **选定**：D（种子 JSON 也同步加上，供全新安装使用；补数据函数从种子 JSON 读取字段）
 - **原因**：A 对老环境无效。B 的做法对 Image View 够用，是因为 Image View 按 tool_key 直接读取、不经过权限检查；网页读取走 `ToolExecutor`，执行前要检查使用权限，缺投影时非超级管理员用不了（spec AC-26）。已有子租户只在缺少默认工具时才会懒复制，网页读取不在默认工具里，不主动复制就永远不会出现在子租户中。复制函数本身幂等，并会为子租户的分类做投影。不选 C 是因为它只在插入的那一次启动尝试投影和复制，如果那次 OpenFGA 未就绪或某个租户复制失败，以后再也不会重试；而 `init_default_data` 里任何未捕获的异常都会让后端启动失败，所以这些步骤必须吞掉异常、下次启动再补。根租户投影复用全新安装用的系统资源清单（`load_system_owned_resource_inventory`）生成的规格，保证与全新安装的投影一致。
 - **何时该重新考虑**：如果平台以后提供「预置工具版本化同步」的统一机制，把本步骤迁过去。
@@ -135,7 +135,7 @@
 5. 回答结束时各场景按原路径持久化引用；前端按 WEB 类型渲染卡片。
 6. 调用展示：助手运行日志标题按 `tool_key` 在助手配置的工具列表里查到「网页读取」，展开后显示调用输入（含网址）和输出原文，所以运行日志不用改。日常模式由 `_build_tool_meta` 把 `web_fetch` 标为 `web` 类型，前端用网页条目展示网页标题和站点图标，名称走 `BUILTIN_TOOL_I18N`。任务模式在 `ToolRowLite` 的动作文案和 `activity.ts` 的统计分类里新增网页读取。
 
-**升级**：`init_default_data`（持有 Redis 锁）→ `_ensure_web_fetch_tool` 按种子 JSON 插入根租户行（已存在则跳过）→ OpenFGA 收尾步骤之后执行 `_sync_web_fetch_tool`：OpenFGA 开启时 `_project_root_web_fetch_tool` 补根分类投影；多租户开启时 `_tenants_missing_web_fetch_tool` 找出缺少该工具的活跃子租户，逐个执行 `acopy_root_builtin_tools_to_tenant`。每一步失败只记日志，下次启动再补。
+**升级**：`init_default_data`（持有 Redis 锁）→ `_ensure_web_fetch_tool` 按种子 JSON 插入根租户行（已存在则跳过）→ OpenFGA 收尾步骤之后执行 `_sync_web_fetch_tool`：多租户开启时 `_tenants_missing_web_fetch_tool` 找出缺少该工具的活跃子租户，在该租户上下文里逐个执行 `acopy_root_builtin_tools_to_tenant`；OpenFGA 开启时 `_project_web_fetch_tool_types` 用一次查询检查所有租户网页读取分类的投影状态，只对 `MISSING` 的逐个在其租户上下文里补投影（先等 OpenFGA 就绪，与全新安装的对账同一套 process runtime）。每一步失败只记日志，下次启动再补。
 
 ### 4.2 关键数据结构 / 字段约定
 
@@ -176,6 +176,8 @@
 | 7 | `_ensure_image_view_tool` 不做权限投影，Image View 不受影响只是因为它不经过权限检查 | 照抄后，非超级管理员在老环境里列不出、用不了网页读取 | 决策 8 |
 | 8 | 子租户只在缺少默认工具时懒复制根租户的预置工具 | 老环境的已有子租户永远看不到网页读取 | 决策 8，升级时主动复制 |
 | 13 | `init_default_data` 里任何未捕获的异常都会让后端启动失败（外层 `raise RuntimeError`） | 补投影或复制子租户时 OpenFGA 未就绪，整个后端起不来 | `_sync_web_fetch_tool` 逐步 `try/except` 只记日志 |
+| 15 | 权限投影的写入链路会查按租户过滤的表；启动阶段没有当前租户，直接调用会抛 `NoTenantContextError`（2026-10-19 首次部署 test 时实测，根租户和全部子租户都失败） | 升级后普通用户用不了网页读取 | `_sync_web_fetch_tool` / `_project_web_fetch_tool_types` 逐个设置 `current_tenant_id` 后再复制、投影 |
+| 16 | 子租户复制函数先提交工具行、再做投影；投影失败时工具行已经存在 | 若按「有没有工具行」判断是否要补，失败的投影永远不会被修 | 补投影按「投影状态是否 `MISSING`」判断，不按工具行 |
 | 14 | `test/sandbox/test_code_interpreter_seed_default.py` 用 AST 禁止 `init_data.py` 出现任何 `extra=` 关键字参数，但它的本意是「升级时不改已有行的 extra」；主线上该测试已因 `_ensure_image_view_tool` 失败 | 误以为是本 feature 引入的回归 | 本 feature 的插入只写新行；该测试的误报留给其维护方处理 |
 | 9 | 旧工具的设置弹窗和 `MANAGED_TOOLS` 按分类的中文名匹配，子租户复制也按名字匹配；在 platform 源码里新增中文字面量会让文件超出 lint 冻结配额 | 设置按钮不出现；lint 失败；子租户复制出重复分类 | 前端改按子工具 `tool_key = web_fetch` 识别（`tools/index.tsx` 的 `hasManagedToolKey`、`ToolSet.tsx`）；分类名只在种子 JSON 里定义一次，补数据函数从种子读取 |
 | 10 | 只有 `api_key` 等固定字段名会被掩码 | 换个字段名，秘钥会明文返回给前端 | 配置字段名固定为 `api_key` |
