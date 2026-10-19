@@ -12,14 +12,14 @@ API endpoint → MarketService → MarketRepository → SQLModel，MinIO 制品�
 
 ## 身份和权限
 
-- 桌面与 SPA 传递 BISHENG 签名 JWT（Bearer），也兼容现有 HttpOnly Cookie。验证 JWT、token_version，再构造 LoginUser。
-- 员工目录、下载、同步从已验证 JWT 的租户与用户派生范围；管理视图不影响员工范围。
+- 员工分发接口使用 `bisheng-dsh-access+jwt` Desktop 凭据，经既有 DshAccessService 验证账号、会话和在线席位；market_employee 限定 Desktop 身份。
+- 目录、下载、能力查询与同步均从已验证身份派生租户及用户范围。管理视图对员工分发范围保持独立。
 - 管理端使用现有 check_tenant_admin 应用协议；普通及全局管理员均以登录身份的 tenant_id 为当前市场范围。
 - `X-DSH-Market-Tenant` 作为登录租户一致性检查，和 actor.tenant_id 不同即拒绝。管理路由移出 AdminScopeMiddleware，market_actor/market_admin 显式关闭管理视图标志并设置仅含登录租户的可见范围。
 - 市场属于租户分发设置，采用租户管理员/员工二层权限；对象没有个人所有者、共享关系或继承授权，无需新增 FGA 资源类型及 tuple 投影。
 - 所有读写显式添加 tenant_id 谓词，写操作同时校验 revision。JSON 字段使用 JsonType，SQL 避免绑定 MySQL 专属操作。
 
-Desktop 的企业登录基于另外已有的网关登录工作；本次 API 接受 BISHENG JWT。若实际网关使用 opaque token，须在企业统一地址处兑换/转发为已验证 BISHENG 用户 JWT，并对齐 tenant/user 标识。客户端和前端均无法获取对象存储管理凭证。实际网关联调尚未执行。
+Desktop 的企业凭据由 Electron 主进程持有，经限定的市场 Broker 访问已确认的企业地址。管理端继续使用平台 JWT/HttpOnly Cookie、token_version 与租户管理员校验。对象存储管理凭据保留在服务端。
 
 ## API v1
 
@@ -27,10 +27,10 @@ Desktop 的企业登录基于另外已有的网关登录工作；本次 API 接�
 
 | 方法/路径 | 身份 | 内容 |
 | --- | --- | --- |
-| GET /capabilities | 登录员工 | contract_version=1、配置状态、tenant_id、上限与周期 |
+| GET /capabilities | 登录员工 | contract_version=2、enabled=true、tenant_id、上限与同步周期 |
 | GET /catalog?q=&page=&size= | 登录员工 | 仅本租户当前发布版本，授权过滤后分页 |
 | GET /plugins/{id}/versions/{version_id}/artifact | 登录员工 | 复核发布状态和摘要，返回 ZIP；禁止共享缓存 |
-| POST /sync | 登录员工 | 设备运行状态报告，返回 Ed25519 签名策略 |
+| POST /sync | 登录员工 | 设备运行状态报告，返回在线插件发布状态 |
 | GET /admin/context | 租户管理员 | 当前登录租户 |
 | GET /admin/plugins | 租户管理员 | 本登录租户列表及分页；旧搜索/状态参数保留协议兼容 |
 | GET /admin/plugins/{id} | 租户管理员 | 插件状态和全部版本；操作记录保留在后台 |
@@ -41,17 +41,17 @@ Desktop 的企业登录基于另外已有的网关登录工作；本次 API 接�
 | POST /admin/imports/{id}/resume | 租户管理员 | 恢复 validating 任务 |
 | GET /admin/devices | 租户管理员 | 兼容已有设备状态读取；首版管理页面使用插件与版本详情 |
 
-错误码 26101：发布包校验；26102：并发/版本状态冲突；26103：记录或可发布制品缺失；26104：管理权限。多语言错误码遵循 locales SSOT 生成。
+错误码 26201：发布包校验；26202：并发/版本状态冲突；26203：记录或可发布制品缺失；26204：管理权限。多语言错误码遵循 locales SSOT 生成。
 
-## 签名与离线运行
+## 在线席位与发布状态
 
-服务端环境变量 `BISHENG_DSH_MARKET_SIGNING_KEY` 载入 PKCS#8 PEM Ed25519 私钥，建议通过部署 secret 注入。Desktop 预置对应 SPKI PEM 公钥。私钥缺失时能力声明 enabled=false；错误密钥使签名失败。
+`/capabilities` 在有效 Desktop 席位校验通过后返回市场协议 2。`/sync` 返回普通 JSON：tenant_id、user_id、device_id、synced_at，以及各插件 disabled/revision/current_version_id/曾发布版本摘要。市场直接复用既有企业身份、会话和席位校验，部署只需配置现有企业服务。
 
-`/sync` 返回 `{payload, signature}`，均为 base64url；签名覆盖原始 JSON 字节。payload 包含 tenant_id、user_id、device_id、issued_at、expires_at，以及各插件 disabled/revision/current_version_id/曾发布版本摘要。
+Desktop 逐项校验同步响应与当前身份、设备及发布状态，将本次响应保存在内存。安装、更新和启用要求在线复核；后台按 60 秒同步，设置入口按既有 5 秒周期刷新。席位失效、会话到期或网络确认失败时停用实例，保留安装记录与用户配置。升级时清理旧 public_key 与 lease 缓存。插件 ZIP 与安装文件的 SHA-256、路径、平台和 peer 依赖检查保持有效。
 
-Desktop 用部署公钥验证签名，绑定账号与设备，设置授权到期定时器。已有启用版本在有效缓存授权内可离线恢复；新增安装、更新与新增启用要求在线复核。新安装还需匹配当前发布版本，历史已发布资格只用于已有安装。
+选择在线校验是因为当前工作流程依赖企业 API；企业 API 可连接时可直接确认席位。BISHENG 和 Desktop 使用相同协议版本协同发布，版本不匹配由客户端提示升级。
 
-部署代理应支持 256 MiB 文件加 multipart 开销，限制整体请求体、并发和临时上传空间。应用在读取文件时再次执行大小限制；框架可能先把 multipart 暂存到磁盘，因此反向代理限制仍需配置。
+部署代理应支持 512 MiB 文件加 multipart 开销，限制整体请求体、并发和临时上传空间。应用在读取文件时再次执行大小限制；框架可能先把 multipart 暂存到磁盘，因此反向代理限制仍需配置。
 
 ## 离线发布包
 
@@ -84,7 +84,7 @@ ZIP 根目录 `manifest.json`，平台文件位于 `bundles/{os}-{arch}/node_mod
 
 ## Constitution Check
 
-C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应用协议并校验目标租户；C5 登记 261；C6 私钥通过 secret 注入；C7 前端 API 统一封装；C8 共享数据持久化到数据库及 MinIO。租户模型已登记自动过滤，同时仓库保留显式租户参数与谓词，约束设备身份和管理视图的独立范围；批量写入遵循 backend/AGENTS.md 的显式租户要求。查询范围先确定再分页，管理变更使用 CAS。3006 的 MySQL/MinIO 与签名基础检查已通过；DM8、完整认证中间件及登录用户流程验收单独列为 NOT_RUN。
+C1 分层；C2 使用 JsonType 与通用 SQL；C4 使用现有租户管理员应用协议并校验目标租户；C5 使用市场错误码 262；C6 企业凭据由主进程和服务端持有；C7 前端 API 统一封装；C8 共享数据持久化到数据库及 MinIO。租户模型已登记自动过滤，同时仓库保留显式租户参数与谓词，约束设备身份和管理视图的独立范围；批量写入遵循 backend/AGENTS.md 的显式租户要求。查询范围先确定再分页，管理变更使用 CAS。历史部署证据见 deployment.md；本次协议 2 的自动验证、部署和真实用户验收分别记录于 tasks.md。
 
 
 ## 删除字段升级与分支

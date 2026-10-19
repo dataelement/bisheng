@@ -11,7 +11,8 @@ from fastapi.responses import JSONResponse
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.context import tenant as context
-from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin
+from bisheng.dsh_market.api.auth import MarketActor, market_actor, market_admin, market_employee
+from bisheng.dsh_market.api.endpoints import router
 from bisheng.utils.http_middleware import CustomMiddleware, owns_dsh_credential
 from test.dsh.test_access import Seats, service, token
 
@@ -21,6 +22,7 @@ def market_app(monkeypatch):
     import bisheng.dsh.access_runtime as runtime
 
     seats = Seats()
+    monkeypatch.setattr(runtime, "get_settings", lambda: None)
     monkeypatch.setattr(runtime, "get_runtime", AsyncMock(return_value=SimpleNamespace(access=service(seats))))
     app = FastAPI()
     app.add_middleware(CustomMiddleware)
@@ -30,7 +32,7 @@ def market_app(monkeypatch):
         return JSONResponse(error.to_dict())
 
     @app.get("/api/v1/dsh/market/catalog")
-    async def catalog(request: Request, actor: MarketActor = Depends(market_actor)):
+    async def catalog(request: Request, actor: MarketActor = Depends(market_employee)):
         if request.headers.get("x-test-admin"):
             await market_admin(request, actor)
         return {
@@ -41,6 +43,7 @@ def market_app(monkeypatch):
             "bypass": context.is_tenant_filter_bypassed(),
         }
 
+    app.include_router(router, prefix="/api/v1")
     return app, seats
 
 
@@ -84,6 +87,25 @@ async def test_revoked_seat_and_invalid_signature_are_rejected(market_app):
         assert result.status_code == 401
 
 
+@pytest.mark.parametrize(
+    "method,path,body",
+    [
+        ("GET", "/capabilities", None),
+        ("GET", "/catalog", None),
+        ("GET", "/plugins/" + "a" * 32 + "/versions/" + "b" * 32 + "/artifact", None),
+        ("POST", "/sync", {"device_id": "device", "plugins": []}),
+    ],
+)
+async def test_revoked_seat_blocks_all_distribution_routes(market_app, method, path, body):
+    app, seats = market_app
+    seats.active = False
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://example.test") as client:
+        result = await client.request(
+            method, "/api/v1/dsh/market" + path, headers={"Authorization": "Bearer " + token()}, json=body
+        )
+        assert result.status_code == 403
+
+
 async def test_desktop_credential_cannot_manage_market(market_app):
     app, _ = market_app
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://example.test") as client:
@@ -113,3 +135,23 @@ async def test_desktop_credential_cannot_manage_market(market_app):
 )
 def test_market_route_credential_ownership(method, path, owned):
     assert owns_dsh_credential(method, path) is owned
+
+
+@pytest.mark.parametrize(
+    "method,path,body",
+    [
+        ("GET", "/capabilities", None),
+        ("GET", "/catalog", None),
+        ("GET", "/plugins/" + "a" * 32 + "/versions/" + "b" * 32 + "/artifact", None),
+        ("POST", "/sync", {"device_id": "device", "plugins": []}),
+    ],
+)
+async def test_platform_login_requires_a_desktop_seat_for_distribution(method, path, body):
+    from bisheng.dsh_market.api.endpoints import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://example.test") as client:
+        result = await client.request(method, "/dsh/market" + path, json=body)
+        assert result.status_code == 403

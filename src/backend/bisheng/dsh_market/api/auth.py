@@ -20,8 +20,6 @@ class MarketActor:
 
 async def market_actor(request: Request) -> MarketActor:
     from bisheng.core.context.tenant import set_current_tenant_id, set_is_management_api, set_visible_tenant_ids
-    from bisheng.user.domain.services.auth import AuthJwt, LoginUser
-    from bisheng.utils.http_middleware import _validate_token_version
 
     authorization = request.headers.get("authorization", "")
     if len(request.headers.getlist("authorization")) > 1:
@@ -48,6 +46,9 @@ async def market_actor(request: Request) -> MarketActor:
             tenant_context.set_admin_scope_tenant_id(None)
             tenant_context._bypass_tenant_filter.set(False)
             return MarketActor(tenant_id, int(principal.user_id), desktop=True)
+    from bisheng.user.domain.services.auth import AuthJwt, LoginUser
+    from bisheng.utils.http_middleware import _validate_token_version
+
     token = request.cookies.get("access_token_cookie")
     if authorization.startswith("Bearer "):
         token = authorization[7:]
@@ -71,6 +72,13 @@ async def market_actor(request: Request) -> MarketActor:
     set_current_tenant_id(user.tenant_id)
     set_visible_tenant_ids(frozenset({user.tenant_id}))
     return MarketActor(user.tenant_id, user.user_id, user.is_global_super)
+
+
+async def market_employee(actor: MarketActor = Depends(market_actor)) -> MarketActor:
+    """Employee distribution uses the verified Desktop seat identity."""
+    if actor.desktop:
+        return actor
+    raise HTTPException(403, "An active Desktop seat is required")
 
 
 async def market_admin(request: Request, actor: MarketActor = Depends(market_actor)) -> MarketActor:

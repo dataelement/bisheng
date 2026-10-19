@@ -1,4 +1,3 @@
-import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
@@ -8,11 +7,10 @@ from starlette.concurrency import run_in_threadpool
 from bisheng.common.errcode.dsh_market import MarketBundleError, MarketConflictError, MarketNotFoundError
 from bisheng.common.schemas.api import resp_200
 from bisheng.dsh_market.domain.bundle import MAX_UPLOAD_BYTES, BundleError
-from bisheng.dsh_market.domain.lease import verification_key
 from bisheng.dsh_market.domain.repository import ConflictError
 from bisheng.dsh_market.infrastructure import get_market_service
 
-from .auth import MarketActor, market_actor, market_admin
+from .auth import MarketActor, market_admin, market_employee
 
 router = APIRouter(prefix="/dsh/market", tags=["DSH enterprise plugin market"])
 
@@ -47,16 +45,13 @@ class DeviceReport(BaseModel):
 
 
 @router.get("/capabilities")
-async def capabilities(actor: MarketActor = Depends(market_actor)):
-    enabled = bool(os.environ.get("BISHENG_DSH_MARKET_SIGNING_KEY"))
+async def capabilities(actor: MarketActor = Depends(market_employee)):
     return resp_200(
         {
-            "enabled": enabled,
-            "public_key": verification_key() if enabled else None,
-            "contract_version": 1,
+            "enabled": True,
+            "contract_version": 2,
             "tenant_id": str(actor.tenant_id),
             "max_upload_bytes": MAX_UPLOAD_BYTES,
-            "lease_seconds": 3600,
             "sync_seconds": 60,
         }
     )
@@ -67,7 +62,7 @@ async def catalog(
     q: str = Query(default="", max_length=200),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
-    actor: MarketActor = Depends(market_actor),
+    actor: MarketActor = Depends(market_employee),
     service=Depends(get_market_service),
 ):
     return resp_200(await call(service.list_plugins, actor.tenant_id, q.strip(), page=page, size=size, employee=True))
@@ -75,7 +70,7 @@ async def catalog(
 
 @router.get("/plugins/{plugin_id}/versions/{version_id}/artifact")
 async def artifact(
-    plugin_id: str, version_id: str, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)
+    plugin_id: str, version_id: str, actor: MarketActor = Depends(market_employee), service=Depends(get_market_service)
 ):
     data, digest = await call(service.download, actor.tenant_id, plugin_id, version_id)
     return Response(
@@ -91,7 +86,9 @@ async def artifact(
 
 
 @router.post("/sync")
-async def sync(report: DeviceReport, actor: MarketActor = Depends(market_actor), service=Depends(get_market_service)):
+async def sync(
+    report: DeviceReport, actor: MarketActor = Depends(market_employee), service=Depends(get_market_service)
+):
     receipt = await call(
         service.synchronize,
         actor.tenant_id,

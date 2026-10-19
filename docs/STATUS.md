@@ -1,3 +1,11 @@
+## 2026-10-19 — 企业插件采用在线席位访问
+
+- 目标基线：`dataelement/bisheng:feat/bisheng-work-120@ea1a3a6bfae06b4037b6f0720abe0c5ed7d0bf2c`，分支 `codex/plugin-market-online-access-120`。
+- 员工能力查询、目录、下载与同步统一使用既有 Desktop 身份和在线席位验证，采用市场协议 2。发布状态直接返回账号、企业、设备与版本摘要，市场部署复用既有企业服务配置。已删除独立签名模块；插件包摘要、文件清单、租户隔离与管理员导入检查继续生效。
+- 管理端中、英、日说明和删除提示统一展示有效席位及在线连接条件。配套桌面基于 `dataelement/bisheng-work:V1.2.0@e9f206331d9ff5a1e36ffdb29ab7403881dc6bb2`、Harness `0.2.0-rc.2`，两端按协议 2 一起发布。
+- 验证：后端市场/席位 62 项、前端市场/路由 11 项、平台 strict 530 文件、平台生产构建、i18n、变更文件 Ruff 和架构守卫通过。平台完整 lint 95 errors / 1 warning 与同一目标提交的基线逐字一致，变更涉及页面/API/测试的定向 ESLint 通过。
+- 跨仓库真实 ASGI/SQLite/Cordis 安装链路通过：导入、目录、安装、加载、重启、卸载；身份和对象存储使用明确测试适配器。真实企业 Gateway、部署后原生 Desktop、Windows 和正式安装包分别验收。当前交付为源码 PR。
+
 ## 2026-10-19 — Desktop Chat session exchange restored
 
 - Shared baseline: `feat/bisheng-work-120@562ee4e6a`. The full-stack migration omitted the prior desktop session exchange route and its HTTP/WebSocket validators, causing desktop Chat to receive 404 while browser login remained available.

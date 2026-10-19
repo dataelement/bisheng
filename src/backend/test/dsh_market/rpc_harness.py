@@ -44,7 +44,7 @@ service = MarketService(MarketRepository(sessions), ObjectStore())
 app = FastAPI()
 app.include_router(router, prefix="/api/v1")
 app.dependency_overrides[get_market_service] = lambda: service
-app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20)
+app.dependency_overrides[market_actor] = lambda: MarketActor(2, 20, desktop=True)
 app.dependency_overrides[market_admin] = lambda: MarketActor(2, 20)
 
 
