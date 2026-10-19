@@ -107,7 +107,7 @@ export function SkillCenterPage() {
   // Mobile switches 我的技能 / 技能广场 with these in-flow tabs; desktop has no square here.
   const mobileTabs = (
     <Tabs
-      className="w-full shrink-0 md:hidden"
+      className="w-full shrink-0"
       activeKey={view}
       onChange={(key) => handleViewChange(key as ModuleView)}
       items={[
@@ -197,16 +197,16 @@ export function SkillCenterPage() {
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-white">
       {view === 'mine' ? (
-        <div className={cn(MODULE_HOME_FRAME, 'max-md:px-4 max-md:pt-0')}>
-          {mobileTabs}
+        <div className={cn(MODULE_HOME_FRAME, isMobile && 'px-4 pt-0')}>
+          {isMobile && mobileTabs}
           {/* Desktop: the shared header row — switchers left, tools right (create last). */}
-          <div className="flex w-full justify-center max-md:hidden">
+          {!isMobile && <div className="flex w-full justify-center">
             <ModuleHomeHeader title={localize('com_skill_center_title')}>{mineTools}</ModuleHomeHeader>
-          </div>
+          </div>}
           <div className={cn(MODULE_HOME_COLUMN, 'mt-4 flex shrink-0 flex-wrap items-center gap-3')}>
             <p className="min-w-0 flex-1 truncate text-body-sm text-text-3 max-[575px]:basis-full">{localize('com_skill_center_subtitle')}</p>
             {/* Mobile has no header row (the top bar carries the title), so the tools stay in flow. */}
-            <div className="contents md:hidden">{mineTools}</div>
+            {isMobile && <div className="contents">{mineTools}</div>}
           </div>
           {/* The scroll area spans the full width so its scrollbar sits at the page edge. */}
           <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
@@ -215,7 +215,7 @@ export function SkillCenterPage() {
         </div>
       ) : (
         <div className="flex h-full min-h-0 w-full flex-col items-center overflow-hidden">
-          <div className="w-full shrink-0 px-4 md:hidden">{mobileTabs}</div>
+          {isMobile && <div className="w-full shrink-0 px-4">{mobileTabs}</div>}
           <SkillSquareBanner />
           <div className="flex w-full max-w-[1000px] shrink-0 items-center justify-end px-5 py-5">{searchInput}</div>
           <main className="scrollbar-os flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
