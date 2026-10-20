@@ -22,6 +22,7 @@ interface SubflowSelectItemProps {
     data: WorkflowNodeParam
     onChange: (value: unknown) => void
     onValidate: (validate: () => string | false) => void
+    onVarEvent: (validate: () => Promise<string> | void) => void
     i18nPrefix: string
 }
 
@@ -31,7 +32,7 @@ interface SubflowSelectItemProps {
  * The inputs and outputs live in the node's hidden params `subflow_inputs` and
  * `subflow_outputs`; the latter is what downstream variable pickers read.
  */
-export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, i18nPrefix }: SubflowSelectItemProps) {
+export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, onVarEvent, i18nPrefix }: SubflowSelectItemProps) {
     const { t } = useTranslation('flow')
     const { flow } = useFlowStore()
     const inputsParam = findNodeParam(node, 'subflow_inputs')
@@ -134,6 +135,7 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, i1
                     data={inputsParam}
                     onChange={(rows) => { inputsParam.value = rows }}
                     onValidate={() => { }}
+                    onVarEvent={onVarEvent}
                     i18nPrefix="node.subflow.subflow_inputs."
                     fixedKeys
                 />

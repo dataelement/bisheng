@@ -15,6 +15,7 @@ interface EndReturnItemProps {
     data: WorkflowNodeParam
     onChange: (value: unknown) => void
     onValidate: (validate: () => string | false) => void
+    onVarEvent: (validate: () => Promise<string> | void) => void
     i18nPrefix: string
 }
 
@@ -23,7 +24,7 @@ interface EndReturnItemProps {
  * The switch lives in the hidden sibling param `return_enabled`; the list is only
  * shown and validated while the switch is on.
  */
-export function EndReturnItem({ nodeId, node, data, onChange, onValidate, i18nPrefix }: EndReturnItemProps) {
+export function EndReturnItem({ nodeId, node, data, onChange, onValidate, onVarEvent, i18nPrefix }: EndReturnItemProps) {
     const { t } = useTranslation('flow')
     const enabledParam = node.group_params
         .flatMap(group => group.params)
@@ -39,6 +40,10 @@ export function EndReturnItem({ nodeId, node, data, onChange, onValidate, i18nPr
 
     const handleValidate = (validate: () => string | false) => {
         onValidate(() => (enabledRef.current ? validate() : false))
+    }
+
+    const handleVarEvent = (validate: () => Promise<string> | void) => {
+        onVarEvent(() => (enabledRef.current ? validate() : Promise.resolve('')))
     }
 
     const validateName = (name: string) =>
@@ -57,6 +62,7 @@ export function EndReturnItem({ nodeId, node, data, onChange, onValidate, i18nPr
             data={data}
             onChange={onChange}
             onValidate={handleValidate}
+            onVarEvent={handleVarEvent}
             i18nPrefix={i18nPrefix}
             refOnly
             validateName={validateName}

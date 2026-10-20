@@ -243,9 +243,9 @@ export default function Parameter({
             return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
             />;
         case 'end_return':
-            return <EndReturnItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix} />;
+            return <EndReturnItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} i18nPrefix={i18nPrefix} />;
         case 'subflow_select':
-            return <SubflowSelectItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix} />;
+            return <SubflowSelectItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} i18nPrefix={i18nPrefix} />;
         case "metadata_filter": return (
             <MetadataFilter
                 data={item}

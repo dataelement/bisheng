@@ -4,7 +4,7 @@ import { cloneDeep } from "lodash-es";
 import { getWorkflowNodeTemplate } from "@/controllers/API/workflow";
 import { applySubflowInterface, findNodeParam } from "@/pages/BuildPage/flow/FlowNode/component/subflowParams";
 import type { WorkflowNode } from "@/types/flow";
-import { isVarInFlow } from "@/util/flowUtils";
+import { findInvalidRefItems, isVarInFlow } from "@/util/flowUtils";
 
 const consumer = { id: "output_1", data: { name: "Output", group_params: [] } };
 
@@ -55,6 +55,14 @@ describe("subflow return variable validation", () => {
         refresh(["summary"]);
         expect(isVarInFlow(consumer.id, [node, consumer], "subflow_1.minutes", "Child/minutes")).toBe("Invalid reference");
         expect(isVarInFlow(consumer.id, [node, consumer], "subflow_1.summary", "Child/summary")).toBe("");
+    });
+
+    it("flags Code inputs and End return results that reference a renamed return value", async () => {
+        const { node, refresh } = await createSubflow();
+        const rows = [{ key: "text", type: "ref", label: "Child/minutes", value: "subflow_1.minutes" }];
+        expect(findInvalidRefItems(consumer.id, [node, consumer], rows)).toEqual({ error: "", indexes: [] });
+        refresh(["summary"]);
+        expect(findInvalidRefItems(consumer.id, [node, consumer], rows)).toEqual({ error: "Invalid reference", indexes: [0] });
     });
 
     it("rejects a return value removed from the child interface", async () => {
