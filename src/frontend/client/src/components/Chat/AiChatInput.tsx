@@ -282,16 +282,11 @@ const AiChatInput = memo(
             (model) => String(model.id) === String(modelValue) && model.visual
         );
 
-        // Leaving task mode drops what only task mode could carry: the skill
-        // selection (so the panel's checkboxes reset in sync with the now-hidden
-        // chips) and any attachment daily chat cannot accept. The latter is not
-        // tidiness — daily chat feeds attachments through the document parser, so a
-        // leftover .py would fail the whole turn instead of just being ignored.
+        // Switching to ordinary chat keeps skills and filters attachments to
+        // the formats supported by its document parser.
         // Fires only on a true→false transition, never on mount or re-entry.
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
-                setDailySkills((prev) => (prev.length ? [] : prev));
-
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     enableEtl4lm: !!bsConfig?.enable_etl4lm,
@@ -322,7 +317,7 @@ const AiChatInput = memo(
             // envConfig/bsConfig are read only when the transition fires; leaving them
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, setDailySkills, supportsVision]);
+        }, [taskMode, supportsVision]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -334,15 +329,14 @@ const AiChatInput = memo(
         // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
         // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
         const showAddSkill = !!bsConfig?.skillEntry?.enabled;
-        useDefaultCheckedSkills({ taskMode, skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
+        useDefaultCheckedSkills({ skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
 
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
-            && (showAddSkill || skillCenterPreviewEnabled)
-            && (taskMode || (taskModeEntry && !!onToggleTaskMode));
+            && (showAddSkill || skillCenterPreviewEnabled);
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
         const fileAccept = buildChatAccept({
@@ -471,7 +465,7 @@ const AiChatInput = memo(
         }, []);
 
         // Skills and knowledge spaces render as references in the writing area.
-        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
+        const mountedSkills = !isLingsi ? dailySkills : [];
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
@@ -692,14 +686,10 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Executable skills use the platform picker and task submission path. */}
+                                    {/* Skill selection is shared by both platform execution modes. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
-                                            selected={taskMode ? dailySkills : []} disabled={!!disabled}
-                                            onChange={(next) => {
-                                                setDailySkills(next);
-                                                if (taskMode) return;
-                                                if (onToggleTaskMode) onToggleTaskMode();
-                                            }} />
+                                            selected={dailySkills} disabled={!!disabled}
+                                            onChange={setDailySkills} />
                                         : null}
                                 </ChatResourceMenu>
                             )}

@@ -13,6 +13,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { SSESubmission } from "./useAiChatSSE";
 
 /** Every SSE turn opened during a test, in order. */
+let mockSelectedSkills: Array<{ name: string }> = [];
 const mockOpenedStreams: Array<{ submission: SSESubmission; close: jest.Mock }> = [];
 
 jest.mock("./useAiChatSSE", () => ({
@@ -46,7 +47,7 @@ jest.mock("~/store", () => ({
 }));
 jest.mock("~/store/linsight", () => ({
     SopStatus: { Running: "running", Stoped: "stoped", SopGenerating: "sop_generating" },
-    taskModeSkillsState: () => ({ __testValue: [] }),
+    taskModeSkillsState: () => ({ __testValue: mockSelectedSkills }),
 }));
 
 jest.mock("~/hooks", () => ({ useLocalize: () => (key: string) => key }));
@@ -103,6 +104,7 @@ const latestStream = () => mockOpenedStreams[mockOpenedStreams.length - 1];
 
 beforeEach(() => {
     mockOpenedStreams.length = 0;
+    mockSelectedSkills = [];
     mockGetAgentMessages.mockImplementation((cid: string) => Promise.resolve(historyOf(cid)));
     mockGetSessionName.mockResolvedValue("");
 });
@@ -340,5 +342,19 @@ describe("useAiChat adopts a new conversation id", () => {
         rerender({ cid: "new" });
         await waitFor(() => expect(result.current.conversationId).toBe("new"));
         expect(result.current.messages).toHaveLength(0);
+    });
+});
+
+
+describe('skill selection is independent of execution mode', () => {
+    it.each([false, true])('sends selected skills when taskMode=%s', async (taskMode) => {
+        mockSelectedSkills = [{ name: 'writing' }];
+        const { result } = renderChat('c1');
+        await waitFor(() => expect(result.current.messages).toHaveLength(1));
+        act(() => result.current.sendMessage('Use this skill', null, { taskMode }));
+        expect(latestStream().submission.payload).toMatchObject({
+            task_mode: taskMode,
+            skills: ['writing'],
+        });
     });
 });

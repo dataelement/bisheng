@@ -127,14 +127,20 @@ test('media parsing keeps drafting available while blocking send until parsing c
 });
 
 
-test('selecting an enterprise skill preserves its selection and enters platform task mode', () => {
+test('skills remain selectable in ordinary chat with task entry disabled', () => {
   const toggle = jest.fn();
   const input = props();
-  const view = render(<AiChatInput {...input} features={{ ...input.features, taskMode: false }} onToggleTaskMode={toggle} />);
+  render(<AiChatInput {...input} features={{ taskModeEntry: false, taskMode: false }} onToggleTaskMode={toggle} />);
   fireEvent.click(screen.getByRole('button', { name: 'skills' }));
   expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
-  expect(toggle).toHaveBeenCalledTimes(1);
-  view.rerender(<AiChatInput {...input} onToggleTaskMode={toggle} />);
-  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
-  expect(toggle).toHaveBeenCalledTimes(1);
+  expect(toggle).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '/research', exact: true })).toBeInTheDocument();
+});
+
+test('switching execution mode preserves selected skills', () => {
+  const input = props();
+  const view = render(<AiChatInput {...input} />);
+  view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
+  expect(mockSetSkills).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: '/research', exact: true })).toBeInTheDocument();
 });

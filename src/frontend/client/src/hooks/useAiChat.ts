@@ -204,9 +204,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // emits the new ChatResponse SSE format). Empty array keeps us on the
     // legacy flow so existing tests / old clients aren't disrupted.
     const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
-    // F035 Track H: skills picked in the daily task-mode input live in the shared
-    // 'new' atom (AiChatInput keys the picker there). Threaded onto the task-mode
-    // turn's submit payload so the user's explicit selection is what gets loaded.
+    // The input and request share the explicit skill selection for both modes.
     const [dailyTaskSkills] = useRecoilState(taskModeSkillsState('new'));
     // Admin-level org-KB toggle. Knowledge spaces remain available even when
     // the org knowledge base feature is disabled, so we only strip org ids.
@@ -637,10 +635,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // F035 Track J (TJ-6): route this turn to the linsight task kernel
                 // via the SAME unified entry. Backend replies with a handoff event.
                 task_mode: taskMode,
-                // F035 Track H: send the picked skill names on task-mode turns so
-                // the backend materializes exactly those (empty = none). Omitted
-                // outside task mode (the daily chain ignores it).
-                skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
+                // Both execution modes consume the user's explicit skill selection.
+                skills: dailyTaskSkills.map((s) => s.name),
             };
 
             // Correlation key for the user (question) message. Starts as the

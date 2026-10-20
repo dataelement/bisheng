@@ -1,4 +1,7 @@
 {
+  "skillReference": {
+    "readFile": "读取技能参考文件"
+  },
   "admin": "管理员",
   "bisheng": "{{bishengZh}}",
   "cancel": "取消",

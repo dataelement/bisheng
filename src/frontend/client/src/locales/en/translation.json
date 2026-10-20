@@ -1,4 +1,7 @@
 {
+  "skillReference": {
+    "readFile": "Read skill reference"
+  },
   "admin": "Administrator",
   "bisheng": "{{bisheng}}",
   "cancel": "Cancel",
