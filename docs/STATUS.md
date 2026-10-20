@@ -1,3 +1,9 @@
+## 2026-10-20 — Chat 输入框原生细节对齐
+
+- 参照当前 Work / Harness conversation 与 model-selection UI 0.2.0-rc.2，Chat 卡片采用 28px + superellipse(1.5) 连续圆角；发送按钮采用原生 16px 实心箭头。
+- 模型按钮独立拥有 13px/400 字体与左右 8px/4px 内边距，采用原生 14px 下拉图形，保留 Work 模型与操作区之间的活动槽留白；窄卡片按容器宽度收紧留白。首页已确认的标题与卡片布局保持。
+- 验证与发布：进行中。
+
 ## 2026-10-20 — Chat / Work 首页布局对齐
 
 - Work 参照为正在运行的 bisheng-work-chat-work@1f3bbb041、Harness 与 conversation UI 0.2.0-rc.2；远端 V1.2.0 当前 a77dd7612。此次改动集中在 Chat 网页首页。

@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import { Check, ChevronDown } from "lucide-react";
+import { Check } from "lucide-react";
 import { Combobox, ComboboxItem, ComboboxList, ComboboxProvider } from "@ariakit/react";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
 import { useLocalize } from "~/hooks";
@@ -76,9 +76,12 @@ const AiModelSelect = memo(
         return (
             <Popover open={open && !disabled} onOpenChange={(next) => { setOpen(next); setQuery(""); }}>
                 <PopoverTrigger asChild>
-                    <button type="button" disabled={disabled} className="dsh-composer-control dsh-model-trigger">
+                    <button type="button" disabled={disabled} className="dsh-model-trigger">
                         <span>{label || localize("com_ui_select_model")}</span>
-                        <ChevronDown size={12} aria-hidden className={open ? "rotate-180" : ""} />
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" strokeWidth="1"
+                            aria-hidden="true" className={open ? "rotate-180" : ""}>
+                            <path d="M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" stroke="currentColor" />
+                        </svg>
                     </button>
                 </PopoverTrigger>
                 <PopoverContent side="top" align="end" sideOffset={8} collisionPadding={16}

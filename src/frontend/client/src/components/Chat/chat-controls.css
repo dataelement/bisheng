@@ -56,7 +56,7 @@ body[data-dsh-chat-theme] .dsh-chat-menu {
   .dsh-chat-surface .dsh-composer-add:hover { background:rgb(var(--fill-1)); }
   .dsh-chat-surface .dsh-composer-submit:hover:enabled { background:rgb(var(--brand-600)); }
 }
-@media (max-width:767px) {
+@container (width <= 560px) {
   .dsh-chat-surface .dsh-composer-trailing { gap:8px; }
 }
 @media (prefers-reduced-motion:reduce) {
