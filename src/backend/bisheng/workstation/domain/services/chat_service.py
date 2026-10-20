@@ -82,7 +82,6 @@ from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng.workstation.domain.schemas.chat import APIChatCompletion
-from bisheng.workstation.domain.services.chat_skills import load_chat_skills
 from bisheng.workstation.domain.services.kb_image_stage import KbImageStage
 
 from .chat_helpers import (
@@ -1862,7 +1861,6 @@ async def _agent_stream_chat_completion(
         )
 
         try:
-            selected_skills = await load_chat_skills(tenant_id, login_user.user_id, data.skills)
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
 
@@ -1887,7 +1885,6 @@ async def _agent_stream_chat_completion(
                 citation_scope=citation_scope,
                 kb_image_stage=kb_image_stage,
             )
-            langchain_tools.extend(selected_skills.tools)
 
             # Surface init failures as synthetic tool_call events so the user
             # sees *something* (e.g. "联网搜索 失败: 未配置服务商") rather than
@@ -1942,8 +1939,6 @@ async def _agent_stream_chat_completion(
                 file_context=file_context,
                 knowledge_bases_info=knowledge_bases_info,
             )
-            if selected_skills.instructions:
-                user_text = f"{selected_skills.instructions}\n\nUser request:\n{user_text}"
 
             # Row-count ceiling just limits DB work; the real trimming
             # happens inside get_chat_history via the token cap
@@ -2518,7 +2513,8 @@ async def stream_chat_completion(
     """
     if data.task_mode:
         return await _task_mode_stream_completion(request, data, login_user)
-    return await _agent_stream_chat_completion(request, data, login_user, session_subject)
+    daily_data = data.model_copy(update={"skills": []})
+    return await _agent_stream_chat_completion(request, daily_data, login_user, session_subject)
 
 
 # Upper bound for in-stream title generation (task mode). Matches the gen_title

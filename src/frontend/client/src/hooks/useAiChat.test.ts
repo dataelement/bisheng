@@ -346,15 +346,15 @@ describe("useAiChat adopts a new conversation id", () => {
 });
 
 
-describe('skill selection is independent of execution mode', () => {
-    it.each([false, true])('sends selected skills when taskMode=%s', async (taskMode) => {
+describe('task mode owns skill execution', () => {
+    it.each([false, true])('sends the mode-scoped skill selection when taskMode=%s', async (taskMode) => {
         mockSelectedSkills = [{ name: 'writing' }];
         const { result } = renderChat('c1');
         await waitFor(() => expect(result.current.messages).toHaveLength(1));
         act(() => result.current.sendMessage('Use this skill', null, { taskMode }));
         expect(latestStream().submission.payload).toMatchObject({
             task_mode: taskMode,
-            skills: ['writing'],
+            skills: taskMode ? ['writing'] : [],
         });
     });
 });

@@ -283,11 +283,11 @@ const AiChatInput = memo(
             (model) => String(model.id) === String(modelValue) && model.visual
         );
 
-        // Switching to ordinary chat keeps skills and filters attachments to
-        // the formats supported by its document parser.
+        // Ordinary chat clears task skills and keeps supported document attachments.
         // Fires only on a true→false transition, never on mount or re-entry.
         useEffect(() => {
             if (prevTaskModeRef.current && !taskMode) {
+                setDailySkills([]);
                 const dailyAccept = buildChatAccept({
                     enableMedia: !!envConfig?.enable_media_upload,
                     enableEtl4lm: !!bsConfig?.enable_etl4lm,
@@ -318,7 +318,7 @@ const AiChatInput = memo(
             // envConfig/bsConfig are read only when the transition fires; leaving them
             // out keeps a config refetch from re-running the cleanup.
             // eslint-disable-next-line react-hooks/exhaustive-deps
-        }, [taskMode, supportsVision]);
+        }, [taskMode, setDailySkills, supportsVision]);
 
         // Voice input: check if ASR model is available
         const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -330,14 +330,14 @@ const AiChatInput = memo(
         // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
         // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
         const showAddSkill = !!bsConfig?.skillEntry?.enabled;
-        useDefaultCheckedSkills({ skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
+        useDefaultCheckedSkills({ taskMode, skillEntryEnabled: showAddSkill, setSkills: setDailySkills });
 
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
         const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
-            && (showAddSkill || skillCenterPreviewEnabled);
+            && taskMode && (showAddSkill || skillCenterPreviewEnabled);
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
         const fileAccept = buildChatAccept({
@@ -466,7 +466,7 @@ const AiChatInput = memo(
         }, []);
 
         // Skills and knowledge spaces render as references in the writing area.
-        const mountedSkills = !isLingsi ? dailySkills : [];
+        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
         const { references, onReferencesChange } = useComposerReferences(
             mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
         );
@@ -670,7 +670,7 @@ const AiChatInput = memo(
                                         ? () => inputFilesRef.current?.openFolderPicker?.()
                                         : undefined}
                                 >
-                                    {/* Skill selection is shared by both platform execution modes. */}
+                                    {/* Task mode owns skill selection and execution. */}
                                     {showSkillPicker ? <ChatSkillSelector menu
                                             selected={dailySkills} disabled={!!disabled}
                                             onChange={setDailySkills} />

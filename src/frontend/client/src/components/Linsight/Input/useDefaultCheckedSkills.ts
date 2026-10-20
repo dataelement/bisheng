@@ -1,6 +1,6 @@
-/** Seed admin defaults once for the shared Chat skill selection, across execution modes. */
+/** Seed enterprise defaults for the current task-mode selection. */
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { getSelectableSkills, type SelectableSkill } from '~/api/linsight';
 import type { TaskModeSkill } from '~/store/linsight';
 
@@ -23,13 +23,15 @@ export function mergeDefaultCheckedSkills(
 let seeded = false;
 
 interface UseDefaultCheckedSkillsOptions {
+    taskMode: boolean;
     /** The 添加技能 entry switch; when it is off, nothing is preselected either. */
     skillEntryEnabled: boolean;
     setSkills: (update: (prev: TaskModeSkill[]) => TaskModeSkill[]) => void;
 }
 
-export function useDefaultCheckedSkills({ skillEntryEnabled, setSkills }: UseDefaultCheckedSkillsOptions) {
-    const active = skillEntryEnabled;
+export function useDefaultCheckedSkills({ taskMode, skillEntryEnabled, setSkills }: UseDefaultCheckedSkillsOptions) {
+    const prevTaskModeRef = useRef(taskMode);
+    const active = taskMode && skillEntryEnabled;
     // Same query key as SkillSelector, so the picker and the seed share one cache.
     const { data, isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
@@ -39,10 +41,17 @@ export function useDefaultCheckedSkills({ skillEntryEnabled, setSkills }: UseDef
         refetchOnReconnect: false,
     });
 
+    // A new task-mode session receives defaults after the previous selection is cleared.
+    useEffect(() => {
+        if (prevTaskModeRef.current && !taskMode) seeded = false;
+        prevTaskModeRef.current = taskMode;
+    }, [taskMode]);
+
     useEffect(() => {
         // Wait for the fetch to settle so a stale cache cannot seed outdated defaults.
         if (!active || seeded || !data || isFetching) return;
         seeded = true;
         setSkills((prev) => mergeDefaultCheckedSkills(prev, data));
-    }, [active, data, isFetching, setSkills]);
+        // taskMode re-runs this after the reset above; the flag is module state.
+    }, [active, taskMode, data, isFetching, setSkills]);
 }

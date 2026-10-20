@@ -204,7 +204,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     // emits the new ChatResponse SSE format). Empty array keeps us on the
     // legacy flow so existing tests / old clients aren't disrupted.
     const [selectedAgentTools] = useRecoilState(store.selectedAgentTools);
-    // The input and request share the explicit skill selection for both modes.
+    // Task-mode requests carry the explicit skill selection.
     const [dailyTaskSkills] = useRecoilState(taskModeSkillsState('new'));
     // Admin-level org-KB toggle. Knowledge spaces remain available even when
     // the org knowledge base feature is disabled, so we only strip org ids.
@@ -635,8 +635,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // F035 Track J (TJ-6): route this turn to the linsight task kernel
                 // via the SAME unified entry. Backend replies with a handoff event.
                 task_mode: taskMode,
-                // Both execution modes consume the user's explicit skill selection.
-                skills: dailyTaskSkills.map((s) => s.name),
+                // Ordinary turns carry an empty skill selection.
+                skills: taskMode ? dailyTaskSkills.map((s) => s.name) : [],
             };
 
             // Correlation key for the user (question) message. Starts as the

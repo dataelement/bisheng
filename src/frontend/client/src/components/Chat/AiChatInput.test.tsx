@@ -129,20 +129,20 @@ test('media parsing keeps drafting available while blocking send until parsing c
 });
 
 
-test('skills remain selectable in ordinary chat with task entry disabled', () => {
-  const toggle = jest.fn();
+test('ordinary chat offers task mode and keeps skills out of its menu and editor', () => {
   const input = props();
-  render(<AiChatInput {...input} features={{ taskModeEntry: false, taskMode: false }} onToggleTaskMode={toggle} />);
-  fireEvent.click(screen.getByRole('button', { name: 'skills' }));
-  expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
-  expect(toggle).not.toHaveBeenCalled();
-  expect(screen.getByText('/research')).toBeInTheDocument();
+  render(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
+  expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
+  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.getByRole('button', { name: 'research' })).toBeInTheDocument();
 });
 
-test('switching execution mode preserves selected skills', () => {
+test('returning to ordinary chat clears selected task skills', () => {
   const input = props();
   const view = render(<AiChatInput {...input} />);
-  view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
-  expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByText('/research')).toBeInTheDocument();
+  view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
+  expect(mockSetSkills).toHaveBeenCalledWith([]);
+  expect(screen.queryByText('/research')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'skills' })).toBeNull();
 });
