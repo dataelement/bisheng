@@ -10,9 +10,11 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
 **版本**: v3.0.0（开发分支 `feat/SEC-3.0.0-1016`）
-**最后更新**: 2026-10-16（第一期 workflow 实现后同步）
+**最后更新**: 2026-10-20（code review 修复后同步）
 
 > 本文中的「现状」指 `origin/feat/3.0.0` 41bf8c650 的代码。「目标」指 F078 实现后的状态。路径以 `src/backend/bisheng/`（简写 `B/`）和 `src/frontend/`（简写 `F/`）为根。
+>
+> **分期**：第一期只实现 workflow 助手节点（已完成）。助手应用顺延到第二期（tasks.md「分期」），相关内容在本文中标为「**第二期，未实现**」，描述的是第二期的目标，代码里还没有。第二期动工时以这些描述为起点，落地后去掉标记。
 
 ---
 
@@ -35,14 +37,14 @@
 | K4 | 多节点部署是默认假设，本地盘只能做缓存 | C8 | 决策 3：工作区以 MinIO 为准 |
 | K5 | 技能查询依赖当前租户上下文（`strict_tenant_filter`，不回落 Root） | `B/linsight/domain/models/linsight_skill.py:212-218` | 运行前必须设置租户上下文 |
 | K6 | 下载只限登录且有权查看会话的用户 | spec AC-28、AC-29、AC-37 | 决策 7：不复用任务模式下载接口 |
-| K7 | `assistant` 表新增列要兼容 DM8：用 `JsonType`，迁移带 `column_exists` 守卫 | C2 | 决策 9 |
+| K7 | `assistant` 表新增列要兼容 DM8：用 `JsonType`，迁移带 `column_exists` 守卫（第二期，未实现） | C2 | 决策 9 |
 
 **Constitution Check**：
 
 | 条款 | 结论 |
 |---|---|
 | C1 分层 | 合规。新增的技能按名查询走 Repository（`B/linsight/domain/repositories/`），不新增 DAO 入口；Service 里不写 ORM。 |
-| C2 双 DB | 合规。新列用 `JsonType`，不用 `JSON_EXTRACT` 类查询。 |
+| C2 双 DB | 合规。第一期不改表结构；第二期的新列用 `JsonType`，不用 `JSON_EXTRACT` 类查询。 |
 | C3 多租户 | 合规。技能查询依赖自动注入的租户上下文；Celery 线程里由 runner 设置上下文，不手写 tenant 条件。 |
 | C4 权限 | 合规。会话归属不是 ReBAC 资源，沿用 chat_session 现有的 `SessionSubject` 归属校验；workflow 与助手的使用权限仍由既有入口校验。 |
 | C5 错误码 | 合规。使用 11075–11077，并在 release-contract 登记（原用 11061–11063，与发版线技能中心撞号，2026-10-20 顺延）。 |
@@ -90,9 +92,9 @@
   - 前缀可以从会话 ID 推导出来，C8 要求的「数据库行记指针」由会话表本身承担，不必新建表。交付文件另有指针（决策 6）。
 - **工作区键**：
   - workflow 正式会话：`agent/{chat_id}/wf-{node_id}`。同一会话里的多个助手节点各用各的工作区（AC-20）。
-  - 助手应用正式会话：`agent/{chat_id}/assistant`。
+  - 助手应用正式会话：`agent/{chat_id}/assistant`（第二期，未实现）。
   - 调试临时会话：`agent/tmp-{临时会话 ID}/...`（决策 8）。
-  - 一次性工作区（评测、助手开放 API）：`agent/once-{uuid}/assistant`，运行结束即删。
+  - 一次性工作区（助手开放 API，运行结束即删）：第二期，未实现。第一期预埋的 `WorkspaceKey.once`、`AgentWorkspace.adelete` 没有调用方，已于 2026-10-20 删除，第二期按自己的调用方补回。workflow 评测没有 `chat_id`，也不传临时会话 ID，走决策 8 的兜底：每次评测运行一个临时会话，只靠 Beat 清理。
   - 同一会话的工作区共享前缀 `workspace/agent/{chat_id}/`，删除会话时按前缀一次清理（AC-23）。
 - **每次运行的本地生命周期**（`AgentWorkspace` 服务负责）：
   1. 在 `CACHE_DIR/agent_runtime/{工作区键哈希}/{运行 ID}` 新建本地目录。目录名带运行 ID，避免同一 worker 上并发运行互相覆盖。
@@ -100,7 +102,7 @@
   3. 记录基线指纹 `snapshot_file_fingerprints`。
   4. 清空本地和 MinIO 的 `skills/`，重新拷入本次配置的技能（AC-11：始终用当前版本）。
   5. 拷入输入文件到 `uploads/`（仅助手节点，AC-10）。
-  6. 运行结束后收集交付文件（决策 6），然后 `tool.close()`、`release_local_run(file_dir)`，最后删除本地目录。
+  6. 运行结束后收集交付文件（决策 6），然后 `tool.close()`、`release_local_run(file_dir)`，最后删除本地目录。第 1–5 步任一步失败时，`AgentRunner.aprepare` 先做同样的释放再抛出，因为调用方拿不到 plan，不会调用 `afinish`（坑 6）。
 - **何时该重新考虑**：单个工作区文件很多、每轮水合耗时明显时，改为按需拉取，并让代码执行器支持 copy-in。
 
 ### 决策 4：同步的 workflow 节点通过 `run_async_safe` 调用异步准备步骤
@@ -149,12 +151,13 @@
 ### 决策 8：调试窗口的临时会话登记在 Redis，三重清理
 
 - **临时会话 ID**：
-  - 助手调试：`ChatClient` 在 `chat_id` 为空时生成，保存在该 WebSocket 连接对象上，同一连接内的多次消息共用。注意现状是每条调试消息都重建 Agent（`B/common/chat/client.py:210-228`），所以 ID 必须放在连接对象上，不能放在 Agent 上。
-  - workflow 调试：使用 `WorkflowClient` 为空 `chat_id` 生成的 `hash_key`（`B/common/chat/clients/workflow_client.py:175`），并通过 `Workflow → GraphEngine → 节点` 参数传下去。
+  - 助手调试（第二期，未实现）：`ChatClient` 在 `chat_id` 为空时生成，保存在该 WebSocket 连接对象上，同一连接内的多次消息共用。注意现状是每条调试消息都重建 Agent（`B/common/chat/client.py:210-228`），所以 ID 必须放在连接对象上，不能放在 Agent 上。
+  - workflow 调试：使用 `WorkflowClient` 的 `hash_key`。`hash_key` 在连接上第一次运行时生成，整个 WebSocket 连接内不变。`init_workflow` 把它记到 `agent_tmp_session_id`，作为 Celery 任务 `execute_workflow` 的关键字参数 `tmp_session_id` 传给 worker，再经 `Workflow → GraphEngine → 节点` 传下去（`B/common/chat/clients/workflow_client.py:205-235`、`B/worker/workflow/tasks.py:101`）。不能用 `unique_id`：调试窗口每次发送都是 `init_data`，每次都会生成新的 `unique_id`（坑 19）。
   - workflow 单节点测试（`WorkFlowService.run_once`，`B/api/services/workflow.py:855-923`）：它是一次 HTTP 请求，没有会话，也没有 WebSocket。每次测试生成一个新的临时会话 ID，交付文件在测试结果里可下载；因为没有关闭事件，只靠第 2、3 步清理。
+  - 其它没有 `chat_id`、也不传临时会话 ID 的调用方（workflow 评测）：worker 用本次运行的 `unique_id` 兜底，只靠第 2、3 步清理。
 - **登记**：Redis 键 `agent_runtime:tmp_session:{ID}` 存 `{user_id, tenant_id}`，TTL 24 小时，每次运行刷新。下载接口据此判定发起人（AC-37）。
 - **清理**：
-  1. WebSocket 关闭时（`workflow_client.py:51-67`、助手 `ChatClient` 关闭钩子）删除 `workspace/agent/tmp-{ID}/` 前缀和临时交付文件。
+  1. WebSocket 关闭时删除 `workspace/agent/tmp-{ID}/` 前缀和临时交付文件。workflow 由 `WorkflowClient._close_agent_tmp_session` 处理（`workflow_client.py:54-95`），它只看本连接是否登记过 `agent_tmp_session_id`，不看 `self.workflow`（坑 19）。用户点「停止」（`close(force_stop=True)`）不清理，因为窗口还开着，下一轮还要用上一轮的文件。助手 `ChatClient` 的关闭钩子属于第二期，未实现。
   2. 临时交付文件放在 tmp 桶，tmp 桶已有 7 天生命周期过期规则（`B/core/storage/minio/minio_storage.py:252-262`），兜底异常断开。
   3. 临时工作区在 public 桶，没有生命周期规则，由 Celery Beat 定时任务按前缀扫描，清理 Redis 登记已过期的 `tmp-*` 目录。
 - **何时该重新考虑**：如果平台给 public 桶的 `workspace/agent/tmp-` 前缀配置了生命周期规则，可以删掉第 3 步。
@@ -162,7 +165,7 @@
 ### 决策 9：技能配置的存储
 
 - **助手节点**：节点参数新增 `skill_list: [{key: 技能名, label: 显示名}]`，与 `tool_list` 形状一致。节点参数由前端整体提交，后端在运行时再按决策 5 校验，不信任提交内容。
-- **助手应用**：`assistant` 表新增 `skill_names` 列，类型为 `JsonType`、可空。`None` 和 `[]` 都表示不配置技能。
+- **助手应用**（第二期，未实现）：`assistant` 表新增 `skill_names` 列，类型为 `JsonType`、可空。`None` 和 `[]` 都表示不配置技能。
 - **被否方案**：存进 `AssistantLink`。该表只有 `tool_id`、`flow_id`、`knowledge_id`，没有可以存技能名的列，而 `flow_id` 已经表示 workflow。改表结构的代价比加一个 JSON 列大，而且本期不需要按技能反查助手。
 - **命名**：代码和接口里一律叫 `skill_names` / `skill_list`，不叫 `skill`。原因是 `flow_list`、i18n 键 `build.skill` 在助手里已经表示「workflow」（`B/api/v1/schemas.py:290-292`）。
 - **何时该重新考虑**：需要「哪些助手用了某技能」这类反查时，改成关联表。
@@ -181,28 +184,30 @@
 ### 决策 11：技能相关提示词由 F078 自己的 middleware 追加
 
 - **内容**：从任务模式 `_build_linsight_system_prompt` 的技能段（`B/linsight/domain/services/agent_factory.py:412-446`）提炼成通用版本，包括三条：先完整读完 SKILL.md 再动手，不要和产出放在同一轮并行调用；交付结果写到 `output/`；有执行器时按技能脚本生成文件。
-- **变体**：
-  - 无执行器：改为「按技能说明尽量完成，脚本无法执行」。
-  - 助手应用开放 API：去掉写文件的引导，改为「本次只能用文字交付结果」（AC-35）。
+- **变体**（`SkillPromptVariant`，当前两个）：
+  - 有执行器（`WITH_EXECUTOR`）：上面三条。
+  - 无执行器（`NO_EXECUTOR`）：改为「按技能说明尽量完成，脚本无法执行」。
+  - 助手应用开放 API（第二期，未实现）：去掉写文件的引导，改为「本次只能用文字交付结果」（AC-35）。第一期预埋的 `TEXT_ONLY` 变体和 `AgentRunSpec.text_only` 没有调用方，已于 2026-10-20 删除，第二期补回。
 - **位置**：作为 system prompt 尾部追加，创建者自己的提示词不改。不复用任务模式的提示词模板，因为它带有 `ask_user`、`export_*`、编号步骤等任务模式专属占位符。
 
 ---
 
 ## 4. 系统现状（接手必读）
 
-### 4.1 数据流（目标状态）
+### 4.1 数据流
 
-**助手节点（workflow）**
+**助手节点（workflow，第一期现状）**
 
-`WorkflowClient` → Celery `execute_workflow` → `GraphEngine` → `AgentNode.run` → `agent_runtime.AgentRunner` → Agent → 收集交付文件 → `StreamMsgOverData.files` → `RedisCallback.on_stream_over` → 消息落库与 WebSocket 推送 / 开放 API 事件
+`WorkflowClient` → Celery `execute_workflow` → `GraphEngine` → `AgentNode.run` → `AgentNodeSkills` → `agent_runtime.AgentRunner` → Agent → 收集交付文件 → `StreamMsgOverData.files` → `RedisCallback.on_stream_over` → 消息落库与 WebSocket 推送 / 开放 API 事件
 
-1. `AgentNode.__init__` 读取 `skill_list`（`B/workflow/nodes/agent/agent.py:193` 起）。会话键来自新传入的 `chat_id`；没有 `chat_id` 时用 `hash_key`。
-2. `_init_agent` 调用 `AgentRunner.prepare(...)`。它判定技能可用性、准备工作区、构建代码执行工具，返回 middleware 列表和附加工具。没有配置技能时返回空列表，不建工作区。
-3. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11077（AC-13）。
-4. `_run_once` 照旧 `invoke`。批量模式下每个批次各自做基线和交付文件收集（AC-17）。
-5. 运行结束后，`AgentRunner.finish()` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.<输出键>_deliverables`（AC-16）：单个模式是 `output_deliverables`，批量模式是每个批次的 `output_xxx_deliverables`。变量名以 `output` 开头，是为了让 platform 的变量选择器沿用「本节点 output 开头的参数即输出变量」这一现有规则。
+1. 节点基类从 kwargs 取 `chat_id` 和 `tmp_session_id`（`B/workflow/nodes/base.py:56-59`）。正式会话有 `chat_id`；调试窗口的 `tmp_session_id` 是连接的 `hash_key`（决策 8）。
+2. `AgentNode.__init__` 创建 `AgentNodeSkills(self)`（`B/workflow/nodes/agent/agent.py:298`），由它读取节点参数 `skill_list` 和 `input_files`（`B/workflow/nodes/agent/skill_support.py` 的 `AgentNodeSkills.__init__`）。
+3. 每次调用模型前，`_invoke_function_call_agent` 调用 `AgentNodeSkills.prepare(...)`（`agent.py:766-779`）。它登记临时会话（只在调试时）、拷入上游文件，再经 `run_async_safe` 调用 `AgentRunner.aprepare`：判定技能可用性、准备工作区、构建代码执行工具，返回 middleware 和工具列表。没有配置技能时不进这条分支，不建工作区。
+4. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent 并 `invoke`。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11077（AC-13）。批量模式下每个批次各自做基线和交付文件收集（AC-17）。
+5. 运行结束后，`AgentNodeSkills.finish()` 经 `AgentRunner.afinish` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.<输出键>_deliverables`（AC-16）：单个模式是 `output_deliverables`，批量模式是每个批次的 `output_xxx_deliverables`。变量名以 `output` 开头，是为了让 platform 的变量选择器沿用「本节点 output 开头的参数即输出变量」这一现有规则。
+6. 技能错误（11075–11077）由 `AgentSkillRunError` 带进失败原因：`<节点名>: <文案> -- agent skill error --<错误 JSON>`。`RedisCallback` 用 `parse_agent_skill_error` 解析出错误码和技能名，发给前端翻译（§6.1）。
 
-**助手应用**
+**助手应用（第二期，未实现）**
 
 `ChatClient.handle_gpts_message` → `AssistantAgent.run` → 同一个 `AgentRunner` → 回答消息的 `files` 和 `extra.agent_notices` → WebSocket `end` 事件 → 前端渲染文字和文件卡片
 
@@ -215,28 +220,38 @@
 |---|---|---|---|
 | 助手节点参数 `skill_list` | `[{key: 技能名, label: 显示名}]` | 缺省或空表示不配置技能 | `AgentNode`、platform 节点面板 |
 | 助手节点参数 `input_files` | `[node.var]`，上游文件变量 | 运行时拷进 `uploads/` | `AgentNode` |
-| `assistant.skill_names` | JSON 字符串数组，可空 | `None` 与 `[]` 等价 | 助手配置读写、`AssistantAgent` |
+| `assistant.skill_names`（第二期，未实现） | JSON 字符串数组，可空 | `None` 与 `[]` 等价 | 助手配置读写、`AssistantAgent` |
 | 交付文件描述 | `{file_id, file_name, object_name, bucket, size, file_url, format_error?}` | `file_url` 是决策 7 的鉴权跳转地址，用这个键名是因为前端文件卡片已认 `file_url`；`bucket` 为 `public`（正式会话）或 `tmp`（临时会话）；`format_error` 只在 AC-33 情况出现 | 消息 `files`、前端文件卡片、开放 API `files` |
 | 输出变量 `{node_id}.<输出键>_deliverables` | 文本，每行「文件名: 下载地址」 | 单个模式为 `output_deliverables`；没有交付文件时为空串；节点未配置技能时不设置 | 下游节点 |
+| 开放 API 事件 `output_schema.files[]` | `{file_id, name, path, size, format_error?}` | 由交付文件描述转换而来（`B/api/services/workflow.py` 的 `convert_chat_response_to_workflow_event`）；`path` 是 `/api/v2/workflow/files/{chat_id}/{file_id}`；不含 `object_name`、`bucket` 等存储细节；没有交付文件时字段缺省 | workflow 开放 API 调用方 |
 | 消息 `extra.agent_notices` | `["code_executor_missing"]` 等提示代码 | 前端按 i18n 渲染 | client、platform |
-| Redis `agent_runtime:tmp_session:{ID}` | `{user_id, tenant_id}`，TTL 24h | 临时会话归属 | 下载接口、清理任务 |
+| Redis `agent_runtime:tmp_session:{ID}` | `{user_id, tenant_id}`，TTL 24h | 临时会话归属；`ID` 在 workflow 调试窗口是连接的 `hash_key` | 下载接口、清理任务 |
 | MinIO `workspace/agent/{会话键}/{运行面}/…` | public 桶 | 工作区内容；`skills/` 只读 | `WorkspaceBackend` |
 
 ### 4.3 关键模块职责
 
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
-| `B/agent_runtime/domain/services/agent_runner.py` | 运行编排：判定技能、准备工作区、构建 middleware 和执行器、收尾 | 不感知 workflow 或助手的业务对象 |
+| `B/agent_runtime/domain/services/agent_runner.py` | 运行编排：判定技能、准备工作区、构建 middleware 和执行器、收尾；准备失败时自己释放 | 不感知 workflow 或助手的业务对象 |
 | `B/agent_runtime/domain/services/agent_workspace.py` | 工作区键、水合、基线、拷技能、拷输入文件、按前缀清理 | 不判定交付文件 |
 | `B/agent_runtime/domain/services/deliverables.py` | 交付文件判定、格式标注、上传为会话附件 | 不处理下载鉴权 |
-| `B/agent_runtime/domain/services/skill_prompt_middleware.py` | 追加技能提示词（三个变体） | 不改创建者提示词 |
+| `B/agent_runtime/domain/services/skill_prompt_middleware.py` | 追加技能提示词（两个变体） | 不改创建者提示词 |
 | `B/agent_runtime/domain/services/tmp_session.py` | 临时会话登记、刷新、清理 | 不处理正式会话 |
 | `B/agent_runtime/domain/services/file_access.py` | 下载鉴权：正式会话走附件归属校验，临时会话校验 Redis 登记的发起人 | 不信任请求里的对象名 |
 | `B/agent_runtime/api/endpoints/files.py` | 下载鉴权与跳转 | 不签发长效链接 |
 | `B/workflow/nodes/agent/skill_support.py` | 把节点配置转成 `AgentRunSpec`，经 `run_async_safe` 驱动 runner；技能错误带错误码进失败事件 | 不直接操作 MinIO |
 | `B/worker/agent_runtime/tasks.py` | Beat 每小时清理过期临时会话的工作区 | 不查业务表 |
-| `B/workflow/nodes/agent/agent.py` | 读节点参数、调用 runner、发事件、写日志 | 不直接操作 MinIO |
-| `B/api/services/assistant_agent.py` | 读助手配置、调用 runner | 同上 |
+| `B/workflow/nodes/agent/agent.py` | 调用 `AgentNodeSkills`、发事件、写日志 | 不直接操作 MinIO |
+| `B/common/chat/clients/workflow_client.py` | 调试窗口：把连接的 `hash_key` 作为临时会话 ID 传给 worker，连接关闭时清理 | 不清理正式会话 |
+| `B/worker/workflow/tasks.py` | `execute_workflow` 接收 `tmp_session_id`，没有 `chat_id` 时交给引擎 | 不生成临时会话 ID（兜底用 `unique_id`） |
+| `B/open_endpoints/api/endpoints/workflow.py` | 开放 API 下载路由 `GET /api/v2/workflow/files/{chat_id}/{file_id}` | 不处理临时会话 |
+| `F/platform/src/pages/BuildPage/flow/FlowNode/component/SkillItem.tsx` | 助手节点的技能多选；ReAct 模型时禁用 | 不校验技能可用性（后端运行时校验） |
+| `F/platform/src/pages/BuildPage/flow/FlowNode/component/InputFileItem.tsx` | 助手节点的上游文件变量选择 | — |
+| `F/platform/src/controllers/API/workflow.ts`、`F/platform/src/util/flowCompatible.ts` | 助手节点模板 v3（`skill_list`、`input_files`、`output_deliverables`）；旧节点加载时补参数 | — |
+| `F/platform/src/pages/BuildPage/flow/FlowChat/agentDeliverables.ts`、`messageStore.ts`、`MessageBs.tsx`、`ChatFileFile.tsx` | workflow 调试面板：`end` 事件合并交付文件和提示代码，渲染文件卡片、格式异常标注、提示条 | — |
+| `F/platform/src/pages/BuildPage/flow/FlowNode/RunLog.tsx` | 运行日志显示技能和提示 | — |
+| `F/client/src/pages/appChat/ChatMessages.tsx`、`components/MessageBs.tsx`、`agentNotices.ts`、`useChatHelpers.ts` | client 对话页：助手节点回答同时显示文字和文件，渲染提示条 | — |
+| `B/api/services/assistant_agent.py`（第二期，未实现） | 读助手配置、调用 runner | 不直接操作 MinIO |
 
 ---
 
@@ -249,19 +264,21 @@
 | 3 | 本地执行器在本地目录里跑，看不到只在 MinIO 里的上一轮文件 | 第二轮修改文件时报文件不存在 | 决策 3 第 2 步水合 |
 | 4 | E2B 执行器的文件列表在构建时固定 | E2B 看不到技能文件 | 决策 10：先水合、拷技能，再建工具 |
 | 5 | 代码执行器的 copy-out 能写进 `skills/`，不经过只读守卫 | 模型改了技能文件，下轮又被覆盖，行为不稳定 | 每轮重拷技能；`skills/` 不参与交付判定 |
-| 6 | `tool.close()` 和 `release_local_run(file_dir)` 必须都调用 | 本地隔离 uid 和运行目录泄漏 | runner `finish()` 的 finally |
-| 7 | client 和 platform 遇到带 `files` 的 bot 消息只渲染文件、不渲染文字（`F/client/src/pages/appChat/ChatMessages.tsx:96`、`F/platform/src/components/bs-comp/chatComponent/MessagePanne.tsx:117`），`FileBs` 只显示第一个文件 | 加了交付文件后回答文字消失 | 前端任务改为「文字 + 文件列表」，涉及组件展示变化，需设计师确认 |
+| 6 | `tool.close()` 和 `release_local_run(file_dir)` 必须都调用，准备失败时也要调用 | 本地隔离 uid 和运行目录泄漏 | runner `afinish()` 的 finally；`aprepare()` 失败时在 `except` 里做同样的释放（`_arelease`） |
+| 7 | client 遇到带 `files` 的 bot 消息只渲染文件、不渲染文字（`F/client/src/pages/appChat/ChatMessages.tsx:96`）；助手调试面板 `F/platform/src/components/bs-comp/chatComponent/MessagePanne.tsx:117` 同样如此，`FileBs` 只显示第一个文件（第二期） | 加了交付文件后回答文字消失 | client 已改为 `stream_msg` 类消息保留文字、文件列在下方；workflow 调试面板 `F/platform/src/pages/BuildPage/flow/FlowChat/MessageBs.tsx` 本来就同时渲染文字和 `files`；助手调试面板随第二期改。展示变化需设计师确认 |
 | 8 | 两个前端的流式 `end` 处理都不合并 `files`（`F/client/src/pages/appChat/useChatHelpers.ts:240-310`、`F/platform/.../messageStore.ts:150-172`） | 实时对话看不到文件卡片，刷新历史后才出现 | 前端任务 |
-| 9 | 助手 WebSocket 对话走 `run()`，不走 `astream`；只有开放 API 用 `astream(stream_mode="messages")` | 只测开放 API 会漏掉主路径 | 两条路径都要测 |
-| 10 | 助手调试每条消息都重建 Agent | 临时会话 ID 放在 Agent 上，每条消息换一个工作区，多轮修改失效 | 决策 8：ID 放在连接对象上 |
-| 11 | `update_status` 上线校验会调用 `init_assistant`，此时 `chat_id` 为空 | 每次上线都建一个空工作区 | 工作区准备放在 `run` 开始时 |
-| 12 | 助手前端的运行日志按 `tool_list/knowledge_list/flow_list` 查名称，三个列表都空时整块隐藏（`F/client/src/components/MessageRunlog.tsx:51-54`、`F/platform/.../RunLog.tsx:56-58`）；`runLogsTypes` 只认 `tool/flow/knowledge` | 只配了技能的助手看不到任何工具调用记录，违反 AC-26 | 前端任务补技能工具的名称映射 |
+| 9 | 助手 WebSocket 对话走 `run()`，不走 `astream`；只有开放 API 用 `astream(stream_mode="messages")` | 只测开放 API 会漏掉主路径 | 第二期：两条路径都要测 |
+| 10 | 助手调试每条消息都重建 Agent | 临时会话 ID 放在 Agent 上，每条消息换一个工作区，多轮修改失效 | 第二期：决策 8，ID 放在连接对象上 |
+| 11 | `update_status` 上线校验会调用 `init_assistant`，此时 `chat_id` 为空 | 每次上线都建一个空工作区 | 第二期：工作区准备放在 `run` 开始时 |
+| 12 | 助手前端的运行日志按 `tool_list/knowledge_list/flow_list` 查名称，三个列表都空时整块隐藏（`F/client/src/components/MessageRunlog.tsx:51-54`、`F/platform/.../RunLog.tsx:56-58`）；`runLogsTypes` 只认 `tool/flow/knowledge` | 只配了技能的助手看不到任何工具调用记录，违反 AC-26 | 第二期：T39 补技能工具的名称映射 |
 | 13 | workflow 节点参数由客户端整体提交，后端照单执行 | 前端绕过 ReAct 禁用也能提交技能 | 后端运行时按决策 5 和 AC-13 校验 |
 | 14 | `create_agent` 的流式节点名从 `"agent"` 改成 `"model"`，且每次模型调用都重新 `bind_tools`（`create_react_agent` 在编译时绑定一次） | 依赖节点名的流式过滤失效；按「编译时只绑定一次」写的模型包装类行为会变 | 助手节点已用对照测试锁定迁移前后一致（`T/workflow/test_agent_node_create_agent.py`）。`B/common/image_view/vision_llm.py` 依赖编译时绑定，但它只用于日常对话，助手节点和助手应用都不引用 |
 | 15 | `run_async_safe` 默认超时 10 秒 | 拷大技能包或水合大工作区时超时 | 显式传超时 |
 | 16 | `FilesystemMiddleware` 总会注册 `execute` 工具，只在 backend 支持执行时才暴露给模型（`deepagents/middleware/filesystem.py:858-870`） | 若判断条件变化，模型会看到一个必然失败的 `execute` | 构建器测试断言模型可见工具列表里没有 `execute` |
 | 17 | `ChatSessionService.delete_session` 不校验调用方是否拥有会话 | 在其中加清理钩子会放大这个缺口的影响 | 本期不改，见 §8，已告知用户 |
 | 18 | 同一会话的两次运行可能同时发生（如用户开两个标签页） | 两次运行写同一个工作区，同名交付文件后写覆盖先写，交付判定可能把对方的文件算进来 | 本期不加锁；`act=agent_runtime_run` 日志带运行 ID，便于排查；出现投诉再按会话键加 Redis 锁 |
+| 19 | platform workflow 调试窗口的 `chatId` 以 `test` 开头，每次发送都是 `init_data`（`F/platform/.../FlowChat/ChatInput.tsx:107`），而 `check_status` 每次都生成新的 `unique_id`；另外一次运行结束后 `WorkflowClient.workflow` 立即置为 `None` | 用 `unique_id` 当临时会话 ID，每轮换一个工作区，第二轮看不到上一轮的文件（AC-36）；关闭钩子判断 `self.workflow` 会在通常情况下直接返回，关窗不清理（AC-37） | 决策 8：用连接级 `hash_key`，关闭钩子只看 `agent_tmp_session_id`（2026-10-20 修复，`T/workflow/test_workflow_client_tmp_session.py`） |
+| 20 | 工作区键只接受 `[A-Za-z0-9_-]`（`_check_part`），开放 API 的 `chat_id` 取自调用方传入的 `session_id` | 调用方自造含其它字符的 `session_id` 时，配置了技能的助手节点抛 `ValueError`，以「其它错误」失败 | 未处理，见 §8。服务端签发的 `session_id` 都是安全字符 |
 
 ---
 
@@ -276,10 +293,14 @@
 | `ChatSessionService.resolve_subject_attachment_url(chat_id, file_id, subject)` | 内部 Python API | 开放 API 下载路由 |
 | workflow 开放 API 助手节点事件 `output_schema.files` | 事件字段（已有字段，新填值） | 开放 API 调用方（AC-34） |
 | 输出变量 `{node_id}.<输出键>_deliverables` | workflow 变量 | 下游节点 |
+| 开放 API 事件 `output_schema.files[]` 的结构 `{file_id, name, path, size, format_error?}` | 事件字段 | 开放 API 调用方；见 §4.2 |
 | 消息 `files`、`extra.agent_notices` | 消息字段 | 两个前端、历史回放 |
-| `assistant.skill_names`、`AssistantUpdateReq.skill_names` | 表列、HTTP 字段 | platform 助手配置页 |
+| 失败原因里的技能错误：`<节点名>: <文案> -- agent skill error --<错误 JSON>`，标记常量 `AGENT_SKILL_ERROR_MARKER`（`B/workflow/nodes/agent/skill_support.py`），解析函数 `parse_agent_skill_error` | 字符串约定 | `RedisCallback`（把错误码发给前端）；F086 子工作流节点（`B/workflow/nodes/subflow/subflow.py:50` 截掉标记后的 JSON 再展示）。改标记要同时改这两处 |
+| 节点构造参数 `chat_id`、`tmp_session_id` | `Workflow → GraphEngine → 节点` 的关键字参数；Celery 任务 `execute_workflow` 新增关键字参数 `tmp_session_id` | 助手节点；F086 子工作流节点把两者原样传给子引擎 |
+| 助手节点模板 `v: "3"`：`skill_list`、`input_files`、`output_deliverables` | 前端节点模板 + `flowCompatible` 升级规则 | platform 编辑器。旧节点（v2）加载时补参数；后端对缺少这些参数的节点按「未配置技能」处理 |
+| `assistant.skill_names`、`AssistantUpdateReq.skill_names`（第二期，未实现） | 表列、HTTP 字段 | platform 助手配置页 |
 | 错误码 11075（已停用）、11076（已删除）、11077（执行方式不支持） | 错误码 | 前端 `api_errors` |
-| `AgentRunner` | 内部 Python API | workflow 节点、助手应用；以后的日常对话 |
+| `AgentRunner` | 内部 Python API | workflow 节点；第二期的助手应用；以后的日常对话 |
 
 ### 6.2 我依赖别人的（Incoming）
 
@@ -295,18 +316,20 @@
 
 ### 6.3 错误码分配
 
-技能相关错误放在 linsight 技能管理段 11050–11069（`B/common/errcode/linsight.py:92-100`）。11060 在前端 locale 里有残留键，跳过不用。原分配 11061–11063，2026-10-20 合并发版线时发现技能中心已占用 11061–11074，顺延为 11075、11076、11077，三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
+技能相关错误放在 linsight 模块（110）的段内，紧接技能中心已用到的 11074，用 11075、11076、11077（`B/common/errcode/linsight.py` 末尾）。原分配 11061–11063（当时以为技能管理段 11050–11069 还有空位），2026-10-20 合并发版线时发现技能中心已占用 11061–11074，于是顺延。11060 在前端 locale 里有残留键，跳过不用。三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
 
 ---
 
 ## 7. 测试与可观测
 
-- **单元测试**（`src/backend/test/agent_runtime/`）：
-  - 工作区：键推导、水合、基线、拷技能。用假 MinIO。
-  - 技能判定：停用、删除、ReAct 三种报错。
-  - 交付文件：判定和格式标注，复用任务模式的测试夹具。
-  - 构建器：无技能时 middleware 为空；有技能时模型可见工具列表正确，且不含 `execute`。
-  - 下载鉴权：本人、他人、开放 API 身份、临时会话发起人、未登录。
+- **单元测试**（`src/backend/test/`）：
+  - 工作区：键推导、水合、基线、拷技能。用假 MinIO（`agent_runtime/test_agent_workspace.py`）。
+  - 技能判定：停用、删除、ReAct 三种报错（`agent_runtime/test_skill_resolver.py`、`test_skill_repository.py`）。
+  - 交付文件：判定和格式标注，复用任务模式的测试夹具（`agent_runtime/test_deliverables.py`）。
+  - 构建器：无技能时 middleware 为空；有技能时模型可见工具列表正确，且不含 `execute`；准备失败时释放本地目录（`agent_runtime/test_agent_runner.py`、`test_agent_runner_integration.py`）。
+  - 下载鉴权：本人、他人、临时会话发起人、伪造 ID（`agent_runtime/test_file_access.py`）；开放 API 身份按 `SessionSubject` 归属（`chat_session/test_attachment_link.py`）。
+  - 临时会话：登记、关闭清理、Beat 清理（`agent_runtime/test_tmp_session.py`）；调试窗口多轮共用、关窗清理、停止不清理（`workflow/test_workflow_client_tmp_session.py`）。
+  - 助手节点：技能接入、create_agent 迁移对照、开放 API 事件（`workflow/test_agent_node_skills.py`、`test_agent_node_create_agent.py`、`test_open_api_files.py`）。
 - **对照测试**：同一配置在迁移前后、无技能时，模型收到的 system prompt 和工具列表一致（AC-25）。
 - **e2e**（`/e2e-test`）：在 114 上配置内置 docx 技能，跑通 workflow 和助手应用的正式会话、调试窗口和开放 API，覆盖文件卡片、二轮修改、跨节点、会话删除清理。
 - **手动验证**（114 环境，部署方式见 `bash /opt/bisheng-ops/deploy.sh`）：
@@ -327,6 +350,8 @@
 - **ReAct 执行方式下线**：可以消除第二条执行路径，影响所有 ReAct 模型，另起 feature。
 - **工作区容量上限**：与任务模式一并处理。
 - **工作区按需拉取**：见决策 3 的重新考虑条件。
+- **上游文件下载没有超时**：`AgentNodeSkills.collect_input_files` 调用的 `file_download`（`B/core/cache/utils.py:417`）用 `requests.get` 且没有超时，外部 URL 不响应时节点一直等待。这是发版线的共享函数，应在 feat/3.0.0 上修，不在 F078 分支改。
+- **开放 API `session_id` 含非安全字符**：见坑 20。处理方式（提前校验并返回带错误码的业务错误，或对工作区键做转义）待定；新增错误码要重新在 release-contract 登记。
 
 ---
 
@@ -336,3 +361,5 @@
 |---|---|---|
 | 2026-10-16 | 初版 | spec 定稿后编写 |
 | 2026-10-16 | 同步第一期实现：决策 10 判定口径、交付文件字段、变量命名、开放 API 下载路由、新增模块 | 实现偏差，见 tasks.md「实际偏差记录」 |
+| 2026-10-20 | 错误码由 11061–11063 改为 11075–11077（§6.3） | 合并发版线时与技能中心撞号 |
+| 2026-10-20 | 标出第二期未实现的助手应用内容；删除预埋的一次性工作区与 `TEXT_ONLY` 变体；workflow 调试临时会话改用连接级 `hash_key`，关闭钩子不再依赖 `self.workflow`（决策 8、坑 19）；准备失败时释放本地目录（坑 6）；补 §6.1 技能错误标记、节点参数、模板 v3、开放 API `files[]` 结构；§4.3 补前端模块；新增坑 20 与 §8 两项 | `/sdd-code-review --base feat/3.0.0` 的 HIGH #2、#3 与 MEDIUM #10、#12 |

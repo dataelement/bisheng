@@ -107,7 +107,7 @@
   **逻辑**: `AgentWorkspace` 提供以下方法：
   - `key_for(...)`：推导工作区键；
   - `aprepare(skills, input_files)`：依次做本地目录、水合、基线、重拷技能（`materialize_session_skills(strict=True)`）、拷输入文件，返回 `WorkspaceBackend`、本地目录和基线；
-  - `adelete_session(chat_id)`：删除 `workspace/agent/{chat_id}/` 前缀；
+  - 模块函数 `adelete_session_workspaces(minio, session_key)`：删除 `workspace/agent/{session_key}/` 前缀；
   - `cleanup_local()`：删除本地目录。
   决策见 design 决策 3、坑 2、坑 3、坑 5。
   **测试**: T09 通过。
@@ -160,7 +160,7 @@
 
 - [x] **T17**：技能提示词 middleware 测试
   **文件**: `T/agent_runtime/test_skill_prompt_middleware.py`
-  **测试**: 三个变体（有执行器、无执行器、只用文字交付）的追加内容；追加位置在 system prompt 尾部；创建者提示词原样保留。
+  **测试**: 有执行器、无执行器两个变体的追加内容（「只用文字交付」变体属于第二期，2026-10-20 删除了预埋代码）；追加位置在 system prompt 尾部；创建者提示词原样保留。
   **覆盖 AC**: AC-07、AC-09、AC-35
   **依赖**: 无
 
@@ -287,7 +287,7 @@
 ## Wave 5：下载、清理与开放 API
 
 - [x] **T32**：下载接口与会话删除清理测试
-  **文件**: `T/agent_runtime/test_files_api.py`
+  **文件**: `T/agent_runtime/test_file_access.py`（网页登录与临时会话）、`T/chat_session/test_attachment_link.py`（开放 API 身份）
   **测试**:
   - 本人可以下载；他人和未登录被拒；
   - 开放 API 身份可以下载自己会话的文件；
@@ -302,7 +302,7 @@
   **逻辑**: `GET /api/v1/agent-runtime/files/{session_key}/{file_id}`：
   - 正式会话用 `SessionSubject` 校验归属，对象名从消息记录里取，校验通过后 302 跳转短时链接；
   - 临时会话校验 Redis 登记的发起人；
-  - `delete_session` 在现有 `_remove_attachments` 之后调用 `AgentWorkspace.adelete_session`。
+  - `delete_session` 在现有 `_remove_attachments` 之后调用 `_remove_agent_workspaces`（内部调用 `adelete_session_workspaces`）。
   影响范围：chat_session 删除会话流程多一步 MinIO 前缀删除，失败只记日志、不阻断删除，与 `_remove_attachments` 的做法一致。决策见 design 决策 7、坑 17。
   **测试**: T32 通过。
   **依赖**: T04、T10、T16、T32
@@ -310,7 +310,7 @@
 - [x] **T34**：临时工作区 Beat 清理任务
   **文件**: `B/worker/agent_runtime/tasks.py`、Beat 调度注册处
   **逻辑**: 每小时扫描 public 桶 `workspace/agent/tmp-*` 前缀，删除 Redis 登记已过期的目录。该任务只读 MinIO 和 Redis，不查业务表，所以不需要恢复租户 ContextVar，在多租户下也不会漏扫。
-  **测试**: `T/agent_runtime/test_tmp_sweep.py`：登记过期的目录被删除，登记有效的目录保留。
+  **测试**: `T/agent_runtime/test_tmp_session.py` 的 `TestSweep`：登记过期的目录被删除，登记有效的目录保留。
   **覆盖 AC**: AC-37；spec §3「调试窗口异常断开也要清理」
   **依赖**: T16
 
@@ -390,3 +390,10 @@
 - T36 偏离 → 助手节点模板升到 v3，旧节点加载时由 `flowCompatible` 补参数；SelectVar 新增 `findFilePath` 模式。
 - 基线记录：backend `test/workflow` 既有 14 个失败、platform vitest 既有 16 个失败（与 origin/feat/3.0.0 一致），本特性未新增失败。
 - 错误码：原分配 11061–11063，2026-10-20 合并发版线时与技能中心（11061–11074）撞号，改为 11075–11077（含后端、三语文案、测试与 release-contract）；判断与扫描结果见 design §6.3。
+- 2026-10-20 `/sdd-code-review --base feat/3.0.0` 修复（design 修订历史同日条目）：
+  - 调试窗口临时会话改用连接级 `hash_key`，关闭钩子不再依赖 `self.workflow`，「停止」不清理 → design 决策 8、坑 19；测试 `T/workflow/test_workflow_client_tmp_session.py`。
+  - `AgentRunner.aprepare` 失败时释放本地目录 → design 坑 6；测试 `T/agent_runtime/test_agent_runner.py` 的 `TestPrepareFailure`。
+  - 补开放 API 下载的归属测试：`T/chat_session/test_attachment_link.py` 的 `TestResolveSubjectAttachmentUrl`。
+  - 删除第二期预埋、无调用方的 `WorkspaceKey.once`、`AgentWorkspace.adelete`、`AgentRunSpec.text_only`、`SkillPromptVariant.TEXT_ONLY`、`TmpSessionService.new_id`；第二期按自己的调用方补回。
+  - platform `WorkflowMessage` 类型补 `notices`。
+  - 未改：上游文件下载无超时（发版线共享函数 `file_download`）、开放 API `session_id` 非安全字符（需新增错误码）→ design §8。
