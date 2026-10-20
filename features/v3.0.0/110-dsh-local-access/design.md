@@ -63,6 +63,12 @@ DSH 直接使用 Python BiSheng 完成登录、会话和模型调用，退出商
 | Platform DshPage / DepartmentAccessTree | 删除商业入口和重授权操作，保留额度配置、用量和模型审计 |
 | Desktop contract.js | 登录、换证和退出改用标准原生路径，审计协商保持原样 |
 
+### 4.4 数据库基线与建表职责
+
+数据库差异以 main `4218ba7c1` 为准，不以 109 曾部署的 feat/3.0.0 审计环境为准。main 的 83 个 Alembic 文件不变，新 revision `work110_dsh_local_sessions` 直接接在 main 的 `f065_dsh_install_policy_default_off` 后面，只修改已有调用表的两列可空性和版本约束。13 张审计表及 2 张原生会话表均为相对 main 新增的整表，由模型发现/建表流程创建完整定义。
+
+不能将不同版本线的测试环境 head 作为导入旧迁移链的理由；这会重复携带审计 DDL，甚至带入无关的知识空间字段。109 采用归档原库、新库建立真实 main 基线后再升级的测试恢复流程，业务数据处理不进入 Alembic revision。
+
 ## 5. 已知坑
 
 | 事实 | 忽略后的影响 | 处理 |

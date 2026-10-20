@@ -1,61 +1,35 @@
-"""Real DDL replay is idempotent for both upgraded and model-created audit tables."""
+"""Main-based installs create complete model lookup indexes from table metadata."""
 
-import importlib.util
-from pathlib import Path
-
-import pytest
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
+from sqlalchemy.dialects.mysql import dialect
+from sqlalchemy.schema import CreateIndex
 
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest
 
-
-def migration():
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "bisheng/core/database/alembic/versions/v3_0_0_work110_dsh_audit_model_lookup.py"
-    )
-    spec = importlib.util.spec_from_file_location("audit_lookup", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+INDEXES = {
+    "ix_dma_request_model": ["tenant_id", "model_id", "started_at", "request_id"],
+    "ix_dma_request_name": ["tenant_id", "model_name_digest", "started_at", "request_id"],
+}
 
 
-@pytest.mark.parametrize("fresh", [False, True])
-def test_migration_adds_only_missing_schema_and_never_backfills_rows(fresh):
-    revision = migration()
+def test_model_lookup_indexes_are_created_with_the_new_table():
     engine = sa.create_engine("sqlite://")
-    with engine.begin() as connection:
-        if fresh:
+    try:
+        with engine.begin() as connection:
             DshModelAuditRequest.__table__.create(connection)
-        else:
-            connection.exec_driver_sql(
-                "CREATE TABLE dsh_model_audit_request (request_id VARCHAR(36) PRIMARY KEY, tenant_id BIGINT, model_id BIGINT, model_name VARCHAR(2048), started_at DATETIME)"
-            )
-            connection.exec_driver_sql(
-                "INSERT INTO dsh_model_audit_request VALUES ('e2e-legacy',2,42,'Provider / Old','2026-10-15')"
-            )
-        with Operations.context(MigrationContext.configure(connection)):
-            revision.upgrade()
-            revision.upgrade()
-        columns = {column["name"]: column for column in sa.inspect(connection).get_columns(revision.TABLE)}
-        assert columns["model_name_digest"]["nullable"]
-        indexes = {index["name"]: index["column_names"] for index in sa.inspect(connection).get_indexes(revision.TABLE)}
-        for name, expected in revision.INDEXES.items():
-            assert indexes[name] == expected
-        if not fresh:
-            assert connection.exec_driver_sql(
-                "SELECT model_name,model_name_digest FROM dsh_model_audit_request"
-            ).one() == ("Provider / Old", None)
+            indexes = {
+                index["name"]: index["column_names"]
+                for index in sa.inspect(connection).get_indexes("dsh_model_audit_request")
+            }
+            for name, columns in INDEXES.items():
+                assert indexes[name] == columns
+    finally:
+        engine.dispose()
 
 
 def test_mysql_and_dm_indexes_have_only_bounded_columns():
-    from sqlalchemy.dialects.mysql import dialect
-    from sqlalchemy.schema import CreateIndex
-
     for index in DshModelAuditRequest.__table__.indexes:
-        if index.name in migration().INDEXES:
+        if index.name in INDEXES:
             ddl = str(CreateIndex(index).compile(dialect=dialect()))
             assert "model_name," not in ddl and "LIKE" not in ddl
             assert all(not isinstance(column.type, sa.String) or column.type.length <= 64 for column in index.columns)

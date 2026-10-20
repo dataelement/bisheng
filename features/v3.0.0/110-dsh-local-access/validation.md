@@ -24,7 +24,7 @@
 | 多语言 | pnpm check-i18n 通过，无新增 drift |
 | 后端 lint | 改动的 52 个现存 Python 文件 Ruff 通过；DSH 模块整体 Ruff 通过 |
 | 架构守卫 | 对 72 个现存修改源码/测试文件逐个运行；无 VIOLATION，仅原 test_profile_outbox.py 合成密码 fixture 的 RULE-7 WARNING |
-| Alembic | 首次本地 head 为 work110_dsh_local_sessions；109 联调补齐历史迁移后 head 为 work110_merge_legacy_audit，已在目标 MySQL 执行升级，见真实环境报告 |
+| Alembic | main 原有 83 个文件不变，仅追加 work110_dsh_local_sessions；迁移/模型建表专项 14 passed、1 外部 MySQL skipped。旧 109 merge head 已撤回，不作为 main 升级证据；新库恢复与复测见 main 基线记录 |
 | Desktop 安装 | npm ci 成功，postinstall 的 patch-package、品牌资源与 Electron 安装步骤完整成功 |
 | Desktop 类型 / 构建 | npm run typecheck、npm run build 通过 |
 | Desktop 完整测试 | 225 files passed / 1 skipped；1931 passed / 2 skipped。覆盖企业连接、审计元数据和既有 Harness 子进程测试；不等同于原生 UI 联调 |
@@ -96,3 +96,7 @@ raise SystemExit(pytest.main([
 - [ ] MySQL/DM 升级预演、行锁并发、ROLE 运维迁移和回退数据兼容。
 
 发布步骤见 [deployment.md](./deployment.md)。当前状态是代码实现、本地验证及本次要求的 109 真实链路验证完成；其余发布清单及全仓原有前端门禁问题仍保留。
+
+## main 基线修正
+
+2026-10-20 按 main 与 work-110 的实际模型差异移除 13 个外来/重复迁移，仅保留已有模型调用表的 DDL。修正后本地 DSH 回归 529 passed、107 skipped、54 deselected；跳过项与外部数据库/Redis等显式前置条件相关。历史 109 结果保留作追溯，完整归档及新库升级过程见 [main 基线恢复记录](./main-baseline-109-recovery-20261020.md)。

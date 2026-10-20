@@ -5,17 +5,13 @@ Only the uniquely named, locally created test container is removed on exit.
 """
 
 import asyncio
-import importlib.util
 import os
 import secrets
 import subprocess
 import time
-from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest
@@ -26,7 +22,7 @@ from test.dsh.test_model_audit_groups import row
 
 
 @pytest.mark.skipif(os.environ.get("DSH_AUDIT_GROUPS_MYSQL") != "1", reason="Explicit local Docker opt-in required")
-def test_owned_mysql_upgrade_projection_and_exact_query_plan():
+def test_owned_mysql_bootstrap_projection_and_exact_query_plan():
     """AC-QC-09/11: actual DDL, transaction retry and indexed equality on MySQL."""
     endpoint = subprocess.check_output(
         ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], text=True
@@ -70,47 +66,24 @@ def test_owned_mysql_upgrade_projection_and_exact_query_plan():
                 if attempt == 159:
                     raise RuntimeError("Isolated MySQL did not become ready") from None
                 time.sleep(0.25)
-        fields = {"audit_status", "group_index_pending", "group_indexed_status", "hierarchy_indexed"}
-        legacy = sa.Table(
-            "dsh_model_audit_request",
-            sa.MetaData(),
-            *[column._copy() for column in DshModelAuditRequest.__table__.columns if column.name not in fields],
-        )
-        path = (
-            Path(__file__).resolve().parents[2]
-            / "bisheng/core/database/alembic/versions/v3_0_0_work110_dsh_audit_groups.py"
-        )
-        spec = importlib.util.spec_from_file_location("audit_group_upgrade", path)
-        revision = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(revision)
+        from bisheng.core.database.alembic_helpers.online import create_missing_model_tables
+
         with engine.begin() as connection:
-            legacy.create(connection)
-            User.__table__.create(connection)
-            group_fields = {"origin_state", "declared_parent_key", "parent_declaration_missing", "relation_conflict"}
-            legacy_group = sa.Table(
-                "dsh_model_audit_conversation",
-                sa.MetaData(),
-                *[
-                    column._copy()
-                    for column in DshModelAuditConversation.__table__.columns
-                    if column.name not in group_fields
-                ],
-            )
-            legacy_group.create(connection)
-            with Operations.context(MigrationContext.configure(connection)):
-                revision.upgrade()
-                revision.upgrade()
-            tree_path = path.with_name("v3_0_0_work110_dsh_audit_tree.py")
-            tree_spec = importlib.util.spec_from_file_location("audit_tree_upgrade", tree_path)
-            tree_revision = importlib.util.module_from_spec(tree_spec)
-            tree_spec.loader.exec_module(tree_revision)
-            with Operations.context(MigrationContext.configure(connection)):
-                tree_revision.upgrade()
-                tree_revision.upgrade()
-            assert fields <= {c["name"] for c in sa.inspect(connection).get_columns(legacy.name)}
-            assert group_fields <= {c["name"] for c in sa.inspect(connection).get_columns(legacy_group.name)}
-            indexes = {index["name"] for index in sa.inspect(connection).get_indexes(legacy.name)}
-            assert {"ix_dma_request_status", "ix_dma_request_association", "ix_dma_request_group_pending"} <= indexes
+            metadata = sa.MetaData()
+            for model in (*AUDIT_MODELS, User):
+                model.__table__.to_metadata(metadata)
+            assert create_missing_model_tables(connection, metadata)
+            assert create_missing_model_tables(connection, metadata) == ()
+            inspector = sa.inspect(connection)
+            assert {"audit_status", "group_index_pending", "group_indexed_status", "hierarchy_indexed"} <= {
+                column["name"] for column in inspector.get_columns(DshModelAuditRequest.__tablename__)
+            }
+            assert {"origin_state", "declared_parent_key", "parent_declaration_missing", "relation_conflict"} <= {
+                column["name"] for column in inspector.get_columns(DshModelAuditConversation.__tablename__)
+            }
+            assert {"ix_dma_request_status", "ix_dma_request_association", "ix_dma_request_group_pending"} <= {
+                index["name"] for index in inspector.get_indexes(DshModelAuditRequest.__tablename__)
+            }
         # Reuse the fixture's scoped listener registration and teardown, not its SQLite data.
         with audit_database():
             from sqlmodel import SQLModel

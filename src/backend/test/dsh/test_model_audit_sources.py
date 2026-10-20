@@ -1,12 +1,6 @@
 """覆盖 AC: AC-40, AC-41, AC-42, AC-43, AC-44, AC-46, AC-47."""
 
-import importlib.util
-from pathlib import Path
-
-import pytest
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest
 from bisheng.dsh.domain.schemas.model_audit_context import parse_audit_context
@@ -68,36 +62,20 @@ def test_annotation_budget_keeps_identity_and_marks_partial():
     assert len(context.message_sources["items"]) < 128
 
 
-@pytest.mark.parametrize("fresh", [False, True])
-def test_provenance_migration_is_idempotent_and_application_rollback_preserves_it(fresh):
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "bisheng/core/database/alembic/versions/v3_0_0_work110_dsh_audit_sources.py"
-    )
-    spec = importlib.util.spec_from_file_location("audit_source_migration", path)
-    revision = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(revision)
+def test_provenance_fields_and_indexes_are_present_at_table_creation():
     engine = sa.create_engine("sqlite://")
-    with engine.begin() as connection:
-        if fresh:
+    try:
+        with engine.begin() as connection:
             DshModelAuditRequest.__table__.create(connection)
-        else:
-            connection.exec_driver_sql(
-                "CREATE TABLE dsh_model_audit_request (request_id VARCHAR(36) PRIMARY KEY, tenant_id BIGINT, started_at DATETIME)"
-            )
-            connection.exec_driver_sql("INSERT INTO dsh_model_audit_request VALUES ('e2e-legacy',2,'2026-10-16')")
-        with Operations.context(MigrationContext.configure(connection)):
-            revision.upgrade()
-            revision.upgrade()
-            revision.downgrade()
-        columns = {column["name"] for column in sa.inspect(connection).get_columns("dsh_model_audit_request")}
-        assert {"session_origin", "parent_conversation_id", "message_sources_status", "message_sources_ref"} <= columns
-        assert "ix_dma_request_sources" in {
-            index["name"] for index in sa.inspect(connection).get_indexes("dsh_model_audit_request")
-        }
-        if not fresh:
-            assert (
-                connection.exec_driver_sql("SELECT message_sources_status FROM dsh_model_audit_request").scalar()
-                == "NOT_PROVIDED"
-            )
-    engine.dispose()
+            columns = {column["name"] for column in sa.inspect(connection).get_columns("dsh_model_audit_request")}
+            assert {
+                "session_origin",
+                "parent_conversation_id",
+                "message_sources_status",
+                "message_sources_ref",
+            } <= columns
+            assert "ix_dma_request_sources" in {
+                index["name"] for index in sa.inspect(connection).get_indexes("dsh_model_audit_request")
+            }
+    finally:
+        engine.dispose()

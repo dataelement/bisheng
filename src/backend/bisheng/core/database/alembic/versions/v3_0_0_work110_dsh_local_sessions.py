@@ -1,26 +1,23 @@
-"""Allow native desktop events without commercial seat identity; DDL only."""
+"""Remove mandatory seat identity from main's existing model-call table; DDL only."""
 
 import sqlalchemy as sa
 from alembic import op
 
-from bisheng.core.database.alembic_helpers.online import table_exists
-
 revision = "work110_dsh_local_sessions"
-down_revision = "f062_work110_audit_tree"
+down_revision = "f065_dsh_install_policy_default_off"
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
-    table = "dsh_model_call"
-    if not table_exists(table):
+    inspector = sa.inspect(op.get_bind())
+    table = next((name for name in inspector.get_table_names() if name.lower() == "dsh_model_call"), None)
+    if table is None:
         return
-    connection = op.get_bind()
-    inspector = sa.inspect(connection)
     columns = {item["name"].lower(): item for item in inspector.get_columns(table)}
     for name, datatype in (("seat_id", sa.String(36)), ("grant_version", sa.BigInteger())):
         if name in columns and not columns[name]["nullable"]:
-            op.alter_column(table, name, existing_type=datatype, nullable=True)
+            op.alter_column(table, columns[name]["name"], existing_type=datatype, nullable=True)
     for constraint in inspector.get_check_constraints(table):
         if (constraint.get("name") or "").lower() == "ck_dsh_call_versions":
             op.drop_constraint(constraint["name"], table, type_="check")
@@ -33,5 +30,5 @@ def upgrade():
 
 
 def downgrade():
-    # Local events and historical evidence must remain readable after rollback.
+    # Native calls and audit evidence cannot be discarded to recreate a main baseline.
     pass
