@@ -152,6 +152,22 @@ async def test_closing_the_window_after_a_finished_run_cleans_the_session(harnes
     assert len(closed) == 1
 
 
+async def test_window_closed_by_the_browser_still_cleans_the_session(harness):
+    _, closed = harness
+    client = _client()
+    await _run(client)
+
+    async def gone(*_args, **_kwargs):
+        raise RuntimeError("Unexpected ASGI message 'websocket.send', after sending 'websocket.close'")
+
+    # The browser usually disconnects first, so the farewell message fails.
+    client.send_response = gone
+    with pytest.raises(RuntimeError):
+        await client.close()
+
+    assert closed == [client.hash_key]
+
+
 async def test_stop_keeps_the_session_for_the_next_run(harness):
     _, closed = harness
     client = _client()

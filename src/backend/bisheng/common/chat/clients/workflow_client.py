@@ -57,21 +57,24 @@ class WorkflowClient(BaseClient):
         # If the user is not actively stopping, setwsTurn the flag off, but there is no need to abortworkflowExecution
         if not force_stop:
             self.ws_closed = True
-        # Non-Session Mode OffworkflowImplementation, Session mode determines if the user took the initiative to close
-        if self.workflow:
-            if force_stop or not self.chat_id:
-                await self.workflow.async_set_workflow_stop()
-                workflow_over = await self.workflow_run()
-                while not workflow_over:
-                    if self.ws_closed:
-                        break
+        try:
+            # Non-Session Mode OffworkflowImplementation, Session mode determines if the user took the initiative to close
+            if self.workflow:
+                if force_stop or not self.chat_id:
+                    await self.workflow.async_set_workflow_stop()
                     workflow_over = await self.workflow_run()
-                    await asyncio.sleep(0.5)
-        else:
-            await self.send_response("processing", "close", "")
-        # "stop" keeps the window open, and its next run still needs the earlier files.
-        if not force_stop:
-            await self._close_agent_tmp_session()
+                    while not workflow_over:
+                        if self.ws_closed:
+                            break
+                        workflow_over = await self.workflow_run()
+                        await asyncio.sleep(0.5)
+            else:
+                # Raises when the browser has already gone, which is how a window usually closes.
+                await self.send_response("processing", "close", "")
+        finally:
+            # "stop" keeps the window open, and its next run still needs the earlier files.
+            if not force_stop:
+                await self._close_agent_tmp_session()
         await super().close()
 
     async def _close_agent_tmp_session(self) -> None:
