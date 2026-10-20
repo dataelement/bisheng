@@ -63,7 +63,7 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                 label={fileName}
                 description={[fileName.split('.').pop()?.toUpperCase(), Number(file.size) >= 0 ? formatBytes(Number(file.size), 1, true) : ''].filter(Boolean).join(' · ')}
                 thumbnail={isImagePreview}
-                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <FileIcon type={getFileTypebyFileName(fileName) || "txt"} className="size-7" />}
+                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <FileIcon type={getFileTypebyFileName(fileName) || "txt"} className="dsh-file-icon" />}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />

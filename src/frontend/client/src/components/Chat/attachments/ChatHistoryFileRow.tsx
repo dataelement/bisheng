@@ -56,7 +56,7 @@ export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowPr
         <>
             <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
                 title={fileName}>
-                <FileIcon type={fileType || 'txt'} className="size-7 shrink-0" />
+                <FileIcon type={fileType || 'txt'} className="dsh-file-icon shrink-0" />
                 <span className="min-w-0 flex-1">
                     <span className="dsh-resource-name block text-text-1">{fileName}</span>
                     <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>

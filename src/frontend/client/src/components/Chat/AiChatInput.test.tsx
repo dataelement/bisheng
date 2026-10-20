@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import AiChatInput from './AiChatInput';
 
+// jsdom has no layout observer; behavior tests use deterministic geometry.
+beforeAll(() => {
+    global.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+});
+
 const mockSetSkills = jest.fn();
 const mockSkills = [{ name: 'research' }];
 jest.mock('react-router-dom', () => ({ useNavigate: () => jest.fn() }));

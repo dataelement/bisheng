@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ComposerReferences } from './ComposerReferences';
 
+// jsdom has no layout observer; behavior tests use deterministic geometry.
+beforeAll(() => {
+    global.ResizeObserver = class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+});
+
 const skill = { name: 'office-docx', display_name: 'Word documents' };
 const space = { id: 'space-1', type: 'knowledge', name: 'Product' };
 
