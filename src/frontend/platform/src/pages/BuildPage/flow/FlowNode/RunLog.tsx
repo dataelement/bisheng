@@ -11,6 +11,7 @@ import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
 import { AGENT_SKILL_TOOL_NAMES } from "../FlowChat/agentDeliverables";
 import { SubflowRunLog } from "./SubflowRunLog";
+import { raiseNodeLayer } from "./nodeLayer";
 
 const enum Status {
     normal = 'normal',
@@ -191,6 +192,9 @@ const Log = ({ type, name, data }) => {
             setOpen(false);
         }
     };
+
+    // The open log must not hide behind the node to its right.
+    useEffect(() => (open ? raiseNodeLayer(ref.current) : undefined), [open]);
 
     useEffect(() => {
         if (open) {

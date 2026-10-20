@@ -121,7 +121,8 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, i1
         />
         {notice && <p className="mt-2 text-xs text-red-500">{notice}</p>}
 
-        {inputsParam && <div className="mt-4">
+        {/* Nothing to describe until a workflow is picked. */}
+        {selected.length > 0 && inputsParam && <div className="mt-4">
             <Label className="flex items-center bisheng-label mb-2">
                 {t('node.subflow.subflow_inputs.label')}
                 <QuestionTooltip content={t('node.subflow.subflow_inputs.help')} />
@@ -139,7 +140,7 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, i1
                 : <p className="text-xs text-muted-foreground">{t('node.subflow.subflow_inputs.empty')}</p>}
         </div>}
 
-        <div className="mt-4">
+        {selected.length > 0 && <div className="mt-4">
             <Label className="flex items-center bisheng-label mb-2">
                 {t('node.subflow.subflow_outputs.label')}
                 <QuestionTooltip content={t('node.subflow.subflow_outputs.help')} />
@@ -149,6 +150,6 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, i1
                     {outputs.map(name => <span key={name} className="rounded border px-2 py-0.5 text-xs bg-background">{name}</span>)}
                 </div>
                 : <p className="text-xs text-muted-foreground">{t('node.subflow.subflow_outputs.empty')}</p>}
-        </div>
+        </div>}
     </div>
 }

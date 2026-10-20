@@ -6,6 +6,7 @@ import { applySubflowInterface, findNodeParam } from "@/pages/BuildPage/flow/Flo
 import { formatDuration, subflowNodeFields } from "@/pages/BuildPage/flow/FlowNode/SubflowRunLog";
 import { subflowWarningLines } from "@/pages/BuildPage/flow/SubflowWarningDialog";
 import { nodeLogData } from "@/pages/BuildPage/flow/FlowChat/nodeLogData";
+import { raiseNodeLayer } from "@/pages/BuildPage/flow/FlowNode/nodeLayer";
 import type { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 
 // Echo translator: the key plus its interpolation values, so assertions see what was asked for.
@@ -169,5 +170,34 @@ describe("F086 failed node log", () => {
         expect(nodeLogData({ reason: "x -- subflow error --{broken", log_data: null }, t)?.[0][0].value).toBe("x")
         const rounds = [[{ key: "output", value: "a", type: "variable" }]]
         expect(nodeLogData({ reason: null, log_data: rounds }, t)).toBe(rounds)
+    })
+})
+
+describe("F086 node log layer", () => {
+    const canvasNode = () => {
+        const node = document.createElement("div")
+        node.className = "react-flow__node"
+        node.style.zIndex = "0"
+        const popup = document.createElement("div")
+        node.appendChild(popup)
+        return { node, popup }
+    }
+
+    it("lifts the node holding an open log and puts it back on close", () => {
+        const { node, popup } = canvasNode()
+        const undo = raiseNodeLayer(popup)
+        expect(node.style.zIndex).toBe("2000")
+        undo()
+        expect(node.style.zIndex).toBe("0")
+    })
+
+    it("keeps a z-index the canvas set meanwhile, and ignores elements outside a node", () => {
+        const { node, popup } = canvasNode()
+        const undo = raiseNodeLayer(popup)
+        node.style.zIndex = "1000"
+        undo()
+        expect(node.style.zIndex).toBe("1000")
+        expect(() => raiseNodeLayer(document.createElement("div"))()).not.toThrow()
+        expect(() => raiseNodeLayer(null)()).not.toThrow()
     })
 })
