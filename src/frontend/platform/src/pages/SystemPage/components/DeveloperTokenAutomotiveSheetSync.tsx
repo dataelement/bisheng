@@ -70,6 +70,8 @@ export function DeveloperTokenAutomotiveSheetSync() {
     targetFolder: t("system.developerToken.fileSync.summary.targetFolder"),
     dynamicDepartment: t("system.developerToken.fileSync.summary.dynamicDepartment"),
     dynamicResponsiblePerson: t("system.developerToken.fileSync.summary.dynamicResponsiblePerson"),
+    libraryClinic: t("system.developerToken.fileSync.summary.libraryClinic"),
+    libraryDepartment: t("system.developerToken.fileSync.summary.libraryDepartment"),
     folderNone: t("system.developerToken.fileSync.summary.folderNone"),
     folderDynamicDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicDepartmentName"),
     folderDynamicCallerMainDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicCallerMainDepartmentName"),

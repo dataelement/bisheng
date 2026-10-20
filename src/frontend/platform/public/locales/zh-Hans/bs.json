@@ -307,6 +307,11 @@
           "departmentId": "使用 department_id",
           "responsiblePersonId": "使用 responsible_person_id 的主部门"
         },
+        "libraryKind": "接收知识库",
+        "libraries": {
+          "clinic": "科室库",
+          "department": "部门库"
+        },
         "errorFields": {
           "category": "一级分类",
           "subcategory": "二级分类",
@@ -326,6 +331,8 @@
           "targetFolder": "目录",
           "dynamicDepartment": "动态(department_id)",
           "dynamicResponsiblePerson": "动态(responsible_person_id 主部门)",
+          "libraryClinic": "科室库",
+          "libraryDepartment": "部门库",
           "folderNone": "根目录",
           "folderDynamicDepartmentName": "动态(同步部门名)",
           "folderDynamicCallerMainDepartmentName": "动态(绑定用户主责部门名)"

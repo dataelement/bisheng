@@ -306,6 +306,11 @@
           "departmentId": "department_id を使用",
           "responsiblePersonId": "responsible_person_id の主所属部署を使用"
         },
+        "libraryKind": "受け入れるライブラリ",
+        "libraries": {
+          "clinic": "課のライブラリ",
+          "department": "部門ライブラリ"
+        },
         "errorFields": {
           "category": "親カテゴリ",
           "subcategory": "子カテゴリ",
@@ -325,6 +330,8 @@
           "targetFolder": "フォルダー",
           "dynamicDepartment": "動的(department_id)",
           "dynamicResponsiblePerson": "動的(responsible_person_id の主所属部署)",
+          "libraryClinic": "課のライブラリ",
+          "libraryDepartment": "部門ライブラリ",
           "folderNone": "ルート",
           "folderDynamicDepartmentName": "動的(同期部門名)",
           "folderDynamicCallerMainDepartmentName": "動的(バインドユーザー主所属部署名)"

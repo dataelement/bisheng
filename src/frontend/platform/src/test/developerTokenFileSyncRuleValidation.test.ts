@@ -5,6 +5,7 @@ import type {
 import {
   changeFileSyncRuleMode,
   findInvalidFileSyncRule,
+  fileSyncRuleForSave,
   formatFileSyncRuleSummary,
   normalizeFileSyncRule,
 } from "@/pages/SystemPage/components/developerTokenFileSyncRuleValidation"
@@ -91,6 +92,7 @@ describe("developer token file-sync rule validation", () => {
         knowledge_id: 118,
         folder_id: null,
         dynamic_source: null,
+        library_kind: null,
         folder_mode: "fixed",
         folder_path: null,
         parent_folder_path: null,
@@ -230,11 +232,22 @@ describe("developer token file-sync rule validation", () => {
       knowledge_id: null,
       folder_id: null,
       dynamic_source: null,
+      library_kind: null,
       folder_mode: "fixed",
       folder_path: "政策文件/管理制度",
       parent_folder_path: null,
       folder_dynamic_source: null,
     })
+  })
+
+  it("keeps an unsaved responsible-person rule legacy until save, then defaults to the office library", () => {
+    const legacy = rule("fixed", "dynamic", "responsible_person_id", "responsible_person_id")
+    expect(normalizeFileSyncRule(legacy)?.target_space.library_kind ?? null).toBeNull()
+    expect(fileSyncRuleForSave(legacy)?.target_space.library_kind).toBe("clinic")
+    expect(fileSyncRuleForSave({
+      ...legacy,
+      target_space: { ...legacy.target_space, library_kind: "department" },
+    })?.target_space.library_kind).toBe("department")
   })
 
   it("formats localized configured and unconfigured summaries without option lookups", () => {
@@ -251,6 +264,19 @@ describe("developer token file-sync rule validation", () => {
     }
 
     expect(formatFileSyncRuleSummary(null, labels)).toBe("Not configured")
+    expect(formatFileSyncRuleSummary({
+      ...rule("fixed", "dynamic", "responsible_person_id", "responsible_person_id"),
+      target_space: {
+        ...rule("fixed", "dynamic", "responsible_person_id", "responsible_person_id").target_space,
+        library_kind: "department",
+      },
+    }, {
+      ...labels,
+      libraryClinic: "Office library",
+      libraryDepartment: "Department library",
+    })).toBe(
+      "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(responsible person)/Department library · Folder: Root"
+    )
     expect(formatFileSyncRuleSummary(rule("fixed", "dynamic", "responsible_person_id", "department_id"), labels)).toBe(
       "POLICY/MGMT_POLICY · Domain: SAFETY · Space: Dynamic(department) · Folder: Root"
     )

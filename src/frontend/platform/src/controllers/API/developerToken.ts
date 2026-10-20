@@ -19,6 +19,8 @@ export type DeveloperTokenFileSyncDynamicSource =
   | "department_id"
   | "responsible_person_id"
 
+export type DeveloperTokenFileSyncLibraryKind = "clinic" | "department"
+
 export type DeveloperTokenFileSyncFolderMode = "none" | "fixed" | "dynamic"
 
 export type DeveloperTokenFileSyncFolderDynamicSource =
@@ -41,6 +43,8 @@ export interface DeveloperTokenFileSyncRule {
     /** @deprecated Legacy folder id; prefer folder_path. */
     folder_id?: number | null
     dynamic_source?: DeveloperTokenFileSyncDynamicSource | null
+    /** Saved choice for responsible_person_id. Null keeps the legacy clinic walk. */
+    library_kind?: DeveloperTokenFileSyncLibraryKind | null
     folder_mode?: DeveloperTokenFileSyncFolderMode
     folder_path?: string | null
     parent_folder_path?: string | null

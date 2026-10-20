@@ -46,6 +46,7 @@ def _department(
     path: str = "",
     *,
     org_level: str | None = None,
+    parent_id: int | None = None,
 ) -> Department:
     return Department(
         id=department_id,
@@ -53,6 +54,23 @@ def _department(
         name=name,
         path=path,
         org_level=org_level,
+        parent_id=parent_id,
+    )
+
+
+def _responsible_library_rule(library_kind: str | None) -> DeveloperTokenFileSyncRule:
+    target_space = {
+        "mode": "dynamic",
+        "dynamic_source": "responsible_person_id",
+    }
+    if library_kind is not None:
+        target_space["library_kind"] = library_kind
+    return DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "IT"},
+            "target_space": target_space,
+        }
     )
 
 
@@ -569,6 +587,112 @@ async def test_resolve_target_space_uses_responsible_person_personal_without_tok
     assert target.used_personal_fallback is False
     assert target.used_responsible_person_personal is True
     knowledge_space_service.ensure_personal_default_space.assert_not_awaited()
+
+
+async def test_saved_clinic_kind_uses_the_nearest_office_library():
+    squad = _department(4, "精益班组", "/1/2/3/4/", org_level="squad", parent_id=3)
+    office = _department(3, "科室", "/1/2/3/", org_level="office", parent_id=2)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=33, name="科室库", type=3)),
+        find_department_by_id=AsyncMock(return_value=office),
+    )
+    service = _service(repository)
+    service.file_sync_rule = _responsible_library_rule("clinic")
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=33),
+    ) as resolve:
+        space = await service._find_department_space(
+            squad,
+            dynamic_source="responsible_person_id",
+            identity=_responsible_identity(squad),
+        )
+    assert space.id == 33
+    repository.find_department_by_id.assert_awaited_once_with(3)
+    resolve.assert_awaited_once_with(
+        [3],
+        kind=DepartmentSpaceTargetKind.CLINIC,
+        allow_legacy=False,
+    )
+
+
+async def test_saved_department_kind_uses_the_nearest_department_library():
+    office = _department(3, "科室", "/1/2/3/", org_level="office", parent_id=2)
+    department = _department(2, "部门", "/1/2/", org_level="dept", parent_id=1)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=22, name="部门库", type=3)),
+        find_department_by_id=AsyncMock(return_value=department),
+    )
+    service = _service(repository)
+    service.file_sync_rule = _responsible_library_rule("department")
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=22),
+    ) as resolve:
+        space = await service._find_department_space(
+            office,
+            dynamic_source="responsible_person_id",
+            identity=_responsible_identity(office),
+        )
+    assert space.id == 22
+    resolve.assert_awaited_once_with(
+        [2],
+        kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        allow_legacy=False,
+    )
+
+
+async def test_department_org_with_clinic_kind_uses_personal_library():
+    department = _department(2, "部门", "/1/2/", org_level="dept", parent_id=1)
+    company = _department(1, "公司", "/1/", org_level="company")
+    personal_space = Knowledge(id=88, name="张三的知识库", type=3)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(),
+        find_department_by_id=AsyncMock(return_value=company),
+    )
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space_for_owner=AsyncMock(return_value=personal_space),
+    )
+    service = _service(repository, knowledge_space_service)
+    service.file_sync_rule = _responsible_library_rule("clinic")
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(),
+    ) as resolve:
+        space = await service._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+            identity=_responsible_identity(department),
+        )
+    assert space.id == 88
+    resolve.assert_not_awaited()
+    knowledge_space_service.ensure_personal_default_space_for_owner.assert_awaited_once()
+
+
+async def test_saved_clinic_kind_picks_smallest_space_when_the_office_has_several():
+    office = _department(3, "科室", "/1/2/3/", org_level="office")
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=Knowledge(id=100, name="科室库A", type=3)),
+        find_department_by_id=AsyncMock(),
+    )
+    service = _service(repository)
+    service.file_sync_rule = _responsible_library_rule("clinic")
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(
+            side_effect=DepartmentKnowledgeSpaceAmbiguousError(
+                department_id=3,
+                candidate_space_ids=[101, 100],
+            ),
+        ),
+    ):
+        space = await service._find_department_space(
+            office,
+            dynamic_source="responsible_person_id",
+            identity=_responsible_identity(office),
+        )
+    assert space.id == 100
+    repository.find_knowledge_by_id.assert_awaited_once_with(100)
 
 
 async def test_nearest_department_binding_is_selected():
