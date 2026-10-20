@@ -213,6 +213,7 @@ async def test_api_runtime_injects_facade_into_business_loaders(
         "knowledge_file",
         "tool",
         "dashboard",
+        "linsight_skill",
     ):
         loader = initialized.adapters[resource_type]._loader
         assert loader._versions is facade

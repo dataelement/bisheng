@@ -22,10 +22,10 @@ class _FakeSkillStore:
     def __init__(self):
         self.version = "v1"
 
-    def list_files(self, tenant_id, name, content_hash):
+    def list_files(self, tenant_id, name, content_hash, *, owner_user_id=0):
         return [{"path": "SKILL.md", "size": 1}, {"path": "scripts/run.py", "size": 1}]
 
-    def read_bytes(self, tenant_id, name, content_hash, rel):
+    def read_bytes(self, tenant_id, name, content_hash, rel, *, owner_user_id=0):
         return f"{name}:{rel}:{self.version}".encode()
 
 

@@ -99,6 +99,7 @@ def test_resource_composition_covers_every_checked_resource_type():
         "knowledge_file",
         "tool",
         "dashboard",
+        "linsight_skill",
     }
     assert expected <= set(adapters)
     # Re-registering raises, which is the cheapest proof each type is already bound

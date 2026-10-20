@@ -243,9 +243,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 11
     },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -1604,17 +1601,8 @@
     }
   },
   "src/components/Voice/SpeechToText.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 4
     }
   },
   "src/components/Voice/textToSpeechStore.tsx": {
@@ -3065,9 +3053,6 @@
   },
   "src/pages/knowledge/SpaceDetail/AiChat/KnowledgeAiInput.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },

@@ -108,6 +108,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     api_meta: dict | None = Field(
         None, description="Open API submission metadata", sa_column=Column(JsonType, nullable=True)
     )
+    # Which skill row owns each directory copied into this session. The name
+    # alone is not enough when a personal skill and a tenant skill share it.
+    # Not a retention record: deleting a skill does not consult this column.
+    skill_snapshot: list[dict] | None = Field(
+        None,
+        description="Directory ownership for skills copied into this session",
+        sa_column=Column(JsonType, nullable=True),
+    )
     sop: str | None = Field(None, description="SOPContents", sa_type=Text, nullable=True)
     output_result: dict | None = Field(None, description="Output Results", sa_column=Column(JsonType, nullable=True))
     status: SessionVersionStatusEnum = Field(
@@ -176,6 +184,8 @@ class LinsightSessionVersion(LinsightSessionVersionBase, table=True):
         data.pop("pending_files", None)
         # F073: credential id and caller instructions are internal to the run.
         data.pop("api_meta", None)
+        # Directory ownership is for the worker's read and execute checks.
+        data.pop("skill_snapshot", None)
         return data
 
 

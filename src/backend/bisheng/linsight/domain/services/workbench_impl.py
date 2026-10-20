@@ -50,7 +50,10 @@ from bisheng.linsight.domain.schemas.linsight_schema import (
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
-from bisheng.linsight.domain.services.code_tool_config import bind_code_config_to_workspace
+from bisheng.linsight.domain.services.code_tool_config import (  # noqa: F401  build_e2b_file_list is re-exported
+    bind_code_config_to_workspace,
+    build_e2b_file_list,
+)
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -339,6 +342,8 @@ class LinsightWorkbenchImpl:
                 )
 
             # Create Ideas Conversation Version (id == svid used for the workspace)
+            from bisheng.linsight.domain.services.skill_provisioning import pending_skill_snapshot
+
             linsight_session_version = LinsightSessionVersion(
                 id=svid,
                 session_id=chat_id,
@@ -353,6 +358,7 @@ class LinsightWorkbenchImpl:
                 pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
+                skill_snapshot=pending_skill_snapshot(submit_obj.skill_ids),
                 api_meta=api_meta,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
@@ -2313,6 +2319,17 @@ class LinsightWorkbenchImpl:
                     "Failed to initialize BiSheng code interpreter tool: session_version_id={}",
                     session_version.id,
                 )
+
+        # Image View is a visual-model config row, not a LangChain tool.
+        # Daily chat skips it and wires pixel viewing separately. Passing the
+        # row to load_tools raises "Got unknown tool image_view" and aborts
+        # the task before skills or any other tool run.
+        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
+
+        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
+        if image_view_tool and image_view_tool.id in tool_ids:
+            tool_ids.remove(image_view_tool.id)
+            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily
         # tool selection directly. Every selected tool id (a real GptsTools id

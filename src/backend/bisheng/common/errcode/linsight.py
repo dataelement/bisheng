@@ -110,7 +110,7 @@ class SkillValidationError(BaseErrorCode):
 # Uploaded skill file (the .md / .zip / .skill payload itself) exceeds the configured upload limit
 class SkillFileTooLargeError(BaseErrorCode):
     Code: int = 11052
-    Msg: str = "Skill file exceeds the upload size limit"
+    Msg: str = "Skill file exceeds {limit_mb} MiB"
 
 
 # Skill not found in the current tenant
@@ -166,7 +166,72 @@ class SkillGitHubRateLimitError(BaseErrorCode):
 # Numbered after the GitHub block to keep this file in ascending code order.
 class SkillBundleTooLargeError(BaseErrorCode):
     Code: int = 11059
-    Msg: str = "Skill bundle contents exceed the unpacked size limit"
+    Msg: str = "Skill bundle exceeds {limit_mb} MiB when unpacked"
+
+
+class SkillCountLimitError(BaseErrorCode):
+    Code: int = 11061
+    Msg: str = "Personal skill count limit reached"
+
+
+class SkillStorageLimitError(BaseErrorCode):
+    Code: int = 11062
+    Msg: str = "Personal skill storage limit reached"
+
+
+class SkillArchiveEncryptedError(BaseErrorCode):
+    Code: int = 11063
+    Msg: str = "The archive is encrypted. Remove the password and choose the file again"
+
+
+class SkillVersionConflictError(BaseErrorCode):
+    Code: int = 11064
+    Msg: str = "This Skill has been updated. Refresh and try again"
+
+
+class SkillTypeMismatchError(BaseErrorCode):
+    Code: int = 11065
+    Msg: str = "The file type does not match its contents"
+
+
+class SkillImportMismatchError(BaseErrorCode):
+    Code: int = 11066
+    Msg: str = "This import was already used for a different file"
+
+
+class SkillArchiveDamagedError(BaseErrorCode):
+    Code: int = 11067
+    Msg: str = "The archive is damaged"
+
+
+class SkillManifestMissingError(BaseErrorCode):
+    Code: int = 11068
+    Msg: str = "The archive does not contain SKILL.md"
+
+
+class SkillPathEscapeError(BaseErrorCode):
+    Code: int = 11069
+    Msg: str = "The archive contains a path outside the skill directory"
+
+
+class SkillEmptyFileError(BaseErrorCode):
+    Code: int = 11071
+    Msg: str = "The file is empty"
+
+
+class SkillMultipleError(BaseErrorCode):
+    Code: int = 11072
+    Msg: str = "The archive contains more than one skill"
+
+
+class SkillManifestTooLargeError(BaseErrorCode):
+    Code: int = 11073
+    Msg: str = "SKILL.md exceeds {limit_mb} MiB"
+
+
+class SkillEntryLimitError(BaseErrorCode):
+    Code: int = 11074
+    Msg: str = "The archive contains more than {limit_count} entries"
 
 
 # ---------------------------------------------------------------------------

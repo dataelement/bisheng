@@ -15,6 +15,39 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter.e2b_executor import SIZE_AUTOPUSH
 
 
+def build_e2b_file_list(file_dir: str) -> list[WriteEntry]:
+    """Files the E2B sandbox receives when the code tool is constructed.
+
+    The walk happens at tool init, so skill bundles have to already be in
+    ``file_dir``. A file over ``SIZE_AUTOPUSH`` (5 MiB) is left out; the local
+    and container executors still read it from the session directory.
+    """
+    file_list: list[WriteEntry] = []
+    oversized: list[str] = []
+    for root, _dirs, files in os.walk(file_dir):
+        for file in files:
+            file_path = os.path.join(root, file)
+            try:
+                if os.path.getsize(file_path) > SIZE_AUTOPUSH:
+                    oversized.append(file_path)
+                    continue
+            except OSError:
+                # Unstattable file: let it through; the push surfaces real problems.
+                pass
+            file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
+    if oversized:
+        # Never let a bounded copy-in look complete: the model is told these
+        # paths exist, so a silent drop reads as "the tool is broken".
+        logger.warning(
+            "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
+            "pushed into the sandbox: {}",
+            len(oversized),
+            SIZE_AUTOPUSH,
+            ", ".join(os.path.basename(p) for p in oversized),
+        )
+    return file_list
+
+
 def bind_code_config_to_workspace(code_config: dict, file_dir: str, workspace_prefix: str | None) -> dict:
     """Point every executor kind at ``file_dir`` and mirror writes to ``workspace_prefix``.
 
@@ -50,28 +83,5 @@ def bind_code_config_to_workspace(code_config: dict, file_dir: str, workspace_pr
     # ``file_list`` is the E2B copy-in set, capped by E2B at SIZE_AUTOPUSH. The
     # container executor copies in at run time, so it needs no pre-scan.
     if executor_type != "container":
-        file_list = []
-        oversized: list[str] = []
-        for root, _dirs, files in os.walk(file_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                try:
-                    if os.path.getsize(file_path) > SIZE_AUTOPUSH:
-                        oversized.append(file_path)
-                        continue
-                except OSError:
-                    # Unstattable file: let it through; the push surfaces real problems.
-                    pass
-                file_list.append(WriteEntry(data=file_path, path=file_path.replace(file_dir, ".")))
-        if oversized:
-            # Never let a bounded copy-in look complete: the model is told these
-            # paths exist, so a silent drop reads as "the tool is broken".
-            logger.warning(
-                "code interpreter: {} file(s) exceed the E2B auto-push ceiling ({} bytes) and were not "
-                "pushed into the sandbox: {}",
-                len(oversized),
-                SIZE_AUTOPUSH,
-                ", ".join(os.path.basename(p) for p in oversized),
-            )
-        e2b["file_list"] = file_list
+        e2b["file_list"] = build_e2b_file_list(file_dir)
     return code_config

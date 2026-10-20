@@ -20,6 +20,7 @@ from bisheng.common.errcode.llm import (
     ServerAddAllError,
     ServerAddError,
     ServerExistError,
+    SpeechCredentialError,
     WorkbenchChatDefaultModelError,
     WorkbenchEmbeddingError,
 )
@@ -36,6 +37,8 @@ from bisheng.common.errcode.server import (
     TtsSynthesisFailedError,
 )
 from bisheng.common.models.config import ConfigKeyEnum
+from bisheng.core.ai.asr.realtime import realtime_protocol
+from bisheng.core.ai.asr.volcengine import SpeechAccessRejected, VolcengineRealtimeASRClient
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.context.tenant import (
     bypass_tenant_filter,
@@ -46,7 +49,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
-from bisheng.llm.domain.const import LLMModelStatus, LLMModelType
+from bisheng.llm.domain.const import LLMModelStatus, LLMModelType, LLMServerType
 from bisheng.llm.domain.models import LLMDao, LLMModel, LLMServer
 from bisheng.llm.domain.models.tenant_system_model_config import TenantSystemModelConfigDao
 from bisheng.llm.domain.schemas import (
@@ -687,6 +690,29 @@ class LLMService:
         return info
 
     @classmethod
+    async def _ensure_volcengine_speech(cls, server_type: str, config: dict | None, models) -> None:
+        """Reject a Volcengine Resource ID the credentials are not granted, before saving.
+
+        Construction only checks that the id is one of the four known values. The
+        vendor answers a mismatch with HTTP 403 on the websocket handshake, which
+        used to surface the first time someone pressed the microphone.
+        """
+        if server_type != LLMServerType.VOLCENGINE.value:
+            return
+        if not any(
+            model.model_type == LLMModelType.ASR.value and realtime_protocol(server_type, model.model_name)
+            for model in models
+        ):
+            return
+        try:
+            await VolcengineRealtimeASRClient("bigmodel", config or {}).verify_access()
+        except SpeechAccessRejected:
+            raise SpeechCredentialError.http_exception() from None
+        except Exception as exc:
+            logger.exception("volcengine speech credential check failed")
+            raise ServerAddAllError.http_exception(str(exc)) from None
+
+    @classmethod
     async def add_llm_server(
         cls, request: Request, login_user: UserPayload, server: LLMServerCreateReq
     ) -> LLMServerInfo:
@@ -705,6 +731,7 @@ class LLMService:
         db_server = LLMServer(**server.model_dump(exclude={"models", "share_to_children"}))
         db_server.config = cls.strip_config_whitespace(db_server.config)
         db_server.user_id = login_user.user_id
+        await cls._ensure_volcengine_speech(db_server.type, db_server.config, model_dict.values())
 
         db_server = await LLMDao.ainsert_server_with_models(
             db_server,
@@ -881,7 +908,9 @@ class LLMService:
             example_file_path = os.path.join(os.path.dirname(__file__), "./asr_example.wav")
             with open(example_file_path, "rb") as f:
                 bisheng_asr = await cls.get_bisheng_asr(model_id=model.id, ignore_online=True, **common_params)
-                await bisheng_asr.ainvoke(f)
+                transcript = await bisheng_asr.ainvoke(f)
+                if not transcript.strip():
+                    raise ValueError("ASR model check returned no final transcript for the sample")
         elif model.model_type == LLMModelType.RERANK.value:
             bisheng_rerank = await cls.get_bisheng_rerank(model_id=model.id, ignore_online=True, **common_params)
             await bisheng_rerank.acompress_documents(documents=[Document(page_content="hello world")], query="hello")
@@ -977,15 +1006,18 @@ class LLMService:
             else:
                 raise ModelNameRepeatError.http_exception()
 
+        mask_maker = JsonFieldMasker()
+        merged_config = cls.strip_config_whitespace(
+            mask_maker.update_json_with_masked(exist_server.config, server.config)
+        )
+        await cls._ensure_volcengine_speech(server.type, merged_config, model_dict.values())
+
         exist_server.name = server.name
         exist_server.description = server.description
         exist_server.type = server.type
         exist_server.limit_flag = server.limit_flag
         exist_server.limit = server.limit
-        mask_maker = JsonFieldMasker()
-        exist_server.config = cls.strip_config_whitespace(
-            mask_maker.update_json_with_masked(exist_server.config, server.config)
-        )
+        exist_server.config = merged_config
 
         # Route share_to_children flips through the dedicated DAO helper
         # so super-admin / Root-only invariants are enforced via FGA.
@@ -1645,6 +1677,9 @@ class LLMService:
             target,
             inherited_from_root=inherited,
         )
+        if config.asr_model and config.asr_model.id:
+            model, server = await BishengASR.get_model_server_info(int(config.asr_model.id))
+            config.asr_model.realtime = bool(model and server and realtime_protocol(server.type, model.model_name))
         return config, inherited, blocked
 
     @classmethod

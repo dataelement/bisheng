@@ -41,10 +41,10 @@ class _RecordingModel(BaseChatModel):
 
 
 class _SkillStore:
-    def list_files(self, tenant_id, name, content_hash):
+    def list_files(self, tenant_id, name, content_hash, *, owner_user_id=0):
         return [{"path": "SKILL.md", "size": 1}]
 
-    def read_bytes(self, tenant_id, name, content_hash, rel):
+    def read_bytes(self, tenant_id, name, content_hash, rel, *, owner_user_id=0):
         return b"---\nname: docx\ndescription: Make Word documents.\n---\n\nRead me first.\n"
 
 

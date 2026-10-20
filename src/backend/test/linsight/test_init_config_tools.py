@@ -88,6 +88,33 @@ async def test_code_interpreter_bound_once_when_selected(monkeypatch: pytest.Mon
     assert init_many.await_args.args[0] == [100]
 
 
+async def test_image_view_config_row_is_not_initialized(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    """Image View stores a visual model. Loading it as a tool aborts the task."""
+    image_view_id = 39
+
+    async def by_key(tool_key: str):
+        if tool_key == "image_view":
+            return SimpleNamespace(id=image_view_id, tool_key="image_view")
+        return _fake_code_tool_row()
+
+    monkeypatch.setattr(GptsToolsDao, "aget_tool_by_tool_key", by_key)
+    init_one = AsyncMock(return_value=object())
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_id", init_one)
+    init_many = AsyncMock(return_value=[object()])
+    monkeypatch.setattr(ToolExecutor, "init_by_tool_ids", init_many)
+
+    tools = await LinsightWorkbenchImpl.init_linsight_config_tools(
+        session_version=_session_with_tools([100, image_view_id]),
+        llm=object(),
+        need_upload=True,
+        file_dir=str(tmp_path),
+    )
+
+    init_one.assert_not_awaited()
+    assert init_many.await_args.args[0] == [100]
+    assert len(tools) == 1
+
+
 async def test_no_tools_selected_binds_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path):
     """Empty selection short-circuits: not even the code interpreter binds."""
     init_one = AsyncMock(return_value=object())
