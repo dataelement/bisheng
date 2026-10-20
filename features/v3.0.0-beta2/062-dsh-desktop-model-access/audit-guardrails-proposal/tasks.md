@@ -32,7 +32,7 @@
 | [x] TT09 Desktop主进程 | enterprise-service.ts、credential-broker.ts：冻结base/token、复核、单并发及取消 | TT08 |
 | [x] TT10 Platform测试 | ModelAuditCard/Group/Panel/Tree.test.tsx：标题纯文本、编号回退、去导航、不预取 | 覆盖 AC: AC-T08, AC-T09；同职责增量跨文件例外 |
 | [x] TT11 Platform | ModelAuditCard/Group/Tree.tsx及dshModelAudit.ts：去两导航、标题回退；删仅用于父导航的ModelAuditParent及测试 | TT10；不改筛选/分页/统计/正文授权 |
-| [ ] TT12 发布验收 | 双端提交推送、精确提交CI、109部署及实际客户端标题/末次调用后改名 | TT01至TT11；覆盖 AC: AC-T01, AC-T02, AC-T08；见audit-title-validation.md |
+| [x] TT12 发布验收 | 双端提交推送、Drone5434成功、109部署；实际原生客户端发请求与末次调用后改名，管理页显示、原编号与原文回读，两个导航按钮移除 | TT01至TT11；覆盖 AC: AC-T01, AC-T02, AC-T08；见audit-title-validation.md；DM8/全平台门禁未冒充通过 |
 
 拆解及L1自审：无剩余high/medium。测试和对应实现配对列明，底层基础设施优先；少量机械接线、声明和旧死代码删除为同职责粒度例外。无新增Worker，不改Gateway或历史审计。
 
