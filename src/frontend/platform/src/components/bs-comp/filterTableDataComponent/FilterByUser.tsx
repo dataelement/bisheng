@@ -23,7 +23,7 @@ export default function FilterByUser({ value, placeholder, onChange }: FilterByU
     value: String(user.user_id),
   }))
   return <div className="w-[200px] relative">
-    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" options={options} value={value.map(option => ({ ...option, value: String(option.value) }))}
+    <MultiSelect contentClassName="overflow-y-auto max-w-[200px] [&_[data-radix-select-viewport]]:min-w-0" options={options} value={value.map(option => ({ ...option, value: String(option.value) }))}
       placeholder={placeholder || t("subjectSearch.userPlaceholder")}
       searchPlaceholder={t("subjectSearch.userPlaceholder")}
       searchInputProps={search.inputProps}

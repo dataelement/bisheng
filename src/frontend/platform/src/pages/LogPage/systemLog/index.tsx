@@ -119,10 +119,11 @@ export default function SystemLog() {
         <div className="h-[calc(var(--bs-vh,100vh)-128px-var(--license-banner-h,0px))] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
                 <div className="w-[200px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple
+                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px] [&_[data-radix-select-viewport]]:min-w-0" multiple
                         options={users}
                         value={keys.userIds}
                         placeholder={t('log.selectUser')}
+                        searchPlaceholder={t('subjectSearch.userPlaceholder')}
                         // onLoad={loadUsers}
                         // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
                         onChange={(values) => setKeys({ ...keys, userIds: values })}
@@ -205,7 +206,7 @@ export default function SystemLog() {
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderObjectName(log, t)}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.objectTypeEnum.none')}</div>
+                                <div className="whitespace-pre-line break-all">{log.note?.replace(t('log.editedAfter', { lng: 'zh-Hans' }), match => `\n${match}`) || t('log.objectTypeEnum.none')}</div>
                             </TableCell>
                         </TableRow>
                     ))}
@@ -238,13 +239,17 @@ export default function SystemLog() {
 
 
 const useUsers = () => {
+    const { t } = useTranslation()
     const [users, setUsers] = useState<any[]>([]);
     const userRef = useRef([])
     const selectedRef = useRef([])
 
     const loadUsers = () => {
         getOperatorsApi().then(res => {
-            const options = res.map((u: any) => ({ label: u.user_name, value: u.user_id }))
+            const options = res.map((u: any) => ({
+                label: u.external_id ? `${u.user_name} (${t('subjectSearch.userId')}: ${u.external_id})` : u.user_name,
+                value: u.user_id,
+            }))
             userRef.current = options
             setUsers(options)
         })

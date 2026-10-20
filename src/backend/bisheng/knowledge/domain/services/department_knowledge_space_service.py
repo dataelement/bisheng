@@ -49,7 +49,6 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     check_business_action,
 )
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.user.domain.models.user import UserDao
 
@@ -404,7 +403,7 @@ class DepartmentKnowledgeSpaceService:
         if request is None:
             request = Request(scope={"type": "http"})
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        for user_id in sorted(set(int(uid) for uid in added_user_ids)):
+        for user_id in sorted({int(uid) for uid in added_user_ids}):
             await cls._sync_added_admin(
                 space_service=space_service,
                 space_id=space_id,
@@ -412,7 +411,7 @@ class DepartmentKnowledgeSpaceService:
                 user_id=user_id,
             )
 
-        for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
+        for user_id in sorted({int(uid) for uid in removed_user_ids}):
             await cls._sync_removed_admin(
                 space_service=space_service,
                 space_id=space_id,
@@ -440,7 +439,7 @@ class DepartmentKnowledgeSpaceService:
         space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
         if not space_id:
             return
-        for user_id in sorted(set(int(uid) for uid in user_ids)):
+        for user_id in sorted({int(uid) for uid in user_ids}):
             await cls._sync_removed_admin(space_id=space_id, user_id=user_id)
 
     @classmethod
@@ -593,11 +592,11 @@ class DepartmentKnowledgeSpaceService:
 
     @classmethod
     async def _materialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
-        """Materialize the single space admin: ADMIN member row + manager tuple.
+        """Materialize the single space admin: ADMIN member row + manager Grant.
 
         The ``department_knowledge_space.admin_user_id`` column is the source of
-        truth; this row/tuple pair only makes the admin visible to the member UI
-        and the approval resolver (design decision 2).
+        truth; the membership Grant supplies the admin's effective permissions
+        and the row makes the admin visible to the approval resolver.
         """
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is not None:
@@ -629,52 +628,47 @@ class DepartmentKnowledgeSpaceService:
         """Clear the space-admin materialization for ``user_id`` (AC-07).
 
         A member promoted from an ordinary role reverts to it; a pure admin row
-        is removed. The manager tuple is revoked either way.
+        is removed. The membership Grant follows the resulting member role.
         """
+        restored_role = None
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is not None and existing.membership_source == SPACE_ADMIN_MEMBERSHIP_SOURCE:
             previous_role = existing.department_admin_promoted_from_role
             if previous_role:
                 existing.user_role = UserRoleEnum(previous_role)
+                restored_role = existing.user_role
                 existing.membership_source = "manual"
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
             else:
                 await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-        if await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id):
+        elif existing is not None and existing.status == MembershipStatusEnum.ACTIVE:
+            # A retry must preserve a member role restored by an earlier call.
+            restored_role = existing.user_role
+        if await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id, restored_role=restored_role):
             await cls._reconcile_file_change_approvers(space_id)
 
     @classmethod
     async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
-        """Write the ``knowledge_space#manager`` tuple for the space admin.
+        """Project the space admin through the F048 business membership source.
 
-        FGA failure is logged and reported as ``False``: the DB column stays the
-        source of truth and the reconcile task repairs the tuple later, so the
+        Projection failure is logged and reported as ``False``: the DB column
+        stays the source of truth and the reconcile task repairs the Grant, so the
         swap itself must not roll back. The boolean lets callers batch the F046
-        file-change approver reconciliation into one dispatch per space
-        (``dispatch_file_change_approver_reconcile=False`` suppresses the
-        per-write dispatch inside ``authorize``).
+        file-change approver reconciliation after the Grant is ready.
         """
         try:
-            await PermissionService.authorize(
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                grants=[
-                    AuthorizeGrantItem(
-                        subject_type="user",
-                        subject_id=user_id,
-                        relation="manager",
-                        include_children=False,
-                    ),
-                ],
-                enforce_fga_success=True,
-                dispatch_file_change_approver_reconcile=False,
+            await KnowledgeSpaceService.sync_direct_space_user_permissions(
+                space_id,
+                user_id,
+                UserRoleEnum.ADMIN,
+                is_active=True,
             )
             return True
         except Exception as e:
             _logger.warning(
-                "Failed to write space admin manager tuple for space %s user %s: %s",
+                "Failed to project space admin manager Grant for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
@@ -682,26 +676,20 @@ class DepartmentKnowledgeSpaceService:
             return False
 
     @classmethod
-    async def _revoke_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
+    async def _revoke_space_admin_manager(
+        cls, *, space_id: int, user_id: int, restored_role: UserRoleEnum | None = None
+    ) -> bool:
         try:
-            await PermissionService.authorize(
-                object_type="knowledge_space",
-                object_id=str(space_id),
-                revokes=[
-                    AuthorizeRevokeItem(
-                        subject_type="user",
-                        subject_id=user_id,
-                        relation="manager",
-                        include_children=False,
-                    ),
-                ],
-                enforce_fga_success=True,
-                dispatch_file_change_approver_reconcile=False,
+            await KnowledgeSpaceService.sync_direct_space_user_permissions(
+                space_id,
+                user_id,
+                restored_role,
+                is_active=restored_role is not None,
             )
             return True
         except Exception as e:
             _logger.warning(
-                "Failed to delete space admin manager tuple for space %s user %s: %s",
+                "Failed to remove space admin manager Grant for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
@@ -710,14 +698,12 @@ class DepartmentKnowledgeSpaceService:
 
     @classmethod
     async def _reconcile_file_change_approvers(cls, space_id: int) -> None:
-        """Recompute the F046 file-change approvers after an admin relation write.
+        """Recompute the F046 file-change approvers after an admin Grant write.
 
         The space admin IS the department space's file-change approver, so every
-        materialize/dematerialize must refresh that cache. The per-write dispatch
-        inside ``authorize`` is suppressed (``dispatch_file_change_approver_
-        reconcile=False``) so one admin swap triggers exactly one reconcile per
-        space instead of one per tuple. Best-effort: the periodic beat reconcile
-        is the backstop, so a failure here must not break the admin change.
+        materialize/dematerialize must refresh that cache. Best-effort: the
+        periodic beat reconcile is the backstop, so a failure here must not
+        break the admin change.
         """
         try:
             from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (

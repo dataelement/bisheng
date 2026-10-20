@@ -256,7 +256,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [reloadToken, setReloadToken] = useState(0);
     const isActiveSpaceReady = Boolean(enabled && activeSpace?.id && activeSpace.role);
 
-    // Reload files whenever active space or deep-link folder changes
+    // Initialize when space information becomes ready or the location changes.
+    // Enriching an already-ready space's role must not clear and reload its files.
     useEffect(() => {
         if (isActiveSpaceReady && activeSpace) {
             setCurrentPage(1);
@@ -292,14 +293,14 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 setCurrentFolderId(undefined);
                 setCurrentPath([]);
             }
-            // Space readiness, id, role, and deep-link folder changes all flow
+            // Space readiness, id, and deep-link folder changes all flow
             // through this single trigger. The loader effect intentionally does
             // not depend on those values directly, avoiding an immediate fetch
             // plus a second fetch after the reset state is committed.
             setReloadToken(t => t + 1);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- readiness/id/role changes are funneled through reloadToken
-    }, [isActiveSpaceReady, activeSpace?.id, activeSpace?.role, initialFolderId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- role availability is represented by readiness; role enrichment must not reset files
+    }, [isActiveSpaceReady, activeSpace?.id, initialFolderId]);
 
     // Reload files when folder navigation, filters, or space (via reloadToken) change.
     // All state updates from the space effect are batched by React, so when this effect
@@ -309,7 +310,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setCurrentPage(1);
             loadFiles(1);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- readiness/id/role changes are funneled through reloadToken
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- readiness/location changes are funneled through reloadToken
     }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────

@@ -40,7 +40,7 @@ export default function Config() {
             })
             setConfig(codeRef.current)
 
-            // 更新配置信息
+            // Reload the saved configuration.
             reloadConfig()
         }))
     }
@@ -49,20 +49,22 @@ export default function Config() {
     const validataRef = useRef([])
     return <div className="flex h-full max-w-[80%] mx-auto flex-col pt-6 pb-4">
         <p className="font-bold mb-2 shrink-0">{t('system.parameterConfig')}</p>
-        <AceEditor
-            value={config || ''}
-            mode="yaml"
-            theme={"twilight"}
-            highlightActiveLine={true}
-            showPrintMargin={false}
-            fontSize={14}
-            showGutter
-            enableLiveAutocompletion
-            name="CodeEditor"
-            onChange={(value) => codeRef.current = value}
-            onValidate={(e) => validataRef.current = e}
-            className="min-h-0 w-full flex-1 rounded-lg border-[1px] border-border custom-scroll"
-        />
+        <div className="system-config-editor flex min-h-0 flex-1 flex-col">
+            <AceEditor
+                value={config || ''}
+                mode="yaml"
+                theme={"twilight"}
+                highlightActiveLine={true}
+                showPrintMargin={false}
+                fontSize={14}
+                showGutter
+                enableLiveAutocompletion
+                name="CodeEditor"
+                onChange={(value) => codeRef.current = value}
+                onValidate={(e) => validataRef.current = e}
+                className="min-h-0 w-full flex-1 rounded-lg border-[1px] border-border custom-scroll"
+            />
+        </div>
         <div className="flex justify-center mt-4 shrink-0">
             <Button className=" h-10 w-[120px] px-24 text-[#fff]" onClick={handleSave}>{t('save')}</Button>
         </div>

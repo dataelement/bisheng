@@ -1328,6 +1328,7 @@
     "notEmpty": "新密码不能为空"
   },
   "log": {
+    "editedAfter": "编辑后",
     "systemIdEnum": {
       "chat": "会话",
       "build": "构建",

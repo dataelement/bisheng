@@ -245,6 +245,12 @@ html[data-bs-font-size] #root {
   min-height: 0;
 }
 
+/* Keep the configuration editor's text and mouse coordinates at standard scale.
+   Cancel zoom on its flex wrapper so the editor still fills the available area. */
+html[data-bs-font-size] .system-config-editor {
+  zoom: var(--bs-fs-editor-zoom, 1);
+}
+
 /* Floating UI measures the trigger with getBoundingClientRect() and writes the
    result back as a translate() on this fixed wrapper, which sits inside the
    zoomed body — so the wrapper must undo whatever part of the zoom the

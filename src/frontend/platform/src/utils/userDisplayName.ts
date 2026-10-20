@@ -1,4 +1,4 @@
-/** 重名时在展示中附加人员 ID；不修改数据库中的 user_name。 */
+/** Include the business person ID without changing the stored username. */
 
 export type UserDisplayPeer = {
   user_name: string
@@ -6,17 +6,9 @@ export type UserDisplayPeer = {
   person_id?: string | null
 }
 
-export function formatUserDisplayName(
-  u: UserDisplayPeer,
-  peers?: UserDisplayPeer[]
-): string {
+export function formatUserDisplayName(u: UserDisplayPeer): string {
   const name = (u.user_name || "").trim() || "-"
-  if (!peers || peers.length < 2) return name
-  const same = peers.filter((p) => (p.user_name || "").trim() === name)
-  if (same.length < 2) return name
-  const pid =
-    (u.person_id && String(u.person_id).trim()) ||
-    (u.user_id != null ? String(u.user_id) : "")
+  const pid = (u.person_id && String(u.person_id).trim()) || ""
   if (!pid) return name
   return `${name}（${pid}）`
 }
@@ -24,11 +16,6 @@ export function formatUserDisplayName(
 export function buildMemberDisplayNameMap(
   members: { user_id: number; user_name: string; person_id?: string | null }[]
 ): Map<number, string> {
-  const peers: UserDisplayPeer[] = members.map((m) => ({
-    user_name: m.user_name,
-    user_id: m.user_id,
-    person_id: m.person_id ?? undefined,
-  }))
   const map = new Map<number, string>()
   for (const m of members) {
     map.set(
@@ -38,8 +25,7 @@ export function buildMemberDisplayNameMap(
           user_name: m.user_name,
           user_id: m.user_id,
           person_id: m.person_id ?? undefined,
-        },
-        peers
+        }
       )
     )
   }

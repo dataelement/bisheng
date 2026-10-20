@@ -35,6 +35,7 @@ const SCALE_ATTRIBUTE = 'data-bs-font-size';
 
 const SCALE_VARIABLES = [
   '--bs-fs-zoom',
+  '--bs-fs-editor-zoom',
   '--bs-fs-popper-zoom',
   '--bs-fs-popper-unzoom',
   '--bs-vh',
@@ -112,6 +113,8 @@ export function applyFontSizeLevel(level: FontSizeLevel) {
     const zoom = ZOOM_BY_LEVEL[level];
     html.setAttribute(SCALE_ATTRIBUTE, level);
     html.style.setProperty('--bs-fs-zoom', String(zoom));
+    // Use a plain number because older zoom parsers do not support calc().
+    html.style.setProperty('--bs-fs-editor-zoom', String(1 / zoom));
     // Probed only now that the zoom is live, so the probe gets the same
     // treatment a popup trigger would. Written as plain numbers rather than a
     // `calc(1 / var(--bs-fs-zoom))` in the stylesheet: older `zoom` parsers take

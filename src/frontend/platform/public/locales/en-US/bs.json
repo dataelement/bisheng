@@ -1345,6 +1345,7 @@
     "notEmpty": "The new password cannot be empty"
   },
   "log": {
+    "editedAfter": "After editing",
     "systemIdEnum": {
       "chat": "Session",
       "build": "Build",

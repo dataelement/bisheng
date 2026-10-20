@@ -216,15 +216,15 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
     );
   });
 
-  it("funnels space readiness changes through one reload token", () => {
-    const startIdx = src.indexOf("// Reload files whenever active space");
+  it("reloads on readiness or location changes without reinitializing for role enrichment", () => {
+    const startIdx = src.indexOf("// Initialize when space information becomes ready");
     const endIdx = src.indexOf("// Reload files when folder navigation", startIdx);
     const resetEffect = src.slice(startIdx, endIdx);
 
     expect(resetEffect).toMatch(/if\s*\(isActiveSpaceReady\s*&&\s*activeSpace\)/);
     expect(resetEffect.match(/setReloadToken\(/g)).toHaveLength(1);
     expect(resetEffect).toMatch(
-      /\[isActiveSpaceReady,\s*activeSpace\?\.id,\s*activeSpace\?\.role,\s*initialFolderId\]/,
+      /\[isActiveSpaceReady,\s*activeSpace\?\.id,\s*initialFolderId\]/,
     );
   });
 

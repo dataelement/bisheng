@@ -1328,6 +1328,7 @@
     "notEmpty": "新しいパスワードは空にできません"
   },
   "log": {
+    "editedAfter": "編集後",
     "systemIdEnum": {
       "chat": "チャット",
       "build": "ビルド",
