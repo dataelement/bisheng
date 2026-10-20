@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
+from yarl import URL
 
 from bisheng.common.errcode.channel import BishengInformationServiceError
 from bisheng.core.config.settings import IntelligenceCenterConf
@@ -52,6 +54,10 @@ async def test_list_all_subscriptions_validates_and_collects_every_page():
 
     assert [item.id for item in result] == ["A", "B"]
     assert http_client.get.await_count == 2
+    assert [call.kwargs["params"] for call in http_client.get.await_args_list] == [
+        {"page": 1, "page_size": 1},
+        {"page": 2, "page_size": 1},
+    ]
 
 
 @pytest.mark.parametrize(
@@ -131,12 +137,47 @@ async def test_get_information_articles_page_is_async_and_preserves_boundary():
     assert result.articles[0].id == "article-1"
     assert result.snapshot_max_create_time == 456
     assert http_client.get.await_args.kwargs["params"] == {
-        "return_information": False,
+        "return_information": "false",
         "page": 2,
         "page_size": 10,
         "min_create_time": 123,
         "max_create_time": 456,
     }
+
+
+@pytest.mark.parametrize("return_information", [False, True])
+async def test_article_page_query_can_be_encoded_by_async_transport(return_information):
+    async def get(endpoint, *, params, **kwargs):
+        query = URL(endpoint).with_query(params).query
+        assert query["return_information"] == str(return_information).lower()
+        return _response({"articles": []})
+
+    client = BishengInformationClient(
+        http_client=SimpleNamespace(get=get),
+        get_conf=lambda: IntelligenceCenterConf(base_url="http://information.test", api_key="secret"),
+    )
+
+    await client.get_information_articles_page("A", return_information=return_information)
+
+
+@pytest.mark.parametrize("return_information", [False, True])
+def test_sync_article_query_uses_lowercase_boolean(monkeypatch, return_information):
+    def handle(request):
+        assert request.url.params["return_information"] == str(return_information).lower()
+        assert request.url.params["min_create_time"] == "123"
+        assert request.url.params["max_create_time"] == "456"
+        return httpx.Response(200, json=_response({"articles": []}).body)
+
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda: real_client(transport=httpx.MockTransport(handle)))
+    client = BishengInformationClient(
+        http_client=SimpleNamespace(),
+        get_conf=lambda: IntelligenceCenterConf(base_url="http://information.test", api_key="secret"),
+    )
+
+    client.get_information_articles(
+        "A", return_information=return_information, min_create_time=123, max_create_time=456
+    )
 
 
 async def test_get_information_articles_bootstrap_uses_dedicated_endpoint():
