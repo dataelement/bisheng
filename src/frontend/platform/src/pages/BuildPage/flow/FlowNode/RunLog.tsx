@@ -61,9 +61,6 @@ export default function RunLog({ node, children }) {
                         label = item.key
                     } else if (item.key === 'error') {
                         label = t('nodeLogError')
-                    } else if (item.type === 'subflow_logs') {
-                        // F086: inner node runs of a subflow node
-                        label = t(`node.${node.type}.${item.key}.label`)
                     } else if (item.key === 'skill_notice') {
                         label = t(`node.${node.type}.${item.key}.label`)
                         return { label, type: item.type, value: t(`agentRuntime.notice.${item.value}`) }

@@ -422,6 +422,8 @@ async def create_flow(
             )
         ).first():
             raise WorkflowNameExistsError.http_exception()
+    # F086: a copied workflow may already contain subflow nodes.
+    await SubflowService.check_new_refs(login_user, None, flow.data)
     flow.user_id = login_user.user_id
     db_flow = Flow.model_validate(flow)
     # Defense-in-depth: Flow.tenant_id default is None and the framework's
@@ -434,7 +436,6 @@ async def create_flow(
     db_flow.flow_type = FlowType.WORKFLOW.value
     # Create New Skill
     db_flow = FlowDao.create_flow(db_flow, FlowType.WORKFLOW.value)
-    # F086: a copied workflow may already contain subflow nodes.
     await SubflowService.sync_refs(db_flow.id, db_flow.data)
 
     current_version = FlowVersionDao.get_version_by_flow(db_flow.id)

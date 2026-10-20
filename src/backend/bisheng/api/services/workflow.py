@@ -871,6 +871,8 @@ class WorkFlowService(BaseService):
             action="edit",
         )
 
+        # F086: a subflow node tried on its own needs the same permission as saving it.
+        await SubflowService.check_new_refs(login_user, workflow_info.id, {"nodes": [node_data]})
         node_data = BaseNodeData(**node_data.get("data", {}))
 
         def _run_node():

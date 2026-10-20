@@ -10,13 +10,14 @@ from typing import Any
 
 from bisheng.common.errcode.flow import (
     WorkFlowReferencedDeleteError,
+    WorkFlowSubflowNoPermissionError,
     WorkFlowSubflowNotFoundError,
     WorkFlowSubflowOnlineCheckError,
 )
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.flow import FlowDao, FlowType
-from bisheng.permission.application.business_authorization import require_business_action
+from bisheng.permission.application.business_authorization import check_business_action, require_business_action
 from bisheng.workflow.domain.repositories.implementations.subflow_ref_repository_impl import SubflowRefRepositoryImpl
 from bisheng.workflow.domain.repositories.interfaces.subflow_ref_repository import SubflowRefRepository
 from bisheng.workflow.domain.services.subflow_inspect import FlowInspection, inspect_flow_data
@@ -49,6 +50,34 @@ class SubflowService:
             await repo.replace_for_parent(flow_id, child_ids)
 
     @classmethod
+    async def check_new_refs(
+        cls, login_user: Any, flow_id: str | None, data: dict | None, known_data: dict | None = None
+    ) -> None:
+        """Require edit permission on every workflow that ``data`` newly uses as a subflow.
+
+        PRD R-5.1 skips the permission check at run time because whoever
+        configured the node could edit the child; this is where that holds.
+        References already recorded for ``flow_id`` or present in
+        ``known_data`` (the data being replaced) are not checked again, so
+        losing edit permission later changes nothing (AC-10).
+        """
+        inspection = inspect_flow_data(data)
+        child_ids = [one for one in inspection.subflow_ids if one != flow_id]
+        if not child_ids:
+            return
+        known = set(inspect_flow_data(known_data).subflow_ids)
+        if flow_id:
+            async with _ref_repo() as repo:
+                known.update(await repo.list_child_ids(flow_id))
+        for child_id in child_ids:
+            if child_id in known:
+                continue
+            if not await check_business_action(
+                login_user, resource_type="workflow", resource_id=child_id, action="edit"
+            ):
+                raise WorkFlowSubflowNoPermissionError(subflow_name=inspection.subflow_names.get(child_id, ""))
+
+    @classmethod
     async def clear_refs(cls, flow_id: str) -> None:
         async with _ref_repo() as repo:
             await repo.delete_for_parent(flow_id)
@@ -72,7 +101,7 @@ class SubflowService:
         children = {one.id: one for one in await FlowDao.aget_flow_by_ids(child_ids)}
         for child_id in child_ids:
             child = children.get(child_id)
-            if child is None:
+            if child is None or child.flow_type != FlowType.WORKFLOW.value:
                 raise WorkFlowSubflowNotFoundError()
             inspection = inspect_flow_data(child.data)
             if not inspection.eligible:

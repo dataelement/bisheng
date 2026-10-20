@@ -10,6 +10,7 @@ from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.chat.clients.base import BaseClient
 from bisheng.common.chat.types import WorkType
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.chat import WorkflowOfflineError
 from bisheng.database.models.flow import FlowDao, FlowStatus
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
@@ -18,6 +19,7 @@ from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
+from bisheng.workflow.domain.services.subflow_service import SubflowService
 
 WORKFLOW_STATUS_CHECK_FINISHED = {
     "event": "workflow_status_checked",
@@ -208,6 +210,9 @@ class WorkflowClient(BaseClient):
         try:
             workflow_data = message.get("data")
             workflow_id = message.get("flow_id", self.client_id)
+            # F086: a debug run sends the editor's unsaved draft; a subflow it adds
+            # needs the same permission as saving it would.
+            await SubflowService.check_new_refs(self.login_user, self.client_id, workflow_data)
             flag, unique_id = await self.check_status(message, is_init=True)
             # Description workflow In operation or offline
             if not flag:
@@ -235,6 +240,10 @@ class WorkflowClient(BaseClient):
             )
             await self.send_response("processing", "begin", "")
             await self.workflow_run()
+        except BaseErrorCode as e:
+            self.workflow = None
+            await self.send_response("error", "over", e.to_dict())
+            return
         except Exception as e:
             logger.exception("init_workflow_error")
             self.workflow = None

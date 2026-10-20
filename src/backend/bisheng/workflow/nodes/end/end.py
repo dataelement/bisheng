@@ -1,5 +1,6 @@
 from typing import Any
 
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.nodes.base import BaseNode
 
 
@@ -16,6 +17,9 @@ class EndNode(BaseNode):
         ret = {}
         for one in self.node_params.get("return_results") or []:
             if one.get("type") == "ref":
+                # The editor blocks the run first; data saved through the API may still lack a variable.
+                if "." not in (one.get("value") or ""):
+                    raise IgnoreException(f"{self.name} -- return result {one['key']} has no variable selected")
                 ret[one["key"]] = self.get_other_node_variable(one["value"])
             else:
                 ret[one["key"]] = one.get("value")

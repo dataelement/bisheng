@@ -190,6 +190,13 @@ class FlowService(BaseService):
         if exist_version:
             return VersionNameExistsError.return_resp()
 
+        # F086: a version saved as a copy keeps the references of the version it came from.
+        source = None
+        if flow_version.original_version_id:
+            source = await FlowVersionDao.aget_version_by_id(flow_version.original_version_id)
+        known_data = source.data if source and source.flow_id == flow_id else None
+        await SubflowService.check_new_refs(user, flow_id, flow_version.data, known_data)
+
         flow_version = FlowVersion(
             flow_id=flow_id,
             name=flow_version.name,
@@ -226,6 +233,8 @@ class FlowService(BaseService):
 
         # F086: keep the data being replaced; the save warning compares against it.
         old_data = version_info.data
+        if flow_version.data:
+            await SubflowService.check_new_refs(user, version_info.flow_id, flow_version.data, old_data)
         version_info.name = flow_version.name if flow_version.name else version_info.name
         version_info.description = flow_version.description if flow_version.description else version_info.description
         version_info.data = flow_version.data if flow_version.data else version_info.data

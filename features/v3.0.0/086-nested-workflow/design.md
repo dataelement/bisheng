@@ -10,7 +10,7 @@
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md) · [PRD](../../../docs/PRD/3.0-SEC/工作流嵌套工作流/工作流嵌套工作流%20PRD.md)
 **版本**: v3.0.0（开发分支 `feat/SEC-3.0.0-1016`）
-**最后更新**: 2026-10-19
+**最后更新**: 2026-10-20
 
 本文路径约定：`B/` = `src/backend/bisheng/`，`P/` = `src/frontend/platform/src/`。
 
@@ -25,7 +25,7 @@
 
 ## 2. 关键约束
 
-- 遵循 `docs/constitution.md` C1–C8。本功能涉及：C1（新代码放 `B/workflow/domain/`，不给旧 DAO 加入口）、C2（新表只用通用列类型）、C3（新表带 `tenant_id`；新模型模块必须登记进租户过滤，见坑 9）、C4（选用和接口查询走权限运行时；删除拦截必须早于权限投影删除，见坑 10）、C5（错误码占 105 模块 10560–10565）。
+- 遵循 `docs/constitution.md` C1–C8。本功能涉及：C1（新代码放 `B/workflow/domain/`，不给旧 DAO 加入口）、C2（新表只用通用列类型）、C3（新表带 `tenant_id`；新模型模块必须登记进租户过滤，见坑 9）、C4（选用、接口查询和新增引用走权限运行时，见决策 13；删除拦截必须早于权限投影删除、晚于删除权限检查，见坑 10）、C5（错误码占 105 模块 10560–10566）。
 - **运行时读取的数据**：子工作流一律读 `Flow.data`。保存当前版本和切换当前版本时，`FlowVersionDao` 会同步写 `Flow.data`（`B/database/models/flow_version.py:73-104,207-226`），所以「当前版本」与 `Flow.data` 始终一致。父工作流调试时运行的是前端发来的画布数据，但子工作流仍读 `Flow.data`。
 - **执行模型**：工作流在 Celery `workflow_celery` 队列中同步执行（`async_mode=False`），暂停期间整个对象常驻 worker 内存。子工作流不暂停，没有跨请求的状态需要保存，不涉及 C8。
 - **引擎没有整体超时，也没有总步数**：`Workflow.timeout` 只存不用（`B/workflow/graph/workflow.py:41`），只有单节点执行次数上限 `max_steps`（`B/workflow/nodes/base.py:220`）。R-7.6 按此口径定为「只算耗时、沿用单节点上限」。
@@ -99,7 +99,7 @@
   - C. 在 SQL 层对 `Flow.data` 做 `LIKE` 过滤。
 - **选定**：A
 - **原因**：「谁在引用我」每次保存都要查（R-3.3、R-5.5），B 每次保存都要加载全部工作流的大 JSON；C 依赖 JSON 列的文本匹配，违反 C2 对 JSON 列的限制，在 DM8 上没有保障。A 的代价是同步入口必须覆盖全；入口已于 2026-10-19 逐一核实（§4.3）。
-- **同步规则**：只按父工作流的**当前版本**计算；每次先删除该父工作流的全部记录再按新数据插入；父工作流删除时删除其记录。本功能是新增能力，存量数据中没有【子工作流】节点，不需要回填。
+- **同步规则**：只按父工作流的**当前版本**计算；每次把该父工作流的记录改成与新数据一致（删掉多余的、插入缺少的，保留不变的行）；父工作流删除时删除其记录。同一父工作流被并发保存时，后提交的一方会撞唯一键或删到已删除的行，Repository 回滚后重读重试，最多 3 次。本功能是新增能力，存量数据中没有【子工作流】节点，不需要回填。
 - **何时该重新考虑**：出现新的 `Flow.data` 写入口时，必须接入同步，否则删除拦截会放行仍被引用的工作流（坑 4）。
 
 ### 决策 8：选用条件由新接口判定，节点构成判定集中在一个纯函数
@@ -131,6 +131,7 @@
 - **原因**：沿用 F078 技能错误的做法（`B/workflow/nodes/agent/skill_support.py:60-67`）。按 B，子工作流内部的 `-- has run more than ...` 等子串会被父工作流的子串匹配误判（`B/worker/workflow/redis_callback.py:194-226`）。
 - **用户中止**：子引擎因中止失败（reason 为 `stop by user`，`B/workflow/nodes/base.py:218-219`）时，父节点原样抛出 `IgnoreException("stop by user")`，不包装成 10560；否则中止会被显示成一条错误（坑 6）。
 - **失败节点名称**：取 `SubflowCallback` 记录的最后一个带 `reason` 的 `on_node_end`。子引擎在构造阶段就抛错时（例如缺开始节点、模型配置失效，`B/workflow/graph/graph_engine.py:86-102,271-279`），不会有节点事件，`node_name` 为空，`reason` 为构造异常文本，错误码仍为 10560。
+- **前端本地化**：节点事件的 `reason` 保留标记与 JSON，不在后端改写成文字。platform 的 `nodeLogData.ts` 解析标记，按 `api_errors:<status_code>` 和 `data` 插值显示，与运行失败的提示一致；不带标记的 `reason` 原样显示。曾尝试由后端只下发英文消息（244b83c5f），因前端无法本地化而撤回（坑 16）。
 - **何时该重新考虑**：平台引入结构化的失败原因字段（替代字符串匹配）时。
 
 ### 决策 11：运行时不校验运行者对子工作流的权限
@@ -138,7 +139,7 @@
 - **备选**：A. 不校验，随父工作流授权；B. 运行时校验运行者对子工作流的使用权限。
 - **选定**：A
 - **原因**：PRD R-5.1 的产品决定：编排者配置时已具备编辑权限，配置即授权；B 要求管理员为全部终端用户补授子工作流权限。子工作流按 id 从 `Flow` 读取，租户自动过滤保证只能读到同租户数据。
-- **护栏**：Worker 的 `_authorize_workflow_use`（`B/worker/workflow/tasks.py:108`）只检查顶层工作流，这是有意为之；不要为子工作流补 `use` 检查，否则 AC-09 会失败。
+- **护栏**：Worker 的 `_authorize_workflow_use`（`B/worker/workflow/tasks.py:108`）只检查顶层工作流，这是有意为之；不要为子工作流补 `use` 检查，否则 AC-09 会失败。「配置时已具备编辑权限」由决策 13 在写入时保证。
 - **何时该重新考虑**：产品要求子工作流可以单独控制谁能间接使用时。
 
 ### 决策 12：子引擎沿用父引擎的运行上下文
@@ -151,6 +152,23 @@
 - **聊天记录与当前时间（R-6.2）**：引擎在构建节点前从原始数据找出开始节点 id，作为 `start_node_id` 透传给节点（`Workflow` 不需要这个参数）。子引擎构造完成后，父节点把父引擎 `graph_state.history_memory` 的消息拷入子引擎开始节点新建的记忆窗口（坑 5），并把子开始节点的 `current_time` 参数设为父开始节点的 `current_time` 变量（坑 8）。`user_info` 由同一个 `user_id` 计算，天然一致。
 - **何时该重新考虑**：需要在子工作流名下统计被调用消耗时，改为同时记录父子两个 id。
 
+### 决策 13：新增引用时校验编辑权限，已有引用不复查
+
+- **备选**：
+  - A. 在写入工作流数据的入口，找出数据中**新增**的子工作流 id，逐个要求编辑权限，不满足抛 10566。「已有」指该父工作流在引用表中已登记的子工作流，加上被替换的那份数据中已有的子工作流。
+  - B. 每次保存都检查数据中全部子工作流的编辑权限。
+  - C. 不在服务端检查，只靠候选列表与接口查询要求编辑权限（2026-10-20 之前的状态）。
+- **选定**：A（2026-10-20，`/sdd-code-review` 发现 C 的缺口后用户批准）
+- **原因**：C 下 R-5.1「配置即授权」的前提只在界面上成立：知道工作流 id 的同租户用户可以直接调用接口把它配进自己的工作流，运行后在节点日志中看到其内部节点的输入输出（提示词、检索片段），并阻止其所有者删除它。B 会让失去编辑权限的编排者连父工作流的其它改动都保存不了，违反 AC-10。
+- **入口**：`SubflowService.check_new_refs(login_user, flow_id, data, known_data)`，由以下入口调用：
+  - 保存版本（`known_data` 为被覆盖的版本数据）。
+  - 另存新版本（`known_data` 为来源版本的数据）。
+  - 新建工作流（无已有引用，全部检查）。
+  - 调试运行：`WorkflowClient.init_workflow`，用连接路径上的工作流 id 查已有引用，不用消息里的 `flow_id`。
+  - 单节点运行 `run_once`。
+- **不检查的入口**：切换当前版本和上线。这两个入口切换到的版本数据在写入时已检查过；2026-10-20 之前保存的版本没有经过检查，属于存量（§8）。
+- **何时该重新考虑**：产品要求子工作流单独控制谁能间接使用时，与决策 11 一起改。
+
 ---
 
 ## 4. 系统现状（目标状态）
@@ -159,14 +177,16 @@
 
 **编排**：编排者拖入【子工作流】节点 → 下拉调用候选接口（决策 8）→ 选定后调用接口查询，取子工作流的输入参数和返回名称 → 节点保存 `subflow_id` 与快照 → 下游节点经变量选择器引用 `<节点id>.<返回名称>`。
 
-**保存**：`PUT /workflow/versions/{id}` → 若保存的是当前版本，同步引用表（决策 7）；若该工作流被引用，并且含禁止节点或接口有变化，在响应中附带 `subflow_warning` → 前端弹窗。接口变化的比较基准是写入前的旧数据：保存版本时取 `version_info.data` 被覆盖前的值（`B/api/services/flow.py:220`），切换版本时取切换前的 `Flow.data`；必须在写入前读出，写入后 `Flow.data` 已是新数据。`POST /workflow/change_version` 同理，前端有两个调用处（编辑页 `Header.tsx` 与版本卡片 `CardSelectVersion.tsx:28`）。
+**保存**：`PUT /workflow/versions/{id}` → 对新增的引用检查编辑权限，无权限抛 10566、不写入（决策 13）→ 若保存的是当前版本，同步引用表（决策 7）；若该工作流被引用，并且含禁止节点或接口有变化，在响应中附带 `subflow_warning` → 前端弹窗。接口变化的比较基准是写入前的旧数据：保存版本时取 `version_info.data` 被覆盖前的值（`B/api/services/flow.py:220`），切换版本时取切换前的 `Flow.data`；必须在写入前读出，写入后 `Flow.data` 已是新数据。`POST /workflow/change_version` 同理，调用处只有版本卡片 `CardSelectVersion.tsx`。编辑页 `Header.tsx` 的版本下拉切换只在本地加载目标版本，切换前先等待当前版本保存完成：保存失败时停在当前版本；保存响应带 `subflow_warning` 时弹窗；当前版本已上线时不保存。
 
 **上线**（两个入口都拦截，坑 2）：
 - `PATCH /workflow/status`：校验**待上线版本**的数据（`version_info.data`，上线后才切换为当前版本，`B/api/services/workflow.py:952-960`）。
 - `PATCH /workflow/update/{id}` 带 `status=2`：校验 `Flow.data`。
 - 两者对数据中的每个【子工作流】节点，读取子工作流的 `Flow.data` 并用 `inspect_flow_data` 检查，不满足抛 10564。
 
-**删除**：`DELETE /flows/{id}` → **在 `project_flow_delete` 之前**查引用表中 `child_flow_id = id` 的记录 → 有则抛 10565 并列出引用方名称；无则继续原删除链路，最后清除以它为父的记录（坑 10）。
+**删除**：`DELETE /flows/{id}` → 先检查删除权限 → 再**在 `project_flow_delete` 之前**查引用表中 `child_flow_id = id` 的记录 → 有则抛 10565 并列出引用方名称；无则继续原删除链路，最后清除以它为父的记录（坑 10）。
+
+**调试与单节点运行的入口检查**：调试运行发来的画布数据、`run_once` 的单个【子工作流】节点，先按决策 13 检查新增引用；无权限时调试运行以 `error` 事件下发 10566，不启动任务。
 
 **运行**：父引擎执行到 `SubflowNode._run` →
 1. 检查 `subflow_depth`；用同步的 `FlowDao.get_flow_by_id` 按 `subflow_id` 读 `Flow`（依赖 worker 已设置的租户上下文自动过滤），不存在抛 10561。
@@ -203,20 +223,24 @@
 | `B/workflow/nodes/subflow/subflow.py` `SubflowNode` | 运行子引擎、传参、取结果、组织失败信息与嵌套日志；定义 `SUBFLOW_ERROR_MARKER`、`SubflowRunError` 与 `parse_subflow_error`；运行中的子引擎放在 `sub_workflow` 属性上，`stop()` 经它停止子引擎 | 不查权限，不写引用表 |
 | `B/workflow/callback/subflow_callback.py` `SubflowCallback` | 丢弃会话事件，记录内部节点执行顺序与日志，检查中止 | 不写 Redis 事件流 |
 | `B/workflow/nodes/base.py` | 新增 `parse_failed_log` 钩子 | 不改成功路径 |
-| `B/workflow/nodes/end/end.py` | 开关打开时解析并返回返回结果 | 开关关闭时行为不变 |
+| `B/workflow/nodes/end/end.py` | 开关打开时解析并返回返回结果；「引用」行没有选变量时以可读原因失败（编辑器会先拦住，这里兜底经接口保存的数据） | 开关关闭时行为不变 |
 | `B/workflow/graph/graph_engine.py`、`workflow.py` | `GraphEngine`、`Workflow` 新参数 `subflow_depth`；引擎预扫开始节点 id 与 `referenced_outputs`（`scan_referenced_outputs`）并透传给节点 | — |
 | `B/workflow/domain/services/subflow_inspect.py` `inspect_flow_data` | 纯函数：节点构成、开始节点变量名、返回名称 | 不访问数据库 |
 | `B/workflow/domain/models/subflow_ref.py` | 引用表模型；模块路径登记进 `_TENANT_AWARE_MODEL_MODULES` | — |
 | `B/workflow/domain/repositories/` | 引用表读写（异步） | 不读 `Flow`：`Flow` 的读取沿用现有 `FlowDao`（同步 `get_flow_by_id` 供节点使用，异步 `aget_flow_by_ids` 供服务使用） |
-| `B/workflow/domain/services/subflow_service.py` `SubflowService` | 候选过滤、接口查询、引用同步 `sync_refs`、上线校验、保存提醒、删除拦截 | 不运行工作流，不调用 `B/api/services/` |
+| `B/workflow/domain/services/subflow_service.py` `SubflowService` | 候选过滤、接口查询、新增引用的权限检查 `check_new_refs`、引用同步 `sync_refs`、上线校验、保存提醒、删除拦截 | 不运行工作流，不调用 `B/api/services/` |
 | `B/api/v1/workflow.py` | 新增候选与接口查询两个端点；创建、上线入口调用 `SubflowService` | — |
 | `B/api/services/flow.py`、`B/api/services/workflow.py`、`B/api/v1/flows.py` | 保存、切换版本、上线、删除入口调用 `SubflowService` | — |
 | `B/worker/workflow/redis_callback.py` | `parse_workflow_failed` 识别子工作流标记 | — |
+| `B/common/chat/clients/workflow_client.py` | 调试运行启动前调用 `check_new_refs`；业务错误码以 `error` 事件原码下发 | — |
 | `P/controllers/API/workflow.ts` `workflowTemplate` | `subflow` 节点模板；`end` 节点模板 v2 | — |
 | `P/util/flowCompatible.ts` | `end` v1→v2：补「返回结果」分组，开关默认关闭 | — |
-| `P/pages/BuildPage/flow/FlowNode/component/` | `SubflowSelectItem`：选择子工作流，并渲染输入参数表与返回名称（写入隐藏参数 `subflow_inputs`、`subflow_outputs`）；`EndReturnItem`：【结束】节点开关与返回结果表；`subflowParams.ts`：按接口重建节点参数的纯函数。`CodeInputItem` 新增可选 prop `refOnly`、`validateName`、`fixedKeys`，不传时代码节点的行为不变 | 不改现有组件样式 |
-| `P/pages/BuildPage/flow/SubflowWarningDialog.tsx`（新） | 保存与切换版本后的 `subflow_warning` 弹窗，供 `Header.tsx`（保存）与 `CardSelectVersion.tsx`（切换当前版本）调用；编辑页的「切换版本」只在本地加载数据、不改当前版本，不弹 | `Header.tsx` 已有 862 行，超过 600 行上限，弹窗不放进去 |
+| `P/pages/BuildPage/flow/FlowNode/component/` | `SubflowSelectItem`：选择子工作流，并渲染输入参数表与返回名称（写入隐藏参数 `subflow_inputs`、`subflow_outputs`）；`EndReturnItem`：【结束】节点开关与返回结果表；`subflowParams.ts`：按接口重建节点参数的纯函数。`CodeInputItem` 新增可选 prop `refOnly`、`validateName`、`fixedKeys`，不传时与代码节点原有用法相同；另经 `onVarEvent` 注册运行前检查，「引用」行指向的变量不存在时拦截运行并标红该行（`flowUtils.findInvalidRefItems`，发版线修复，代码节点同样受益）。`SubflowSelectItem` 在接口查询成功后才切换选中的工作流 | 不改现有组件样式 |
+| `P/pages/BuildPage/flow/SubflowWarningDialog.tsx`（新） | 保存与切换版本后的 `subflow_warning` 弹窗，供 `Header.tsx`（保存、版本下拉切换前的保存）与 `CardSelectVersion.tsx`（切换当前版本）调用 | `Header.tsx` 已有 862 行，超过 600 行上限，弹窗不放进去 |
 | `P/pages/BuildPage/flow/FlowNode/RunLog.tsx`、`SubflowRunLog.tsx`（新） | `RunLog` 把 `subflow_logs` 项交给 `SubflowRunLog` 渲染为可展开列表；【结束】节点有返回结果时显示日志 | — |
+| `P/pages/BuildPage/flow/FlowChat/nodeLogData.ts`（新） | 节点结束事件转为节点日志：失败时错误项在前、失败日志在后；解析 `SUBFLOW_ERROR_MARKER` 并按错误码本地化（决策 10） | 不处理成功日志 |
+| `P/pages/BuildPage/flow/FlowNode/nodeLayer.ts`（新） | 节点日志浮层打开时提升所在画布节点的层级，关闭时恢复（坑 17）；所有节点类型共用 | 画布已改动层级时不恢复 |
+| `P/util/flowUtils.ts` `isVarInFlow` | 运行前判断引用的变量是否存在；`subflow_output` 与 `code_output` 一样按各项 `key` 识别（PR #2509） | — |
 
 **`Flow.data` 写入口与引用同步**（2026-10-19 已逐一核实为完整清单）：
 
@@ -229,6 +253,8 @@
 | 删除工作流 | `B/api/v1/flows.py:27` → `B/api/services/flow.py:391` | 先拦截，再清除以它为父的记录 |
 
 不需要同步的写入：`PATCH /workflow/update/{id}` 跳过 `data` 字段（`B/api/v1/workflow.py:550-552`）；资源共享只改 `is_shared`（`B/tenant/domain/services/resource_share_service.py:353-359`）；`POST /workflow/versions` 新建的版本不是当前版本。
+
+新增引用的权限检查（决策 13）挂在新建工作流、保存版本、`POST /workflow/versions` 三个写入口，以及调试运行和 `run_once`，都在写入或启动之前。
 
 ---
 
@@ -245,11 +271,16 @@
 | 7 | `BaseNode.run` 只在 `_run` 成功时调用 `parse_log` | 子工作流失败时恰好没有嵌套日志，而这正是最需要日志的时候 | 决策 6「失败日志」，基类新增 `parse_failed_log` |
 | 8 | 子开始节点 `__init__` 会重新取 `datetime.now()` 作为 `current_time`（`B/workflow/nodes/start/start.py:24`） | 父工作流在【输入】节点暂停后恢复，子工作流的当前时间与父工作流相差数分钟到数小时 | 决策 12，用父开始节点的值覆盖 |
 | 9 | 租户过滤只扫描 `_TENANT_AWARE_MODEL_MODULES` 显式列出的模块（`B/core/database/tenant_filter.py:41-133`），`*/domain/models` 的自动发现只给 Alembic 用 | 新表绕过 `tenant_id` 自动填充和查询过滤，跨租户泄漏 | T03 登记模块路径 |
-| 10 | `DELETE /flows/{id}` 先执行权限投影删除（`B/api/services/flow.py:391-412`），再删 `Flow` 行 | 引用拦截若放在投影删除之后，会出现「权限记录已删、工作流还在」 | 引用拦截放在 `project_flow_delete` 之前 |
+| 10 | `DELETE /flows/{id}` 先执行权限投影删除（`B/api/services/flow.py:391-412`），再删 `Flow` 行 | 引用拦截若放在投影删除之后，会出现「权限记录已删、工作流还在」 | 引用拦截放在 `project_flow_delete` 之前；删除权限检查又放在引用拦截之前，否则无删除权限的用户能从 10565 读到引用方名称 |
 | 11 | 父工作流调试时运行的是前端画布数据，子工作流读的是 `Flow.data` | 编辑子工作流后未保存，父工作流调试仍跑旧内容 | 符合 R-4.1；节点帮助文案说明「运行时使用子工作流已保存的当前版本」 |
 | 12 | 子引擎沿用父工作流的 `workflow_id`（决策 12），而临时向量分区、F078 工作区等按 `workflow_id`/`chat_id` 加节点 id 区分 | 父子工作流是复制关系、节点 id 相同时，这些资源会串用 | 现状接受；出现串扰时给子引擎的节点 id 加前缀 |
 | 13 | 返回名称 `chat_history` 会被 `GraphState.get_variable` 特判为聊天记录 | 下游拿到的是聊天记录而不是返回值 | 决策 4，前端与 `inspect_flow_data` 都禁止该名称 |
 | 14 | platform 请求拦截器把返回 403/404 的 GET 直接跳转到 403/404 页面（`P/controllers/request.ts`） | 编排者失去子工作流编辑权限后打开父工作流的节点，整个编辑页被带走，违反 AC-10 | 接口查询请求带 `silent`，失败时沿用节点快照 |
+| 15 | 运行前的变量检查 `isVarInFlow`（`P/util/flowUtils.ts`）按参数类型逐个列举可被引用的输出，没列举的类型一律判为不存在 | 新增一种输出参数类型而不加进去，变量选择器能选中，点运行却提示「已失效」（PR #2509 修的就是 `subflow_output`） | 新输出类型同时加进 `isVarInFlow` 的类型判断 |
+| 16 | 子工作流失败时，节点事件的 `reason` 是 `SUBFLOW_ERROR_MARKER` 加 JSON，前端靠解析它才能本地化 | 后端把 `reason` 改成文字，节点日志只能显示英文，与运行失败提示的语言不一致 | 决策 10「前端本地化」；`P/pages/BuildPage/flow/FlowChat/nodeLogData.ts` |
+| 17 | 画布上每个节点的外层元素各自带 `z-index`，节点内的浮层无法高过后绘制的节点 | 节点日志浮层被右侧或下方的节点遮住 | 浮层打开时 `raiseNodeLayer` 提升所在节点（`nodeLayer.ts`） |
+| 18 | `CodeInputItem` 的名称有两处校验：行级只负责标红，列表级决定能否运行 | 两处正则不一致时，合法名称（如单字母 `r`）能运行却一直标红 | 两处统一为 1 到 50 个字符 |
+| 19 | 候选列表与接口查询要求编辑权限，只约束界面；保存接口直接收工作流数据 | 同租户用户调用接口即可把任意工作流配成子工作流，读到其内部节点日志并阻止其删除 | 决策 13，写入口调用 `check_new_refs` |
 
 ---
 
@@ -266,7 +297,8 @@
 | 运行日志类型 `subflow_logs` | `node_run` 事件 `log_data` | platform `RunLog` |
 | `SubflowService.sync_refs(flow_id, data)`、`clear_refs(flow_id)` | 内部 Python API | 所有 `Flow.data` 写入口（坑 4）；删除入口 |
 | `inspect_flow_data(data)` | 内部 Python API | `SubflowService`、`SubflowNode` |
-| `SUBFLOW_ERROR_MARKER` 与解析函数 | 内部字符串格式 | `RedisCallback.parse_workflow_failed` |
+| `SUBFLOW_ERROR_MARKER`（`'-- subflow error --'`）后接 `{status_code, status_message, data}` JSON | 前后端字符串契约：后端在 `B/workflow/nodes/subflow/subflow.py` 定义，前端在 `nodeLogData.ts` 硬编码同一常量，改一端必须同时改另一端 | `RedisCallback.parse_workflow_failed`、platform `nodeLogData.ts` |
+| `SubflowService.check_new_refs(login_user, flow_id, data, known_data)` | 内部 Python API | 写入工作流数据与启动运行的入口（决策 13） |
 | `BaseNode.parse_failed_log` | 节点基类钩子 | 其它节点可覆写以在失败时附带日志 |
 
 ### 6.2 我依赖别人的（Incoming）
@@ -282,7 +314,7 @@
 | `get_all_flows_envelope(flow_type, managed=True)` 的编辑权限过滤 | 内部 API | 候选列表的权限口径随它变化 |
 | `_TENANT_AWARE_MODEL_MODULES` 登记机制 | 租户过滤基础设施 | 机制变化时需复核新表是否仍被过滤 |
 
-### 6.3 错误码分配（105 flow 模块，10560–10565）
+### 6.3 错误码分配（105 flow 模块，10560–10566）
 
 | 码 | 类 | 场景 | AC |
 |---|---|---|---|
@@ -292,6 +324,7 @@
 | 10563 | `WorkFlowSubflowForbiddenNodeError` | 运行期执行到【子工作流】、【输入】或交互型【输出】节点；`data: {subflow_name, node_name}` | AC-06 |
 | 10564 | `WorkFlowSubflowOnlineCheckError` | 上线时子工作流不满足条件；`data: {subflow_name, reasons, reason_codes}`，`reasons` 为不合规节点名称与返回名称，用「, 」连接 | AC-04 |
 | 10565 | `WorkFlowReferencedDeleteError` | 删除被引用的工作流；`data: {referenced_by, referrers: [{id, name}]}`，`referenced_by` 为引用方名称，用「, 」连接 | AC-11 |
+| 10566 | `WorkFlowSubflowNoPermissionError` | 保存、新建、调试或单节点运行时，新增引用的工作流当前用户没有编辑权限；`data: {subflow_name}`，取节点里保存的名称，不读子工作流 | AC-03（R-2.1、R-5.1） |
 
 文案三语写在 `src/frontend/packages/locales` 的 `api_errors` 域。2026-10-19 已核对 `feat/3.0.0`、`feat/3.0.0-vibe` 与本分支均未占用 1056x。T01 负责登记到 `features/v3.0.0/release-contract.md`，同时登记表 1 的领域对象「子工作流引用关系」和一条跨 Feature 不变量：【结束】节点「返回结果」开关关闭时，工作流行为与改动前一致。
 
@@ -319,6 +352,9 @@
 - **整次运行的总步数预算**：引擎没有跨节点步数计数，R-7.6 定为沿用单节点上限（2026-10-19 用户拍板）。
 - **应用列表上线入口的既有缺口**：`PATCH /workflow/update/{id}` 上线时不做构建检查，只要求编辑权限。与子工作流无关，2026-10-19 用户确认单独修复，F086 只在该入口补子工作流校验。
 - **引用表与 `Flow.data` 的对账脚本**：本期不做；若发现漏记，可写一次性脚本按全部工作流当前版本重建。
+- **运行前检查失效引用（已修）**：子工作流返回结果改名后，【代码】节点入参、【结束】节点返回结果和【子工作流】节点输入参数中的失效引用，曾经要到运行时才以 10562 报错。2026-10-20 已改为在编辑器运行前拦截（§4.3 `CodeInputItem` 行）；后端 10562 保留为兜底。
+- **2026-10-20 之前保存的版本**：没有经过决策 13 的检查。切换当前版本和上线不复查，所以这类版本中的引用仍可生效；属于功能上线前的测试数据，不做迁移。
+- **调试运行消息中的 `flow_id`**：`WorkflowClient` 允许消息里的 `flow_id` 覆盖连接路径上的工作流 id，这是既有行为，与子工作流无关。决策 13 的检查用连接路径上的 id，不受它影响；是否收紧由工作流模块另行处理。
 
 ---
 
@@ -332,3 +368,5 @@
 | 2026-10-19 | Wave 1–2 实现：标记识别改为最先进行（决策 10）；`start_node_id` 由引擎预扫得出；`inspect_flow_data` 补 `subflow_ids` 与原因代码；记录 `subflow` 节点日志格式 | T07、T13、T16、T18 实现 |
 | 2026-10-19 | Wave 3 实现：10564、10565 的名称字段改为字符串并附机器可读字段；上线时子工作流不存在抛 10561；记录 `subflow_warning` 的响应形态 | T20–T24 实现 |
 | 2026-10-19 | Wave 4 实现：子工作流节点改为单分组＋隐藏参数；`CodeInputItem` 加 `fixedKeys`；接口查询静默失败（坑 14）；留空的输入参数沿用子工作流自身的值；保存提醒只接保存与版本卡片 | T25–T32 实现 |
+| 2026-10-20 | 119 验证后的修复：失败原因改由前端解析标记并本地化（决策 10）；`isVarInFlow` 识别 `subflow_output`（PR #2509）；节点日志浮层提升层级；`CodeInputItem` 名称校验统一；`CodeInputItem` 的「引用」行接入运行前检查；补坑 15–18 | T34 补验发现 |
+| 2026-10-20 | `/sdd-code-review` 修复：新增决策 13 与 10566（新增引用要求编辑权限）；删除先检查删除权限再拦截（坑 10）；引用同步并发重试（决策 7）；【结束】节点空引用兜底；编辑页版本下拉切换前等待保存并弹提醒；`SubflowSelectItem` 接口查询成功后才切换；`SUBFLOW_ERROR_MARKER` 记为前后端契约（§6.1）；补坑 19 与 §8 三项 | 代码审查 NEEDS_FIX |

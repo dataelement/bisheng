@@ -16,7 +16,12 @@ from bisheng.api.services import flow as flow_service_module
 from bisheng.api.services import workflow as workflow_service_module
 from bisheng.api.v1 import flows as flows_api
 from bisheng.api.v1 import workflow as workflow_api
-from bisheng.common.errcode.flow import WorkFlowReferencedDeleteError, WorkFlowSubflowOnlineCheckError
+from bisheng.common.errcode.flow import (
+    WorkFlowReferencedDeleteError,
+    WorkFlowSubflowNoPermissionError,
+    WorkFlowSubflowOnlineCheckError,
+)
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.database.models.flow import FlowStatus, FlowType
 
 
@@ -54,6 +59,7 @@ def calls():
 def _subflow_service(calls: Calls, **errors) -> SimpleNamespace:
     return SimpleNamespace(
         sync_refs=calls.async_mock("sync_refs"),
+        check_new_refs=calls.async_mock("check_new_refs", error=errors.get("check_new_refs")),
         clear_refs=calls.async_mock("clear_refs"),
         check_online=calls.async_mock("check_online", error=errors.get("check_online")),
         check_delete=calls.async_mock("check_delete", error=errors.get("check_delete")),
@@ -65,7 +71,8 @@ USER = SimpleNamespace(user_id=1, tenant_id=1)
 
 
 class TestDelete:
-    async def _delete(self, calls, service):
+    async def _delete(self, calls, service, permission=None):
+        permission = permission or calls.async_mock("require_delete")
         flow = SimpleNamespace(id="child", name="Child", data={})
         flow_service = SimpleNamespace(
             project_flow_delete=calls.async_mock("project_flow_delete"),
@@ -79,6 +86,7 @@ class TestDelete:
             patch.object(flows_api, "FlowService", flow_service),
             patch.object(flows_api, "FlowDao", flow_dao),
             patch.object(flows_api, "telemetry_service", MagicMock()),
+            patch.object(flows_api, "require_business_action", permission),
         ):
             return await flows_api.delete_flow(request=MagicMock(), flow_id="child", login_user=USER)
 
@@ -86,11 +94,24 @@ class TestDelete:
         service = _subflow_service(calls, check_delete=WorkFlowReferencedDeleteError(referenced_by="Parent"))
         with pytest.raises(WorkFlowReferencedDeleteError):
             await self._delete(calls, service)
-        assert calls.names() == ["check_delete"]
+        assert calls.names() == ["require_delete", "check_delete"]
+
+    async def test_user_without_delete_permission_never_sees_the_referrers(self, calls):
+        service = _subflow_service(calls, check_delete=WorkFlowReferencedDeleteError(referenced_by="Parent"))
+        with pytest.raises(UnAuthorizedError):
+            await self._delete(calls, service, calls.async_mock("require_delete", error=UnAuthorizedError()))
+        assert calls.names() == ["require_delete"]
 
     async def test_delete_clears_own_references_after_the_row_is_gone(self, calls):
         await self._delete(calls, _subflow_service(calls))
-        assert calls.names() == ["check_delete", "project_flow_delete", "delete_flow", "clear_refs", "delete_flow_hook"]
+        assert calls.names() == [
+            "require_delete",
+            "check_delete",
+            "project_flow_delete",
+            "delete_flow",
+            "clear_refs",
+            "delete_flow_hook",
+        ]
         assert ("clear_refs", "child") in calls.log
 
 
@@ -204,8 +225,9 @@ class TestSaveVersion:
 
     async def test_current_version_syncs_and_compares_with_the_data_before_saving(self, calls):
         resp = await self._save(calls, _subflow_service(calls, warning=WARNING), 1, {"new": True})
-        assert calls.names() == ["aupdate_version", "sync_refs", "build_save_warning"]
-        assert calls.log[2] == ("build_save_warning", "child", {"old": True}, {"new": True})
+        assert calls.names() == ["check_new_refs", "aupdate_version", "sync_refs", "build_save_warning"]
+        assert calls.log[0] == ("check_new_refs", USER, "child", {"new": True}, {"old": True})
+        assert calls.log[3] == ("build_save_warning", "child", {"old": True}, {"new": True})
         assert resp.data["subflow_warning"] == WARNING
         assert resp.data["id"] == 9
 
@@ -215,7 +237,57 @@ class TestSaveVersion:
 
     async def test_other_versions_are_not_synced(self, calls):
         await self._save(calls, _subflow_service(calls, warning=WARNING), 0, {"new": True})
-        assert calls.names() == ["aupdate_version"]
+        assert calls.names() == ["check_new_refs", "aupdate_version"]
+
+    async def test_new_reference_without_permission_is_not_saved(self, calls):
+        service = _subflow_service(calls, check_new_refs=WorkFlowSubflowNoPermissionError(subflow_name="B"))
+        with pytest.raises(WorkFlowSubflowNoPermissionError):
+            await self._save(calls, service, 1, {"new": True})
+        assert calls.names() == ["check_new_refs"]
+
+
+class TestCreateVersion:
+    async def _create(self, calls, original):
+        dao = flow_service_module.FlowVersionDao
+        with (
+            patch.object(flow_service_module, "SubflowService", _subflow_service(calls)),
+            patch.object(dao, "get_version_by_name", MagicMock(return_value=None)),
+            patch.object(dao, "aget_version_by_id", AsyncMock(return_value=original)),
+            patch.object(dao, "create_version", calls.sync_mock("create_version")),
+            patch.object(flow_service_module.FlowService, "judge_flow_write_permission", AsyncMock()),
+            patch.object(flow_service_module, "telemetry_service", MagicMock(log_event=AsyncMock())),
+        ):
+            payload = flow_service_module.FlowVersionCreate(
+                name="v2", data={"new": True}, original_version_id=7, flow_type=FlowType.WORKFLOW.value
+            )
+            await flow_service_module.FlowService.create_new_version(USER, "parent", payload)
+
+    async def test_copy_keeps_the_references_of_its_source_version(self, calls):
+        await self._create(calls, SimpleNamespace(flow_id="parent", data={"source": True}))
+        assert calls.log[0] == ("check_new_refs", USER, "parent", {"new": True}, {"source": True})
+        assert calls.names() == ["check_new_refs", "create_version"]
+
+    async def test_source_of_another_workflow_is_ignored(self, calls):
+        await self._create(calls, SimpleNamespace(flow_id="other", data={"source": True}))
+        assert calls.log[0] == ("check_new_refs", USER, "parent", {"new": True}, None)
+
+
+class TestRunOnce:
+    async def test_single_subflow_node_checks_its_reference(self, calls):
+        node = {"data": {"id": "subflow_1", "type": "subflow"}}
+        error = WorkFlowSubflowNoPermissionError(subflow_name="B")
+        with (
+            patch.object(workflow_service_module, "SubflowService", _subflow_service(calls, check_new_refs=error)),
+            patch.object(
+                workflow_service_module,
+                "FlowDao",
+                SimpleNamespace(get_flow_by_id=MagicMock(return_value=SimpleNamespace(id="parent"))),
+            ),
+            patch.object(workflow_service_module, "require_business_action", AsyncMock()),
+            pytest.raises(WorkFlowSubflowNoPermissionError),
+        ):
+            await workflow_service_module.WorkFlowService.run_once(USER, {}, node, "parent")
+        assert calls.log == [("check_new_refs", USER, "parent", {"nodes": [node]})]
 
 
 class TestChangeVersion:
@@ -264,7 +336,10 @@ class TestCreate:
             patch.object(workflow_api, "FlowService", SimpleNamespace(create_flow_hook=AsyncMock())),
         ):
             await workflow_api.create_flow.__wrapped__(request=MagicMock(), flow=flow, login_user=USER)
-        assert calls.log == [("sync_refs", "new", {"nodes": ["copied"], "edges": []})]
+        assert calls.log == [
+            ("check_new_refs", USER, None, {"nodes": ["copied"], "edges": []}),
+            ("sync_refs", "new", {"nodes": ["copied"], "edges": []}),
+        ]
 
 
 def _page(ids: list[str], next_cursor: str | None):

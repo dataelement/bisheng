@@ -56,6 +56,9 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, on
             cursorRef.current = res.cursor
             const next = res.data.filter(one => one.id).map(one => ({ label: one.name, value: one.id }))
             setOptions(prev => cursor ? [...prev, ...next.filter(o => !prev.some(p => p.value === o.value))] : next)
+        }).catch(() => {
+            // The request layer already showed the error; stop paging past a failed page.
+            if (seq === requestSeqRef.current) cursorRef.current = null
         })
     }
 
@@ -69,8 +72,13 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, on
         }))
     }
 
+    const interfaceSeqRef = useRef(0)
     const fetchInterface = (flowId: string, onLoaded: (info: SubflowInterface) => void) => {
-        getSubflowInterfaceApi(flowId).then(onLoaded).catch((envelope: { status_code?: number }) => {
+        const seq = ++interfaceSeqRef.current
+        getSubflowInterfaceApi(flowId).then(info => {
+            // Only the latest pick counts when several answers arrive out of order.
+            if (seq === interfaceSeqRef.current) onLoaded(info)
+        }).catch((envelope: { status_code?: number }) => {
             // Without edit permission the saved snapshot keeps the node usable (AC-10).
             if (envelope?.status_code === 404) setNotice(t(`${i18nPrefix}notFound`))
         })
@@ -85,9 +93,11 @@ export function SubflowSelectItem({ nodeId, node, data, onChange, onValidate, on
     const handleSelect = (vals: Option[]) => {
         const picked = vals[vals.length - 1]
         if (!picked) return
-        setSelected([picked])
         setError(false)
+        // The node switches only once the new workflow's interface is loaded,
+        // so a failed load leaves the previous workflow and its parameters intact.
         fetchInterface(picked.value, info => {
+            setSelected([picked])
             showInterface(info)
             onChange(data.value)
         })

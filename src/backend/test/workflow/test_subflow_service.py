@@ -11,6 +11,7 @@ import pytest
 
 from bisheng.common.errcode.flow import (
     WorkFlowReferencedDeleteError,
+    WorkFlowSubflowNoPermissionError,
     WorkFlowSubflowNotFoundError,
     WorkFlowSubflowOnlineCheckError,
 )
@@ -33,6 +34,9 @@ class FakeRefRepo:
 
     async def list_referrer_ids(self, child_flow_id):
         return [parent for parent, children in self.rows.items() if child_flow_id in children]
+
+    async def list_child_ids(self, parent_flow_id):
+        return list(self.rows.get(parent_flow_id, []))
 
 
 class FakeFlows:
@@ -138,6 +142,56 @@ class TestCheckOnline:
     async def test_deleted_child_is_rejected(self):
         with pytest.raises(WorkFlowSubflowNotFoundError):
             await SubflowService.check_online(_parent_of("gone"))
+
+    async def test_child_that_is_not_a_workflow_is_rejected(self, flows):
+        flows.add("a", _plain("x"), flow_type=FlowType.ASSISTANT.value)
+        with pytest.raises(WorkFlowSubflowNotFoundError):
+            await SubflowService.check_online(_parent_of("a"))
+
+
+class TestCheckNewRefs:
+    """R-5.1 holds only if whoever adds a reference can edit the child; AC-10 keeps old ones."""
+
+    @pytest.fixture
+    def allowed(self):
+        allowed = {"mine"}
+
+        async def check(login_user, *, resource_type, resource_id, action):
+            assert (resource_type, action) == ("workflow", "edit")
+            checked.append(resource_id)
+            return resource_id in allowed
+
+        checked: list[str] = []
+        with patch.object(subflow_service, "check_business_action", check):
+            yield checked
+
+    async def test_new_reference_without_edit_permission_is_rejected(self, allowed):
+        with pytest.raises(WorkFlowSubflowNoPermissionError) as raised:
+            await SubflowService.check_new_refs("user", "parent", _parent_of("mine", "theirs"))
+        assert raised.value.kwargs == {"subflow_name": "snapshot theirs"}
+        assert allowed == ["mine", "theirs"]
+
+    async def test_editable_new_reference_passes(self, allowed):
+        await SubflowService.check_new_refs("user", "parent", _parent_of("mine"))
+        assert allowed == ["mine"]
+
+    async def test_recorded_reference_is_not_checked_again(self, repo, allowed):
+        repo.rows["parent"] = ["theirs"]
+        await SubflowService.check_new_refs("user", "parent", _parent_of("theirs"))
+        assert allowed == []
+
+    async def test_reference_in_the_replaced_data_is_not_checked_again(self, allowed):
+        await SubflowService.check_new_refs("user", "parent", _parent_of("theirs"), _parent_of("theirs"))
+        assert allowed == []
+
+    async def test_new_workflow_checks_every_reference(self, allowed):
+        with pytest.raises(WorkFlowSubflowNoPermissionError):
+            await SubflowService.check_new_refs("user", None, _parent_of("theirs"))
+
+    async def test_self_reference_and_plain_data_skip_the_check(self, allowed):
+        await SubflowService.check_new_refs("user", "parent", _parent_of("parent"))
+        await SubflowService.check_new_refs("user", "parent", None)
+        assert allowed == []
 
 
 class TestSaveWarning:

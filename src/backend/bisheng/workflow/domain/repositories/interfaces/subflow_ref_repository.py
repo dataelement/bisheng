@@ -18,5 +18,9 @@ class SubflowRefRepository(BaseRepository[WorkflowSubflowRef, int], ABC):
         """Remove every row whose parent is ``parent_flow_id``."""
 
     @abstractmethod
+    async def list_child_ids(self, parent_flow_id: str) -> list[str]:
+        """Workflows that ``parent_flow_id`` currently references."""
+
+    @abstractmethod
     async def list_referrer_ids(self, child_flow_id: str) -> list[str]:
         """Parent workflow ids that reference ``child_flow_id``, oldest reference first."""

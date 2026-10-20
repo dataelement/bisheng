@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 32 / 35 完成；2026-10-20 在 119 A 插槽完成 API E2E（11 项全过）、浏览器验证与重建后补验；T28、T34 只剩 AC-10 的浏览器部分（需普通用户登录）；T35 的 DM8 复核已做，`/code-review` 待用户启动 |
+| 实现 | 🔄 进行中 | 32 / 35 完成；2026-10-20 在 119 A 插槽完成 API E2E（11 项全过）、浏览器验证与重建后补验；T28、T34 只剩 AC-10 的浏览器部分（需普通用户登录）；T35 的 DM8 复核已做；2026-10-20 `/sdd-code-review --base feat/3.0.0` 结论 NEEDS_FIX，F086 部分已在 `fix/f086-review` 修复，待复审 |
 
 ---
 
@@ -298,3 +298,13 @@
 - 119 重建后补验（2026-10-20）：T31 失败节点日志、T29 版本卡片提醒、931538af0 两项 UI 修复均通过；新增覆盖编辑器运行前的变量检查（PR #2509 修复的路径）：【输出】【大模型】【代码】【结束】四类节点引用子工作流返回结果均能运行，返回结果改名后【输出】【大模型】被拦截。T28、T34 保留：AC-10 的浏览器部分需要普通用户登录，未做。
 - 补验发现（未修）：返回结果改名后，【代码】节点入参与【结束】节点返回结果中失效的引用不会在运行前被标出（`CodeInputItem` 只校验名称，不校验引用是否存在；【代码】节点为既有行为，【结束】节点复用该组件）。运行时后端以 10562 报错，不会静默取空值。详见 e2e-checklist.md。
 - 上述缺口已修（2026-10-20）：`CodeInputItem` 的「引用」行接入运行前变量检查（`flowUtils.findInvalidRefItems`，内部调用 `isVarInFlow`），覆盖【代码】节点入参、【结束】节点返回结果（开关关闭时不检查）和【子工作流】节点输入参数；失败节点日志错误项标题改为「失败原因」（`flow:nodeLogError`）。【代码】节点与日志标题属发版线既有问题，先修在 feat/3.0.0（3d71c0a94）再合入本分支；单测 `codeInputRefValidation.test.ts`、`subflowVariableValidation.test.ts`。浏览器复验待 119 重建。
+- `/sdd-code-review --base feat/3.0.0`（2026-10-20）F086 部分的修复，分支 `fix/f086-review`：
+  - 新增引用要求编辑权限（design 决策 13，错误码 10566）。保存版本、另存新版本、新建工作流、调试运行、`run_once` 在写入或启动前调用 `SubflowService.check_new_refs`；该父工作流已登记的引用和被替换数据中已有的引用不复查（AC-10）。切换当前版本与上线不复查（design §8）。用例：`test_subflow_service.py::TestCheckNewRefs`、`test_subflow_api.py`（保存、另存、新建、`run_once`）、`test_subflow_debug_run_permission.py`。
+  - 删除工作流先检查删除权限，再做引用拦截（design 坑 10），无删除权限的用户读不到引用方名称；`test_subflow_api.py::TestDelete` 的顺序断言随之更新。
+  - `replace_for_parent` 并发保存时撞唯一键或删到已删除的行，回滚后重读重试，最多 3 次（design 决策 7）；`test_subflow_ref_repository.py` 用 SQLite 模拟读到旧数据的情形。
+  - `check_online` 把不是工作流的 id 当作不存在（10561）。自引用不需要另加判断：工作流引用自己时，它自身含【子工作流】节点，已按 10564 拒绝。
+  - 【结束】节点「引用」行没有选变量时，以「return result … has no variable selected」失败，不再抛 IndexError。
+  - 编辑页版本下拉切换前等待当前版本保存完成，保存失败停在当前版本，响应带 `subflow_warning` 时弹窗（补上 T29 漏掉的入口）；当前版本已上线时不保存。
+  - `SubflowSelectItem` 接口查询成功后才切换选中的工作流，失败时保留原工作流和参数；先后发出的查询以最后一次为准；候选列表某页失败时停止翻页。
+  - 删除两处死代码：`RunLog` 中与默认分支相同的 `subflow_logs` 分支；`SubflowNode` 中不会走到的 `None` 判断和与通用分支相同的 `IgnoreException` 分支。
+  - 未做（与本轮根因无关，记为 LOW）：`subflow_logs` 随 WebSocket 下发给所有查看者、子工作流失败日志缺 `subflow_id`、`sub_workflow` 常驻内存、`EndReturnItem` 重复 `findNodeParam`、超 600 行文件拆分。

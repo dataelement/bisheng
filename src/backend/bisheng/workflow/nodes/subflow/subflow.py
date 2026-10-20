@@ -118,8 +118,7 @@ class SubflowNode(BaseNode):
                 ret[one["key"]] = self.get_other_node_variable(one.get("value"))
             else:
                 # A typed-in value is text, whatever it looks like.
-                value = one.get("value")
-                ret[one["key"]] = "" if value is None else str(value)
+                ret[one["key"]] = str(one["value"])
         return ret
 
     def _apply_inputs(self, data: dict) -> dict:
@@ -162,8 +161,6 @@ class SubflowNode(BaseNode):
                 tmp_session_id=self.tmp_session_id,
                 subflow_depth=self.subflow_depth + 1,
             )
-        except IgnoreException as e:
-            raise SubflowRunError(WorkFlowSubflowRunError, subflow_name=self._subflow_name, node_name="", reason=str(e))
         except Exception as e:
             raise SubflowRunError(
                 WorkFlowSubflowRunError, subflow_name=self._subflow_name, node_name="", reason=str(e)
