@@ -1,11 +1,17 @@
 """SubflowRefRepository implementation."""
 
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
 from bisheng.workflow.domain.models.subflow_ref import WorkflowSubflowRef
 from bisheng.workflow.domain.repositories.interfaces.subflow_ref_repository import SubflowRefRepository
+
+# Two saves of one parent may sync at the same time; the loser retries against
+# the rows the winner wrote.
+REPLACE_ATTEMPTS = 3
 
 
 class SubflowRefRepositoryImpl(BaseRepositoryImpl[WorkflowSubflowRef, int], SubflowRefRepository):
@@ -19,9 +25,20 @@ class SubflowRefRepositoryImpl(BaseRepositoryImpl[WorkflowSubflowRef, int], Subf
         return list(result.all())
 
     async def replace_for_parent(self, parent_flow_id: str, child_flow_ids: list[str]) -> None:
+        wanted = list(dict.fromkeys(child_flow_ids))
+        for attempt in range(REPLACE_ATTEMPTS):
+            try:
+                await self._replace_once(parent_flow_id, wanted)
+                return
+            except (IntegrityError, StaleDataError):
+                # Another save inserted or deleted the same row in between.
+                await self.session.rollback()
+                if attempt == REPLACE_ATTEMPTS - 1:
+                    raise
+
+    async def _replace_once(self, parent_flow_id: str, wanted: list[str]) -> None:
         # Rows are loaded first and deleted one by one: bulk DELETE statements
         # skip the tenant auto-filter, loaded rows have already passed it.
-        wanted = list(dict.fromkeys(child_flow_ids))
         existing = await self._rows_for_parent(parent_flow_id)
         existing_ids = {row.child_flow_id for row in existing}
         for row in existing:
@@ -34,6 +51,9 @@ class SubflowRefRepositoryImpl(BaseRepositoryImpl[WorkflowSubflowRef, int], Subf
 
     async def delete_for_parent(self, parent_flow_id: str) -> None:
         await self.replace_for_parent(parent_flow_id, [])
+
+    async def list_child_ids(self, parent_flow_id: str) -> list[str]:
+        return [row.child_flow_id for row in await self._rows_for_parent(parent_flow_id)]
 
     async def list_referrer_ids(self, child_flow_id: str) -> list[str]:
         result = await self.session.exec(

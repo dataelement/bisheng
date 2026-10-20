@@ -88,6 +88,7 @@
   "10563": "Subflow \"{{subflow_name}}\" reached node \"{{node_name}}\", which cannot run inside a subflow",
   "10564": "Subflow \"{{subflow_name}}\" contains nodes or return results that cannot be used in a subflow: {{reasons}}",
   "10565": "This workflow is used as a subflow by the following workflows and cannot be deleted: {{referenced_by}}",
+  "10566": "You cannot edit workflow \"{{subflow_name}}\", so it cannot be used as a subflow",
   "10599": "No permission to view",
   "10600": "Incorrect username or password",
   "10601": "Password expired. Please update it",

@@ -30,6 +30,8 @@ class FlowInspection:
     subflow_nodes: list[dict] = field(default_factory=list)
     # Workflows referenced by the subflow nodes, first occurrence order.
     subflow_ids: list[str] = field(default_factory=list)
+    # Workflow name as stored in the node that references it, by workflow id.
+    subflow_names: dict[str, str] = field(default_factory=dict)
     # Start node custom variables: [{name, value}].
     inputs: list[dict] = field(default_factory=list)
     # Return names of every End node whose return switch is on.
@@ -112,6 +114,7 @@ def inspect_flow_data(data: dict | None) -> FlowInspection:
             flow_id = subflow.get("id") if isinstance(subflow, dict) else None
             if flow_id and flow_id not in result.subflow_ids:
                 result.subflow_ids.append(flow_id)
+                result.subflow_names[flow_id] = subflow.get("name") or brief["name"]
         elif node_type == NodeType.END.value:
             for name in end_node_return_names(params):
                 if name in RESERVED_OUTPUT_NAMES:

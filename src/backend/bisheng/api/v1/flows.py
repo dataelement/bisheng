@@ -10,6 +10,7 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.services import telemetry_service
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowDao
+from bisheng.permission.application.business_authorization import require_business_action
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
 from bisheng.workflow.domain.services.subflow_service import SubflowService
@@ -41,7 +42,10 @@ async def delete_flow(
     db_flow = FlowDao.get_flow_by_id(flow_id)
     if not db_flow:
         raise NotFoundError()
-    # F086: refuse before the permission projection is removed (design pitfall 10).
+    # F086: check the delete permission first, so a user who may not delete the
+    # workflow never learns who references it; then refuse before the
+    # permission projection is removed (design pitfall 10).
+    await require_business_action(login_user, resource_type="workflow", resource_id=flow_id, action="delete")
     await SubflowService.check_delete(flow_id)
     await FlowService.project_flow_delete(login_user, db_flow)
     FlowDao.delete_flow(db_flow)

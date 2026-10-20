@@ -119,3 +119,8 @@ class WorkFlowSubflowOnlineCheckError(BaseErrorCode):
 class WorkFlowReferencedDeleteError(BaseErrorCode):
     Code: int = 10565
     Msg: str = "This workflow is used as a subflow by {referenced_by} and cannot be deleted"
+
+
+class WorkFlowSubflowNoPermissionError(BaseErrorCode):
+    Code: int = 10566
+    Msg: str = "No permission to edit workflow {subflow_name}, so it cannot be used as a subflow"

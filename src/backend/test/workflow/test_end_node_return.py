@@ -3,6 +3,9 @@
 覆盖 AC: AC-19
 """
 
+import pytest
+
+from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData
 from bisheng.workflow.graph.graph_state import GraphState
@@ -101,3 +104,13 @@ def test_switch_on_with_missing_reference_returns_none_value():
 def test_switch_on_with_empty_list_returns_empty_result():
     node = _end_node([{"key": "return_enabled", "value": True}, {"key": "return_results", "value": []}], _state())
     assert node._run("x") == {}
+
+
+def test_reference_without_a_variable_fails_with_a_readable_reason():
+    params = [
+        {"key": "return_enabled", "value": True},
+        {"key": "return_results", "value": [{"key": "answer", "type": "ref", "value": ""}]},
+    ]
+    node = _end_node(params, _state())
+    with pytest.raises(IgnoreException, match="return result answer has no variable selected"):
+        node._run("x")
