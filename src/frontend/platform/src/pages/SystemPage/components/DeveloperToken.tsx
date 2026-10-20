@@ -36,7 +36,7 @@ import { findInvalidDeveloperTokenRouteRule, normalizeDeveloperTokenRouteWhiteli
 import DeveloperTokenFileSyncRuleEditor from "./DeveloperTokenFileSyncRule"
 import {
   findInvalidFileSyncRule,
-  normalizeFileSyncRule,
+  fileSyncRuleForSave,
 } from "./developerTokenFileSyncRuleValidation"
 import DeveloperTokenGlobalSettings from "./DeveloperTokenGlobalSettings"
 import { DeveloperTokenAutomotiveSheetSync } from "./DeveloperTokenAutomotiveSheetSync"
@@ -93,7 +93,7 @@ function asPayload(form: TokenFormState): DeveloperTokenPayload {
     override_rate_limit: form.override_rate_limit,
     rate_limit_per_minute: parseLimit(form.rate_limit_per_minute),
     route_whitelist: normalizeDeveloperTokenRouteWhitelist(form.route_whitelist),
-    file_sync_rule: normalizeFileSyncRule(form.file_sync_rule),
+    file_sync_rule: fileSyncRuleForSave(form.file_sync_rule),
   }
   if (!form.id || form.binding_changed) {
     const selected = form.user[0]
@@ -194,6 +194,8 @@ export default function DeveloperToken() {
     targetFolder: t("system.developerToken.fileSync.summary.targetFolder"),
     dynamicDepartment: t("system.developerToken.fileSync.summary.dynamicDepartment"),
     dynamicResponsiblePerson: t("system.developerToken.fileSync.summary.dynamicResponsiblePerson"),
+    libraryClinic: t("system.developerToken.fileSync.summary.libraryClinic"),
+    libraryDepartment: t("system.developerToken.fileSync.summary.libraryDepartment"),
     folderNone: t("system.developerToken.fileSync.summary.folderNone"),
     folderDynamicDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicDepartmentName"),
     folderDynamicCallerMainDepartmentName: t("system.developerToken.fileSync.summary.folderDynamicCallerMainDepartmentName"),

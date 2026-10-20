@@ -1142,11 +1142,23 @@ class FilelibSyncService:
         department: Department,
         identity: ResolvedIdentity | None,
     ) -> tuple[Knowledge, bool]:
-        """Nearest clinic library on the department chain, else the person's personal space.
+        """Resolve the responsible person's library, else that person's personal space.
 
-        Walks self → parent → root. The first organization that has a clinic
-        knowledge-space binding wins; org_level is not consulted.
+        A saved library_kind walks the current parent chain, including self, and
+        keeps only the nearest organization with the matching org_level. clinic
+        uses office; department uses dept. The binding must be on that
+        organization. No match uses the responsible person's personal space.
+
+        library_kind is empty for tokens saved before the choice existed. Those
+        still take the first clinic binding from self to root and ignore org_level.
         """
+        library_kind = getattr(self.file_sync_rule.target_space, "library_kind", None)
+        if library_kind in {"clinic", "department"}:
+            space = await self._resolve_org_level_library(department, library_kind)
+            if space is not None:
+                return space, False
+            return await self._responsible_person_personal_space(department, identity)
+
         clinic_space = await self._resolve_bound_space(
             department,
             department_ids=self._department_chain(department),
@@ -1156,6 +1168,71 @@ class FilelibSyncService:
         )
         if clinic_space is not None:
             return clinic_space, False
+        return await self._responsible_person_personal_space(department, identity)
+
+    async def _resolve_org_level_library(
+        self,
+        department: Department,
+        library_kind: str,
+    ) -> Knowledge | None:
+        org_level = "office" if library_kind == "clinic" else "dept"
+        kind = DepartmentSpaceTargetKind.CLINIC if library_kind == "clinic" else DepartmentSpaceTargetKind.DEPARTMENT
+        matched = await self._nearest_department_with_org_level(department, org_level)
+        if matched is None:
+            logger.info(
+                "filelib sync responsible person org level missing library_kind={} department_id={}",
+                library_kind,
+                int(department.id),
+            )
+            return None
+        space = await self._resolve_bound_space(
+            matched,
+            department_ids=[int(matched.id)],
+            kind=kind,
+            missing_is_error=False,
+            ambiguous_picks_first=True,
+        )
+        if space is None:
+            logger.info(
+                "filelib sync responsible person library unbound library_kind={} department_id={} org_level={}",
+                library_kind,
+                int(matched.id),
+                org_level,
+            )
+            return None
+        logger.info(
+            "filelib sync responsible person library_kind={} department_id={} space_id={}",
+            library_kind,
+            int(matched.id),
+            space.id,
+        )
+        return space
+
+    async def _nearest_department_with_org_level(
+        self,
+        department: Department,
+        org_level: str,
+    ) -> Department | None:
+        current: Department | None = department
+        seen: set[int] = set()
+        while current is not None:
+            current_id = int(current.id)
+            if current_id in seen:
+                break
+            seen.add(current_id)
+            if str(getattr(current, "org_level", None) or "") == org_level:
+                return current
+            parent_id = getattr(current, "parent_id", None)
+            if parent_id is None:
+                break
+            current = await self.repository.find_department_by_id(int(parent_id))
+        return None
+
+    async def _responsible_person_personal_space(
+        self,
+        department: Department,
+        identity: ResolvedIdentity | None,
+    ) -> tuple[Knowledge, bool]:
         if identity is None or not identity.responsible_user_id:
             raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
         owner = self._responsible_person_payload(identity)

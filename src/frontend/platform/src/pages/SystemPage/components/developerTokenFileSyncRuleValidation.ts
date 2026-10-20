@@ -1,6 +1,7 @@
 import type {
   DeveloperTokenFileSyncDynamicSource,
   DeveloperTokenFileSyncFolderDynamicSource,
+  DeveloperTokenFileSyncLibraryKind,
   DeveloperTokenFileSyncFolderMode,
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
@@ -38,6 +39,8 @@ export interface FileSyncRuleSummaryLabels {
   targetFolder: string
   dynamicDepartment: string
   dynamicResponsiblePerson: string
+  libraryClinic?: string
+  libraryDepartment?: string
   folderNone: string
   folderDynamicDepartmentName: string
   folderDynamicCallerMainDepartmentName: string
@@ -58,6 +61,18 @@ function migrateLegacyDynamicSource(rule: DeveloperTokenFileSyncRule): Developer
       : rule.target_space,
     dynamic_source: null,
   }
+}
+
+function resolveLibraryKind(
+  targetSpace: DeveloperTokenFileSyncRule["target_space"],
+): DeveloperTokenFileSyncLibraryKind | null {
+  if (targetSpace.mode !== "dynamic" || targetSpace.dynamic_source !== "responsible_person_id") {
+    return null
+  }
+  if (targetSpace.library_kind === "clinic" || targetSpace.library_kind === "department") {
+    return targetSpace.library_kind
+  }
+  return null
 }
 
 function formatDynamicSourceLabel(
@@ -167,9 +182,34 @@ export function normalizeFileSyncRule(
       dynamic_source: migrated.target_space.mode === "dynamic"
         ? migrated.target_space.dynamic_source ?? null
         : null,
+      library_kind: resolveLibraryKind({
+        ...migrated.target_space,
+        mode: migrated.target_space.mode,
+        dynamic_source: migrated.target_space.mode === "dynamic"
+          ? migrated.target_space.dynamic_source ?? null
+          : null,
+      }),
     }),
     dynamic_source: null,
   }
+}
+
+export function fileSyncRuleForSave(
+  rule?: DeveloperTokenFileSyncRule | null,
+): DeveloperTokenFileSyncRule | null {
+  const normalized = normalizeFileSyncRule(rule)
+  if (!normalized) return null
+  if (
+    normalized.target_space.mode === "dynamic"
+    && normalized.target_space.dynamic_source === "responsible_person_id"
+    && normalized.target_space.library_kind == null
+  ) {
+    return {
+      ...normalized,
+      target_space: { ...normalized.target_space, library_kind: "clinic" },
+    }
+  }
+  return normalized
 }
 
 export function changeFileSyncRuleMode(
@@ -386,7 +426,7 @@ export function formatFileSyncRuleSummary(
     : formatDynamicSourceLabel(normalized.business_domain.dynamic_source, labels)
   const target = normalized.target_space.mode === "fixed"
     ? formatFixedTarget(normalized, labels, targetDisplay)
-    : formatDynamicSourceLabel(normalized.target_space.dynamic_source, labels)
+    : formatDynamicTargetLabel(normalized, labels)
   const folder = formatFolderSummary(normalized, labels)
   return [
     `${normalized.category.code}/${normalized.category.subcategory_code}`,
@@ -394,6 +434,17 @@ export function formatFileSyncRuleSummary(
     `${labels.targetSpace}: ${target}`,
     `${labels.targetFolder}: ${folder}`,
   ].join(" · ")
+}
+
+function formatDynamicTargetLabel(
+  rule: DeveloperTokenFileSyncRule,
+  labels: FileSyncRuleSummaryLabels,
+): string {
+  const source = formatDynamicSourceLabel(rule.target_space.dynamic_source, labels)
+  const kind = rule.target_space.library_kind
+  if (rule.target_space.dynamic_source !== "responsible_person_id" || !kind) return source
+  const kindLabel = kind === "department" ? labels.libraryDepartment : labels.libraryClinic
+  return kindLabel ? `${source}/${kindLabel}` : source
 }
 
 function formatFixedTarget(

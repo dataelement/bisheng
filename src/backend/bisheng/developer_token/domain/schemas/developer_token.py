@@ -8,6 +8,7 @@ from bisheng.developer_token.domain.file_sync_folder_path import normalize_file_
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
 
 FileSyncDynamicSource = Literal["department_id", "responsible_person_id"]
+FileSyncLibraryKind = Literal["clinic", "department"]
 FileSyncFolderMode = Literal["none", "fixed", "dynamic"]
 FileSyncFolderDynamicSource = Literal["department_name", "caller_main_department_name"]
 
@@ -53,6 +54,8 @@ class FileSyncTargetSpaceRule(BaseModel):
     knowledge_id: int | None = Field(default=None, strict=True, gt=0)
     folder_id: int | None = Field(default=None, strict=True, gt=0)
     dynamic_source: FileSyncDynamicSource | None = None
+    # None keeps the legacy responsible-person walk. clinic/department apply only after save.
+    library_kind: FileSyncLibraryKind | None = None
     folder_mode: FileSyncFolderMode = "none"
     folder_path: str | None = None
     parent_folder_path: str | None = None
