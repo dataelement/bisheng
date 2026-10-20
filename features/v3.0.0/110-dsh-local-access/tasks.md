@@ -20,8 +20,10 @@ spec 与 design 依据用户已确认技术方案及本轮实施指令整理。�
 | T002 | local_auth / identity endpoint、router/main、http_middleware、DshSettings、tenant_filter、Alembic | 标准及旧路由行为、middleware 回归、Celery 无 Gateway 配置导入、唯一迁移 head |
 | T003 | admin_policy、subject_policy / subject_grant、role_migration、user profile、worker | 个人低额度/零额度、继承、部门重试、退休任务与后台关闭测试 |
 | T004 | DshPage、SystemPage/dsh、DepartmentAccessTree、API/dsh；Desktop contract/client/error-copy | 管理端 300 项；Desktop 1931 项；两端构建与平台/客户端类型检查 |
-| T005 | test/dsh、相关前端测试、deployment / validation / review | 本地验证完成；全仓原有门禁及真实环境检查未完成，故本任务保持未勾选 |
+| T005 | test/dsh、相关前端测试、deployment / validation / review | 本地及 109 指定链路验证完成；全仓原有门禁及其余发布检查未完成，故本任务保持未勾选 |
 
-109:13001 已完成本次指定链路的真实联调，见 [环境报告](./e2e-109-20261020.md)；T005 的其他发布检查保持未完成。
+109:13001 已完成本次指定链路的真实联调，最新证据见 [main 基线恢复记录](./main-baseline-109-recovery-20261020.md)；T005 的其他发布检查保持未完成。
 
 详细结果见 [validation.md](./validation.md)，任务和特性自审见 [review.md](./review.md)。本次未进行生产操作。
+
+2026-10-20 main 基线修正已实施并在 109 复验：旧库完整归档保留，新库通过标准 main 初始化后升级；实际结构对比、重复升级和客户端登录/调用/额度/审计均通过。见 [恢复记录](./main-baseline-109-recovery-20261020.md)。T005 继续保留其余未完成检查。

@@ -1,6 +1,6 @@
 # 验证记录
 
-日期：2026-10-20。本文保留首次本地验证结果；后续已按用户授权部署并完成 109:13001 无 Gateway 联调，结果见 [真实环境报告](./e2e-109-20261020.md)。
+日期：2026-10-20。本文保留首次本地验证结果；109:13001 最新验收基于真实 main 新测试库升级，见 [main 基线恢复与联调](./main-baseline-109-recovery-20261020.md)。[首次环境报告](./e2e-109-20261020.md) 保留历史追溯。
 
 ## 基线
 
@@ -24,7 +24,7 @@
 | 多语言 | pnpm check-i18n 通过，无新增 drift |
 | 后端 lint | 改动的 52 个现存 Python 文件 Ruff 通过；DSH 模块整体 Ruff 通过 |
 | 架构守卫 | 对 72 个现存修改源码/测试文件逐个运行；无 VIOLATION，仅原 test_profile_outbox.py 合成密码 fixture 的 RULE-7 WARNING |
-| Alembic | main 原有 83 个文件不变，仅追加 work110_dsh_local_sessions；迁移/模型建表专项 14 passed、1 外部 MySQL skipped。旧 109 merge head 已撤回，不作为 main 升级证据；新库恢复与复测见 main 基线记录 |
+| Alembic | main 原有 83 个文件不变，仅追加 work110_dsh_local_sessions；迁移/模型建表专项 14 passed、1 外部 MySQL skipped。旧 109 merge head 已撤回；实际新库 main 128 表 → 功能版本 143 表，唯一已有表变化为 dsh_model_call；重复 upgrade 结构不变 |
 | Desktop 安装 | npm ci 成功，postinstall 的 patch-package、品牌资源与 Electron 安装步骤完整成功 |
 | Desktop 类型 / 构建 | npm run typecheck、npm run build 通过 |
 | Desktop 完整测试 | 225 files passed / 1 skipped；1931 passed / 2 skipped。覆盖企业连接、审计元数据和既有 Harness 子进程测试；不等同于原生 UI 联调 |
@@ -100,3 +100,5 @@ raise SystemExit(pytest.main([
 ## main 基线修正
 
 2026-10-20 按 main 与 work-110 的实际模型差异移除 13 个外来/重复迁移，仅保留已有模型调用表的 DDL。修正后本地 DSH 回归 529 passed、107 skipped、54 deselected；跳过项与外部数据库/Redis等显式前置条件相关。历史 109 结果保留作追溯，完整归档及新库升级过程见 [main 基线恢复记录](./main-baseline-109-recovery-20261020.md)。
+
+新库实际验收完成：6 个迁移检查 + 1 个真实登录/额度/调用/审计端到端场景共 7 passed；本地 Electron 重新登录并完成 qwen-max 调用，审计正文解密核验通过。个人 10000 优先于部门 100000、取消个人配置继承部门、两个成员分别使用 30 Token 及用量不清零均已在新库验证。原库保留 2132 条调用、917 条审计请求。证据及归档位置见上述 main 基线记录；这些结果替代旧跨版本线直接升级的部署结论，不扩大其余发布检查的通过范围。
