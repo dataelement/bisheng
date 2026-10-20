@@ -1,3 +1,9 @@
+## 2026-10-20 — Chat 与 Work 统一欢迎区配置
+
+- Landing 与桌面呈现桥复用 workbenchBranding，从构建→工作台既有 assistantIcon、welcomeMessage 生成相同的欢迎区；支持图标隐藏、绝对资源 URL 与应用相对路径。默认欢迎语统一为“来一起创造”，保留管理员当前配置与图片；用户继续在后台上传图标。
+- 桌面呈现报告仅增加公开欢迎语与图标字段；Work 消费同一配置，不传递完整工具或模型配置。桌面对应基线 bisheng-work/V1.2.0 a77dd7612 / Harness 0.2.0-rc.2。
+- 自动验证：2 套件 / 2 项定向回归、定向 ESLint、生产构建与 locale 生成检查通过。3006 发布与桌面实际验收进行中。
+
 ## 2026-10-20 — Chat 输入框原生细节对齐
 
 - 参照当前 Work / Harness conversation 与 model-selection UI 0.2.0-rc.2，Chat 卡片采用 28px + superellipse(1.5) 连续圆角；发送按钮采用原生 16px 实心箭头。

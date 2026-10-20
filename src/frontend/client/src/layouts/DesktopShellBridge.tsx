@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useLocalize } from '~/hooks';
+import { workbenchBranding } from '~/components/Chat/workbenchBranding';
 import { useLocation } from 'react-router-dom';
 import { isDesktopEmbedded } from '~/components/Chat/desktopEmbedding';
 import { useDesktopNavigation } from '~/components/Chat/useDesktopNavigation';
@@ -14,12 +17,15 @@ export function DesktopShellBridge() {
   useDesktopAppearance();
   useDesktopLocale();
   const { pathname, search } = useLocation();
+  const { data: bsConfig } = useGetBsConfig();
+  const localize = useLocalize();
   const entries = useSidebarEntries();
   const { links } = useWorkbenchNavLinks();
   const prefs = useSidebarPrefs();
   const { shown } = splitSidebarEntries(entries, prefs, links.some(link => link.section === 'home'));
   const payload = JSON.stringify({
     entries: entries.map(({ id, to, label, active }) => ({ id, path: to, label, active, primary: shown.some(entry => entry.id === id) })),
+    branding: workbenchBranding(bsConfig, localize('dshChat.welcome')),
     homeLabel: links.find(link => link.section === 'home')?.label,
     path: pathname + search,
   });
