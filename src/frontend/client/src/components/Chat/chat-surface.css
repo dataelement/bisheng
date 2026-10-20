@@ -89,7 +89,6 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-surface .dsh-chat-composer textarea::placeholder { color:rgb(var(--text-3)); }
 .dsh-chat-surface .dsh-chat-composer:focus-within { outline:1px solid rgb(var(--border-deep)); }
 .dsh-chat-surface .dsh-composer-toolbar { height:auto; min-height:42px; flex-wrap:wrap; gap:12px; padding:2px 8px 6px; }
-.dsh-chat-hero .dsh-chat-input-shell { padding-bottom:0; }
 .dsh-chat-hero .dsh-chat-composer {
   min-height:114px;
   box-shadow:0 0 0 .5px var(--dsh-hero-stroke),0 4px 16px rgb(0 0 0 / 3%),0 0 24px rgb(0 0 0 / 3%);
