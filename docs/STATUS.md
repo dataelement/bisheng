@@ -1,3 +1,11 @@
+## 2026-10-20 — DSH 企业后台按用户 ID 搜索
+
+- 基线：远端 `dataelement/bisheng:feat/bisheng-work-120@cbbe6e104b9373d2c25da1bc317d8dc429ef03bf`；工作目录 `.worktrees/bisheng-dsh-user-id-search`，修复分支 `codex/dsh-admin-user-id-search`。修改范围为毕昇企业后台，Desktop/Harness 沿用现有运行版本。
+- 根因：模型授权人员查询只匹配用户名和内部数字编号，遗漏用户业务 ID `external_id`。查询复用毕昇主体搜索规则：用户名包含匹配、业务 ID 大小写敏感前缀匹配，保留内部数字编号精确匹配；关键字统一规范化。租户、账号状态、部门与游标条件继续在外层查询生效，列表沿用内部编号稳定排序。
+- 授权弹窗提示更新为“搜索用户名或 ID”，同步中文、英文和日文。后台与前端接口结构沿用现有合同。
+- 自动验证：原基线查询在新增回归中复现 4 项业务 ID 失败；修复后身份搜索、部门授权、模型授权与管理用户搜索共 31 项通过。授权前端 3 套件共 20 项通过，覆盖业务 ID 请求与人员结果呈现；平台 530 个及客户端 1457 个 strict 文件类型检查、变更文件 ESLint、Ruff、架构守卫、i18n 和 diff 检查通过。
+- 平台全量 ESLint 为 95 errors / 1 warning，客户端为 22 errors / 1 warning，均与相同基线逐项比较完全一致；问题位于本次保持原样的文件。真实企业部署、MySQL/DM8 执行、真实账号添加授权与浏览器端到端验收待执行。
+
 ## 2026-10-20 — Chat / Work 首页布局对齐
 
 - Work 参照为正在运行的 bisheng-work-chat-work@1f3bbb041、Harness 与 conversation UI 0.2.0-rc.2；远端 V1.2.0 当前 a77dd7612。此次改动集中在 Chat 网页首页。

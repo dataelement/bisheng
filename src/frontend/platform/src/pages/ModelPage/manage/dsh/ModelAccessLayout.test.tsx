@@ -95,6 +95,21 @@ beforeEach(() => {
     vi.mocked(getDshOperation).mockRejectedValue(new Error('Pending'))
 })
 describe('model access layout', () => {
+    it('searches all departments by business ID and displays the matching user', async () => {
+        render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
+        await screen.findByText('Engineering')
+        fireEvent.change(screen.getByRole('textbox', { name: 'dsh.searchUserIdentity' }), {
+            target: { value: ' EMP_001% ' },
+        })
+        await waitFor(() =>
+            expect(getDshModelUserPermissions).toHaveBeenLastCalledWith(
+                7,
+                expect.objectContaining({ keyword: 'EMP_001%', department_id: undefined, include_seats: true }),
+                expect.any(AbortSignal),
+            ),
+        )
+        expect(await screen.findByText('User')).toBeTruthy()
+    })
     it('expands roots with nested connectors, keeps descendants collapsed and permits root collapse', async () => {
         render(<ModelAccessDialog model={model} onClose={vi.fn()} />)
         await screen.findByText('Engineering')
@@ -113,7 +128,7 @@ describe('model access layout', () => {
         )
         fireEvent.click(root)
         expect(screen.queryByText('Engineering')).toBeNull()
-        fireEvent.change(screen.getByRole('textbox', { name: 'dsh.searchUsername' }), {
+        fireEvent.change(screen.getByRole('textbox', { name: 'dsh.searchUserIdentity' }), {
             target: { value: 'Platform' },
         })
         expect(screen.getByText('Organization')).toBeTruthy()
