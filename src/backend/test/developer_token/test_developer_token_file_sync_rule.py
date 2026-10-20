@@ -58,6 +58,46 @@ def test_rule_schema_accepts_all_mode_combinations_and_normalizes_codes(payload)
     assert rule.dynamic_source is None
 
 
+def test_library_kind_is_saved_only_for_responsible_person_dynamic_target() -> None:
+    clinic_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "dynamic",
+                "dynamic_source": "responsible_person_id",
+                "library_kind": "clinic",
+            },
+        }
+    )
+    legacy_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "dynamic",
+                "dynamic_source": "responsible_person_id",
+            },
+        }
+    )
+    department_source_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "SA"},
+            "target_space": {
+                "mode": "dynamic",
+                "dynamic_source": "department_id",
+                "library_kind": "clinic",
+            },
+        }
+    )
+
+    assert DeveloperTokenService._normalize_file_sync_rule(clinic_rule).target_space.library_kind == "clinic"
+    assert DeveloperTokenService._normalize_file_sync_rule(legacy_rule).target_space.library_kind is None
+    with pytest.raises(DeveloperTokenInvalidFileSyncRuleError, match="target library kind"):
+        DeveloperTokenService._normalize_file_sync_rule(department_source_rule)
+
+
 def test_legacy_top_level_dynamic_source_migrates_to_per_dimension() -> None:
     rule = DeveloperTokenFileSyncRule.model_validate(
         {
@@ -203,7 +243,12 @@ def test_dynamic_target_rejects_a_folder_id_with_19813() -> None:
         {
             "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
             "business_domain": {"mode": "fixed", "code": "SA"},
-            "target_space": {"mode": "dynamic", "knowledge_id": None, "folder_id": 4096, "dynamic_source": "department_id"},
+            "target_space": {
+                "mode": "dynamic",
+                "knowledge_id": None,
+                "folder_id": 4096,
+                "dynamic_source": "department_id",
+            },
         }
     )
 
@@ -636,5 +681,6 @@ def test_audit_snapshot_contains_only_rule_summary() -> None:
         "business_domain_dynamic_source": None,
         "target_space_mode": "fixed",
         "target_space_dynamic_source": None,
+        "target_library_kind": None,
     }
     assert "file_sync_rule" not in snapshot

@@ -384,9 +384,7 @@ class DeveloperTokenService:
                     code=code,
                     name=str(getattr(item, "name", "") or "").strip(),
                     space_ids=[
-                        int(space_id)
-                        for space_id in (getattr(item, "space_ids", None) or [])
-                        if int(space_id) > 0
+                        int(space_id) for space_id in (getattr(item, "space_ids", None) or []) if int(space_id) > 0
                     ],
                 )
             )
@@ -540,10 +538,21 @@ class DeveloperTokenService:
             raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed target space cannot specify dynamic source")
         if not space_fixed and normalized.target_space.dynamic_source is None:
             raise DeveloperTokenInvalidFileSyncRuleError(msg="dynamic target space requires dynamic source")
+        cls._validate_target_library_kind(normalized.target_space, space_fixed=space_fixed)
         cls._validate_target_folder_rule(normalized.target_space, space_fixed=space_fixed)
         if normalized.dynamic_source is not None:
             raise DeveloperTokenInvalidFileSyncRuleError(msg="legacy dynamic source must not be persisted")
         return normalized
+
+    @staticmethod
+    def _validate_target_library_kind(target_space, *, space_fixed: bool) -> None:
+        library_kind = target_space.library_kind
+        if library_kind is None:
+            return
+        if space_fixed or target_space.dynamic_source != "responsible_person_id":
+            raise DeveloperTokenInvalidFileSyncRuleError(
+                msg="target library kind is only valid for responsible person dynamic target",
+            )
 
     @staticmethod
     def _validate_target_folder_rule(target_space, *, space_fixed: bool) -> None:
@@ -565,7 +574,9 @@ class DeveloperTokenService:
 
         if folder_mode == "fixed":
             if parent_folder_path is not None or folder_dynamic_source is not None:
-                raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed folder mode cannot specify dynamic folder fields")
+                raise DeveloperTokenInvalidFileSyncRuleError(
+                    msg="fixed folder mode cannot specify dynamic folder fields"
+                )
             if folder_path is None and folder_id is None:
                 raise DeveloperTokenInvalidFileSyncRuleError(msg="fixed folder mode requires folder path")
             if not space_fixed and folder_id is not None:
@@ -1252,6 +1263,7 @@ class DeveloperTokenService:
             "business_domain_dynamic_source": normalized.business_domain.dynamic_source,
             "target_space_mode": normalized.target_space.mode,
             "target_space_dynamic_source": normalized.target_space.dynamic_source,
+            "target_library_kind": normalized.target_space.library_kind,
         }
 
     @classmethod

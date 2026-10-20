@@ -307,6 +307,11 @@
           "departmentId": "Use department_id",
           "responsiblePersonId": "Use the primary department of responsible_person_id"
         },
+        "libraryKind": "Receiving library",
+        "libraries": {
+          "clinic": "Office library",
+          "department": "Department library"
+        },
         "errorFields": {
           "category": "parent category",
           "subcategory": "subcategory",
@@ -326,6 +331,8 @@
           "targetFolder": "Folder",
           "dynamicDepartment": "Dynamic(department_id)",
           "dynamicResponsiblePerson": "Dynamic(responsible person's primary department)",
+          "libraryClinic": "Office library",
+          "libraryDepartment": "Department library",
           "folderNone": "Root",
           "folderDynamicDepartmentName": "Dynamic(sync department name)",
           "folderDynamicCallerMainDepartmentName": "Dynamic(bound user primary department name)"

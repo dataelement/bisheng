@@ -11,6 +11,7 @@ import type {
   DeveloperTokenFileSyncDynamicSource,
   DeveloperTokenFileSyncFolderDynamicSource,
   DeveloperTokenFileSyncFolderMode,
+  DeveloperTokenFileSyncLibraryKind,
   DeveloperTokenFileSyncMode,
   DeveloperTokenFileSyncOptions,
   DeveloperTokenFileSyncRule as FileSyncRule,
@@ -297,7 +298,23 @@ export default function DeveloperTokenFileSyncRule({
               value={value.target_space.dynamic_source}
               onChange={(dynamic_source) => onChange({
                 ...value,
-                target_space: { ...value.target_space, dynamic_source },
+                target_space: {
+                  ...value.target_space,
+                  dynamic_source,
+                  library_kind: dynamic_source === "responsible_person_id"
+                    ? value.target_space.library_kind ?? "clinic"
+                    : null,
+                },
+              })}
+            />
+          )}
+          {value.target_space.mode === "dynamic"
+            && value.target_space.dynamic_source === "responsible_person_id" && (
+            <LibraryKindField
+              value={value.target_space.library_kind ?? "clinic"}
+              onChange={(library_kind) => onChange({
+                ...value,
+                target_space: { ...value.target_space, library_kind },
               })}
             />
           )}
@@ -398,6 +415,33 @@ function FolderDynamicSourceField({
           <SelectItem value="caller_main_department_name">
             {t("system.developerToken.fileSync.folderSources.callerMainDepartmentName")}
           </SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
+  )
+}
+
+function LibraryKindField({
+  value,
+  onChange,
+}: {
+  value: DeveloperTokenFileSyncLibraryKind
+  onChange: (value: DeveloperTokenFileSyncLibraryKind) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Field label={t("system.developerToken.fileSync.libraryKind")}>
+      <Select
+        name="file-sync-library-kind"
+        value={value}
+        onValueChange={(kind) => onChange(kind as DeveloperTokenFileSyncLibraryKind)}
+      >
+        <SelectTrigger aria-label={t("system.developerToken.fileSync.libraryKind")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="clinic">{t("system.developerToken.fileSync.libraries.clinic")}</SelectItem>
+          <SelectItem value="department">{t("system.developerToken.fileSync.libraries.department")}</SelectItem>
         </SelectContent>
       </Select>
     </Field>
