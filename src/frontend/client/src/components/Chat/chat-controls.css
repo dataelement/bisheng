@@ -116,7 +116,7 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
   --dsh-command-name-size:13px; --dsh-command-description-size:12px;
   max-width:calc(100vw - 24px);
   max-height:min(360px, var(--radix-dropdown-menu-content-available-height));
-  padding:4px; overflow-y:auto; overscroll-behavior:contain;
+  padding:4px; overflow:hidden;
 }
 .dsh-command-description {
   margin-left:0; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis;
@@ -143,3 +143,17 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 
 .dsh-command-skills .skill-menu-name { flex:0 0 auto; max-width:100%; }
 .dsh-command-skills .skill-menu-description { min-width:0; flex:1; }
+
+/* Fade scrollable menu content into the panel surface, in either theme. */
+.dsh-command-scroll {
+  max-height:calc(min(360px, var(--radix-dropdown-menu-content-available-height)) - 8px);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding-bottom:20px;
+}
+.dsh-command-scroll,
+.dsh-command-skills {
+  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+  mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+}
+.dsh-command-skills { padding-bottom:20px; }

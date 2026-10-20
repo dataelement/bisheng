@@ -58,6 +58,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
       <DropdownMenuContent side="top" align="start" sideOffset={anchor.sideOffset} alignOffset={anchor.alignOffset} collisionPadding={12}
         style={{ width: anchor.width }}
         className="dsh-chat-menu dsh-add-menu dsh-command-panel" onCloseAutoFocus={(event) => { if (selecting) event.preventDefault(); }}>
+        <div className="dsh-command-scroll">
         <ComposerMenuContext.Provider value={{ page, setPage }}>
         {!page && <>
         {showFileUpload && <DropdownMenuItem aria-label={localize('com_ui_upload_files')} disabled={fileUploadDisabled} onSelect={onFileUploadClick} className="gap-2">
@@ -90,6 +91,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         </>}
         {children}
         </ComposerMenuContext.Provider>
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="dsh-active-capabilities">
