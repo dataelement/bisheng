@@ -224,6 +224,7 @@ class TestPersonalSkillStore:
         payload = _zip_bytes({SKILL_MD: b"ok"})
         for filename, data, mime in (
             ("pdf.md", b"hello", "text/markdown"),
+            ("pdf.md", b"hello", "text/x-markdown"),
             ("pdf.md", b"hello", "text/plain; charset=utf-8"),
             ("pdf.md", b"hello", None),
             ("pdf.zip", payload, "application/zip"),

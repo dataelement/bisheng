@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { Button, SearchInput, StateView, Tabs, Tooltip } from '@bisheng/ui';
+import { Button, SearchInput, StateView, Tooltip } from '@bisheng/ui';
 import { translateApiErrorMessage } from '~/api/request';
 import { NotificationSeverity } from '~/common';
 import { ActionMenuCheckboxItem, ActionMenuContent } from '~/components/ActionMenu';
@@ -14,19 +14,13 @@ import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu'
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
-import { SkillGrid, SkillGridSkeleton } from './SkillGrid';
 import { SkillList, SkillListSkeleton, type SkillSort } from './SkillList';
-import { SkillSquareBanner } from './SkillSquareBanner';
 
 /**
- * 技能 module home, in the shared 我的 / 广场 frame:
- *   我的  — every skill this account can use, as one list in two groups: what the user
- *           uploaded (a switch per row; update / delete in the details) and what the
- *           enterprise provides (always on).
- *   广场  — 技能广场: the enterprise skills as a card showcase, read-only.
- * The view and the open detail live in the URL (`?view=square`, `?skill=<id>`).
+ * Skill center: one list in two groups. Skills the user uploaded have a switch
+ * per row, with update and delete in the details. Skills the enterprise provides
+ * stay on. The open detail lives in the URL (`?skill=<id>`).
  */
-type ModuleView = 'mine' | 'square';
 
 export function SkillCenterPage() {
   const localize = useLocalize();
@@ -47,30 +41,17 @@ export function SkillCenterPage() {
     .sort((left, right) => left.displayName.localeCompare(right.displayName)), [platform.data, personal.data, enabledOverride]);
   const requestedId = Number(params.get('skill'));
   const selected = Number.isInteger(requestedId) ? skills.find((skill) => skill.id === requestedId) : undefined;
-  // A deep link that only names a skill lands on the view that skill belongs to.
-  const viewParam = params.get('view');
-  const view: ModuleView = (viewParam ? viewParam === 'square' : selected?.source === 'platform') ? 'square' : 'mine';
   const keyword = search.trim().toLocaleLowerCase();
-  const viewSkills = view === 'square' ? skills.filter((skill) => skill.source === 'platform') : skills;
-  const filtered = viewSkills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
-  const viewQuery = view === 'square' ? platform : personal;
-  const loading = viewQuery.isLoading || viewQuery.isFetching;
-  const failed = viewQuery.isError;
+  const filtered = skills.filter((skill) => `${skill.displayName} ${skill.name} ${skill.description}`.toLocaleLowerCase().includes(keyword));
+  const loading = personal.isLoading || personal.isFetching;
+  const failed = personal.isError;
 
-  const updateParams = (nextView: ModuleView, skillId?: string) => {
+  const updateParams = (skillId?: string) => {
     const next = new URLSearchParams(params);
-    if (nextView === 'square') next.set('view', 'square');
-    // A skill opened from 我的 pins the view: an enterprise skill would otherwise pull the
-    // page over to the square, the view its bare deep link belongs to.
-    else if (skillId) next.set('view', 'mine');
-    else next.delete('view');
+    next.delete('view');
     if (skillId) next.set('skill', skillId);
     else next.delete('skill');
     setParams(next, { replace: true });
-  };
-  const handleViewChange = (nextView: ModuleView) => {
-    updateParams(nextView);
-    setSearch('');
   };
   const handleStartUpload = () => { setTarget(undefined); setUploadOpen(true); };
   const handleRetry = () => { void personal.refetch(); };
@@ -102,7 +83,8 @@ export function SkillCenterPage() {
     });
   };
   const handleSaved = () => {
-    handleViewChange('mine');
+    setSearch('');
+    updateParams();
     showToast({ message: localize('com_skill_center_saved'), severity: NotificationSeverity.SUCCESS });
   };
   useEffect(() => {
@@ -112,10 +94,10 @@ export function SkillCenterPage() {
       return;
     }
     setNotice(localize('com_skill_center_unavailable'));
-    updateParams(view);
+    updateParams();
     // updateParams is stable enough for this URL cleanup; including it retriggers the clear.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, selected, personal.isLoading, personal.isFetching, view]);
+  }, [params, selected, personal.isLoading, personal.isFetching]);
 
   const searchInput = (
     <SearchInput
@@ -128,19 +110,7 @@ export function SkillCenterPage() {
     />
   );
 
-  const viewTabs = (
-    <Tabs
-      className="w-full shrink-0"
-      activeKey={view}
-      onChange={(key) => handleViewChange(key as ModuleView)}
-      items={[
-        { key: 'mine', label: localize('com_skill_center_my_skills'), badge: personalCount },
-        { key: 'square', label: localize('com_skill_center_square_title'), badge: enterpriseCount },
-      ]}
-    />
-  );
-
-  // 我的 view's tools, in the module homes' shared order: search, sort, then create.
+  // Tools, in the module homes' shared order: search, sort, then create.
   const mineTools = (
     <>
       {searchInput}
@@ -167,47 +137,41 @@ export function SkillCenterPage() {
     </>
   );
 
-  const emptyKind = keyword ? 'search' : failed ? 'failed' : view;
+  const emptyKind = keyword ? 'search' : failed ? 'failed' : 'mine';
   const content = (
     <>
       {notice && <p role="alert" className="mb-4 text-body-sm text-text-2">{notice}</p>}
       {failed && (
         <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border-base p-3 text-body-sm text-text-2">
-          <p>{localize(view === 'square' ? 'com_skill_center_error_platform' : 'com_skill_center_load_failed')}</p>
+          <p>{localize('com_skill_center_load_failed')}</p>
           <Button color="default" variant="outlined" size="small" loading={loading} onClick={handleRetry}>{localize('com_skill_center_retry')}</Button>
         </div>
       )}
-      {loading && viewSkills.length === 0 ? (view === 'mine' ? <SkillListSkeleton /> : <SkillGridSkeleton />) : filtered.length ? (
-        view === 'mine' ? (
-          <SkillList
-            skills={filtered}
-            sort={sort}
-            createdCount={personalCount}
-            providedCount={enterpriseCount}
-            pendingId={mutation.isLoading ? mutation.variables?.target?.id : undefined}
-            onSelect={(skill) => updateParams('mine', String(skill.id))}
-            onToggle={handleToggle}
-            createdEmptyHint={keyword ? undefined : (
-              <p className="px-2 py-3 text-body-sm text-text-3">{localize('com_skill_center_empty_hint')}</p>
-            )}
-          />
-        ) : (
-          <SkillGrid skills={filtered} onSelect={(skill) => updateParams('square', String(skill.id))} />
-        )
+      {loading && skills.length === 0 ? <SkillListSkeleton /> : filtered.length ? (
+        <SkillList
+          skills={filtered}
+          sort={sort}
+          createdCount={personalCount}
+          providedCount={enterpriseCount}
+          pendingId={mutation.isLoading ? mutation.variables?.target?.id : undefined}
+          onSelect={(skill) => updateParams(String(skill.id))}
+          onToggle={handleToggle}
+          createdEmptyHint={keyword ? undefined : (
+            <p className="px-2 py-3 text-body-sm text-text-3">{localize('com_skill_center_empty_hint')}</p>
+          )}
+        />
       ) : (
         <div className="flex flex-1 items-center justify-center py-10">
           <StateView
             title={localize({
-              search: 'com_skill_center_no_results', failed: 'com_skill_center_load_failed',
-              square: 'com_skill_center_square_empty', mine: 'com_skill_center_empty',
+              search: 'com_skill_center_no_results', failed: 'com_skill_center_load_failed', mine: 'com_skill_center_empty',
             }[emptyKind])}
             description={localize({
-              search: 'com_skill_center_search_hint', failed: 'com_skill_center_retry_hint',
-              square: 'com_skill_center_square_empty_hint', mine: 'com_skill_center_empty_hint',
+              search: 'com_skill_center_search_hint', failed: 'com_skill_center_retry_hint', mine: 'com_skill_center_empty_hint',
             }[emptyKind])}
             action={emptyKind === 'search'
               ? <Button color="default" variant="outlined" onClick={() => setSearch('')}>{localize('com_skill_center_clear')}</Button>
-              : emptyKind === 'mine' && <Button onClick={handleStartUpload} disabled={personal.isError}>{localize('com_skill_center_upload')}</Button>}
+              : <Button onClick={handleStartUpload} disabled={personal.isError}>{localize('com_skill_center_upload')}</Button>}
           />
         </div>
       )}
@@ -216,38 +180,26 @@ export function SkillCenterPage() {
 
   return (
     <div className="relative h-full min-h-0 w-full overflow-hidden bg-white">
-      {view === 'mine' ? (
-        <div className={cn(MODULE_HOME_FRAME, 'max-md:px-4 max-md:pt-0')}>
-          {viewTabs}
-          {/* Desktop: the shared header row — title left, tools right (create last). */}
-          <div className="mt-4 flex w-full justify-center max-md:hidden">
-            <ModuleHomeHeader title={localize('com_skill_center_title')}>{mineTools}</ModuleHomeHeader>
-          </div>
-          <div className={cn(MODULE_HOME_COLUMN, 'mt-4 flex shrink-0 flex-wrap items-center gap-3')}>
-            <p className="min-w-0 flex-1 truncate text-body-sm text-text-3 max-[575px]:basis-full">{localize('com_skill_center_subtitle')}</p>
-            {/* Mobile has no header row (the top bar carries the title), so the tools stay in flow. */}
-            <div className="contents md:hidden">{mineTools}</div>
-          </div>
-          {/* The scroll area spans the full width so its scrollbar sits at the page edge. */}
-          <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
-            <div className={cn(MODULE_HOME_COLUMN, 'flex flex-1 flex-col pb-3 pt-4')}>{content}</div>
-          </div>
+      <div className={cn(MODULE_HOME_FRAME, 'max-md:px-4 max-md:pt-0')}>
+        {/* Desktop: the shared header row — title left, tools right (create last). */}
+        <div className="mt-4 flex w-full justify-center max-md:hidden">
+          <ModuleHomeHeader title={localize('com_skill_center_title')}>{mineTools}</ModuleHomeHeader>
         </div>
-      ) : (
-        <div className="flex h-full min-h-0 w-full flex-col items-center overflow-hidden">
-          <div className="w-full shrink-0 px-4 md:px-3 md:pt-5">{viewTabs}</div>
-          <SkillSquareBanner />
-          <div className="flex w-full max-w-[1000px] shrink-0 items-center justify-end px-5 py-5">{searchInput}</div>
-          <main className="scrollbar-os flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
-            <div className="flex w-full max-w-[1000px] flex-1 flex-col px-5 pb-5">{content}</div>
-          </main>
+        <div className={cn(MODULE_HOME_COLUMN, 'mt-4 flex shrink-0 flex-wrap items-center gap-3')}>
+          <p className="min-w-0 flex-1 truncate text-body-sm text-text-3 max-[575px]:basis-full">{localize('com_skill_center_subtitle')}</p>
+          {/* Mobile has no header row (the top bar carries the title), so the tools stay in flow. */}
+          <div className="contents md:hidden">{mineTools}</div>
         </div>
-      )}
+        {/* The scroll area spans the full width so its scrollbar sits at the page edge. */}
+        <div className="scroll-on-scroll flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto">
+          <div className={cn(MODULE_HOME_COLUMN, 'flex flex-1 flex-col pb-3 pt-4')}>{content}</div>
+        </div>
+      </div>
       {selected && !uploadOpen && (
         <SkillDetails
           skill={selected}
           toggling={mutation.isLoading && mutation.variables?.kind === 'toggle'}
-          onClose={() => updateParams(view)}
+          onClose={() => updateParams()}
           onToggle={handleToggle}
           onUpdate={(skill) => { setTarget(skill); setUploadOpen(true); }}
         />

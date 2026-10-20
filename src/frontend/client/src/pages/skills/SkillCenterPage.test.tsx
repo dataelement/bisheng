@@ -27,7 +27,6 @@ let mockCenter = {
 
 const copy: Record<string, string> = {
   com_skill_center_my_skills: '我的技能',
-  com_skill_center_square_title: '技能广场',
   com_skill_center_group_created: '我创建的',
   com_skill_center_group_platform: '企业提供',
   com_skill_center_delete_failed: '删除失败，请重试',
@@ -103,8 +102,8 @@ function openPage(path = '/skills') {
 
 it('splits my skills into the two groups and counts each source', () => {
   openPage();
-  expect(screen.getByRole('tab', { name: /我的技能/ })).toBeVisible();
-  expect(screen.getByRole('tab', { name: /技能广场/ })).toBeVisible();
+  expect(screen.queryByRole('tab', { name: /技能广场/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '技能广场' })).not.toBeInTheDocument();
   expect(screen.getByRole('heading', { name: /我创建的/ })).toHaveTextContent('1');
   expect(screen.getByRole('heading', { name: /企业提供/ })).toHaveTextContent('1');
   expect(screen.getByRole('button', { name: /我的合同/ })).toBeVisible();
@@ -162,12 +161,12 @@ it('shows the enterprise skill body', async () => {
   expect(within(dialog).queryByRole('switch')).not.toBeInTheDocument();
 });
 
-it('opens the skill square from its link', () => {
+it('keeps my skills when an old square link is opened', () => {
   openPage('/skills?view=square');
-  expect(screen.getByRole('tab', { name: /技能广场/ })).toBeVisible();
-  expect(screen.getByRole('heading', { name: '技能广场' })).toBeVisible();
+  expect(screen.queryByRole('tab', { name: /技能广场/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: '技能广场' })).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: /我创建的/ })).toBeVisible();
   expect(screen.getByRole('button', { name: /企业合同/ })).toBeVisible();
-  expect(screen.queryByRole('heading', { name: /我创建的/ })).not.toBeInTheDocument();
 });
 
 it('keeps the card and explains a failed delete', async () => {

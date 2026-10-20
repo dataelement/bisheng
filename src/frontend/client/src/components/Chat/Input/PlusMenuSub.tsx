@@ -35,7 +35,7 @@ export function PlusMenuSub({ icon, label, panelClassName, open, onOpenChange, c
         align="center"
         collisionPadding={COLLISION_PADDING}
         className={cn(
-          'dsh-chat-menu ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-0 bg-page px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'dsh-chat-menu ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-0 bg-bg-page px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           panelClassName,
         )}
       >

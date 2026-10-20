@@ -1,11 +1,9 @@
-/** 技能 module home: 我的技能 by default, `?view=square` is the 技能广场, `?skill=<id>` opens a detail. */
+/** Skill center home. `?skill=<id>` opens one skill's detail. */
 export const skillCenterPath = '/skills';
-export const skillSquarePath = `${skillCenterPath}?view=square`;
 
-/** Deep link to one skill's detail dialog. Enterprise skills live in the square view. */
-export function skillDetailPath(skill: { id: number | string; source: 'personal' | 'platform' }): string {
+/** Deep link to one skill's detail dialog. */
+export function skillDetailPath(skill: { id: number | string }): string {
   const params = new URLSearchParams();
-  if (skill.source === 'platform') params.set('view', 'square');
   params.set('skill', String(skill.id));
   return `${skillCenterPath}?${params.toString()}`;
 }

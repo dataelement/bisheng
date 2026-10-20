@@ -2385,6 +2385,17 @@ class LinsightWorkbenchImpl:
                     session_version.id,
                 )
 
+        # Image View is a visual-model config row, not a LangChain tool.
+        # Daily chat skips it and wires pixel viewing separately. Passing the
+        # row to load_tools raises "Got unknown tool image_view" and aborts
+        # the task before skills or any other tool run.
+        from bisheng.common.image_view.loop import IMAGE_VIEW_TOOL_KEY
+
+        image_view_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key=IMAGE_VIEW_TOOL_KEY)
+        if image_view_tool and image_view_tool.id in tool_ids:
+            tool_ids.remove(image_view_tool.id)
+            logger.info("skip image_view tool id={}: config row is not a callable tool", image_view_tool.id)
+
         # Unified-resource direction (2026-06-16): task mode reuses the daily
         # tool selection directly. Every selected tool id (a real GptsTools id
         # the user already has access to) binds. The code interpreter is already

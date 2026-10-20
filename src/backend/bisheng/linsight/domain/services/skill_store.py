@@ -95,7 +95,17 @@ PERSONAL_UNPACKED_MAX_BYTES = 200 * _MB
 PERSONAL_SKILL_MD_MAX_BYTES = 1 * _MB
 PERSONAL_ENTRY_MAX_COUNT = 1000
 
-_MD_CONTENT_TYPES = frozenset({"text/markdown", "text/plain", "application/octet-stream", ""})
+# macOS reports Markdown as text/x-markdown (UTI net.daringfireball.markdown).
+# Browsers put that on the upload, so a real .md file would otherwise be rejected.
+_MD_CONTENT_TYPES = frozenset(
+    {
+        "text/markdown",
+        "text/x-markdown",
+        "text/plain",
+        "application/octet-stream",
+        "",
+    }
+)
 _ZIP_CONTENT_TYPES = frozenset({"application/zip", "application/x-zip-compressed", "application/octet-stream", ""})
 
 
