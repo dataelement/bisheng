@@ -12,8 +12,31 @@
 .dsh-chat-column { display:flex; flex:1; min-width:0; min-height:0; flex-direction:column; container-type:inline-size; margin-inline-end:7px; }
 .dsh-chat-content { width:100%; margin-inline:auto; }
 .dsh-chat-composer-seat { width:100%; margin-inline:auto; flex-shrink:0; }
-.dsh-chat-landing { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow-y: auto; padding: 32px 24px; }
-.dsh-chat-hero { width: 100%; max-width: 744px; margin: auto; padding-block: 48px; display: flex; flex-direction: column; gap: 28px; }
+/* Work's blank header occupies 40px above its centered hero. */
+.dsh-chat-landing {
+  --dsh-hero-controls-height:32px;
+  --dsh-hero-stack-gap:8px;
+  display:flex; min-height:0; flex:1; flex-direction:column;
+  overflow-y:auto; padding:40px 0 0;
+}
+.dsh-chat-hero {
+  width:100%; max-width:calc(clamp(680px,64cqw,920px) + 64px);
+  margin:auto; padding:0 16px 32px; display:flex; flex-direction:column;
+  /* Work's shell gap, stack gaps and control row preserve the shared title/card anchors. */
+  gap:calc(12px + var(--dsh-hero-stack-gap) * 2 + var(--dsh-hero-controls-height));
+  --dsh-add-background:#f5f6f7;
+  --dsh-hero-placeholder:#adb2b8;
+  --dsh-hero-stroke:rgb(0 0 0 / 10%);
+}
+.dsh-chat-welcome-content { display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.dsh-chat-headline { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px 10px; min-height:34px; }
+.dsh-chat-hero-mark { display:block; width:34px; height:34px; object-fit:contain; flex:none; }
+.dsh-chat-headline-title { max-width:100%; margin:0; text-align:center; color:rgb(var(--text-1)); font-size:26px; font-weight:500; line-height:32px; }
+body[data-dsh-chat-theme=dark] .dsh-chat-hero {
+  --dsh-add-background:#353638;
+  --dsh-hero-placeholder:#81858c;
+  --dsh-hero-stroke:rgb(255 255 255 / 10%);
+}
 .dsh-chat-preview-dock { position: relative; flex-shrink: 0; min-height: 0; padding: 8px 8px 8px 4px; }
 .dsh-chat-resize { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; z-index: 2; cursor: col-resize; touch-action: none; }
 .dsh-chat-resize:hover, .dsh-chat-resize:focus-visible { background: rgb(var(--brand-500) / 12%); outline: none; }
@@ -61,13 +84,21 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 
 .dsh-chat-content { max-width:calc(clamp(680px,64cqw,920px) + 32px); padding-inline:16px; }
 .dsh-chat-composer-seat { max-width:calc(clamp(680px,64cqw,920px) + 64px); padding:8px 16px 20px; }
-.dsh-chat-hero { max-width:calc(clamp(680px,64cqw,920px) + 32px); gap:28px; padding-bottom:52px; }
 .dsh-chat-surface .dsh-chat-composer { border:0; border-radius:28px; padding:8px 0 0; background:rgb(var(--dsh-composer-bg)); box-shadow:0 0 0 .5px rgb(var(--border-base)),0 2px 8px rgb(0 0 0 / 4%); gap:12px; }
 .dsh-chat-surface .dsh-chat-composer textarea { box-sizing:border-box; border:0; min-height:36px; margin:0; padding:4px 8px 0 14px; font-family:inherit; font-size:14px; line-height:24px; color:rgb(var(--text-1)); }
 .dsh-chat-surface .dsh-chat-composer textarea::placeholder { color:rgb(var(--text-3)); }
 .dsh-chat-surface .dsh-chat-composer:focus-within { outline:1px solid rgb(var(--border-deep)); }
 .dsh-chat-surface .dsh-composer-toolbar { height:auto; min-height:42px; flex-wrap:wrap; gap:12px; padding:2px 8px 6px; }
-.dsh-chat-hero .dsh-chat-composer { min-height:114px; }
+.dsh-chat-hero .dsh-chat-input-shell { padding-bottom:0; }
+.dsh-chat-hero .dsh-chat-composer {
+  min-height:114px;
+  box-shadow:0 0 0 .5px var(--dsh-hero-stroke),0 4px 16px rgb(0 0 0 / 3%),0 0 24px rgb(0 0 0 / 3%);
+}
+.dsh-chat-hero .dsh-chat-composer textarea { font-size:14px; }
+.dsh-chat-hero .dsh-chat-composer textarea::placeholder { color:var(--dsh-hero-placeholder); }
+.dsh-chat-hero .dsh-composer-submit { background:#4176e6; }
+.dsh-chat-hero .dsh-composer-submit:disabled { background:#4176e6; opacity:.4; }
+.dsh-chat-hero .dsh-composer-submit:hover:enabled { background:#7aaaff; }
 .dsh-chat-hero .dsh-chat-composer textarea { min-height:52px; }
 .dsh-chat-surface .dsh-composer-toolbar .input-bottom-left { flex:1 1 auto; gap:12px; overflow:visible; }
 /* Harness conversation header: 10px inset, 30px title, 10px gap, 25px section. */
@@ -116,10 +147,9 @@ body[data-dsh-chat-theme=dark] .dsh-web-chat .dsh-history-new-chat { background:
 .dsh-chat-surface .dsh-message-actions button svg { width:17px; height:17px; color:inherit; }
 .dsh-chat-surface .dsh-user-message .dsh-message-actions button svg { width:15px; height:15px; }
 .dsh-chat-surface .dsh-message-actions button:hover { color:rgb(var(--text-1)); background:rgb(var(--fill-2)); }
-.dsh-chat-hero h2 { color:rgb(var(--text-1)); font-size:26px; font-weight:500; line-height:32px; }
 @media (max-width:767px) {
   .dsh-chat-column { margin-inline-end:0; }
-  .dsh-chat-hero { padding-block:24px; }
+  .dsh-chat-column:has(.dsh-chat-landing) { margin-inline-end:7px; }
   .dsh-chat-content { max-width:100%; padding-inline:16px; }
   .dsh-chat-composer-seat { max-width:100%; padding:8px 12px max(12px,env(safe-area-inset-bottom)); }
   .dsh-chat-surface .dsh-chat-composer textarea { font-size:16px; }

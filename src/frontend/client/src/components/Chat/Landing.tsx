@@ -30,17 +30,17 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
   return (
     <div className={`relative ${!isNew ? 'h-full' : ''}`}>
       <div className="absolute left-0 right-0">{Header != null ? Header : null}</div>
-      <div className="flex h-full flex-col items-center justify-center max-md:justify-start max-md:pt-2 max-md:pb-4 px-4">
-        {/* Hero: row on ≥768 (matches the desktop shell), stacked only on the H5 shell (≤767) */}
-        <div className="flex flex-col items-center gap-3 md:flex-row md:gap-4">
+      <div className="dsh-chat-welcome-content">
+        {/* The headline shares the native Work hero dimensions at every width. */}
+        <div className="dsh-chat-headline">
           {bsConfig?.assistantIcon?.image && (
             <img
-              className="overflow-hidden w-[52px] h-[52px] object-contain shrink-0"
+              className="dsh-chat-hero-mark"
               src={__APP_ENV__.BASE_URL + bsConfig.assistantIcon.image}
               alt=""
             />
           )}
-          <h2 className="max-w-full md:max-w-[75vw] text-center text-xl md:text-2xl font-semibold md:font-medium leading-snug md:leading-8 text-text-1 dark:text-white px-0">
+          <h2 className="dsh-chat-headline-title">
             {bsConfig?.welcomeMessage || localize('dshChat.welcome')}
           </h2>
         </div>
