@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { DropdownMenuItem, DropdownMenuLabel } from '~/components/ui';
+import { DropdownMenuItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { useSkillCenter } from './useSkillCenter';
 import { skillDetailPath } from './types';
@@ -29,7 +29,6 @@ export function SkillMenuPanel({ onBack }: SkillMenuPanelProps) {
       {onBack && <DropdownMenuItem onSelect={(event) => { event.preventDefault(); onBack(); }} className="shrink-0 cursor-pointer gap-2 rounded-lg px-2 py-2 text-body-sm text-text-1">
         <Outlined.ArrowLeft className="size-4" />{localize('com_skill_center_menu')}
       </DropdownMenuItem>}
-      <DropdownMenuLabel className="shrink-0 px-2 pb-1 pt-2 text-caption font-normal text-text-3">{localize('com_skill_center_menu_available')}</DropdownMenuLabel>
       <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1">
         {loading && skills.length === 0 ? <p role="status" className="px-2 py-5 text-body-sm text-text-3">{localize('com_skill_center_loading')}</p> : skills.length ? skills.map((skill) => (
           <SkillMenuRow
