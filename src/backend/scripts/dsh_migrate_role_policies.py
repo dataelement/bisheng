@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import sys
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,7 +23,7 @@ from bisheng.common.services.config_service import settings  # noqa: E402
 from bisheng.core.context import close_app_context, initialize_app_context  # noqa: E402
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id  # noqa: E402
 from bisheng.dsh.access_runtime import get_runtime, get_settings  # noqa: E402
-from bisheng.dsh.admin_runtime import get_admin_runtime  # noqa: E402
+from bisheng.dsh.admin_runtime import get_admin_runtime, read_model_user_permissions  # noqa: E402
 from bisheng.dsh.domain.services.role_migration import migrate_role_policies  # noqa: E402
 
 
@@ -38,6 +39,8 @@ async def main(args):
         register_f048_permission_runtime_context(initialize_f048_worker_runtime)
         runtime = await get_runtime(request, get_settings())
         service = (await get_admin_runtime(runtime)).admin
+        # Read retired role sources only for this operator-invoked migration.
+        service.model_user_permissions_view = partial(read_model_user_permissions, include_retired_roles=True)
         reports = []
         for model_id in args.model:
             reports.append(

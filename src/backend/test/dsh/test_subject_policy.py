@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import Column, DateTime, Integer, MetaData, Table, create_engine, delete, text
 from sqlmodel import Session, select
 
-from bisheng.common.errcode.dsh import DshOperationConflictError, DshSeatLimitReachedError
+from bisheng.common.errcode.dsh import DshOperationConflictError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.role import Role
@@ -127,25 +127,6 @@ def test_personal_override_precedes_department_and_role_quotas(subject_store):
         assert repository.effective(21).rows[0].monthly_token_limit == 100
 
 
-def test_department_grant_rejects_the_complete_change_when_seats_are_insufficient(subject_store):
-    with Session(subject_store) as session, session.begin():
-        session.add(UserDepartment(id=101, user_id=21, department_id=11))
-        repository = DshSubjectPolicyRepository(session)
-        with pytest.raises(DshSeatLimitReachedError):
-            repository.update(
-                subject_type="DEPARTMENT",
-                subject_id=10,
-                model_id=7,
-                actor_user_id=90,
-                expected_version=0,
-                monthly_token_limit=100,
-                enabled=True,
-                seat_limit=1,
-            )
-        assert repository.inventory(7)["departments"][1]["version"] == 0
-        assert session.exec(select(DshSubjectPolicyAudit)).all() == []
-
-
 def test_user_permission_page_explains_department_role_and_legacy_sources(subject_store):
     with Session(subject_store) as session, session.begin():
         repository = DshSubjectPolicyRepository(session)
@@ -183,7 +164,6 @@ def test_user_permission_page_explains_department_role_and_legacy_sources(subjec
             for source in admin["sources"]
         } == {
             ("DEPARTMENT", 100, True, False),
-            ("ROLE", 300, False, False),
             ("USER", 200, False, True),
         }
         assert page["items"][1]["authorized"] is False

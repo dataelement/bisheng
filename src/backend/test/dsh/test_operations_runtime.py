@@ -74,7 +74,6 @@ def test_real_celery_registration_and_existing_jwt_decoder(tmp_path):
         "celery_redis_url: redis://127.0.0.1:16362/15\n"
         "dsh:\n  enabled: true\n"
         "  platform_public_url: https://bisheng.example\n"
-        "  gateway_internal_url: https://gateway.example\n"
         "logger_conf:\n  log_level: ERROR\n"
     )
     script = """
@@ -84,12 +83,13 @@ from bisheng.worker.config import beat_schedule
 from bisheng.user.domain.services.auth import AuthJwt
 from bisheng.dsh.operations_runtime import _decode_admin_token
 required = {'dsh.project_usage', 'dsh.scan_usage',
-            'dsh.inspect_usage', 'dsh.scan_operations', 'dsh.resume_operation', 'dsh.scan_profiles',
+            'dsh.inspect_usage', 'dsh.scan_operations', 'dsh.resume_operation',
             'dsh.inspect_model_audit', 'dsh.scan_model_audit',
             'dsh.prepare_audit_tree', 'dsh.scan_audit_trees'}
 assert required <= set(bisheng_celery.tasks)
+assert "dsh.scan_profiles" not in bisheng_celery.tasks
 assert {beat_schedule[k]['task'] for k in beat_schedule if k.startswith('dsh-')} == {
-    'dsh.scan_usage', 'dsh.scan_operations', 'dsh.scan_profiles',
+    'dsh.scan_usage', 'dsh.scan_operations',
     'dsh.scan_model_audit', 'dsh.scan_audit_trees'}
 subject = {'user_id': 7, 'tenant_id': 1, 'token_version': 4}
 auth = AuthJwt()
@@ -112,3 +112,17 @@ print('DSH registration and existing JWT signature verification passed')
     )
     assert result.returncode == 0, result.stderr[-5000:]
     assert "DSH registration and existing JWT signature verification passed" in result.stdout
+
+
+async def test_worker_shutdown_has_no_retired_http_dependency():
+    from unittest.mock import AsyncMock, Mock
+
+    from bisheng.dsh.operations_runtime import OperationsRuntime
+
+    runtime = object.__new__(OperationsRuntime)
+    runtime.quota = SimpleNamespace(topology=SimpleNamespace(close=Mock()), redis=SimpleNamespace(aclose=AsyncMock()))
+    runtime.authentication = SimpleNamespace(reset=Mock())
+    await runtime.close()
+    runtime.quota.topology.close.assert_called_once_with()
+    runtime.quota.redis.aclose.assert_awaited_once_with()
+    runtime.authentication.reset.assert_called_once_with()

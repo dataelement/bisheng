@@ -33,4 +33,3 @@ if settings.dsh.enabled:
         "dsh-usage-inspection", {"task": "dsh.scan_usage", "schedule": 60.0, "kwargs": {"inspect_requests": True}}
     )
     beat_schedule.setdefault("dsh-operation-recovery", {"task": "dsh.scan_operations", "schedule": 5.0})
-    beat_schedule.setdefault("dsh-profile-repair", {"task": "dsh.scan_profiles", "schedule": 1800.0})

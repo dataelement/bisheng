@@ -9,7 +9,6 @@ import { QuotaInput } from './QuotaInput'
 import { formatWanQuota } from './quotaUnits'
 import { AccessMembersProvider, useAccessMembers, useDelayedMemberLoading } from './useAccessMembers'
 
-import { ReauthorizeSeat, SeatRestoreContext } from './ReauthorizeSeat'
 
 type UserDrafts = ReturnType<typeof useUserPolicyDrafts>
 interface Props {
@@ -43,7 +42,7 @@ function departmentQuota(item: DshDepartmentPolicy, items: DshDepartmentPolicy[]
 }
 
 function inheritedQuota(item: DshModelUserPermission, departments: DshDepartmentPolicy[], drafts: PolicyDrafts): number {
-    const quotas = item.sources.filter((source) => source.subject_type === 'ROLE').map((source) => source.monthly_token_limit)
+    const quotas: number[] = []
     for (const membership of item.departments) {
         const department = departments.find((entry) => entry.subject_id === membership.id)
         if (department) quotas.push(departmentQuota(department, departments, drafts))
@@ -77,7 +76,7 @@ function MemberRows({
                 const entry = users.entries[item.user_id]
                 const saved = entry?.saved ?? item
                 const draft = entry?.draft ?? userDraftOf(item)
-                const status = item.access_status ?? 'UNAVAILABLE'
+                const status = item.authorized ? 'AUTHORIZED' : 'UNAUTHORIZED'
                 const inherited = inheritedQuota(saved, departments, departmentDrafts)
                 const value = draft.enabled ? draft.limit : String(inherited)
                 const disabled = saving || Boolean(entry?.operationId)
@@ -105,17 +104,10 @@ function MemberRows({
                         <div className="flex flex-wrap items-center gap-2">
                             <span
                                 className={'inline-flex h-6 items-center whitespace-nowrap text-xs font-medium ' +
-                                    (status === 'AUTHORIZED' || status === 'PENDING_LOGIN'
-                                        ? 'text-green-600'
-                                        : status === 'REVOKED'
-                                          ? 'text-red-600'
-                                          : status === 'SEAT_LIMIT_REACHED'
-                                            ? 'text-amber-600'
-                                            : 'text-muted-foreground')}
+                                    (status === 'AUTHORIZED' ? 'text-green-600' : 'text-muted-foreground')}
                             >
                                 {t('dsh.access_' + status)}
                             </span>
-                            {status === 'REVOKED' && <ReauthorizeSeat userId={item.user_id} name={saved.user_name} disabled={saving} />}
                         </div>
                         <div className="flex h-9 items-center justify-end">
                             {draft.enabled && <Button variant="outline" size="sm" className="h-9 whitespace-nowrap px-3 text-xs" disabled={disabled} onClick={() => { users.change(saved, { enabled: false, limit: '0' }); setEditing(null) }}>{t('dsh.useDepartmentQuota')}</Button>}
@@ -198,12 +190,10 @@ function DepartmentPane({ props, selected }: { props: Props; selected: number })
 
 export function DepartmentAccessTree(props: Props) {
     const { t } = useTranslation()
-    const [seatRevision, setSeatRevision] = useState(0)
     const [selected, setSelected] = useState(props.items[0]?.subject_id ?? 0)
     const roots = useMemo(() => treeOf(props.items), [props.items])
     const choose = (id: number) => { setSelected(id); props.onQueryClear() }
-    return <SeatRestoreContext.Provider value={{ tenantId: props.tenantId, onRestored: () => setSeatRevision((value) => value + 1) }}>
-        <AccessMembersProvider modelId={props.modelId} refresh={props.refresh + seatRevision}>
+    return <AccessMembersProvider modelId={props.modelId} refresh={props.refresh}>
             <div className="flex min-h-full min-w-[880px] text-sm leading-5">
                 <nav aria-label={t('dsh.quotaDepartments')} className="w-60 shrink-0 border-r bg-muted/10 p-3 text-[13px]">
                     <p className="mb-3 px-2 text-xs font-medium text-muted-foreground">{t('dsh.quotaDepartments')}</p>
@@ -213,5 +203,4 @@ export function DepartmentAccessTree(props: Props) {
                 <DepartmentPane props={props} selected={selected} />
             </div>
         </AccessMembersProvider>
-    </SeatRestoreContext.Provider>
 }

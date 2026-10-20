@@ -197,6 +197,9 @@ def create_app():
         return JSONResponse(status_code=401, content={"detail": str(exc)})
 
     app.include_router(router)
+    from bisheng.dsh.api.router import compatibility_router
+
+    app.include_router(compatibility_router)
     app.include_router(router_rpc)
     app.include_router(router_public)
     from bisheng.department.api.endpoints.department_limit import (

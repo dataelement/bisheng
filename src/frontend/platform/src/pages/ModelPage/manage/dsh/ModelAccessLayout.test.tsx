@@ -107,7 +107,7 @@ describe('model access layout', () => {
         await waitFor(() =>
             expect(getDshModelUserPermissions).toHaveBeenCalledWith(
                 7,
-                expect.objectContaining({ department_id: 31, membership: 'DIRECT', include_seats: true }),
+                expect.objectContaining({ department_id: 31, membership: 'DIRECT' }),
                 expect.any(AbortSignal),
             ),
         )

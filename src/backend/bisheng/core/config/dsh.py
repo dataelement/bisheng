@@ -10,6 +10,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 class DshSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True, hide_input_in_errors=True)
 
+    access_ttl_seconds: int = Field(
+        default=300, ge=60, le=600, description="Lifetime in seconds of a native DSH access token."
+    )
+    session_ttl_seconds: int = Field(
+        default=2592000, ge=600, le=2592000, description="Absolute lifetime in seconds of a native desktop session."
+    )
+
     enabled: bool = Field(
         default=False,
         description="Expose the DSH management module; disabled by default. Business access is enabled separately in its management page.",
@@ -18,20 +25,23 @@ class DshSettings(BaseModel):
         default="dsh-desktop", description="Desktop OAuth client identifier fixed by the DSH contract."
     )
     contract_version: Literal["0.5.0"] = Field(
-        default="0.5.0", description="DSH wire contract version shared with the gateway and Desktop."
+        default="0.5.0", description="DSH wire contract version shared with Desktop."
     )
     platform_public_url: str | None = Field(
         default=None, description="Public HTTP(S) origin of Bisheng used by the Desktop authorization flow; no path."
     )
     gateway_internal_url: str | None = Field(
         default=None,
-        description="Internal HTTP(S) origin of the gateway used for authenticated service calls; no path.",
+        description="Deprecated compatibility field; native DSH never connects to this address.",
     )
     billing_timezone: str = Field(
         default="Asia/Shanghai", description="IANA timezone used to calculate monthly quota accounting boundaries."
     )
     introspection_timeout_seconds: float = Field(
-        default=2.0, gt=0, le=30, description="Maximum duration in seconds of a gateway token introspection request."
+        default=2.0,
+        gt=0,
+        le=30,
+        description="Deprecated compatibility field; native session validation uses local SQL.",
     )
     projection_target_seconds: int = Field(
         default=5, gt=0, description="Target latency in seconds for projecting usage events from Redis into SQL."
@@ -148,10 +158,7 @@ class DshSettings(BaseModel):
             raise ValueError("Quota capacity requires positive settlement headroom below its finite memory budget")
         if not self.enabled:
             return self
-        names = (
-            "platform_public_url",
-            "gateway_internal_url",
-        )
+        names = ("platform_public_url",)
         if any(not getattr(self, name) for name in names):
             raise ValueError("Enabled DSH requires endpoint addresses")
         if self.backlog_stop_seconds <= self.projection_target_seconds:
