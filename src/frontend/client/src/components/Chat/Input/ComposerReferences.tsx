@@ -66,17 +66,10 @@ export function ComposerReferences({
     return (
         <div className="dsh-composer-references" ref={railRef}>
             {references.map(({ key, label, remove }) => (
-                <span className="dsh-composer-reference" key={key}>
+                <span className="dsh-composer-reference" key={key} data-composer-resource>
                     <button type="button" className="dsh-reference-label" title={label}
-                        disabled={disabled} onClick={onFocusInput}
-                        onKeyDown={(event) => {
-                            if (event.key === 'Backspace' || event.key === 'Delete') {
-                                event.preventDefault();
-                                remove();
-                                onFocusInput();
-                            }
-                        }}>{label}</button>
-                    <button type="button" className="dsh-reference-remove" aria-label={`Remove ${label}`}
+                        data-composer-focus disabled={disabled} onClick={(event) => event.currentTarget.focus()}>{label}</button>
+                    <button type="button" className="dsh-reference-remove" data-composer-remove aria-label={`Remove ${label}`}
                         disabled={disabled} onClick={() => { remove(); onFocusInput(); }}>
                         <Outlined.Close size={12} />
                     </button>

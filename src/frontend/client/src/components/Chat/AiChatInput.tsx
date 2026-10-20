@@ -21,6 +21,7 @@ import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import { ComposerReferences } from "./Input/ComposerReferences";
+import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { Outlined } from "bisheng-icons";
@@ -498,6 +499,7 @@ const AiChatInput = memo(
                 </div>}
 
                 <div
+                    onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, !!disabled || !!isStreaming, isComposingRef.current)}
                     className={cn(
                         // The composer owns its theme surface through dsh-composer-bg.
                         // z-[1] keeps it above the attached resource strip.
@@ -513,11 +515,13 @@ const AiChatInput = memo(
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            onRemoveFile={(file) => {
+                            onRemoveFile={disabled || isStreaming ? undefined : (file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
-                                inputFilesRef.current?.removeByClientId?.(file.clientId);
-                                setChatFiles((prev) => (prev || []).filter((i) => String(i.clientId) !== String(file.clientId)));
+                                const id = String(file.clientId ?? file.id);
+                                inputFilesRef.current?.removeByClientId?.(id);
+                                setUploadingFiles((prev) => prev.filter((item) => String(item.clientId ?? item.id) !== id));
+                                setChatFiles((prev) => (prev || []).filter((item) => String(item.clientId ?? item.id) !== id));
                             }}
                         />
                     )}

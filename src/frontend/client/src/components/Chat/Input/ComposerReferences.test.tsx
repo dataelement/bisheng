@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ComposerReferences } from './ComposerReferences';
+import { handleComposerResourceKeyDown } from './composerResourceKeyboard';
 
 // jsdom has no layout observer; behavior tests use deterministic geometry.
 beforeAll(() => {
@@ -18,9 +19,10 @@ test('references stay in the composer and can be removed independently with keyb
     const removeSpace = jest.fn();
     const focus = jest.fn();
     const props = { skills: [skill], spaces: [space], onRemoveSkill: removeSkill, onRemoveSpace: removeSpace, onFocusInput: focus };
-    const view = render(<><textarea defaultValue="Draft remains" /><ComposerReferences {...props} /></>);
+    const view = render(<div onKeyDownCapture={(event) => handleComposerResourceKeyDown(event, false, false)}><textarea defaultValue="Draft remains" /><ComposerReferences {...props} /></div>);
     fireEvent.click(screen.getByRole('button', { name: '/Word documents', exact: true }));
-    expect(focus).toHaveBeenCalledTimes(1);
+    expect(focus).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '/Word documents', exact: true })).toHaveFocus();
     expect(removeSkill).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByRole('button', { name: '/Word documents', exact: true }), { key: 'Backspace' });
     expect(removeSkill).toHaveBeenCalledWith(skill);
