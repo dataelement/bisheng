@@ -19,7 +19,7 @@ import { cn } from "~/utils";
 import { KnowledgeSpaceDialog } from "./KnowledgeSpaceDialog";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import { PlusMenuSub } from "./PlusMenuSub";
-import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
+import { SkillMenuEntries } from "~/components/Skills/SkillMenuEntries";
 import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
@@ -300,7 +300,6 @@ export const ChatKnowledge = ({
   }, [isMobile, rootOpen, mobileTallPanel, mobilePanel]);
 
   return (
-    <SkillUploadHost>{(openSkillUpload) => (
     <>
     {spaceDialogOpen && (
       <KnowledgeSpaceDialog value={value} onConfirm={onChange} onClose={() => {
@@ -557,10 +556,10 @@ export const ChatKnowledge = ({
         {/* 技能 — preview-gated unified entry (list + upload + manage); replaces 添加 Skill below.
             Desktop: side panel. Mobile: drill row on the root, panel in place of it. */}
         {variant === 'plus' && (!isMobile || mobilePanel === 'root') && (
-          <SkillMenuEntries onUpload={openSkillUpload} onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined} />
+          <SkillMenuEntries onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined} />
         )}
         {variant === 'plus' && isMobile && mobilePanel === 'skill' && skillCenterPreviewEnabled && (
-          <SkillMenuPanel onUpload={openSkillUpload} onBack={() => setMobilePanel('root')} />
+          <SkillMenuPanel onBack={() => setMobilePanel('root')} />
         )}
 
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
@@ -702,6 +701,5 @@ export const ChatKnowledge = ({
       </DropdownMenuContent>
     </DropdownMenu>
     </>
-    )}</SkillUploadHost>
   );
 };

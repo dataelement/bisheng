@@ -19,7 +19,7 @@ import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
-import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
+import { SkillMenuEntries } from "~/components/Skills/SkillMenuEntries";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -648,7 +648,7 @@ const AiChatInput = memo(
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
                         <div ref={toolbarRef} className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                             {/* Add files and knowledge spaces to the conversation context. */}
-                            {!isLingsi && onSelectedOrgKbsChange && <SkillUploadHost>{(openSkillUpload) => (
+                            {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatResourceMenu
                                     availableTools={agentMode ? bsConfig.tools : undefined}
                                     showTools={!!showToolPicker && agentMode}
@@ -693,9 +693,9 @@ const AiChatInput = memo(
                                                 if (onToggleTaskMode) onToggleTaskMode();
                                                 else navigate('/linsight/new');
                                             }} />
-                                        : skillCenterPreviewEnabled && <SkillMenuEntries inline onUpload={openSkillUpload} />}
+                                        : skillCenterPreviewEnabled && <SkillMenuEntries inline />}
                                 </ChatResourceMenu>
-                            )}</SkillUploadHost>}
+                            )}
 
 
                         </div>

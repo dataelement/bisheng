@@ -1,17 +1,16 @@
 import { useNavigate } from 'react-router-dom';
 import { Outlined } from 'bisheng-icons';
-import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '~/components/ui';
+import { DropdownMenuItem, DropdownMenuLabel } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { useSkillCenter } from './useSkillCenter';
-import { skillCenterPath, skillDetailPath } from './types';
+import { skillDetailPath } from './types';
 import { SkillMenuRow } from './SkillMenuRow';
 
 interface SkillMenuPanelProps {
-  onUpload: () => void;
   onBack?: () => void;
 }
 
-export function SkillMenuPanel({ onUpload, onBack }: SkillMenuPanelProps) {
+export function SkillMenuPanel({ onBack }: SkillMenuPanelProps) {
   const localize = useLocalize();
   const navigate = useNavigate();
   const { identity, platform, personal } = useSkillCenter();
@@ -44,13 +43,6 @@ export function SkillMenuPanel({ onUpload, onBack }: SkillMenuPanelProps) {
           <DropdownMenuItem disabled={loading} onSelect={(event) => { event.preventDefault(); retry(); }} className="mt-1 cursor-pointer rounded-lg text-body-sm text-text-1">{localize('com_skill_center_retry')}</DropdownMenuItem>
         </div>}
       </div>
-      <DropdownMenuSeparator className="shrink-0" />
-      <DropdownMenuItem onSelect={onUpload} className="h-8 shrink-0 cursor-pointer gap-2 rounded-lg px-2 text-body-sm font-normal text-text-1">
-        <Outlined.Upload className="size-4 text-text-2" />{localize('com_skill_center_upload')}
-      </DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => navigate(skillCenterPath)} className="h-8 shrink-0 cursor-pointer gap-2 rounded-lg px-2 text-body-sm font-normal text-text-1">
-        <Outlined.Setting className="size-4 text-text-2" />{localize('com_skill_center_manage')}
-      </DropdownMenuItem>
     </div>
   );
 }

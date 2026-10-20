@@ -1,3 +1,8 @@
+## 2026-10-20 — 输入框技能菜单专注选择
+
+- 统一移除 Chat 首页、会话及深度研究技能选择菜单底部的上传与管理入口，清理菜单专用上传弹窗宿主和回调。技能中心页面继续提供管理功能。
+- 定向 ESLint、生产构建、diff-check 通过。3006 发布及实际菜单验收待执行。
+
 ## 2026-10-20 — Work 知识空间检索接口
 
 - 新增 POST /api/v1/knowledge/space/retrieve，复用登录态 KnowledgeSpaceChatService 及其空间/文件权限过滤，限定 query、space_ids、top_k 与内容长度，返回文档来源信息。
