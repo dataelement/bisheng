@@ -9,6 +9,7 @@ import { useRecoilState } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { skillCenterPath, skillCenterPreviewEnabled } from '~/components/Skills/types';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
@@ -157,8 +158,9 @@ function Sidebar({
   });
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
+  const skillCenterLabel = localize('com_skill_center_title');
   const links = useMemo<Array<{
-    section: 'home' | 'apps' | 'channel' | 'knowledge';
+    section: 'home' | 'apps' | 'channel' | 'knowledge' | 'skills';
     to: string;
     icon: React.ReactNode;
     label: string;
@@ -174,6 +176,17 @@ function Sidebar({
         activeIcon: <Filled.Home />,
         label: menuNames.home,
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname) || menuUnavailablePlugin === 'home',
+        closeDrawerOnNavigate: true,
+      },
+      {
+        // 技能 has no menu key of its own yet: it rides on 首页's grant, behind the
+        // deployment's preview switch (see ~/components/Skills/types).
+        section: 'skills' as const,
+        to: hasPlugin('home') || !menuApprovalMode ? skillCenterPath : '/menu-unavailable?plugin=home',
+        icon: <Outlined.Skill />,
+        activeIcon: <Outlined.Skill />,
+        label: skillCenterLabel,
+        isActive: pathname.startsWith(skillCenterPath),
         closeDrawerOnNavigate: true,
       },
 
@@ -210,6 +223,7 @@ function Sidebar({
       },
     ].filter((l) => {
       if (l.section === 'home') return showHomeTab;
+      if (l.section === 'skills') return showHomeTab && skillCenterPreviewEnabled;
       if (l.section === 'apps') return showAppsTab;
       if (l.section === 'channel') return showSubscriptionTab;
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
@@ -217,7 +231,7 @@ function Sidebar({
     });
     // Menu names are read field-by-field: the hook returns a fresh object each render.
   }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins,
-    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps]);
+    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps, skillCenterLabel]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -352,11 +366,12 @@ export default function MainLayout() {
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const isMenuUnavailableRoute = pathname.startsWith('/menu-unavailable');
+  const isSkillsRoute = /^\/skills(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute || isSkillsRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -535,9 +550,11 @@ export default function MainLayout() {
             className="absolute inset-0 z-[60] cursor-default bg-transparent"
           />
         ) : null}
-        {pathname.startsWith('/menu-unavailable') ? (
+        {isMenuUnavailableRoute || isSkillsRoute ? (
           // Bypass KeepAlive for menu-unavailable: always mount fresh so
           // useEffect fires on every navigation and re-checks pending status.
+          // 技能 bypasses it too: a page react-activation froze keeps its old router
+          // context, so `useSearchParams` stops seeing `?skill=` / `?view=` after a return.
           <div
             className={cn(
               'flex flex-col bg-white shadow-[0px_0px_20px_0px_#07225808]',
@@ -545,9 +562,14 @@ export default function MainLayout() {
               // Match the main panel: when the left system menu is revealed, round
               // the exposed left edge and clip content to it (parity with KeepAlive branch).
               systemMenuRevealing && 'rounded-l-3xl',
-              isMobile
-                ? 'h-auto min-h-[100dvh] overflow-visible'
-                : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+              // 技能 is a fixed-height shell that scrolls inside the page, like the other module homes.
+              isSkillsRoute
+                ? isMobile
+                  ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
+                  : 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                : isMobile
+                  ? 'h-auto min-h-[100dvh] overflow-visible'
+                  : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
               systemMenuRevealing && 'overflow-hidden',
             )}
           >
@@ -564,11 +586,16 @@ export default function MainLayout() {
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
+                  {isSkillsRoute ? (
+                    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+                      {localize('com_skill_center_title')}
+                    </span>
+                  ) : null}
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>
               </div>
             ) : null}
-            {outlet}
+            {isSkillsRoute ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{outlet}</div> : outlet}
           </div>
         ) : (
         <KeepAlive
