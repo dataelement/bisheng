@@ -18,6 +18,7 @@ interface ApiCard {
   content_hash: string;
   bundle_missing: boolean;
   preview?: string;
+  source_text?: string;
   files?: { path: string }[];
 }
 
@@ -46,6 +47,7 @@ function toRecord(row: ApiCard, source: SkillRecord['source']): SkillRecord {
     contentHash: row.content_hash,
     bundleMissing: Boolean(row.bundle_missing),
     preview: row.preview || '',
+    sourceText: row.source_text || '',
     files: (row.files || []).map((file) => file.path),
   };
 }
@@ -79,7 +81,10 @@ export async function getSkillCenter(keyword?: string, tab: 'personal' | 'enterp
 }
 
 export async function getSkillDetail(skillId: number): Promise<SkillRecord> {
-  const response = await request.get<Envelope<ApiCard>>(`${SKILL_API}/personal/${skillId}`);
+  // A missing bundle is one skill, not a service outage. The dialog explains it.
+  const response = await request.get<Envelope<ApiCard>>(`${SKILL_API}/personal/${skillId}`, {
+    skipMaintenance: true,
+  });
   const row = unwrap(response);
   return toRecord(row, 'personal');
 }
@@ -88,7 +93,7 @@ export async function getSkillDetail(skillId: number): Promise<SkillRecord> {
 export async function getSkillFile(skillId: number, path: string): Promise<string> {
   const response = await request.get<Envelope<{ path: string; content: string }>>(
     `${SKILL_API}/personal/${skillId}/file`,
-    { params: { path }, skip403Redirect: true },
+    { params: { path }, skip403Redirect: true, skipMaintenance: true },
   );
   return unwrap(response).content ?? '';
 }
