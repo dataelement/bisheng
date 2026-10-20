@@ -55,7 +55,14 @@ def _judge_workflow_status(redis_callback: RedisCallback, workflow: Workflow):
     _clear_workflow_obj(redis_callback.unique_id)
 
 
-def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: int, source: str = "platform"):
+def _execute_workflow(
+    unique_id: str,
+    workflow_id: str,
+    chat_id: str,
+    user_id: int,
+    source: str = "platform",
+    tmp_session_id: str | None = None,
+):
     # F022 INV-T18: resolve Flow.tenant_id once; reuse for both Workflow
     # node tenant threading and RedisCallback's sync workbench reads.
     workflow_info = FlowDao.get_flow_by_id(workflow_id)
@@ -88,9 +95,10 @@ def _execute_workflow(unique_id: str, workflow_id: str, chat_id: str, user_id: i
             tenant_id=flow_tenant_id,
             flow_user_id=flow_user_id,
             chat_id=chat_id or None,
-            # A debug run has no chat id; its unique_id is stable for the whole
-            # WebSocket connection, so it identifies the temporary session.
-            tmp_session_id=None if chat_id else unique_id,
+            # A debug run has no chat id. The debug window passes its connection
+            # id so every run in the window shares one temporary session;
+            # unique_id is new on every run and only serves callers without one.
+            tmp_session_id=None if chat_id else (tmp_session_id or unique_id),
         )
         redis_callback.workflow = workflow
         status, reason = workflow.run()
@@ -157,6 +165,7 @@ def execute_workflow(
     user_id: int,
     source: str = "platform",
     execution_snapshot: dict | None = None,
+    tmp_session_id: str | None = None,
 ):
     """Implementationworkflow"""
     trace_id_var.set(unique_id)
@@ -165,7 +174,7 @@ def execute_workflow(
         with restore_execution_context(execution_snapshot) as snapshot:
             # Guest runs skip `use` only when session.flow_id matches this workflow.
             _authorize_workflow_use(snapshot, user_id, workflow_id, chat_id)
-            _execute_workflow(unique_id, workflow_id, chat_id, user_id, source)
+            _execute_workflow(unique_id, workflow_id, chat_id, user_id, source, tmp_session_id)
     finally:
         _log_workflow_telemetry(workflow_id, chat_id, user_id, start_time)
 

@@ -43,6 +43,9 @@ class WorkflowClient(BaseClient):
         self.workflow: RedisCallback | None = None
         self.latest_history: ChatMessage | None = None
         self.hash_key = None
+        # Temporary agent session of a debug run (F078 design decision 8): one
+        # per connection, so every run in this window shares it until close.
+        self.agent_tmp_session_id: str | None = None
         self.ws_closed = False
         self.run_lock = asyncio.Lock()
         self.session_subject = kwargs.get("session_subject")
@@ -64,20 +67,28 @@ class WorkflowClient(BaseClient):
                     await asyncio.sleep(0.5)
         else:
             await self.send_response("processing", "close", "")
-        await self._close_agent_tmp_session()
+        # "stop" keeps the window open, and its next run still needs the earlier files.
+        if not force_stop:
+            await self._close_agent_tmp_session()
         await super().close()
 
     async def _close_agent_tmp_session(self) -> None:
-        """A debug run's agent workspace and files go away with its connection (F078)."""
-        if self.chat_id or self.workflow is None:
+        """A debug run's agent workspace and files go away with its connection (F078).
+
+        Keyed on the connection, not on ``self.workflow``: that is reset to None
+        as soon as a run finishes, which is the usual state when a window closes.
+        """
+        tmp_session_id = self.agent_tmp_session_id
+        if not tmp_session_id:
             return
+        self.agent_tmp_session_id = None
         try:
             from bisheng.agent_runtime.domain.services.tmp_session import TmpSessionService
             from bisheng.core.cache.redis_manager import get_redis_client
             from bisheng.core.storage.minio.minio_manager import get_minio_storage
 
             service = TmpSessionService(redis=await get_redis_client(), minio=await get_minio_storage())
-            await service.aclose(self.workflow.unique_id)
+            await service.aclose(tmp_session_id)
         except Exception:
             # The Beat sweep removes what this misses.
             logger.exception("failed to close agent temp session of workflow {}", self.client_id)
@@ -206,7 +217,10 @@ class WorkflowClient(BaseClient):
             await self.workflow.async_set_workflow_data(workflow_data)
             await self.workflow.async_set_workflow_status(WorkflowStatus.WAITING.value)
             # Start asynchronous task
-
+            queue = await self.get_execute_worker()
+            if not self.chat_id:
+                # hash_key lives as long as the connection; unique_id is new on every run.
+                self.agent_tmp_session_id = self.hash_key
             execute_workflow.apply_async(
                 [
                     unique_id,
@@ -216,7 +230,8 @@ class WorkflowClient(BaseClient):
                     "api" if self.execution_snapshot is not None else "platform",
                     self.execution_snapshot,
                 ],
-                queue=await self.get_execute_worker(),
+                kwargs={"tmp_session_id": self.agent_tmp_session_id},
+                queue=queue,
             )
             await self.send_response("processing", "begin", "")
             await self.workflow_run()
