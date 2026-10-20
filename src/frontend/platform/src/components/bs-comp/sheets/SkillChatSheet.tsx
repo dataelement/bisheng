@@ -1,13 +1,14 @@
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
+
 import { getChatOnlineApi } from "@/controllers/API/assistant";
 import { useDebounce } from "@/util/hook";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { SearchInput } from "../../bs-ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import LoadMore from "../loadMore";
@@ -56,7 +57,7 @@ export default function SkillChatSheet({ children, onSelect }) {
                 <div className="w-fit p-6">
                     <SheetTitle>{t('chat.dialogueSelection')}</SheetTitle>
                     <SheetDescription>{t('chat.chooseSkillOrAssistant')}</SheetDescription>
-                    <SearchInput placeholder={t('chat.search')} className="my-6" onChange={handleSearch} />
+                    <SearchInput placeholder={t('chat.search')} onChange={handleSearch} className={"my-6"} />
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     {

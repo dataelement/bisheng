@@ -832,7 +832,25 @@
     "dailyLimitSuffix": "calls per day",
     "shareToChildrenTip": "When on, child tenants can use the models of this provider but cannot view or change its configuration.",
     "getApiKey": "Get a {{provider}} API key",
-    "formatExample": "Example: {{example}}"
+    "formatExample": "Example: {{example}}",
+    "streamingAsrHint": "Streaming speech recognition supports paraformer-realtime-v2, paraformer-realtime-v1 and qwen3-asr-flash-realtime. Save and test the model, then select it as the workbench ASR model.",
+    "speechCredentials": "Real-time speech recognition",
+    "providerSilicon": "SiliconFlow",
+    "providerTencent": "Tencent Cloud",
+    "providerAliyun": "Alibaba Cloud Bailian",
+    "providerVolcengine": "Volcengine",
+    "speechAuthMode": "Speech authentication",
+    "configExample": "Example: {{value}}",
+    "providerQianfan": "Baidu Qianfan",
+    "providerMoonshot": "Moonshot",
+    "getProviderApiKey": "Get {{provider}} API Key",
+    "speechCredentialsHint": "Enter credentials for this provider’s speech recognition service. Configure language models and speech recognition separately.",
+    "volcAsrHint": "Real-time ASR: use bigmodel for the Doubao bidirectional streaming API. Match Resource ID to your enabled speech resource.",
+    "speechDocs": "Speech service setup and API documentation",
+    "baiduAsrHint": "Real-time ASR: use 15372 (Chinese punctuation), 1537, 15376 (dialects), 1737 or 17372 (English). Enter Baidu Speech application credentials.",
+    "providerZhipu": "Zhipu AI",
+    "tencentAsrHint": "Real-time ASR: enter engine_model_type, such as 16k_zh_en, 16k_zh, 16k_en or 16k_multi_lang. The documented 16k engines are supported.",
+    "providerSpark": "iFLYTEK Spark"
   },
   "finetune": {
     "all": "All",
@@ -911,6 +929,7 @@
     "embeddingModelSelection": "Knowledge base embedding model selection"
   },
   "evaluation": {
+    "editPrompt": "Edit prompt",
     "id": "Task ID",
     "filename": "Test File Name",
     "skillAssistant": "Skill Assistant",
@@ -1096,7 +1115,9 @@
       "autoReplyNotEmpty": "Auto-reply content cannot be empty",
       "workbenchSelectAtLeastOneWordType": "Please select at least one sensitive word list",
       "workbenchAutoReplyNotEmpty": "Auto-reply content cannot be empty",
-      "workbenchAutoReplyMaxLength": "Auto-reply cannot exceed 500 characters"
+      "workbenchAutoReplyMaxLength": "Auto-reply cannot exceed 500 characters",
+      "customWordsNotEmpty": "Custom word list cannot be empty",
+      "sensitivePolicyLoading": "Content review settings are loading. Please try again."
     },
     "saveSuccess": "Saved successfully",
     "contentSecurityDesc": "Review session content for safety with a sensitive word list or API",
@@ -1147,7 +1168,17 @@
     "unsavedChangesLeave": "You have unsaved changes, are you sure you want to leave?",
     "leaveAndSave": "Leave and save",
     "leaveWithoutSave": "Leave without saving",
-    "selectModel": "Select a model"
+    "selectModel": "Select a model",
+    "contentSecurityReview": "Content review",
+    "tagLibraryTagsPlaceholder": "One tag per line",
+    "deleteTagLibraryDescWithCount": "This affects {{count}} knowledge spaces and disables their automatic tagging. Delete this tag library?",
+    "deleteTagLibraryDescEmpty": "No knowledge spaces use this tag library. Delete it?",
+    "deleteTagLibraryTitle": "Delete tag library",
+    "confirmDelete": "Delete",
+    "autoTagGenerationTitle": "Automatic tagging",
+    "autoTagGenerationDesc": "When enabled, users can choose a tag library for a knowledge space. After parsing, matching tags are selected from the library.",
+    "searchTagLibrary": "Search tag libraries",
+    "tagLibraryEmpty": "No tag libraries"
   },
   "bench": {
     "daily": "Daily",
@@ -1183,7 +1214,35 @@
     "fetchKbFailed": "Failed to fetch knowledge bases",
     "addMoreModels": "Add more models",
     "home": "Home",
-    "appCenter": "Apps"
+    "appCenter": "Apps",
+    "departmentKnowledgeSpaceSaveSuccess": "Saved successfully",
+    "departmentKnowledgeSpaceConfigured": "Configured",
+    "departmentKnowledgeSpaceHidden": "Hidden",
+    "departmentKnowledgeSpaceDefaultName": "Default space name",
+    "departmentKnowledgeSpaceManager": "Department knowledge spaces",
+    "departmentKnowledgeSpaceManagerDesc2": "Select departments to create knowledge spaces. Clear configured departments to hide their spaces without deleting spaces or data.",
+    "departmentKnowledgeSpaceClearAll": "Clear selection",
+    "departmentKnowledgeSpaceSelectAll": "Select all available departments",
+    "departmentKnowledgeSpaceChangePreview": "Changes",
+    "departmentKnowledgeSpaceSelectedDesc": "Creates “Department knowledge space” by default. The super admin is the owner and department admins are managers.",
+    "departmentKnowledgeSpaceNoChanges": "No changes",
+    "departmentKnowledgeSpacePendingCreate": "To create",
+    "departmentKnowledgeSpacePendingRestore": "To show again",
+    "departmentKnowledgeSpacePendingHide": "To hide",
+    "departmentKnowledgeSpaceSave": "Save",
+    "departmentKnowledgeSpace": "Department knowledge spaces",
+    "departmentKnowledgeSpaceDesc": "Manage department knowledge space creation and view their associated departments.",
+    "departmentKnowledgeSpaceCreatedList": "Created knowledge spaces",
+    "departmentKnowledgeSpaceCreatedListDesc": "Knowledge spaces associated with departments appear here.",
+    "departmentKnowledgeSpaceCreatedEmpty": "No department knowledge spaces yet",
+    "departmentKnowledgeSpaceDepartmentLabel": "Department",
+    "knowledgeSpaceContentSecurityDesc": "Review parsed knowledge space files for sensitive words and block matched content from entering the vector store.",
+    "configureOrgKbs": "Configure organization knowledge bases",
+    "knowledgeBaseCol": "Knowledge base",
+    "noOrgKbConfigured": "No organization knowledge bases configured",
+    "pickFromRight": "Select from the knowledge bases on the right",
+    "allKbs": "All knowledge bases",
+    "searchKbName": "Search knowledge bases"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -1281,6 +1340,7 @@
     "notEmpty": "The new password cannot be empty"
   },
   "log": {
+    "thinkingContent": "Reasoning",
     "systemIdEnum": {
       "chat": "Session",
       "build": "Build",
@@ -2243,7 +2303,21 @@
     "timeline_actionAssignApprovers": "Approvers assigned",
     "timeline_actionAssignFlow": "Flow assigned",
     "timeline_actionRetryExecuteFailed": "Retried execution",
-    "timeline_actionMarkManuallyCompleted": "Marked as completed"
+    "timeline_actionMarkManuallyCompleted": "Marked as completed",
+    "discardChangesTitle": "Discard changes",
+    "discardChangesDesc": "You have unsaved node changes. Discard them?",
+    "cancelEditBtn": "Cancel editing",
+    "saveChangesBtn": "Save changes",
+    "editNodesBtn": "Edit nodes",
+    "nodeEditModeHint": "Editing — Save changes to apply node changes and create a new version snapshot.",
+    "addScenarioTitle": "Add approval scenario",
+    "scenarioNameLabel": "Scenario name",
+    "allPresetsAdded": "(All preset scenarios have been added)",
+    "confirmAdd": "Add",
+    "saveSuccess": "Saved successfully",
+    "switchFlowDiscardDesc": "Switching flows will discard unsaved node changes. Continue?",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
   },
   "createImport": "Create and Import",
   "dailyFullName": "{{dailyFullName}}",
@@ -2364,7 +2438,8 @@
     "noDownloadUrl": "No downloadable file address",
     "tempKb": "Temporary knowledge base",
     "noPermission": "You do not have permission to view this source",
-    "sourceExpired": "This source is no longer available"
+    "sourceExpired": "This source is no longer available",
+    "noSummary": "No summary available"
   },
   "openApiManagement": {
     "list": {
@@ -3035,7 +3110,8 @@
     "individualQuota": "Custom quota",
     "useDepartmentQuota": "Use department default",
     "inlineQuotaHelp": "Department changes apply to default members. Custom quotas stay unchanged. Click Save to apply.",
-    "monthlyQuotaWan": "Monthly quota (10K Tokens)"
+    "monthlyQuotaWan": "Monthly quota (10K Tokens)",
+    "usageDimension": "Usage dimension"
   },
   "request": {
     "session_expired": "Session expired",
@@ -3070,6 +3146,55 @@
     "searchMember": "Search user name or ID"
   },
   "tenant": {
-    "searchUser": "Search user name or ID"
+    "searchUser": "Search user name or ID",
+    "createDeprecatedDesc": "Create child tenants by mounting a department. The system initializes the root tenant automatically.",
+    "inheritedFromRoot": "Using root tenant settings",
+    "currentOverride": "This tenant has its own settings",
+    "noOverrideYet": "No tenant-specific settings saved yet",
+    "selectionDeprecatedTitle": "Tenant selection is no longer available",
+    "selectionDeprecatedDesc": "Since v2.5.1, the current tenant is determined automatically by the primary department. Manual switching is no longer available.",
+    "selectionDeprecatedRedirect": "If you are signed in, you will be redirected to the admin console.",
+    "continueToAdmin": "Continue to admin console"
+  },
+  "sharedUi": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "required": "This field is required",
+    "nonNegativeInteger": "Enter a nonnegative integer",
+    "minimum": "Must be at least {{min}}",
+    "maximum": "Must be at most {{max}}",
+    "addItem": "Add item",
+    "removeItem": "Remove item",
+    "expand": "Expand"
+  },
+  "tenant.mountedBadge": "Child tenant mount point",
+  "tenant.mountedTag": "Child tenant",
+  "tenant.markAsTenant": "Mark as child tenant",
+  "tenant.unmountTitle": "Unmount child tenant",
+  "tenant.unmountConfirm": "After unmounting, all resources owned by this child tenant (knowledge bases, applications, conversations, etc.) will move to the headquarters (Root). The child tenant will be archived for auditing. Its members will continue as headquarters members without interruption. Continue?",
+  "tenant.unmountOk": "Confirm unmount",
+  "tenant.unmountSuccess": "Unmounted",
+  "tenant.unmount": "Unmount",
+  "publicPages": {
+    "crawlFeedbackDefault": "Send your website crawling request to: XXXX@XX",
+    "feedbackRequired": "Enter the request feedback message",
+    "feedbackTooLong": "The message cannot exceed 1,000 characters",
+    "recommendedApps": "Recommended apps",
+    "selectedApps": "Selected apps",
+    "noConfiguredApps": "No apps configured",
+    "pickAppsFromRight": "Select apps from the list on the right",
+    "allApps": "All apps",
+    "searchApps": "Search app names or descriptions",
+    "noApps": "No apps",
+    "passwordExpired": "Your password has expired. Please change it.",
+    "forbidden": "You do not have access to this page",
+    "loggingOut": "Signing out…",
+    "switchAccount": "Switch account",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "close": "Close",
+    "maskedFile": "Masked file.msk",
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "The page you are trying to access does not exist or has been removed."
   }
 }

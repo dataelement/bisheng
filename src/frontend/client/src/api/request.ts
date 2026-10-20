@@ -12,6 +12,8 @@ type ErrorOptions = {
   showError?: boolean;
   /** When true, the interceptor will NOT auto-redirect on 403. The caller handles it. */
   skip403Redirect?: boolean;
+  /** When true, a 500 on this call does not cover the app with the maintenance overlay. */
+  skipMaintenance?: boolean;
 };
 
 const customAxios = axios.create({
@@ -235,7 +237,7 @@ customAxios.interceptors.response.use(
     // gateways often wrap upstream 5xx into a 200 envelope, so mirror the
     // HTTP-500 branch below and raise the global maintenance overlay here too.
     // Return early — the overlay covers the screen, no toast needed underneath.
-    if (response.data?.status_code === 500) {
+    if (response.data?.status_code === 500 && !response.config.skipMaintenance) {
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
       return response;
     }
@@ -283,7 +285,7 @@ customAxios.interceptors.response.use(
 
     // Gateway/backend service exception → surface the global maintenance overlay.
     // Event name mirrors SERVICE_MAINTENANCE_EVENT in SystemMaintenanceOverlay.tsx.
-    if (error.response.status === 500) {
+    if (error.response.status === 500 && !originalRequest?.skipMaintenance) {
       window.dispatchEvent(new CustomEvent('bs:service-maintenance'));
     }
 

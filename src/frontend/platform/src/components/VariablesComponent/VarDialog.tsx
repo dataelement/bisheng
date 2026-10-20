@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
 import cloneDeep from 'lodash-es/cloneDeep';
 import { ArrowDownUp, Plus, X } from "lucide-react";
 import { useContext, useState } from 'react';
@@ -6,9 +7,9 @@ import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 import { alertContext } from '../../contexts/alertContext';
 import { generateUUID } from '../../utils';
-import { Button } from '../bs-ui/button';
+
 import { DialogContent, DialogFooter } from '../bs-ui/dialog';
-import { Input } from '../bs-ui/input';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../bs-ui/tabs';
 
 export default function VarDialog({ data, onSave, onClose }) {
@@ -71,10 +72,10 @@ export default function VarDialog({ data, onSave, onClose }) {
 
     const VariablesName = <div>
         <label className='text-sm text-gray-500'>{t('flow.variableName')}：</label>
-        <Input value={item.name} className='mt-2' onChange={(e) => setItem(prevItem => ({
+        <Input value={item.name} onChange={(e) => setItem(prevItem => ({
             ...prevItem,
             name: e.target.value
-        }))} />
+        }))} className={"mt-2"} />
     </div>
 
     return (<DialogContent className="sm:max-w-[425px]">
@@ -93,10 +94,10 @@ export default function VarDialog({ data, onSave, onClose }) {
                 {VariablesName}
                 <div>
                     <label className='text-sm text-gray-500'>{t('flow.maxLength')}：</label>
-                    <Input value={item.maxLength} className='mt-2' onChange={(e) => setItem(prevItem => ({
+                    <Input value={item.maxLength} onChange={(e) => setItem(prevItem => ({
                         ...prevItem,
                         maxLength: e.target.value
-                    }))} />
+                    }))} className={"mt-2"} />
                 </div>
             </TabsContent>
             <TabsContent value="select" className='pb-10 px-2 max-h-80 overflow-y-auto scrollbar-hide'>
@@ -114,7 +115,7 @@ export default function VarDialog({ data, onSave, onClose }) {
                                                 style={snapshot.isDragging ? {
                                                     ...provided.draggableProps.style, position: 'relative', left: 0, top: 0
                                                 } : provided.draggableProps.style}>
-                                                <Input value={option.value} className={errors[index] && 'border-red-400'} onChange={(e) => handleChangeOptionValue(e.target.value, index)} />
+                                                <Input value={option.value} onChange={(e) => handleChangeOptionValue(e.target.value, index)} className={errors[index] && 'border-red-400'} />
                                                 <button onClick={() => {
                                                     setItem((old) => {
                                                         const newItem = cloneDeep(old);
@@ -148,8 +149,8 @@ export default function VarDialog({ data, onSave, onClose }) {
             </TabsContent>
         </Tabs>
         <DialogFooter>
-            <Button className='px-8' variant='outline' size='sm' onClick={() => onClose(false)}>{t('cancel')}</Button>
-            <Button className='px-8' onClick={handleSave} size='sm'>{t('save')}</Button>
+            <Button className='px-8' variant="outlined" size="small" onClick={() => onClose(false)} color="default">{t('cancel')}</Button>
+            <Button className='px-8' onClick={handleSave} size="small">{t('save')}</Button>
         </DialogFooter>
         <div className='flex mt-4 justify-end gap-4'>
         </div>

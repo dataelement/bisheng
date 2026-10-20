@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
   getGrantablePermissionModelsApi,
@@ -117,26 +118,12 @@ function ExistingAssigneeRow({
       </select>
 
       <div className="flex flex-wrap items-start gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11"
-          aria-label={`grant.move.${assignee.assignee_id}`}
-          disabled={
+        <Button type="button" variant="outlined" className="min-h-11" aria-label={`grant.move.${assignee.assignee_id}`} disabled={
             !editable || pending || targetModelKey === assignee.model.key
-          }
-          onClick={() => onMove(assignee, targetModelKey)}
-        >
+          } onClick={() => onMove(assignee, targetModelKey)} color="default">
           {t("grant.move")}
         </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="min-h-11 text-red-700"
-          aria-label={`grant.remove.${assignee.assignee_id}`}
-          disabled={!editable || pending}
-          onClick={() => onRemove(assignee)}
-        >
+        <Button type="button" variant="outlined" className="min-h-11 text-red-700" aria-label={`grant.remove.${assignee.assignee_id}`} disabled={!editable || pending} onClick={() => onRemove(assignee)} color="default">
           {t("grant.remove")}
         </Button>
       </div>
@@ -401,15 +388,11 @@ export function PermissionGrantTab({
         </div>
 
         <div className="mt-4 flex shrink-0 justify-end border-t pt-4">
-          <Button
-            type="button"
-            disabled={
+          <Button type="button" disabled={
               pendingKey !== null ||
               selectedSubjects.length === 0 ||
               !selectedModelKey
-            }
-            onClick={handleAdd}
-          >
+            } onClick={handleAdd}>
             {t("grant.submit")}
           </Button>
         </div>
@@ -508,16 +491,11 @@ export function PermissionGrantTab({
                 ))}
               </select>
             </label>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={
+            <Button type="button" className="min-h-11" disabled={
                 pendingKey !== null ||
                 selectedSubjects.length === 0 ||
                 !selectedModelKey
-              }
-              onClick={handleAdd}
-            >
+              } onClick={handleAdd}>
               {t("grant.submit")}
             </Button>
           </div>

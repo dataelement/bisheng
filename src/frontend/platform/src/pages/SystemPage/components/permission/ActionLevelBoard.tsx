@@ -1,29 +1,32 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/bs-ui/dropdownMenu"
-import { Switch } from "@/components/bs-ui/switch"
+DropdownMenu,
+DropdownMenuContent,
+DropdownMenuRadioGroup,
+DropdownMenuRadioItem,
+DropdownMenuTrigger,
+} from "@/components/bs-ui/dropdownMenu";
+import { Switch } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
+Tooltip,
+TooltipContent,
+TooltipProvider,
+TooltipTrigger,
+} from "@/components/bs-ui/tooltip";
 import type {
-  PermissionActionLevel,
-  PermissionCatalogAction,
-  PermissionCatalogChange,
-  PermissionCatalogDraft,
-} from "@/controllers/API/permission"
-import { cn } from "@/utils"
-import { ChevronDown, GripVertical, Info } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { actionLabel, resourceTypeLabel } from "./actionLabels"
+PermissionActionLevel,
+PermissionCatalogAction,
+PermissionCatalogChange,
+PermissionCatalogDraft,
+} from "@/controllers/API/permission";
+import { cn } from "@/utils";
+
+import { useCallback,useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { actionLabel,resourceTypeLabel } from "./actionLabels";
 
 interface ActionLevelBoardProps {
   actions: PermissionCatalogAction[]
@@ -197,21 +200,10 @@ export function ActionLevelBoard({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            
-            disabled={pendingChanges.length === 0 || submitting}
-            onClick={resetToRelease}
-          >
+          <Button type="button" variant="outlined" disabled={pendingChanges.length === 0 || submitting} onClick={resetToRelease} color="default">
             {t("actionLevel.discardChanges")}
           </Button>
-          <Button
-            type="button"
-            
-            disabled={pendingChanges.length === 0 || submitting}
-            onClick={() => void handlePublishChanges()}
-          >
+          <Button type="button" disabled={pendingChanges.length === 0 || submitting} onClick={() => void handlePublishChanges()}>
             {t("actionLevel.publishChanges")}
           </Button>
         </div>
@@ -223,22 +215,17 @@ export function ActionLevelBoard({
           role="status"
         >
           <div className="flex flex-wrap items-center gap-2">
-            <Info aria-hidden="true" className="size-4 shrink-0 text-primary" />
+            <Outlined.Info aria-hidden="true" className="size-4 shrink-0 text-primary" />
             <span>
               {t("actionLevel.pendingChanges", {
                 count: pendingChanges.length,
               })}
             </span>
-            <button
-              type="button"
-              className="text-primary underline-offset-2 hover:underline"
-              aria-expanded={showChangeList}
-              onClick={() => setShowChangeList((current) => !current)}
-            >
+            <Button variant="text" size="small" type="button" className="text-primary underline-offset-2 hover:underline" aria-expanded={showChangeList} onClick={() => setShowChangeList((current) => !current)} color="default">
               {showChangeList
                 ? t("actionLevel.hideChangeList")
                 : t("actionLevel.showChangeList")}
-            </button>
+            </Button>
           </div>
           {showChangeList && (
             <ul className="mt-2 space-y-1 pl-6 text-muted-foreground">
@@ -336,7 +323,7 @@ export function ActionLevelBoard({
                             a full-width select repeated the drag target on every card
                             and doubled the card's height. */}
                         <div className="flex items-center gap-1.5">
-                          <GripVertical
+                          <Outlined.Drag
                             aria-hidden="true"
                             className="size-4 shrink-0 cursor-grab text-muted-foreground"
                           />
@@ -379,15 +366,10 @@ export function ActionLevelBoard({
                         <div className="mt-1.5 flex items-center gap-2 pl-[22px]">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label={`${t("actionLevel.change")}.${action.code}`}
-                                disabled={disabled || submitting}
-                                className="inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
+                              <Button variant="text" size="small" type="button" aria-label={`${t("actionLevel.change")}.${action.code}`} disabled={disabled || submitting} className="inline-flex h-6 items-center gap-1 rounded border px-1.5 text-xs text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50" color="default">
                                 {levelName(level)}
-                                <ChevronDown aria-hidden="true" className="size-3" />
-                              </button>
+                                <Outlined.Down aria-hidden="true" className="size-3" />
+                              </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                               <DropdownMenuRadioGroup

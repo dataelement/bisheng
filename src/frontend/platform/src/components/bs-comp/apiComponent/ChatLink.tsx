@@ -1,17 +1,18 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
-import { Button } from '@/components/bs-ui/button';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { SearchInput } from '@/components/bs-ui/input';
+
 import { Label } from '@/components/bs-ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import Skeleton from '@/components/bs-ui/skeleton';
-import { Switch } from '@/components/bs-ui/switch';
-import { toast } from '@/components/bs-ui/toast/use-toast';
+import { Switch } from '@bisheng/ui';
+
 import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { copyText } from '@/utils';
-import { Check, CircleX, Clipboard, Info } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
@@ -44,7 +45,7 @@ const BorwserSkeleton = ({ size = '' }) => {
               <Skeleton className="h-6 w-16 ml-2 rounded" /> {/* 发送按钮骨架 */}
             </div>
           </div>
-          <CircleX className='h-6 w-6 text-foreground' />
+          <Outlined.CloseCircle className='h-6 w-6 text-foreground' />
         </div>
           : <div className="p-4 bg-white">
             <div className="border border-border rounded-lg p-4 space-y-4">
@@ -130,7 +131,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
     }
     setSettings(result)
     onAvailabilityChange(Boolean(result.system_guest_access && result.enabled))
-    toast({ variant: 'success', description: t('api.guestSaved') })
+    notification.open({ type: 'success', description: String(t('api.guestSaved') ?? '') })
   }
 
   if (!settings) {
@@ -153,7 +154,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
   return (
     <>
       <Alert className="mb-4">
-        <Info className="h-4 w-4" />
+        <Outlined.Info className="h-4 w-4" />
         <AlertDescription className="mt-0.5">
           {systemOff ? t('api.guestAccessDisabledSystem') : t('api.noLoginLinkDescription')}
         </AlertDescription>
@@ -203,14 +204,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
               <SelectContent
                 headNode={
                   <div className="shrink-0 bg-popover p-2" onPointerDown={(event) => event.stopPropagation()}>
-                    <SearchInput
-                      value={operatorQuery}
-                      inputClassName="h-8 dark:border-gray-700"
-                      placeholder={t('api.guestSearchOperator')}
-                      onChange={(event) => setOperatorQuery(event.target.value)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      iconClassName="w-4 h-4"
-                    />
+                    <SearchInput value={operatorQuery} placeholder={t('api.guestSearchOperator')} onChange={(event) => setOperatorQuery(event.target.value)} onKeyDown={(event) => event.stopPropagation()} className={"h-8 dark:border-gray-700"} />
                   </div>
                 }
               >
@@ -233,17 +227,11 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
               <span className="text-xs text-muted-foreground">{t('api.systemDefault')}</span>
             )}
             {!settings.follow_system_default && settings.can_edit && !systemOff && (
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                disabled={saving}
-                onClick={() => {
+              <Button type="button" variant="link" size="small" disabled={saving} onClick={() => {
                   const previous = settings
                   setSettings({ ...settings, follow_system_default: true, user_id: null })
                   void persist({ user_id: null }, previous)
-                }}
-              >
+                }}>
                 {t('api.restoreSystemDefault')}
               </Button>
             )}
@@ -327,7 +315,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
         <GuestLinkPanel kind={kind} appId={String(id)} onAvailabilityChange={setGuestAvailable} />
       ) : (
         <Alert className='mb-4'>
-          <Info className="h-4 w-4" />
+          <Outlined.Info className="h-4 w-4" />
           <AlertDescription className='mt-0.5'>
             {noLogin
               ? t('api.noLoginLinkDescription')
@@ -347,7 +335,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                 onClick={() => copyToClipboard(url)}
               >
-                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                {isCopied ? <Outlined.Check size={18} /> : <Outlined.Copy size={15} />}
               </button>
             </div>
           </CardTitle>
@@ -392,7 +380,7 @@ const NoLoginLink = ({ type, noLogin = false }) => {
                 className="flex items-center gap-1.5 rounded bg-none p-1 text-xs text-gray-500 dark:text-gray-300"
                 onClick={() => copyToClipboard(embedCode)}
               >
-                {isCopied ? <Check size={18} /> : <Clipboard size={15} />}
+                {isCopied ? <Outlined.Check size={18} /> : <Outlined.Copy size={15} />}
               </button>
             </div>
           </CardTitle>

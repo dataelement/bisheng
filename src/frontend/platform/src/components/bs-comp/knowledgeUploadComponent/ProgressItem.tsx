@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
-import { Button } from "@/components/bs-ui/button";
+
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
 import { uploadFileApi } from "@/controllers/API";
 import { cn } from "@/util/utils";
@@ -113,22 +114,12 @@ export default function ProgressItem({ analysis = false, knowledgeId = '', item,
                 </div>
                 <div className="ml-auto flex opacity-0 group-hover:opacity-100">
                     {item.error && !analysis &&
-                        <Button
-                            size="icon"
-                            className="size-8"
-                            variant="ghost"
-                            onClick={() => {
+                        <Button size="medium" className="size-8" variant="text" onClick={() => {
                                 uploadApi(item);
                                 setRetrying(true);
-                            }}
-                        ><RefreshCw size={16} /></Button>
+                            }} color="default" iconOnly><RefreshCw size={16} /></Button>
                     }
-                    {onDelete && <Button
-                        size="icon"
-                        className="size-8"
-                        variant="ghost"
-                        onClick={handleCancel}
-                    ><XCircle size={16} /></Button>}
+                    {onDelete && <Button size="medium" className="size-8" variant="text" onClick={handleCancel} color="default" iconOnly><XCircle size={16} /></Button>}
                 </div>
                 {analysisStatusIcon(item)}
             </div>

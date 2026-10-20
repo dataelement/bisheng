@@ -1,31 +1,33 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button, LoadButton } from "@/components/bs-ui/button"
-import { Input } from "@/components/bs-ui/input"
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio-group"
-import { Switch } from "@/components/bs-ui/switch"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, toast } from '@bisheng/ui';
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+import { RadioGroup,Radio as RadioGroupItem,Switch,Tag } from "@bisheng/ui";
+
+
+
+
+
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/bs-ui/table"
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
+} from "@/components/bs-ui/table";
+
 import {
-  getPersonalTokenSettingApi,
-  listPersonalTokensApi,
-  revokePersonalTokenApi,
-  updatePersonalTokenSettingApi,
-} from "@/controllers/API/personalToken"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import type { PersonalTokenDataScope, PersonalTokenSetting } from "@/types/api/openApi"
-import type { PersonalTokenLedgerItem } from "@/types/api/openApi"
-import { useCallback, useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter"
-import { useOpenApiList } from "../OpenApiList/useOpenApiList"
+getPersonalTokenSettingApi,
+listPersonalTokensApi,
+revokePersonalTokenApi,
+updatePersonalTokenSettingApi,
+} from "@/controllers/API/personalToken";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import type { PersonalTokenDataScope,PersonalTokenLedgerItem,PersonalTokenSetting } from "@/types/api/openApi";
+import { useCallback,useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { OpenApiListFooter } from "../OpenApiList/OpenApiListFooter";
+import { useOpenApiList } from "../OpenApiList/useOpenApiList";
 
 function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "-"
@@ -72,17 +74,15 @@ export function PersonalToken() {
       if (!next) return
 
       applySetting(next)
-      message({
-        title: t("prompt"),
-        variant: "success",
-        description: t("openApiManagement.personalToken.settingsSaved"),
-      })
+      toast.show({ type: "success", message: [String(t("prompt") ?? ''), String(t("openApiManagement.personalToken.settingsSaved") ?? '')].filter(Boolean).join('\n') })
     } finally {
       setSaving(false)
     }
   }
 
   const handleSave = () => {
+        if ((String((ttlDays) ?? '') !== '' && (!Number.isFinite(Number(ttlDays)) || Number(ttlDays) < 1 || Number(ttlDays) > 365))) return;
+
     if (saving) return
     // Narrowing hits every issued key immediately — confirm before tightening;
     // widening back needs no ceremony.
@@ -130,7 +130,7 @@ export function PersonalToken() {
           </label>
           <label className="w-48 space-y-1 text-sm">
             <span>{t("openApiManagement.personalToken.ttlDays")}</span>
-            <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => setTtlDays(Number(event.target.value))} />
+            <Input type="number" min={1} max={365} value={ttlDays} disabled={saving} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, { min: 1, max: 365 })) return; return setTtlDays(Number(event.target.value)); }} />
           </label>
         </div>
         <div className="mt-4 space-y-2 text-sm">
@@ -139,7 +139,7 @@ export function PersonalToken() {
             value={dataScope}
             disabled={saving}
             onValueChange={(value) => setDataScope(value as PersonalTokenDataScope)}
-            className="space-y-2"
+            className="items-start"
           >
             <label className="flex items-start gap-2">
               <RadioGroupItem value="all_visible" className="mt-0.5" />
@@ -155,14 +155,9 @@ export function PersonalToken() {
           </RadioGroup>
         </div>
         <div className="mt-4">
-          <LoadButton
-            loading={saving}
-            aria-busy={saving}
-            disabled={!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365}
-            onClick={handleSave}
-          >
+          <Button loading={saving} aria-busy={saving} onClick={handleSave} disabled={((String((ttlDays) ?? '') !== '' && (!Number.isFinite(Number(ttlDays)) || Number(ttlDays) < 1 || Number(ttlDays) > 365))) || (Boolean(saving) || (!setting?.deployment_enabled || ttlDays < 1 || ttlDays > 365))}>
             {t("save")}
-          </LoadButton>
+          </Button>
         </div>
       </section>
       <Table>
@@ -182,13 +177,9 @@ export function PersonalToken() {
               <TableCell>
                 {item.holder_name || item.holder_user_id}
                 {item.holder_is_admin ? (
-                  <Badge
-                    className="ml-2"
-                    variant="secondary"
-                    title={t("openApiManagement.personalToken.adminHolderTip")}
-                  >
-                    {t("openApiManagement.personalToken.adminHolder")}
-                  </Badge>
+                  <span title={t("openApiManagement.personalToken.adminHolderTip")}>
+                    <Tag size="small" className="ml-2">{t("openApiManagement.personalToken.adminHolder")}</Tag>
+                  </span>
                 ) : null}
               </TableCell>
               <TableCell><code>{item.key_mask}</code></TableCell>

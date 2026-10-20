@@ -155,6 +155,7 @@
   "cannotBeEmpty": "{{label}}は空にできません",
   "editReportTemplate": "レポートテンプレートを編集",
   "nodeErrorMessage": "{{nodeName}}ノードエラー：{{varNameCn}}は無効です",
+  "nodeLogError": "失敗の原因",
   "required": "必須",
   "isRequired": "必須入力項目",
   "documentKnowledgeBase": "ドキュメント知識ベース",
@@ -599,5 +600,6 @@
         "label": "出力変数"
       }
     }
-  }
+  },
+  "rerunWorkflow": "再実行"
 }

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SeatsView } from './SeatsView'
-import { message } from '@/components/bs-ui/toast/use-toast'
+import { toast } from '@bisheng/ui';
 import { bsConfirm } from '@/components/bs-ui/alertDialog/useConfirm'
 import { useState } from 'react'
 import {
@@ -20,7 +20,12 @@ vi.mock('@/controllers/API/dsh', async (importOriginal) => ({
 vi.mock('@/components/bs-ui/alertDialog/useConfirm', () => ({
     bsConfirm: vi.fn(),
 }))
-vi.mock('@/components/bs-ui/toast/use-toast', () => ({ message: vi.fn() }))
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({ message: vi.fn() }))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 function seat(id: number): DshSeat {
     return {
         seat_id: `seat${id}`,
@@ -61,8 +66,9 @@ describe('DSH seat pagination and commands', () => {
         await screen.findByText('User 1')
         expect(vi.mocked(getDshSeats).mock.calls.at(-1)![0].seat_state).toBeUndefined()
         const search = screen.getByLabelText('dsh.searchUsers')
-        const filters = search.parentElement!.parentElement!
-        expect(search.parentElement!.classList.contains('w-56')).toBe(true)
+        const searchShell = search.closest('.w-56')!
+        const filters = searchShell.parentElement!
+        expect(searchShell).not.toBeNull()
         expect(filters.classList.contains('justify-end')).toBe(true)
         expect(filters.classList.contains('items-center')).toBe(true)
         expect(filters.contains(screen.getByLabelText('dsh.seatState'))).toBe(true)
@@ -227,7 +233,7 @@ it.each(['receipt', 'http', 'business'])(
         }
         const { unmount } = render(<SeatCommandHarness />)
         fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
-        await waitFor(() => expect(message).toHaveBeenCalledExactlyOnceWith({ variant: 'error', description: 'User 1: dsh.seatLimitGrantHelp' }))
+        await waitFor(() => expect(toast.show).toHaveBeenCalledExactlyOnceWith({ type: 'error', message: 'User 1: dsh.seatLimitGrantHelp' }))
         expect(screen.queryByRole('alert')).toBeNull()
         expect(screen.getByRole('table')).not.toHaveTextContent('dsh.seatLimitGrantHelp')
         expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
@@ -236,11 +242,11 @@ it.each(['receipt', 'http', 'business'])(
         fireEvent.click(screen.getByRole('button', { name: 'dsh.reassign' }))
         await waitFor(() => expect(commandDshSeat).toHaveBeenCalledTimes(2))
         expect(vi.mocked(commandDshSeat).mock.calls[1][3]).not.toBe(previousId)
-        expect(message).toHaveBeenCalledTimes(1)
+        expect(toast.show).toHaveBeenCalledTimes(1)
         expect(screen.queryByRole('alert')).toBeNull()
         vi.mocked(commandDshSeat).mockResolvedValueOnce({ status: 'FAILED', result_code: 'seat_limit_reached' } as DshOperation)
         fireEvent.click(screen.getByRole('button', { name: 'dsh.reassign' }))
-        await waitFor(() => expect(message).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(toast.show).toHaveBeenCalledTimes(2))
         expect(vi.mocked(commandDshSeat).mock.calls[2][3]).not.toBe(previousId)
         unmount()
     },
@@ -256,11 +262,11 @@ it('toasts a delayed capacity failure once across polling and page refreshes', a
     expect(screen.queryByRole('alert')).toBeNull()
     const id = vi.mocked(commandDshSeat).mock.calls[0][3]
     rerender(<SeatsView operations={{ [id]: { status: 'FAILED', result_code: 'seat_limit_reached' } as DshOperation }} revision={0} onOperation={onOperation} />)
-    await waitFor(() => expect(message).toHaveBeenCalledExactlyOnceWith({ variant: 'error', description: 'User 1: dsh.seatLimitGrantHelp' }))
+    await waitFor(() => expect(toast.show).toHaveBeenCalledExactlyOnceWith({ type: 'error', message: 'User 1: dsh.seatLimitGrantHelp' }))
     expect(screen.getByRole('button', { name: 'dsh.reassign' })).toBeEnabled()
     rerender(<SeatsView operations={{ [id]: { status: 'FAILED', result_code: 'seat_limit_reached' } as DshOperation }} revision={1} onOperation={onOperation} />)
     await screen.findByText('User 1')
-    expect(message).toHaveBeenCalledTimes(1)
+    expect(toast.show).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('alert')).toBeNull()
     unmount()
 })
@@ -271,12 +277,12 @@ it('toasts a service error once while preserving the pending operation until con
     const onOperation = vi.fn()
     const { rerender, unmount } = render(<SeatsView operations={{}} revision={0} onOperation={onOperation} />)
     fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
-    await waitFor(() => expect(message).toHaveBeenCalledExactlyOnceWith({ variant: 'error', description: 'User 1: api_errors:26125' }))
+    await waitFor(() => expect(toast.show).toHaveBeenCalledExactlyOnceWith({ type: 'error', message: 'User 1: api_errors:26125' }))
     expect(screen.getByRole('button', { name: 'dsh.PROCESSING' })).toBeDisabled()
     expect(onOperation).toHaveBeenCalledTimes(1)
     expect(onOperation.mock.calls[0][0].rejected).toBeUndefined()
     await act(async () => { await onOperation.mock.calls[0][0].retry() })
-    expect(message).toHaveBeenCalledTimes(1)
+    expect(toast.show).toHaveBeenCalledTimes(1)
     const id = vi.mocked(commandDshSeat).mock.calls[0][3]
     rerender(<SeatsView operations={{ [id]: { status: 'SUCCEEDED', result_code: null } as DshOperation }} revision={0} onOperation={onOperation} />)
     expect(screen.queryByRole('alert')).toBeNull()
@@ -292,9 +298,9 @@ it('starts the command and feedback after confirmation', async () => {
     const { unmount } = render(<SeatCommandHarness />)
     fireEvent.click(await screen.findByRole('button', { name: 'dsh.reassign' }))
     expect(commandDshSeat).toHaveBeenCalledTimes(0)
-    expect(message).toHaveBeenCalledTimes(0)
+    expect(toast.show).toHaveBeenCalledTimes(0)
     await act(async () => { vi.mocked(bsConfirm).mock.calls[0][0].onOk?.(() => {}) })
-    await waitFor(() => expect(message).toHaveBeenCalledExactlyOnceWith({ variant: 'error', description: 'User 1: dsh.seatLimitGrantHelp' }))
+    await waitFor(() => expect(toast.show).toHaveBeenCalledExactlyOnceWith({ type: 'error', message: 'User 1: dsh.seatLimitGrantHelp' }))
     expect(screen.queryByRole('alert')).toBeNull()
     unmount()
 })

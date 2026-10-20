@@ -1,11 +1,13 @@
 // @ts-strict-ignore
-import { DelIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
+
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { getRolesByGroupApi, getUserGroupsApi } from "@/controllers/API/user";
-import { useEffect, useRef, useState } from "react";
+import SelectSearch from "@/components/bs-ui/select/select";
+import { getRolesByGroupApi,getUserGroupsApi } from "@/controllers/API/user";
+import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import SelectSearch from "@/components/bs-ui/select/select"
 
 export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete, onChange }:
     { showDel: boolean, groupId: null | string, selectedRoles: any[], onDelete: any, onChange: any }) {
@@ -39,7 +41,7 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
     }
     const handleSearch = (e) => {
         const keyword = e.target.value
-        const newGroups = groupsRef.current.filter(g => g.label.toUpperCase().includes(keyword.toUpperCase()) 
+        const newGroups = groupsRef.current.filter(g => g.label.toUpperCase().includes(keyword.toUpperCase())
         || g.value === userGroupSelected[0])
         setGroups(newGroups)
     }
@@ -84,6 +86,6 @@ export default function UserRoleItem({ showDel, groupId, selectedRoles, onDelete
             onChange={handleSelectRole}
         >
         </MultiSelect>
-        {showDel && <Button variant="ghost" size="icon" className="mt-2" onClick={onDelete}><DelIcon /></Button>}
+        {showDel && <Button variant="text" size="medium" className="mt-2" onClick={onDelete} color="default" iconOnly><Outlined.Delete size={16} /></Button>}
     </div>
 };

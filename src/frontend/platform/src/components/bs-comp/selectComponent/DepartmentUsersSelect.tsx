@@ -1,9 +1,10 @@
+import { Button, SearchInput } from '@bisheng/ui';
 import { useSubjectSearch } from "./useSubjectSearch"
 import { SubjectBusinessId, SubjectSearchStatus } from "./SubjectSearchStatus"
 import { useLazyDepartmentTree } from "@/components/bs-comp/department"
-import { Button } from "@/components/bs-ui/button"
+
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { SearchInput } from "@/components/bs-ui/input"
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import {
   getDepartmentChildrenApi,
@@ -286,12 +287,7 @@ export default function DepartmentUsersSelect({
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <div className={`w-full ${className}`.trim()}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal"
-          >
+          <Button type="button" variant="outlined" disabled={disabled} className="h-auto min-h-9 w-full justify-between px-3 py-1.5 font-normal" color="default">
             <span className="min-w-0 flex-1 truncate text-left">{displayText}</span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
@@ -330,11 +326,7 @@ export default function DepartmentUsersSelect({
           className="flex min-h-0 flex-col gap-2 overflow-hidden"
           style={{ maxHeight: "min(504px, calc(var(--radix-popover-content-available-height, 520px) - 1rem))" }}
         >
-          <SearchInput
-            placeholder={searchPlaceholder || t("subjectSearch.userPlaceholder")}
-            className="mb-1 shrink-0"
-            {...search.inputProps}
-          />
+          <SearchInput placeholder={searchPlaceholder || t("subjectSearch.userPlaceholder")} {...search.inputProps} className={"mb-1 shrink-0"} />
           <div
             className="min-h-0 flex-1 overflow-y-auto rounded-md border"
             // Radix popover portaled outside the Dialog's react-remove-scroll

@@ -1,6 +1,6 @@
 import { Label } from "@/components/bs-ui/label";
 import { Slider } from "@/components/bs-ui/slider";
-import { QuestionTooltip } from "@/components/bs-ui/tooltip";
+import { AppHint as QuestionTooltip } from "@/pages/BuildPage/components/AppHint";
 import React from "react";
 import { useTranslation } from "react-i18next";
 

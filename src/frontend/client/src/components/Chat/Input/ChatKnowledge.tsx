@@ -20,6 +20,9 @@ import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hoo
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import { SkillMenuEntries, SkillUploadHost } from "~/components/Skills/SkillMenuEntries";
+import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
+import type { TaskModeSkill } from "~/store/linsight";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
@@ -65,9 +68,9 @@ export const ChatKnowledge = ({
   onFolderUploadClick,
   showTaskModeEntry = false,
   onEnterTaskMode,
-  renderSkillSubmenu,
+  selectedSkills = [],
+  onSkillsChange,
   taskModeActive = false,
-  skillSelected = false,
   compact = false,
 }: {
   /** Controls the trigger button and which menu sections render:
@@ -89,12 +92,11 @@ export const ChatKnowledge = ({
    *  delegated to the caller so this component stays route-free. */
   showTaskModeEntry?: boolean;
   onEnterTaskMode?: () => void;
-  /** F035: "添加 Skill" hover submenu (desktop) / drill panel (mobile); selecting a skill enters task mode. */
-  renderSkillSubmenu?: (close: () => void) => ReactNode;
+  /** Checked skills in the + menu. */
+  selectedSkills?: TaskModeSkill[];
+  onSkillsChange?: (skills: TaskModeSkill[]) => void;
   /** When already in task mode, show the entry checked (toggle indicator). */
   taskModeActive?: boolean;
-  /** F035: tint the "添加技能" icon brand-blue once at least one skill is picked. */
-  skillSelected?: boolean;
   /** Toolbar out of room (see useContainerCompact): collapse label to icon. */
   compact?: boolean;
 }) => {
@@ -257,7 +259,9 @@ export const ChatKnowledge = ({
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
       const raw = (preferBottom ? below : above) - 8;
-      const capped = Math.min(MAX_SUB_HEIGHT, Math.max(80, Math.floor(raw)));
+      // The unified skill panel lists skills plus two footer rows, so it gets the desktop cap.
+      const heightCap = mobilePanel === 'skill' ? 440 : MAX_SUB_HEIGHT;
+      const capped = Math.min(heightCap, Math.max(80, Math.floor(raw)));
       setMobileDrillMaxH(capped);
     };
     run();
@@ -270,9 +274,10 @@ export const ChatKnowledge = ({
       window.removeEventListener('resize', run);
       window.removeEventListener('scroll', run, true);
     };
-  }, [isMobile, rootOpen, mobileTallPanel]);
+  }, [isMobile, rootOpen, mobileTallPanel, mobilePanel]);
 
   return (
+    <SkillUploadHost>{(openSkillUpload) => (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
       <TooltipProvider delayDuration={50}>
         <Tooltip>
@@ -505,6 +510,25 @@ export const ChatKnowledge = ({
           </DropdownMenuSub>
         )}
 
+        {/* 技能 — preview-gated unified entry (list + upload + manage); replaces 添加 Skill below.
+            Desktop: side panel. Mobile: drill row on the root, panel in place of it. */}
+        {variant === 'plus' && (!isMobile || mobilePanel === 'root') && (
+          <SkillMenuEntries
+            selected={selectedSkills}
+            onChange={onSkillsChange ?? (() => undefined)}
+            onUpload={openSkillUpload}
+            onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined}
+          />
+        )}
+        {variant === 'plus' && isMobile && mobilePanel === 'skill' && (
+          <SkillMenuPanel
+            selected={selectedSkills}
+            onChange={onSkillsChange ?? (() => undefined)}
+            onUpload={openSkillUpload}
+            onBack={() => setMobilePanel('root')}
+          />
+        )}
+
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
         {variant === 'plus' && isMobile && mobilePanel === 'root' && config?.knowledgeBase?.enabled !== false && (
           <DropdownMenuItem
@@ -584,81 +608,10 @@ export const ChatKnowledge = ({
               </span>
               {taskModeActive && <Outlined.Check size={14} className="text-blue-500" />}
             </DropdownMenuItem>
-            {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
-                选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
-                close 让选择器先关掉「+」菜单，避免 popover 跳位。 */}
-            {renderSkillSubmenu && (
-              !isMobile ? (
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger
-                    className={cn(
-                      'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
-                      <span className="text-[14px] font-normal text-slate-700">
-                        {localize('com_linsight_add_skill')}
-                      </span>
-                    </div>
-                  </DropdownMenuSubTrigger>
-                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
-                      `align="center"` centers the panel vertically on the trigger row
-                      instead of aligning their top edges. */}
-                  <DropdownMenuSubContent
-                    align="center"
-                    collisionPadding={BOTTOM_GAP}
-                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
-                  >
-                    {renderSkillSubmenu(() => setRootOpen(false))}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              ) : (
-                <DropdownMenuItem
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    setMobilePanel('skill');
-                  }}
-                  className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
-                    <span className="truncate text-[14px] font-normal text-slate-700">
-                      {localize('com_linsight_add_skill')}
-                    </span>
-                  </div>
-                  <Outlined.Right className="size-4 shrink-0 text-slate-400" />
-                </DropdownMenuItem>
-              )
-            )}
           </>
-        )}
-
-        {/* 添加 Skill — 移动端下钻面板 */}
-        {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
-          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5">
-              <button
-                type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-3 hover:bg-fill-2"
-                aria-label={localize('com_ui_go_back')}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMobilePanel('root');
-                }}
-              >
-                <Outlined.ArrowLeft size={18} />
-              </button>
-              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                {localize('com_linsight_add_skill')}
-              </span>
-            </div>
-            {renderSkillSubmenu(() => setRootOpen(false))}
-          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+    )}</SkillUploadHost>
   );
 };

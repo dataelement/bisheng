@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { notification, toast } from '@bisheng/ui';
 import { SettingIcon } from "@/components/bs-icons";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { Switch } from "@/components/bs-ui/switch";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 import { CircleHelp } from "lucide-react";
@@ -15,7 +16,7 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
     const { t } = useTranslation();
 
     const [open, setOpen] = useState(false);
-    const { toast, message } = useToast();
+
     const [form, setForm] = useState({
         isCheck: false,
         autoReply: "",
@@ -41,14 +42,14 @@ export default function FlowSetting({ id, type, isOnline, onSubTask }) {
         if (_form.wordsType.length === 0) errors.push(t('build.errors.selectAtLeastOneWordType'));
         if (_form.autoReply === '') errors.push(t('build.errors.autoReplyNotEmpty'));
         if (errors.length) {
-            return toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
+            return notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(errors.join(', ') ?? '') });
         }
 
         setForm(_form);
         if (isOnline) return; // 在线状态不允许修改
         const callBack = async (id) => {
             await sensitiveSaveApi({ ..._form, id, type });
-            message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+            toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('build.saveSuccess') ?? '')].filter(Boolean).join('\n') });
         }
         id ? callBack(id) : onSubTask?.(callBack);
     };

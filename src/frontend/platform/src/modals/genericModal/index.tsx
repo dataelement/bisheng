@@ -1,12 +1,13 @@
 // @ts-strict-ignore
+import { Button, Textarea } from '@bisheng/ui';
 import { FileText, Variable } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import SanitizedHTMLWrapper from "../../components/SanitizedHTMLWrapper";
 import ShadTooltip from "../../components/ShadTooltipComponent";
 import { Badge } from "../../components/bs-ui/badge";
-import { Button } from "../../components/bs-ui/button";
+
 import { DialogTitle } from "../../components/bs-ui/dialog";
-import { Textarea } from "../../components/bs-ui/input";
+
 import {
   MAX_WORDS_HIGHLIGHT
 } from "../../constants";
@@ -209,32 +210,18 @@ export default function GenericModal({
             )}
           >
             {type === TypeModal.PROMPT && isEdit ? (
-              <Textarea
-                ref={divRefPrompt}
-                className="form-input h-full w-full rounded-lg custom-scroll focus-visible:ring-1"
-                value={inputValue}
-                onBlur={() => {
+              <Textarea ref={divRefPrompt} value={inputValue} onBlur={() => {
                   setIsEdit(false);
-                }}
-                autoFocus
-                onChange={(e) => {
+                }} autoFocus onChange={(e) => {
                   setInputValue(e.target.value);
                   checkVariables(e.target.value);
-                }}
-                placeholder="Type message here."
-              />
+                }} placeholder="Type message here." textareaClassName={"form-input h-full w-full rounded-lg custom-scroll focus-visible:ring-1"} />
             ) : type === TypeModal.PROMPT && !isEdit ? (
               <TextAreaContentView />
             ) : type !== TypeModal.PROMPT ? (
-              <Textarea
-                ref={ref}
-                className="form-input h-full w-full rounded-lg focus-visible:ring-1"
-                value={inputValue}
-                onChange={(e) => {
+              <Textarea ref={ref} value={inputValue} onChange={(e) => {
                   setInputValue(e.target.value);
-                }}
-                placeholder="Type message here."
-              />
+                }} placeholder="Type message here." textareaClassName={"form-input h-full w-full rounded-lg focus-visible:ring-1"} />
             ) : (
               <></>
             )}
@@ -285,8 +272,7 @@ export default function GenericModal({
                 </div>
               )}
             </div>
-            <Button
-              onClick={() => {
+            <Button onClick={() => {
                 switch (myModalType) {
                   case 1:
                     setValue(inputValue);
@@ -301,9 +287,7 @@ export default function GenericModal({
                   default:
                     break;
                 }
-              }}
-              type="submit"
-            > {myButtonText} </Button>
+              }} type="submit"> {myButtonText} </Button>
           </div>
         </div>
       </BaseModal.Content>

@@ -1,12 +1,13 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
-import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
-import { PassInput } from '@/components/bs-ui/input';
+import { Button } from '@bisheng/ui';
+
+import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
+import { PassInput } from '@/components/bs-comp/formFields/PassInput';
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import { QuestionTooltip } from '@/components/bs-ui/tooltip';
-import { useEffect, useRef, useState } from 'react';
+import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
+import { useEffect,useRef,useState } from 'react';
 import { useTranslation } from "react-i18next";
+import { AppHint } from "../../components/AppHint";
 import { InputField } from "./InputField";
 
 const Dalle3ToolForm = ({ formData, onSubmit }) => {
@@ -139,7 +140,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                         <RadioGroupItem value="container" id="execution-container" />
                         <Label htmlFor="execution-container">
                             {t('executionContainerLabel')}{' '}
-                            <QuestionTooltip content={t('executionContainerHint')} />
+                            <AppHint content={t('executionContainerHint')} />
                         </Label>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -167,14 +168,14 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
                                 <RadioGroupItem value="private" id="provider-private" />
                                 <Label htmlFor="provider-private">
                                     {t('providerPrivateLabel')}{' '}
-                                    <QuestionTooltip content={t('providerPrivateTooltip')} />
+                                    <AppHint content={t('providerPrivateTooltip')} />
                                 </Label>
                             </div>
                             <div className="flex items-center space-x-2">
                                 <RadioGroupItem value="official" id="provider-official" />
                                 <Label htmlFor="provider-official">
                                     {t('providerOfficialLabel')}{' '}
-                                    <QuestionTooltip content={t('providerOfficialTooltip')} />
+                                    <AppHint content={t('providerOfficialTooltip')} />
                                 </Label>
                             </div>
                         </RadioGroup>
@@ -209,7 +210,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
 
             <DialogFooter className="mt-6">
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
+                    <Button variant="outlined" className="px-11" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>

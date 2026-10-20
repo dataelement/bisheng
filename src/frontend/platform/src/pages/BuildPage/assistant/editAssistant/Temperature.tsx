@@ -1,4 +1,4 @@
-import { ButtonNumber } from "@/components/bs-ui/button";
+import { ButtonNumber } from '@/components/bs-comp/formFields/NumberStepper';
 import { Slider } from "@/components/bs-ui/slider";
 
 export default function Temperature({ value, onChange }) {

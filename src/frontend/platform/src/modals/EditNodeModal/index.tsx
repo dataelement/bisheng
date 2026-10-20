@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CodeAreaComponent from "../../components/codeAreaComponent";
@@ -12,7 +13,7 @@ import PromptAreaComponent from "../../components/promptComponent";
 import TextAreaComponent from "../../components/textAreaComponent";
 import ToggleShadComponent from "../../components/toggleShadComponent";
 import { Badge } from "../../components/bs-ui/badge";
-import { Button } from "../../components/bs-ui/button";
+
 import {
   Dialog,
   DialogContent,
@@ -36,7 +37,7 @@ import { TabsContext } from "../../contexts/tabsContext";
 import { typesContext } from "../../contexts/typesContext";
 import { NodeDataType } from "../../types/flow";
 import { classNames, limitScrollFieldsModal } from "../../utils";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 
 export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const [open, setOpen] = useState(true);
@@ -75,12 +76,9 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
     }
   }
 
-  const { message } = useToast()
+
   const handleSave = () => {
-    if (isOnlineVersion()) return message({
-      description: '上线中不可编辑保存',
-      variant: 'warning'
-    })
+    if (isOnlineVersion()) return toast.show({ type: 'warning', message: String('上线中不可编辑保存') })
     setModalOpen(false)
   }
 
@@ -158,7 +156,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
               <p className="sm:max-w-[700px] lg:max-w-[700px] break-words">
                 {data.node?.description}
               </p>
-              
+
               <div className="flex pt-3">
                 {/* <Variable className="edit-node-modal-variable "></Variable> */}
                 <span className="edit-node-modal-span">List</span>
@@ -368,7 +366,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
         </div>
 
         <DialogFooter>
-          <Button className="mt-3 rounded-full" onClick={handleSave} type="submit" >save</Button>
+          <Button className="mt-3 rounded-full" onClick={handleSave} type="submit">save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

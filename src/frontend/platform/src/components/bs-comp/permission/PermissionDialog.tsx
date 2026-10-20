@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import {
   Dialog,
@@ -202,15 +203,11 @@ export function PermissionDialog({
                   </TabsList>
 
                   {canAddPermission && (
-                    <Button
-                      type="button"
-                      className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]"
-                      onClick={() => {
+                    <Button type="button" className="h-8 shrink-0 rounded-[6px] px-3 text-[14px] leading-[22px]" onClick={() => {
                         setGrantSubjectType(subjectType)
                         setGrantIncludeChildren(false)
                         setGrantDialogOpen(true)
-                      }}
-                    >
+                      }}>
                       {t("dialog.tabGrant")}
                     </Button>
                   )}

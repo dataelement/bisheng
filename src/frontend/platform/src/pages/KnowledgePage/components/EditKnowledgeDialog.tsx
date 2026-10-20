@@ -1,8 +1,9 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
-import { useEffect, useState } from "react";
+import { Button, Input, Textarea } from '@bisheng/ui';
+
+import { DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function KnowledgeBaseSettingsDialog({
@@ -47,6 +48,8 @@ export default function KnowledgeBaseSettingsDialog({
 
     // Handle form submission
     const handleSubmit = (e) => {
+        if ((String((formData.name) ?? '').length > 30) || (String((formData.desc) ?? '').length > 200)) return;
+
         e.preventDefault();
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
@@ -68,38 +71,22 @@ export default function KnowledgeBaseSettingsDialog({
                         {t('name')}<span className="bisheng-tip">*</span>
                     </label>
                     <div className="flex items-center mt-2">
-                        <Input
-                            id="name"
-                            name="name"
-                            placeholder={t('namePlaceholder')}
-                            maxLength={30}
-                            className="flex-1"
-                            value={formData.name}
-                            onChange={handleChange}
-                        />
+                        <Input id="name" name="name" placeholder={t('namePlaceholder')} maxLength={30} value={formData.name} onChange={handleChange} className={"flex-1"} showCount />
                     </div>
                     {errors.name && <p className="bisheng-tip mt-1 text-red-500">{errors.name}</p>}
                 </div>
                 <div className="">
                     <label htmlFor="desc" className="bisheng-label">{t('desc')}</label>
                     <div className="flex items-center mt-2">
-                        <Textarea
-                            id="desc"
-                            name="desc"
-                            placeholder={t('descPlaceholder')}
-                            maxLength={200}
-                            className="flex-1"
-                            value={formData.desc}
-                            onChange={handleChange}
-                        />
+                        <Textarea id="desc" name="desc" placeholder={t('descPlaceholder')} maxLength={200} value={formData.desc} onChange={handleChange} textareaClassName={"flex-1"} showCount />
                     </div>
                 </div>
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">{t('cancel', {ns: 'bs'})}</Button>
+                    <Button variant="outlined" className="px-11" type="button" color="default">{t('cancel', {ns: 'bs'})}</Button>
                 </DialogClose>
-                <Button type="submit" className="px-11" onClick={handleSubmit}>{t('confirm', {ns: 'bs'})}</Button>
+                <Button type="submit" className="px-11" onClick={handleSubmit} disabled={(String((formData.name) ?? '').length > 30) || (String((formData.desc) ?? '').length > 200)}>{t('confirm', {ns: 'bs'})}</Button>
             </DialogFooter>
         </DialogContent>
     );

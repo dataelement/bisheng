@@ -1,14 +1,15 @@
 // @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectTrigger } from "@/components/bs-ui/select";
-import { Check } from "lucide-react";
-import { useContext, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Select,SelectContent,SelectTrigger } from "@/components/bs-ui/select";
+import { Outlined } from "bisheng-icons";
+
 import { locationContext } from "@/contexts/locationContext";
 import {
-    normalizeFileAccept,
-    type UploadFileKind,
+normalizeFileAccept,
+type UploadFileKind,
 } from "@/util/fileAcceptUtils";
+import { useContext,useEffect,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface FileTypeSelectProps {
     data: {
@@ -16,7 +17,7 @@ interface FileTypeSelectProps {
         value: UploadFileKind[] | 'all' | 'file' | 'image' | string;
     };
     onChange: (value: UploadFileKind[]) => void;
-    i18nPrefix: string;
+    i18nPrefix?: string;
 }
 
 export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeSelectProps) {
@@ -93,7 +94,7 @@ export default function FileTypeSelect({ data, onChange, i18nPrefix }: FileTypeS
                             <span className="w-64 overflow-hidden text-ellipsis">
                                 {option.label}
                             </span>
-                            {kinds.includes(option.value) && <Check className="h-4 w-4" />}
+                            {kinds.includes(option.value) && <Outlined.Check className="h-4 w-4" />}
                         </div>
                     ))}
                 </SelectContent>

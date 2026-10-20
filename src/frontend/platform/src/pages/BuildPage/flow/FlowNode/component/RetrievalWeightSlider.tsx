@@ -1,19 +1,15 @@
 // @ts-strict-ignore
 import { Slider } from '@/components/bs-ui/slider';
-import { Switch } from '@/components/bs-ui/switch';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger
-} from '@/components/bs-ui/tooltip';
+import { Tooltip as SharedTooltip,Switch } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
 import { useModel } from '@/pages/ModelPage/manage';
 import { ModelSelect } from '@/pages/ModelPage/manage/tabs/WorkbenchModel';
 import { WorkflowNodeParam } from '@/types/flow';
-import { HelpCircle } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
-import InputItem from './InputItem';
+
+import React,{ useEffect,useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import InputItem from './InputItem';
 
 interface RerankModel {
     value: string;
@@ -125,17 +121,8 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                 <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">{t('userAuthVerification')}</span>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    {/* F041: detailed tip — ON=runtime user view_file, OFF=config author range (shared) */}
-                                    <p className="max-w-xs">{t('userAuthVerificationTips')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <><SharedTooltip   content={<>{/* F041: detailed tip — ON=runtime user view_file, OFF=config author range (shared) */}
+                                    <p className="max-w-xs">{t('userAuthVerificationTips')}</p></>}><Outlined.Question className="h-4 w-4 text-gray-400 cursor-pointer" /></SharedTooltip></>
                     </div>
                     <Switch
                         checked={userAuth}
@@ -148,16 +135,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                 <div className="space-y-4 pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">{t('retrieverWeightSettings')}</span>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="max-w-xs">{t('adjustWeightForVectorOrKeywordSearch')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <><SharedTooltip   content={<><p className="max-w-xs">{t('adjustWeightForVectorOrKeywordSearch')}</p></>}><Outlined.Question className="h-4 w-4 text-gray-400 cursor-pointer" /></SharedTooltip></>
                     </div>
 
                     <div className="space-y-2">
@@ -191,16 +169,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                 <div className="flex items-center justify-between pl-4">
                     <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-500">{t('retrievalResultReRank')}</span>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="max-w-xs">{t('useRerankModelForReorderingResults')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <><SharedTooltip   content={<><p className="max-w-xs">{t('useRerankModelForReorderingResults')}</p></>}><Outlined.Question className="h-4 w-4 text-gray-400 cursor-pointer" /></SharedTooltip></>
                     </div>
                     <Switch
                         checked={rerankEnabled}
@@ -227,16 +196,7 @@ const RetrievalConfig: React.FC<RetrievalConfigProps> = ({ data, onChange, onVal
                 <div className="space-y-2 pl-4">
                     <div className="flex items-center gap-2">
                         <label className="text-sm font-medium text-gray-500">{t('retrievalResultLength')}</label>
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-gray-400 cursor-pointer" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p className="max-w-xs">{t('controlResultTextLengthForModel')}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        <><SharedTooltip   content={<><p className="max-w-xs">{t('controlResultTextLengthForModel')}</p></>}><Outlined.Question className="h-4 w-4 text-gray-400 cursor-pointer" /></SharedTooltip></>
                     </div>
                     <InputItem
                         type="number"

@@ -5,8 +5,10 @@ import plugin from "tailwindcss/plugin";
 
 // ! Check if removing the other module.exports made sense
 module.exports = {
+  presets: [require('@bisheng/ui/tailwind-preset')],
   darkMode: ["class"],
   content: [
+    "../packages/ui/src/**/*.{ts,tsx}",
     "app/**/*.{ts,tsx}",
     "components/**/*.{ts,tsx}",
     "./index.html",
@@ -98,7 +100,6 @@ module.exports = {
         "chat-bot-icon": "var(--chat-bot-icon)",
         "chat-user-icon": "var(--chat-user-icon)",
         "black-button": "hsl(var(--black-button))",
-        white: "var(--white)",
         border: "hsl(var(--border))",
         input: "hsl(var(--input)/0.15)",
         ring: "hsl(var(--ring))",
@@ -132,11 +133,6 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-      },
-      borderRadius: {
-        lg: `var(--radius)`,
-        md: `calc(var(--radius) - 2px)`,
-        sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", ...fontFamily.sans],

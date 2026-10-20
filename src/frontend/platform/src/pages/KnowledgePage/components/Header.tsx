@@ -1,15 +1,15 @@
-import { Dialog, DialogTrigger } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast } from '@bisheng/ui';
+
 import { updateKnowledgeApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { ArrowLeft, SquarePen } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Outlined } from "bisheng-icons";
+import { KnowledgeTooltip } from "./KnowledgeTooltip";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams, useNavigate, useLocation } from "react-router-dom";
-import { Button } from "../../../components/bs-ui/button";
-import ShadTooltip from "../../../components/ShadTooltipComponent";
-import KnowledgeBaseSettingsDialog from "./EditKnowledgeDialog";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { useLocation,useNavigate,useParams } from "react-router-dom";
+
+
 import useKnowledgeStore from "../useKnowledgeStore";
 
 interface HeaderProps {
@@ -50,7 +50,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
     // 使用传入的回调或默认回调
     const handleBackClick = onBack || handleBackDefault;
 
-    const { message } = useToast()
+
     const handleSave = (form) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeApi({
             knowledge_id: Number(id),
@@ -61,7 +61,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
             // api
             setLibInfo(form)
             setOpen(false)
-            message({ variant: 'success', description: t('saved') })
+            toast.show({ type: 'success', message: String(t('saved') ?? '') })
             localStorage.setItem('libname', form.name)
             localStorage.setItem('libdesc', form.desc)
         })
@@ -73,14 +73,14 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
         <div className="flex items-start h-14 z-30">
             {/* 回退按钮 - 根据 showBackButton 控制显示 */}
             {showBackButton && (
-                <ShadTooltip content={t('back')} side="top">
+                <KnowledgeTooltip content={t('back')} side="top">
                     <button
                         className="extra-side-bar-buttons w-[36px]"
                         onClick={handleBackClick}
                     >
-                        <ArrowLeft className="side-bar-button-size" />
+                        <Outlined.ArrowLeft className="side-bar-button-size" />
                     </button>
-                </ShadTooltip>
+                </KnowledgeTooltip>
             )}
 
             <div>
@@ -95,7 +95,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
                     {/* {isEditable ? <Dialog open={open} onOpenChange={setOpen}>
                         <DialogTrigger asChild>
                             <Button variant="ghost" size="icon" className="group-hover:visible invisible disabled:pointer-events-auto">
-                                <SquarePen className="w-4 h-4" />
+                                <Outlined.Edit className="w-4 h-4" />
                             </Button>
                         </DialogTrigger>
                         {

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import {
   Table,
   TableBody,
@@ -8,15 +9,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/bs-ui/table";
-import { Tabs, TabsContent } from "@/components/bs-ui/tabs";
+
 import { useNavigate } from "react-router-dom";
 
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Badge } from "@/components/bs-ui/badge";
+import { Tag, Tooltip } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+
 import {
   Evaluation,
   deleteEvaluationApi,
@@ -27,7 +29,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
 import { downloadFile } from "@/util/utils";
 import { map } from "lodash-es";
-import { CircleHelpIcon } from "lucide-react";
+
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -50,7 +52,6 @@ export default function EvaluationPage() {
     total,
     loading,
     setPage,
-    search,
     reload,
   } = useTable({ cancelLoadingWhenReload: true }, (param) =>
     getEvaluationApi(param.page, param.pageSize)
@@ -70,7 +71,7 @@ export default function EvaluationPage() {
       desc: t("evaluation.confirmDeleteEvaluation"),
       onOk(next) {
         captureAndAlertRequestErrorHoc(
-          deleteEvaluationApi(id).then((res) => {
+          deleteEvaluationApi(id).then(() => {
             reload();
           })
         );
@@ -92,13 +93,9 @@ export default function EvaluationPage() {
         </div>
       )}
       <div className="h-full overflow-y-auto pb-10">
-        <Tabs defaultValue="account" className="mb-[40px] w-full">
-          <TabsContent value="account">
+        <div className="mb-10 w-full">
             <div className="flex items-center justify-end gap-4">
-              <Button
-                className="px-8 text-[#fff]"
-                onClick={() => navigate("/evaluation/create")}
-              >
+              <Button className="px-8 text-[#fff]" onClick={() => navigate("/evaluation/create")}>
                 {t("create")}
               </Button>
             </div>
@@ -134,9 +131,9 @@ export default function EvaluationPage() {
                     <TableCell>{el.file_name || "--"}</TableCell>
                     <TableCell>
                       <div className="flex items-center">
-                        <Badge className="whitespace-nowrap">
+                        <Tag size="small" className="whitespace-nowrap shrink-0">
                           {t(EvaluationTypeLabelMap[EvaluationType[el.exec_type]]?.label ?? t("unknown"))}
-                        </Badge>
+                        </Tag>
                         &nbsp;
                         <span className="whitespace-nowrap text-medium-indigo">
                           {el.unique_name}
@@ -150,37 +147,20 @@ export default function EvaluationPage() {
 
                     <TableCell>
                       {!!el.status && (
-                        <div className="flex items-center">
-                          <Badge
-                            variant={EvaluationStatusLabelMap[el.status]?.variant ?? "default"}
-                            className={"whitespace-nowrap min-w-[60px] justify-center"}
-                          >
+                        <div className="flex items-center gap-1">
+                          <Tag size="small" className="whitespace-nowrap shrink-0" dot color={EvaluationStatusLabelMap[el.status]?.color ?? "default"}>
                             {t(EvaluationStatusLabelMap[el.status]?.label ?? t("unknown"))}
                             {el.status === EvaluationStatusEnum.running
                               ? ` ${el.progress}`
                               : null}
+                          </Tag>
                             {el.status === EvaluationStatusEnum.failed && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="">
-                                      <CircleHelpIcon className="h-3.5 w-3.5" />
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent
-                                    className="max-w-[400px] whitespace-normal"
-                                    side="top"
-                                  >
-                                    <p className="break-words">
-                                      {el.description || t("description")}
-                                    </p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                              <Tooltip content={el.description || t("description")} side="top">
+                                <span tabIndex={0} className="inline-flex" aria-label={el.description || t("description")}>
+                                  <Outlined.Question size={14} className="text-text-3" />
+                                </span>
+                              </Tooltip>
                             )}
-                          </Badge>
-
-
                         </div>
                       )}
                     </TableCell>
@@ -191,7 +171,7 @@ export default function EvaluationPage() {
                             const labelKey = EvaluationScoreLabelMap[EvaluationScore[key]]?.label;
                             const displayLabel = labelKey ? t(labelKey) : key;
                             return (
-                              <span className="whitespace-nowrap">
+                              <span key={key} className="whitespace-nowrap">
                                 {displayLabel}
                                 :{value}&nbsp;
                               </span>
@@ -205,18 +185,10 @@ export default function EvaluationPage() {
                     </TableCell>
                     <TableCell className="flex justify-end">
                       <div className="flex">
-                        {el.status !== EvaluationStatusEnum.failed && <Button
-                          variant="link"
-                          className="no-underline hover:underline"
-                          onClick={() => handleDownload(el)}
-                        >
+                        {el.status !== EvaluationStatusEnum.failed && <Button variant="link" className="no-underline hover:underline" onClick={() => handleDownload(el)}>
                           {t("evaluation.download")}
                         </Button>}
-                        <Button
-                          variant="link"
-                          onClick={() => handleDelete(el.id)}
-                          className="ml-1 px-0 text-red-500"
-                        >
+                        <Button variant="link" onClick={() => handleDelete(el.id)} className="ml-1 px-0 text-red-500">
                           {t("delete")}
                         </Button>
                       </div>
@@ -225,9 +197,7 @@ export default function EvaluationPage() {
                 ))}
               </TableBody>
             </Table>
-          </TabsContent>
-          <TabsContent value="password"></TabsContent>
-        </Tabs>
+          </div>
       </div>
       <div className="bisheng-table-footer px-6 bg-background-login">
         <p className="desc">{t("evaluation.evaluationCollection")}</p>

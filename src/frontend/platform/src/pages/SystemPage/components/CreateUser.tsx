@@ -1,22 +1,24 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input, PasswordInput } from "@/components/bs-ui/input"
-import { Label } from "@/components/bs-ui/label"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { generateUUID } from "@/components/bs-ui/utils"
-import { createUserApi } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { handleEncrypt, PWD_RULE } from "@/pages/LoginPage/utils"
-import { copyText } from "@/utils"
-import { Plus } from "lucide-react"
-import { useState } from "react"
-import { useTranslation } from "react-i18next"
-import UserRoleItem from "./UserRoleItem"
+import { Button, Input, PasswordInput, toast } from '@bisheng/ui';
+
+import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { Label } from "@/components/bs-ui/label";
+
+import { generateUUID } from "@/components/bs-ui/utils";
+import { createUserApi } from "@/controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { handleEncrypt,PWD_RULE } from "@/pages/LoginPage/utils";
+import { copyText } from "@/utils";
+import { Outlined } from "bisheng-icons";
+
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import UserRoleItem from "./UserRoleItem";
 
 export default function CreateUser({ open, onClose, onSave }) {
     const { t } = useTranslation()
-    const { message } = useToast()
+
     const initItems = { key: generateUUID(8), groupId: '', roles: [] }
     const initUser = {
         user_name: '',
@@ -37,7 +39,7 @@ export default function CreateUser({ open, onClose, onSave }) {
         if (form.user_name.length > 30) errors.push(t('system.usernameMaxLength'))
         if (!PWD_RULE.test(form.password)) errors.push(t('system.passwordRequirements'))
         if (items.every(item => item.roles.length === 0)) errors.push(t('system.roleRequired'))
-        if (errors.length > 0) return message({ title: t('prompt'), description: errors, variant: 'warning' })
+        if (errors.length > 0) return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), errors.filter(Boolean).join('\n')].filter(Boolean).join('\n') })
 
         const encryptPwd = await handleEncrypt(form.password)
         const group_roles = items.map(item => ({
@@ -46,7 +48,7 @@ export default function CreateUser({ open, onClose, onSave }) {
         }))
         captureAndAlertRequestErrorHoc(createUserApi(form.user_name, encryptPwd, group_roles).then(() => {
             copyText(`${t('system.username')}: ${form.user_name}，${t('system.initialPassword')}: ${form.password}`).then(() =>
-                message({ title: t('prompt'), description: t('system.userCreationSuccess'), variant: 'success' }))
+                toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('system.userCreationSuccess') ?? '')].filter(Boolean).join('\n') }))
             onClose(false)
             setItems([initItems])
             setForm(initUser)
@@ -68,13 +70,11 @@ export default function CreateUser({ open, onClose, onSave }) {
             <div className="flex flex-col gap-4 mb-4">
                 <div>
                     <Label htmlFor="user" className="bisheng-label">{t('system.username')}</Label>
-                    <Input id="user" value={form.user_name} onChange={(e) => setForm({ ...form, user_name: e.target.value })}
-                        placeholder={t('system.usernamePlaceholder')} className="h-[48px]" />
+                    <Input id="user" value={form.user_name} onChange={(e) => setForm({ ...form, user_name: e.target.value })} placeholder={t('system.usernamePlaceholder')} className={"h-[48px]"} />
                 </div>
                 <div>
                     <Label htmlFor="password" className="bisheng-label">{t('system.initialPassword')}</Label>
-                    <PasswordInput id="password" value={form.password} placeholder={t('system.passwordPlaceholder')}
-                        onChange={(e) => setForm({ ...form, password: e.target.value })} inputClassName="h-[48px]" />
+                    <PasswordInput id="password" value={form.password} placeholder={t('system.passwordPlaceholder')} onChange={(e) => setForm({ ...form, password: e.target.value })} className={"h-[48px]"} revealLabel={t('sharedUi.showPassword')} hideLabel={t('sharedUi.hidePassword')} />
                 </div>
                 <div className="flex flex-col gap-2">
                     <Label className="bisheng-label">{t('system.userGroupRoleSelection')}</Label>
@@ -87,15 +87,15 @@ export default function CreateUser({ open, onClose, onSave }) {
                             onDelete={() => setItems(items => items.filter((el, i) => i !== index))}
                         />)}
                     </div>
-                    <Button variant="outline" size="icon" onClick={() =>
+                    <Button variant="outlined" size="medium" onClick={() =>
                         setItems(items => [...items, { key: generateUUID(8), groupId: '', roles: [] }])
-                    }>
-                        <Plus />
+                    } color="default" iconOnly>
+                        <Outlined.Plus size={16} />
                     </Button>
                 </div>
             </div>
             <DialogFooter>
-                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={handleCancel}>{t('cancel')}</Button>
+                <Button variant="outlined" className="h-10 w-[120px] px-16" onClick={handleCancel} color="default">{t('cancel')}</Button>
                 <Button className="px-16 h-10 w-[120px]" onClick={handleConfirm}>{t('confirm')}</Button>
             </DialogFooter>
         </DialogContent>

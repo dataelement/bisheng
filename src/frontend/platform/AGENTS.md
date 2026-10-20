@@ -19,9 +19,10 @@ Vite 5 + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + **Zustand** 
 - **HTTP Requests**: wrapper is `@/controllers/request.ts`; API modules in `@/controllers/API/`.
 - **State Management**: Zustand stores in `@/store/` (cross-page); React Context (`@/contexts/`) for UI-scoped state (alerts, theme, tabs).
 - **Frozen deps (lint-enforced via `no-restricted-imports`; existing usage suppressed)**: `react-query` v3 (unmaintained; @tanstack migration pending, ledger #6) — new data fetching uses the API Layer Pattern below; `xlsx` / `xlsx-populate` (vulnerable / duplicated, ledger #7); `react-color`, `react-beautiful-dnd` (deprecated, ledger #8). Do not add new imports of any of these.
-- **UI Components**: `@/components/bs-ui/` (Radix-based). Icons from `@/components/bs-icons/`.
+- **UI Components**: Button, input fields and notices import directly from `@bisheng/ui`; no platform compatibility wrappers or primitive re-exports. Business compositions live in `@/components/bs-comp/formFields/` and use shared primitives. Other families remain Radix-based in `@/components/bs-ui/`. Shared tokens and the Tailwind preset are loaded by platform.
+- **Icons**: Prefer `bisheng-icons`. Existing icon implementations may be retained when no suitable equivalent is available.
 - **Workflow editor**: `@xyflow/react` (**not** `react-flow-renderer`); nodes in `src/pages/BuildPage/flow/FlowNode/`. (Legacy skill editor + `src/CustomNodes/` were removed with the skill module.)
-- **Toast**: `import { toast } from "@/components/bs-ui/toast/use-toast"; toast({ title, variant: 'error' | 'success', description })`.
+- **Toast**: `import { toast, notification } from "@bisheng/ui"`. Use `toast.show({ type, message })` for light messages and `notification.open({ type, title, description })` for notification cards; copy is localized at the caller.
 - **Confirm Dialogs**: `import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"`.
 - **i18n**: `useTranslation()` from react-i18next → `t()`. Locale files at `public/locales/{en-US,zh-Hans,ja}/{ns}.json`. Namespaces: bs, flow, model, tool, dashboard, knowledge.
 

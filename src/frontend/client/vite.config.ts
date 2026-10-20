@@ -156,11 +156,21 @@ export default defineConfig(({ command, mode }) => {
         '/workspace/api': {
           target: apiTarget,
           changeOrigin: true,
+          // changeOrigin rewrites Host to the backend. The ASR socket rejects an
+          // Origin that does not match the browser host; see configure below.
+          xfwd: true,
           secure: false,
           ws: true,
-          configure: (proxy, options) => {
+          configure: (proxy) => {
+            // http-proxy writes X-Forwarded-Host only on HTTP. The websocket
+            // upgrade still has Host rewritten by changeOrigin, so copy the
+            // browser host here or the ASR origin check closes the socket.
+            proxy.on('proxyReqWs', (proxyReq, req) => {
+              const host = req.headers.host;
+              if (host) proxyReq.setHeader('x-forwarded-host', host);
+            });
             if (proxyLog) {
-              proxy.on('proxyReq', (proxyReq, req, res) => {
+              proxy.on('proxyReq', (proxyReq) => {
                 console.log('Proxying request to:', proxyReq.path);
               });
             }

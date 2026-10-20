@@ -1,9 +1,9 @@
 import { RbDragIcon } from '@/components/bs-icons/rbDrag';
-import { NodeToolbar, useViewport } from '@xyflow/react';
-import { useEffect, useRef, useState } from 'react';
-import NodeToolbarComponent from './FlowNode/NodeToolbarComponent';
-import { useHoverToolbar } from './FlowNode';
+import { NodeToolbar,useViewport } from '@xyflow/react';
+import { useEffect,useRef,useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useHoverToolbar } from './FlowNode';
+import NodeToolbarComponent from './FlowNode/NodeToolbarComponent';
 
 function NoteNode({ data: node, selected, width, height }: { data: any; selected: boolean, width: number, height: number }) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);

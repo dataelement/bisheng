@@ -94,9 +94,14 @@ vi.mock("@/hooks/useDshBrowserConfig", () => ({
   }),
 }));
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   toast: vi.fn(),
-}));
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+});
 
 beforeAll(() => {
   (globalThis as any).__APP_ENV__ = { BASE_URL: "" };

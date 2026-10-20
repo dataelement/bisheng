@@ -1,44 +1,47 @@
-import { Button } from "@/components/bs-ui/button"
-import { LoadIcon } from "@/components/bs-icons"
-import { Checkbox } from "@/components/bs-ui/checkBox"
+import { Button, SearchInput, notification } from '@bisheng/ui';
+
+import { Checkbox } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
-import { SearchInput } from "@/components/bs-ui/input"
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
+
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/bs-ui/select"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+Select,
+SelectContent,
+SelectItem,
+SelectTrigger,
+SelectValue,
+} from "@/components/bs-ui/select";
+
 import {
-  listServiceAccountGrantableResourcesApi,
-  mutateServiceAccountResourceGrantsApi,
-} from "@/controllers/API/serviceAccount"
+getGrantablePermissionModelsApi,
+getResourcePermissionContextApi,
+type GrantablePermissionModel,
+} from "@/controllers/API/permission";
 import {
-  getGrantablePermissionModelsApi,
-  getResourcePermissionContextApi,
-  type GrantablePermissionModel,
-} from "@/controllers/API/permission"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+listServiceAccountGrantableResourcesApi,
+mutateServiceAccountResourceGrantsApi,
+} from "@/controllers/API/serviceAccount";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import type {
-  ServiceAccountGrantableResource,
-  ServiceAccountResourceGrant,
-} from "@/types/api/openApi"
-import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
+ServiceAccountGrantableResource,
+ServiceAccountResourceGrant,
+} from "@/types/api/openApi";
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
-  createResourceGrantIdempotencyKey,
-  SERVICE_ACCOUNT_PERMISSION_TIERS,
-  SERVICE_ACCOUNT_RESOURCE_TYPES,
-} from "./resourceGrantUtils"
+createResourceGrantIdempotencyKey,
+SERVICE_ACCOUNT_PERMISSION_TIERS,
+SERVICE_ACCOUNT_RESOURCE_TYPES,
+} from "./resourceGrantUtils";
 
 function filterPermissionTiers(models: GrantablePermissionModel[]) {
   return SERVICE_ACCOUNT_PERMISSION_TIERS.flatMap((key) => {
@@ -243,19 +246,15 @@ export function ResourceGrantDialog({
         setSelectedResources((current) => current.slice(completedCount))
         return
       }
-      toast({
-        title: t(
+      notification.open({ type: "success", title: String(t(
           editingGrant
             ? "openApiManagement.grants.change"
             : "openApiManagement.grants.add",
-        ),
-        description: t(
+        ) ?? ''), description: String(t(
           editingGrant
             ? "openApiManagement.feedback.grantUpdated"
             : "openApiManagement.feedback.grantAdded",
-        ),
-        variant: "success",
-      })
+        ) ?? '') })
       onOpenChange(false)
       setSelectedResources([])
       setModelKey("")
@@ -316,11 +315,7 @@ export function ResourceGrantDialog({
             </label>
             <label className="space-y-1 text-sm">
               <span>{t("openApiManagement.grants.resourceSearch")}</span>
-              <SearchInput
-                value={keyword}
-                placeholder={t("openApiManagement.grants.search")}
-                onChange={(event) => setKeyword(event.target.value)}
-              />
+              <SearchInput value={keyword} placeholder={t("openApiManagement.grants.search")} onChange={(event) => setKeyword(event.target.value)} />
             </label>
           </div>
         ) : null}
@@ -366,7 +361,7 @@ export function ResourceGrantDialog({
             })}
             {loadingResources ? (
               <p className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-                <LoadIcon className="size-4" />
+                <Outlined.Loading className="size-4 animate-spin" />
                 {t("openApiManagement.grants.loadingResources")}
               </p>
             ) : null}
@@ -409,23 +404,16 @@ export function ResourceGrantDialog({
           </Select>
         </label>
         <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={loading}
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="outlined" disabled={loading} onClick={() => onOpenChange(false)} color="default">
             {t("cancel")}
           </Button>
-          <Button
-            disabled={
+          <Button disabled={
               loading ||
               !selectedResources.length ||
               !modelKey ||
               modelKey === editingGrant?.model_key
-            }
-            onClick={handleGrant}
-          >
-            {loading ? <LoadIcon className="mr-2 size-4" /> : null}
+            } onClick={handleGrant}>
+            {loading ? <Outlined.Loading className="mr-2 size-4 animate-spin" /> : null}
             {t(
               editingGrant
                 ? "confirmButton"

@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
+
 import {
   getGrantablePermissionModelsApi,
   getMyResourcePermissionsApi,
@@ -460,13 +461,7 @@ export function PermissionListTab({
           </p>
         )}
         {hasMore && (
-          <Button
-            type="button"
-            variant="outline"
-            className="mx-auto mt-3 flex min-h-9"
-            disabled={loadingMore}
-            onClick={() => void handleLoadMore()}
-          >
+          <Button type="button" variant="outlined" className="mx-auto mt-3 flex min-h-9" disabled={loadingMore} onClick={() => void handleLoadMore()} color="default">
             {loadingMore ? t("roster.loadingMore") : t("roster.loadMore")}
           </Button>
         )}

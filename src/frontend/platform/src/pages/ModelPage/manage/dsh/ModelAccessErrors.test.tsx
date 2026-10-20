@@ -5,7 +5,12 @@ import { getDshModelSubjects, getDshModelUserPermissions, getDshOperation, saveD
 import { ModelAccessDialog } from './ModelAccessDialog'
 
 vi.mock('@/components/bs-icons/loading/Load.svg?react', () => ({ default: () => <svg /> }))
-vi.mock('@/components/bs-ui/toast/use-toast', () => ({ useToast: () => ({ message: vi.fn() }), toast: vi.fn() }))
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({ useToast: () => ({ message: vi.fn() }), toast: vi.fn() }))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 vi.mock('@/controllers/API/dsh', async (importOriginal) => ({
     ...await importOriginal<typeof import('@/controllers/API/dsh')>(),
     getDshModelSubjects: vi.fn(), getDshModelUserPermissions: vi.fn(),

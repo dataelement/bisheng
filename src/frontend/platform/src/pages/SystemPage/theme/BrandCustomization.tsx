@@ -1,28 +1,30 @@
 // @ts-strict-ignore
-import { Button, LoadButton } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Label } from "@/components/bs-ui/label";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { darkContext } from "@/contexts/darkContext";
-import type { BrandAsset, BrandAssetOption, BrandConfig, BrandText } from "@/controllers/API";
-import { getBrandAssetOptionsApi, getBrandConfigApi, saveBrandConfigApi } from "@/controllers/API";
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { withBrandBaseUrl } from "@/utils/brand";
+import { Button, Input, notification } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import BuiltinLoadingIcon from "@/components/bs-icons/loading/Loading.svg?react";
-import { Eye, RefreshCw, Save } from "lucide-react";
-import { ChangeEvent, useContext, useEffect, useMemo, useState } from "react";
+
+
+import { Label } from "@/components/bs-ui/label";
+import {
+Select,
+SelectContent,
+SelectItem,
+SelectTrigger,
+SelectValue,
+} from "@/components/bs-ui/select";
+
+import { darkContext } from "@/contexts/darkContext";
+import type { BrandAsset,BrandAssetOption,BrandConfig,BrandText } from "@/controllers/API";
+import { getBrandAssetOptionsApi,getBrandConfigApi,saveBrandConfigApi } from "@/controllers/API";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { withBrandBaseUrl } from "@/utils/brand";
+import { Outlined } from "bisheng-icons";
+
+import { ChangeEvent,useContext,useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
 import BrandAssetUpload from "./BrandAssetUpload";
 import BrandPreviewPanel from "./BrandPreviewPanel";
-import { BrandAssetKey, BrandPreviewTarget, BrandTextKey, buildDefaultAssetOptions, cloneBrandConfig, DEFAULT_BRAND_CONFIG } from "./brandTypes";
+import { BrandAssetKey,BrandPreviewTarget,BrandTextKey,buildDefaultAssetOptions,cloneBrandConfig,DEFAULT_BRAND_CONFIG } from "./brandTypes";
 
 const ASSET_ROWS: Array<{
     key: BrandAssetKey;
@@ -174,31 +176,15 @@ function BrandTextField({
     };
 
     return (
-        <div className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)_72px]">
+        <div className="grid grid-cols-1 items-center gap-3 lg:contents">
             <div className="space-y-1">
                 <Label className="text-sm text-foreground">{label}</Label>
                 <p className="text-xs leading-5 text-muted-foreground">{description}</p>
             </div>
-            <Input
-                value={value.zh}
-                maxLength={20}
-                placeholder={t("theme.brandZhPlaceholder")}
-                onChange={handleChange("zh")}
-            />
-            <Input
-                value={value.en}
-                maxLength={20}
-                placeholder={t("theme.brandEnPlaceholder")}
-                onChange={handleChange("en")}
-            />
-            <Button
-                type="button"
-                size="sm"
-                variant={previewActive ? "default" : "outline"}
-                className="w-fit justify-self-start"
-                onClick={onPreview}
-            >
-                <Eye className="mr-1 size-3.5" />
+            <Input value={value.zh} maxLength={20} placeholder={t("theme.brandZhPlaceholder")} onChange={handleChange("zh")} showCount />
+            <Input value={value.en} maxLength={20} placeholder={t("theme.brandEnPlaceholder")} onChange={handleChange("en")} showCount />
+            <Button type="button" size="small" variant={previewActive ? "default" : "outline"} className="w-fit justify-self-start" onClick={onPreview}>
+                <Outlined.Eye className="mr-1 size-3.5" />
                 {t("theme.brandPreviewButton")}
             </Button>
         </div>
@@ -207,7 +193,7 @@ function BrandTextField({
 
 export default function BrandCustomization() {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const { dark } = useContext(darkContext);
     const [config, setConfig] = useState<BrandConfig>(() => cloneBrandConfig(DEFAULT_BRAND_CONFIG));
     const [assetOptions, setAssetOptions] = useState<Record<BrandAssetKey, BrandAssetOption[]>>(
@@ -425,12 +411,9 @@ export default function BrandCustomization() {
     };
 
     const handleSave = async () => {
+        if (config.brandName.zh.length > 20 || config.brandName.en.length > 20) return;
         if (hasInvalidBrandText(config.brandName)) {
-            toast({
-                title: t("prompt"),
-                variant: "warning",
-                description: t("theme.brandNameInvalidCharacters"),
-            });
+            notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("theme.brandNameInvalidCharacters") ?? '') });
             return;
         }
 
@@ -441,11 +424,7 @@ export default function BrandCustomization() {
 
         setConfig(saved);
         applyRuntimeBrandConfig(saved);
-        toast({
-            title: t("prompt"),
-            variant: "success",
-            description: t("theme.brandSaveSuccess"),
-        });
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("theme.brandSaveSuccess") ?? '') });
     };
 
     return (
@@ -462,21 +441,21 @@ export default function BrandCustomization() {
                     <div className="flex items-center justify-between gap-3">
                         <h2 className="text-lg font-medium">{t("theme.brandCustomization")}</h2>
                         <div className="flex items-center gap-2">
-                            <Button type="button" variant="outline" onClick={handleReset} disabled={loading || saving}>
-                                <RefreshCw className="mr-1 size-4" />
+                            <Button type="button" variant="outlined" onClick={handleReset} disabled={loading || saving} color="default">
+                                <Outlined.Refresh className="mr-1 size-4" />
                                 {t("theme.brandResetDefault")}
                             </Button>
-                            <LoadButton type="button" loading={saving} disabled={loading} onClick={handleSave}>
-                                <Save className="mr-1 size-4" />
+                            <Button type="button" loading={saving} onClick={handleSave} disabled={Boolean(saving) || (loading)}>
+                                <Outlined.FileSaveAs className="mr-1 size-4" />
                                 {t("theme.brandSave")}
-                            </LoadButton>
+                            </Button>
                         </div>
                     </div>
 
                     <section className="space-y-3 rounded-md border border-border bg-background p-4">
                         <h3 className="text-base font-medium">{t("theme.brandTextSection")}</h3>
-                        <div className="space-y-3">
-                            <div className="hidden grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)_72px] items-center gap-3 lg:grid">
+                        <div className="space-y-3 lg:grid lg:grid-cols-[180px_minmax(0,1fr)_minmax(0,1fr)_max-content] lg:items-center lg:gap-3 lg:space-y-0">
+                            <div className="hidden lg:contents">
                                 <span />
                                 <span className="text-xs font-medium text-muted-foreground">{t("theme.brandChineseColumn")}</span>
                                 <span className="text-xs font-medium text-muted-foreground">{t("theme.brandEnglishColumn")}</span>
@@ -550,14 +529,8 @@ export default function BrandCustomization() {
                                     <SelectItem value="animate-bounce">{t("theme.brandAnimationBounce")}</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant={previewTarget === "loadingAnimation" ? "default" : "outline"}
-                                className="w-fit"
-                                onClick={() => setPreviewTarget("loadingAnimation")}
-                            >
-                                <Eye className="mr-1 size-4" />
+                            <Button type="button" size="small" variant={previewTarget === "loadingAnimation" ? "default" : "outline"} className="w-fit" onClick={() => setPreviewTarget("loadingAnimation")}>
+                                <Outlined.Eye className="mr-1 size-4" />
                                 {t("theme.brandPreviewButton")}
                             </Button>
                         </div>

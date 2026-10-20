@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import ApiMainPage from "@/components/bs-comp/apiComponent";
 import { useMessageStore } from "@/components/bs-comp/chatComponent/messageStore";
 import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { changeAssistantStatusApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { checkAppEditPermission } from "@/controllers/API/flow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -70,7 +71,7 @@ export default function EditAssistant() {
         setOpenChat(true)
     }
 
-    const { message, toast } = useToast()
+
     // Save assistant details
     const handleSave = async (showMessage = false) => {
         if (!canEdit) return
@@ -84,11 +85,7 @@ export default function EditAssistant() {
             logo: assistantState.viewLogo ? assistantState.logo : '',
         })).then(res => {
             if (!res) return
-            showMessage && message({
-                title: t('prompt'),
-                variant: 'success',
-                description: t('skills.saveSuccessful')
-            })
+            showMessage && toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.saveSuccessful') ?? '')].filter(Boolean).join('\n') })
         })
         saveAfter()
     }
@@ -100,11 +97,7 @@ export default function EditAssistant() {
             await handleSave()
             await captureAndAlertRequestErrorHoc(changeAssistantStatusApi(assistantState.id, 2)).then(res => {
                 if (res === false) return
-                message({
-                    title: t('prompt'),
-                    variant: 'success',
-                    description: t('skills.onlineSuccessful')
-                })
+                toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('skills.onlineSuccessful') ?? '')].filter(Boolean).join('\n') })
             })
             setTimeout(() => {
                 navigate('/build')
@@ -139,11 +132,7 @@ export default function EditAssistant() {
         }
 
         if (errors.length) {
-            message({
-                title: t('prompt'),
-                variant: 'error',
-                description: errors
-            })
+            toast.show({ type: 'error', message: [String(t('prompt') ?? ''), errors.filter(Boolean).join('\n')].filter(Boolean).join('\n') })
             return false
         }
         return true
@@ -198,12 +187,12 @@ export default function EditAssistant() {
                             {t('build.leaveAndSave')}
                         </Button>
                     }
-                    <Button className="h-8" variant="destructive" onClick={() => blocker.proceed?.()}>
+                    <Button className="h-8" variant="solid" onClick={() => blocker.proceed?.()} color="danger">
                         {t('build.leaveWithoutSave')}
                     </Button>
-                    <Button className="h-8" variant="outline" onClick={() => {
+                    <Button className="h-8" variant="outlined" onClick={() => {
                         blocker.reset?.()
-                    }}>
+                    }} color="default">
                         {t('cancel')}
                     </Button>
                 </DialogFooter>

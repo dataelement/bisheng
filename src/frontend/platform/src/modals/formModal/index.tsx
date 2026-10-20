@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Textarea } from '@bisheng/ui';
 import { Eraser, TerminalSquare, Variable } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { alertContext } from "../../contexts/alertContext";
@@ -21,7 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../../components/bs-ui/dialog";
-import { Textarea } from "../../components/bs-ui/input";
+
 import ToggleShadComponent from "../../components/toggleShadComponent";
 import {
   Accordion,
@@ -479,21 +480,16 @@ export default function FormModal({
                                   Source: Component
                                 </div>
                               )}
-                            <Textarea
-                              value={
+                            <Textarea value={
                                 input_keys[i]
-                              }
-                              onChange={(e) => {
+                              } onChange={(e) => {
                                 setTabsState((old) => {
                                   const newTabsState = cloneDeep(old);
                                   const input = newTabsState[id.current].formKeysData.input_keys.find((el: any) => !el.type) || {}
                                   input[i] = e.target.value;
                                   return newTabsState;
                                 });
-                              }}
-                              disabled={chatKey === i}
-                              placeholder="Enter text..."
-                            ></Textarea>
+                              }} disabled={chatKey === i} placeholder="Enter text..."></Textarea>
                           </div>
                         </AccordionContent>
                       </AccordionItem>

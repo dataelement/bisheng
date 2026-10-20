@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { SearchInput } from '@bisheng/ui';
 import { FlowIcon, HelperIcon } from "@/components/bs-icons/app";
 import { readTempsDatabase } from "@/controllers/API";
 import { AppType, AppTypeToNum } from "@/types/app";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "../../bs-ui/input";
+
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "../../bs-ui/sheet";
 import CardComponent from "../cardComponent";
 import AppAvator from "../cardComponent/avatar";
@@ -55,7 +56,7 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                 <div className="w-fit p-6">
                     <SheetTitle>{t('appTemplate')}</SheetTitle>
                     <SheetDescription>{t('chooseTemplateOrCreateBlank')}</SheetDescription>
-                    <SearchInput value={keyword} placeholder={t('search')} className="my-6" onChange={(e) => setKeyword(e.target.value)} />
+                    <SearchInput value={keyword} placeholder={t('search')} onChange={(e) => setKeyword(e.target.value)} className={"my-6"} />
                     {/* type */}
                     <div className="mt-4">
                         <div

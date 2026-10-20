@@ -1,4 +1,9 @@
 {
+  "queryDateLabel": "クエリ日付：",
+  "settings": "設定",
+  "noValue": "なし",
+  "removeSelectedValue": "{{value}}を削除",
+
   "chartSelector": {
     "title": "関連グラフ設定",
     "selectCharts": "関連グラフを選択",

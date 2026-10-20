@@ -1,17 +1,19 @@
 // @ts-strict-ignore
-import { LoadIcon } from "@/components/bs-icons/loading";
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
+
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
-import { createTool, deleteTool, getMcpServeByConfig, testMcpApi, updateTool } from "@/controllers/API/tools";
+
+import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
+import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
+import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
+
+import { createTool,deleteTool,getMcpServeByConfig,testMcpApi,updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { isValidJSON } from "@/util/utils";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef,useEffect,useImperativeHandle,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // test chat
@@ -21,7 +23,7 @@ const TestDialog = forwardRef((props, ref) => {
     const [params, setParams] = useState({});
     const [result, setResult] = useState("");
     const [loading, setLoading] = useState(false);
-    const { message } = useToast();
+
     const serverRef = useRef({});
     const openapiSchemaRef = useRef('')
 
@@ -46,7 +48,7 @@ const TestDialog = forwardRef((props, ref) => {
 
         const errors = requiredParams.filter(name => !params[name]);
         if (errors.length > 0) {
-            return message({ description: errors.map(n => `${n} ${t('required')}`), variant: "warning" });
+            return toast.show({ type: "warning", message: (errors.map(n => `${n} ${t('required')}`)).filter(Boolean).join('\n') });
         }
 
         setLoading(true);
@@ -97,13 +99,10 @@ const TestDialog = forwardRef((props, ref) => {
                                             {toolData?.inputSchema.required?.includes(name) && <span className="text-red-500">*</span>}
                                         </TableCell>
                                         <TableCell>
-                                            <Input
-                                                placeholder={t('test.inputTypeValue', { type: schema.type || 'string' })}
-                                                onChange={(e) => setParams(prev => ({
+                                            <Input placeholder={t('test.inputTypeValue', { type: schema.type || 'string' })} onChange={(e) => setParams(prev => ({
                                                     ...prev,
                                                     [name]: e.target.value
-                                                }))}
-                                            />
+                                                }))} />
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -111,12 +110,7 @@ const TestDialog = forwardRef((props, ref) => {
                         </Table>
                     </div>
                     <Button onClick={handleTest} disabled={loading}>{t('test.test')}</Button>
-                    <Textarea
-                        value={result}
-                        placeholder={t('test.outResultPlaceholder')}
-                        readOnly
-                        className="mt-2 min-h-[100px]"
-                    />
+                    <Textarea value={result} placeholder={t('test.outResultPlaceholder')} readOnly textareaClassName={"mt-2 min-h-[100px]"} />
                 </div>
             </DialogContent>
         </Dialog>
@@ -136,7 +130,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
     const [formData, setFormData] = useState(initialFormState);
     const serverRef = useRef(initialFormState);
     const originalName = useRef("");
-    const { message } = useToast();
+
     const testToolDialogRef = useRef(null);
     // Parse flag
     const textareaRef = useRef(null);
@@ -213,7 +207,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
 
         if (!isValidJSON(schemaContent)) {
             setAvailableTools([]);
-            return message({ description: t('tools.configFormatError'), variant: "warning" });
+            return toast.show({ type: "warning", message: String(t('tools.configFormatError') ?? '') });
         }
 
         // setIsLoading(true);
@@ -286,10 +280,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
         // Use latestFormData.current to get latest data
         const validationErrors = validateForm();
         if (validationErrors.length > 0) {
-            return message({
-                description: validationErrors,
-                variant: "warning"
-            });
+            return toast.show({ type: "warning", message: String(validationErrors ?? '') });
         }
 
         setIsLoading(true);
@@ -305,7 +296,7 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                 is_preset: 2
             })).then((res) => {
                 if (!res) return;
-                message({ description: t('skills.saveSuccessful'), variant: "success" });
+                toast.show({ type: "success", message: String(t('skills.saveSuccessful') ?? '') });
                 setIsDialogOpen(false);
                 onReload();
             });
@@ -351,15 +342,10 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                         {/* Name input */}
                         <div>
                             <label className="">{t('tools.name')}</label>
-                            <Input
-                                value={formData.name}
-                                className="mt-2"
-                                placeholder={t('tools.enterMcpName')}
-                                onChange={(e) => setFormData(prev => ({
+                            <Input value={formData.name} placeholder={t('tools.enterMcpName')} onChange={(e) => setFormData(prev => ({
                                     ...prev,
                                     name: e.target.value
-                                }))}
-                            />
+                                }))} className={"mt-2"} />
                         </div>
 
                         {/* Configuration input */}
@@ -378,27 +364,20 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <Textarea
-                                ref={textareaRef}
-                                value={formData.openapiSchema}
-                                placeholder={t('tools.enterOpenAPISchema')}
-                                className="min-h-[200px] font-mono"
-                                onChange={(e) => {
+                            <Textarea ref={textareaRef} value={formData.openapiSchema} placeholder={t('tools.enterOpenAPISchema')} onChange={(e) => {
                                     setFormData(prev => ({
                                         ...prev,
                                         openapiSchema: e.target.value
                                     }))
                                     parseBeforeSaveRef.current = true;
-                                }}
-                                onBlur={() => loadToolsFromSchema(formData.openapiSchema)}
-                            />
+                                }} onBlur={() => loadToolsFromSchema(formData.openapiSchema)} textareaClassName={"min-h-[200px] font-mono"} />
                         </div>
 
                         {/* Tool list */}
                         <div>
                             <div className="flex justify-between items-center mb-2">
                                 <label>{t('tools.availableTools')}</label>
-                                <Button variant="outline" disabled={isLoading} onClick={() => loadToolsFromSchema(formData.openapiSchema)}>
+                                <Button variant="outlined" disabled={isLoading} onClick={() => loadToolsFromSchema(formData.openapiSchema)} color="default">
                                     {t('build.refresh')}
                                 </Button>
                             </div>
@@ -416,14 +395,11 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                                             <TableCell>{tool.name}</TableCell>
                                             <TableCell>{tool.description}</TableCell>
                                             <TableCell>
-                                                <Button
-                                                    variant="outline"
-                                                    onClick={() => testToolDialogRef.current.open(
+                                                <Button variant="outlined" onClick={() => testToolDialogRef.current.open(
                                                         tool,
                                                         formData.openapiSchema,
                                                         serverRef.current
-                                                    )}
-                                                >{t('test.test')}</Button>
+                                                    )} color="default">{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -435,19 +411,15 @@ const McpServerEditorDialog = forwardRef(({ existingNames = [], onReload }, ref)
                     {/* footer buttons */}
                     <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                         {isEditMode && canDelete && (
-                            <Button
-                                variant="destructive"
-                                className="mr-auto"
-                                onClick={handleServerDelete}
-                            >
+                            <Button variant="solid" className="mr-auto" onClick={handleServerDelete} color="danger">
                                 {t('delete')}
                             </Button>
                         )}
-                        <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                        <Button variant="outlined" onClick={() => setIsDialogOpen(false)} color="default">
                             {t('cancel')}
                         </Button>
                         <Button disabled={isLoading} onClick={handleSubmit}>
-                            {isLoading && <LoadIcon className="mr-1" />}
+                            {isLoading && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('save')}
                         </Button>
                     </SheetFooter>

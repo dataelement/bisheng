@@ -1,23 +1,24 @@
 // @ts-strict-ignore
-import UsersSelect from "@/components/bs-comp/selectComponent/Users";
+import { Button, Input, notification } from '@bisheng/ui';
 import type { DepartmentUserOption } from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
-import { Button } from "@/components/bs-ui/button";
+import UsersSelect from "@/components/bs-comp/selectComponent/Users";
+
 import { Label } from "@/components/bs-ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
+
 import { userContext } from "@/contexts/userContext";
 import {
-    createUserGroupV2,
-    getAllUserGroupMembersV2,
-    syncUserGroupMembersV2,
-    updateUserGroupV2,
-    UserGroupMemberRow,
-    UserGroupV2,
+createUserGroupV2,
+getAllUserGroupMembersV2,
+syncUserGroupMembersV2,
+updateUserGroupV2,
+UserGroupMemberRow,
+UserGroupV2,
 } from "@/controllers/API/userGroups";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
+import { useContext,useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Input } from "../../../components/bs-ui/input";
+
 
 type EditProps = {
     data: UserGroupV2 | Record<string, never>
@@ -40,7 +41,7 @@ function formatMemberAddedTime(iso?: string | null): string {
 
 export default function EditUserGroup({ data, onBeforeChange, onChange }: EditProps) {
     const { t } = useTranslation()
-    const { toast } = useToast()
+
     const { user } = useContext(userContext)
 
     const [form, setForm] = useState({
@@ -90,18 +91,18 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
     const handleSave = async () => {
         if (!form.groupName) {
             setForm({ ...form, groupName: (data as UserGroupV2).group_name || '' })
-            toast({ title: t('prompt'), description: t('system.groupNameRequired'), variant: 'error' });
+            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('system.groupNameRequired') ?? '') });
             return
         }
         if (form.groupName.length > 30) {
             setForm({ ...form, groupName: (data as UserGroupV2).group_name || '' })
-            toast({ title: t('prompt'), description: t('system.groupNamePrompt'), variant: 'error' });
+            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('system.groupNamePrompt') ?? '') });
             return
         }
         const dup = onBeforeChange(form.groupName)
         if (dup) {
             setForm({ ...form, groupName: '' })
-            toast({ title: t('prompt'), description: t('system.groupNameExists'), variant: 'error' });
+            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('system.groupNameExists') ?? '') });
             return
         }
 
@@ -126,7 +127,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                 .filter((id) => id > 0)
             await syncUserGroupMembersV2(gid, desiredIds)
 
-            toast({ title: t('prompt'), description: t('system.saveUserGroupSuccess'), variant: 'success' })
+            notification.open({ type: 'success', title: String(t('prompt') ?? ''), description: String(t('system.saveUserGroupSuccess') ?? '') })
             await onChange(true)
         } catch (e) {
             const msg =
@@ -135,7 +136,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                     : typeof e === 'string'
                       ? e
                       : (e as Error)?.message || t('system.saveUserGroupFailedUnknown')
-            toast({ title: t('prompt'), description: msg, variant: 'error' })
+            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(msg ?? '') })
         }
     }
 
@@ -255,12 +256,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
                                         {m.added_time}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Button
-                                            type="button"
-                                            variant="link"
-                                            className="h-auto p-0 text-red-500"
-                                            onClick={() => removeMemberFromPick(m.user_id)}
-                                        >
+                                        <Button type="button" variant="link" className="h-auto p-0 text-red-500" onClick={() => removeMemberFromPick(m.user_id)}>
                                             {t('system.removeFromGroup')}
                                         </Button>
                                     </TableCell>
@@ -274,7 +270,7 @@ export default function EditUserGroup({ data, onBeforeChange, onChange }: EditPr
 
         </div>
         <div className="flex shrink-0 items-center justify-center gap-4 border-t bg-background-login py-3">
-            <Button variant="outline" className="px-16" onClick={() => onChange()}>{t('cancel')}</Button>
+            <Button variant="outlined" className="px-16" onClick={() => onChange()} color="default">{t('cancel')}</Button>
             <Button className="px-16" onClick={() => { void handleSave(); }}>{t('save')}</Button>
         </div>
     </div>

@@ -1,15 +1,16 @@
 // @ts-strict-ignore
+import { Button, notification, toast } from '@bisheng/ui';
 import { useContext, useEffect, useRef, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
+
 import { getSysConfigApi, setSysConfigApi } from "../../../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { locationContext } from "@/contexts/locationContext";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 
 export default function Config() {
-    const { toast, message } = useToast()
+
     const { reloadConfig } = useContext(locationContext)
 
     const [config, setConfig] = useState('')
@@ -25,19 +26,11 @@ export default function Config() {
 
     const handleSave = () => {
         if (validataRef.current.length) {
-            return toast({
-                variant: 'error',
-                title: `yaml${t('formatError')}`,
-                description: validataRef.current.map(el => el.text)
-            })
+            return notification.open({ type: 'error', title: String(`yaml${t('formatError')}`), description: (validataRef.current.map(el => el.text)).filter(Boolean).join('\n') })
         }
 
         captureAndAlertRequestErrorHoc(setSysConfigApi({ data: codeRef.current }).then(res => {
-            message({
-                variant: 'success',
-                title: t('prompt'),
-                description: t('saved')
-            })
+            toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('saved') ?? '')].filter(Boolean).join('\n') })
             setConfig(codeRef.current)
 
             // 更新配置信息

@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { toast } from '@bisheng/ui';
 import { Badge } from '@/components/bs-ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/bs-ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/bs-ui/tabs';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+
 import { getCurlCode, getPythonApiCode } from '@/constants';
 import { TabsContext } from '@/contexts/tabsContext';
 import { copyText } from '@/utils';
@@ -21,10 +22,10 @@ const ApiAccessSkill = ({ }) => {
     const curl_code = getCurlCode(flow, getTweak, tabsState);
     const pythonCode = getPythonApiCode(flow, getTweak, tabsState);
 
-    const { message } = useToast()
+
     const handleCopyLink = (e) => {
         copyText(e.target).then(() => {
-            message({ variant: 'success', description: t('api.copySuccess') })
+            toast.show({ type: 'success', message: String(t('api.copySuccess') ?? '') })
         })
     }
 
@@ -270,7 +271,7 @@ def upload_file(local_path: str):
     res = requests.post(url, headers=headers, files=files)
     file_path = res.json()['data'].get('file_path', '')
     return file_path
-    
+
  financeA = upload_file("caibao.pdf")
  financeB = upload_file("caibao2.pdf")`}
                     </SyntaxHighlighter>
@@ -284,7 +285,7 @@ def upload_file(local_path: str):
                         {`tweaks = {
   "InputFileNode-ozsI2": {"file_path": financeA},
   "InputFileNode-16U46": {"file_path": financeB},
-  "Milvus-6HDPE": {"collection_name": "tmp", "drop_old": True} 
+  "Milvus-6HDPE": {"collection_name": "tmp", "drop_old": True}
 }`}
                     </SyntaxHighlighter>
 

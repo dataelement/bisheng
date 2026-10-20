@@ -1,12 +1,13 @@
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { FilterIcon } from "@/components/bs-icons/filter";
-import { Button } from "@/components/bs-ui/button";
+
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import React from 'react';
 import { useTranslation } from "react-i18next";
 import { Select, SelectContent, SelectGroup, SelectItem } from '.';
-import { SearchInput } from "../../../components/bs-ui/input";
+
 
 export const TableHeadEnumFilter = ({ options, onChange }: { options: { label: string, value: string }[], onChange: (value: string) => void }) => {
   const [open, setOpen] = React.useState(false)
@@ -54,7 +55,7 @@ const FilterUserGroup: React.FC<FilterUserGroupProps> = ({
   return (
     <div className="h-full">
       <div>
-        <SearchInput placeholder={placeholder} className="w-[240px]" onChange={search}></SearchInput>
+        <SearchInput placeholder={placeholder} onChange={search} className={"w-[240px]"}></SearchInput>
       </div>
       <div className="mt-2 max-h-[260px] min-h-20 overflow-y-auto">
         {options.map((i) => (
@@ -65,12 +66,12 @@ const FilterUserGroup: React.FC<FilterUserGroupProps> = ({
         ))}
         {options.length === 0 && (
           <div className="flex items-center justify-center h-[70px]">
-            <Button variant="ghost">{t('build.empty')}</Button>
+            <Button variant="text" color="default">{t('build.empty')}</Button>
           </div>
         )}
       </div>
       <div className="flex justify-between mt-4">
-        <Button variant="ghost" className="px-8 h-8" onClick={onClearChecked}>{t('system.reset')}</Button>
+        <Button variant="text" className="px-8 h-8" onClick={onClearChecked} color="default">{t('system.reset')}</Button>
         <Button className="px-8 h-8" onClick={onOk}>{t('system.confirm')}</Button>
       </div>
     </div>

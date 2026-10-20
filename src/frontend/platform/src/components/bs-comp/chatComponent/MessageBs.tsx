@@ -1,21 +1,22 @@
 // @ts-strict-ignore
-import { ToastIcon } from "@/components/bs-icons";
-import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
+import { Outlined } from "bisheng-icons";
+
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { cname } from "@/components/bs-ui/utils";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";
 import { copyText } from "@/utils";
-import { ChevronDown } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import MessageButtons from "./MessageButtons";
-import SourceEntry from "./SourceEntry";
-import { useMessageStore } from "./messageStore";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import CitationReferencesDrawer from "./CitationReferencesDrawer";
-import { normalizeCitationItems, parseLegacyWebCitationContent } from "./citationUtils";
+import MessageButtons from "./MessageButtons";
+import SourceEntry from "./SourceEntry";
+import { normalizeCitationItems,parseLegacyWebCitationContent } from "./citationUtils";
+import { useMessageStore } from "./messageStore";
 
 
 // 颜色列表
@@ -34,6 +35,7 @@ const colorList = [
 ]
 
 export const ReasoningLog = ({ loading, msg = '' }) => {
+    const { t } = useTranslation('flow')
     const [open, setOpen] = useState(true)
     // console.log('msg :>> ', msg);
     if (!msg) return null
@@ -42,15 +44,15 @@ export const ReasoningLog = ({ loading, msg = '' }) => {
         <div className="rounded-sm border">
             <div className="flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => setOpen(!open)}>
                 {loading ? <div className="flex items-center font-bold gap-2 text-sm">
-                    <LoadIcon className="text-primary duration-300" />
-                    <span>思考中</span>
+                    <Outlined.Loading className="animate-spin text-primary duration-300" />
+                    <span>{t('thinking')}</span>
                 </div>
                     : <div className="flex items-center font-bold gap-2 text-sm">
-                        <ToastIcon type="success" />
-                        <span>已深度思考</span>
+                        <Outlined.CheckCircle className="text-success" />
+                        <span>{t('thoughtCompleted')}</span>
                     </div>
                 }
-                <ChevronDown className={open && 'rotate-180'} />
+                <Outlined.Down className={open && 'rotate-180'} />
             </div>
             <div className={cname('bg-[#F5F6F8] dark:bg-[#313336] px-4 py-2 overflow-hidden text-sm ', open ? 'h-auto' : 'h-0 p-0')}>
                 {msg.split('\n').map((line, index) => (

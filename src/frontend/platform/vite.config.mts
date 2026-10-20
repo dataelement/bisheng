@@ -16,6 +16,9 @@ const app_env = { BASE_URL: '' } // /custom
 
 const commonProxyOptions = {
   changeOrigin: true,
+  // changeOrigin rewrites Host to the backend. HTTP gets X-Forwarded-Host
+  // from xfwd; websocket upgrades need the proxyReqWs hook below.
+  xfwd: true,
   secure: false,
   ws: true
 };
@@ -46,6 +49,12 @@ const createProxyConfig = (target: string, rewrite = true, isMinio = false, verb
     rewrite: (p: string) => p.replace(new RegExp(`^${app_env.BASE_URL}`), '')
   }),
   configure: (proxy: import('http-proxy').ProxyServer) => {
+    // http-proxy writes X-Forwarded-Host only on HTTP. The websocket upgrade
+    // still has Host rewritten by changeOrigin, so copy the browser host here.
+    proxy.on('proxyReqWs', (proxyReq, req) => {
+      const host = req.headers.host;
+      if (host) proxyReq.setHeader('x-forwarded-host', host);
+    });
     // Per-request logging is opt-in (VITE_PROXY_LOG=1): on by default it prints
     // dozens of lines per page load and buries the warnings that matter.
     if (verbose) {
@@ -223,6 +232,8 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     define: {
+      // react-draggable reads this flag on every drag/resize start in the browser.
+      'process.env.DRAGGABLE_DEBUG': 'false',
       __APP_ENV__: JSON.stringify(app_env_define)
     },
     server: {

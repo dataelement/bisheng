@@ -1,4 +1,5 @@
 export interface ModelInfo {
+    realtime?: boolean;
     key: string | null;
     id: string;
     name: string | null;

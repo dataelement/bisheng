@@ -1,15 +1,16 @@
-import { SearchInput } from "@/components/bs-ui/input"
+import { Button, SearchInput } from '@bisheng/ui';
+
+
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/bs-ui/tooltip"
-import { cn } from "@/utils"
-import { DepartmentTreeNode } from "@/types/api/department"
-import { Building2, ChevronDown, ChevronRight, Plus } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+TooltipProvider
+} from "@/components/bs-ui/tooltip";
+import { DepartmentTreeNode } from "@/types/api/department";
+import { cn } from "@/utils";
+import { Tooltip as SharedTooltip,Tag } from "@bisheng/ui";
+import { Outlined } from "bisheng-icons";
+
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /** 每层缩进宽度（px），侧栏内要一眼能看出父子关系 */
 const TREE_INDENT_PER_LEVEL = 22
@@ -187,58 +188,37 @@ export function DepartmentTree({
             >
               {hasChildren ? (
                 isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Outlined.Down className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Outlined.Right className="h-3.5 w-3.5 text-muted-foreground" />
                 )
               ) : (
                 <span className="block h-3.5 w-3.5" aria-hidden />
               )}
             </span>
-            <Building2
+            <Outlined.City
               className={cn(
                 "mr-1.5 h-4 w-4 shrink-0",
                 node.is_tenant_root ? "text-primary" : "text-muted-foreground",
               )}
             />
             <TooltipProvider delayDuration={250}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex-1 truncate">
+              <SharedTooltip content={node.is_tenant_root ? `${node.name} · ${t("bs:tenant.mountedBadge")}` : node.name}><span className="flex-1 truncate">
                     {node.name}
                     {isArchived ? ` ${t("bs:department.archivedTag")}` : ""}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md break-all">
-                  {node.name}
-                  {node.is_tenant_root && (
-                    <span className="ml-1 text-primary">
-                      {" "}· {t("bs:tenant.mountedBadge", { defaultValue: "子租户挂载点" })}
-                    </span>
-                  )}
-                </TooltipContent>
-              </Tooltip>
+                  </span></SharedTooltip>
             </TooltipProvider>
             {node.is_tenant_root && (
-              <span
-                className="mr-1 rounded bg-primary/10 px-1 py-0.5 text-[10px] font-medium text-primary"
-                title={t("bs:tenant.mountedBadge", { defaultValue: "子租户挂载点" })}
-              >
-                {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
-              </span>
+              <span title={t("bs:tenant.mountedBadge")}><Tag size="small" color="brand" className="mr-1 shrink-0">{t("bs:tenant.mountedTag")}</Tag></span>
             )}
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (
-              <button
-                className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex"
-                onClick={(e) => {
+              <Button variant="text" size="small" className="hidden h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-gray-200 group-hover:flex" onClick={(e) => {
                   e.stopPropagation()
                   onCreateChild(node.id)
-                }}
-                title={t("bs:department.create")}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+                }} title={t("bs:department.create")} color="default">
+                <Outlined.Plus className="h-3.5 w-3.5" />
+              </Button>
             )}
           </div>
           {hasChildren && isExpanded && (
@@ -258,11 +238,7 @@ export function DepartmentTree({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <SearchInput
-        placeholder={t("bs:department.search")}
-        className="mb-2"
-        onChange={(e) => setKeyword(e.target.value)}
-      />
+      <SearchInput placeholder={t("bs:department.search")} onChange={(e) => setKeyword(e.target.value)} className={"mb-2"} />
       <div className="flex-1 overflow-y-auto">
         {data.map((node) => (
           <TreeNode key={node.id} node={node} depth={0} />

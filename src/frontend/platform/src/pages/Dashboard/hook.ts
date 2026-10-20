@@ -1,5 +1,6 @@
+import { notification } from '@bisheng/ui';
 
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { publishDashboard } from "@/controllers/API/dashboard";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { userContext } from "@/contexts/userContext";
@@ -7,6 +8,7 @@ import { useEditorDashboardStore } from "@/store/dashboardStore";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "react-query";
+import type { Dashboard } from "./types/dataConfig";
 
 export const DashboardsQueryKey = "DashboardsQueryKey"
 export const DashboardQueryKey = "DashboardQueryKey"
@@ -161,7 +163,7 @@ export function useLazyDashboardPermission(resourceId: string): {
 
 export const usePublishDashboard = () => {
     const queryClient = useQueryClient();
-    const { toast } = useToast();
+
     const { t } = useTranslation("dashboard")
 
     const mutation = useMutation({
@@ -172,27 +174,24 @@ export const usePublishDashboard = () => {
             ),
         onSuccess: (_, variables) => {
             const newStatus = variables.published ? DashboardStatus.Draft : DashboardStatus.Published
-            queryClient.setQueryData([DashboardQueryKey, variables.id], (old: any) => {
-                old.status = newStatus // Reduce render
-                return old
-            })
-            queryClient.setQueryData([DashboardsQueryKey], (old: any) => {
-                return old.map(el => el.id === variables.id ? {
+            // List and editor callers use string and numeric IDs respectively.
+            // Update existing detail entries without requiring a prior list visit.
+            queryClient.setQueriesData<Dashboard | undefined>({
+                predicate: ({ queryKey }) => Array.isArray(queryKey)
+                    && queryKey[0] === DashboardQueryKey
+                    && String(queryKey[1]) === String(variables.id),
+            }, old => old ? { ...old, status: newStatus } : old)
+            queryClient.setQueryData<Dashboard[] | undefined>([DashboardsQueryKey], old => {
+                return old?.map(el => String(el.id) === String(variables.id) ? {
                     ...el,
                     status: newStatus
                 } : el);
             });
-            toast({
-                description: variables.published ? t('unpublishSuccess') : t('publishSuccess'),
-                variant: "success"
-            });
+            notification.open({ type: "success", description: String(variables.published ? t('unpublishSuccess') : t('publishSuccess') ?? '') });
         },
         onError: (error) => {
             console.error("Publish Error:", error);
-            toast({
-                description: t('operationFailed'),
-                variant: "error",
-            });
+            notification.open({ type: "error", description: String(t('operationFailed') ?? '') });
         },
     });
 

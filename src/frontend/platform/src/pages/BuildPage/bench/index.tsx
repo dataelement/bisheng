@@ -1,33 +1,20 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 // src/features/chat-config/ChatConfig.tsx
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
-import { CardContent } from "@/components/bs-ui/card";
-import { Label } from "@/components/bs-ui/label";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
-import { userContext } from "@/contexts/userContext";
-import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
 import { getDailyConfigApi, getLinsiConfigApi, setDailyConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { t } from "i18next";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import { FormInput } from "./FormInput";
-import { IconUploadSection } from "./IconUploadSection";
-import { Model } from "./ModelManagement";
-import OrgKbConfig, { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
-import Preview from "./Preview";
-import { ToggleSection } from "./ToggleSection";
-import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
-import RecommendedAppsConfig from "./RecommendedAppsConfig";
-import { WorkbenchSensitivePolicy, type WorkbenchSensitivePolicyHandle } from "./WorkbenchSensitivePolicy";
-import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import { clampMenuName, toStoredMenuName } from "./menuDisplayName";
-import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
+import { Model } from "./ModelManagement";
+import { OrgKbConfig as OrgKbConfigType } from "./OrgKbConfig";
+import { ToolConfig as ToolConfigType } from "./ToolsConfig";
 
 export interface FormErrors {
     homeMenuDisplayName: string;
@@ -46,9 +33,9 @@ export interface FormErrors {
 
 export interface ChatConfigForm {
     menuShow: boolean;
-    /** 首页在 client 侧边栏的菜单显示名称，为空时客户端回退到本地化默认文案 */
+
     homeMenuDisplayName: string;
-    /** 应用菜单显示名称：在「应用」tab 编辑，这里只做原样回传，避免保存首页时被清空 */
+
     appCenterMenuDisplayName: string;
     systemPrompt: string;
     sidebarIcon: {
@@ -80,20 +67,17 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
-    /** F035 (v2.6): gate for the client 添加技能 entry. Default off — only when
-     * enabled does the task-mode input surface the Add-Skill submenu. */
+
     skillEntry: {
         enabled: boolean;
     };
     recommendedApps: string[];
-    /** 日常模式 Tab 名称，对应接口 tabDisplayName */
+
     tabDisplayName?: string;
     // v2.5 Agent-mode additions
     tools: ToolConfigType[];
     orgKbs: OrgKbConfigType[];
-    /** F035 (PRD §4.8): legacy 灵思 tab merged into 日常. Only display name and
-     * input placeholder stay user-editable; linsight_entry / tools are kept
-     * untouched on save so the workstation/config/linsight payload round-trips. */
+
     linsightConfig: {
         linsight_entry: boolean;
         input_placeholder: string;
@@ -101,279 +85,7 @@ export interface ChatConfigForm {
         tab_display_name: string;
     };
 }
-export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: number }) {
-    const homeMenuDisplayNameRef = useRef<HTMLDivElement>(null);
-    const welcomeMessageRef = useRef<HTMLDivElement>(null);
-    const functionDescriptionRef = useRef<HTMLDivElement>(null);
-    const inputPlaceholderRef = useRef<HTMLDivElement>(null);
-    const taskModeNameRef = useRef<HTMLDivElement>(null);
-    const knowledgeBaseRef = useRef<HTMLDivElement>(null);
-    const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
-    const systemPromptRef = useRef<HTMLDivElement>(null);
-    // New: ref for model management container
-    const modelManagementContainerRef = useRef<HTMLDivElement>(null);
-
-    const { t } = useTranslation()
-    const { appConfig } = useContext(locationContext)
-    const sensitivePolicyRef = useRef<WorkbenchSensitivePolicyHandle>(null);
-    const {
-        formData,
-        errors,
-        configMeta,
-        setFormData,
-        handleInputChange,
-        handleMenuNameChange,
-        handleLinsightChange,
-        toggleFeature,
-        handleSave
-    } = useChatConfig({
-        homeMenuDisplayNameRef,
-        welcomeMessageRef,
-        functionDescriptionRef,
-        inputPlaceholderRef,
-        taskModeNameRef,
-        knowledgeBaseRef,
-        modelRefs,
-        systemPromptRef,
-        modelManagementContainerRef, // Pass in the new ref
-    }, scopeVersion, async () => {
-        if (!appConfig?.isPro) return true;
-        return (await sensitivePolicyRef.current?.save()) !== false;
-    });
-
-    useEffect(() => {
-        modelRefs.current = modelRefs.current.slice(0, formData.models.length);
-    }, [formData.models]);
-    // Redirect users who cannot manage workstation settings
-    const { user } = useContext(userContext);
-    const navigate = useNavigate()
-    useEffect(() => {
-        if (user.user_id && !canManageWorkbenchConfig(user)) {
-            navigate('/build/apps')
-        }
-    }, [user, navigate])
-
-    const uploadAvator = (fileUrl: string, type: 'sidebar' | 'assistant', relativePath?: string) => {
-        setFormData(prev => ({
-            ...prev,
-            [`${type}Icon`]: { ...prev[`${type}Icon`], image: fileUrl, relative_path: relativePath }
-        }));
-    };
-    const handleModelChange = (index: number, id: string) => {
-        const newModels = [...formData.models];
-        newModels[index].id = id;
-        setFormData(prev => ({ ...prev, models: newModels }));
-    };
-
-    const handleModelNameChange = (index: number, name: string) => {
-        const newModels = [...formData.models];
-        newModels[index].displayName = name;
-        setFormData(prev => ({ ...prev, models: newModels }));
-    };
-
-    const addModel = () => {
-        setFormData(prev => ({
-            ...prev,
-            models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }]
-        }));
-    };
-    const handleVisualToggle = (index: number, enabled: boolean) => {
-        const newModels = [...formData.models];
-        newModels[index] = {
-            ...newModels[index],
-            visual: enabled
-        };
-        setFormData(prev => ({ ...prev, models: newModels }));
-    };
-    return (
-        <div className="daily-page h-full overflow-y-scroll scrollbar-hide relative border-t">
-            <div className="pt-4 relative">
-                <CardContent className="pt-4 pb-0 relative  ">
-                    <div className="w-full  max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide pb-10">
-                        <ConfigInheritanceBanner meta={configMeta} />
-                        {/* <ToggleSection
-                            title={t('chatConfig.workstationEntry')}
-                            enabled={formData.menuShow}
-                            onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
-                        >{null}</ToggleSection> */}
-                        {/* Sidebar entry name — optional (blank = localized default), capped at MENU_NAME_MAX_WIDTH */}
-                        <div ref={homeMenuDisplayNameRef}>
-                            <FormInput
-                                label={t('chatConfig.menuDisplayName')}
-                                value={formData.homeMenuDisplayName}
-                                error={errors.homeMenuDisplayName}
-                                placeholder={t('bench.home')}
-                                onChange={(v) => handleMenuNameChange('homeMenuDisplayName', v)}
-                            />
-                        </div>
-                        {/* Icon Uploads */}
-                        <p className="text-lg font-bold mb-2">{t('chatConfig.iconUpload')}</p>
-                        <div className="flex gap-8 mb-6">
-                            <IconUploadSection
-                                label={t('chatConfig.sidebarIcon')}
-                                enabled={formData.sidebarIcon.enabled ?? true}
-                                image={formData.sidebarIcon.image ?? ''}
-                                onToggle={(enabled) => toggleFeature('sidebarIcon', enabled)}
-                                onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'sidebar', relativePath)}
-                            />
-                            <IconUploadSection
-                                label={t('chatConfig.assistantIcon')}
-                                enabled={formData.assistantIcon.enabled ?? true}
-                                image={formData.assistantIcon.image ?? ''}
-                                onToggle={(enabled) => toggleFeature('assistantIcon', enabled)}
-                                onUpload={(fileUrl, relativePath) => uploadAvator(fileUrl, 'assistant', relativePath)}
-                            />
-                        </div>
-                        <div ref={welcomeMessageRef}>
-                            <FormInput
-                                label={t('chatConfig.welcomeMessage')}
-                                value={formData.welcomeMessage}
-                                error={errors.welcomeMessage}
-                                placeholder={t('chatConfig.welcomeMessagePlaceholder')}
-                                maxLength={1000}
-                                onChange={(v) => handleInputChange('welcomeMessage', v, 1000)}
-                            />
-                        </div>
-                        <div ref={functionDescriptionRef}>
-                            <FormInput
-                                label={t('chatConfig.functionDescription')}
-                                value={formData.functionDescription}
-                                error={errors.functionDescription}
-                                placeholder={t('chatConfig.functionDescriptionPlaceholder')}
-                                maxLength={1000}
-                                onChange={(v) => handleInputChange('functionDescription', v, 1000)}
-                            />
-                        </div>
-                        <div ref={inputPlaceholderRef}>
-                            <FormInput
-                                label={t('chatConfig.inputPlaceholder')}
-                                value={formData.inputPlaceholder}
-                                error={errors.inputPlaceholder}
-                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
-                                maxLength={1000}
-                                onChange={(v) => handleInputChange('inputPlaceholder', v, 1000)}
-                            />
-                        </div>
-                        {/* F035 (PRD §4.8): task-mode fields merged from the legacy 灵思 tab */}
-                        <div ref={taskModeNameRef}>
-                            <FormInput
-                                label={t('chatConfig.taskModeName')}
-                                value={formData.linsightConfig.tab_display_name}
-                                error={errors.taskModeName}
-                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
-                                maxLength={20}
-                                onChange={(v) => handleLinsightChange('tab_display_name', v)}
-                            />
-                        </div>
-                        <FormInput
-                            label={t('chatConfig.taskModeInputPlaceholder')}
-                            value={formData.linsightConfig.input_placeholder}
-                            error={''}
-                            placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
-                            maxLength={100}
-                            onChange={(v) => handleLinsightChange('input_placeholder', v)}
-                        />
-                        {/* F035: 应用中心欢迎语/描述 moved to the 应用 tab (AppCenter.tsx);
-                            their values still round-trip through dataToSave below. */}
-                        <div className="mb-6" ref={modelManagementContainerRef}>
-                            <FormInput
-                                label={<Label className="bisheng-label block pt-2">{t('chatConfig.maxTokens')}</Label>}
-                                type="number"
-                                value={formData.maxTokens}
-                                error={''}
-                                placeholder={t('chatConfig.maxTokensPlaceholder')}
-                                maxLength={1000}
-                                onChange={(v) => handleInputChange('maxTokens', v, 100)}
-                            />
-                            <div ref={systemPromptRef}>
-                                <FormInput
-                                    label={<Label className="bisheng-label">{t('chatConfig.systemPrompt')}</Label>}
-                                    isTextarea
-                                    value={formData.systemPrompt}
-                                    error={errors.systemPrompt}
-                                    placeholder={`${t('chatConfig.systemPromptPlaceholder')}`}
-                                    maxLength={30000}
-                                    onChange={(val) => handleInputChange('systemPrompt', val, 30000)}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Toggle Sections */}
-                        {/* <ToggleSection
-                            title="Voice Input"
-                            enabled={formData.voiceInput.enabled}
-                            onToggle={(enabled) => toggleFeature('voiceInput', enabled)}
-                        >
-                            <Label className="bisheng-label">Voice Input Model Selection</Label>
-                            <div className="mt-3">
-                                <Select value={""} onValueChange={(val) => { }}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="1">{t('model.yes')}</SelectItem>
-                                            <SelectItem value="0">{t('model.no')}</SelectItem>
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </ToggleSection> */}
-                        {/* v2.5 Agent-mode: available tools configuration (replaces 联网搜索 toggle) */}
-                        <ToolsConfig
-                            tools={formData.tools}
-                            onChange={(tools) => setFormData(prev => ({ ...prev, tools }))}
-                        />
-
-                        <ToggleSection
-                            title={t('chatConfig.knowledgeBase')}
-                            enabled={formData.knowledgeBase.enabled}
-                            onToggle={(enabled) => toggleFeature('knowledgeBase', enabled)}
-                        >
-                            <OrgKbConfig
-                                orgKbs={formData.orgKbs}
-                                onChange={(orgKbs) => setFormData(prev => ({ ...prev, orgKbs }))}
-                            />
-                        </ToggleSection>
-
-                        <ToggleSection
-                            title={t('chatConfig.fileUpload')}
-                            enabled={formData.fileUpload.enabled}
-                            onToggle={(enabled) => toggleFeature('fileUpload', enabled)}
-                        >
-                            {null}
-                        </ToggleSection>
-
-                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
-                            The header toggle (default off) gates the client 添加技能 entry. */}
-                        <SkillManagement
-                            scopeVersion={scopeVersion}
-                            entryEnabled={formData.skillEntry.enabled}
-                            onEntryToggle={(enabled) => toggleFeature('skillEntry', enabled)}
-                        />
-
-                        {/* Recommended Apps */}
-                        <RecommendedAppsConfig
-                            selectedAppIds={formData.recommendedApps || []}
-                            onSelectedAppsChange={(ids) =>
-                                setFormData((prev) => ({ ...prev, recommendedApps: ids }))
-                            }
-                        />
-                        {appConfig?.isPro ? (
-                            <WorkbenchSensitivePolicy ref={sensitivePolicyRef} />
-                        ) : null}
-                    </div>
-                    {/* Action Buttons */}
-                    <div className="flex justify-end gap-4 absolute bottom-1 right-4">
-                        <Preview onBeforView={handleSave} />
-                        <Button onClick={handleSave}>{t('save')}</Button>
-                    </div>
-                </CardContent>
-            </div>
-        </div>
-    );
-}
-
+export { DailyChatConfig as default } from "./DailyChatConfig";
 
 interface UseChatConfigProps {
     homeMenuDisplayNameRef: React.RefObject<HTMLDivElement>;
@@ -387,33 +99,33 @@ interface UseChatConfigProps {
     modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
-const useChatConfig = (
+export const useChatConfig = (
     refs: UseChatConfigProps,
     scopeVersion: number,
     onBeforePersist?: () => Promise<boolean>,
 ) => {
-    const { t } = useTranslation()
+    const { t } = useTranslation();
 
     const [formData, setFormData] = useState<ChatConfigForm>({
         // menuShow: true,
         // Fresh-deployment default — overwritten by API value when present.
-        systemPrompt: t('chatConfig.systemPrompt2'),
+        systemPrompt: t("chatConfig.systemPrompt2"),
         // Blank until configured — the input placeholder shows the default name
-        homeMenuDisplayName: '',
-        appCenterMenuDisplayName: '',
-        sidebarIcon: { enabled: true, image: '', relative_path: '' },
-        assistantIcon: { enabled: true, image: '', relative_path: '' },
-        welcomeMessage: '',
-        functionDescription: '',
-        inputPlaceholder: '',
-        applicationCenterWelcomeMessage: '',
-        applicationCenterDescription: '',
-        models: [{ key: generateUUID(4), id: null, name: '', displayName: '', visual: false }],
+        homeMenuDisplayName: "",
+        appCenterMenuDisplayName: "",
+        sidebarIcon: { enabled: true, image: "", relative_path: "" },
+        assistantIcon: { enabled: true, image: "", relative_path: "" },
+        welcomeMessage: "",
+        functionDescription: "",
+        inputPlaceholder: "",
+        applicationCenterWelcomeMessage: "",
+        applicationCenterDescription: "",
+        models: [{ key: generateUUID(4), id: null, name: "", displayName: "", visual: false }],
         maxTokens: 15000,
-        voiceInput: { enabled: false, model: '' },
+        voiceInput: { enabled: false, model: "" },
         knowledgeBase: {
             enabled: true,
-            prompt: t('chatConfig.internationalization')
+            prompt: t("chatConfig.internationalization"),
         },
         fileUpload: {
             enabled: true,
@@ -424,16 +136,16 @@ const useChatConfig = (
         skillEntry: {
             enabled: false,
         },
-        // 默认展示名称：接口为空时展示默认文案
-        tabDisplayName: t('dailyFullName'),
+
+        tabDisplayName: t("dailyFullName"),
         tools: [],
         orgKbs: [],
         recommendedApps: [],
         linsightConfig: {
             linsight_entry: true,
-            input_placeholder: '',
+            input_placeholder: "",
             tools: [],
-            tab_display_name: t('chatConfig.taskModeFullName'),
+            tab_display_name: t("chatConfig.taskModeFullName"),
         },
     });
 
@@ -446,63 +158,63 @@ const useChatConfig = (
         }
     };
 
-
-
     useEffect(() => {
         // Preset-tool list is fetched alongside config so fresh deployments can
-        // seed the built-in "联网搜索" tool as default-checked. The preset list
+
         // is authoritative (t_gpts_tools* tables), so tool_key is looked up at
         // runtime rather than hardcoded.
         setConfigMeta(null);
         Promise.all([
             getDailyConfigApi(),
-            getToolsApi('default').catch(() => []),
-            // F035: 灵思 tab merged here — load its config alongside the daily one.
+            getToolsApi("default").catch(() => []),
+
             getLinsiConfigApi().catch(() => null),
         ]).then(([res, toolsRes, linsightRes]) => {
             const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
             setConfigMeta(meta);
-            const linsightCfg = linsightRes ? (resolveConfigEnvelope<any>(linsightRes).data || {}) : {};
-            setFormData(prev => ({
+            const linsightCfg = linsightRes ? resolveConfigEnvelope<any>(linsightRes).data || {} : {};
+            setFormData((prev) => ({
                 ...prev,
                 linsightConfig: {
                     linsight_entry: linsightCfg.linsight_entry ?? prev.linsightConfig.linsight_entry,
                     input_placeholder: linsightCfg.input_placeholder ?? prev.linsightConfig.input_placeholder,
                     tools: Array.isArray(linsightCfg.tools) ? linsightCfg.tools : prev.linsightConfig.tools,
-                    tab_display_name: (typeof linsightCfg.tab_display_name === 'string' && linsightCfg.tab_display_name.trim())
-                        ? linsightCfg.tab_display_name.trim()
-                        : prev.linsightConfig.tab_display_name,
+                    tab_display_name:
+                        typeof linsightCfg.tab_display_name === "string" && linsightCfg.tab_display_name.trim()
+                            ? linsightCfg.tab_display_name.trim()
+                            : prev.linsightConfig.tab_display_name,
                 },
             }));
             const presetTools: any[] = Array.isArray(toolsRes) ? toolsRes : [];
 
             const buildDefaultTools = (): ToolConfigType[] => {
                 for (const parent of presetTools) {
-                    const child = (parent.children || []).find(
-                        (c: any) => c.tool_key === 'web_search',
-                    );
+                    const child = (parent.children || []).find((c: any) => c.tool_key === "web_search");
                     if (child) {
-                        return [{
-                            id: parent.id,
-                            name: parent.name,
-                            is_preset: parent.is_preset,
-                            description: parent.description,
-                            default_checked: true,
-                            children: [{
-                                id: child.id,
-                                name: child.name,
-                                tool_key: child.tool_key,
-                                desc: child.desc,
-                            }],
-                        }];
+                        return [
+                            {
+                                id: parent.id,
+                                name: parent.name,
+                                is_preset: parent.is_preset,
+                                description: parent.description,
+                                default_checked: true,
+                                children: [
+                                    {
+                                        id: child.id,
+                                        name: child.name,
+                                        tool_key: child.tool_key,
+                                        desc: child.desc,
+                                    },
+                                ],
+                            },
+                        ];
                     }
                 }
                 return [];
             };
 
             setFormData((prev) => {
-                const mergeObj = (a: any, b: any) =>
-                    b != null && typeof b === 'object' ? { ...a, ...b } : a;
+                const mergeObj = (a: any, b: any) => (b != null && typeof b === "object" ? { ...a, ...b } : a);
 
                 // Fresh deployment: no WORKSTATION config row yet. Seed both
                 // systemPrompt and web_search from defaults; leave other fields
@@ -510,7 +222,7 @@ const useChatConfig = (
                 if (!cfg) {
                     return {
                         ...prev,
-                        systemPrompt: t('chatConfig.systemPrompt2'),
+                        systemPrompt: t("chatConfig.systemPrompt2"),
                         tools: buildDefaultTools(),
                     };
                 }
@@ -520,30 +232,29 @@ const useChatConfig = (
                 const toolsFromCfg: ToolConfigType[] = Array.isArray(cfg.tools)
                     ? cfg.tools
                     : cfg.tools === undefined
-                        ? buildDefaultTools()
-                        : prev.tools;
+                      ? buildDefaultTools()
+                      : prev.tools;
 
                 // Treat empty string as "not configured" so the default prompt
                 // fills in instead of an empty textarea.
-                const cfgSystemPrompt = typeof cfg.systemPrompt === 'string'
-                    && cfg.systemPrompt.trim()
-                    ? cfg.systemPrompt
-                    : t('chatConfig.systemPrompt2');
+                const cfgSystemPrompt =
+                    typeof cfg.systemPrompt === "string" && cfg.systemPrompt.trim()
+                        ? cfg.systemPrompt
+                        : t("chatConfig.systemPrompt2");
 
                 return {
                     ...prev,
                     // Blank = unconfigured; the placeholder shows the default and the client localizes it
-                    homeMenuDisplayName: typeof cfg.homeMenuDisplayName === 'string' ? cfg.homeMenuDisplayName.trim() : '',
+                    homeMenuDisplayName:
+                        typeof cfg.homeMenuDisplayName === "string" ? cfg.homeMenuDisplayName.trim() : "",
                     appCenterMenuDisplayName: cfg.appCenterMenuDisplayName ?? prev.appCenterMenuDisplayName,
                     welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
                     functionDescription: cfg.functionDescription ?? prev.functionDescription,
                     inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
                     applicationCenterWelcomeMessage:
                         cfg.applicationCenterWelcomeMessage ?? prev.applicationCenterWelcomeMessage,
-                    applicationCenterDescription:
-                        cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
-                    maxTokens:
-                        typeof cfg.maxTokens === 'number' ? cfg.maxTokens : prev.maxTokens,
+                    applicationCenterDescription: cfg.applicationCenterDescription ?? prev.applicationCenterDescription,
+                    maxTokens: typeof cfg.maxTokens === "number" ? cfg.maxTokens : prev.maxTokens,
                     systemPrompt: cfgSystemPrompt,
                     sidebarIcon: mergeObj(prev.sidebarIcon, cfg.sidebarIcon),
                     assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
@@ -554,7 +265,7 @@ const useChatConfig = (
                     tabDisplayName: (() => {
                         // Treat empty string / whitespace as "API empty" and don't override defaults.
                         const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
-                        if (typeof raw !== 'string') return prev.tabDisplayName;
+                        if (typeof raw !== "string") return prev.tabDisplayName;
                         const trimmed = raw.trim();
                         return trimmed ? trimmed : prev.tabDisplayName;
                     })(),
@@ -567,126 +278,130 @@ const useChatConfig = (
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
-        homeMenuDisplayName: '',
-        welcomeMessage: '',
-        functionDescription: '',
-        tabDisplayName: '',
-        taskModeName: '',
-        inputPlaceholder: '',
-        kownledgeBase: '',
-        model: '',
+        homeMenuDisplayName: "",
+        welcomeMessage: "",
+        functionDescription: "",
+        tabDisplayName: "",
+        taskModeName: "",
+        inputPlaceholder: "",
+        kownledgeBase: "",
+        model: "",
         modelNames: [],
-        systemPrompt: '',
-        applicationCenterWelcomeMessage: '',
-        applicationCenterDescription: '',
+        systemPrompt: "",
+        applicationCenterWelcomeMessage: "",
+        applicationCenterDescription: "",
     });
     const [configMeta, setConfigMeta] = useState<any>(null);
 
     const handleInputChange = (field: keyof ChatConfigForm, value: string, maxLength: number) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        if (field === "maxTokens" && value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) return;
+        setFormData((prev) => ({ ...prev, [field]: value }));
 
         if (value.length >= maxLength) {
-            setErrors(prev => ({ ...prev, [field]: t('chatConfig.errors.maxCharacters', { count: maxLength }) }));
+            setErrors((prev) => ({ ...prev, [field]: t("chatConfig.errors.maxCharacters", { count: maxLength }) }));
         } else {
-            setErrors(prev => ({ ...prev, [field]: '' }));
+            setErrors((prev) => ({ ...prev, [field]: "" }));
         }
     };
 
     // Menu name: truncate past the display-width cap; blank is allowed (client localizes it)
-    const handleMenuNameChange = (field: 'homeMenuDisplayName', value: string) => {
-        setFormData(prev => ({ ...prev, [field]: clampMenuName(value) }));
-        setErrors(prev => ({ ...prev, [field]: '' }));
+    const handleMenuNameChange = (field: "homeMenuDisplayName", value: string) => {
+        setFormData((prev) => ({ ...prev, [field]: clampMenuName(value) }));
+        setErrors((prev) => ({ ...prev, [field]: "" }));
     };
 
     // F035: edits to the merged task-mode fields (legacy linsight config).
-    const handleLinsightChange = (field: 'tab_display_name' | 'input_placeholder', value: string) => {
-        setFormData(prev => ({
+    const handleLinsightChange = (field: "tab_display_name" | "input_placeholder", value: string) => {
+        setFormData((prev) => ({
             ...prev,
             linsightConfig: { ...prev.linsightConfig, [field]: value },
         }));
-        if (field === 'tab_display_name') {
-            setErrors(prev => ({ ...prev, taskModeName: '' }));
+        if (field === "tab_display_name") {
+            setErrors((prev) => ({ ...prev, taskModeName: "" }));
         }
     };
 
     const toggleFeature = (feature: keyof ChatConfigForm, enabled: boolean) => {
-        setFormData(prev => ({
+        setFormData((prev) => ({
             ...prev,
-            [feature]: { ...prev[feature], enabled }
+            [feature]: { ...prev[feature], enabled },
         }));
     };
 
     const validateForm = (): {
-        isValid: boolean,
-        firstErrorRef: React.RefObject<HTMLDivElement> | null,
-        modelErrorMessages: string[],
+        isValid: boolean;
+        firstErrorRef: React.RefObject<HTMLDivElement> | null;
+        modelErrorMessages: string[];
     } => {
         let isValid = true;
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
         const modelErrorMessages: string[] = [];
+        if (!Number.isFinite(Number(formData.maxTokens)) || Number(formData.maxTokens) < 0) {
+            isValid = false;
+            modelErrorMessages.push(t("sharedUi.minimum", { min: 0 }));
+            if (!firstErrorRef) firstErrorRef = refs.modelManagementContainerRef;
+        }
         const newErrors: FormErrors = {
-            homeMenuDisplayName: '',
-            welcomeMessage: '',
-            functionDescription: '',
-            tabDisplayName: '',
-            taskModeName: '',
-            inputPlaceholder: '',
-            kownledgeBase: '',
-            model: '',
+            homeMenuDisplayName: "",
+            welcomeMessage: "",
+            functionDescription: "",
+            tabDisplayName: "",
+            taskModeName: "",
+            inputPlaceholder: "",
+            kownledgeBase: "",
+            model: "",
             modelNames: [],
-            applicationCenterWelcomeMessage: '',
-            applicationCenterDescription: '',
-            systemPrompt: '',
+            applicationCenterWelcomeMessage: "",
+            applicationCenterDescription: "",
+            systemPrompt: "",
         };
 
-        // F035: 日常模式展示名称 was removed from the UI (the value still
         // round-trips through dataToSave) — no validation for it anymore.
 
-        // F035: task-mode display name (merged from the legacy 灵思 tab) is required.
-        const taskModeName = (formData.linsightConfig.tab_display_name || '').trim();
+        const taskModeName = (formData.linsightConfig.tab_display_name || "").trim();
         if (!taskModeName) {
-            newErrors.taskModeName = t('chatConfig.errors.taskModeNameRequired');
+            newErrors.taskModeName = t("chatConfig.errors.taskModeNameRequired");
             if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
         } else if (taskModeName.length > 20) {
-            newErrors.taskModeName = t('chatConfig.errors.maxCharacters', { count: 20 });
+            newErrors.taskModeName = t("chatConfig.errors.maxCharacters", { count: 20 });
             if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
         }
 
         // Validate welcome message
         if (formData.welcomeMessage.length > 1000) {
-            newErrors.welcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            newErrors.welcomeMessage = t("chatConfig.errors.maxCharacters", { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.welcomeMessageRef;
             isValid = false;
         }
 
         // Validate function description
         if (formData.functionDescription.length > 1000) {
-            newErrors.functionDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            newErrors.functionDescription = t("chatConfig.errors.maxCharacters", { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.functionDescriptionRef;
             isValid = false;
         }
 
         // Validate input placeholder
         if (formData.inputPlaceholder.length > 1000) {
-            newErrors.inputPlaceholder = t('chatConfig.errors.maxCharacters', { count: 1000 });
+            newErrors.inputPlaceholder = t("chatConfig.errors.maxCharacters", { count: 1000 });
             if (!firstErrorRef) firstErrorRef = refs.inputPlaceholderRef;
             isValid = false;
         }
 
         if (formData.knowledgeBase.prompt.length > 30000) {
-            newErrors.kownledgeBase = t('chatConfig.errors.maxCharacters', { count: 30000 });
+            newErrors.kownledgeBase = t("chatConfig.errors.maxCharacters", { count: 30000 });
             if (!firstErrorRef) firstErrorRef = refs.knowledgeBaseRef;
             isValid = false;
         }
 
         if (formData.systemPrompt?.length > 30000) {
-            newErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
+            newErrors.systemPrompt = t("chatConfig.errors.maxCharacters", { count: 30000 });
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
-        // F035: app-center copy moved to the 应用 tab (AppCenter.tsx) — validated there.
+
         newErrors.modelNames = [];
         setErrors(newErrors);
 
@@ -697,8 +412,8 @@ const useChatConfig = (
         };
     };
 
-    const { toast } = useToast()
-    const { reloadConfig } = useContext(locationContext)
+
+    const { reloadConfig } = useContext(locationContext);
 
     /**
      * Guard against persisting a form that never received the saved config.
@@ -713,10 +428,10 @@ const useChatConfig = (
     const confirmBlindOverwrite = () =>
         new Promise<boolean>((resolve) => {
             bsConfirm({
-                title: t('chatConfig.blindOverwriteTitle'),
-                desc: t('chatConfig.blindOverwriteDesc'),
-                okTxt: t('chatConfig.blindOverwriteOk'),
-                canelTxt: t('cancel', { ns: 'bs' }),
+                title: t("chatConfig.blindOverwriteTitle"),
+                desc: t("chatConfig.blindOverwriteDesc"),
+                okTxt: t("chatConfig.blindOverwriteOk"),
+                canelTxt: t("cancel", { ns: "bs" }),
                 onOk(next) {
                     resolve(true);
                     next();
@@ -734,16 +449,13 @@ const useChatConfig = (
         const { isValid, firstErrorRef, modelErrorMessages } = validateForm();
         if (!isValid) {
             if (modelErrorMessages.length > 0) {
-                toast({
-                    variant: 'error',
-                    description: modelErrorMessages.join('; '),
-                });
+                notification.open({ type: "error", description: String(modelErrorMessages.join("; ") ?? '') });
             }
             if (firstErrorRef?.current) {
                 firstErrorRef.current.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center',
-                    inline: 'nearest'
+                    behavior: "smooth",
+                    block: "center",
+                    inline: "nearest",
                 });
 
                 setTimeout(() => {
@@ -766,21 +478,23 @@ const useChatConfig = (
 
         const dataToSave = {
             // Blank stays blank: the client falls back to its localized menu name.
-            homeMenuDisplayName: await toStoredMenuName(formData.homeMenuDisplayName, 'bench.home'),
-            appCenterMenuDisplayName: await toStoredMenuName(formData.appCenterMenuDisplayName, 'bench.appCenter'),
+            homeMenuDisplayName: await toStoredMenuName(formData.homeMenuDisplayName, "bench.home"),
+            appCenterMenuDisplayName: await toStoredMenuName(formData.appCenterMenuDisplayName, "bench.appCenter"),
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
             welcomeMessage: formData.welcomeMessage.trim(),
             functionDescription: formData.functionDescription.trim(),
             inputPlaceholder: formData.inputPlaceholder.trim(),
-            applicationCenterWelcomeMessage: formData.applicationCenterWelcomeMessage.trim() || t('chatConfig.appCenterWelcomePlaceholder'),
-            applicationCenterDescription: formData.applicationCenterDescription.trim() || t('chatConfig.appCenterDescriptionPlaceholder'),
+            applicationCenterWelcomeMessage:
+                formData.applicationCenterWelcomeMessage.trim() || t("chatConfig.appCenterWelcomePlaceholder"),
+            applicationCenterDescription:
+                formData.applicationCenterDescription.trim() || t("chatConfig.appCenterDescriptionPlaceholder"),
             maxTokens: formData.maxTokens || 15000,
             systemPrompt: formData.systemPrompt,
             knowledgeBase: formData.knowledgeBase,
             fileUpload: formData.fileUpload,
             skillEntry: formData.skillEntry,
-            tabDisplayName: formData.tabDisplayName ?? '',
+            tabDisplayName: formData.tabDisplayName ?? "",
             // v2.5 Agent-mode fields
             tools: formData.tools,
             orgKbs: formData.orgKbs,
@@ -792,28 +506,25 @@ const useChatConfig = (
         // entry toggle moved to role menus, tools share the daily pool).
         const linsightToSave = {
             linsight_entry: formData.linsightConfig.linsight_entry ?? true,
-            input_placeholder: formData.linsightConfig.input_placeholder?.trim() || '',
+            input_placeholder: formData.linsightConfig.input_placeholder?.trim() || "",
             tools: formData.linsightConfig.tools || [],
-            tab_display_name: (formData.linsightConfig.tab_display_name || '').trim(),
+            tab_display_name: (formData.linsightConfig.tab_display_name || "").trim(),
         };
 
         captureAndAlertRequestErrorHoc(
-            Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)])
+            Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)]),
         ).then((res) => {
             if (res) {
                 setConfigMeta({
                     inherited_from_root: false,
                     has_override: true,
                 });
-                toast({
-                    variant: 'success',
-                    description: t('chatConfig.saveSuccess'),
-                })
-                reloadConfig()
+                notification.open({ type: "success", description: String(t("chatConfig.saveSuccess") ?? '') });
+                reloadConfig();
             }
-        })
+        });
 
-        return true
+        return true;
     };
 
     return {
@@ -826,6 +537,6 @@ const useChatConfig = (
         handleMenuNameChange,
         handleLinsightChange,
         toggleFeature,
-        handleSave
+        handleSave,
     };
 };

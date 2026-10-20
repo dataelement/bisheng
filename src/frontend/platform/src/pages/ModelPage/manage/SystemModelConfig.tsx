@@ -1,11 +1,11 @@
 // @ts-strict-ignore
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
-import ShadTooltip from "@/components/ShadTooltipComponent";
+import { Outlined } from "bisheng-icons";
+import { Button, Tabs, Tooltip } from "@bisheng/ui";
 import { userContext } from "@/contexts/userContext";
 import { getTenantsApi } from "@/controllers/API/tenant";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { Tenant } from "@/types/api/tenant";
-import { ArrowLeft } from "lucide-react";
+
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isGlobalSuperUser } from "./permissions";
@@ -115,11 +115,11 @@ export default function SystemModelConfig({
     return <div className="px-2 py-4 size-full pb-20 relative overflow-y-auto">
         <div className="">
             <div className="flex ml-6 items-center gap-x-3">
-                <ShadTooltip content={t('back')} side="right">
-                    <button className="extra-side-bar-buttons w-[36px]" onClick={() => onBack()}>
-                        <ArrowLeft strokeWidth={1.5} className="side-bar-button-size" />
-                    </button>
-                </ShadTooltip>
+                <Tooltip content={t('back', { ns: 'bs' })} side="right">
+                    <Button variant="ghost" size="icon" aria-label={t('back', { ns: 'bs' })} onClick={onBack}>
+                        <Outlined.ArrowLeft />
+                    </Button>
+                </Tooltip>
                 <span>{t('model.systemModelSettings')}</span>
             </div>
             <div className="px-4">
@@ -129,37 +129,16 @@ export default function SystemModelConfig({
                     rootTenant={rootTenant}
                     childTenant={childTenant}
                 />
-                <Tabs
-                    value={activeTab}
-                    onValueChange={(tab) => {
-                        setActiveTab(tab)
-                        onTabChange?.(tab)
-                    }}
-                    className="flex flex-col"
-                >
-                    <TabsList className="w-[550px] m-auto">
-                        <TabsTrigger value="workbench" className="w-[150px]">{t('model.workModel')}</TabsTrigger>
-                        <TabsTrigger value="knowledge" className="w-[150px]">{t('model.knowledgeBaseModel')}</TabsTrigger>
-                        <TabsTrigger value="assis" className="w-[150px]">{t('model.assistantModel')}</TabsTrigger>
-                        <TabsTrigger value="evaluation" className="w-[150px]">{t('model.evaluationModel')}</TabsTrigger>
-                        <TabsTrigger value="workflow" className="w-[150px]">{t('model.workflowModel')}</TabsTrigger>
-                    </TabsList>
-                     <TabsContent value="workbench">
-                        <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack}></WorkbenchModel>
-                    </TabsContent>
-                    <TabsContent value="knowledge">
-                        <KnowledgeModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack}></KnowledgeModel>
-                    </TabsContent>
-                    <TabsContent value="assis">
-                        <AssisModel llmOptions={llmOptions} onBack={onBack}></AssisModel>
-                    </TabsContent>
-                    <TabsContent value="evaluation">
-                        <EvaluationModel llmOptions={llmOptions} onBack={onBack}></EvaluationModel>
-                    </TabsContent>
-                    <TabsContent value="workflow">
-                        <WorkflowModel llmOptions={llmOptions} onBack={onBack}></WorkflowModel>
-                    </TabsContent>
-                </Tabs>
+                <Tabs activeKey={activeTab} onChange={(tab) => {
+                    setActiveTab(tab)
+                    onTabChange?.(tab)
+                }} items={[
+                    { key: "workbench", label: t("model.workModel"), children: <WorkbenchModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} ttsModel={ttsModel} onBack={onBack} /> },
+                    { key: "knowledge", label: t("model.knowledgeBaseModel"), children: <KnowledgeModel llmOptions={llmOptions} embeddings={embeddings} asrModel={asrModel} onBack={onBack} /> },
+                    { key: "assis", label: t("model.assistantModel"), children: <AssisModel llmOptions={llmOptions} onBack={onBack} /> },
+                    { key: "evaluation", label: t("model.evaluationModel"), children: <EvaluationModel llmOptions={llmOptions} onBack={onBack} /> },
+                    { key: "workflow", label: t("model.workflowModel"), children: <WorkflowModel llmOptions={llmOptions} onBack={onBack} /> },
+                ]} />
             </div>
         </div>
     </div>

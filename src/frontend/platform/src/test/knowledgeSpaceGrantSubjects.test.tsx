@@ -45,11 +45,7 @@ vi.mock("@/controllers/request", () => ({
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => promise),
 }));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: ({ value, onChange, placeholder }: any) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
-  ),
-}));
+
 
 vi.mock("@/components/bs-ui/checkBox", () => ({
   // Stop propagation like the real Radix checkbox so a row click does not also

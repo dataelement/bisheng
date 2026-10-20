@@ -1,7 +1,6 @@
 import userEvent from "@testing-library/user-event"
-import type { InputHTMLAttributes } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { message } from "@/components/bs-ui/toast/use-toast"
+import { toast } from '@bisheng/ui';
 import {
   listServiceAccountGrantableResourcesApi,
   listServiceAccountKeysApi,
@@ -52,16 +51,17 @@ vi.mock("@/controllers/request", () => ({
   captureAndAlertRequestErrorHoc: vi.fn(),
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   message: vi.fn(),
   toast: vi.fn(),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: (props: InputHTMLAttributes<HTMLInputElement>) => (
-    <input {...props} />
-  ),
-}))
+
 
 vi.mock("@/components/bs-icons", () => ({
   LoadIcon: () => <span data-testid="load-icon" />,
@@ -193,16 +193,15 @@ describe("service-account resource grants", () => {
       }),
     )
     expect(copyText).toHaveBeenCalledWith("knowledge_library:1042")
-    expect(message).toHaveBeenCalledWith(
+    expect(toast.show).toHaveBeenCalledWith(
       expect.objectContaining({
-        className: expect.stringContaining("bottom-6"),
-        description:
+        message:
           "openApiManagement.feedback.resourceCopied:knowledge_library:1042",
       }),
     )
 
     await user.type(
-      screen.getByRole("textbox", {
+      screen.getByRole("searchbox", {
         name: "openApiManagement.grants.resourceSearch",
       }),
       "Reimbursement",
@@ -282,7 +281,7 @@ describe("service-account resource grants", () => {
     )
     await screen.findByText("Contract library")
     await user.type(
-      screen.getByRole("textbox", {
+      screen.getByRole("searchbox", {
         name: "openApiManagement.grants.resourceSearch",
       }),
       "nothing-matches",

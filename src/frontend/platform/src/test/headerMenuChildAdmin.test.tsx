@@ -1,5 +1,6 @@
+import userEvent from "@testing-library/user-event"
 import { render, screen } from "@testing-library/react"
-import { MemoryRouter } from "react-router-dom"
+import { MemoryRouter, useLocation } from "react-router-dom"
 import { describe, expect, it, vi } from "vitest"
 
 import { userContext } from "@/contexts/userContext"
@@ -59,6 +60,28 @@ describe("HeaderMenu for Child Admin", () => {
     expect(screen.getByText("build.tools")).toBeInTheDocument()
     expect(screen.getByText("build.workbench")).toBeInTheDocument()
     expect(screen.queryByText("build.dsh")).toBeNull()
+  })
+
+  it("navigates with the text-only segments and synchronizes selection", async () => {
+    function CurrentPath() {
+      return <output>{useLocation().pathname}</output>
+    }
+    const user = userEvent.setup()
+    const { container } = render(
+      <MemoryRouter initialEntries={["/build/apps"]}>
+        <userContext.Provider value={contextValue({ role: "admin", web_menu: [] })}>
+          <HeaderMenu />
+          <CurrentPath />
+        </userContext.Provider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole("radio", { name: "build.app" })).toBeChecked()
+    expect(container.querySelector("svg")).toBeNull()
+    await user.click(screen.getByRole("radio", { name: "build.tools" }))
+    expect(screen.getByText("/build/tools")).toBeInTheDocument()
+    expect(screen.getByRole("radio", { name: "build.tools" })).toBeChecked()
+    await user.click(screen.getByRole("radio", { name: "build.workbench" }))
+    expect(screen.getByText("/build/client")).toBeInTheDocument()
   })
 
   it("keeps the global header empty on the DSH management page", () => {
