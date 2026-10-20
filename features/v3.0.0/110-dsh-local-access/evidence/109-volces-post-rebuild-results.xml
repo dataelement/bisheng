@@ -6,8 +6,8 @@
         try:
 &gt;           yield
 
-../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:101: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:101:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 ../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_transports/default.py:394: in handle_async_request
     resp = await self._pool.handle_async_request(req)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -32,7 +32,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     with map_exceptions(exc_map):
 ../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/contextlib.py:158: in __exit__
     self.gen.throw(typ, value, traceback)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 map = {&lt;class 'TimeoutError'&gt;: &lt;class 'httpcore.ReadTimeout'&gt;, &lt;class 'anyio.BrokenResourceError'&gt;: &lt;class 'httpcore.ReadErr... 'anyio.ClosedResourceError'&gt;: &lt;class 'httpcore.ReadError'&gt;, &lt;class 'anyio.EndOfStream'&gt;: &lt;class 'httpcore.ReadError'&gt;}
 
@@ -86,8 +86,8 @@ scenario = (&lt;httpx.AsyncClient object at 0x109c8e550&gt;, Credentials(&lt;red
                 },
             )
 
-test/e2e/test_e2e_dsh_no_gateway.py:182: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+test/e2e/test_e2e_dsh_no_gateway.py:182:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 ../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1859: in post
     return await self.request(
 ../../../../../../works/bisheng/src/backend/.venv/lib/python3.11/site-packages/httpx/_client.py:1540: in request
@@ -107,7 +107,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     with map_httpcore_exceptions():
 ../../../../../../.local/share/uv/python/cpython-3.11.13-macos-aarch64-none/lib/python3.11/contextlib.py:158: in __exit__
     self.gen.throw(typ, value, traceback)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
     @contextlib.contextmanager
     def map_httpcore_exceptions() -&gt; typing.Iterator[None]:
@@ -118,7 +118,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
             yield
         except Exception as exc:
             mapped_exc = None
-    
+
             for from_exc, to_exc in HTTPCORE_EXC_MAP.items():
                 if not isinstance(exc, from_exc):
                     continue
@@ -127,10 +127,10 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
                 # `httpx.ReadTimeout`, not just `httpx.TimeoutException`.
                 if mapped_exc is None or issubclass(to_exc, mapped_exc):
                     mapped_exc = to_exc
-    
+
             if mapped_exc is None:  # pragma: no cover
                 raise
-    
+
             message = str(exc)
 &gt;           raise mapped_exc(message) from exc
 E           httpx.ReadTimeout
