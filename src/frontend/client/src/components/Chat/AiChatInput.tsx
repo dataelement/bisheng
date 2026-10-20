@@ -20,6 +20,7 @@ import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultC
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
+import { ComposerReferences } from "./Input/ComposerReferences";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { Outlined } from "bisheng-icons";
@@ -467,8 +468,7 @@ const AiChatInput = memo(
             isComposingRef.current = false;
         }, []);
 
-        // Skills join the knowledge spaces as context resources you
-        // mount onto the conversation, not something you are about to send.
+        // Skills and knowledge spaces render as references in the writing area.
         const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
@@ -513,14 +513,10 @@ const AiChatInput = memo(
                         (elevated || hasSelectionTags) && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {hasSelectionTags && (
+                    {hasInlineAttachments && (
                         <AttachmentBar
                             uploadingFiles={uploadingFiles}
                             files={chatFiles || []}
-                            kbs={selectedOrgKbs || []}
-                            skills={mountedSkills}
-                            onRemoveKb={onSelectedOrgKbsChange ? (kb) => onSelectedOrgKbsChange(selectedOrgKbs.filter((item) => item.id !== kb.id || item.type !== kb.type)) : undefined}
-                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((item) => item.name !== skill.name))}
                             onRemoveFile={(file) => {
                                 // clientId, not name: a folder upload can carry the
                                 // same file name in several subdirectories.
@@ -612,6 +608,15 @@ const AiChatInput = memo(
                         />;
                     })()}
 
+                    <div className="dsh-composer-writing">
+                        {hasMountedKbs && <ComposerReferences
+                            skills={mountedSkills}
+                            spaces={selectedOrgKbs || []}
+                            disabled={disabled || isStreaming}
+                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((item) => item.name !== skill.name))}
+                            onRemoveSpace={(kb) => onSelectedOrgKbsChange?.(selectedOrgKbs.filter((item) => item.id !== kb.id || item.type !== kb.type))}
+                            onFocusInput={() => textAreaRef.current?.focus()}
+                        />}
                     {/* Textarea */}
                     <TextareaAutosize
                         ref={textAreaRef}
@@ -626,7 +631,7 @@ const AiChatInput = memo(
                         // Media parsing only has to block a second send, not typing:
                         // the send button below stays disabled while `isParsingMedia`.
                         disabled={disabled || isStreaming}
-                        placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
+                        placeholder={hasMountedKbs ? "" : placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
                         tabIndex={0}
                         data-testid="ai-chat-input"
                         data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
@@ -642,6 +647,8 @@ const AiChatInput = memo(
                             isTextareaScrollable && "scroll-on-scroll"
                         )}
                     />
+
+                    </div>
 
                     <div className="dsh-composer-toolbar flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}

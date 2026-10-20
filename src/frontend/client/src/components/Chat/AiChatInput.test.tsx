@@ -37,7 +37,7 @@ jest.mock('./Input/ChatResourceMenu', () => ({
   ),
 }));
 jest.mock('./Input/AttachmentBar', () => ({
-  AttachmentBar: ({ files, kbs }) => <div data-testid="attachments">{[...files, ...kbs].map((file) => file.name).join(',')}</div>,
+  AttachmentBar: ({ files }) => <div data-testid="attachments">{files.map((file) => file.name).join(',')}</div>,
 }));
 jest.mock('./Input/Files/DragDropOverlay', () => () => null);
 jest.mock('~/components/Voice/SpeechToText', () => () => null);
@@ -69,20 +69,21 @@ test('new chat offers setup, established chat hides setup while preserving conte
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
   }
-  expect(screen.getByTestId('attachments')).toHaveTextContent('Reference');
+  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
-  for (const label of ['skills', 'tools', 'research']) {
+  for (const label of ['tools', 'research']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.getByTestId('attachments')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
-  expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', 'dshChat.followupPlaceholder');
+  expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
+  expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '');
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
   expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'model' })).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} />);
-  expect(screen.getByTestId('attachments')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
 });
 
 test('follow-up retains attachment upload and sends its text and file', () => {

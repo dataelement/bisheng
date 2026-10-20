@@ -41,7 +41,7 @@ body[data-dsh-chat-theme=dark] .dsh-chat-hero {
 .dsh-chat-resize { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; z-index: 2; cursor: col-resize; touch-action: none; }
 .dsh-chat-resize:hover, .dsh-chat-resize:focus-visible { background: rgb(var(--brand-500) / 12%); outline: none; }
 .dsh-chat-preview-modal { background: rgb(var(--bg-page)); }
-.dsh-chat-attachment { display: flex; align-items: center; gap: 10px; width: 240px; max-width: 100%; min-height: 64px; border: 1px solid rgb(var(--border-base)); border-radius: 20px; background: rgb(var(--dsh-composer-bg)); padding: 8px 12px; text-align: left; }
+.dsh-chat-attachment { display: flex; align-items: center; gap: 10px; width: 240px; max-width: 100%; min-height: 64px; border: .5px solid rgb(var(--border-base)); border-radius: 20px; background: rgb(var(--dsh-composer-bg)); padding: 8px 12px; text-align: left; }
 .dsh-chat-attachment:hover { background: rgb(var(--fill-1)); }
 .dsh-chat-attachment:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: 2px; }
 /* Harness 0.2.0-rc.2 conversation geometry and semantic surface palette. */

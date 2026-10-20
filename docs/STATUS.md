@@ -1,3 +1,11 @@
+## 2026-10-20 — Chat 资源展示对齐原生 Work
+
+- 基线核验：毕昇共享分支 feat/bisheng-work-120@24f9793a9，桌面 V1.2.0@887bc82；工作目录分别为 bisheng-desktop-navigation 与 bisheng-work-chat-work，已安装 Harness / 原生 attachment / conversation UI 为 0.2.0-rc.2。v0.9.0 整合工作树干净，远端版本分支查询未返回该引用；本次沿用当前企业整合版本，只修改 Chat 展示。
+- 输入区按资源语义拆分：技能使用 /名称、知识空间使用 @名称的品牌色文字引用；文件采用原生 240×64 卡片、16px 圆角、14px/500 名称与 12px 元信息，图片采用 64×64 / 20px 圆角缩略图。附件轨道、悬浮移除按钮与发送后的文件卡沿用相同几何与主题色。
+- 引用选择、移除和重新聚焦保留现有 Chat 技能 ID、知识空间 ID、文件上传和平台执行链路。引用键盘 Delete / Backspace 和点击移除使用同一回调；原生 Work 保持当前实现。
+- 已验证：3 套件 / 7 项组件行为回归、定向 ESLint、生产构建、diff-check。ESLint 自动收缩 AttachmentBar 已消除的 any 抑制计数。3006 部署及真实桌面验收正在进行；本轮模型执行未验收。
+- 证据：主工作区 outputs/native-context-style-20261020。
+
 ## 2026-10-20 — 会话内技能选择与旧菜单统一
 
 - 已有 Chat 会话的输入框以 allowConfiguration=false 隐藏技能入口和挂载资源；该配置仅控制首页配置项，技能入口按用户任务能力与实际执行回调判断，已选技能随当前输入框显示。

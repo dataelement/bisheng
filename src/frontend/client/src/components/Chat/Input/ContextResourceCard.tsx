@@ -9,6 +9,7 @@ export const ContextResourceCard = ({
     title,
     onRemove,
     onClick,
+    thumbnail = false,
 }: {
     icon: React.ReactNode;
     label: string;
@@ -16,22 +17,23 @@ export const ContextResourceCard = ({
     title?: string;
     onRemove?: () => void;
     onClick?: () => void;
+    thumbnail?: boolean;
 }) => (
     <div
         className={cn(
-            "dsh-composer-chip group relative flex h-14 shrink-0 items-center gap-3 rounded-xl bg-fill-1 px-3 text-body-sm text-text-1",
+            "dsh-composer-chip group",
+            thumbnail && "dsh-composer-thumbnail",
             onClick && "cursor-pointer",
         )}
-        style={{ width: 224 }}
         onClick={onClick}
         role={onClick ? "button" : undefined}
         tabIndex={onClick ? 0 : undefined}
         onKeyDown={onClick ? (event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); } } : undefined}
     >
-        <span className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded text-text-2">{icon}</span>
-        <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
-            <span className="block truncate">{label}</span>
-            {description && <span className="block truncate text-caption text-text-3">{description}</span>}
+        <span className="dsh-resource-icon">{icon}</span>
+        <span className="dsh-resource-body" title={title ?? label}>
+            <span className="dsh-resource-name">{label}</span>
+            {description && <span className="dsh-resource-meta">{description}</span>}
         </span>
         {onRemove && (
             <button
@@ -42,7 +44,7 @@ export const ContextResourceCard = ({
                 // Hover-reveal on hover-capable pointers; always visible where the
                 // pointer can't hover (touch) — gated by CSS hover capability, not
                 // screen width, so a small-screen PC still gets the hover behaviour.
-                className="dsh-resource-remove absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-fill-2 text-text-3 opacity-0 hover:text-text-1 group-hover:opacity-100 focus-visible:opacity-100 coarse-pointer:opacity-100"
+                className="dsh-resource-remove"
                 aria-label="Remove"
             >
                 <Outlined.Close size={12} />
