@@ -86,7 +86,7 @@ export function getToolTree(temp) {
             description: item.desc,
             group_params: [
                 {
-                    name: '工具参数',
+                    name: 'parameterGroup',
                     params: item.api_params.map(el => ({
                         key: el.name,
                         label: el.name,
@@ -98,11 +98,11 @@ export function getToolTree(temp) {
                     }))
                 },
                 {
-                    name: '输出',
+                    name: 'outputGroup',
                     params: [{
                         global: 'key',
                         key: 'output',
-                        label: '输出变量',
+                        label: i18next.t('node.tool.output.label', { ns: 'flow' }),
                         type: 'var',
                         value: ''
                     }]
@@ -183,7 +183,8 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
                     const questionId = varName.split('#')[1]
                     const quwstionStr = varNameCn?.split('/')[1] || ''
                     return param.value.some(item => item.key === questionId && item.value === quwstionStr) // id and name 必须一致
-                } else if ((param.type === 'var' && Array.isArray(param.value) && param.value.length) || param.type === 'code_output') {
+                } else if ((param.type === 'var' && Array.isArray(param.value) && param.value.length)
+                    || param.type === 'code_output' || param.type === 'subflow_output') {
                     return param.value.some(item => `${node.id}.${item.key}` === varName)
                 } else if (param.tab && param.tab !== node.data.tab.value) {
                     return false
@@ -347,7 +348,7 @@ export function importFlow() {
                         const flow = JSON.parse(text);
 
                         if (!flow || !Array.isArray(flow.nodes)) {
-                            return reject("flow.nodes 不存在或不是数组");
+                            return reject(i18next.t('invalidFileError', { ns: 'flow' }));
                         }
                         // 使用 Promise.all 等待所有的 copyReportTemplate 完成
                         await Promise.all(flow.nodes.map(async (node) => {
