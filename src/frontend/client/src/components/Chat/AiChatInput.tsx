@@ -231,6 +231,8 @@ const AiChatInput = memo(
         }, []);
 
         const handleTextareaScroll = useCallback(() => {
+            const el = textAreaRef.current;
+            el?.parentElement?.style.setProperty('--dsh-draft-scroll', `${-(el?.scrollTop ?? 0)}px`);
             if (!isTextareaScrollable) return;
             setIsTextareaScrolling(true);
             if (textareaScrollHideTimerRef.current) {

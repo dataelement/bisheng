@@ -18,7 +18,7 @@ import { isMediaAttachmentFile } from "~/utils/mediaAttachmentUtils";
 import { resolveKnowledgePreviewUrl } from "~/pages/knowledge/FilePreview/previewUrlUtils";
 import { groupAttachmentsByFolder } from "~/components/Linsight/Input/ContextChips";
 import { useLocalize } from "~/hooks";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypeIcon } from "~/components/ui/icon/File/FileIcon";
 
 /** Stable sequence key for a file attachment across upload → completed transition. */
 function attachmentSeqKey(clientId: string | undefined): string | undefined {
@@ -43,6 +43,7 @@ function resolveFilePreviewUrl(file: {
 const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     const fileName = file.name || file.file_name || file.filename || 'File';
     const [previewOpen, setPreviewOpen] = useState(false);
+    const TypeIcon = getFileTypeIcon(fileName);
 
     if (isMediaChipFile({ ...file, name: fileName })) {
         return (
@@ -63,7 +64,7 @@ const FileCard = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                 label={fileName}
                 description={[fileName.split('.').pop()?.toUpperCase(), Number(file.size) >= 0 ? formatBytes(Number(file.size), 1, true) : ''].filter(Boolean).join(' · ')}
                 thumbnail={isImagePreview}
-                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <FileIcon type={getFileTypebyFileName(fileName) || "txt"} className="dsh-file-icon" />}
+                icon={isImagePreview ? <img src={previewUrl} alt="" /> : <TypeIcon size={28} />}
                 onRemove={onRemove}
                 onClick={isImagePreview ? () => setPreviewOpen(true) : undefined}
             />

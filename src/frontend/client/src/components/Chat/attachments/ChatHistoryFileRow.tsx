@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { OGDialog, OGDialogContent } from '~/components/ui';
-import { FileIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
+import { getFileTypeIcon, getFileTypebyFileName } from '~/components/ui/icon/File/FileIcon';
 import FilePreview from '~/pages/knowledge/FilePreview';
 import { getViewerType } from '~/pages/knowledge/FilePreview/viewers';
 import { downloadFile } from '~/utils';
@@ -31,6 +31,7 @@ export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowPr
     const [previewOpen, setPreviewOpen] = useState(false);
     const fileName = getChatAttachmentFileName(file);
     const fileType = getFileTypebyFileName(fileName);
+    const TypeIcon = getFileTypeIcon(fileName);
     const fileUrl = resolveChatAttachmentUrl(file);
     const viewerType = getViewerType(fileType);
     const canPreview = !!fileUrl && viewerType !== 'unsupported';
@@ -56,7 +57,7 @@ export function ChatHistoryFileRow({ file, onPreviewFile }: ChatHistoryFileRowPr
         <>
             <button type="button" className="dsh-chat-attachment" onClick={handleClick} disabled={!isInteractive}
                 title={fileName}>
-                <FileIcon type={fileType || 'txt'} className="dsh-file-icon shrink-0" />
+                <span className="dsh-resource-icon"><TypeIcon size={28} /></span>
                 <span className="min-w-0 flex-1">
                     <span className="dsh-resource-name block text-text-1">{fileName}</span>
                     <span className="dsh-resource-meta block">{fileType.toUpperCase()}</span>
