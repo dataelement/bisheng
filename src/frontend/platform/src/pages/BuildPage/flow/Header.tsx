@@ -382,14 +382,17 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                         )}
                         dropDown={(
                             <div className=" overflow-y-auto max-h-96 max-h">
-                                <RadioGroup value={version.id + ''} onValueChange={(vid) => {
+                                <RadioGroup value={version.id + ''} onValueChange={async (vid) => {
                                     if (isOnlineVersionFun() && hasChanged) return setModelVersionId(vid)
-                                    const { edges, nodes, viewport } = flow
-                                    updateVersion(version.id, {
-                                        name: version.name, description: '', data: {
-                                            edges, nodes, viewport
-                                        }
-                                    })
+                                    // An online version cannot be saved; otherwise save first and stay here if that fails
+                                    if (!isOnlineVersionFun()) {
+                                        const { edges, nodes, viewport } = flow
+                                        const saved = await captureAndAlertRequestErrorHoc(updateVersion(version.id, {
+                                            name: version.name, description: '', data: { edges, nodes, viewport }
+                                        }))
+                                        if (saved === false) return
+                                        showSubflowWarning(saved?.subflow_warning)
+                                    }
                                     handleChangeVersion(vid)
                                 }} className="gap-0">
                                     {versions.map((vers, index) => (
