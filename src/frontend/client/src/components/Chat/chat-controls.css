@@ -87,13 +87,13 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 }
 .dsh-command-description {
   margin-left:0; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis;
-  white-space:nowrap; font-size:12px; color:rgb(var(--text-3));
+  white-space:nowrap; font-size:12px; font-weight:400; line-height:20px; color:rgb(var(--text-3));
 }
 .dsh-command-skills {
   display:flex; flex-direction:column; min-height:0; max-height:260px;
   padding:4px 8px; overflow-y:auto;
 }
-.dsh-command-name { flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsh-command-name { font-size:13px; font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh-command-skills .skill-menu-text,
 .dsh-command-skill-text { display:flex; align-items:baseline; gap:8px; }
 .dsh-command-panel .dsh-command-skill-row { align-items:center; }
