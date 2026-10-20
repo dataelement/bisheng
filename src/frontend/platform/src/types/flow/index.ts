@@ -216,4 +216,6 @@ export interface WorkflowMessage {
   reasoning_log?: string; // 推理
   extra?: string;
   citations?: ChatCitation[] | null;
+  /** F078: notice codes of an agent node that ran skills, e.g. code_executor_missing */
+  notices?: string[];
 }
