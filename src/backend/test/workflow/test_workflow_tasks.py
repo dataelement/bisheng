@@ -33,4 +33,6 @@ def test_telemetry_failure_does_not_change_workflow_task_outcome(monkeypatch, ta
 
     task.run("run-id", "workflow-id", "chat-id", 42)
 
-    runner.assert_called_once_with("run-id", "workflow-id", "chat-id", 42, "platform")
+    runner.assert_called_once()
+    # execute_workflow also forwards the F078 tmp_session_id (None here).
+    assert runner.call_args.args[:5] == ("run-id", "workflow-id", "chat-id", 42, "platform")

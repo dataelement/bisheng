@@ -65,7 +65,12 @@ def harness(monkeypatch):
     async def get_client():
         return None
 
+    async def no_new_refs(*_args):
+        return None
+
     monkeypatch.setattr(workflow_client_module, "RedisCallback", FakeRedisCallback)
+    # F086 checks subflow references before a run; these drafts have none.
+    monkeypatch.setattr(workflow_client_module.SubflowService, "check_new_refs", no_new_refs)
     monkeypatch.setattr(workflow_client_module, "generate_uuid", lambda: next(ids))
     monkeypatch.setattr(
         workflow_client_module.execute_workflow,
@@ -84,6 +89,7 @@ def _client(chat_id: str = "") -> WorkflowClient:
     client.client_id = "flow-1"
     client.chat_id = chat_id
     client.user_id = 1
+    client.login_user = None
     client.latest_history = None
     client.workflow = None
     client.hash_key = None
