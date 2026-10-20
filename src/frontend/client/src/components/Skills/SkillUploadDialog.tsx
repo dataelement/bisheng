@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { Button } from '@bisheng/ui';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '~/components/ui/Dialog';
 import { useLocalize } from '~/hooks';
+import { cn } from '~/utils';
 import {
   createPersonalSkill,
   findPersonalSkillByImport,
@@ -28,6 +29,7 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
   const { refresh } = useSkillCenter();
   const usage = useQuery(['skill-center', 'usage'], getPersonalSkillUsage, { enabled: open, retry: false });
   const [file, setFile] = useState<File>();
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [duplicate, setDuplicate] = useState<{ skillId: number; contentHash: string }>();
   const [saving, setSaving] = useState(false);
@@ -41,6 +43,20 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
     setDuplicate(undefined);
     setFile(files?.length === 1 ? files[0] : undefined);
     if (files && files.length > 1) setError(localize('com_skill_center_error_multiple'));
+  };
+  const allowDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!saving) setDragging(true);
+  };
+  const endDrag = (event: DragEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setDragging(false);
+  };
+  const dropFile = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    if (saving) return;
+    choose(event.dataTransfer.files);
   };
   const close = () => {
     if (saving) return;
@@ -108,7 +124,16 @@ export function SkillUploadDialog({ open, onOpenChange, target, onSaved }: Skill
           })}
         </DialogDescription>
         <input ref={input} type="file" accept=".md,.zip,.skill" className="hidden" onChange={(event) => { choose(event.target.files); event.target.value = ''; }} />
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border-base bg-fill-1 p-7 text-center">
+        <div
+          className={cn(
+            'flex flex-col items-center gap-3 rounded-xl border border-dashed bg-fill-1 p-7 text-center',
+            dragging ? 'border-blue-500 bg-blue-500/10' : 'border-border-base',
+          )}
+          onDragEnter={allowDrop}
+          onDragOver={allowDrop}
+          onDragLeave={endDrag}
+          onDrop={dropFile}
+        >
           <Outlined.Skill className="size-8 text-text-3" aria-hidden />
           <p className="text-body text-text-1">{file ? file.name : localize('com_skill_center_drop')}</p>
           <Button color="default" variant="outlined" disabled={saving} onClick={() => input.current?.click()}>
