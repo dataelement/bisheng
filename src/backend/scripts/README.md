@@ -4,6 +4,21 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ## General Database Scripts
 
+### `backfill_dashboard_original_organizations.py`
+
+补齐指定租户看板现有文件统计的“原始上传库、原始所属公司/部门/科室/班组”空值。复用当前投影规则；原始库ID缺失回退当前库并单独计数。原始组织按原始库当前组织映射，不能恢复首次上传时的组织历史。已有非空值不同则整条跳过；不写数据库、不新增统计记录、不改历史事件和计数，也不更新索引结构。
+
+```bash
+# 后端根目录执行，默认只读；所有输出必须是新文件。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --tenant-id 1 --output /tmp/origin-plan.json
+# 可重复 --space-id 限定知识库。审核计划数量、冲突和回退数量后，再确认生产写入。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --plan /tmp/origin-plan.json --apply --output /tmp/origin-write.jsonl
+# 回退先预览，确认后增加 --apply，输出换新路径。
+.venv/bin/python scripts/backfill_dashboard_original_organizations.py --rollback /tmp/origin-write.jsonl --output /tmp/origin-rollback-preview.jsonl
+```
+
+五字段必须已有 keyword mapping；预览绑定索引UUID和计划摘要。写入前重新计算来源并检查ES身份，局部更新使用版本并发保护。写前记录0600权限日志并fsync，写后读回；任何异常立即停止，部分成功记录保留在日志。回退只恢复本次涉及字段，字段已有并发变化时拒绝，不覆盖其他字段。重复扫描应无相同候选；旧计划重复执行会因漂移停止。容器 `/tmp` 文件随容器重建丢失，正式操作后需保存计划及日志到持久化存储。
+
 ### `audit_knowledge_document_categories.py`
 
 只读审计数据看板的文档分类冲突。指定租户，并按知识库或文档 ID 限定范围；123、91 为示例 ID。比对 ES 文件快照与数据库当前入口、主版本和管理入口，输出分类来源、身份差异及安全的定向刷新建议。不会修改数据库/ES、派发刷新或内容解析任务，没有 `--apply` 模式。
