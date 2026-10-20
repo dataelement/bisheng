@@ -1,29 +1,34 @@
 ---
-name: code-review
+name: sdd-code-review
 description: >-
-  L2 特性级多维度代码审查。Feature 全部任务完成后执行。
-  用法：/code-review --base <branch>
-  TRIGGER when: 用户运行 /code-review，或在 merge 前要求特性级代码审查。
+  SDD 第 8 步：Feature 全部任务完成后、合入前的特性级多维度代码审查，对照 spec/design/tasks 按 7 个维度出 PASS / NEEDS_FIX 报告。
+  用法：/sdd-code-review --base <目标分支>（通常是发版线，如 feat/3.0.0）。
+  TRIGGER when: 用户运行 /sdd-code-review，或在 SDD feature 合入前要求特性级代码审查。
+  与 Claude Code 自带的 /code-review（云端多 agent 找缺陷）不是同一个工具。
 ---
 
-# Skill: code-review
+# Skill: sdd-code-review
 
 ## 描述
 
-L2 特性级多维度代码审查。Feature 全部任务完成后执行。
+L2 特性级多维度代码审查。Feature 全部任务完成后执行（SDD 第 8 步）。
+
+本 skill 是仓库内的唯一原件：`.cursor/skills` 与 `.agents/skills` 都是指向 `.claude/skills` 的软链接，改这里即可。
 
 ## 触发
 
 ```
-/code-review --base 2.5.0-PM
+/sdd-code-review --base feat/3.0.0
 ```
+
+`--base` 取 Feature 要合入的目标分支，下文用 `<base>` 指代。
 
 ---
 
 ## 审查流程
 
-1. 执行 `git diff 2.5.0-PM...HEAD --stat` 获取变更文件列表
-2. 执行 `git diff 2.5.0-PM...HEAD` 获取完整 diff
+1. 执行 `git diff <base>...HEAD --stat` 获取变更文件列表
+2. 执行 `git diff <base>...HEAD` 获取完整 diff
 3. 对照 Feature 的 `spec.md`、`design.md` 和 `tasks.md`
 4. 按 7 维度逐一审查
 5. 输出审查报告
@@ -45,13 +50,16 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 
 ### 维度 2：权限与认证
 
+> 以 `docs/constitution.md` C4 为准；本表只列审查时要看的点。
+
 | 检查项 | 说明 |
 |--------|------|
 | 认证注入 | 需要认证的端点是否使用 `UserPayload = Depends(UserPayload.get_login_user)` |
-| 五级权限链路 | 是否遵循：super_admin → tenant 归属 → tenant admin → ReBAC → RBAC 菜单 |
-| PermissionService | 权限检查是否走 `PermissionService.check()` 而非直接查旧表 |
-| 资源授权 | 创建资源时是否调用 `PermissionService.authorize()` 写入 owner 元组 |
-| tenant_id 隔离 | 跨租户访问是否被阻止（SQLAlchemy event 自动注入） |
+| 资源动作鉴权 | 资源操作是否走 `permission.application` 的 `require_business_action` / `check_business_action`（F048 统一运行时），而不是直接查 `role_access`、OpenFGA 或旧的 relation/`permission_id` 模板（RULE-8） |
+| 判定顺序 | 不自行重写 super_admin → 租户不匹配拒绝 → 租户管理员 → Catalog/动作闸 → OpenFGA 的短路顺序；RBAC 菜单权限不能当资源动作的兜底放行 |
+| 资源生命周期 | 资源创建、移动、复制、删除与授权变更是否走权限模块的投影台账，而不是业务代码自己写 tuple（RULE-9） |
+| tenant_id 隔离 | 跨租户访问被阻止；批量 `update()` / `delete()` 和原生 SQL 是否手写了 tenant 条件（自动过滤只拦 SELECT） |
+| 普通用户验证 | 权限相关的测试或手动验证是否用了非管理员账号（super_admin 会短路） |
 | WebSocket 认证 | WS 端点是否使用 `UserPayload.get_login_user_from_ws` |
 
 ### 维度 3：并发安全
@@ -84,8 +92,8 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 | 错误路径 | 权限拒绝、参数校验失败等错误路径有测试 |
 | 测试质量 | mock 合理，不 mock 掉核心逻辑 |
 
-> **务实适配**：当前测试基础薄弱，降低阈值但要求核心 Service 方法必须有测试。
-> 前端暂用手动验证替代（tasks.md 中有「手动验证」描述即可）。
+> **务实适配**：核心 Service 方法必须有测试。
+> 前端：可抽成纯函数的逻辑（数据转换、校验、兼容升级）要有 vitest 单测；交互与视觉走 `/e2e-test` 的手动验证清单，tasks.md 只写「手动验证」不算覆盖。
 
 ### 维度 6：代码风格
 
@@ -135,7 +143,7 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 
 **Feature**: <feature_name>
 **Review scope**: <描述>
-**Base branch**: 2.5.0-PM
+**Base branch**: <base>
 **Changed files**: <数量>
 
 ## Summary
@@ -153,7 +161,7 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 ## Findings（如有）
 
 ### HIGH
-- [Permission] `xxx_endpoint.py:42` — 缺少 PermissionService.check() 调用
+- [Permission] `xxx_endpoint.py:42` — 资源删除前未调用 require_business_action(action="delete")
 
 ### MEDIUM
 - [Style] `xxx_service.py:18` — DAO 方法未使用 @classmethod
