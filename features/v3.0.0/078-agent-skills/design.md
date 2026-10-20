@@ -30,7 +30,7 @@
 | # | 约束 | 来源 | 对方案的影响 |
 |---|---|---|---|
 | K1 | 配不配技能必须走同一条技术路径，不维护两套 | 用户拍板（2026-10-16） | 决策 1 |
-| K2 | 未配置技能的助手节点和助手应用行为与改动前一致 | spec AC-25、V3-INV-4 | 决策 1 否决整体 deepagents |
+| K2 | 未配置技能的助手节点和助手应用行为与改动前一致 | spec AC-25、V3-INV-5 | 决策 1 否决整体 deepagents |
 | K3 | workflow 节点同步执行：Celery `workflow_celery` 队列线程池里调用 `node.run`，`async_mode=False` | `B/worker/workflow/tasks.py:79-90`、`B/workflow/nodes/base.py:250` | 决策 4 |
 | K4 | 多节点部署是默认假设，本地盘只能做缓存 | C8 | 决策 3：工作区以 MinIO 为准 |
 | K5 | 技能查询依赖当前租户上下文（`strict_tenant_filter`，不回落 Root） | `B/linsight/domain/models/linsight_skill.py:212-218` | 运行前必须设置租户上下文 |

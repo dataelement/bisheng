@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import BigInteger, Index, Integer, String
+from sqlalchemy import BigInteger, Index, Integer, String, or_
 from sqlmodel import Column, DateTime, Field, col, func, select, text, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -411,15 +411,26 @@ class MessageSessionDao(MessageSessionBase):
 
     @classmethod
     @retry_on_transient_db_conflict()
-    def update_session_name_sync(cls, chat_id: str, name: str):
+    def update_session_name_sync(
+        cls, chat_id: str, name: str, *, only_if_default: bool = False, tenant_id: int | None = None
+    ) -> bool:
         statement = (
             update(MessageSession)
             .where(col(MessageSession.chat_id) == chat_id)
             .values(name=name, update_time=datetime.now())
         )
+        if only_if_default:
+            if tenant_id is None:
+                raise ValueError("tenant_id is required for a generated session title")
+            # Bulk UPDATEs do not receive the automatic tenant SELECT filter.
+            statement = statement.where(
+                col(MessageSession.tenant_id) == tenant_id,
+                or_(col(MessageSession.name).is_(None), col(MessageSession.name).in_(["", "New Chat"])),
+            )
         with get_sync_db_session() as session:
-            session.exec(statement)
+            result = session.exec(statement)
             session.commit()
+            return result.rowcount > 0
 
     @classmethod
     async def get_user_used_apps(

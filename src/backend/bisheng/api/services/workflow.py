@@ -4,7 +4,7 @@ from datetime import datetime
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-import anyio
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from langchain_classic.memory import ConversationBufferWindowMemory
 from loguru import logger
@@ -42,8 +42,8 @@ from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.common.node import BaseNodeData, NodeType
-from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.domain.services.subflow_service import SubflowService
+from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
 
@@ -872,42 +872,46 @@ class WorkFlowService(BaseService):
         )
 
         node_data = BaseNodeData(**node_data.get("data", {}))
-        base_callback = BaseCallback()
-        graph_state = GraphState()
-        graph_state.history_memory = ConversationBufferWindowMemory(k=10)
-        node = NodeFactory.instance_node(
-            node_type=node_data.type,
-            node_data=node_data,
-            user_id=login_user.user_id,
-            workflow_id=workflow_info.id,
-            workflow_name=workflow_info.name,
-            graph_state=graph_state,
-            target_edges=None,
-            max_steps=233,
-            callback=base_callback,
-            tenant_id=workflow_info.tenant_id,
-            # F078: a single-node test is a one-off debug session.
-            tmp_session_id=generate_uuid(),
-        )
-        if node_data.type == NodeType.CODE.value:
-            node.handle_input({"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]})
-        elif node_data.type == NodeType.TOOL.value:
-            user_input = {}
-            for k, v in node_input.items():
-                user_input[k] = v
-            node.handle_input(user_input)
-        else:
-            for key, val in node_input.items():
-                graph_state.set_variable_by_str(key, val)
 
-        exec_id = generate_uuid()
-        if node_data.type == NodeType.AGENT.value:
-            # The agent node bridges to async code with run_async_safe, which must
-            # not be called on the running loop; a worker thread can hop back to it.
-            result = await anyio.to_thread.run_sync(node._run, exec_id)
-        else:
+        def _run_node():
+            # Nodes are sync and some reach async services through run_async_safe
+            # (a tool node builds its tool that way), which refuses to run on the
+            # request's event loop. In a worker thread it hops back to the loop.
+            base_callback = BaseCallback()
+            graph_state = GraphState()
+            graph_state.history_memory = ConversationBufferWindowMemory(k=10)
+            node = NodeFactory.instance_node(
+                node_type=node_data.type,
+                node_data=node_data,
+                user_id=login_user.user_id,
+                workflow_id=workflow_info.id,
+                workflow_name=workflow_info.name,
+                graph_state=graph_state,
+                target_edges=None,
+                max_steps=233,
+                callback=base_callback,
+                tenant_id=workflow_info.tenant_id,
+                # F078: a single-node test is a one-off debug session.
+                tmp_session_id=generate_uuid(),
+            )
+            if node_data.type == NodeType.CODE.value:
+                node.handle_input(
+                    {"code_input": [{"key": k, "value": v, "type": "input"} for k, v in node_input.items()]}
+                )
+            elif node_data.type == NodeType.TOOL.value:
+                user_input = {}
+                for k, v in node_input.items():
+                    user_input[k] = v
+                node.handle_input(user_input)
+            else:
+                for key, val in node_input.items():
+                    graph_state.set_variable_by_str(key, val)
+
+            exec_id = generate_uuid()
             result = node._run(exec_id)
-        log_data = node.parse_log(exec_id, result)
+            return node.parse_log(exec_id, result)
+
+        log_data = await run_in_threadpool(_run_node)
         res = []
         for one_batch in log_data:
             ret = []

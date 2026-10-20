@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, SkipValidation, field_validator
 
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
+    FetchedPageCitationRegistry,
+    annotate_fetched_page_with_citation,
     annotate_rag_documents_with_citations,
     annotate_temp_documents_with_citations,
     annotate_web_results_with_citations,
@@ -19,6 +21,9 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     collect_temp_citation_registry_items,
     collect_web_citation_registry_items,
+    exclude_known_registry_items,
+    is_web_citation_tool,
+    is_web_fetch_tool,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.errcode.linsight import AgentSkillExecutorUnsupportedError
@@ -66,6 +71,7 @@ class WorkflowCitationToolWrapper(BaseTool):
     citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
     kb_name_by_id: dict[str, str] = Field(default_factory=dict, exclude=True)
     temp_source_by_document_id: dict[str, str] = Field(default_factory=dict, exclude=True)
+    fetched_pages: FetchedPageCitationRegistry = Field(default_factory=FetchedPageCitationRegistry, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool) -> BaseTool:
@@ -78,7 +84,7 @@ class WorkflowCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
+        return is_web_citation_tool(self.tool) and not is_web_fetch_tool(self.tool)
 
     def _has_knowledge_rag_tool(self) -> bool:
         return hasattr(self.tool, "knowledge_retriever_tool")
@@ -108,6 +114,16 @@ class WorkflowCitationToolWrapper(BaseTool):
         results = annotate_web_results_with_citations(results)
         await self._aextend_citation_registry_items(collect_web_citation_registry_items(results))
         return json.dumps(results, ensure_ascii=False)
+
+    def _append_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        self._extend_citation_registry_items(exclude_known_registry_items(self.citation_registry_items, items))
+        return output
+
+    async def _aappend_fetch_citation(self, output: Any) -> Any:
+        output, items = annotate_fetched_page_with_citation(output, self.fetched_pages)
+        await self._aextend_citation_registry_items(exclude_known_registry_items(self.citation_registry_items, items))
+        return output
 
     def _format_knowledge_results(self, retrieval_result: Any) -> str:
         source_documents = list(retrieval_result or [])
@@ -158,7 +174,9 @@ class WorkflowCitationToolWrapper(BaseTool):
         await cache_citation_registry_items(items)
         self.citation_registry_items.extend(items)
 
-    def _run(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
+    def _run(self, query: str = "", config: RunnableConfig = None, **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return self._append_fetch_citation(self.tool.invoke({"url": kwargs.get("url", "")}, config=config))
         if self._is_web_search_tool():
             return self._append_web_citation(self.tool.invoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
@@ -170,7 +188,11 @@ class WorkflowCitationToolWrapper(BaseTool):
         retrieval_result = self.tool.knowledge_retriever_tool._run(query)
         return self._format_knowledge_results(retrieval_result)
 
-    async def _arun(self, query: str, config: RunnableConfig = None, **kwargs: Any) -> Any:
+    async def _arun(self, query: str = "", config: RunnableConfig = None, **kwargs: Any) -> Any:
+        if is_web_fetch_tool(self.tool):
+            return await self._aappend_fetch_citation(
+                await self.tool.ainvoke({"url": kwargs.get("url", "")}, config=config)
+            )
         if self._is_web_search_tool():
             return await self._aappend_web_citation(await self.tool.ainvoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
@@ -361,7 +383,7 @@ class AgentNode(BaseNode):
     def _wrap_citation_tool(tool: BaseTool) -> BaseTool:
         # F062: ephemeral_source still marks a temp-kb tool, but the wrapper
         # now registers those chunks as citation_type=temp instead of skipping.
-        if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
+        if is_web_citation_tool(tool) or hasattr(tool, "knowledge_retriever_tool"):
             return WorkflowCitationToolWrapper.wrap(tool)
         return tool
 
