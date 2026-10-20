@@ -337,7 +337,7 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = allowConfiguration && !isLingsi && !!onSelectedOrgKbsChange
+        const showSkillPicker = !isLingsi && !!onSelectedOrgKbsChange
             && (showAddSkill || skillCenterPreviewEnabled)
             && (taskMode || (taskModeEntry && !!onToggleTaskMode));
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
@@ -469,7 +469,7 @@ const AiChatInput = memo(
 
         // Skills join the knowledge spaces as context resources you
         // mount onto the conversation, not something you are about to send.
-        const mountedSkills = allowConfiguration && taskMode && !isLingsi ? dailySkills : [];
+        const mountedSkills = taskMode && !isLingsi ? dailySkills : [];
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;

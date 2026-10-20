@@ -73,7 +73,7 @@ export function PlusMenu({
                 align="start"
                 className={cn('flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl', isMobile && skillPanelOpen && 'max-h-[min(440px,var(--radix-dropdown-menu-content-available-height))] w-[min(calc(100vw-24px),320px)] gap-0 p-2')}
             >
-                {isMobile && skillPanelOpen ? <SkillMenuPanel onBack={() => setSkillPanelOpen(false)} /> : <>
+                {isMobile && skillPanelOpen ? <SkillMenuPanel selected={selectedSkills} onChange={onSkillsChange} onBack={() => setSkillPanelOpen(false)} /> : <>
                 {/* Upload file — same icon component as the daily-mode "+" menu:
                     the old `link.svg` asset bakes its own colour in and can't
                     follow the shared resting tint. */}
@@ -101,7 +101,7 @@ export function PlusMenu({
                     </DropdownMenuItem>
                 )}
 
-                <SkillMenuEntries onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined} />
+                <SkillMenuEntries selected={selectedSkills} onChange={onSkillsChange} onOpenMobile={isMobile ? () => setSkillPanelOpen(true) : undefined} />
 
                 {/* Divider between upload and the mode entries (spec §1) */}
                 <div className="my-1 h-px bg-slate-100" />

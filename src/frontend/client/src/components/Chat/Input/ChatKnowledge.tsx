@@ -19,9 +19,6 @@ import { cn } from "~/utils";
 import { KnowledgeSpaceDialog } from "./KnowledgeSpaceDialog";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
 import { PlusMenuSub } from "./PlusMenuSub";
-import { SkillMenuEntries } from "~/components/Skills/SkillMenuEntries";
-import { SkillMenuPanel } from "~/components/Skills/SkillMenuPanel";
-import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
@@ -553,15 +550,6 @@ export const ChatKnowledge = ({
           </PlusMenuSub>
         )}
 
-        {/* 技能 — preview-gated unified entry (list + upload + manage); replaces 添加 Skill below.
-            Desktop: side panel. Mobile: drill row on the root, panel in place of it. */}
-        {variant === 'plus' && (!isMobile || mobilePanel === 'root') && (
-          <SkillMenuEntries onOpenMobile={isMobile ? () => setMobilePanel('skill') : undefined} />
-        )}
-        {variant === 'plus' && isMobile && mobilePanel === 'skill' && skillCenterPreviewEnabled && (
-          <SkillMenuPanel onBack={() => setMobilePanel('root')} />
-        )}
-
         {/* Org knowledge selector (mobile): drill option on the "+" root. */}
         {variant === 'plus' && showKnowledgeSelection && isMobile && mobilePanel === 'root' && config?.knowledgeBase?.enabled !== false && (
           <DropdownMenuItem
@@ -644,7 +632,7 @@ export const ChatKnowledge = ({
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
                 close 让选择器先关掉「+」菜单，避免 popover 跳位。 */}
-            {!skillCenterPreviewEnabled && renderSkillSubmenu && (
+            {renderSkillSubmenu && (
               !isMobile ? (
                 <PlusMenuSub
                   icon={<Outlined.Skill size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />}
@@ -675,7 +663,7 @@ export const ChatKnowledge = ({
         )}
 
         {/* 添加 Skill — 移动端下钻面板 */}
-        {!skillCenterPreviewEnabled && isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
+        {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-0.5">
               <button
