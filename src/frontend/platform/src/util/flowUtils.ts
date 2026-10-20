@@ -211,6 +211,23 @@ export function isVarInFlow(nodeId, nodes, varName, varNameCn) {
 }
 
 /**
+ * Reference rows ({ type: 'ref', value: 'node.var', label: 'Node/var' }) whose variable
+ * no longer exists in the flow. Returns the first error message and the bad row indexes.
+ */
+export function findInvalidRefItems(nodeId, nodes, items): { error: string, indexes: number[] } {
+    let error = ''
+    const indexes: number[] = []
+    ;(items || []).forEach((item, index) => {
+        if (item?.type !== 'ref' || !item.value) return
+        const message = isVarInFlow(nodeId, nodes, item.value, item.label)
+        if (!message) return
+        error = error || message
+        indexes.push(index)
+    })
+    return { error, indexes }
+}
+
+/**
  * 并行节点判断
  * // 测速数据
     var a = [
