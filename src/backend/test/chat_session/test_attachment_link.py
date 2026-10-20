@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from bisheng.chat_session.domain.chat import ChatSessionService
 
@@ -119,5 +120,56 @@ class TestResolveAttachmentUrl:
             pytest.raises(Exception),
         ):
             await ChatSessionService.resolve_attachment_url("nope", "f1", _user(OWNER_ID))
+
+        storage.get_share_link.assert_not_awaited()
+
+
+class TestResolveSubjectAttachmentUrl:
+    """F078: the workflow Open API downloads agent deliverables by its own identity."""
+
+    @staticmethod
+    def _subject(service_account_id=5, external_user_id="u-1", tenant_id=1):
+        from bisheng.chat_session.domain.session_subject import SessionSubject
+
+        return SessionSubject.service_account(
+            tenant_id=tenant_id,
+            service_account_id=service_account_id,
+            resource_owner_user_id=OWNER_ID,
+            external_user_id=external_user_id,
+        )
+
+    @pytest.fixture
+    def api_conversation(self, conversation):
+        conversation.api_subject_type = "service_account"
+        conversation.api_subject_id = 5
+        conversation.external_user_id = "u-1"
+        return conversation
+
+    async def test_owning_caller_gets_a_fresh_link(self, storage, api_conversation):
+        url = await ChatSessionService.resolve_subject_attachment_url("c1", "f1", self._subject())
+
+        assert url == "/bisheng/chat/7/abc.png?sig=fresh"
+        assert storage.get_share_link.await_args.args[0] == "chat/7/abc.png"
+
+    @pytest.mark.parametrize(
+        "subject_kwargs",
+        [
+            {"service_account_id": 6},  # another service account
+            {"external_user_id": "u-2"},  # same account, another end user
+            {"tenant_id": 2},  # another tenant
+        ],
+    )
+    async def test_other_callers_are_refused(self, storage, api_conversation, subject_kwargs):
+        with pytest.raises(HTTPException) as caught:
+            await ChatSessionService.resolve_subject_attachment_url("c1", "f1", self._subject(**subject_kwargs))
+        assert caught.value.status_code == 404
+
+        storage.get_share_link.assert_not_awaited()
+
+    async def test_platform_conversation_is_not_reachable_through_the_open_api(self, storage, conversation):
+        # Owned by a natural person on the platform, not by any Open API caller.
+        with pytest.raises(HTTPException) as caught:
+            await ChatSessionService.resolve_subject_attachment_url("c1", "f1", self._subject())
+        assert caught.value.status_code == 404
 
         storage.get_share_link.assert_not_awaited()
