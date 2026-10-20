@@ -214,3 +214,32 @@ class TestFinish:
 
     async def test_finish_is_safe_without_prepare(self):
         assert await _runner(_spec()).afinish() == []
+
+
+class TestPrepareFailure:
+    """A failed prepare leaves no run directory behind: the caller has nothing to finish."""
+
+    async def test_workspace_failure_removes_the_local_dir(self, monkeypatch, _fakes):
+        async def _boom(self, skills, input_files):
+            raise RuntimeError("skill disabled")
+
+        monkeypatch.setattr(_FakeWorkspace, "aprepare", _boom)
+        runner = _runner(_spec())
+        with pytest.raises(RuntimeError):
+            await runner.aprepare()
+        (ws,) = _FakeWorkspace.instances
+        assert ws.cleaned
+        # Nothing was prepared, so there is no isolation run to release.
+        assert _fakes.released == []
+        assert get_current_tenant_id() is None
+
+    async def test_executor_failure_releases_the_prepared_run(self, _fakes):
+        async def _boom(**kwargs):
+            raise TimeoutError("executor down")
+
+        runner = AgentRunner(_spec(), minio=SimpleNamespace(), code_tool_builder=_boom)
+        with pytest.raises(TimeoutError):
+            await runner.aprepare()
+        (ws,) = _FakeWorkspace.instances
+        assert _fakes.released == [ws.file_dir]
+        assert ws.cleaned

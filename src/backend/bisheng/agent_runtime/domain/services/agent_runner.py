@@ -13,7 +13,8 @@ so the agent behaves exactly as before (spec AC-25). With skills the plan adds:
 - the code interpreter bound to the workspace, replacing a copy the author may
   have added to the tool list.
 
-``afinish`` always runs the clean-up, even when collecting deliverables fails.
+``afinish`` always runs the clean-up, even when collecting deliverables fails;
+a failed ``aprepare`` runs the same clean-up before it raises.
 
 Both coroutines set the tenant context themselves: a sync caller runs them
 through ``run_async_safe`` on a background loop, which does not inherit the
@@ -151,6 +152,10 @@ class AgentRunner:
                 app_id=spec.app_id,
                 app_name=spec.app_name,
             )
+        except BaseException:
+            # The caller never gets a plan to finish, so release what was set up here.
+            await self._arelease()
+            raise
         finally:
             current_tenant_id.reset(token)
 
@@ -214,17 +219,25 @@ class AgentRunner:
             )
             return files
         finally:
-            try:
-                if self._code_tool is not None:
-                    await asyncio.to_thread(self._code_tool.close)
+            await self._arelease()
+            current_tenant_id.reset(token)
+
+    async def _arelease(self) -> None:
+        """Release the local run directory, the executor and a one-off workspace."""
+        if self._workspace is None:
+            return
+        svid = self.spec.workspace_key.svid
+        try:
+            if self._code_tool is not None:
+                await asyncio.to_thread(self._code_tool.close)
+            if self._prepared is not None:
                 # Frees the retained local-isolation run dir and its uid.
                 await asyncio.to_thread(release_local_run, self._prepared.file_dir)
+        except Exception:
+            logger.exception("act=agent_runtime_release_failed svid={}", svid)
+        self._workspace.cleanup_local()
+        if self.spec.workspace_key.kind == "once":
+            try:
+                await self._workspace.adelete()
             except Exception:
-                logger.exception("act=agent_runtime_release_failed svid={}", spec.workspace_key.svid)
-            self._workspace.cleanup_local()
-            if spec.workspace_key.kind == "once":
-                try:
-                    await self._workspace.adelete()
-                except Exception:
-                    logger.exception("act=agent_runtime_once_delete_failed svid={}", spec.workspace_key.svid)
-            current_tenant_id.reset(token)
+                logger.exception("act=agent_runtime_once_delete_failed svid={}", svid)
