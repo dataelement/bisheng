@@ -15,6 +15,7 @@ import { formatDate } from "@/util/utils";
 
 import { useContext,useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useVoiceDraft } from "@/hooks/useVoiceDraft";
 import GuideQuestions from "./GuideQuestions";
 import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage";
 import { useMessageStore } from "./messageStore";
@@ -33,7 +34,12 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
     const { messages, hisMessages, chatId, createSendMsg, createWsMsg, updateCurrentMessage, closeDanglingRunLogs, destory, setShowGuideQuestion } = useMessageStore()
     const currentChatIdRef = useRef(null)
-    const inputRef = useRef(null)
+    const inputRef = useRef<HTMLTextAreaElement>(null)
+    const voice = useVoiceDraft(inputRef, '', (value) => {
+        if (!inputRef.current) return
+        inputRef.current.value = value
+        inputRef.current.dispatchEvent(new Event('input', { bubbles: true }))
+    })
     const continueRef = useRef(false)
     // 停止状态
     const [stop, setStop] = useState({
@@ -75,6 +81,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     }, [])
 
     const handleSendClick = async () => {
+        if (voice.busy) return
         // 解除锁定状态下 form 按钮开放的状态
         setShowWhenLocked(false)
         // 关闭引导词
@@ -260,6 +267,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
     // 触发发送消息事件（重试、表单）
     useEffect(() => {
         const handleCustomEvent = (e) => {
+            if (voice.busy) return
             if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
             const { send, message } = e.detail
             inputRef.current.value = message
@@ -269,10 +277,11 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         return () => {
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked, showWhenLocked])
+    }, [inputLock.locked, showWhenLocked, voice.busy])
 
     // 点击引导词
     const handleClickGuideWord = (message) => {
+        if (voice.busy) return
         if (!showWhenLocked && inputLock.locked) return console.error('弹窗已锁定，消息无法发送')
         inputRef.current.value = message
         handleSendClick()
@@ -286,25 +295,13 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
         // setInputEmpty(textarea.value.trim() === '')
     }
 
-    const handleSpeechRecognition = (text) => {
-        console.log('text', text);
-
-        if (!showWhenLocked && inputLock.locked) return;
-        if (!inputRef.current) return;
-
-        // 将识别结果追加到当前输入框内容后
-        const currentValue = inputRef.current.value;
-        inputRef.current.value = currentValue + text;
-
-        // 触发input事件以更新UI（如自动调整高度）
-        const event = new Event('input', { bubbles: true, cancelable: true });
-        inputRef.current.dispatchEvent(event);
-    };
-
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         <div className={`relative ${clear && 'pl-9'}`}>
             {/* 语音转文字 */}
-            {linsightConfig?.asr_model?.id && <SpeechToTextComponent disabled={inputLock.locked} onChange={handleSpeechRecognition} />}
+            {linsightConfig?.asr_model?.id && <SpeechToTextComponent
+                key={chatId} {...voice.props} disabled={inputLock.locked}
+                realtime={!!linsightConfig.asr_model.realtime} modelId={linsightConfig.asr_model.id}
+            />}
             {/* form */}
             {
                 formShow && <div className="relative">
@@ -354,7 +351,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                         id="bs-send-btn"
                         className="w-6 h-6 rounded-sm hover:bg-gray-200 dark:hover:bg-gray-950 cursor-pointer flex justify-center items-center"
                         onClick={() => { !inputLock.locked && handleSendClick() }}>
-                        <Outlined.Send className={`${inputLock.locked || audioOpening ? 'text-muted-foreground' : 'text-foreground'}`} />
+                        <Outlined.Send className={`${inputLock.locked || audioOpening || voice.busy ? 'text-muted-foreground' : 'text-foreground'}`} />
                     </div>
                 }
             </div>
@@ -368,8 +365,18 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
                     }} color="default"><Outlined.PlayerPause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
-            <Textarea id="bs-send-input" ref={inputRef} rows={1} style={{ height: 56 }} disabled={inputLock.locked} onInput={handleTextAreaHeight} placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')} onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
+            <Textarea
+                id="bs-send-input"
+                ref={inputRef}
+                rows={1}
+                style={{ height: 56 }}
+                disabled={inputLock.locked}
+                onInput={(event) => { voice.handleEdit(event.currentTarget.value); handleTextAreaHeight(event) }}
+                onCompositionStart={voice.compositionStart}
+                onCompositionEnd={voice.compositionEnd}
+                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault();
                         !inputLock.locked && handleSendClick()
                     }

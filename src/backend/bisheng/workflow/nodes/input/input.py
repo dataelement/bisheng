@@ -12,6 +12,7 @@ from loguru import logger
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.chat.types import IgnoreException
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.errcode.flow import WorkflowMediaFileCountLimitError
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.core.cache.utils import file_download
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag

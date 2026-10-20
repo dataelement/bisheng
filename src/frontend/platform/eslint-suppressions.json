@@ -152,7 +152,7 @@
       "count": 4
     },
     "no-console": {
-      "count": 3
+      "count": 2
     },
     "no-restricted-syntax": {
       "count": 6
@@ -266,17 +266,6 @@
       "count": 1
     }
   },
-  "src/components/bs-comp/filterTableDataComponent/FilterByUser.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 2
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/components/bs-comp/filterTableDataComponent/FilterByUsergroup.tsx": {
     "no-restricted-syntax": {
       "count": 1
@@ -354,11 +343,6 @@
       "count": 2
     }
   },
-  "src/components/bs-comp/selectComponent/Users.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 6
-    }
-  },
   "src/components/bs-comp/selectComponent/knowledge.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 10
@@ -419,54 +403,14 @@
       "count": 1
     }
   },
-  "src/components/bs-icons/addTo/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-icons/app/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
     }
   },
-  "src/components/bs-icons/avatar/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/bookOpen/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/clear/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/dashboard/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
   "src/components/bs-icons/del/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "src/components/bs-icons/down/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/en/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/expand/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/bs-icons/file/index.tsx": {
@@ -492,17 +436,7 @@
       "count": 5
     }
   },
-  "src/components/bs-icons/form/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-icons/github/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/go/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -510,11 +444,6 @@
   "src/components/bs-icons/knowledge/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 3
-    }
-  },
-  "src/components/bs-icons/label/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "src/components/bs-icons/loading/BrandTickSpinner.tsx": {
@@ -527,37 +456,7 @@
       "count": 2
     }
   },
-  "src/components/bs-icons/menu/application/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/approval/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-icons/menu/dataset/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/evaluation/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/label/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/log/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/model/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -567,77 +466,12 @@
       "count": 2
     }
   },
-  "src/components/bs-icons/menu/technology/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/menu/tenant/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/moon/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/moveOne/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/office/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/plus/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/plusBox/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 2
-    }
-  },
-  "src/components/bs-icons/prompt/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/quit/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-icons/rbDrag/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
   },
-  "src/components/bs-icons/save/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/search/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/send/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
   "src/components/bs-icons/setting/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/tab/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -653,11 +487,6 @@
     }
   },
   "src/components/bs-icons/upload/index.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    }
-  },
-  "src/components/bs-icons/user/index.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
     }
@@ -702,22 +531,9 @@
       "count": 1
     }
   },
-  "src/components/bs-ui/input/editTitle.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 2
-    }
-  },
   "src/components/bs-ui/input/textInput.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
-    }
-  },
-  "src/components/bs-ui/multiSelect.tsx/Example.tsx": {
-    "no-console": {
-      "count": 2
-    },
-    "no-restricted-syntax": {
-      "count": 9
     }
   },
   "src/components/bs-ui/multiSelect.tsx/index.tsx": {
@@ -876,20 +692,6 @@
     },
     "no-restricted-syntax": {
       "count": 5
-    }
-  },
-  "src/components/voiceFunction/speechToText.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
-    },
-    "no-console": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 6
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/constants.tsx": {
@@ -1383,13 +1185,13 @@
       "count": 12
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "no-restricted-syntax": {
       "count": 1
     },
     "react-hooks/rules-of-hooks": {
-      "count": 16
+      "count": 14
     }
   },
   "src/pages/BuildPage/assistant/CreateAssistant.tsx": {
@@ -1422,7 +1224,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -1451,7 +1253,7 @@
       "count": 4
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
@@ -1874,9 +1676,6 @@
     }
   },
   "src/pages/BuildPage/flow/FlowNode/component/ReportItem.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -2085,7 +1884,7 @@
   },
   "src/pages/BuildPage/tools/ToolSet.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "no-console": {
       "count": 1
@@ -2416,7 +2215,7 @@
       "count": 1
     },
     "react-hooks/rules-of-hooks": {
-      "count": 4
+      "count": 3
     }
   },
   "src/pages/DepartmentPage/components/DepartmentSettings.tsx": {
@@ -2883,7 +2682,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -2997,17 +2796,6 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    }
-  },
-  "src/pages/ModelPage/manage/CustomForm.tsx": {
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -3267,7 +3055,7 @@
   },
   "src/test/knowledgeSpaceGrantSubjects.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 18
+      "count": 17
     },
     "no-restricted-syntax": {
       "count": 26
@@ -3303,7 +3091,7 @@
   },
   "src/test/subjectSearchUser.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 7
     },
     "no-restricted-syntax": {
       "count": 1
@@ -3486,7 +3274,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     },
     "no-prototype-builtins": {
       "count": 4

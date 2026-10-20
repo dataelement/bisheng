@@ -284,6 +284,13 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.commercial_license.tasks.refresh_etl_license",
                 "schedule": 3600.0,
             }
+        # v3.0.0-beta3 F076: one child task per tenant deletes personal skill
+        # objects that no skill row still points at. No new YAML key.
+        if "dispatch_personal_skill_orphan_sweep" not in self.beat_schedule:
+            self.beat_schedule["dispatch_personal_skill_orphan_sweep"] = {
+                "task": "bisheng.worker.linsight.personal_skill_sweep.dispatch_personal_skill_orphan_sweep",
+                "schedule": crontab.from_string("10 4 * * *"),
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

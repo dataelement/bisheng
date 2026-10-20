@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import NamedTuple, Protocol
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.common.errcode.linsight import (
     SkillBundleTooLargeError,
@@ -50,9 +51,9 @@ from bisheng.linsight.domain.services.skill_store import (
     compose_skill_md,
     parse_skill_md,
     render_skill_md,
-    slugify_pinyin,
     resolve_skill_unpacked_limit,
     resolve_skill_upload_limit,
+    slugify_pinyin,
     unpack_zip_bytes,
     validate_skill_name,
 )
@@ -231,7 +232,9 @@ class SkillService:
         if form.name != name:
             raise SkillValidationError(msg="skill ID cannot be changed when editing")
         self._validate_fields(form.name, form.display_name, form.description)
-        await self._check_duplicate(form.name, form.display_name, exclude_id=skill.id)
+        await self._check_duplicate(
+            form.name, form.display_name, exclude_id=skill.id, owner_user_id=skill.owner_user_id
+        )
         # Re-render SKILL.md, keep any other bundle assets untouched.
         new_md = compose_skill_md(
             name=form.name, description=form.description, body=form.content, display_name=form.display_name
@@ -256,7 +259,7 @@ class SkillService:
         )
         if meta.name != name:
             raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
-        await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
+        await self._check_duplicate(name, meta.display_name, exclude_id=skill.id, owner_user_id=skill.owner_user_id)
         ref = self.store.write_bundle(tenant_id, name, files)
         skill.display_name, skill.description = meta.display_name, meta.description
         skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
@@ -297,14 +300,14 @@ class SkillService:
         max_unpacked: int = MAX_UNPACKED_SIZE,
     ) -> tuple[SkillMeta, dict[str, bytes]]:
         if len(data) > max_size:
-            raise SkillFileTooLargeError()
+            raise SkillFileTooLargeError(limit_mb=max_size // (1024 * 1024))
         lower = (filename or "").lower()
         if lower.endswith(_ARCHIVE_SUFFIXES):
             try:
                 # The unpacked cap is checked inside, before anything is decompressed.
                 files = unpack_zip_bytes(data, max_unpacked=max_unpacked)
             except BundleTooLargeError:
-                raise SkillBundleTooLargeError()
+                raise SkillBundleTooLargeError(limit_mb=max_unpacked // (1024 * 1024))
             except ValueError as exc:
                 raise SkillValidationError(msg=str(exc))
         elif lower.endswith(".md"):
@@ -357,11 +360,22 @@ class SkillService:
         if not description or len(description) > MAX_DESCRIPTION_LEN:
             raise SkillValidationError(msg=f"description is required and must be <= {MAX_DESCRIPTION_LEN} chars")
 
-    async def _check_duplicate(self, name: str, display_name: str, exclude_id: int | None = None) -> None:
-        existing = await LinsightSkillDao.get_by_name(name)
+    async def _check_duplicate(
+        self,
+        name: str,
+        display_name: str,
+        exclude_id: int | None = None,
+        *,
+        owner_user_id: int = 0,
+    ) -> None:
+        existing = await LinsightSkillDao.get_by_name(name, owner_user_id=owner_user_id)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
-        existing = await LinsightSkillDao.get_by_display_name(display_name)
+        # A personal skill is keyed by its skill id. The same display name with a
+        # different id is a new skill. Tenant skills (owner 0) keep the display-name check.
+        if owner_user_id != 0:
+            return
+        existing = await LinsightSkillDao.get_by_display_name(display_name, owner_user_id=owner_user_id)
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
 
@@ -376,6 +390,13 @@ class SkillService:
             entry["path"]: self.store.read_bytes(tenant_id, name, content_hash, entry["path"])
             for entry in self.store.list_files(tenant_id, name, content_hash)
         }
+
+    async def _discard_unpublished(self, tenant_id: int, name: str, content_hash: str, owner_user_id: int = 0) -> None:
+        """A lost insert must not leave an object the saved row does not point at."""
+        current = await LinsightSkillDao.get_by_name(name, owner_user_id=owner_user_id)
+        if current is not None and current.content_hash == content_hash:
+            return
+        self.store.delete_version(tenant_id, name, content_hash, owner_user_id=owner_user_id)
 
     async def _create(
         self,
@@ -401,7 +422,11 @@ class SkillService:
             size=ref.size,
             created_by=user_id,
         )
-        skill = await LinsightSkillDao.create(skill)
+        try:
+            skill = await LinsightSkillDao.create(skill)
+        except IntegrityError:
+            await self._discard_unpublished(tenant_id, name, ref.content_hash)
+            raise SkillNameDuplicateError() from None
         await self._owner_projection.authorize_created(
             tenant_id=tenant_id,
             resource_type=SKILL_OBJECT_TYPE,

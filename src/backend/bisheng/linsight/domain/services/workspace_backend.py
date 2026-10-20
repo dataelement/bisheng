@@ -525,6 +525,12 @@ class WorkspaceBackend(FilesystemBackend):
         # citation markers the rest of the platform understands. ``None`` keeps
         # the F047 contract: markdown is only unescaped.
         self.citation_scope = citation_scope
+        # F076: which skill row owns each copied directory. Empty means an older
+        # session or a caller that does not track skills; reads are not checked.
+        # The enabled flag is loaded on each read, not copied here, so a disable
+        # or delete during the run is visible. ``skill_row_enabled`` is a test seam.
+        self.skill_snapshot: list[dict] | None = None
+        self.skill_row_enabled = None
         os.makedirs(self.file_dir, exist_ok=True)
 
     # -- key / cache helpers ------------------------------------------------
@@ -837,8 +843,30 @@ class WorkspaceBackend(FilesystemBackend):
         return WriteResult(path="/" + rel)
 
     # -- read ---------------------------------------------------------------
+    def _skill_enabled_sync(self, skill_id: int) -> bool | None:
+        if self.skill_row_enabled is not None:
+            return self.skill_row_enabled(skill_id)
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled_sync
+
+        return load_skill_enabled_sync(skill_id)
+
+    async def _skill_enabled(self, skill_id: int) -> bool | None:
+        if self.skill_row_enabled is not None:
+            enabled = self.skill_row_enabled(skill_id)
+            if hasattr(enabled, "__await__"):
+                return await enabled
+            return enabled
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled
+
+        return await load_skill_enabled(skill_id)
+
     def read(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        from bisheng.linsight.domain.services.skill_runtime_guard import refuse_workspace_read
+
+        refusal = refuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled_sync)
+        if refusal:
+            return ReadResult(error=refusal)
         data = self._materialize(rel)
         if data is None:
             return ReadResult(error=self._not_found_error(file_path))
@@ -1082,6 +1110,11 @@ class WorkspaceBackend(FilesystemBackend):
 
     async def aread(self, file_path: str, offset: int = 0, limit: int = 2000) -> ReadResult:
         rel = self._ws_rel(file_path)
+        from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_workspace_read
+
+        refusal = await arefuse_workspace_read(rel, self.skill_snapshot, self._skill_enabled)
+        if refusal:
+            return ReadResult(error=refusal)
         data = await asyncio.to_thread(self._cache_read, rel)
         if data is None:
             try:

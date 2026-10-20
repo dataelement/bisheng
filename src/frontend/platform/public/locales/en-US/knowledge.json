@@ -438,5 +438,10 @@
   "split": "Split",
   "successMsg": "File uploaded successfully",
   "qa": {},
-  "legacyFormatNotSupported": "Legacy file format cannot be previewed"
+  "legacyFormatNotSupported": "Legacy file format cannot be previewed",
+  "voiceInput": {
+    "start": "Start recording",
+    "pause": "Pause recording",
+    "failed": "Voice input failed. Please try again."
+  }
 }

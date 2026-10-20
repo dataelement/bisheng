@@ -22,6 +22,7 @@ from bisheng.permission.application import catalog_bootstrap
 from bisheng.permission.application import control_state as control_state_module
 from bisheng.permission.application import sql_runtime as sql_runtime_module
 from bisheng.permission.application.catalog_bootstrap import (
+    ensure_linsight_skill_action_scopes,
     normalize_environment,
     seed_initial_permission_catalog,
 )
@@ -29,6 +30,7 @@ from bisheng.permission.application.sql_runtime import SqlCatalogDecisionState
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
+    PermissionActionResourceScope,
     PermissionCatalogRelease,
     PermissionModel,
     PermissionModelAction,
@@ -152,10 +154,7 @@ async def test_seed_creates_single_current_catalog_on_fresh_install(session_fact
         "active",
         f"permission_catalog_release:{INITIAL_CATALOG_RELEASE_KEY}",
     ) in fga.tuples
-    assert any(
-        user == "service_account:*" and relation == "enabled_marker"
-        for user, relation, _ in fga.tuples
-    )
+    assert any(user == "service_account:*" and relation == "enabled_marker" for user, relation, _ in fga.tuples)
 
 
 @pytest.mark.asyncio
@@ -180,6 +179,43 @@ async def test_seed_makes_runtime_ready(session_factory):
     snapshot = await control_state_module.SqlPermissionControlState().current_catalog()
     assert snapshot.store_id == STORE_ID
     assert snapshot.model_id == MODEL_ID
+
+
+@pytest.mark.asyncio
+async def test_existing_catalog_gains_personal_skill_action_scopes(session_factory):
+    await seed_initial_permission_catalog(
+        FakeFGA(),
+        store_id=STORE_ID,
+        model_id=MODEL_ID,
+        model_checksum=MODEL_CHECKSUM,
+        environment="prod",
+    )
+    async with session_factory() as session:
+        async with session.begin():
+            scopes = (
+                (
+                    await session.execute(
+                        select(PermissionActionResourceScope).where(
+                            PermissionActionResourceScope.resource_type == "linsight_skill",
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for scope in scopes:
+                await session.delete(scope)
+
+    added = await ensure_linsight_skill_action_scopes()
+    assert added == 3
+
+    decision = SqlCatalogDecisionState(
+        expected_store_id=STORE_ID,
+        expected_model_id=MODEL_ID,
+    )
+    assert await decision.is_action_effective("linsight_skill", "edit") is True
+    assert await decision.is_action_effective("linsight_skill", "delete") is True
+    assert await ensure_linsight_skill_action_scopes() == 0
 
 
 @pytest.mark.asyncio

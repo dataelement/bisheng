@@ -19,7 +19,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useAdminScope } from "@/hooks/useAdminScope";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import CustomForm from "./CustomForm";
+import { CustomForm } from "./CustomForm";
 import { canShareToChildren, isGlobalSuperUser } from "./permissions";
 import { useLinsightConfig } from "./tabs/WorkbenchModel";
 import { useModelProviderInfo } from "./useLink";
@@ -104,7 +104,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     const handleTypeChange = (val) => {
         const name = onGetName(providerLabel(_modelProvider.find(el => el.value === val), t))
         const models = getModelsByType(val)
-        setFormData({ ...formData, type: val, name, models })
+        setFormData({ ...formData, type: val, name, models, config: {} })
     }
 
     const handleAddModel = () => {
@@ -282,6 +282,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                     showDefault={id === -1}
                     provider={formData.type}
                     formData={formData.config}
+                    modelTypes={formData.models.map(model => model.model_type)}
                     providerName={providerLabel(_modelProvider.find(el => el.value === formData.type), t)}
                     apiKeySite={providerInfo?.apiKeyUrl}
                 />

@@ -20,13 +20,12 @@ from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
 from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
-from test.linsight.fixtures.fake_minio import FakeMinioStorage
-
 from bisheng.linsight.domain.services.skill_store import (
     MAX_BUNDLE_SIZE,
     SKILL_MD,
     SkillStore,
 )
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
 TENANT = 1
 USER = 7
@@ -55,12 +54,22 @@ class FakeSkillDao:
         return skill
 
     @classmethod
-    async def get_by_name(cls, name):
-        return cls.rows.get(name)
+    async def get_by_name(cls, name, owner_user_id=0, **kwargs):
+        row = cls.rows.get(name)
+        if row is not None and getattr(row, "owner_user_id", 0) != owner_user_id:
+            return None
+        return row
 
     @classmethod
-    async def get_by_display_name(cls, display_name):
-        return next((s for s in cls.rows.values() if s.display_name == display_name), None)
+    async def get_by_display_name(cls, display_name, owner_user_id=0, **kwargs):
+        return next(
+            (
+                s
+                for s in cls.rows.values()
+                if s.display_name == display_name and getattr(s, "owner_user_id", 0) == owner_user_id
+            ),
+            None,
+        )
 
     @classmethod
     async def get_page(cls, keyword=None, enabled=None, page=1, page_size=10):
@@ -332,12 +341,7 @@ class TestImportNameNormalization:
     the form-create path stays strict — the user typed that ID explicitly."""
 
     async def test_uppercase_name_normalized_on_upload(self, service):
-        md = (
-            b"---\n"
-            b"name: Presentations\n"
-            b"description: Create or edit PowerPoint decks.\n"
-            b"---\n\n# body\n"
-        )
+        md = b"---\nname: Presentations\ndescription: Create or edit PowerPoint decks.\n---\n\n# body\n"
         detail = await service.create_from_upload(TENANT, USER, "presentations.md", md)
         assert detail.name == "presentations"
         assert detail.display_name == "Presentations"
@@ -355,14 +359,7 @@ class TestImportNameNormalization:
         assert detail.normalized_from == "演示文稿"
 
     async def test_foreign_frontmatter_keys_survive_rewrite(self, service):
-        md = (
-            b"---\n"
-            b"name: My-Skill\n"
-            b"description: demo\n"
-            b"license: Apache-2.0\n"
-            b"allowed-tools: Bash, Read\n"
-            b"---\n\nbody"
-        )
+        md = b"---\nname: My-Skill\ndescription: demo\nlicense: Apache-2.0\nallowed-tools: Bash, Read\n---\n\nbody"
         detail = await service.create_from_upload(TENANT, USER, "s.md", md)
         text = detail.source_text
         assert "license: Apache-2.0" in text

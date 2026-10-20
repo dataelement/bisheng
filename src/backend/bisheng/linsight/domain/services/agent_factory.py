@@ -28,6 +28,7 @@ from typing import Annotated, Any
 from json_repair import json_repair
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool, tool
 from langchain_core.tools.base import ArgsSchema
 from langgraph.prebuilt import InjectedState
@@ -1075,6 +1076,203 @@ def _build_researcher_subagent(tools: Sequence[BaseTool], citation_handles: bool
     }
 
 
+# Appended to an Available Skills row. Not written into SKILL.md.
+SKILL_SELECTED_NOTE = "用户选中了这个技能"
+SKILL_TOOL_UNAVAILABLE_NOTE = "该技能需要的工具当前不可用"
+# deepagents always binds these on the main graph. A skill that names one of
+# them is not missing a tool. ``execute`` is omitted: it is filtered per run.
+_FRAMEWORK_TOOL_NAMES = frozenset({"ls", "read_file", "write_file", "edit_file", "glob", "grep", "task"})
+_ALWAYS_AVAILABLE_TOOL_NAMES = frozenset({"ask_user", "export_docx", "export_pdf"})
+
+
+def task_tool_names(tools, *, has_code_interpreter: bool) -> set[str]:
+    """Tools this run can actually call, including the framework file tools."""
+    names = {getattr(tool, "name", None) for tool in tools or []}
+    names.discard(None)
+    names.update(_FRAMEWORK_TOOL_NAMES)
+    names.update(_ALWAYS_AVAILABLE_TOOL_NAMES)
+    if has_code_interpreter:
+        names.add(CODE_INTERPRETER_TOOL)
+    return names
+
+
+def _skill_line_notes(skill: dict, selected: set[str], available: set[str]) -> str:
+    """Sentences for one Available Skills row. Empty when the row stays as listed."""
+    notes: list[str] = []
+    name = skill.get("name")
+    if name and name in selected:
+        notes.append(SKILL_SELECTED_NOTE)
+    allowed = [item for item in (skill.get("allowed_tools") or []) if item]
+    if allowed and any(item not in available for item in allowed):
+        notes.append(SKILL_TOOL_UNAVAILABLE_NOTE)
+    return " ".join(notes)
+
+
+def annotate_available_skills(text: str, skills: list[dict], selected: set[str], available: set[str]) -> str:
+    """Append the selection and missing-tool sentences onto existing skill rows."""
+    notes = {skill.get("name"): _skill_line_notes(skill, selected, available) for skill in skills}
+    notes = {name: note for name, note in notes.items() if name and note}
+    if not notes:
+        return text
+    lines = []
+    for line in text.split("\n"):
+        rewritten = line
+        for name, note in notes.items():
+            marker = f"- **{name}**:"
+            if marker in line and note not in line:
+                rewritten = f"{line} {note}"
+                break
+        lines.append(rewritten)
+    return "\n".join(lines)
+
+
+def _state_dict(state) -> dict:
+    if isinstance(state, dict):
+        return state
+    return {}
+
+
+class SkillSelectionMiddleware(AgentMiddleware):
+    """Mark checked skills and unavailable tools on the Available Skills rows.
+
+    Sits after deepagents' ``SkillsMiddleware``. That middleware already wrote
+    the list from ``skills_metadata``; this one only edits those rows. It does
+    not read ``SKILL.md`` again, so a checkpoint that already has
+    ``skills_metadata`` is left on disk as-is.
+    """
+
+    def __init__(
+        self,
+        selected_names: list[str] | None,
+        tool_names: set[str] | list[str] | None,
+        session=None,
+        skill_row_enabled=None,
+    ) -> None:
+        super().__init__()
+        self.tools = []
+        self._selected = set(selected_names or [])
+        self._available = set(tool_names or [])
+        # Read at call time. Provisioning updates the snapshot after the tools exist.
+        self._session = session
+        # Test seam. Production loads the row on each code run.
+        self._skill_row_enabled = skill_row_enabled
+
+    @property
+    def name(self) -> str:
+        return "LinsightSkillSelection"
+
+    def _rewrite(self, request):
+        skills = _state_dict(getattr(request, "state", None)).get("skills_metadata") or []
+        system_message = getattr(request, "system_message", None)
+        if not skills or system_message is None:
+            return request
+        blocks = []
+        changed = False
+        for block in system_message.content_blocks:
+            text = block.get("text") if isinstance(block, dict) else getattr(block, "text", None)
+            if not isinstance(text, str):
+                blocks.append(block)
+                continue
+            rewritten = annotate_available_skills(text, skills, self._selected, self._available)
+            if rewritten == text:
+                blocks.append(block)
+                continue
+            changed = True
+            if isinstance(block, dict):
+                blocks.append({**block, "text": rewritten})
+            else:
+                blocks.append({"type": "text", "text": rewritten})
+        if not changed:
+            return request
+        return request.override(system_message=SystemMessage(content_blocks=blocks))
+
+    def _missing_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        name = call.get("name")
+        if not name or getattr(request, "tool", None) is not None or name in self._available:
+            return None
+        skills = _state_dict(getattr(request, "state", None)).get("skills_metadata") or []
+        declared = {
+            tool_name
+            for skill in skills
+            for tool_name in (skill.get("allowed_tools") or [])
+            if tool_name and tool_name not in self._available
+        }
+        if name not in declared:
+            return None
+        # Not status="error": a repeated error result would trip the tool-loop
+        # breaker and end the task. The skill stays usable for everything else.
+        return ToolMessage(content=SKILL_TOOL_UNAVAILABLE_NOTE, tool_call_id=call.get("id") or "", name=name)
+
+    def _snapshot(self) -> list[dict] | None:
+        if self._session is None:
+            return None
+        return getattr(self._session, "skill_snapshot", None)
+
+    def _enabled_sync(self, skill_id: int) -> bool | None:
+        if self._skill_row_enabled is not None:
+            return self._skill_row_enabled(skill_id)
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled_sync
+
+        return load_skill_enabled_sync(skill_id)
+
+    async def _enabled(self, skill_id: int) -> bool | None:
+        if self._skill_row_enabled is not None:
+            enabled = self._skill_row_enabled(skill_id)
+            if hasattr(enabled, "__await__"):
+                return await enabled
+            return enabled
+        from bisheng.linsight.domain.services.skill_runtime_guard import load_skill_enabled
+
+        return await load_skill_enabled(skill_id)
+
+    def _code_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        if call.get("name") != CODE_INTERPRETER_TOOL or not self._snapshot():
+            return None
+        from bisheng.linsight.domain.services.skill_runtime_guard import refuse_code
+
+        text = refuse_code((call.get("args") or {}).get("python_code") or "", self._snapshot(), self._enabled_sync)
+        if not text:
+            return None
+        return ToolMessage(content=text, tool_call_id=call.get("id") or "", name=call.get("name"))
+
+    async def _acode_reply(self, request) -> ToolMessage | None:
+        call = getattr(request, "tool_call", None) or {}
+        if call.get("name") != CODE_INTERPRETER_TOOL or not self._snapshot():
+            return None
+        from bisheng.linsight.domain.services.skill_runtime_guard import arefuse_code
+
+        text = await arefuse_code((call.get("args") or {}).get("python_code") or "", self._snapshot(), self._enabled)
+        if not text:
+            return None
+        return ToolMessage(content=text, tool_call_id=call.get("id") or "", name=call.get("name"))
+
+    def wrap_model_call(self, request, handler):
+        return handler(self._rewrite(request))
+
+    async def awrap_model_call(self, request, handler):
+        return await handler(self._rewrite(request))
+
+    def wrap_tool_call(self, request, handler):
+        reply = self._missing_reply(request)
+        if reply is not None:
+            return reply
+        reply = self._code_reply(request)
+        if reply is not None:
+            return reply
+        return handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        reply = self._missing_reply(request)
+        if reply is not None:
+            return reply
+        reply = await self._acode_reply(request)
+        if reply is not None:
+            return reply
+        return await handler(request)
+
+
 async def create_linsight_agent(
     session_model,
     tools: Sequence[BaseTool],
@@ -1197,6 +1395,15 @@ async def create_linsight_agent(
             SkillsMiddleware(
                 backend=FilesystemBackend(root_dir=file_dir, virtual_mode=True),
                 sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
+            )
+        )
+        # Session ``skills`` already holds the directory names provisioning kept,
+        # including a personal skill that covered a checked tenant skill.
+        middlewares.append(
+            SkillSelectionMiddleware(
+                selected_names=list(getattr(session_model, "skills", None) or []),
+                tool_names=task_tool_names(tools, has_code_interpreter=has_code_interpreter),
+                session=session_model,
             )
         )
 

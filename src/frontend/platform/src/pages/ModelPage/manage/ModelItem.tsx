@@ -2,6 +2,7 @@ import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
 import { Button, Input, Textarea } from '@bisheng/ui';
 import { Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
+import { asrHints, asrProviders, ttsProviders } from "./speechConfig";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
@@ -59,7 +60,6 @@ const MODEL_TYPE_LABELS: Record<string, string> = {
     tts: 'TTS',
 };
 
-const ASR_TTS_PROVIDERS = ['azure_openai', 'openai', 'qwen', 'qianfan'];
 
 // The UI field is always stored as `max_tokens`; the backend renames it per
 // provider, and for ollama it becomes the context window, not an output cap.
@@ -187,6 +187,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     </Label>
                     <Input aria-label={t('model.modelName')} value={data.model_name} onChange={handleNameChange} className={"h-8"} />
                     {nameError && <span className="text-xs text-red-500">{nameError}</span>}
+                    {modelType === "asr" && asrHints[type] && <p className="text-xs text-muted-foreground">{t(asrHints[type])}</p>}
                 </div>
                 <div className="space-y-2">
                     <Label className="bisheng-label flex h-8 items-center">{t('model.modelType')}</Label>
@@ -199,12 +200,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 <SelectItem value="llm">LLM</SelectItem>
                                 <SelectItem value="embedding">Embedding</SelectItem>
                                 <SelectItem value="rerank">Rerank</SelectItem>
-                                {ASR_TTS_PROVIDERS.includes(type) && (
-                                    <>
-                                        <SelectItem value="asr">ASR</SelectItem>
-                                        <SelectItem value="tts">TTS</SelectItem>
-                                    </>
-                                )}
+                                {asrProviders.includes(type) && <SelectItem value="asr">ASR</SelectItem>}
+                                {ttsProviders.includes(type) && <SelectItem value="tts">TTS</SelectItem>}
                             </SelectGroup>
                         </SelectContent>
                     </Select>
