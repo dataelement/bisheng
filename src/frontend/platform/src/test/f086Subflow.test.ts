@@ -5,6 +5,7 @@ import { flowVersionCompatible } from "@/util/flowCompatible";
 import { applySubflowInterface, findNodeParam } from "@/pages/BuildPage/flow/FlowNode/component/subflowParams";
 import { formatDuration, subflowNodeFields } from "@/pages/BuildPage/flow/FlowNode/SubflowRunLog";
 import { subflowWarningLines } from "@/pages/BuildPage/flow/SubflowWarningDialog";
+import { nodeLogData } from "@/pages/BuildPage/flow/FlowChat/nodeLogData";
 import type { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 
 // Echo translator: the key plus its interpolation values, so assertions see what was asked for.
@@ -141,5 +142,28 @@ describe("F086 nested run log", () => {
     it("formats durations", () => {
         expect(formatDuration(850)).toBe("850ms")
         expect(formatDuration(1250)).toBe("1.3s")
+    })
+})
+
+describe("F086 failed node log", () => {
+    it("keeps what a failed node logged after its error", () => {
+        const inner = [{ node_id: "code_c", reason: "boom" }]
+        expect(nodeLogData({
+            reason: "Subflow S failed at node code_c: boom",
+            log_data: [[
+                { key: "subflow_inputs", value: {}, type: "params" },
+                { key: "subflow_logs", value: inner, type: "subflow_logs" },
+            ]],
+        })).toEqual([[
+            { key: "error", type: "params", value: "Subflow S failed at node code_c: boom" },
+            { key: "subflow_inputs", value: {}, type: "params" },
+            { key: "subflow_logs", value: inner, type: "subflow_logs" },
+        ]])
+    })
+
+    it("shows only the error when nothing was logged, and passes success logs through", () => {
+        expect(nodeLogData({ reason: "kaput", log_data: null })).toEqual([[{ key: "error", type: "params", value: "kaput" }]])
+        const rounds = [[{ key: "output", value: "a", type: "variable" }]]
+        expect(nodeLogData({ reason: null, log_data: rounds })).toBe(rounds)
     })
 })

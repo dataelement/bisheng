@@ -6,7 +6,7 @@
 import pytest
 
 from bisheng.workflow.common.workflow import WorkflowStatus
-from bisheng.workflow.nodes.subflow.subflow import parse_subflow_error
+from bisheng.workflow.nodes.subflow.subflow import SUBFLOW_ERROR_MARKER, parse_subflow_error
 from test.workflow.subflow_helpers import (
     FlowStore,
     RecordingCallback,
@@ -218,7 +218,9 @@ def test_inner_node_failure_fails_parent_with_10560(store, message):
     logs = _subflow_log(callback)
     assert [(one["node_id"], one["type"]) for one in logs] == [("start_c", "start"), ("boom_1", "boom")]
     assert logs[1]["reason"] == message
-    assert next(one for one in callback.node_ends() if one.node_id == "subflow_1").reason == reason
+    # The node log shows the readable message; the marker only travels with the workflow failure.
+    assert next(one for one in callback.node_ends() if one.node_id == "subflow_1").reason == error["status_message"]
+    assert SUBFLOW_ERROR_MARKER in reason
 
 
 def test_success_log_lists_inner_nodes_with_timing(store):

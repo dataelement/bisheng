@@ -21,6 +21,7 @@ import { useMessageStore } from "./messageStore";
 import DragDropOverlay from "./DragDropOverlay";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
 import { fileAcceptToInputAccept, normalizeFileAccept } from "@/util/fileAcceptUtils";
+import { nodeLogData } from "./nodeLogData";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
@@ -361,7 +362,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             detail: {
                 nodeId: node_id,
                 action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
-                data: isError ? [[{ key: 'error', type: 'params', value: data.message.reason }]] : data.message.log_data // 缓存TODO
+                data: nodeLogData(data.message) // 缓存TODO
             }
         })
         window.dispatchEvent(event)

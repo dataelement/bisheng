@@ -243,6 +243,13 @@ class SubflowNode(BaseNode):
             ]
         ]
 
+    def failed_reason(self, error: Exception) -> str:
+        # The node log shows the message; the marker stays on the raised error
+        # so the workflow failure keeps its code.
+        if isinstance(error, SubflowRunError):
+            return error.error.message
+        return super().failed_reason(error)
+
     def parse_failed_log(self, unique_id: str) -> Any:
         return [
             [
