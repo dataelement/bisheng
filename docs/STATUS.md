@@ -2,7 +2,7 @@
 
 - 参照当前 Work / Harness conversation 与 model-selection UI 0.2.0-rc.2，Chat 卡片采用 28px + superellipse(1.5) 连续圆角；发送按钮采用原生 16px 实心箭头。
 - 模型按钮独立拥有 13px/400 字体与左右 8px/4px 内边距，采用原生 14px 下拉图形，保留 Work 模型与操作区之间的活动槽留白；窄卡片按容器宽度收紧留白。首页已确认的标题与卡片布局保持。
-- 验证与发布：进行中。
+- 定向 ESLint、生产构建、diff-check 通过；3006 已发布 037d2a0ed，459 个构建文件校验与健康检查通过，其他容器保持。Chrome 实测卡片 114px、28px + superellipse(1.5)，模型 13px/400、左右内边距 8px/4px，下拉可打开并关闭。桌面 Chat 聚焦刷新后，和同窗口 Work 截图核对：发送箭头相对边界一致，禁用按钮底色均为 RGB(185,200,241)，模型下拉与发送间距一致；标题与卡片位置保持。证据：主工作区 outputs/home-controls-20261020。
 
 ## 2026-10-20 — Chat / Work 首页布局对齐
 
