@@ -159,6 +159,8 @@ describe("pivot table two column dimensions", () => {
       ["2026-08-21", "政策制度"],
     ])
     expect(data.rows[0]).toEqual({
+      id: '["张三","信息部"]',
+      rawKey: ["张三", "信息部"],
       key: ["张三", "信息部"],
       values: [3, 4, 0],
       total: 7,

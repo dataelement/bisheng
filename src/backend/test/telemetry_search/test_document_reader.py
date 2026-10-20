@@ -13,6 +13,8 @@ from bisheng.telemetry_search.domain.services import knowledge_document_reader a
 
 
 def matches(source, query):
+    if "exists" in query:
+        return source.get(query["exists"]["field"]) is not None
     if "term" in query:
         return all(source.get(k) == v for k, v in query["term"].items())
     if "terms" in query:
@@ -20,7 +22,9 @@ def matches(source, query):
     if "range" in query:
         return all(source.get(k, 0) > bounds["gt"] for k, bounds in query["range"].items())
     boolean = query["bool"]
-    return all(matches(source, clause) for clause in boolean.get("filter", []) + boolean.get("must", [])) and (
+    return not any(matches(source, clause) for clause in boolean.get("must_not", [])) and all(
+        matches(source, clause) for clause in boolean.get("filter", []) + boolean.get("must", [])
+    ) and (
         not boolean.get("should") or any(matches(source, clause) for clause in boolean["should"])
     )
 

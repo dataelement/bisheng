@@ -214,3 +214,81 @@ def test_category_dependency_checks_nested_filters_not_filter_values():
             )
         ],
     )
+
+
+@pytest.mark.parametrize("values, expected", [
+    ([None], {"bool": {"must_not": [{"exists": {"field": "uploader_department_name"}}]}}),
+    (["未分类"], {"terms": {"uploader_department_name": ["未分类"]}}),
+    ([""], {"terms": {"uploader_department_name": [""]}}),
+    ([None, "生产部"], {"bool": {"should": [
+        {"terms": {"uploader_department_name": ["生产部"]}},
+        {"bool": {"must_not": [{"exists": {"field": "uploader_department_name"}}]}},
+    ]}}),
+])
+async def test_missing_department_export_preserves_missing_semantics_and_other_filters(setup, values, expected):
+    _, load = setup
+    filters = [
+        DimensionQueryFilter(fieldId="uploader_department_name", values=values),
+        DimensionQueryFilter(fieldId="original_upload_company_name", values=["首钢"]),
+    ]
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": "uploader_department_name"}],
+        metrics=[{"fieldId": "total_file_count"}],
+    )
+    await dashboard_export_detail.query_detail_rows(
+        dataset_code=INDEX, data_config=config, dimension_filters=filters, row_limit=100,
+    )
+    clauses = load.call_args.args[0]
+    assert clauses[0] == {"bool": {"must": [
+        expected, {"terms": {"original_upload_company_name": ["首钢"]}},
+    ]}}
+    assert {"term": {"tenant_id": 1}} in clauses
+    assert {"terms": {"space_level": ["public", "department", "team", "team_ks", "personal"]}} in clauses
+
+
+@pytest.mark.parametrize("values, identities", [
+    ([None], ["document:1"]),
+    (["未分类"], ["document:3"]),
+    ([""], ["document:4"]),
+    ([None, "未分类"], ["document:1", "document:3"]),
+])
+async def test_missing_department_query_and_detail_select_same_documents(setup, monkeypatch, values, identities):
+    from test.telemetry_search.test_document_reader import ES
+
+    records = [
+        {"file_id": 1, "knowledge_identity": "document:1"},
+        {"file_id": 2, "knowledge_identity": "document:1", "uploader_department_name": None},
+        {"file_id": 3, "knowledge_identity": "document:3", "uploader_department_name": "未分类"},
+        {"file_id": 4, "knowledge_identity": "document:4", "uploader_department_name": ""},
+        {"file_id": 5, "knowledge_identity": "document:5", "tenant_id": 2},
+        {"file_id": 6, "knowledge_identity": "document:6", "original_upload_company_name": "其他公司"},
+        {"file_id": 7, "knowledge_identity": "document:7", "timestamp": ts("2026-10-01") / 1000},
+    ]
+    records = [{
+        "record_type": "file", "file_type": 1, "tenant_id": 1, "space_level": "public",
+        "original_upload_company_name": "首钢", "timestamp": ts("2026-09-02") / 1000, **record,
+    } for record in records]
+
+    @asynccontextmanager
+    async def reader(index):
+        yield knowledge_document_reader.DocumentReader(ES(records), index)
+
+    monkeypatch.setattr(knowledge_document_reader, "document_reader", reader)
+    filters = [
+        DimensionQueryFilter(fieldId="uploader_department_name", values=values),
+        DimensionQueryFilter(fieldId="original_upload_company_name", values=["首钢"]),
+    ]
+    config = ComponentDataConfig(
+        dimensions=[{"fieldId": "uploader_department_name"}],
+        metrics=[{"fieldId": "total_file_count"}],
+        timeFilter={"mode": "fixed", "type": "custom", "startDate": ts("2026-09-01") // 1000,
+                    "endDate": ts("2026-09-30T23:59:59") // 1000},
+    )
+    query = await component.DataQueryService(
+        dataset_code=INDEX, data_config=config, dimension_filters=filters,
+    ).query_telemetry_data()
+    detail = await dashboard_export_detail.query_detail_rows(
+        dataset_code=INDEX, data_config=config, dimension_filters=filters, row_limit=100,
+    )
+    assert [row["knowledge_identity"] for row in detail.rows] == identities
+    assert sum(row[0] for row in query.value) == len(identities)

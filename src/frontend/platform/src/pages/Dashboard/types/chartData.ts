@@ -17,6 +17,10 @@ export interface ChartSeries {
 }
 
 export interface PivotTableRow {
+  // 使用原始维度生成标识, 避免空值与同名展示分组合并。
+  id?: string
+  // 与展示列对齐的原始导出值, null 表示字段缺失。
+  rawKey?: (string | number | null)[]
   key: string[]
   values: number[]
   total: number

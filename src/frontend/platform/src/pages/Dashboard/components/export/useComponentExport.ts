@@ -48,9 +48,9 @@ export function useComponentExport({
     toast({ description: t("componentExport.saveBeforeExport"), variant: "error" })
   }
 
-  const exportDetail = async (dimensionField: string, dimensionValue: string | number) => {
+  const exportDetail = async (dimensionField: string, dimensionValue: string | number | null) => {
     if (!canExport) return warnUnsaved()
-    const key = `${dimensionField}:${dimensionValue}`
+    const key = JSON.stringify([dimensionField, dimensionValue])
     setExportingDetailKey(key)
     try {
       const { file_url } = await exportComponentDetail({
@@ -93,8 +93,8 @@ export function useComponentExport({
     exportDetail,
     exportAll,
     canExport,
-    isExportingDetail: (dimensionField: string, dimensionValue: string | number) =>
-      exportingDetailKey === `${dimensionField}:${dimensionValue}`,
+    isExportingDetail: (dimensionField: string, dimensionValue: string | number | null) =>
+      exportingDetailKey === JSON.stringify([dimensionField, dimensionValue]),
     isExportingAll: exportingAll,
   }
 }

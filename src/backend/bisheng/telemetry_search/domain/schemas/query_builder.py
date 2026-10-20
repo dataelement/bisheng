@@ -133,6 +133,18 @@ class RangeOp(BaseOp):
         return {"range": {self.field: self.value.model_dump(exclude_none=True)}}
 
 
+class ExistsOp(BaseOp):
+    """判断字段是否具有可检索的值。"""
+
+    operator: Literal['exists'] = 'exists'
+
+    def to_dsl(self) -> dict:
+        query = {"exists": {"field": self.field}}
+        if "." in self.field:
+            return {"nested": {"path": self.field.rsplit('.', 1)[0], "query": query}}
+        return query
+
+
 class MatchAllOp(BaseOp):
     """Match all documents"""
     operator: Literal['match_all'] = 'match_all'
@@ -162,7 +174,7 @@ class MatchPhraseOp(BaseOp):
         return {"match_phrase": {f"{self.field}.text": self.value}}
 
 
-AtomFilter = Union[TermOp, TermsOp, RangeOp, MatchAllOp, MatchPhraseOp]
+AtomFilter = Union[TermOp, TermsOp, RangeOp, MatchAllOp, MatchPhraseOp, ExistsOp]
 
 
 # ==================== Filter expression ====================

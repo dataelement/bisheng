@@ -35,6 +35,7 @@ from ..repositories.implementations.dataset_repository_impl import DashboardData
 from ..schemas.component import AggregationType, ComponentDataConfig, DimensionQueryFilter, TimeFilter
 from ..schemas.query_builder import AggsTypeEnum, FilterExpression
 from .component import DataQueryService
+from .user_metric_definitions import USER_STAT_DATASETS
 
 # Per-dataset "which one is this" columns, in display order. These are read straight off
 # the stored document, so they cover fields that were never declared as chart dimensions
@@ -296,10 +297,15 @@ async def query_detail_rows(
         return DetailRows(columns=columns, rows=rows)
     filters = DataQueryService.merge_filters(filters, _metric_filter(metric_config))
     detail_query = _build_bool_query(filters)
-    if metric_config and metric_config.calculation == "login_participation":
+    if metric_config and (
+        metric_config.calculation == "login_participation"
+        or (dataset_code in USER_STAT_DATASETS and metric_config.field == "active_user_count")
+    ):
         from .login_participation import LoginSelection
 
-        detail_query = LoginSelection(filters).query(history=False)
+        detail_query = LoginSelection(filters).query(
+            history=metric_config.field == "active_employee_count",
+        )
 
     identity_columns = [
         DetailColumn(field=field, label=label)

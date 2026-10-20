@@ -199,9 +199,11 @@ export const PivotTable = memo(function PivotTable({
               const gdi = groupDimensionIndex as number
               const remainingDimCount = Math.max(0, data.rowHeaders.length - (gdi + 1))
               const fieldId = data.rowFieldIds?.[gdi]
-              const displayLabel = data.rowLabels?.[JSON.stringify(group.childRows[0]?.key)]?.[gdi] ?? group.groupLabel
-              const isClickable = canExportDetail && fieldId && group.groupLabel
-              const exporting = fieldId ? isExportingDetail(fieldId, group.groupLabel) : false
+              const firstRow = group.childRows[0]
+              const rawValue = (firstRow.rawKey ?? firstRow.key)[gdi] ?? null
+              const displayLabel = data.rowLabels?.[firstRow.id ?? JSON.stringify(firstRow.key)]?.[gdi] || group.groupLabel
+              const isClickable = canExportDetail && fieldId
+              const exporting = fieldId ? isExportingDetail(fieldId, rawValue) : false
               return (
                 <tr key={`subtotal-${group.groupKey}`} className="bg-slate-50 font-semibold dark:bg-slate-800/40">
                   <th
@@ -218,7 +220,7 @@ export const PivotTable = memo(function PivotTable({
                     }`}
                     style={{ left: `${64 + gdi * 128}px`, paddingLeft: `${12 + gdi * 12}px` }}
                     title={isClickable ? `${displayLabel}（点击导出该分类明细）` : displayLabel}
-                    onClick={isClickable ? () => void exportDetail(fieldId, group.groupLabel) : undefined}
+                    onClick={isClickable ? () => void exportDetail(fieldId, rawValue) : undefined}
                   >
                     <span className="block max-w-28 truncate">
                       {exporting ? "导出中…" : displayLabel}
@@ -236,7 +238,7 @@ export const PivotTable = memo(function PivotTable({
                   )}
                   {group.subtotalRow.values.map((value, columnIndex) => (
                     <td
-                      key={`subtotal-${group.groupKey}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
+                      key={`subtotal-${group.groupKey}-${columnIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
                       className="border-b border-r border-border bg-slate-50 px-3 py-2 text-right tabular-nums text-foreground dark:bg-slate-800/40"
                       title={`${group.groupLabel} · 汇总 · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
                     >
@@ -252,7 +254,7 @@ export const PivotTable = memo(function PivotTable({
 
             const { row } = entry
             return (
-              <tr key={JSON.stringify(row.key)} className="hover:brightness-[0.98]">
+              <tr key={row.id ?? JSON.stringify(row.key)} className="hover:brightness-[0.98]">
                 <th
                   scope="row"
                   className="sticky left-0 z-20 w-16 min-w-16 max-w-16 border-b border-r border-border bg-background px-2 py-2 text-center font-medium tabular-nums text-foreground"
@@ -268,10 +270,11 @@ export const PivotTable = memo(function PivotTable({
                   // F058 AC-09/AC-11: the merged "name(dept)" cell has no single raw value
                   // to filter on, so it never becomes a drill-down export target.
                   const fieldId = data.rowFieldIds?.[dimensionIndex]
-                  const displayLabel = data.rowLabels?.[JSON.stringify(row.key)]?.[dimensionIndex] ?? label
+                  const rawValue = (row.rawKey ?? row.key)[dimensionIndex] ?? null
+                  const displayLabel = data.rowLabels?.[row.id ?? JSON.stringify(row.key)]?.[dimensionIndex] ?? label
                   const isDedupMergedCell = dimensionIndex === data.personDedupIndex
-                  const isClickable = canExportDetail && fieldId && !isDedupMergedCell && label
-                  const exporting = fieldId ? isExportingDetail(fieldId, label) : false
+                  const isClickable = canExportDetail && fieldId && !isDedupMergedCell
+                  const exporting = fieldId ? isExportingDetail(fieldId, rawValue) : false
                   return (
                     <th
                       key={`${label}-${dimensionIndex}`}
@@ -284,7 +287,7 @@ export const PivotTable = memo(function PivotTable({
                         paddingLeft: `${12 + dimensionIndex * 12}px`,
                       }}
                       title={isClickable ? `${displayLabel}（点击导出该分类明细）` : displayLabel}
-                      onClick={isClickable ? () => void exportDetail(fieldId, label) : undefined}
+                      onClick={isClickable ? () => void exportDetail(fieldId, rawValue) : undefined}
                     >
                       <span className="block max-w-28 truncate">
                         {exporting ? "导出中…" : (displayLabel || "未分类")}
@@ -300,7 +303,7 @@ export const PivotTable = memo(function PivotTable({
                 ))}
                 {row.values.map((value, columnIndex) => (
                   <td
-                    key={`${rowIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
+                    key={`${rowIndex}-${columnIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
                     className="border-b border-r border-border px-3 py-2 text-right tabular-nums text-foreground"
                     style={{ backgroundColor: cellBackground(value) }}
                     title={`${row.key.join(" / ")} · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
@@ -325,7 +328,7 @@ export const PivotTable = memo(function PivotTable({
             </th>
             {data.columnTotals.map((value, index) => (
               <td
-                key={`total-${JSON.stringify(originalColumnPaths[index])}`}
+                key={`total-${index}-${JSON.stringify(originalColumnPaths[index])}`}
                 className="border-r border-t border-border bg-slate-100 px-3 py-2 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {formatValue(value, dataConfig)}

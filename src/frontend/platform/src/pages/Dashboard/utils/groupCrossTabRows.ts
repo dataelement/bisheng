@@ -4,11 +4,10 @@
 // already-flat `PivotTableRow[]` produced by transformPivotData — the backend's
 // aggregation/response contract is unchanged (see spec.md AD-02).
 
-export interface PivotTableRow {
-  key: string[]
-  values: number[]
-  total: number
-}
+import type { PivotTableRow } from "../types/chartData"
+import { dimensionValueKey } from "./documentRollups"
+
+export type { PivotTableRow } from "../types/chartData"
 
 export interface PivotSubtotalRow {
   groupLabel: string
@@ -160,21 +159,22 @@ export function groupCrossTabRows(
   const groupOrder: string[] = []
   const childRowsByGroup = new Map<string, PivotTableRow[]>()
   for (const row of rows) {
-    const groupLabel = row.key[groupDimensionIndex] ?? "未分类"
-    if (!childRowsByGroup.has(groupLabel)) {
-      groupOrder.push(groupLabel)
-      childRowsByGroup.set(groupLabel, [])
+    const groupKey = dimensionValueKey([(row.rawKey ?? row.key)[groupDimensionIndex]])
+    if (!childRowsByGroup.has(groupKey)) {
+      groupOrder.push(groupKey)
+      childRowsByGroup.set(groupKey, [])
     }
-    childRowsByGroup.get(groupLabel)!.push(row)
+    childRowsByGroup.get(groupKey)!.push(row)
   }
-  return groupOrder.map(groupLabel => {
-    const childRows = childRowsByGroup.get(groupLabel)!
+  return groupOrder.map(groupKey => {
+    const childRows = childRowsByGroup.get(groupKey)!
+    const groupLabel = childRows[0].key[groupDimensionIndex] || "未分类"
     return {
-      groupKey: groupLabel,
+      groupKey,
       groupLabel,
       childRows,
-      subtotalRow: exactTotals?.[groupLabel]
-        ? { groupLabel, ...exactTotals[groupLabel] }
+      subtotalRow: exactTotals?.[groupKey]
+        ? { groupLabel, ...exactTotals[groupKey] }
         : sumChildRows(groupLabel, childRows),
     }
   })

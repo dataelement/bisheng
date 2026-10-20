@@ -5,6 +5,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from collections import defaultdict
 from contextlib import aclosing
+from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 from itertools import product
 from typing import Any
@@ -15,13 +16,17 @@ from bisheng.telemetry_search.domain.schemas.query_builder import (
     AggregationExpression,
     FilterExpression,
     RangeOp,
+    RangeValue,
     TermOp,
     TermsOp,
 )
 
+from .search_engine_service import SearchEngineService, SearchParameters
+from .user_metric_definitions import active_user_metric
+
 CHINA = timezone(timedelta(hours=8))
 TIME_FIELDS = {"timestamp", "local_date"}
-LOGIN_FIELDS = {"participation_rate", "logged_in_employee_count"}
+LOGIN_FIELDS = {"participation_rate", "logged_in_employee_count", "active_employee_count"}
 
 
 def day_of(value: Any) -> date:
@@ -72,11 +77,13 @@ class LoginSelection:
         self.end = today or datetime.now(CHINA).date()
         self.selections: list[list[tuple[date, date]]] = []
         self.business = []
+        self.business_filters = []
         try:
             for expr in filters or []:
                 remaining = self._split(expr)
                 if remaining is not None:
                     self.business.append({"bool": remaining.to_dsl()})
+                    self.business_filters.append(remaining)
         except (ValueError, TypeError, OverflowError) as exc:
             raise LoginParticipationFilterError() from exc
 
@@ -124,14 +131,16 @@ class LoginSelection:
             and all(any(start <= day <= end for start, end in spans) for spans in self.selections)
         )
 
-    def query(self, *, history: bool) -> dict:
+    def query(self, *, history: bool, successful_only: bool = True) -> dict:
         bounds = {"lt": midnight(self.end + timedelta(days=1))}
         if not history and self.start:
             bounds["gte"] = midnight(self.start)
         conditions = [
             *self.business,
-            {"term": {"metric_source": "participation"}},
-            {"term": {"logged_in": True}},
+            *([
+                {"term": {"metric_source": "participation"}},
+                {"term": {"logged_in": True}},
+            ] if successful_only else []),
             {"range": {"timestamp": bounds}},
         ]
         if not history:
@@ -152,6 +161,25 @@ class LoginSelection:
                     }
                 )
         return {"bool": {"filter": conditions}}
+
+    def activity_filters(self) -> list[FilterExpression]:
+        """活跃查询保留业务范围, 将年月等日期选择转换为实际期间."""
+        filters = [
+            *self.business_filters,
+            FilterExpression(bool_operator="must", filters=[RangeOp(
+                field="timestamp", value=RangeValue(
+                    gte=midnight(self.start) if self.start else None,
+                    lt=midnight(self.end + timedelta(days=1)),
+                ),
+            )]),
+        ]
+        for spans in self.selections:
+            filters.append(FilterExpression(bool_operator="must", filters=[FilterExpression(
+                bool_operator="should", filters=[RangeOp(
+                    field="timestamp", value=RangeValue(gte=midnight(start), lt=midnight(end + timedelta(days=1))),
+                ) for start, end in spans],
+            )]))
+        return filters
 
 
 def dimension_keys(source: dict, fields: list[str]) -> set[tuple]:
@@ -212,7 +240,16 @@ class LoginPopulation:
                 bucket = period(day, self.granularity)[0] if self.granularity else None
                 self.active[key, bucket].add(user)
 
-    def rows(self, metric: str) -> list[list]:
+    def rows(self, metric: str, *, active_rows: list[list] | None = None) -> list[list]:
+        if metric == "participation_rate":
+            if active_rows is None:
+                raise ValueError("Active user counts are required for participation rate")
+            counts = {tuple(row[:-1]): row[-1] for row in active_rows}
+            totals = {tuple(row[:-1]): row[-1] for row in self.rows("active_employee_count")}
+            return [
+                [*key, counts.get(key, 0) / totals[key] if totals.get(key) else 0.0]
+                for key in dict.fromkeys([*totals, *counts])
+            ]
         if self.selection.start and self.selection.start > self.selection.end:
             return []
         groups = self.firsts or ({(): {}} if not self.fields else {})
@@ -232,11 +269,12 @@ class LoginPopulation:
                 if selected_days:
                     numerator = len(self.active.get((key, bucket), ()))
                     denominator = bisect_right(first_days, selected_days[-1])
-                    value = (
-                        numerator
-                        if metric == "logged_in_employee_count"
-                        else (numerator / denominator if denominator else 0.0)
-                    )
+                    if metric == "active_employee_count":
+                        value = denominator
+                    elif metric == "logged_in_employee_count":
+                        value = numerator
+                    else:
+                        value = numerator / denominator if denominator else 0.0
                     row = list(key)
                     if self.time_index is not None:
                         field = self.dimensions[self.time_index].field
@@ -305,4 +343,20 @@ async def load_login_population(
 
 async def query_login_participation(metric: str, **search_kwargs) -> list[list]:
     population = await load_login_population(**search_kwargs)
-    return population.rows(metric)
+    active_rows = await query_active_users(**search_kwargs) if metric == "participation_rate" else None
+    return population.rows(metric, active_rows=active_rows)
+
+
+async def query_active_users(**search_kwargs) -> list[list]:
+    parameters = deepcopy(search_kwargs)
+    metric = active_user_metric()
+    parameters["filters"] = LoginSelection(parameters.get("filters")).activity_filters()
+    if metric.filter is not None:
+        parameters["filters"].append(metric.filter)
+    for dimension in [*parameters.get("dimensions", []), *([parameters["stack_dimension"]] if parameters.get("stack_dimension") else [])]:
+        if dimension.type == "date_histogram":
+            dimension.custom_params["time_zone"] = "+08:00"
+    return await SearchEngineService(SearchParameters(
+        metrics=metric.aggregations,
+        **parameters,
+    )).search()

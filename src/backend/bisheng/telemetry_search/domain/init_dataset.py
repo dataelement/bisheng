@@ -5,7 +5,7 @@ from bisheng.common.constants.telemetry import (
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.database.models.group import DefaultGroup
 from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
-from bisheng.telemetry.domain.mid_table.user_engagement_shared import USER_ENGAGEMENT_ES_INDEX
+from bisheng.telemetry.domain.mid_table.user_engagement_shared import METRIC_SOURCE_INCREMENT, USER_ENGAGEMENT_ES_INDEX
 from bisheng.telemetry_search.domain.models.dashboard import DashboardType
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
 from bisheng.telemetry_search.domain.models.dashboard_dataset import (
@@ -28,6 +28,7 @@ from bisheng.telemetry_search.domain.schemas.query_builder import (
     TermOp,
     TermsOp,
 )
+from bisheng.telemetry_search.domain.services.user_metric_definitions import active_user_metric
 
 
 def _login_participation_metrics() -> list[MetricConfig]:
@@ -38,7 +39,7 @@ def _login_participation_metrics() -> list[MetricConfig]:
             name=name,
             is_virtual=True,
             calculation=VirtualMetricCalculationEnum.LOGIN_PARTICIPATION,
-            filter=FilterExpression(
+            filter=None if field == "participation_rate" else FilterExpression(
                 bool_operator="must",
                 filters=[
                     TermOp(field="metric_source", value="participation"),
@@ -51,7 +52,11 @@ def _login_participation_metrics() -> list[MetricConfig]:
                 if field == "participation_rate" else None
             ),
         )
-        for field, name in (("participation_rate", "全员参与占比"), ("logged_in_employee_count", "实际登录人数"))
+        for field, name in (
+            ("participation_rate", "全员参与度占比"),
+            ("logged_in_employee_count", "累积登录人数"),
+            ("active_employee_count", "全员有效用户数"),
+        )
     ]
 
 
@@ -96,6 +101,10 @@ DASHBOARD_DATASET = [
                     field="new_user_count",
                     is_virtual=True,
                     name="新增用户数",
+                    filter=FilterExpression(
+                        bool_operator="must",
+                        filters=[TermOp(field="metric_source", value=METRIC_SOURCE_INCREMENT)],
+                    ),
                     aggregations=[
                         AggregationExpression(
                             name="new_user_count",
@@ -104,35 +113,8 @@ DASHBOARD_DATASET = [
                         )
                     ]
                 ),
-                MetricConfig(
-                    field="active_user_count",
-                    name="活跃用户数",
-                    is_virtual=True,
-                    aggregations=[
-                        AggregationExpression(
-                            name="active_user_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="user_id"
-                        )
-                    ]
-                ),
+                active_user_metric(),
                 *_login_participation_metrics(),
-                MetricConfig(
-                    field="active_employee_count",
-                    name="全员总数",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[TermOp(field="active_employee", value=1)],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="active_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        )
-                    ],
-                ),
                 MetricConfig(
                     field="login_count",
                     name="实际登录次数",
@@ -184,18 +166,7 @@ DASHBOARD_DATASET = [
         is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
-                MetricConfig(
-                    field="active_user_count",
-                    name="活跃用户数",
-                    is_virtual=True,
-                    aggregations=[
-                        AggregationExpression(
-                            name="active_user_count",
-                            type=AggsTypeEnum.CARDINALITY,
-                            field="user_id"
-                        )
-                    ]
-                )
+                active_user_metric(),
             ],
             dimensions=[
                 DimensionConfig(
@@ -1595,23 +1566,8 @@ DASHBOARD_DATASET = [
         is_visible=False,
         schema_config=SchemaConfig(
             metrics=[
+                active_user_metric(),
                 *_login_participation_metrics(),
-                MetricConfig(
-                    field="active_employee_count",
-                    name="全员总数",
-                    is_virtual=True,
-                    filter=FilterExpression(
-                        bool_operator="must",
-                        filters=[TermOp(field="active_employee", value=1)],
-                    ),
-                    aggregations=[
-                        AggregationExpression(
-                            name="active_employee_count",
-                            type=AggsTypeEnum.VALUE_COUNT,
-                            field="user_id",
-                        )
-                    ],
-                ),
                 MetricConfig(
                     field="login_count",
                     name="实际登录次数",

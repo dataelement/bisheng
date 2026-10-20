@@ -10,6 +10,11 @@ vi.mock("@/controllers/API/dashboard", () => ({
   exportComponentAll: vi.fn(),
 }))
 
+vi.mock("@/store/dashboardStore", () => ({
+  useEditorDashboardStore: (selector: (state: any) => unknown) =>
+    selector({ savedDashboard: { components: [{ id: "c1" }] } }),
+}))
+
 const mockedExportDetail = vi.mocked(exportComponentDetail)
 const mockedExportAll = vi.mocked(exportComponentAll)
 
@@ -20,14 +25,14 @@ beforeEach(() => {
 })
 
 describe("useComponentExport", () => {
-  it("exportDetail calls the API with the given field/value and opens the returned file_url", async () => {
+  it.each(["生产制造部", null, 0])("exportDetail forwards the original value %s and opens the returned file_url", async dimensionValue => {
     mockedExportDetail.mockResolvedValue({ file_url: "https://minio/detail.xlsx" })
     const { result } = renderHook(() =>
       useComponentExport({ dashboardId: "d1", componentId: "c1" }),
     )
 
     await act(async () => {
-      await result.current.exportDetail("belonging_department_name", "生产制造部")
+      await result.current.exportDetail("belonging_department_name", dimensionValue)
     })
 
     expect(mockedExportDetail).toHaveBeenCalledWith(
@@ -35,7 +40,7 @@ describe("useComponentExport", () => {
         dashboardId: "d1",
         componentId: "c1",
         dimensionField: "belonging_department_name",
-        dimensionValue: "生产制造部",
+        dimensionValue,
       }),
     )
     expect(window.open).toHaveBeenCalledWith(

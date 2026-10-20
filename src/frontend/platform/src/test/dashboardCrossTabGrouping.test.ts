@@ -81,13 +81,13 @@ describe("groupCrossTabRows", () => {
 
     expect(grouped).toEqual([
       {
-        groupKey: "生产制造部",
+        groupKey: '["生产制造部"]',
         groupLabel: "生产制造部",
         childRows: [rows[0], rows[1]],
         subtotalRow: { groupLabel: "生产制造部", values: [15], total: 15 },
       },
       {
-        groupKey: "安全环保监察部",
+        groupKey: '["安全环保监察部"]',
         groupLabel: "安全环保监察部",
         childRows: [rows[2]],
         subtotalRow: { groupLabel: "安全环保监察部", values: [3], total: 3 },
