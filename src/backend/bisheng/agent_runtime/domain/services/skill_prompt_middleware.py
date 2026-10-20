@@ -6,12 +6,10 @@ The author's own prompt is never changed; these rules are appended after it on
 every model call. The text is distilled from task mode's skill lines without the
 task-mode placeholders (ask_user, export_*, numbered steps).
 
-Three variants match what the run can do:
+Two variants match what the run can do:
 
 - ``WITH_EXECUTOR``: a code executor is bound, so a skill's scripts can run;
-- ``NO_EXECUTOR``: no executor, so the model follows the skill as far as text allows;
-- ``TEXT_ONLY``: the caller cannot receive files (assistant open API), so the
-  model must not produce any.
+- ``NO_EXECUTOR``: no executor, so the model follows the skill as far as text allows.
 """
 
 from __future__ import annotations
@@ -35,19 +33,15 @@ _WITH_EXECUTOR_RULES = """- 交付给用户的文件一律写到 /output/。需�
 _NO_EXECUTOR_RULES = """- 本次没有可用的代码执行工具，技能中需要执行脚本的做法无法落地。请按技能说明尽量完成，用 write_file 把结果写到 /output/，并在回复中说明技能脚本未能执行。
 - 需要修改用户的文件时，把结果另存到 /output/，不要覆盖 /uploads/ 里的原件。"""
 
-_TEXT_ONLY_RULES = """- 本次调用只能用文字交付结果：不要把结果写成文件，也不要在回复中声称已生成可下载的文件。直接在回复正文中给出完整结果。"""
-
 
 class SkillPromptVariant(StrEnum):
     WITH_EXECUTOR = "with_executor"
     NO_EXECUTOR = "no_executor"
-    TEXT_ONLY = "text_only"
 
 
 _VARIANT_RULES = {
     SkillPromptVariant.WITH_EXECUTOR: _WITH_EXECUTOR_RULES,
     SkillPromptVariant.NO_EXECUTOR: _NO_EXECUTOR_RULES,
-    SkillPromptVariant.TEXT_ONLY: _TEXT_ONLY_RULES,
 }
 
 

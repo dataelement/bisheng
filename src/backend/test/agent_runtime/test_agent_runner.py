@@ -33,7 +33,6 @@ class _FakeWorkspace:
         self.file_dir = f"/tmp/fake/{key.svid}"
         self.run_id = "run-1"
         self.cleaned = False
-        self.deleted = False
         self.prepared_with = None
         _FakeWorkspace.instances.append(self)
 
@@ -49,10 +48,6 @@ class _FakeWorkspace:
 
     def cleanup_local(self):
         self.cleaned = True
-
-    async def adelete(self):
-        self.deleted = True
-        return 1
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +88,7 @@ def _code_tool_builder(status=CodeToolStatus.READY):
     return _build
 
 
-def _spec(skills=("docx",), executor="function call", tools=(), text_only=False, target=True):
+def _spec(skills=("docx",), executor="function call", tools=(), target=True):
     return AgentRunSpec(
         tenant_id=2,
         user_id=7,
@@ -105,7 +100,6 @@ def _spec(skills=("docx",), executor="function call", tools=(), text_only=False,
         app_type=ApplicationTypeEnum.WORKFLOW,
         app_id="flow-1",
         app_name="Flow",
-        text_only=text_only,
         deliverable_target=DeliverableTarget("chat/7/agent/c1", False, lambda fid: fid) if target else None,
     )
 
@@ -167,10 +161,6 @@ class TestWithSkills:
         assert plan.prompt_variant is SkillPromptVariant.NO_EXECUTOR
         assert "bisheng_code_interpreter" not in [t.name for t in plan.tools]
 
-    async def test_text_only_uses_the_text_only_prompt(self):
-        plan = await _runner(_spec(text_only=True, target=False)).aprepare()
-        assert plan.prompt_variant is SkillPromptVariant.TEXT_ONLY
-
 
 class TestFinish:
     async def test_finish_collects_and_cleans_up(self, _fakes):
@@ -198,19 +188,10 @@ class TestFinish:
         assert ws.cleaned
 
     async def test_finish_without_target_collects_nothing(self, _fakes):
-        runner = _runner(_spec(text_only=True, target=False))
+        runner = _runner(_spec(target=False))
         await runner.aprepare()
         assert await runner.afinish() == []
         assert "file_dir" not in _fakes.collected
-
-    async def test_once_workspace_is_deleted_after_the_run(self):
-        spec = _spec(target=False, text_only=True)
-        spec.workspace_key = WorkspaceKey.once("assistant")
-        runner = _runner(spec)
-        await runner.aprepare()
-        await runner.afinish()
-        (ws,) = _FakeWorkspace.instances
-        assert ws.deleted
 
     async def test_finish_is_safe_without_prepare(self):
         assert await _runner(_spec()).afinish() == []

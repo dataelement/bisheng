@@ -12,7 +12,6 @@ every run refreshes. Clean-up happens in three places:
 from __future__ import annotations
 
 import asyncio
-import uuid
 
 from loguru import logger
 
@@ -59,10 +58,6 @@ class TmpSessionService:
     def __init__(self, redis, minio) -> None:
         self.redis = redis
         self.minio = minio
-
-    @staticmethod
-    def new_id() -> str:
-        return uuid.uuid4().hex
 
     async def aregister(self, tmp_id: str, *, user_id: int, tenant_id: int) -> None:
         """Register (or refresh) the owner of a temporary session."""

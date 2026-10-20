@@ -64,12 +64,9 @@ def _skills(*names):
 
 
 class TestWorkspaceKey:
-    def test_formal_temp_and_once_keys(self):
+    def test_formal_and_temp_keys(self):
         assert WorkspaceKey.formal("c1", "wf-n1").svid == "agent/c1/wf-n1"
         assert WorkspaceKey.temp("t1", "wf-n1").svid == "agent/tmp-t1/wf-n1"
-        once = WorkspaceKey.once("assistant")
-        assert once.svid.startswith("agent/once-")
-        assert once.kind == "once"
         assert WorkspaceKey.formal("c1", "assistant").object_prefix == "workspace/agent/c1/assistant/"
 
     @pytest.mark.parametrize("bad", ["", "a/b", "..", "c 1"])

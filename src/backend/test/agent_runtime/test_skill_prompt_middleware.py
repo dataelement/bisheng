@@ -52,11 +52,6 @@ class TestSkillRules:
         assert "bisheng_code_interpreter" not in text
         assert "无法" in text
 
-    def test_text_only_forbids_file_deliverables(self):
-        text = skill_rules_text(SkillPromptVariant.TEXT_ONLY)
-        assert "不要把结果写成文件" in text
-        assert "/output/" not in text
-
 
 class TestMiddleware:
     def test_appends_after_the_author_prompt(self):

@@ -62,8 +62,6 @@ class AgentRunSpec:
     app_type: ApplicationTypeEnum
     app_id: str
     app_name: str
-    # True when the caller cannot receive files (assistant open API).
-    text_only: bool = False
     # None means: do not collect deliverables.
     deliverable_target: DeliverableTarget | None = None
 
@@ -167,9 +165,7 @@ class AgentRunner:
         else:
             notices.append(NOTICE_CODE_EXECUTOR_MISSING)
 
-        if spec.text_only:
-            variant = SkillPromptVariant.TEXT_ONLY
-        elif self._code_tool is not None:
+        if self._code_tool is not None:
             variant = SkillPromptVariant.WITH_EXECUTOR
         else:
             variant = SkillPromptVariant.NO_EXECUTOR
@@ -223,7 +219,7 @@ class AgentRunner:
             current_tenant_id.reset(token)
 
     async def _arelease(self) -> None:
-        """Release the local run directory, the executor and a one-off workspace."""
+        """Release the local run directory and the executor."""
         if self._workspace is None:
             return
         svid = self.spec.workspace_key.svid
@@ -236,8 +232,3 @@ class AgentRunner:
         except Exception:
             logger.exception("act=agent_runtime_release_failed svid={}", svid)
         self._workspace.cleanup_local()
-        if self.spec.workspace_key.kind == "once":
-            try:
-                await self._workspace.adelete()
-            except Exception:
-                logger.exception("act=agent_runtime_once_delete_failed svid={}", svid)

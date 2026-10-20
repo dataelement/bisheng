@@ -54,8 +54,7 @@ def _check_part(value: str, what: str) -> str:
 class WorkspaceKey:
     """Identifies one workspace: a session plus the surface that runs in it.
 
-    ``session_key`` is a chat id (formal session), ``tmp-<id>`` (debug session)
-    or ``once-<uuid>`` (evaluation / assistant open API, deleted after the run).
+    ``session_key`` is a chat id (formal session) or ``tmp-<id>`` (debug session).
     ``surface`` is ``wf-<node_id>`` for a workflow agent node or ``assistant``.
     """
 
@@ -70,10 +69,6 @@ class WorkspaceKey:
     @classmethod
     def temp(cls, tmp_session_id: str, surface: str) -> WorkspaceKey:
         return cls(f"tmp-{_check_part(tmp_session_id, 'session')}", _check_part(surface, "surface"), "temp")
-
-    @classmethod
-    def once(cls, surface: str) -> WorkspaceKey:
-        return cls(f"once-{uuid.uuid4().hex}", _check_part(surface, "surface"), "once")
 
     @property
     def svid(self) -> str:
@@ -186,12 +181,6 @@ class AgentWorkspace:
 
     def cleanup_local(self) -> None:
         shutil.rmtree(self.file_dir, ignore_errors=True)
-
-    async def adelete(self) -> int:
-        """Delete this workspace's objects (used for one-off workspaces)."""
-        keys = await asyncio.to_thread(_list_keys, self.minio, self.key.object_prefix)
-        await asyncio.to_thread(_remove_keys, self.minio, keys)
-        return len(keys)
 
 
 async def adelete_session_workspaces(minio, session_key: str) -> int:
