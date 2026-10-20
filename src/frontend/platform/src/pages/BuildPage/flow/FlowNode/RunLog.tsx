@@ -51,7 +51,7 @@ export default function RunLog({ node, children }) {
                     } else if (item.key === 'output_msg') {
                         label = item.key
                     } else if (item.key === 'error') {
-                        label = item.key
+                        label = t('nodeLogError')
                     } else {
                         label = t(`node.${node.type}.${item.key}.label`)
                     }

@@ -184,7 +184,7 @@ export default function Parameter({
             return <InputItem char type='number' data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix}
             />;
         case 'code_input':
-            return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
+            return <CodeInputItem nodeId={nodeId} data={item} onChange={handleOnNewValue} onValidate={bindValidate} onVarEvent={bindVarValidate} i18nPrefix={i18nPrefix}
             />;
         case 'code':
             return <CodePythonItem data={item} onChange={handleOnNewValue} i18nPrefix={i18nPrefix}

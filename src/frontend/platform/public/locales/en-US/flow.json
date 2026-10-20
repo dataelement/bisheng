@@ -155,6 +155,7 @@
   "cannotBeEmpty": "{{label}} cannot be empty",
   "editReportTemplate": "Edit Report Template",
   "nodeErrorMessage": "{{nodeName}} node error: {{varNameCn}} is invalid.",
+  "nodeLogError": "Failure reason",
   "required": "Required",
   "isRequired": "Is Required",
   "documentKnowledgeBase": "Document Knowledge",
