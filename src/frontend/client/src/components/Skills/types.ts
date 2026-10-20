@@ -50,6 +50,8 @@ export interface SkillRecord {
   contentHash: string;
   bundleMissing: boolean;
   preview: string;
+  /** Raw SKILL.md, including the YAML header. Present on the detail response. */
+  sourceText?: string;
   files: string[];
 }
 

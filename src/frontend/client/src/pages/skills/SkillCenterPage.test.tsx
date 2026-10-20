@@ -31,12 +31,15 @@ const copy: Record<string, string> = {
   com_skill_center_group_platform: '企业提供',
   com_skill_center_delete_failed: '删除失败，请重试',
   com_skill_center_bundle_missing: '技能文件已丢失，请更新技能。',
+  com_skill_center_open_failed: '这个技能暂时无法打开。',
   com_skill_center_unavailable: '该技能已删除或已停用。',
   com_skill_center_update: '更新技能',
   com_skill_center_cancel: '取消',
   com_ui_delete: '删除',
   com_skill_center_more: '更多',
   com_skill_center_delete: '删除技能',
+  com_skill_center_detail_source: '源码',
+  com_skill_center_detail_preview: '预览',
   com_skill_center_delete_title: '删除这个技能？',
   com_skill_center_details: '查看详情',
   com_skill_center_search: '搜索',
@@ -44,6 +47,11 @@ const copy: Record<string, string> = {
   com_skill_center_error_storage: '操作失败，请重试。',
 };
 
+jest.mock('react-markdown', () => ({
+  __esModule: true,
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
+jest.mock('remark-gfm', () => ({ __esModule: true, default: () => undefined }));
 jest.mock('~/api/skillCenter', () => ({
   getSkillDetail: jest.fn(() => new Promise(() => undefined)),
   getSkillFile: jest.fn(() => new Promise(() => undefined)),
@@ -140,9 +148,22 @@ it('shows the chosen skill file', async () => {
   openPage();
   fireEvent.click(screen.getByRole('button', { name: /企业合同/ }));
   const dialog = await screen.findByRole('dialog');
+  expect(await within(dialog).findByText('企业技能正文')).toBeVisible();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'scripts/render_docx.py' }));
   expect(await within(dialog).findByText('print("ok")')).toBeVisible();
   fireEvent.click(within(dialog).getByRole('button', { name: 'SKILL.md' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: '源码' }));
   expect(await within(dialog).findByText('raw skill')).toBeVisible();
+});
+
+it('keeps the skill list when a skill cannot be opened', async () => {
+  (getSkillDetail as jest.Mock).mockRejectedValueOnce(new Error('missing'));
+  openPage();
+  fireEvent.click(screen.getByRole('button', { name: /企业合同/ }));
+  const dialog = screen.getByRole('dialog');
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('这个技能暂时无法打开。');
+  expect(screen.getByRole('button', { name: /我的合同/, hidden: true })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /企业合同/, hidden: true })).toBeInTheDocument();
 });
 
 it('shows the enterprise skill body', async () => {
@@ -173,9 +194,7 @@ it('keeps the card and explains a failed delete', async () => {
   mutateAsync.mockRejectedValue(new Error('no'));
   openPage();
   fireEvent.click(screen.getByRole('button', { name: /我的合同/ }));
-  const more = within(screen.getByRole('dialog')).getByRole('button', { name: '更多' });
-  fireEvent.keyDown(more, { key: 'ArrowDown' });
-  fireEvent.click(await screen.findByRole('menuitem', { name: '删除技能' }));
+  fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '删除技能' }));
   const confirm = screen.getByRole('dialog', { name: '删除这个技能？' });
   expect(confirm).toHaveTextContent('删除‘我的合同’后，后续任务将无法使用该 Skill，已有对话和生成结果保留。');
   expect(within(confirm).getByRole('button', { name: '取消' })).toBeVisible();

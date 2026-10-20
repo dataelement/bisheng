@@ -661,7 +661,15 @@ class SkillStore:
         if (dst / SKILL_MD).is_file():
             return dst
         key = self.object_key(tenant_id, name, content_hash, owner_user_id=owner_user_id)
-        data = self.minio.get_object_sync(bucket_name=self._bucket(), object_name=key)
+        try:
+            data = self.minio.get_object_sync(bucket_name=self._bucket(), object_name=key)
+        except Exception as exc:
+            # Real MinIO raises S3Error(NoSuchKey). The in-memory fake returns None.
+            # Callers (detail, file read, list) only recover from FileNotFoundError;
+            # letting the S3 error through turns a missing bundle into HTTP 500.
+            if getattr(exc, "code", None) != "NoSuchKey":
+                raise
+            raise FileNotFoundError(f"skill bundle object not found: {key}") from exc
         if data is None:
             raise FileNotFoundError(f"skill bundle object not found: {key}")
         self._install_cache(dst, self._unpack_for_cache(unpack_zip_bytes(data)))
