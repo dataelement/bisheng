@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 25 / 35 完成；Wave 4 代码与质量门已完成，T25–T31 待同事在 119 共享沙箱部署、手动验证后勾选 |
+| 实现 | 🔄 进行中 | 26 / 35 完成；Wave 4 代码与质量门已完成，T25–T31 待同事在 119 共享沙箱部署、手动验证后勾选；T35 的 DM8 复核已做，`/code-review` 待用户启动 |
 
 ---
 
@@ -251,7 +251,7 @@
 
 ## Wave 5：验收
 
-- [ ] **T33**：契约登记复核
+- [x] **T33**：契约登记复核
   **文件**: `features/v3.0.0/release-contract.md`
   **逻辑**: 确认 T01 的登记完整；补「变更历史」一行。
   **依赖**: T01
@@ -288,3 +288,5 @@
 - T29：编辑页的「切换版本」只在本地加载该版本数据，不调用 `change_version`、不改变当前版本，所以不需要提醒；调用 `change_version` 的只有版本卡片 `CardSelectVersion.tsx`。提醒接在编辑页保存（含上线前的保存）和版本卡片两处。
 - T30：不需要改代码。编辑页上线、应用列表上线开关和删除都已经过 `captureAndAlertRequestErrorHoc`，错误提示按错误码文案插值 `data`，失败时开关状态不变。待 119 手动确认。
 - T32：`pnpm typecheck` 的 platform 部分通过；client 与 `file-viewers` 的报错来自 worktree 软链到主检出的 `node_modules`，与本功能无关。platform `pnpm lint` 的剩余错误都在本功能未触及的文件中。platform vitest 失败的 16 个用例在改动前的基线上同样失败。
+- T33：登记完整。10561 的说明补上「上线时草稿指向的工作流已被删除」，与 T20 的偏差一致；2026-10-20 扫描远程各分支，10560–10565 只有本分支占用。
+- T35（先做的部分）：DM8 按 C2 人工复核通过。`workflow_subflow_ref` 只用 `Integer`、`String(64)`、`DateTime`，更新时间用 `UPDATE_TIME_SERVER_DEFAULT`，`CURRENT_TIMESTAMP` 默认值与仓库内 41 处既有用法一致；Repository 只用 ORM 的 select、add、delete，没有方言专属 SQL。`/code-review` 只能由用户启动，留待 E2E 之后连同 E2E 的修改一起审。
