@@ -639,7 +639,28 @@ class QuestionRepository:
                 )
 
             # 排序相关的过滤条件需要在计算总数之前应用
-            if sort_by == "unanswered":
+            if sort_by == "answered_by_me":
+                if not viewer_user_id:
+                    stmt = stmt.where(Question.id < 0)
+                else:
+                    viewer_expert_ids = _tenant_scoped(
+                        select(Expert.id).where(Expert.user_id == viewer_user_id),
+                        Expert,
+                    )
+                    my_answer_question_ids = _tenant_scoped(
+                        select(Answer.question_id)
+                        .where(
+                            Answer.status != ANSWER_STATUS_DELETED,
+                            or_(
+                                Answer.user_id == viewer_user_id,
+                                Answer.expert_id.in_(viewer_expert_ids),
+                            ),
+                        )
+                        .distinct(),
+                        Answer,
+                    )
+                    stmt = stmt.where(Question.id.in_(my_answer_question_ids))
+            elif sort_by == "unanswered":
                 stmt = stmt.where(Question.answer_count == 0)
 
             subquery = stmt.subquery()

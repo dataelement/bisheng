@@ -83,6 +83,45 @@ async def read_space_owner_manager_ids(space_id: int) -> tuple[set[int], set[int
     return owners, managers
 
 
+async def user_has_space_manager_relation(space_id: int, user_id: int) -> bool:
+    """直接询问 OpenFGA 该用户是否满足知识空间 manager.
+
+    覆盖按部门、按用户组授予的管理员. 不经过 PermissionService.check,
+    因此没有超管短路、10 秒权限缓存和创建人兜底. 月奖发奖仍用直连用户名单.
+
+    Args:
+        space_id: 知识空间 id.
+        user_id: 要判断的用户 id.
+
+    Returns:
+        OpenFGA 判定为 manager 时为 True. 客户端不可用或查询失败时为 False.
+    """
+    sid = int(space_id)
+    uid = int(user_id)
+    if sid <= 0 or uid <= 0:
+        return False
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    try:
+        fga = await PermissionService._aget_fga()
+    except Exception:
+        logger.exception("points.space_fga.manager_check_client_failed space_id=%s user_id=%s", sid, uid)
+        return False
+    if fga is None:
+        logger.error("points.space_fga.manager_check_unavailable space_id=%s user_id=%s", sid, uid)
+        return False
+    try:
+        allowed = await fga.check(
+            user=f"user:{uid}",
+            relation="manager",
+            object=f"knowledge_space:{sid}",
+        )
+    except Exception:
+        logger.exception("points.space_fga.manager_check_failed space_id=%s user_id=%s", sid, uid)
+        return False
+    return bool(allowed)
+
+
 async def resolve_space_owner_manager_ids(*space_ids: int) -> frozenset[int]:
     """汇总多个空间的 owner∪manager（含创建人兜底），供 P7 跳过库管发分。
 

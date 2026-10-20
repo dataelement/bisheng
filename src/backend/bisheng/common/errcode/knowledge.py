@@ -113,6 +113,11 @@ class KnowledgeFileAliasGenerateError(BaseErrorCode):
     Msg: str = 'AI file alias generation failed, file_name remains unchanged'
 
 
+class KnowledgeSourceFileUnreadableError(BaseErrorCode):
+    Code: int = 10958
+    Msg: str = '原始文件已加密或结构损坏。无法读取。请检查后重新上传'
+
+
 # Is notQAThe knowledge base upon
 class KnowledgeNotQAError(BaseErrorCode):
     Code: int = 10960

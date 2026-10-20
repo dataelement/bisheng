@@ -34,6 +34,7 @@ from bisheng.knowledge.domain.services.knowledge_violation_delete_policy import 
     deduct_block_reason,
     highest_scope_tier,
     is_personal_level,
+    manager_spaces_needing_relation_check,
     monthly_award_exempt,
     resolve_payee_id,
 )
@@ -53,6 +54,7 @@ from bisheng.points.domain.services.points_pending_deduct_service import PointsP
 from bisheng.points.domain.services.space_fga_roles import (
     SpaceFgaRolesError,
     read_space_owner_manager_ids,
+    user_has_space_manager_relation,
 )
 
 logger = logging.getLogger(__name__)
@@ -294,13 +296,25 @@ class KnowledgeViolationDeleteService:
             getattr(manager, "user_id", None) if manager else None,
         )
         matchers = await self._enabled_matchers(loaded.tenant_id)
+        owners_by_space = {space_id: owners for space_id, (owners, _) in roles.items()}
+        managers_by_space = {space_id: set(managers) for space_id, (_, managers) in roles.items()}
         exempt = False
         if payee is not None:
+            # 按部门或用户组授予的管理员不在直连名单里, 只为这次免扣补问 manager.
+            for space_id in manager_spaces_needing_relation_check(
+                payee_id=payee,
+                space_levels=scope_levels,
+                owners_by_space=owners_by_space,
+                managers_by_space=managers_by_space,
+                enabled_matchers=matchers,
+            ):
+                if await user_has_space_manager_relation(space_id, payee):
+                    managers_by_space.setdefault(space_id, set()).add(payee)
             exempt = monthly_award_exempt(
                 uploader_id=payee,
                 space_levels=scope_levels,
-                owners_by_space={space_id: owners for space_id, (owners, _) in roles.items()},
-                managers_by_space={space_id: managers for space_id, (_, managers) in roles.items()},
+                owners_by_space=owners_by_space,
+                managers_by_space=managers_by_space,
                 enabled_matchers=matchers,
             )
         code = (rule_code or "").strip().upper() or None

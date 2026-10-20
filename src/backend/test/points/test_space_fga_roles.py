@@ -4,10 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from bisheng.core.openfga.exceptions import FGAConnectionError
 from bisheng.points.domain.services.space_fga_roles import (
     SpaceFgaRolesError,
     read_space_owner_manager_ids,
     resolve_space_owner_manager_ids,
+    user_has_space_manager_relation,
 )
 
 
@@ -78,3 +80,28 @@ async def test_resolve_space_owner_manager_ids_fga_fail_uses_creator_only():
     ):
         got = await resolve_space_owner_manager_ids(19)
     assert got == frozenset({7})
+
+
+@pytest.mark.asyncio
+async def test_user_has_space_manager_relation_uses_direct_check_and_fails_closed():
+    fga = AsyncMock()
+    fga.check = AsyncMock(return_value=True)
+    with patch(
+        "bisheng.permission.domain.services.permission_service.PermissionService._aget_fga",
+        AsyncMock(return_value=fga),
+    ):
+        assert await user_has_space_manager_relation(317, 79) is True
+    fga.check.assert_awaited_once_with(user="user:79", relation="manager", object="knowledge_space:317")
+
+    fga.check = AsyncMock(side_effect=FGAConnectionError("down"))
+    with patch(
+        "bisheng.permission.domain.services.permission_service.PermissionService._aget_fga",
+        AsyncMock(return_value=fga),
+    ):
+        assert await user_has_space_manager_relation(317, 79) is False
+
+    with patch(
+        "bisheng.permission.domain.services.permission_service.PermissionService._aget_fga",
+        AsyncMock(return_value=None),
+    ):
+        assert await user_has_space_manager_relation(317, 79) is False

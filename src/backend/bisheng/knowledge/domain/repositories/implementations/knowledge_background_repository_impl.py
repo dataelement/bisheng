@@ -277,6 +277,7 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
         files: list[dict],
         artifacts: list[dict],
         clear_minio: bool = True,
+        cleanup_permissions: bool = False,
     ) -> list[str]:
         ids = []
         for file in files:
@@ -292,6 +293,7 @@ class KnowledgeBackgroundRepositoryImpl(KnowledgeBackgroundRepository):
                         "file": file,
                         "artifacts": [a for a in artifacts if int(a.get("knowledge_file_id", 0)) == file_id],
                         "clear_minio": clear_minio,
+                        "cleanup_permissions": cleanup_permissions,
                         "completed_stages": [],
                     },
                 )

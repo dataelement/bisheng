@@ -69,6 +69,7 @@ class CourseCreate(BaseModel):
     external_id: str | None = Field(default=None, max_length=128)
     cover_url: str = Field(default="", max_length=2048)
     source_updated_at: datetime | None = None
+    duration_seconds: int = Field(default=0, ge=0)
 
     @field_validator("catalog_id", mode="before")
     @classmethod
@@ -130,6 +131,7 @@ class CourseUpdate(BaseModel):
     external_id: str | None = Field(default=None, max_length=128)
     cover_url: str | None = Field(default=None, max_length=2048)
     source_updated_at: datetime | None = None
+    duration_seconds: int | None = Field(default=None, ge=0)
 
     @field_validator("catalog_id", mode="before")
     @classmethod
@@ -163,6 +165,7 @@ class CourseUpdate(BaseModel):
         "course_type",
         "external_url",
         "cover_url",
+        "duration_seconds",
         mode="before",
     )
     @classmethod
@@ -432,6 +435,7 @@ class CatalogImportIssue(BaseModel):
 class CatalogImportPreview(BaseModel):
     total: int
     valid: int
+    catalog_count: int = 0
     issues: list[CatalogImportIssue] = Field(default_factory=list)
 
 
@@ -439,6 +443,7 @@ class CatalogImportResult(BaseModel):
     total: int
     success: int
     failed: int
+    catalog_count: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
@@ -452,6 +457,7 @@ class CourseImportIssue(BaseModel):
 class CourseImportPreview(BaseModel):
     total: int
     valid: int
+    catalog_count: int = 0
     issues: list[CourseImportIssue] = Field(default_factory=list)
 
 
@@ -459,6 +465,7 @@ class CourseImportResult(BaseModel):
     total: int
     success: int
     failed: int
+    catalog_count: int = 0
     errors: list[str] = Field(default_factory=list)
 
 
