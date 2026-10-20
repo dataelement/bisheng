@@ -25,10 +25,6 @@ PORTAL_BFF_TELEMETRY_SOURCE = "shougang_portal_bff"
 PORTAL_TELEMETRY_SOURCE_SHOUGANG = "shougang_portal"
 PORTAL_DOCUMENT_READ_BUCKET_MAX_SIZE = 10000
 
-PORTAL_HOME_EVENT_TYPES = (
-    BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
-)
-
 
 class PortalTelemetryEventService:
     """Best-effort recorder and stats reader for Shougang portal events."""
@@ -230,60 +226,37 @@ class PortalTelemetryEventService:
 
     @staticmethod
     async def count_home_events() -> dict[str, int]:
-        """首页阅读/收藏/问答计数.
-
-        阅读沿用原始事件口径; 收藏和问答使用看板统计的历史累计总量。
-        """
-        event_values = [event_type.value for event_type in PORTAL_HOME_EVENT_TYPES]
-        body = {
-            "size": 0,
-            "query": {
-                "bool": {
-                    "filter": [{"terms": {"event_type": event_values}}],
-                    "must_not": [
-                        {
-                            "bool": {
-                                "filter": [
-                                    {
-                                        "term": {
-                                            "event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value,
-                                        }
-                                    },
-                                    {
-                                        "exists": {
-                                            "field": ("event_data.portal_document_read_content_stat_schema_version")
-                                        }
-                                    },
-                                ]
-                            }
-                        },
-                    ],
-                }
-            },
-            "aggs": {
-                "by_event_type": {
-                    "terms": {
-                        "field": "event_type",
-                        "size": len(event_values),
-                    }
-                }
-            },
-        }
-        es_client = await get_statistics_es_connection()
-        response = await es_client.search(index=telemetry_service.index_name, body=body)
-        buckets = response.get("aggregations", {}).get("by_event_type", {}).get("buckets", [])
-        counts = dict.fromkeys(event_values, 0)
-        for bucket in buckets:
-            key = str(bucket.get("key") or "")
-            if key in counts:
-                counts[key] = int(bucket.get("doc_count") or 0)
+        """首页阅读、收藏、问答均使用看板统计的历史累计总量."""
+        read_count = await PortalTelemetryEventService.count_dashboard_reads()
         qa_count = await PortalTelemetryEventService.count_dashboard_qa()
         favorite_count = await PortalTelemetryEventService.count_dashboard_favorites()
         return {
-            "read_count": counts[BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value],
+            "read_count": read_count,
             "favorite_count": favorite_count,
             "qa_count": qa_count,
         }
+
+    @staticmethod
+    async def count_dashboard_reads() -> int:
+        """按看板空间范围汇总预览日统计, 不额外限制日期或来源."""
+        es_client = await get_statistics_es_connection()
+        response = await es_client.search(
+            index=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"term": {"record_type": "preview_daily"}},
+                            {"terms": {"space_level": list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS)}},
+                        ]
+                    }
+                },
+                "aggs": {"preview_count": {"sum": {"field": "preview_count"}}},
+            },
+            filter_path="aggregations.preview_count.value",
+        )
+        return int(response["aggregations"]["preview_count"]["value"] or 0)
 
     @staticmethod
     async def count_dashboard_favorites() -> int:

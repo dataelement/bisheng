@@ -21,6 +21,21 @@ This directory contains manual maintenance and migration scripts for the backend
 
 ### `move_personal_files_to_clinic.py`
 
+可通过 `--source-space-id` 指定来源知识库，支持个人库、科室库、部门库等有效已发布知识库。指定后自动只处理接口同步文件；`--folder-path` 使用相对该库根目录的目录名称路径，包含全部子目录。省略目录或指定 `/` 表示整个指定库。
+
+```bash
+# 只读预览指定来源库下的接口同步文件；1234 和目录路径替换为实际值
+.venv/bin/python scripts/move_personal_files_to_clinic.py \
+  --tenant-id 1 --source-space-id 1234 --folder-path '一级目录/二级目录'
+
+# 审核预览后，正式执行同一范围（必须处于维护窗口）
+.venv/bin/python scripts/move_personal_files_to_clinic.py \
+  --tenant-id 1 --source-space-id 1234 --folder-path '一级目录/二级目录' \
+  --operator-id 1 --apply
+```
+
+显式来源库不存在、跨租户、未发布、为收藏库或缺少有效范围时直接拒绝，不退回扫描其他库。来源 ID、目录及范围归属写入恢复单元；创建目标目录前和事务内复核，来源范围行锁到事务结束。恢复沿用报告，不能再传入 `--source-space-id` 或 `--folder-path` 改变范围。已处于上传人路由对应目标库的文件跳过。版本链跨库、跨目录范围或混有非接口文件时整链暂缓，分享/发布入口等既有保护继续生效。不指定来源库时保持原来的全部个人库扫描。
+
 扫描指定租户的全部有效个人知识库，将指定完整目录路径（含子目录）中的文件，按上传人的主组织迁入科室库，找不到时兜底部门库。独立单文件脚本，运行依赖当前后端环境。
 
 ```bash

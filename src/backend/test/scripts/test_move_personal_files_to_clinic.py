@@ -70,6 +70,72 @@ def test_path_original_uploader_and_first_bound_clinic(snapshot):
     assert m.build_plan(snapshot, 1, ("B",))["candidate_files"] == 0
 
 
+@pytest.mark.parametrize("level,owner_type", [("personal", "user"), ("team_ks", "user"), ("department", "department")])
+def test_selected_source_limits_library_subtree_and_interface_files(snapshot, level, owner_type):
+    snapshot["scopes"][0].level = level
+    snapshot["scopes"][0].owner_type = owner_type
+    snapshot["scopes"][0].owner_id = 8
+    snapshot["files"][-1].user_metadata = {"external_file_id": "sync"}
+    snapshot["files"].extend(
+        [
+            file(3, file_type=0, file_name="C", file_level_path="/1/2", level=2),
+            file(102, user_metadata={}),
+            file(103, file_level_path="/1/2/3", level=3, user_metadata={"external_file_id": "nested"}),
+            file(104, file_level_path="", level=0, user_metadata={"external_file_id": "outside"}),
+            file(105, knowledge_id=11, file_level_path="", level=0, user_metadata={"external_file_id": "other"}),
+        ]
+    )
+    snapshot["spaces"].append(NS(id=11, tenant_id=1, name="other"))
+    snapshot["scopes"].append(NS(space_id=11, level="personal", owner_type="user", owner_id=8))
+    snapshot["versions"].extend(NS(document_id=i, knowledge_file_id=i) for i in range(102, 106))
+    plan = m.build_plan(snapshot, 1, ("A", "B"), source_space_id=10)
+    assert plan["api_sync_only"] is True
+    assert plan["source_spaces"] == [{"id": 10, "name": "10"}]
+    assert {f["file_id"] for g in plan["groups"] for f in g["files"]} == {101, 103}
+    unit = m.document_units(snapshot, plan["groups"][0], plan)[0]
+    assert unit["source_filter"]["space_id"] == 10
+    assert unit["source_filter"]["folder_parts"] == ["A", "B"]
+    assert unit["source_filter"]["scope"]["level"] == level
+
+
+def test_selected_source_skips_files_already_in_routed_library(snapshot):
+    snapshot["scopes"][0] = NS(space_id=10, level="team_ks", owner_type="user", owner_id=8)
+    snapshot["bindings"].append(NS(space_id=10, department_id=5))
+    snapshot["files"][-1].user_metadata = {"external_file_id": "sync"}
+    plan = m.build_plan(snapshot, 1, source_space_id=10)
+    assert plan["candidate_files"] == 0
+    assert plan["skipped"][0]["reason_code"] == "already_in_target_space"
+
+
+@pytest.mark.parametrize("fault", ["missing", "tenant", "unpublished", "favorite", "scope", "owner"])
+def test_selected_source_rejects_invalid_library_without_falling_back(snapshot, fault):
+    snapshot["scopes"][0].owner_id = 8
+    if fault == "missing":
+        snapshot["spaces"] = snapshot["spaces"][1:]
+    elif fault == "tenant":
+        snapshot["spaces"][0].tenant_id = 2
+    elif fault == "unpublished":
+        snapshot["spaces"][0].state = 0
+    elif fault == "favorite":
+        snapshot["spaces"][0].is_favorite = True
+    elif fault == "owner":
+        snapshot["scopes"][0].owner_type = "unknown"
+    else:
+        snapshot["scopes"] = snapshot["scopes"][1:]
+    with pytest.raises(ValueError, match="来源库"):
+        m.build_plan(snapshot, 1, source_space_id=10)
+
+
+def test_selected_source_cli_automatically_filters_api_and_forbids_recovery_override():
+    args = m.parse_args(["--source-space-id", "10", "--folder-path", "A/B"])
+    assert args.source_space_id == 10 and args.api_sync_only and args.folder_parts == ("A", "B")
+    for value in ("0", "-1", "x"):
+        with pytest.raises(SystemExit):
+            m.parse_args(["--source-space-id", value])
+    with pytest.raises(SystemExit):
+        m.parse_args(["--source-space-id", "10", "--recover-report", "old.json", "--apply", "--operator-id", "1"])
+
+
 def test_missing_original_uploader_falls_back_to_current(snapshot):
     snapshot["files"][-1].original_uploader_id = None
     entry = m.build_plan(snapshot, 1, ())["groups"][0]["files"][0]
@@ -406,6 +472,59 @@ class FakeBackend:
     async def move(self, unit, checkpoint, **kwargs):
         unit["status"] = "succeeded"
         checkpoint()
+
+
+async def test_selected_source_execution_and_recovery_keep_recorded_scope(snapshot, tmp_path):
+    snapshot["scopes"][0].owner_id = 8
+    snapshot["scopes"][0].level = "department"
+    snapshot["scopes"][0].owner_type = "department"
+    snapshot["files"][-1].user_metadata = {"external_file_id": "sync"}
+    backend, path = FakeBackend(snapshot), tmp_path / "selected.json"
+    args = m.parse_args(["--tenant-id", "1", "--source-space-id", "10", "--folder-path", "A/B"])
+    assert await m.execute(args, backend, path) == 0
+    backend.load_snapshot.assert_awaited_once_with(1, source_space_id=10)
+    backend.ensure_folder.assert_not_awaited()
+    backend.move_unit.assert_not_awaited()
+
+    async def fail(unit, checkpoint, **kwargs):
+        unit["before"] = {"files": []}
+        checkpoint()
+        raise RuntimeError("response lost")
+
+    backend.move_unit.side_effect = fail
+    args.apply, args.operator_id = True, 1
+    assert await m.execute(args, backend, path) == 2
+    backend.load_snapshot.assert_awaited_with(1, source_space_id=10, file_ids={101})
+    recovery_path = tmp_path / "recovery" / path.name
+    saved = json.loads(recovery_path.read_text())
+    assert saved["units"][0]["source_filter"] == {
+        "space_id": 10,
+        "folder_parts": ["A", "B"],
+        "scope": {"level": "department", "owner_type": "department", "owner_id": 8},
+    }
+    backend.move_unit.side_effect = backend.move
+    recovery_args = m.parse_args(
+        ["--tenant-id", "1", "--operator-id", "1", "--apply", "--recover-report", str(recovery_path)]
+    )
+    assert await m.execute(recovery_args, backend, recovery_path) == 0
+    recovered = backend.move_unit.await_args
+    assert recovered.kwargs["recover"] is True
+    assert recovered.args[0]["source_filter"] == saved["units"][0]["source_filter"]
+
+
+async def test_selected_source_rechecks_scope_before_creating_destination(snapshot, tmp_path):
+    snapshot["scopes"][0].owner_id = 8
+    snapshot["files"][-1].user_metadata = {"external_file_id": "sync"}
+    changed = deepcopy(snapshot)
+    changed["scopes"][0].owner_id = 99
+    backend = FakeBackend(snapshot)
+    backend.load_snapshot.side_effect = [snapshot, changed]
+    args = m.parse_args(["--tenant-id", "1", "--source-space-id", "10", "--apply", "--operator-id", "1"])
+    path = tmp_path / "scope-changed.json"
+    assert await m.execute(args, backend, path) == 0
+    backend.ensure_folder.assert_not_awaited()
+    backend.move_unit.assert_not_awaited()
+    assert json.loads(path.read_text())[0]["file_id"] == 101
 
 
 def arguments(apply=False):
