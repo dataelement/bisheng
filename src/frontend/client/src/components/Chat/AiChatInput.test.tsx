@@ -78,21 +78,21 @@ test('new chat offers setup, established chat hides setup while preserving conte
   for (const label of ['skills', 'tools', 'research', 'spaces']) {
     expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
   }
-  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'tools' }).closest('.dsh-chat-composer')).toBeTruthy();
   view.rerender(<AiChatInput {...input} allowConfiguration={false} />);
   for (const label of ['tools', 'research']) {
     expect(screen.queryByRole('button', { name: label })).toBeNull();
   }
-  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'spaces' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'skills' })).toBeInTheDocument();
-  expect(screen.getByRole('textbox')).toHaveAttribute('placeholder', '');
+  expect(screen.getByRole('textbox')).toHaveAttribute('contenteditable', 'true');
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
   expect(mockSetSkills).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: 'model' })).toBeInTheDocument();
   view.rerender(<AiChatInput {...input} />);
-  expect(screen.getByRole('button', { name: '@Reference', exact: true })).toBeInTheDocument();
+  expect(screen.getByText('@Reference')).toBeInTheDocument();
 });
 
 test('follow-up retains attachment upload and sends its text and file', () => {
@@ -100,7 +100,8 @@ test('follow-up retains attachment upload and sends its text and file', () => {
   render(<AiChatInput {...input} allowConfiguration={false} />);
   fireEvent.click(screen.getByRole('button', { name: 'upload' }));
   expect(screen.getByTestId('attachments')).toHaveTextContent('notes.txt');
-  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Summarize this file' } });
+  screen.getByRole('textbox').append(document.createTextNode('Summarize this file'));
+  fireEvent.input(screen.getByRole('textbox'));
   fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
   expect(input.onSend).toHaveBeenCalledWith('Summarize this file', [{ name: 'notes.txt', filepath: '/notes.txt' }]);
   expect(input.onSelectedOrgKbsChange).not.toHaveBeenCalled();
@@ -118,7 +119,8 @@ test('media parsing keeps drafting available while blocking send until parsing c
   const view = render(<AiChatInput {...input} isParsingMedia />);
   const textbox = screen.getByRole('textbox');
   expect(textbox).toBeEnabled();
-  fireEvent.change(textbox, { target: { value: 'Draft while parsing' } });
+  textbox.append(document.createTextNode('Draft while parsing'));
+  fireEvent.input(textbox);
   expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
   expect(input.onSend).not.toHaveBeenCalled();
   view.rerender(<AiChatInput {...input} isParsingMedia={false} />);
@@ -134,7 +136,7 @@ test('skills remain selectable in ordinary chat with task entry disabled', () =>
   fireEvent.click(screen.getByRole('button', { name: 'skills' }));
   expect(mockSetSkills).toHaveBeenCalledWith(mockSkills);
   expect(toggle).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: '/research', exact: true })).toBeInTheDocument();
+  expect(screen.getByText('/research')).toBeInTheDocument();
 });
 
 test('switching execution mode preserves selected skills', () => {
@@ -142,5 +144,5 @@ test('switching execution mode preserves selected skills', () => {
   const view = render(<AiChatInput {...input} />);
   view.rerender(<AiChatInput {...input} features={{ taskModeEntry: true, taskMode: false }} />);
   expect(mockSetSkills).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: '/research', exact: true })).toBeInTheDocument();
+  expect(screen.getByText('/research')).toBeInTheDocument();
 });

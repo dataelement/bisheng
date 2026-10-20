@@ -279,8 +279,8 @@ export const ChatKnowledge = ({
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
       const raw = (preferBottom ? below : above) - 8;
-      // The unified 技能 panel lists skills plus two footer rows, so it gets the desktop cap.
-      const heightCap = mobilePanel === 'skill' && skillCenterPreviewEnabled ? 440 : MAX_SUB_HEIGHT;
+      // The skill picker uses its own scroll cap within the available viewport.
+      const heightCap = mobilePanel === 'skill' ? 440 : MAX_SUB_HEIGHT;
       const capped = Math.min(heightCap, Math.max(80, Math.floor(raw)));
       setMobileDrillMaxH(capped);
     };

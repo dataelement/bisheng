@@ -20,13 +20,14 @@ import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultC
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
-import { ComposerReferences } from "./Input/ComposerReferences";
+import { ComposerEditor } from "./Input/ComposerEditor";
+import { useComposerReferences } from "./Input/useComposerReferences";
 import { handleComposerResourceKeyDown } from "./Input/composerResourceKeyboard";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { Outlined } from "bisheng-icons";
 import { ArrowDown } from "lucide-react";
-import { Button, TextareaAutosize } from "~/components/ui";
+import { Button } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useContainerCompact, TOOLBAR_COMPACT_THRESHOLD } from "~/hooks";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
@@ -36,7 +37,7 @@ import InputFiles from "~/pages/appChat/components/InputFiles";
 import { resolveUploadSizeLimits } from "~/pages/knowledge/knowledgeUtils";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
+import { cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import type { AttachmentAsk } from "./chatAskHandoff";
 
@@ -220,7 +221,7 @@ const AiChatInput = memo(
             },
             [isControlled, onExternalChange]
         );
-        const textAreaRef = useRef<HTMLTextAreaElement>(null);
+        const textAreaRef = useRef<HTMLDivElement>(null);
         const [isTextareaScrollable, setIsTextareaScrollable] = useState(false);
         /** True only while user is actively scrolling — drives .scroll-on-scroll (see style.css). */
         const [isTextareaScrolling, setIsTextareaScrolling] = useState(false);
@@ -228,12 +229,10 @@ const AiChatInput = memo(
 
         const updateTextareaScrollable = useCallback(() => {
             const el = textAreaRef.current;
-            setIsTextareaScrollable(el ? checkIfScrollable(el) : false);
+            setIsTextareaScrollable(el ? el.scrollHeight > el.clientHeight : false);
         }, []);
 
         const handleTextareaScroll = useCallback(() => {
-            const el = textAreaRef.current;
-            el?.parentElement?.style.setProperty('--dsh-draft-scroll', `${-(el?.scrollTop ?? 0)}px`);
             if (!isTextareaScrollable) return;
             setIsTextareaScrolling(true);
             if (textareaScrollHideTimerRef.current) {
@@ -269,6 +268,7 @@ const AiChatInput = memo(
         const [chatFiles, setChatFiles] = useState<any[] | null>(null);
         const [uploadingFiles, setUploadingFiles] = useState<Array<{
             id: string;
+            clientId?: string;
             name: string;
             previewUrl?: string;
             mediaPreviewUrl?: string;
@@ -434,7 +434,7 @@ const AiChatInput = memo(
         }, [autoSendAskKey, chatFiles, uploadingFiles.length, fileUploading, filesParsing, text, handleSend, onAttachmentAskDone]);
 
         const handleKeyDown = useCallback(
-            (e: KeyboardEvent<HTMLTextAreaElement>) => {
+            (e: KeyboardEvent<HTMLDivElement>) => {
                 // While an IME is composing (拼音 / かな / 한글), Enter belongs to the
                 // IME: it commits the candidate into the box. Sending on it shipped
                 // the raw pinyin instead. The event must also pass through
@@ -467,6 +467,9 @@ const AiChatInput = memo(
 
         // Skills and knowledge spaces render as references in the writing area.
         const mountedSkills = !isLingsi ? dailySkills : [];
+        const { references, onReferencesChange } = useComposerReferences(
+            mountedSkills, isLingsi ? [] : selectedOrgKbs, setDailySkills, onSelectedOrgKbsChange,
+        );
         const hasMountedKbs = ((!!(selectedOrgKbs && selectedOrgKbs.length > 0) && !isLingsi) || mountedSkills.length > 0);
         const hasInlineAttachments = ((chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         const hasSelectionTags = hasMountedKbs || hasInlineAttachments;
@@ -609,45 +612,22 @@ const AiChatInput = memo(
                     })()}
 
                     <div className="dsh-composer-writing">
-                        {hasMountedKbs && <ComposerReferences
-                            skills={mountedSkills}
-                            spaces={selectedOrgKbs || []}
+                        <ComposerEditor
+                            ref={textAreaRef}
+                            value={text}
+                            references={references}
+                            onReferencesChange={onReferencesChange}
+                            onChange={setText}
+                            onKeyDown={handleKeyDown}
+                            onCompositionStart={handleCompositionStart}
+                            onCompositionEnd={handleCompositionEnd}
+                            onPaste={handlePaste}
+                            onScroll={handleTextareaScroll}
                             disabled={disabled || isStreaming}
-                            onRemoveSkill={(skill) => setDailySkills(dailySkills.filter((item) => item.name !== skill.name))}
-                            onRemoveSpace={(kb) => onSelectedOrgKbsChange?.(selectedOrgKbs.filter((item) => item.id !== kb.id || item.type !== kb.type))}
-                            onFocusInput={() => textAreaRef.current?.focus()}
-                        />}
-                    {/* Textarea */}
-                    <TextareaAutosize
-                        ref={textAreaRef}
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        onCompositionStart={handleCompositionStart}
-                        onCompositionEnd={handleCompositionEnd}
-                        onPaste={handlePaste}
-                        onScroll={handleTextareaScroll}
-                        onHeightChange={updateTextareaScrollable}
-                        // Media parsing only has to block a second send, not typing:
-                        // the send button below stays disabled while `isParsingMedia`.
-                        disabled={disabled || isStreaming}
-                        placeholder={hasMountedKbs ? "" : placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
-                        tabIndex={0}
-                        data-testid="ai-chat-input"
-                        data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
-                        rows={1}
-                        style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
-                        className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder:text-text-3",
-                            "max-h-[240px] scrollbar-gutter-stable",
-                            size === 'mini' ? 'min-h-0' : 'min-h-12',
-                            removeFocusRings,
-                            "transition-[max-height] duration-200",
-                            isTextareaScrollable && "scroll-on-scroll"
-                        )}
-                    />
-
+                            placeholder={placeholder || (allowConfiguration ? bsConfig?.inputPlaceholder || localize("dshChat.placeholder") : localize("dshChat.followupPlaceholder"))}
+                            className={cn(size === 'mini' && 'min-h-0', removeFocusRings,
+                                isTextareaScrollable && isTextareaScrolling && 'scroll-on-scroll')}
+                        />
                     </div>
 
                     <div className="dsh-composer-toolbar flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
