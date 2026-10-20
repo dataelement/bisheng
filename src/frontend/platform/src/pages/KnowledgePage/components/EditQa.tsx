@@ -1,11 +1,12 @@
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { Outlined } from "bisheng-icons";
 import type { ChangeEvent } from 'react';
 import { forwardRef,useImperativeHandle,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button,LoadButton } from "../../../components/bs-ui/button";
-import { Input,InputList,Textarea } from "../../../components/bs-ui/input";
+
+import { InputList } from '@/components/bs-comp/formFields/InputList';
 import { generateSimilarQa,getQaDetail,updateQa } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 export interface EditQaHandle {
@@ -72,10 +73,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
     };
     const handleModelGenerate = async () => {
         if (!form.question) {
-            return message({
-                variant: 'warning',
-                description: t('pleaseEnterQuestion')
-            });
+            return toast.show({ type: 'warning', message: String(t('pleaseEnterQuestion') ?? '') });
         }
         setLoading(true);
         captureAndAlertRequestErrorHoc(generateSimilarQa(form.question, form.answer).then(res => {
@@ -91,7 +89,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
         }));
     };
 
-    const { message } = useToast();
+
     const [saveLoad, setSaveLoad] = useState(false);
     const handleSubmit = async () => {
         const isQuestionEmpty = !form.question.trim();
@@ -103,24 +101,15 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                 answer: isAnswerEmpty
             });
 
-            return message({
-                variant: 'warning',
-                description: t('questionAndAnswerCannotBeEmpty')
-            });
+            return toast.show({ type: 'warning', message: String(t('questionAndAnswerCannotBeEmpty') ?? '') });
         }
 
         const _similarQuestions = form.similarQuestions.filter((question) => question.trim() !== '');
         if (_similarQuestions.some((q) => q.length > 100)) {
-            return message({
-                variant: 'warning',
-                description: t('max100CharactersForSimilarQuestion')
-            });
+            return toast.show({ type: 'warning', message: String(t('max100CharactersForSimilarQuestion') ?? '') });
         }
         if (form.answer.length > 10000) {
-            return message({
-                variant: 'warning',
-                description: t('max1000CharactersForAnswer')
-            });
+            return toast.show({ type: 'warning', message: String(t('max1000CharactersForAnswer') ?? '') });
         }
 
         setSaveLoad(true);
@@ -158,12 +147,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                         <label htmlFor="question" className="bisheng-label">
                             <span className="text-red-500">*</span>{t('question')}
                         </label>
-                        <Input
-                            name="question"
-                            className={`col-span-3 ${error.question && 'border-red-400'}`}
-                            value={form.question}
-                            onChange={handleInputChange}
-                        />
+                        <Input name="question" value={form.question} onChange={handleInputChange} className={`col-span-3 ${error.question && 'border-red-400'}`} />
                     </div>
                     <div>
                         <label htmlFor="similarQuestions" className="bisheng-label">{t('similarQuestions')}</label>
@@ -172,7 +156,7 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                             value={form.similarQuestions}
                             onChange={handleSimilarQuestionsChange}
                         />
-                        <Button className="mt-2" size="sm" onClick={handleModelGenerate} disabled={loading}>
+                        <Button className="mt-2" size="small" onClick={handleModelGenerate} disabled={loading}>
                             {loading && <Outlined.Loading  className="size-4 animate-spin"/>} {t('aiGenerate')}
                         </Button>
                     </div>
@@ -180,23 +164,18 @@ export const EditQa = forwardRef<EditQaHandle, EditQaProps>(function EditQa({ kn
                         <label htmlFor="answer" className="bisheng-label">
                             <span className="text-red-500">*</span>{t('answer')}
                         </label>
-                        <Textarea
-                            name="answer"
-                            className={`col-span-3 h-36 ${error.answer && 'border-red-400'}`}
-                            value={form.answer}
-                            onChange={handleInputChange}
-                        />
+                        <Textarea name="answer" value={form.answer} onChange={handleInputChange} textareaClassName={`col-span-3 h-36 ${error.answer && 'border-red-400'}`} />
                     </div>
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={close}>
+                        <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">
                             {t('cancel2')}
                         </Button>
                     </DialogClose>
-                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
+                    <Button loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
                         {t('confirm')}
-                    </LoadButton>
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

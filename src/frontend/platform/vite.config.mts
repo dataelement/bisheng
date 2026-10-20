@@ -223,6 +223,8 @@ export default defineConfig(({ command, mode }) => {
       }),
     ],
     define: {
+      // react-draggable reads this flag on every drag/resize start in the browser.
+      'process.env.DRAGGABLE_DEBUG': 'false',
       __APP_ENV__: JSON.stringify(app_env_define)
     },
     server: {

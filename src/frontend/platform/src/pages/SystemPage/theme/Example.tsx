@@ -1,17 +1,19 @@
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
-import { Badge } from "@/components/bs-ui/badge";
-import { Button } from "@/components/bs-ui/button";
+import { Button, SearchInput, Textarea } from '@bisheng/ui';
+import { Accordion,AccordionContent,AccordionItem,AccordionTrigger } from "@/components/bs-ui/accordion";
+import { Checkbox,RadioGroup,Radio as RadioGroupItem,Switch,Tag } from "@bisheng/ui";
+
+
 import { Calendar } from "@/components/bs-ui/calendar";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/bs-ui/card";
-import { Checkbox } from "@/components/bs-ui/checkBox";
-import { SearchInput, Textarea } from "@/components/bs-ui/input";
+import { Card,CardContent,CardDescription,CardFooter,CardHeader,CardTitle } from "@/components/bs-ui/card";
+
+
 import { Label } from "@/components/bs-ui/label";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
-import { RadioGroup, RadioGroupItem } from "@/components/bs-ui/radio";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectLabel,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
 import { Slider } from "@/components/bs-ui/slider";
-import { Switch } from "@/components/bs-ui/switch";
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+
+import { Table,TableBody,TableCaption,TableCell,TableFooter,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
 import { useTranslation } from "react-i18next"; // Import useTranslation
 
 const invoices = [
@@ -41,19 +43,19 @@ export default function Example(params) {
     return <div className="h-[calc(100vh-220px-var(--license-banner-h,0px))] overflow-y-auto py-10 pl-2 pr-10">
         <Label className="mt-10">{t('example.buttons')}</Label>
         <div className="flex gap-2 mb-6">
-            <Button variant="default">{t('example.button')}</Button>
-            <Button variant="destructive">{t('example.button')}</Button>
-            <Button variant="outline">{t('example.button')}</Button>
-            <Button variant="secondary">{t('example.button')}</Button>
-            <Button variant="ghost">{t('example.button')}</Button>
+            <Button variant="solid" color="primary">{t('example.button')}</Button>
+            <Button variant="solid" color="danger">{t('example.button')}</Button>
+            <Button variant="outlined" color="default">{t('example.button')}</Button>
+            <Button variant="filled" color="default">{t('example.button')}</Button>
+            <Button variant="text" color="default">{t('example.button')}</Button>
             <Button variant="link">{t('example.button')}</Button>
         </div>
         <Label>{t('example.badges')}</Label>
         <div className="flex gap-2 mb-6">
-            <Badge >{t('example.badge')}</Badge>
-            <Badge variant="secondary">{t('example.badge')}</Badge>
-            <Badge variant="outline">{t('example.badge')}</Badge>
-            <Badge variant="destructive">{t('example.badge')}</Badge>
+            <Tag size="small" >{t('example.badge')}</Tag>
+            <Tag size="small" color="default">{t('example.badge')}</Tag>
+            <Tag size="small" color="default">{t('example.badge')}</Tag>
+            <Tag size="small" color="danger">{t('example.badge')}</Tag>
         </div>
         <Label>{t('example.inputs')}</Label>
         <div className="flex flex-col gap-2 mb-6">
@@ -154,7 +156,7 @@ export default function Example(params) {
                     {t('example.content')}
                 </CardContent>
                 <CardFooter className="flex justify-between">
-                    <Button variant="outline">{t('example.cancel')}</Button>
+                    <Button variant="outlined" color="default">{t('example.cancel')}</Button>
                     <Button>{t('example.deploy')}</Button>
                 </CardFooter>
             </Card>

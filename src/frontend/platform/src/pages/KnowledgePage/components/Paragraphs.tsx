@@ -1,10 +1,12 @@
+import { notification } from '@bisheng/ui';
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
-import { Button } from '@/components/bs-ui/button';
+
 import { Dialog,DialogContent } from '@/components/bs-ui/dialog';
-import { SearchInput } from '@/components/bs-ui/input';
+
 import AutoPagination from '@/components/bs-ui/pagination/autoPagination';
-import { toast } from "@/components/bs-ui/toast/use-toast";
+
 import { delChunkApi,getFileBboxApi,getFilePathApi,getKnowledgeChunkApi,readFileByLibDatabase,updateChunkApi } from '@/controllers/API';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { useTable } from '@/util/hook';
@@ -35,7 +37,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     const [chunks, setChunks] = useState([]);
     const [rawFiles, setRawFiles] = useState([]);
     const isKnowledgeAdmin = canEditKb;
-    const { metadataDialog, setMetadataDialog, mainMetadataList, newMetadata, setNewMetadata, metadataError, setMetadataError, sideDialog, setSideDialog, predefinedMetadata, searchTerm, setSearchTerm, fileInfor, mainMetadataDialogRef, sideDialogPosition, isSmallScreen, sideDialogWidth, isSideDialogPositioned, handleDeleteMainMetadata, handleMainMetadataValueChange, handleSaveNewMetadata, handleSearchMetadataClick, handleCreateMetadataClick, closeSideDialog, handleAddFromSearch, handleMetadataClick, handleSaveUserMetadata, splitRuleDesc, formatFileSize } = useParagraphMetadata({ id, selectedFileId, currentFile, canEditKb, t, notify: toast });
+    const { metadataDialog, setMetadataDialog, mainMetadataList, newMetadata, setNewMetadata, metadataError, setMetadataError, sideDialog, setSideDialog, predefinedMetadata, searchTerm, setSearchTerm, fileInfor, mainMetadataDialogRef, sideDialogPosition, isSmallScreen, sideDialogWidth, isSideDialogPositioned, handleDeleteMainMetadata, handleMainMetadataValueChange, handleSaveNewMetadata, handleSearchMetadataClick, handleCreateMetadataClick, closeSideDialog, handleAddFromSearch, handleMetadataClick, handleSaveUserMetadata, splitRuleDesc, formatFileSize } = useParagraphMetadata({ id, selectedFileId, currentFile, canEditKb, t, notify: notification.open });
     const [paragraph, setParagraph] = useState({
         fileId: '',
         chunkId: '',
@@ -416,26 +418,16 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
                     <div className="w-60">
-                        <SearchInput
-                            placeholder={t('segment.searchSegments')}
-                            onChange={(e) => search(e.target.value)}
-                            disabled={!selectedFileId}
-                        />
+                        <SearchInput placeholder={t('segment.searchSegments')} onChange={(e) => search(e.target.value)} disabled={!selectedFileId} />
                     </div>
                     {canEditKb && (
-                    <Button
-                        variant="outline"
-                        onClick={handleMetadataClick}
-                        className="px-4 whitespace-nowrap"
-                    >
+                    <Button variant="outlined" onClick={handleMetadataClick} className="px-4 whitespace-nowrap" color="default">
                         <Outlined.FileEditing size={16} strokeWidth={1.5} className="mr-1" />
                         {t('metadialog.title')}
                     </Button>
                     )}
                     {canEditKb && (
-                        <Button
-                            onClick={handleAdjustSegmentation}
-                            className={`px-4 whitespace-nowrap`}>
+                        <Button onClick={handleAdjustSegmentation} className={`px-4 whitespace-nowrap`}>
                             {t('segment.adjustStrategy')}
                         </Button>
                     )}

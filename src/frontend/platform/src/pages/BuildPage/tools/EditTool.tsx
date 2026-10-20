@@ -1,14 +1,15 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea, toast } from '@bisheng/ui';
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog,DialogContent,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
-import { Input,Textarea } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import { Popover,PopoverClose,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
 import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Sheet,SheetContent,SheetFooter,SheetHeader,SheetTitle } from "@/components/bs-ui/sheet";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { createTool,deleteTool,downloadToolSchema,testToolApi,updateTool } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
@@ -54,7 +55,7 @@ export const TestDialog = forwardRef<{
             formRef.current.rules = {}
         }
     }, [testShow])
-    const { message } = useToast()
+
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState('')
     const handleTest = async () => {
@@ -66,10 +67,7 @@ export const TestDialog = forwardRef<{
             }
         })
         if (errors.length > 0) {
-            return message({
-                description: errors,
-                variant: 'warning'
-            })
+            return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') })
         }
         setLoading(true)
         const { server_host, children, auth_method, parameter_name } = toolRef.current
@@ -125,7 +123,7 @@ export const TestDialog = forwardRef<{
                 <Button onClick={handleTest} disabled={loading}>{t('test.test')}</Button>
                 <div className="">
                     <label htmlFor="desc" className="bisheng-label">{t('test.result')}</label>
-                    <Textarea id="desc" name="desc" value={result} placeholder={t('test.outResultPlaceholder')} readOnly className="mt-2" />
+                    <Textarea id="desc" name="desc" value={result} placeholder={t('test.outResultPlaceholder')} readOnly textareaClassName={"mt-2"} />
                 </div>
             </div>}
         </DialogContent>
@@ -215,7 +213,7 @@ const EditTool = forwardRef((props: any, ref) => {
             setTableData(res.children)
         })
     };
-    const { message } = useToast()
+
     const [saveLoading, setSaveLoading] = useState(false)
     // save api
     const handleSave = () => {
@@ -242,10 +240,7 @@ const EditTool = forwardRef((props: any, ref) => {
             }
         }
         if (errors.length > 0) {
-            return message({
-                description: errors,
-                variant: "warning"
-            });
+            return toast.show({ type: "warning", message: errors.filter(Boolean).join('\n') });
         }
 
         const fromData = fromDataRef.current
@@ -268,10 +263,7 @@ const EditTool = forwardRef((props: any, ref) => {
             // save
             setEditShow(false)
             props.onReload()
-            message({
-                description: t('skills.saveSuccessful'),
-                variant: "success"
-            })
+            toast.show({ type: "success", message: String(t('skills.saveSuccessful') ?? '') })
         })
     };
     // del tool
@@ -306,14 +298,7 @@ const EditTool = forwardRef((props: any, ref) => {
                     {/* name */}
                     <label htmlFor="open" className="px-6">{t('tools.name')}</label>
                     <div className="px-6 mb-4" >
-                        <Input
-                            id="toolName"
-                            name="toolName"
-                            className="mt-2"
-                            placeholder={t('tools.enterToolName')}
-                            value={formState.toolName}
-                            onChange={handleInputChange}
-                        />
+                        <Input id="toolName" name="toolName" placeholder={t('tools.enterToolName')} value={formState.toolName} onChange={handleInputChange} className={"mt-2"} />
                     </div>
                     {/* schema */}
                     <div className="px-6 flex items-center justify-between">
@@ -321,18 +306,13 @@ const EditTool = forwardRef((props: any, ref) => {
                         <div className="flex gap-2">
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <Button variant="outline" className="dark:bg-[#282828]"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
+                                    <Button variant="outlined" className="dark:bg-[#282828]" color="default"><Outlined.Plus /> {t('tools.importFromUrl')}</Button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80" align="end">
                                     <div className="flex items-center gap-4">
-                                        <Input
-                                            id="schemaUrl"
-                                            name="schemaUrl"
-                                            placeholder="https://"
-                                            onChange={(e) => schemaUrl.current = e.target.value}
-                                        />
+                                        <Input id="schemaUrl" name="schemaUrl" placeholder="https://" onChange={(e) => schemaUrl.current = e.target.value} />
                                         <PopoverClose>
-                                            <Button size="sm" className="w-16" onClick={handleImportSchema}>{t('skills.import')}</Button>
+                                            <Button size="small" className="w-16" onClick={handleImportSchema}>{t('skills.import')}</Button>
                                         </PopoverClose>
                                     </div>
                                 </PopoverContent>
@@ -351,15 +331,7 @@ const EditTool = forwardRef((props: any, ref) => {
                         </div>
                     </div>
                     <div className="px-6 mb-4" >
-                        <Textarea
-                            id="schemaContent"
-                            name="schemaContent"
-                            placeholder={t('tools.enterOpenAPISchema')}
-                            className="mt-2 min-h-52"
-                            value={formState.schemaContent}
-                            onChange={handleInputChange}
-                            onBlur={() => handleSelectTemplate()}
-                        />
+                        <Textarea id="schemaContent" name="schemaContent" placeholder={t('tools.enterOpenAPISchema')} value={formState.schemaContent} onChange={handleInputChange} onBlur={() => handleSelectTemplate()} textareaClassName={"mt-2 min-h-52"} />
                     </div>
                     <label htmlFor="open" className="px-6">{t('tools.authenticationType')}</label>
                     <div className="px-6">
@@ -444,28 +416,14 @@ const EditTool = forwardRef((props: any, ref) => {
                                     <Label className="bisheng-label" htmlFor="parameter">
                                         <span className="text-red-500">*</span> {t('tools.parameterName')}
                                     </Label>
-                                    <Input
-                                        id="parameter"
-                                        name="parameter"
-                                        className="mt-2"
-                                        placeholder={t('tools.parameterPlaceholder')}
-                                        value={formState.parameter}
-                                        onChange={handleInputChange}
-                                    />
+                                    <Input id="parameter" name="parameter" placeholder={t('tools.parameterPlaceholder')} value={formState.parameter} onChange={handleInputChange} className={"mt-2"} />
                                 </div>
                             </>}
                             <div className="px-6 mb-4">
                                 <Label className="bisheng-label" htmlFor="apiKey">
                                     <span className="text-red-500">*</span> {t('tools.apiKeyLabel')}
                                 </Label>
-                                <Input
-                                    id="apiKey"
-                                    name="apiKey"
-                                    className="mt-2"
-                                    placeholder={t('tools.apiKeyPlaceholder')}
-                                    value={formState.apiKey}
-                                    onChange={handleInputChange}
-                                />
+                                <Input id="apiKey" name="apiKey" placeholder={t('tools.apiKeyPlaceholder')} value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
                             </div>
                         </>)}
                     </div>
@@ -490,15 +448,10 @@ const EditTool = forwardRef((props: any, ref) => {
                                             <TableCell>{item.extra.method}</TableCell>
                                             <TableCell>{item.extra.path}</TableCell>
                                             <TableCell>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="dark:bg-[#666]"
-                                                    onClick={() => {
+                                                <Button size="small" variant="outlined" className="dark:bg-[#666]" onClick={() => {
                                                         testDialogRef.current.open(item, fromDataRef.current, formState)
                                                     }
-                                                    }
-                                                >{t('test.test')}</Button>
+                                                    } color="default">{t('test.test')}</Button>
                                             </TableCell>
                                         </TableRow>
                                     ) :
@@ -534,27 +487,16 @@ const EditTool = forwardRef((props: any, ref) => {
                     {formState.authMethod === "apikey" && (
                         <div className="px-6 mb-4">
                             <label htmlFor="apiKey">{t('tools.apiKey')}</label>
-                            <Input
-                                id="apiKey"
-                                name="apiKey"
-                                className="mt-2"
-                                value={formState.apiKey}
-                                onChange={handleInputChange}
-                            />
+                            <Input id="apiKey" name="apiKey" value={formState.apiKey} onChange={handleInputChange} className={"mt-2"} />
                         </div>
                     )}
                 </div>
                 <SheetFooter className="absolute bottom-0 right-0 w-full px-6 py-4">
                     {delShow && canDelete && (
-                        <Button
-                            size="sm"
-                            variant="destructive"
-                            className="absolute left-6"
-                            onClick={handleDelete}
-                        >{t('tools.delete')}</Button>
+                        <Button size="small" variant="solid" className="absolute left-6" onClick={handleDelete} color="danger">{t('tools.delete')}</Button>
                     )}
-                    <Button size="sm" variant="outline" onClick={() => setEditShow(false)}>{t('tools.cancel')}</Button>
-                    <Button size="sm" className="text-[white]" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
+                    <Button size="small" variant="outlined" onClick={() => setEditShow(false)} color="default">{t('tools.cancel')}</Button>
+                    <Button size="small" className="text-[white]" disabled={saveLoading} onClick={handleSave}>{t('tools.save')}</Button>
                 </SheetFooter>
             </SheetContent>
         </Sheet >

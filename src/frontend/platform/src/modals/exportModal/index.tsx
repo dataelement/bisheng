@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Download } from "lucide-react";
 import { useContext, useState } from "react";
 import { useTranslation } from "react-i18next";
 import EditFlowSettings from "../../components/EditFlowSettingsComponent";
-import { Button } from "../../components/bs-ui/button";
+
 import {
   Dialog,
   DialogContent,
@@ -93,10 +94,7 @@ export default function ExportModal() {
         </div>
 
         <DialogFooter>
-          <Button
-            onClick={handleClose}
-            type="submit"
-          >
+          <Button onClick={handleClose} type="submit">
             {t('code.exportSkill')}
           </Button>
         </DialogFooter>

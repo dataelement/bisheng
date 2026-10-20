@@ -1,10 +1,11 @@
+import { Button, SearchInput, toast, notification } from '@bisheng/ui';
 import { KnowledgeLibraryDialog } from "./components/KnowledgeLibraryDialog";
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
 import { Shield } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "../../components/bs-ui/button";
-import { SearchInput } from "../../components/bs-ui/input";
+
+
 import {
 Table,
 TableBody,
@@ -22,7 +23,7 @@ import { useLazyResourceActions } from "@/components/bs-comp/permission/useResou
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Select,SelectContent,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { TableHeadEnumFilter } from "@/components/bs-ui/select/filter";
-import { toast,useToast } from "@/components/bs-ui/toast/use-toast";
+
 
 
 
@@ -62,7 +63,7 @@ const doing = {} // Record knowledge bases being copied
 export default function KnowledgeFile() {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
-    const { message } = useToast()
+
     const navigate = useNavigate()
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [currentSettingLib, setCurrentSettingLib] = useState(null);
@@ -134,10 +135,7 @@ export default function KnowledgeFile() {
             if (doing[todo.id]) {
                 const lib = datalist.find(item => item.id === todo.id);
                 if (lib && lib.state !== KnowledgeBaseStatus.Copying) {
-                    message({
-                        variant: 'success',
-                        description: t('copyCompleted', { name: todo.name })
-                    })
+                    toast.show({ type: 'success', message: String(t('copyCompleted', { name: todo.name }) ?? '') })
                     delete doing[todo.id]
                 }
             }
@@ -224,10 +222,7 @@ export default function KnowledgeFile() {
         const result = await loadRowActions(resourceId);
         if (result.hasError) {
             setSelectOpenId((current) => current === resourceId ? null : current);
-            message({
-                variant: 'error',
-                description: t('error.checkFailed', { ns: 'permission' }),
-            });
+            toast.show({ type: 'error', message: String(t('error.checkFailed', { ns: 'permission' }) ?? '') });
         }
     };
 
@@ -235,11 +230,7 @@ export default function KnowledgeFile() {
     const handleCopy = async (elem) => {
         const newName = `${elem.name}${t('copySuffix')}`;
         if (newName.length > 200) {
-            toast({
-                title: t('operationFailed'),
-                variant: 'error',
-                description: t('copyNameExceedsLimit')
-            });
+            notification.open({ type: 'error', title: String(t('operationFailed') ?? ''), description: String(t('copyNameExceedsLimit') ?? '') });
 
             // Reset all related states
             setSelectOpenId(null);
@@ -257,10 +248,7 @@ export default function KnowledgeFile() {
             await captureAndAlertRequestErrorHoc(copyLibDatabase(elem.id, newName));
             reload();
         } catch (error) {
-            message({
-                variant: 'error',
-                description: t('copyFailed')
-            });
+            toast.show({ type: 'error', message: String(t('copyFailed') ?? '') });
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);
@@ -281,7 +269,7 @@ export default function KnowledgeFile() {
                 <Outlined.Loading  className="size-4 animate-spin"/>
             </div>}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
+                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-40px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
                     {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
@@ -327,8 +315,8 @@ export default function KnowledgeFile() {
                                     className="font-medium max-w-[200px]"
                                 >
                                     <div className="flex items-center gap-2">
-                                        <div className="flex items-center justify-center size-12 text-white rounded-[4px]  w-[40px] h-[40px]">
-                                            <Outlined.Book className="text-primary size-10" />
+                                        <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
+                                            <Outlined.BookOpenText size={16} className="shrink-0" />
                                         </div>
                                         <div>
                                             <div className="truncate max-w-[500px] w-[264px] text-[14px] font-medium pt-2">

@@ -1,27 +1,27 @@
 // @ts-strict-ignore
-"use client"
+import { Button, SearchInput, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
-import { SearchInput } from "@/components/bs-ui/input"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import Tip from "@/components/bs-ui/tooltip/tip"
-import { userContext } from "@/contexts/userContext"
-import { copyDashboard, createDashboard, deleteDashboard } from "@/controllers/API/dashboard"
-import { useMiniDebounce } from "@/util/hook"
-import { generateUniqueName } from "@/util/utils"
-import { cn } from "@/utils"
-import { ListIndentDecrease, ListIndentIncrease, SquarePlusIcon } from "lucide-react"
-import type React from "react"
-import { useContext, useMemo, useState } from "react"
-import { useMutation, useQueryClient } from "react-query"
-import { useNavigate } from "react-router-dom"
-import { DashboardsQueryKey } from "../../hook"
-import { Dashboard } from "../../types/dataConfig"
-import { DashboardListItem } from "./DashboardListItem"
-import { useTranslation } from "react-i18next"
-import { ExpandIcon } from "@/components/bs-icons/expand"
+import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
+import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
+
+
+
+import { userContext } from "@/contexts/userContext";
+import { copyDashboard,createDashboard,deleteDashboard } from "@/controllers/API/dashboard";
+import { useMiniDebounce } from "@/util/hook";
+import { generateUniqueName } from "@/util/utils";
+import { cn } from "@/utils";
+import { Tooltip as Tip } from "@bisheng/ui";
+
+import type React from "react";
+import { useContext,useMemo,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useMutation,useQueryClient } from "react-query";
+import { useNavigate } from "react-router-dom";
+import { DashboardsQueryKey } from "../../hook";
+import { Dashboard } from "../../types/dataConfig";
+import { DashboardListItem } from "./DashboardListItem";
 
 interface DashboardSidebarProps {
     dashboards: Dashboard[]
@@ -73,7 +73,7 @@ export function DashboardSidebar({
         }
     }
     const navigator = useNavigate()
-    const { toast } = useToast()
+
     const queryClient = useQueryClient()
     const createMutation = useMutation({
         mutationFn: createDashboard,
@@ -83,18 +83,12 @@ export function DashboardSidebar({
             navigator(`/dashboard/${res.id}`)
         },
         onError: (msg: string) => {
-            toast({
-                description: msg,
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(msg ?? '') })
         },
     })
     const handleCreate = () => {
         if (dashboards.length >= 20) {
-            toast({
-                description: t('maxLimitReached', { count: 20 }),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('maxLimitReached', { count: 20 }) ?? '') })
             return
         }
 
@@ -111,27 +105,18 @@ export function DashboardSidebar({
             navigator(`/dashboard/${newDashboard.id}`)
         },
         onError: () => {
-            toast({
-                description: t('copyFailed'),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('copyFailed') ?? '') })
         },
     })
     const handleDuplicate = (dashboard: Dashboard) => {
         if (dashboards.length >= 20) {
-            toast({
-                description: t('maxLimitReached', { count: 20 }),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('maxLimitReached', { count: 20 }) ?? '') })
             return
         }
 
         const newTitle = generateUniqueName(dashboards, 'title', t('dashboardCopyName', { title: dashboard.title }), '(x)')
         if (newTitle.length > 200) {
-            return toast({
-                description: t('charLimit200b'),
-                variant: "error",
-            })
+            return notification.open({ type: "error", description: String(t('charLimit200b') ?? '') })
         }
 
         duplicateMutation.mutate({ id: dashboard.id, title: newTitle })
@@ -154,10 +139,7 @@ export function DashboardSidebar({
             }
         },
         onError: () => {
-            toast({
-                description: "delete error",
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String("delete error") })
         },
     })
     const handleDelete = (id: string) => {
@@ -186,20 +168,15 @@ export function DashboardSidebar({
                     <p className="text-base font-bold">{t('dashboardList')}</p>
                     {
                         canCreate && <Tip content={t('addDashboard')} >
-                            <Button variant="ghost" size="icon" onClick={handleCreate}><SquarePlusIcon size={16} /></Button>
+                            <Button variant="text" size="medium" onClick={handleCreate} color="default" iconOnly><Outlined.Plus size={16} /></Button>
                         </Tip>
                     }
                 </div>
             }
             <Tip content={t('collapseList')}>
                 {
-                    !isCollapsed && <Button
-                        variant="ghost"
-                        size="icon"
-                        className={"absolute top-2 z-10 hover:text-primary bg-background right-2"}
-                        onClick={() => setIsCollapsed(!isCollapsed)}
-                    >
-                        <ExpandIcon className="h-4 w-4 rotate-180" />
+                    !isCollapsed && <Button variant="text" size="medium" className={"absolute top-2 z-10 hover:text-primary bg-background right-2"} onClick={() => setIsCollapsed(!isCollapsed)} color="default" iconOnly>
+                        <Outlined.SidebarMenu className="h-4 w-4 rotate-180" />
                     </Button>
                 }
             </Tip>
@@ -208,12 +185,7 @@ export function DashboardSidebar({
             {!isCollapsed && (
                 <div className="flex flex-col p-2 gap-2">
                     <div className="relative">
-                        <SearchInput
-                            placeholder={t('system.boardName', { ns: 'bs' })}
-                            value={searchQuery}
-                            onChange={handleSearch}
-                            onKeyDown={handleKeyDown}
-                        />
+                        <SearchInput placeholder={t('system.boardName', { ns: 'bs' })} value={searchQuery} onChange={handleSearch} onKeyDown={handleKeyDown} />
                     </div>
 
                     <div className="overflow-y-auto space-y-2 h-[calc(100vh-174px-var(--license-banner-h,0px))]">

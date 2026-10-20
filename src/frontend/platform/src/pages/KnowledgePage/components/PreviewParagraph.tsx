@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { KnowledgeTooltip } from "./KnowledgeTooltip";
 
-import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
 
 import { locationContext } from "@/contexts/locationContext";
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
@@ -182,18 +183,14 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
         }
     }, [needCoverData, edit, data.chunkIndex, onChange, setNeedCoverData])
 
-    const { toast } = useToast()
+
     const handleBlur = (newValue, restore) => {
         const _value = value.trim()
         const _newValue = newValue.trim()
         if (!_value || _newValue === '') {
             setValue(data.text)
             restore?.()
-            return toast({
-                variant: 'error',
-                title: t('operationFailed'),
-                description: t('chunkContentCannotBeEmpty'),
-            })
+            return notification.open({ type: 'error', title: String(t('operationFailed') ?? ''), description: String(t('chunkContentCannotBeEmpty') ?? '') })
         }
         if (!edit) return
         if (!showSourceEdit && _value === _newValue) return // 无需保存
@@ -219,12 +216,7 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
                 <div className="flex gap-2 justify-center items-center">
                     {
                         fileSuffix === 'pdf' && appConfig.enableEtl4lm && <KnowledgeTooltip content={t('clickLocateOriginalFile')} side={"top"}  >
-                            <Button
-                                size="icon"
-                                variant="ghost"
-                                className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
-                                onClick={onPositionClick}
-                            ><LocateFixed size={18} /></Button>
+                            <Button size="medium" variant="text" className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")} onClick={onPositionClick} color="default" iconOnly><LocateFixed size={18} /></Button>
                         </KnowledgeTooltip>
                     }
                     {edit && (showSourceEdit
@@ -240,12 +232,7 @@ const EditMarkdown = ({ data, active, oneLeft, fileSuffix, edit = false, canDele
             </div>
             {!oneLeft && canDelete &&
                 <KnowledgeTooltip content={t('clickDeleteChunk')} side={"top"}  >
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")}
-                        onClick={() => onDel(data.chunkIndex, data.text)}
-                    ><Outlined.CloseCircle size={18} /></Button>
+                    <Button size="medium" variant="text" className={cn("size-6 text-primary opacity-0 group-hover:opacity-100")} onClick={() => onDel(data.chunkIndex, data.text)} color="default" iconOnly><Outlined.CloseCircle size={18} /></Button>
                 </KnowledgeTooltip>
             }
         </div>

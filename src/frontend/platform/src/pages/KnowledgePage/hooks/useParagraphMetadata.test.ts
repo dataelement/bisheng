@@ -45,6 +45,6 @@ describe('paragraph metadata after extraction', () => {
         await act(async () => { await result.current.handleSaveUserMetadata() })
         expect(result.current.metadataDialog.open).toBe(true)
         expect(result.current.metadataError).toBe('metadialog.saveFailed')
-        expect(notify).toHaveBeenCalledWith({ variant: 'error', description: 'Network unavailable' })
+        expect(notify).toHaveBeenCalledWith({ type: 'error', description: 'Network unavailable' })
     })
 })

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Input } from "@/components/bs-ui/input";
+import { Input } from '@bisheng/ui';
+
 import { Label } from "@/components/bs-ui/label";
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -368,14 +369,7 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
                     {t('model.getApiKey', { provider: providerName })}
                 </a>}
             </div>
-            <Input
-                type={field.type}
-                autoComplete="off"
-                placeholder={field.example ? t('model.formatExample', { example: field.example }) : field.placeholder}
-                value={value}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                required={field.required}
-            />
+            <Input type={field.type} autoComplete="off" placeholder={field.example ? t('model.formatExample', { example: field.example }) : field.placeholder} value={value} onChange={(e) => onChange(field.key, e.target.value)} required={field.required} />
         </div>
     );
 };
@@ -384,7 +378,7 @@ const FormField = ({ showDefault, field, value, providerName, apiKeySite, onChan
 const CustomForm = forwardRef(({ showDefault, provider, formData, providerName, apiKeySite, apiKeyUrl }, ref) => {
     const [form, setForm] = useState(formData);
     const fields = modelProviders[provider] || [];
-    
+
     const handleChange = (key, value) => {
         setForm((prevData) => ({
             ...prevData,

@@ -1,26 +1,28 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/bs-ui/dialog"
+Dialog,
+DialogContent,
+DialogDescription,
+DialogFooter,
+DialogHeader,
+DialogTitle,
+} from "@/components/bs-ui/dialog";
 import type {
-  PermissionCatalogAction,
-  PermissionCatalogActionChange,
-  PermissionCatalogDraft,
-  PermissionCatalogModel,
-  PermissionCatalogModelChange,
-  PublishPermissionCatalogDraftRequest,
-} from "@/controllers/API/permission"
-import { formatDate } from "@/util/utils"
-import { AlertTriangle } from "lucide-react"
-import { useState } from "react"
-import { useTranslation } from "react-i18next"
-import { actionLabel } from "./actionLabels"
-import { formatBlockerMessage } from "./blockerMessages"
+PermissionCatalogAction,
+PermissionCatalogActionChange,
+PermissionCatalogDraft,
+PermissionCatalogModel,
+PermissionCatalogModelChange,
+PublishPermissionCatalogDraftRequest,
+} from "@/controllers/API/permission";
+import { formatDate } from "@/util/utils";
+import { Outlined } from "bisheng-icons";
+
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { actionLabel } from "./actionLabels";
+import { formatBlockerMessage } from "./blockerMessages";
 
 interface ImpactDialogProps {
   open: boolean
@@ -277,7 +279,7 @@ export function ImpactDialog({
             role="alert"
           >
             <div className="flex items-center gap-2 font-medium">
-              <AlertTriangle aria-hidden="true" className="size-4" />
+              <Outlined.Attention aria-hidden="true" className="size-4" />
               {t("impact.blocked")}
             </div>
             <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -310,21 +312,10 @@ export function ImpactDialog({
         </p>
 
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            
-            disabled={publishing}
-            onClick={() => onOpenChange(false)}
-          >
+          <Button type="button" variant="outlined" disabled={publishing} onClick={() => onOpenChange(false)} color="default">
             {t("impact.cancel")}
           </Button>
-          <Button
-            type="button"
-            
-            disabled={publishing || expired || blocked}
-            onClick={() => void handlePublish()}
-          >
+          <Button type="button" disabled={publishing || expired || blocked} onClick={() => void handlePublish()}>
             {publishing ? t("impact.publishing") : t("impact.publish")}
           </Button>
         </DialogFooter>

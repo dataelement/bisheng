@@ -1,12 +1,13 @@
+import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { Outlined } from "bisheng-icons";
 import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Button } from "../../../components/bs-ui/button";
-import { Input,Textarea } from "../../../components/bs-ui/input";
+
+
 import { createFileLib,updateKnowledge } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useModel } from "../../ModelPage/manage";
@@ -22,7 +23,7 @@ interface LibraryDialogProps {
 
 export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }: LibraryDialogProps) {
     const { t } = useTranslation('knowledge')
-    const { toast } = useToast();
+
     const navigate = useNavigate()
 
     const nameRef = useRef<HTMLInputElement>(null)
@@ -55,15 +56,12 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                 }
             } catch (error) {
                 console.error('Failed to load model data:', error);
-                toast({
-                    variant: "error",
-                    description: t('loadModelError')
-                });
+                notification.open({ type: "error", description: String(t('loadModelError') ?? '') });
             }
         };
 
         fetchModelData();
-    }, [open, mode, currentLib, t, toast]);
+    }, [open, mode, currentLib, t]);
 
     useEffect(() => {
         // Clear all internal state when modal closes
@@ -159,14 +157,11 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                 "description": desc
             }
             await captureAndAlertRequestErrorHoc(updateKnowledge(data).then(() => {
-                toast({
-                    variant: "success",
-                    description: t('updateSuccess')
-                })
+                notification.open({ type: "success", description: String(t('updateSuccess') ?? '') })
                 onOpenChange(false);
                 onLoadEnd()
             }).catch(error => {
-                toast({ variant: "error", description: String(error || t('updateFailed')) });
+                notification.open({ type: "error", description: String(error || t('updateFailed')) });
                 onOpenChange(false);
             })).finally(() => {
                 setIsSubmitting(false)
@@ -175,10 +170,7 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
     }
 
     const handleError = (message: string) => {
-        toast({
-            variant: 'error',
-            description: message
-        });
+        notification.open({ type: 'error', description: String(message ?? '') });
     }
 
     return <Dialog open={open} onOpenChange={onOpenChange}>
@@ -204,24 +196,11 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
                 <div className="">
                     <label htmlFor="name" className="bisheng-label">{t('system.libraryName', { ns: 'bs' })}</label>
                     <span className="text-red-500">*</span>
-                    <Input
-                        name="name"
-                        ref={nameRef}
-                        defaultValue={mode === 'edit' && currentLib ? currentLib.name : ''}
-                        placeholder={t('lib.enterLibraryName', { ns: 'bs' })}
-                        className={`col-span-3 ${error.name && 'border-red-400'}`}
-                    />
+                    <Input name="name" ref={nameRef} defaultValue={mode === 'edit' && currentLib ? currentLib.name : ''} placeholder={t('lib.enterLibraryName', { ns: 'bs' })} className={`col-span-3 ${error.name && 'border-red-400'}`} />
                 </div>
                 <div className="">
                     <label htmlFor="desc" className="bisheng-label">{t('lib.desc', { ns: 'bs' })}</label>
-                    <Textarea
-                        id="desc"
-                        ref={descRef}
-                        defaultValue={mode === 'edit' && currentLib ? currentLib.description : ''}
-                        placeholder={t('enterKnowledgeBaseDescription')}
-                        rows={8}
-                        className={`col-span-3 ${error.desc && 'border-red-400'}`}
-                    />
+                    <Textarea id="desc" ref={descRef} defaultValue={mode === 'edit' && currentLib ? currentLib.description : ''} placeholder={t('enterKnowledgeBaseDescription')} rows={8} textareaClassName={`col-span-3 ${error.desc && 'border-red-400'}`} />
                 </div>
                 <div className="">
                     <label htmlFor="model" className="bisheng-label">{t('lib.embeddingModelSelection', { ns: 'bs' })}</label>
@@ -257,36 +236,21 @@ export function KnowledgeLibraryDialog({ datalist, open, onOpenChange, onLoadEnd
             </div>
             <DialogFooter>
                 <DialogClose>
-                    <Button variant="outline" className="px-8 h-8">{t('cancel')}</Button>
+                    <Button variant="outlined" className="px-8 h-8" color="default">{t('cancel')}</Button>
                 </DialogClose>
                 {mode === 'create' ? (
                     <>
-                        <Button
-                            variant="outline"
-                            className="px-8 h-8 flex"
-                            onClick={() => handleCreate(false)}
-                            disabled={isSubmitting}
-                        >
+                        <Button variant="outlined" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting} color="default">
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('finishCreate')}
                         </Button>
-                        <Button
-                            type="submit"
-                            className="px-8 h-8 flex"
-                            onClick={() => handleCreate(true)}
-                            disabled={isSubmitting}
-                        >
+                        <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(true)} disabled={isSubmitting}>
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('createImport', { ns: 'bs' })}
                         </Button>
                     </>
                 ) : (
-                    <Button
-                        type="submit"
-                        className="px-8 h-8 flex"
-                        onClick={() => handleCreate(false)}
-                        disabled={isSubmitting}
-                    >
+                    <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                         {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                         {t('confirm')}
                     </Button>

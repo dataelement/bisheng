@@ -82,7 +82,7 @@ function ModelRow({ model, canEdit, probing, onToggle, onVerify }: ModelRowProps
                         {t(model.status === 0 ? 'model.available' : model.status === 1 ? 'model.abnormal' : 'model.unknown')}
                     </Tag>}
                 {model.status === 1 && model.remark && <Tooltip content={model.remark}>
-                    <Button variant="ghost" size="icon" aria-label={model.remark}><Outlined.Question className="size-3.5" /></Button>
+                    <Button variant="ghost" size="icon" aria-label={model.remark}><Outlined.Question className="size-3.5 text-text-3" /></Button>
                 </Tooltip>}
                 <Button variant="link" size="sm" loading={verifying} disabled={verifying} onClick={handleVerify}>
                     {t('model.updateStatus')}

@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
+
 import StepProgress from "@/components/bs-ui/step";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { rebUploadFile,retryKnowledgeFileApi } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -27,7 +28,7 @@ export default function AdjustFilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
   const location = useLocation();
-  const { message } = useToast();
+
   const { fileId: knowledgeId } = useParams();
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [hasEditPermission, setHasEditPermission] = useState(false);
@@ -49,12 +50,12 @@ export default function AdjustFilesUpload() {
       setPermissionChecked(true);
       setHasEditPermission(allowed);
       if (!allowed) {
-        message({ variant: 'warning', description: t('noOperationPermission') });
+        toast.show({ type: 'warning', message: String(t('noOperationPermission') ?? '') });
         navigate(`/filelib/${knowledgeId}`, { replace: true });
       }
     };
     guardByPermission();
-  }, [knowledgeId, message, navigate, t]);
+  }, [knowledgeId, navigate, t]);
 
   useEffect(() => {
     // If no initialization data, it means direct access, redirect to /filelib
@@ -280,7 +281,7 @@ export default function AdjustFilesUpload() {
           );
 
           // 3. Fix step jump timing (ensure data is updated before jumping)
-          message({ variant: 'success', description: t('adjustSegmentStrategySuccess') });
+          toast.show({ type: 'success', message: String(t('adjustSegmentStrategySuccess') ?? '') });
           setCurrentStep(3); // Only jump when successful and no duplicates
         })
         .finally(() => {
@@ -315,7 +316,7 @@ export default function AdjustFilesUpload() {
           );
           setRepeatFiles([]);
           setRetryLoad(false);
-          message({ variant: 'success', description: t('parseSuccess') });
+          toast.show({ type: 'success', message: String(t('parseSuccess') ?? '') });
           repeatCallBackRef.current();
         })
         .catch(() => {
@@ -347,12 +348,7 @@ export default function AdjustFilesUpload() {
       <div className="relative px-4 pt-4">
         <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
           <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
-              onClick={() => navigate(-1)}
-            >
+            <Button variant="outlined" size="medium" className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background" onClick={() => navigate(-1)} color="default" iconOnly>
               <Outlined.Left className="size-4" />
             </Button>
             <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledgeDetail')}</span>
@@ -405,18 +401,10 @@ export default function AdjustFilesUpload() {
 
                 {/* Step 2 bottom buttons */}
                 <div className="fixed bottom-2 right-12 flex gap-4 bg-background p-2 rounded-lg shadow-sm z-10">
-                  <Button
-                    className="h-8"
-                    variant="outline"
-                    onClick={handleBack}
-                  >
+                  <Button className="h-8" variant="outlined" onClick={handleBack} color="default">
                     {t('previousStep')}
                   </Button>
-                  <Button
-                    className="h-8"
-                    onClick={handleNext}
-                    disabled={isNextDisabled || isSubmitting}
-                  >
+                  <Button className="h-8" onClick={handleNext} disabled={isNextDisabled || isSubmitting}>
                     {isSubmitting ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : null}
                     {t('nextStep')}
                   </Button>

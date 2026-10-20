@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { FlagIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 import { copyTrackingApi,likeChatApi } from "@/controllers/API";
 import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";

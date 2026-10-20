@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlined } from "bisheng-icons";
 import i18next from "i18next";
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { speechToText } from '@/controllers/API/workbench';
 import VoiceRecordingIcon from '../bs-ui/voice';
 import { useAudioPlayerStore, useAudioStore } from './audioPlayerStore';
@@ -97,7 +98,7 @@ const convertBlobToWav = async (blob) => {
 // --- 主组件---
 const SpeechToTextComponent = ({ disabled, onChange }) => {
   const [version] = useState(window.chat_version || 'v1');
-  const { toast } = useToast();
+
   const { t } = useTranslation('knowledge')
   const [isRecording, _setIsRecording] = useState(false);
   const isRecordingRef = useRef(false);
@@ -168,11 +169,7 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
           await convertSpeechToText(wavBlob);
         } catch (conversionError) {
           console.error('音频转换失败:', conversionError);
-          toast({
-            title: i18next.t('prompt'),
-            variant: 'error',
-            description: '语音识别不可用，请联系管理员'
-          });
+          notification.open({ type: 'error', title: String(i18next.t('prompt') ?? ''), description: String('语音识别不可用，请联系管理员') });
         } finally {
           setIsProcessing(false);
           // 清理资源
@@ -202,11 +199,7 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
             timerRef.current = null;
             stopRecording();
             // 提示用户已达最大时长
-            toast({
-              title: i18next.t('prompt'),
-              variant: 'info',
-              description: '已达到最大录音时长（10分钟），录音已自动停止'
-            });
+            notification.open({ type: 'info', title: String(i18next.t('prompt') ?? ''), description: String('已达到最大录音时长（10分钟），录音已自动停止') });
           }
           return newDuration;
         });
@@ -215,11 +208,7 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
     } catch (err) {
 
       setIsLoading(false);
-      toast({
-        title: i18next.t('prompt'),
-        variant: 'error',
-        description: '麦克风未授权'
-      });
+      notification.open({ type: 'error', title: String(i18next.t('prompt') ?? ''), description: String('麦克风未授权') });
     }
   };
 
@@ -271,12 +260,7 @@ const SpeechToTextComponent = ({ disabled, onChange }) => {
       onChange(transcript);
 
     } catch (err) {
-      toast({
-        title: i18next.t('prompt'),
-        variant: 'error',
-        // description: '语音识别不可用，请联系管理员'
-        description: t('unavailable')
-      });
+      notification.open({ type: 'error', title: String(i18next.t('prompt') ?? ''), description: String(t('unavailable') ?? '') });
     } finally {
       setIsProcessing(false);
     }

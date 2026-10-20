@@ -2,7 +2,6 @@
 import { useState } from "react";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
-import { LoadingIcon } from "@/components/bs-icons/loading";
 
 export default function Chat({
     stop = false,

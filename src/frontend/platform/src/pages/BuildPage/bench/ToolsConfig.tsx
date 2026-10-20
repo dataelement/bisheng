@@ -1,12 +1,10 @@
+import { notification } from '@bisheng/ui';
 // src/pages/BuildPage/bench/ToolsConfig.tsx
 //
-// v2.5 Agent 模式「可用工具」配置面板。
-// 数据模型与灵思 linsight_config.tools 保持一致：顶层是工具父分组，
-// children[] 存放选中的子工具；daily 模式在父级新增 default_checked，
-// 控制工作台输入区的默认开启状态。后端根据 children[].id 调度具体工具。
+
 import ToolSelectorContainer from "@/components/LinSight/ToolSelectorContainer";
 import { Label } from "@/components/bs-ui/label";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { getToolsApi } from "@/controllers/API/tools";
 import { cloneDeep } from "lodash-es";
 import { useCallback, useEffect, useState } from "react";
@@ -39,7 +37,7 @@ interface Props {
 
 export default function ToolsConfig({ tools, onChange }: Props) {
     const { t } = useTranslation();
-    const { toast } = useToast();
+
     const [activeToolTab, setActiveToolTab] = useState<ToolCategory>("builtin");
     const [toolSearchTerm, setToolSearchTerm] = useState("");
     const [showToolSelector, setShowToolSelector] = useState(true);
@@ -56,7 +54,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
             const res: any = await getToolsApi(bucket);
             setToolsData((prev) => ({ ...prev, [category]: res || [] }));
         } catch {
-            toast({ variant: "error", description: t("bench.fetchToolsFailed", { type: category }) });
+            notification.open({ type: "error", description: String(t("bench.fetchToolsFailed", { type: category }) ?? '') });
         }
     };
 
@@ -75,14 +73,18 @@ export default function ToolsConfig({ tools, onChange }: Props) {
             if (parentIndex > -1) {
                 const existingParent = tools[parentIndex];
                 const childIndex = existingParent.children.findIndex((c) => c.id === child.id);
-                const nextChildren = childIndex === -1
-                    ? [...existingParent.children, {
-                        id: child.id,
-                        name: child.name,
-                        tool_key: child.tool_key,
-                        desc: child.desc,
-                    }]
-                    : existingParent.children.filter((_, i) => i !== childIndex);
+                const nextChildren =
+                    childIndex === -1
+                        ? [
+                              ...existingParent.children,
+                              {
+                                  id: child.id,
+                                  name: child.name,
+                                  tool_key: child.tool_key,
+                                  desc: child.desc,
+                              },
+                          ]
+                        : existingParent.children.filter((_, i) => i !== childIndex);
                 if (nextChildren.length === 0) {
                     onChange(tools.filter((t) => t.id !== parent.id));
                     return;
@@ -93,10 +95,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
                 return;
             }
             if (atCapacityForNewParent(parent.id)) {
-                toast({
-                    variant: "warning",
-                    description: t("bench.toolLimitReached", { max: MAX_TOOLS }),
-                });
+                notification.open({ type: "warning", description: String(t("bench.toolLimitReached", { max: MAX_TOOLS }) ?? '') });
                 return;
             }
             onChange([
@@ -107,16 +106,18 @@ export default function ToolsConfig({ tools, onChange }: Props) {
                     is_preset: parent.is_preset,
                     description: parent.description,
                     default_checked: false,
-                    children: [{
-                        id: child.id,
-                        name: child.name,
-                        tool_key: child.tool_key,
-                        desc: child.desc,
-                    }],
+                    children: [
+                        {
+                            id: child.id,
+                            name: child.name,
+                            tool_key: child.tool_key,
+                            desc: child.desc,
+                        },
+                    ],
                 },
             ]);
         },
-        [tools, onChange, t, toast],
+        [tools, onChange, t],
     );
 
     const toggleGroup = useCallback(
@@ -126,10 +127,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
                 return;
             }
             if (atCapacityForNewParent(group.id)) {
-                toast({
-                    variant: "warning",
-                    description: t("bench.toolLimitReached", { max: MAX_TOOLS }),
-                });
+                notification.open({ type: "warning", description: String(t("bench.toolLimitReached", { max: MAX_TOOLS }) ?? '') });
                 return;
             }
             const existing = tools.find((t) => t.id === group.id);
@@ -149,7 +147,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
             };
             onChange([...tools.filter((t) => t.id !== group.id), next]);
         },
-        [tools, onChange, t, toast],
+        [tools, onChange, t],
     );
 
     const isToolSelected = useCallback(
@@ -190,9 +188,7 @@ export default function ToolsConfig({ tools, onChange }: Props) {
 
     return (
         <div className="mb-6">
-            <Label className="text-lg font-bold flex items-center">
-                {t("bench.availableTools")}
-            </Label>
+            <Label className="text-lg font-bold flex items-center">{t("bench.availableTools")}</Label>
             <div className="mt-2">
                 <ToolSelectorContainer
                     toolsData={toolsData}

@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
+import { Button } from '@bisheng/ui';
+
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { Dialog,DialogContent,DialogDescription,DialogHeader } from '@/components/bs-ui/dialog';
 import { cname } from "@/components/bs-ui/utils";
@@ -280,21 +281,13 @@ export const MainMetadataDialog = React.memo(({
                 </div>
 
                 <div className="flex justify-end gap-2 pt-4 border-t border-gray-200 flex-shrink-0">
-                    <Button
-                        variant="outline"
-                        onClick={() => setMetadataDialog({ ...metadataDialog, open: false })}
-                        className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                    >
+                    <Button variant="outlined" onClick={() => setMetadataDialog({ ...metadataDialog, open: false })} className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")} color="default">
                         {t('metacommon.cancel')}
                     </Button>
-                    <Button
-                        onClick={handleSaveUserMetadata}
-                        disabled={!isKnowledgeAdmin}
-                        className={cname(
+                    <Button onClick={handleSaveUserMetadata} disabled={!isKnowledgeAdmin} className={cname(
                             "bg-blue-500 hover:bg-blue-600",
                             isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                        )}
-                    >
+                        )}>
                         {t('metacommon.save')}
                     </Button>
                 </div>
@@ -549,20 +542,13 @@ export const MetadataSideDialog = React.memo(({
                         </div>
 
                         <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                onClick={() => setSideDialog({ type: 'search', open: true })}
-                                className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")}
-                            >
+                            <Button variant="outlined" onClick={() => setSideDialog({ type: 'search', open: true })} className={cname(isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm")} color="default">
                                 {t('metacommon.cancel')}
                             </Button>
-                            <Button
-                                onClick={handleSaveNewMetadata}
-                                className={cname(
+                            <Button onClick={handleSaveNewMetadata} className={cname(
                                     "bg-blue-500 hover:bg-blue-600",
                                     isSmallScreen ? "px-3 py-1 text-xs" : "px-4 py-2 text-sm"
-                                )}
-                            >
+                                )}>
                                 {t('metacommon.save')}
                             </Button>
                         </div>

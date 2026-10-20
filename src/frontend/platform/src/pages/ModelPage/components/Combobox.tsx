@@ -1,5 +1,6 @@
+import { Button } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
-import { Button } from "@/components/bs-ui/button"
+
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/bs-ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 
@@ -26,12 +27,7 @@ export default function Combobox({
 
     return <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-            <Button
-                variant="outline"
-                role="combobox"
-                aria-expanded={open}
-                className="w-[280px] justify-between"
-            >
+            <Button variant="outlined" role="combobox" aria-expanded={open} className="w-[280px] justify-between" color="default">
                 {
                     value
                         ? options.find((option) => option[valueKey] + '' === value)?.[labelKey]

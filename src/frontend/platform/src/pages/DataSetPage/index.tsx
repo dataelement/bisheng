@@ -1,13 +1,14 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
+
+
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { deleteDatasetApi, getFileUrlApi, getPresetFileApi } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useTable } from "@/util/hook";
@@ -36,11 +37,11 @@ export default function index() {
 
     const modelRef = useRef(null);
 
-    const { toast } = useToast();
+
     const handleDownloadFile = async (name, url) => {
         const res = await getFileUrlApi(url);
         if (!res.url) {
-            return toast({ variant: 'error', description: t('dataset.fileNotFound') });
+            return notification.open({ type: 'error', description: String(t('dataset.fileNotFound') ?? '') });
         }
         await downloadFile(checkSassUrl(res.url), name + '.json');
     };
@@ -54,7 +55,7 @@ export default function index() {
             )}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-10">
                 <div className="flex justify-end gap-4 items-center">
-                    <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} />
+                    <SearchInput placeholder={t('dataset.name')} onChange={(e) => search(e.target.value)} className={"w-56 shrink-0"} />
                     <Button className="px-8 text-[#FFFFFF]" onClick={() => modelRef.current.open()}>{t('dataset.create')}</Button>
                 </div>
                 <Table>

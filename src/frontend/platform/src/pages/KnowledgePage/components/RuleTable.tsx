@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Input } from '@bisheng/ui';
 import { FileIcon } from "@/components/bs-icons/file";
 import {
 Accordion,
@@ -6,7 +8,7 @@ AccordionContent,
 AccordionItem,
 AccordionTrigger,
 } from "@/components/bs-ui/accordion";
-import { Input } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import { Checkbox } from "@bisheng/ui";
 import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
@@ -21,18 +23,7 @@ import { useTranslation } from "react-i18next";
  *  sits at the edge of the content box, so anything absolutely positioned inside
  *  ends up fighting it. */
 const RowInput = ({ value, onChange, onEmpty, disabled = false, max, maxLength }) => (
-  <Input
-    type="number"
-    min={1}
-    max={max}
-    maxLength={maxLength}
-    value={value}
-    disabled={disabled}
-    onChange={onChange}
-    onBlur={(e) => { !e.target.value && onEmpty() }}
-    boxClassName="w-24 shrink-0"
-    className="h-8 border-[#ebecf0] bg-white"
-  />
+  <Input type="number" min={1} max={max} maxLength={maxLength} value={value} disabled={disabled} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, { min: 1, max: max, maxLength: maxLength })) return; onChange(event); }} onBlur={(e) => { !e.target.value && onEmpty() }} className={["w-24 shrink-0", "h-8 border-[#ebecf0] bg-white"].filter(Boolean).join(" ")} showCount />
 )
 
 const ItemForm = ({ data, setData }) => {

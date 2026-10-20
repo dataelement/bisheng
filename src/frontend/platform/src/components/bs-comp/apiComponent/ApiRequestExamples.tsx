@@ -1,8 +1,9 @@
+import { Button, toast } from '@bisheng/ui';
 import { Tag, Tabs } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
-import { Button } from '@/components/bs-ui/button';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { useToast } from '@/components/bs-ui/toast/use-toast';
+
 import { copyText } from '@/utils';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -17,16 +18,16 @@ interface ApiRequestExamplesProps {
 
 export function ApiRequestExamples({ kind, applicationId }: ApiRequestExamplesProps) {
     const { t } = useTranslation();
-    const { message } = useToast();
+
     const [identity, setIdentity] = useState<ApiIdentityMode>('service');
     const options = { origin: location.origin, applicationId, identity, question: t('api.assistantDoc.hello') };
     const examples = kind === 'assistant' ? assistantExamples(options) : workflowExamples(options);
     const handleCopy = async (code: string) => {
         try {
             await copyText(code);
-            message({ variant: 'success', description: t('api.copySuccess') });
+            toast.show({ type: 'success', message: String(t('api.copySuccess') ?? '') });
         } catch {
-            message({ variant: 'error', description: t('api.openApiGuide.copy_failed') });
+            toast.show({ type: 'error', message: String(t('api.openApiGuide.copy_failed') ?? '') });
         }
     };
 
@@ -50,7 +51,7 @@ export function ApiRequestExamples({ kind, applicationId }: ApiRequestExamplesPr
                 label: key === 'python' ? 'Python API' : key === 'curl' && kind === 'assistant' ? 'cURL' : t(`api.openApiGuide.example_${key}_tab`),
                 children: <>
                     <div className="mb-2 flex justify-end">
-                        <Button type="button" size="sm" variant="outline" onClick={() => void handleCopy(code)}>
+                        <Button type="button" size="small" variant="outlined" onClick={() => void handleCopy(code)} color="default">
                             <Outlined.Copy size={15} className="mr-1.5" />{t('api.openApiGuide.copy_example')}
                         </Button>
                     </div>

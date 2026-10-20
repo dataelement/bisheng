@@ -1,7 +1,8 @@
+import { Button, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { Label } from "@/components/bs-ui/label";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { getEvaluationModelEnvelope, updateEvaluationModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect, useState } from "react";
@@ -26,16 +27,16 @@ export default function EvaluationModel({ llmOptions, onBack }) {
         setSelectedModel(val)
     }
 
-    const { message } = useToast()
+
     const handleSave = () => {
         if (!selectedModel) {
-            return message({ variant: 'error', description: t('model.defaultEvaluationFeature') + t('bs:required') })
+            return toast.show({ type: 'error', message: String(t('model.defaultEvaluationFeature') + t('bs:required')) })
         }
         const data = {
             model_id: selectedModel
         };
         captureAndAlertRequestErrorHoc(updateEvaluationModelConfig(data).then(res => {
-            message({ variant: 'success', description: t('model.saveSuccess') })
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
         }));
     };
 
@@ -59,7 +60,7 @@ export default function EvaluationModel({ llmOptions, onBack }) {
                 />
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
+                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
                 <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>

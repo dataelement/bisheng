@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { notification, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/bs-ui/accordion";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/bs-ui/sheet";
 import { Switch } from "@bisheng/ui";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { Tooltip } from "@bisheng/ui";
 import { getSensitiveApi, sensitiveSaveApi } from "@/controllers/API/pro";
 
@@ -25,7 +26,7 @@ const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(
     const { t } = useTranslation();
 
     const [open, setOpen] = useState(false);
-    const { toast, message } = useToast();
+
     const [form, setForm] = useState({
         isCheck: false,
         autoReply: "",
@@ -59,7 +60,7 @@ const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(
             errors.push(t('build.errors.autoReplyNotEmpty'));
         }
         if (errors.length) {
-            toast({ title: t('prompt'), variant: 'error', description: errors.join(', ') });
+            notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(errors.join(', ') ?? '') });
             return false
         }
         return true
@@ -81,7 +82,7 @@ const AssistantSetting = forwardRef<AssistantSettingRef, AssistantSettingProps>(
         setForm(_form);
         if (id) {
             await sensitiveSaveApi({ ..._form, id, type });
-            message({ title: t('prompt'), variant: 'success', description: t('build.saveSuccess') });
+            toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('build.saveSuccess') ?? '')].filter(Boolean).join('\n') });
             return false
         }
     };

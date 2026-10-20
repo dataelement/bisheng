@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
+
 import StepProgress from "@/components/bs-ui/step";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { retryKnowledgeFileApi,subUploadLibFile } from "@/controllers/API";
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -41,7 +42,7 @@ export default function FilesUpload() {
   const { t } = useTranslation('knowledge');
   const navigate = useNavigate();
   const { id: knowledgeId } = useParams(); // Get knowledge base ID from route
-  const { message } = useToast();
+
   const [permissionChecked, setPermissionChecked] = useState(false);
   const [hasEditPermission, setHasEditPermission] = useState(false);
 
@@ -82,7 +83,7 @@ export default function FilesUpload() {
       setHasEditPermission(allowed);
       setPermissionChecked(true);
       if (!allowed) {
-        message({ variant: 'warning', description: t('noOperationPermission') });
+        toast.show({ type: 'warning', message: String(t('noOperationPermission') ?? '') });
         navigate(`/filelib/${knowledgeId}`);
       }
     };
@@ -209,7 +210,7 @@ export default function FilesUpload() {
           handleRetry(repeatFilesRes)
         }
       } else {
-        message({ variant: 'success', description: t('addSuccess') });
+        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
       }
 
       // Update file ID
@@ -237,7 +238,7 @@ export default function FilesUpload() {
         setRepeatFiles(repeatFileI18nRmark(_repeatFiles, t));
         repeatCallBackRef.current = () => navigate(-1);
       } else {
-        message({ variant: 'success', description: t('addSuccess') });
+        toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
         navigate(-1);
       }
     }));
@@ -296,7 +297,7 @@ export default function FilesUpload() {
     captureAndAlertRequestErrorHoc(retryKnowledgeFileApi(params).then(res => {
       setRepeatFiles([]);
       setRetryLoad(false);
-      message({ variant: 'success', description: t('addSuccess') });
+      toast.show({ type: 'success', message: String(t('addSuccess') ?? '') });
       repeatCallBackRef.current();
     }), () => {
       setRetryLoad(false);
@@ -333,12 +334,7 @@ export default function FilesUpload() {
       <div className="relative px-4 pt-4">
         <div className="absolute left-4 top-1/2 z-10 -translate-y-1/4">
           <div className="flex shrink-0 items-center gap-3 whitespace-nowrap">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background"
-              onClick={() => navigate(-1)}
-            >
+            <Button variant="outlined" size="medium" className="size-9 rounded-md border-[#e4e8ee] bg-white shadow-sm hover:bg-background" onClick={() => navigate(-1)} color="default" iconOnly>
               <Outlined.Left className="size-4" />
             </Button>
             <span className="text-sm font-medium text-[#0f172a]">{t('backToKnowledge')}</span>
@@ -423,7 +419,7 @@ export default function FilesUpload() {
                   />
 
                   <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                    <Button variant="outline" onClick={handleBack}>
+                    <Button variant="outlined" onClick={handleBack} color="default">
                       {t('previousStep')}
                     </Button>
                     <Button onClick={handleNext} disabled={isNextDisabled || isSubmitting || resultFiles.length === 0}>

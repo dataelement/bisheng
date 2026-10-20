@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, Textarea } from '@bisheng/ui';
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import KnowledgeSelect from "@/components/bs-comp/selectComponent/knowledge";
@@ -11,8 +13,8 @@ AccordionContent,
 AccordionItem,
 AccordionTrigger,
 } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { Input,InputList,Textarea } from "@/components/bs-ui/input";
+
+import { InputList } from '@/components/bs-comp/formFields/InputList';
 import { locationContext } from "@/contexts/locationContext";
 import { useAssistantStore } from "@/store/assistantStore";
 import { Switch } from "@bisheng/ui";
@@ -72,9 +74,7 @@ export default function Setting() {
                 {t("build.maxToken")}
                 <AppHint content={t("build.maxTokenTip")}></AppHint>
               </label>
-              <Input value={assistantState.max_token} type="number" className="mt-2" defaultValue={32000} min={0} onChange={e =>
-                dispatchAssistant("setting", { max_token: Number(e.target.value) })
-              }></Input>
+              <Input value={assistantState.max_token} type="number" defaultValue={32000} min={0} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 0 })) return; return dispatchAssistant("setting", { max_token: Number(e.target.value) }); }} className={"mt-2"}></Input>
             </div>
           </AccordionContent>
         </AccordionItem>
@@ -88,16 +88,9 @@ export default function Setting() {
               <label htmlFor="open" className="bisheng-label">
                 {t("build.openingStatement")}
               </label>
-              <Textarea
-                name="open"
-                className="mt-2 min-h-[34px]"
-                style={{ height: 56 }}
-                placeholder={t("build.assistantMessageFormat")}
-                value={assistantState.guide_word}
-                onChange={(e) =>
+              <Textarea name="open" style={{ height: 56 }} placeholder={t("build.assistantMessageFormat")} value={assistantState.guide_word} onChange={(e) =>
                   dispatchAssistant("setting", { guide_word: e.target.value })
-                }
-              ></Textarea>
+                } textareaClassName={"mt-2 min-h-[34px]"}></Textarea>
               {assistantState.guide_word.length > 1000 && (
                 <p className="bisheng-tip mt-1">
                   {t("build.maximumPromptLength")}

@@ -1,13 +1,14 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { Alert, AlertDescription } from '@/components/bs-ui/alert';
-import { Button } from '@/components/bs-ui/button';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/bs-ui/card';
-import { SearchInput } from '@/components/bs-ui/input';
+
 import { Label } from '@/components/bs-ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/bs-ui/select';
 import Skeleton from '@/components/bs-ui/skeleton';
 import { Switch } from '@bisheng/ui';
-import { toast } from '@/components/bs-ui/toast/use-toast';
+
 import { getGuestLinkApi, GuestLinkKind, GuestLinkSettings, patchGuestLinkApi } from '@/controllers/API/guestLink';
 import { captureAndAlertRequestErrorHoc } from '@/controllers/request';
 import { copyText } from '@/utils';
@@ -130,7 +131,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
     }
     setSettings(result)
     onAvailabilityChange(Boolean(result.system_guest_access && result.enabled))
-    toast({ variant: 'success', description: t('api.guestSaved') })
+    notification.open({ type: 'success', description: String(t('api.guestSaved') ?? '') })
   }
 
   if (!settings) {
@@ -203,14 +204,7 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
               <SelectContent
                 headNode={
                   <div className="shrink-0 bg-popover p-2" onPointerDown={(event) => event.stopPropagation()}>
-                    <SearchInput
-                      value={operatorQuery}
-                      inputClassName="h-8 dark:border-gray-700"
-                      placeholder={t('api.guestSearchOperator')}
-                      onChange={(event) => setOperatorQuery(event.target.value)}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      iconClassName="w-4 h-4"
-                    />
+                    <SearchInput value={operatorQuery} placeholder={t('api.guestSearchOperator')} onChange={(event) => setOperatorQuery(event.target.value)} onKeyDown={(event) => event.stopPropagation()} className={"h-8 dark:border-gray-700"} />
                   </div>
                 }
               >
@@ -233,17 +227,11 @@ function GuestLinkPanel({ kind, appId, onAvailabilityChange }: GuestLinkPanelPro
               <span className="text-xs text-muted-foreground">{t('api.systemDefault')}</span>
             )}
             {!settings.follow_system_default && settings.can_edit && !systemOff && (
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                disabled={saving}
-                onClick={() => {
+              <Button type="button" variant="link" size="small" disabled={saving} onClick={() => {
                   const previous = settings
                   setSettings({ ...settings, follow_system_default: true, user_id: null })
                   void persist({ user_id: null }, previous)
-                }}
-              >
+                }}>
                 {t('api.restoreSystemDefault')}
               </Button>
             )}

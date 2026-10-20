@@ -1,11 +1,13 @@
 // @ts-strict-ignore
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import Tip from "@/components/bs-ui/tooltip/tip";
+import { Button, Input } from '@bisheng/ui';
+
+
+import { Select,SelectContent,SelectGroup,SelectItem,SelectTrigger,SelectValue } from "@/components/bs-ui/select";
+import { FlowTooltip as Tip } from "@/pages/BuildPage/flow/FlowTooltip";
 import { updateVariableNameByCode } from "@/util/flowUtils";
-import { ChevronDown, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
 import { useTranslation } from 'react-i18next';
 import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
@@ -62,11 +64,11 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
                         {item.label ? <span className="flex items-center">
                             {item.label}
                         </span> : <span className="bisheng-label">{t('value')}</span>}
-                        <ChevronDown className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
+                        <Outlined.Down className="h-5 w-5 min-w-5 opacity-80 group-data-[state=open]:rotate-180" />
                     </div>
                 </Tip>
-            </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className="h-8" />}
-            <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
+            </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className={"h-8"} />}
+            <Outlined.Delete size={16} onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
         </div>
     );
 };
@@ -131,7 +133,7 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
         return () => onValidate(() => { })
     }, [paramItem.value])
 
-    // Update Preset Questions 
+    // Update Preset Questions
     // const [_, forceUpdate] = useState(false)
     const [updateVariable] = useUpdateVariableState()
     useEffect(() => {
@@ -164,7 +166,7 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
                     onDeleteItem={handleDeleteItem}
                 />
             ))}
-            <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
+            <Button onClick={handleAddItem} variant="outlined" className="border-primary text-primary mt-2 h-8" color="default">
                 {t('addNewParameter')}
             </Button>
         </div>

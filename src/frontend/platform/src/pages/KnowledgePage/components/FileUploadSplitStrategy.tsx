@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { Button, Input } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { Button } from '@/components/bs-ui/button';
-import { Input } from '@/components/bs-ui/input';
+
+
 import { generateUUID } from '@/components/bs-ui/utils';
 import { useState } from 'react';
 import { DragDropContext,Draggable,Droppable } from 'react-beautiful-dnd';
@@ -84,12 +85,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
             {predefinedRules.map((rule, index) => {
               const regexDisplay = t(`predefinedRules.${ruleI18nMap[rule.regexKey]}.label`);
               return (
-                <Button
-                  key={index}
-                  className="h-6 rounded-[7px] bg-[#f1f5f9] px-2.5 text-[#0f172a] shadow-sm hover:bg-[#e7edf8]"
-                  variant="secondary"
-                  onClick={() => handleRegexClick(rule.regexKey, rule.mode)}
-                >
+                <Button key={index} className="h-6 rounded-[7px] bg-[#f1f5f9] px-2.5 text-[#0f172a] shadow-sm hover:bg-[#e7edf8]" variant="filled" onClick={() => handleRegexClick(rule.regexKey, rule.mode)} color="default">
                   {rule.mode === 'before' ? `✂️${regexDisplay}` : `${regexDisplay}✂️`}
                 </Button>
               );
@@ -102,13 +98,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
           <div className="flex items-center gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <span className="shrink-0 text-sm text-[#0f172a]">{t('in')}</span>
-              <Input
-                value={customRegex}
-                onChange={(e) => setCustomRegex(e.target.value)}
-                placeholder={t('enterRegex')}
-                boxClassName="min-w-0 flex-1"
-                className='h-8 min-w-0 w-full border-[#ebecf0] bg-white'
-              />
+              <Input value={customRegex} onChange={(e) => setCustomRegex(e.target.value)} placeholder={t('enterRegex')} className={["min-w-0 flex-1", "h-8 min-w-0 w-full border-[#ebecf0] bg-white"].filter(Boolean).join(" ")} />
               <div className="inline-flex h-8 shrink-0 items-center rounded-[6px] bg-[#f8f8f8] p-[3px]">
                 {['before', 'after'].map((item) => (
                   <button
@@ -122,7 +112,7 @@ const FileUploadSplitStrategy = ({ data: strategies, onChange: setStrategies }) 
                 ))}
               </div>
               <span className="shrink-0 text-sm text-[#0f172a]">{t('split')}</span>
-              <Button onClick={handleAddCustomStrategy} className="h-8 shrink-0 rounded-md border-[#ebecf0] bg-white px-4 text-[#070038]" variant="outline">
+              <Button onClick={handleAddCustomStrategy} className="h-8 shrink-0 rounded-md border-[#ebecf0] bg-white px-4 text-[#070038]" variant="outlined" color="default">
                 {t('add')}
               </Button>
             </div>

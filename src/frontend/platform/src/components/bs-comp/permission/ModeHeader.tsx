@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button"
+import { Button } from '@bisheng/ui';
+
 import {
   Dialog,
   DialogContent,
@@ -215,21 +216,10 @@ export function ModeHeader({
             </div>
           )}
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={applying}
-              onClick={() => setConfirmOpen(false)}
-            >
+            <Button type="button" variant="outlined" className="min-h-11" disabled={applying} onClick={() => setConfirmOpen(false)} color="default">
               {t("mode.cancel")}
             </Button>
-            <Button
-              type="button"
-              className="min-h-11"
-              disabled={!draft || expired || applying}
-              onClick={() => void handleApply()}
-            >
+            <Button type="button" className="min-h-11" disabled={!draft || expired || applying} onClick={() => void handleApply()}>
               {applying ? t("mode.applying") : t("mode.confirm")}
             </Button>
           </DialogFooter>

@@ -1,3 +1,4 @@
+import { SearchInput } from '@bisheng/ui';
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
@@ -6,7 +7,7 @@ import { useTable } from "@/util/hook";
 import { CircleHelp } from "lucide-react";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "@/components/bs-ui/input";
+
 import { FlowRadio } from "./FlowRadio";
 
 type FlowControlProps = {

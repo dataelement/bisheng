@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger } from "@/components/bs-ui/dialog";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import {
 batchAddFileTagsApi,
 createKnowledgeTagApi,
@@ -38,7 +39,7 @@ export default function KnowledgeTagSelect({
     isEditable = true,
     mode = 'auto'
 }: KnowledgeTagSelectProps) {
-    const { toast } = useToast();
+
     const { t } = useTranslation('knowledge');
     const [open, setOpen] = useState(false);
     const [tags, setTags] = useState<KnowledgeTagItem[]>([]);
@@ -106,7 +107,7 @@ export default function KnowledgeTagSelect({
         const name = value.trim();
         if (!name) return false;
         if (name.length > TAG_NAME_MAX_LENGTH) {
-            toast({ variant: 'error', description: t('tagNameMaxLength', { count: TAG_NAME_MAX_LENGTH }) });
+            notification.open({ type: 'error', description: String(t('tagNameMaxLength', { count: TAG_NAME_MAX_LENGTH }) ?? '') });
             return false;
         }
         return true;
@@ -156,7 +157,7 @@ export default function KnowledgeTagSelect({
         }
         setTags(prev => prev.filter(item => item.id !== tag.id));
         setSelectedTagIds(prev => prev.filter(id => id !== tag.id));
-        toast({ variant: 'success', description: t('tagDeleted') });
+        notification.open({ type: 'success', description: String(t('tagDeleted') ?? '') });
         setDeletingTagId(null);
     };
 

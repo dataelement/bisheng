@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { notification } from '@bisheng/ui';
 // components/AudioPlayButton.tsx
 import { textToSpeech } from '@/controllers/API/workbench';
 import { Outlined } from "bisheng-icons";
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '../bs-ui/toast/use-toast';
+
 import { useAudioPlayerStore } from './audioPlayerStore';
 
 interface AudioPlayButtonProps {
@@ -98,11 +99,7 @@ export const AudioPlayComponent = ({ messageId, msg = '' }: AudioPlayButtonProps
       });
     } catch (err) {
       console.error('播放请求异常详情:', err);
-      toast({
-        title: t('prompt'),
-        variant: 'error',
-        description: t('playbackUnavailable')
-      });
+      notification.open({ type: 'error', title: String(t('prompt') ?? ''), description: String(t('playbackUnavailable') ?? '') });
       setLoading(false);
       setCurrentPlayingId(null);
     }

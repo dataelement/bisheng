@@ -17,7 +17,7 @@ function contentText(content: ReactNode): string {
 export function AppHint({ content, className }: AppHintProps) {
     return <Tooltip content={content} disabled={!content}>
         <Button type="button" variant="ghost" size="small" iconOnly className={className} aria-label={contentText(content)}>
-            <Outlined.Question />
+            <Outlined.Question className="text-text-3" />
         </Button>
     </Tooltip>
 }

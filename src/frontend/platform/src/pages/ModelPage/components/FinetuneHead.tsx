@@ -1,8 +1,9 @@
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
-import { SearchInput } from "../../../components/bs-ui/input";
+
+
 import {
     Select,
     SelectContent,
@@ -76,11 +77,11 @@ export default function FinetuneHead({ onSearch, onFilter, rtClick, onCreate }: 
                     </SelectGroup>
                 </SelectContent>
             </Select>
-            <SearchInput boxClassName="w-56 shrink-0" ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)}></SearchInput>
+            <SearchInput ref={inputRef} placeholder={t('finetune.modelName')} onChange={useDebounce(handleSearch, 600, false)} className={"w-56 shrink-0"}></SearchInput>
         </div>
         <div className="flex flex-wrap items-center gap-4 mr-2">
             <Button onClick={onCreate}>{t('finetune.createTrainingTask')}</Button>
-            <Button variant="black" onClick={rtClick}>{t('finetune.rtServiceManagement')}</Button>
+            <Button onClick={rtClick} variant="solid" color="default">{t('finetune.rtServiceManagement')}</Button>
         </div>
     </div>
 };

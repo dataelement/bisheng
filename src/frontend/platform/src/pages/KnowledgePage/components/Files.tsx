@@ -1,7 +1,8 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 import { useNavigate,useParams,useSearchParams } from "react-router-dom";
-import { Button } from "../../../components/bs-ui/button";
+
 import {
 Table,
 TableBody,
@@ -20,13 +21,13 @@ import { FileIcon } from "@/components/bs-icons/file";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Checkbox } from "@bisheng/ui";
 
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { downloadFile,truncateString } from "@/util/utils";
 
 import { locationContext } from "@/contexts/locationContext";
 import { useContext,useEffect,useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SearchInput } from "../../../components/bs-ui/input";
+
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
 import { batchDownloadFileApi,deleteFile,getKnowledgeDetailApi,readFileByLibDatabase,retryKnowledgeFileApi } from "../../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
@@ -55,7 +56,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const [searchParams] = useSearchParams()
-    const { toast } = useToast()
+
 
     const { setEditable } = useKnowledgeStore();
     const initialAbnormalFilter = searchParams.get('fileStatus') === 'abnormal'
@@ -207,7 +208,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
         try {
             const fileIds = selectedFileObjs.map(f => Number(f.id));
             if (!fileIds.length) {
-                toast({ variant: 'error', description: t('selectFile', { ns: 'knowledge' }) });
+                notification.open({ type: 'error', description: String(t('selectFile', { ns: 'knowledge' }) ?? '') });
                 setIsDownloading(false);
                 return;
             }
@@ -226,10 +227,10 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
                 }
             } else {
-                toast({ variant: 'error', description: t('api_errors:10003') });
+                notification.open({ type: 'error', description: String(t('api_errors:10003') ?? '') });
             }
         } catch (e) {
-            toast({ variant: 'error', description: t('api_errors:10003') });
+            notification.open({ type: 'error', description: String(t('api_errors:10003') ?? '') });
         } finally {
             setIsDownloading(false);
         }
@@ -352,12 +353,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 {/* Batch Actions */}
                 {selectedFileObjs.length > 0 && (
                     <div className="flex items-center gap-2 mr-1 md:mr-0 pr-2 md:pr-4 border-r border-gray-200 dark:border-gray-700">
-                        <Button
-                            variant="outline"
-                            onClick={handleBatchDownload}
-                            disabled={isDownloading}
-                            className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                        >
+                        <Button variant="outlined" onClick={handleBatchDownload} disabled={isDownloading} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
                             {isDownloading ? <Outlined.Loading className="animate-spin h-4 w-4 mr-1" /> : <Outlined.Download size={16} />}
                             <span className="hidden sm:inline">{t('download', { ns: 'bs' })}</span>
                         </Button>
@@ -370,12 +366,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 isEditable={canBatchEditTags}
                                 mode="batch"
                             >
-                                <Button
-                                    variant="outline"
-                                    disabled={!canBatchEditTags}
-                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
+                                <Button variant="outlined" disabled={!canBatchEditTags} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" onClick={(e) => e.stopPropagation()} color="default">
                                     <Outlined.Tag size={16} />
                                     <span className="hidden sm:inline">{t('tags')}</span>
                                 </Button>
@@ -383,21 +374,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                             </KnowledgeTooltip>
                         )}
                         {canDeleteKb && (
-                            <Button
-                                variant="outline"
-                                onClick={handleBatchDelete}
-                                className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                            >
+                            <Button variant="outlined" onClick={handleBatchDelete} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
                                 <Outlined.Delete size={16} />
                                 <span className="hidden sm:inline">{t('delete')}</span>
                             </Button>
                         )}
                         {canEditKb && hasSelectedFailedFiles && (
-                                <Button
-                                    variant="outline"
-                                    onClick={handleBatchRetry}
-                                    className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4"
-                                >
+                                <Button variant="outlined" onClick={handleBatchRetry} className="flex items-center gap-1 disabled:pointer-events-auto h-9 px-2 sm:px-4" color="default">
                                     <Outlined.Refresh size={16} />
                                     <span className="hidden sm:inline">{t('retry')}</span>
                                 </Button>
@@ -413,11 +396,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         setIsAllSelected(false);
                     }} />
                     {canEditKb && (
-                        <Button
-                            variant="outline"
-                            onClick={() => setMetadataOpen(true)}
-                            className="px-2 md:px-4 whitespace-nowrap h-9"
-                        >
+                        <Button variant="outlined" onClick={() => setMetadataOpen(true)} className="px-2 md:px-4 whitespace-nowrap h-9" color="default">
                             <Outlined.FileEditing size={16} strokeWidth={1.5} className="mr-0 md:mr-1" />
                             <span className="hidden md:inline">{t('metaData')}</span>
                         </Button>
@@ -527,30 +506,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                                 {hasRowActions && <TableCell className="text-right">
                                     <div className="flex items-center justify-end gap-1">
                                         {canEditKb && el.status === 3 && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={(e) => {
+                                                <Button variant="text" size="medium" onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRetry([el]); // Single retry passes complete object
-                                                    }}
-                                                    className="disabled:pointer-events-auto"
-                                                    title={t('retry')}
-                                                >
+                                                    }} className="disabled:pointer-events-auto" title={t('retry')} color="default" iconOnly>
                                                     <Outlined.Refresh size={16} />
                                                 </Button>
                                         )}
                                         {canDeleteKb && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="disabled:pointer-events-auto"
-                                                onClick={(e) => {
+                                            <Button variant="text" size="medium" className="disabled:pointer-events-auto" onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleDelete(el.id);
-                                                }}
-                                                title={t('delete')}
-                                            >
+                                                }} title={t('delete')} color="default" iconOnly>
                                                 <Outlined.Delete size={16} />
                                             </Button>
                                         )}

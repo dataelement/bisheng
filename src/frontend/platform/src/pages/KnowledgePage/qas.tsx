@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { Outlined } from "bisheng-icons";
 import { EditQa } from "./components/EditQa";
 import { KnowledgeTooltip } from "./components/KnowledgeTooltip";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { downloadFile,formatDate } from "@/util/utils";
 import { Checkbox,Switch } from "@bisheng/ui";
 
@@ -13,8 +14,8 @@ import { useEffect,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link,useParams } from "react-router-dom";
 
-import { Button } from "../../components/bs-ui/button";
-import { SearchInput } from "../../components/bs-ui/input";
+
+
 import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
 import {
 Table,
@@ -41,7 +42,7 @@ export default function QasPage() {
     const importRef = useRef(null)
     const [canEditKb, setCanEditKb] = useState(false)
     const [canDeleteKb, setCanDeleteKb] = useState(false)
-    const { toast } = useToast();
+
 
       const sourceTypeKeys = [
         'source_unknown',      // 0: 未知
@@ -118,7 +119,7 @@ export default function QasPage() {
             });
 
             if (itemsToEnable.length === 0) {
-                toast({ variant: 'info', description: t('theSelectedItemsAlreadyEnabled') });
+                notification.open({ type: 'info', description: String(t('theSelectedItemsAlreadyEnabled') ?? '') });
                 return;
             }
 
@@ -141,16 +142,13 @@ export default function QasPage() {
             setSelectAll(false);
 
             if (successCount > 0) {
-                toast({ variant: 'success', description: t('successfullyEnabled', { count: successCount }) });
+                notification.open({ type: 'success', description: String(t('successfullyEnabled', { count: successCount }) ?? '') });
             }
             if (failedIds.length > 0) {
-                toast({
-                    variant: 'warning',
-                    description: t('someItemsFailedToEnable', { ids: failedIds.join(', ') })
-                });
+                notification.open({ type: 'warning', description: String(t('someItemsFailedToEnable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            toast({ variant: 'error', description: t('batchEnableOperationFailed') });
+            notification.open({ type: 'error', description: String(t('batchEnableOperationFailed') ?? '') });
         }
     };
 
@@ -165,7 +163,7 @@ export default function QasPage() {
             });
 
             if (itemsToDisable.length === 0) {
-                toast({ variant: 'info', description: t('theSelectedItemsAlreadyDisabled') });
+                notification.open({ type: 'info', description: String(t('theSelectedItemsAlreadyDisabled') ?? '') });
                 return;
             }
 
@@ -183,16 +181,13 @@ export default function QasPage() {
             setSelectAll(false);
 
             if (successCount > 0) {
-                toast({ variant: 'success', description: t('successfullyDisabled', { count: successCount }) });
+                notification.open({ type: 'success', description: String(t('successfullyDisabled', { count: successCount }) ?? '') });
             }
             if (failedIds.length > 0) {
-                toast({
-                    variant: 'warning',
-                    description: t('someItemsFailedToDisable', { ids: failedIds.join(', ') })
-                });
+                notification.open({ type: 'warning', description: String(t('someItemsFailedToDisable', { ids: failedIds.join(', ') }) ?? '') });
             }
         } catch (error) {
-            toast({ variant: 'error', description: t('batchDisableOperationFailed') });
+            notification.open({ type: 'error', description: String(t('batchDisableOperationFailed') ?? '') });
         }
     };
 
@@ -283,10 +278,7 @@ export default function QasPage() {
             await updateQaStatus(id, targetStatus);
             refreshData(item => item.id === id, { status: targetStatus });
         } catch (error) {
-            toast({
-                variant: 'error',
-                description: error
-            });
+            notification.open({ type: 'error', description: String(error ?? '') });
             refreshData(item => item.id === id, {
                 status: 3
             });
@@ -310,17 +302,17 @@ export default function QasPage() {
                     {selectedItems.length > 0 && hasSelectableActions && (
                     <div>
                         {canDeleteKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleDeleteSelected}>
+                            <Button variant="outlined" className="ml-2" onClick={handleDeleteSelected} color="default">
                                 <Outlined.Delete className="mr-2 h-4 w-4" ></Outlined.Delete> {t('delete')}
                             </Button>
                         )}
                         {canEditKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleDisableSelected}>
+                            <Button variant="outlined" className="ml-2" onClick={handleDisableSelected} color="default">
                                 <Outlined.CloseCircle className="mr-2 h-4 w-4" /> {t('disable')}
                             </Button>
                         )}
                         {canEditKb && (
-                            <Button variant="outline" className="ml-2" onClick={handleEnableSelected}>
+                            <Button variant="outlined" className="ml-2" onClick={handleEnableSelected} color="default">
                                 <Outlined.Check className="mr-2 h-4 w-4" /> {t('enable')}
                             </Button>
                         )}
@@ -329,13 +321,13 @@ export default function QasPage() {
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex gap-4 items-center">
                             <SearchInput placeholder={t('qaContent')} onChange={(e) => search(e.target.value)}></SearchInput>
-                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => importRef.current.open()}>{t('import')}</Button>}
-                            {canEditKb && <Button variant="outline" className="px-8" onClick={() => {
+                            {canEditKb && <Button variant="outlined" className="px-8" onClick={() => importRef.current.open()} color="default">{t('import')}</Button>}
+                            {canEditKb && <Button variant="outlined" className="px-8" onClick={() => {
                                 getQaFile(id).then(res => {
                                     const fileUrl = res.file_list[0];
                                     downloadFile(checkSassUrl(fileUrl), `${title} ${formatDate(new Date(), 'yyyy-MM-dd')}.xlsx`);
                                 })
-                            }}>{t('export')}</Button>}
+                            }} color="default">{t('export')}</Button>}
                             {canEditKb && <Button className="px-8" onClick={() => editRef.current.open()}>{t('createQA')}</Button>}
                         </div>
                     </div>
@@ -413,15 +405,10 @@ export default function QasPage() {
                                                 )}
                                             </div>}
                                             {canDeleteKb && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="disabled:pointer-events-auto"
-                                                    onClick={(e) => {
+                                                <Button variant="text" size="medium" className="disabled:pointer-events-auto" onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleDelete(el.id);
-                                                    }}
-                                                >
+                                                    }} color="default" iconOnly>
                                                     <Outlined.Delete size={16} />
                                                 </Button>
                                             )}

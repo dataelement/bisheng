@@ -1,6 +1,7 @@
+import { toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { checkResourceActionApi } from "@/controllers/API/permission";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { useEffect,useState } from "react";
@@ -19,7 +20,7 @@ export default function FilesPage() {
     const [canDeleteKb, setCanDeleteKb] = useState(false);
     const { id: knowledgeId } = useParams();
     const navigate = useNavigate();
-    const { message } = useToast();
+
     const { t } = useTranslation('knowledge');
 
     useEffect(() => {
@@ -45,7 +46,7 @@ export default function FilesPage() {
             setCanDeleteKb(!!deleteResult?.allowed);
             setPermissionChecked(true);
             if (!allowed) {
-                message({ variant: 'warning', description: t('noOperationPermission') });
+                toast.show({ type: 'warning', message: String(t('noOperationPermission') ?? '') });
                 navigate('/filelib');
             }
         };

@@ -1,14 +1,15 @@
 // @ts-strict-ignore
+import { Button, Textarea, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/bs-ui/dialog";
-import { Textarea } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { Switch } from "@bisheng/ui";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { ModelFieldHint } from "../ModelFieldHint";
 import { Tooltip as Tip } from "@bisheng/ui";
 import { getKnowledgeModelEnvelope, updateKnowledgeModelConfig } from "@/controllers/API/finetune";
@@ -94,18 +95,13 @@ const PromptDialog = ({ value, onChange, onRestore, onSave, label, children }) =
             </DialogHeader>
             <div>
                 <Label className="bisheng-label">{label || t('model.docKnowledgeAbstractPrompt')}</Label>
-                <Textarea
-                    value={textValue}
-                    onChange={(e) => {
+                <Textarea value={textValue} onChange={(e) => {
                         setTextValue(e.target.value)
                         modifyNotSavedRef.current = true;
-                    }}
-                    className="mt-1"
-                    rows={16}
-                />
+                    }} rows={16} textareaClassName={"mt-1"} />
             </div>
             <DialogFooter>
-                <Button variant="outline" className="px-11" type="button" onClick={handleCancel}>{t('model.cancel')}</Button>
+                <Button variant="outlined" className="px-11" type="button" onClick={handleCancel} color="default">{t('model.cancel')}</Button>
                 <Button disabled={false} type="submit" className="px-11" onClick={() => {
                     modifyNotSavedRef.current = false
                     onSave(textValue)
@@ -199,7 +195,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         setFormAndClearInherited(next)
     }
 
-    const { message } = useToast()
+
     const [saveload, setSaveLoad] = useState(false)
     const handleSave = async () => {
         const {
@@ -223,7 +219,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         if (!qaSimilarModelId) {
             errors.push(t('model.qaSimilarModel') + t('bs:required'))
         }
-        if (errors.length) return message({ variant: 'error', description: errors })
+        if (errors.length) return toast.show({ type: 'error', message: errors.filter(Boolean).join('\n') })
 
         const data = {
             embedding_model_id: embeddingModelId,
@@ -240,7 +236,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
         await captureAndAlertRequestErrorHoc(updateKnowledgeModelConfig(data).then(res => {
             lastSaveFormDataRef.current = data
             setUnavailableModelFields([])
-            message({ variant: 'success', description: t('model.saveSuccess') })
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
         }))
         setSaveLoad(false)
     };
@@ -254,7 +250,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
             ...patch,
         }).then(res => {
             lastSaveFormDataRef.current = { ...lastSaveFormDataRef.current, ...patch }
-            message({ variant: 'success', description: t('model.promptSaved') })
+            toast.show({ type: 'success', message: String(t('model.promptSaved') ?? '') })
         }))
     }
 
@@ -310,7 +306,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                             onRestore={() => setFormAndClearInherited({ ...form, abstractPrompt: lastSaveFormDataRef.current.abstract_prompt })}
                         >
                             <Tip content={t('model.docKnowledgeAbstractPromptTooltip')} side="top">
-                                <Button variant="link" size="sm" className="h-auto px-0">
+                                <Button variant="link" size="small" className="h-auto px-0">
                                     <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
@@ -333,7 +329,7 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                             onRestore={() => setFormAndClearInherited({ ...form, autoTagPrompt: lastSaveFormDataRef.current.auto_tag_prompt })}
                         >
                             <Tip content={t('model.autoTagPromptTooltip')} side="top">
-                                <Button variant="link" size="sm" className="h-auto px-0">
+                                <Button variant="link" size="small" className="h-auto px-0">
                                     <Outlined.Setting size={14} className="mr-1" />
                                     {t('model.editPromptButton')}
                                 </Button>
@@ -363,12 +359,8 @@ export function KnowledgeModel({ llmOptions, embeddings, asrModel = [], onBack }
                 onChange={(val) => handleModelChange('asr_model_id', { ...form, asrModelId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
-                <Button
-                    className="px-10"
-                    disabled={saveload}
-                    onClick={handleSave}
-                >
+                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button className="px-10" disabled={saveload} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

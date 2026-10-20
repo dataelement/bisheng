@@ -1,7 +1,8 @@
 // @ts-strict-ignore
+import { Button, Input, notification } from '@bisheng/ui';
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
+
 import {
   Dialog,
   DialogContent,
@@ -9,10 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
+
 import { Label } from "@/components/bs-ui/label"
 import MultiSelect from "@/components/bs-ui/select/multi"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import {
   Tooltip,
   TooltipContent,
@@ -81,11 +82,7 @@ export function OrganizationMemberEditDialog({
         getDepartmentMemberEditFormApi(deptId, member.user_id)
       )
       if (!data) {
-        toast({
-          title: t("prompt"),
-          variant: "warning",
-          description: t("bs:department.memberEditLoadFailed"),
-        })
+        notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditLoadFailed") ?? '') })
         return
       }
       setForm(data)
@@ -217,15 +214,11 @@ export function OrganizationMemberEditDialog({
         }
         if (chk?.has_assets) {
           const c = chk.counts
-          toast({
-            title: t("prompt"),
-            variant: "warning",
-            description: t("bs:department.deleteLocalMemberBlocked", {
+          notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberBlocked", {
               k: c.knowledge_spaces,
               f: c.flows,
               a: c.assistants,
-            }),
-          })
+            }) ?? '') })
           close()
           return
         }
@@ -236,11 +229,7 @@ export function OrganizationMemberEditDialog({
           close()
           return
         }
-        toast({
-          title: t("prompt"),
-          variant: "success",
-          description: t("bs:department.deleteLocalMemberDone"),
-        })
+        notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.deleteLocalMemberDone") ?? '') })
         onSaved()
         onClose()
         close()
@@ -259,11 +248,7 @@ export function OrganizationMemberEditDialog({
   const handleSave = async () => {
     if (!member || !form) return
     if (form.edit_mode === "local_primary" && !userName.trim()) {
-      toast({
-        title: t("prompt"),
-        variant: "warning",
-        description: t("bs:department.localUserNameRequired"),
-      })
+      notification.open({ type: "warning", title: String(t("prompt") ?? ''), description: String(t("bs:department.localUserNameRequired") ?? '') })
       return
     }
     setSaving(true)
@@ -299,11 +284,7 @@ export function OrganizationMemberEditDialog({
         )
         if (res === false) return
       }
-      toast({
-        title: t("prompt"),
-        variant: "success",
-        description: t("bs:department.memberEditSaved"),
-      })
+      notification.open({ type: "success", title: String(t("prompt") ?? ''), description: String(t("bs:department.memberEditSaved") ?? '') })
       onSaved()
       onClose()
     } finally {
@@ -359,18 +340,13 @@ export function OrganizationMemberEditDialog({
           <div className="space-y-4 py-1">
             <div>
               <Label>{t("system.username")}</Label>
-              <Input
-                className="mt-1"
-                value={userName}
-                disabled={
+              <Input value={userName} disabled={
                   form.edit_mode === "affiliate" || form.edit_mode === "synced_primary"
-                }
-                onChange={(e) => setUserName(e.target.value)}
-              />
+                } onChange={(e) => setUserName(e.target.value)} className={"mt-1"} />
             </div>
             <div>
               <Label>{t("bs:department.personId")}</Label>
-              <Input className="mt-1 bg-muted" readOnly value={form.user.person_id || "-"} />
+              <Input readOnly value={form.user.person_id || "-"} className={"mt-1 bg-muted"} />
             </div>
 
             {form.edit_mode !== "affiliate" && (
@@ -479,18 +455,13 @@ export function OrganizationMemberEditDialog({
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {form?.edit_mode === "local_primary" && (
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={saving || loading}
-                onClick={() => handleDeleteLocalMember()}
-              >
+              <Button type="button" variant="solid" disabled={saving || loading} onClick={() => handleDeleteLocalMember()} color="danger">
                 {t("bs:department.deleteLocalMember")}
               </Button>
             )}
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose} disabled={saving}>
+            <Button variant="outlined" onClick={onClose} disabled={saving} color="default">
               {t("cancel")}
             </Button>
             <Button onClick={() => void handleSave()} disabled={saving || loading || !form}>

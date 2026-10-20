@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, Textarea } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog,DialogTrigger } from "@/components/bs-ui/dialog";
-import { Textarea } from "@/components/bs-ui/input";
+
 import { useAssistantStore } from "@/store/assistantStore";
 
 import { useEffect,useState } from "react";
@@ -44,13 +45,6 @@ export default function Prompt({ canEdit = false }) {
                 {open && <AutoPromptDialog onOpenChange={setOpen}></AutoPromptDialog>}
             </Dialog>
         </div>
-        <Textarea
-            boxClassName='h-[90%]'
-            className="h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"
-            value={assistantState.prompt}
-            placeholder={assistantRoleExample()}
-            disabled={!canEdit || promptStreaming}
-            onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))}
-        ></Textarea>
+        <Textarea value={assistantState.prompt} placeholder={assistantRoleExample()} disabled={!canEdit || promptStreaming} onInput={(e => dispatchAssistant('setPrompt', { prompt: e.target.value }))} textareaClassName={"h-full border-none bg-transparent scrollbar-hide focus-visible:ring-0 resize-none text-sm text-muted-foreground"} className={"h-[90%]"} borderless></Textarea>
     </div>
 };

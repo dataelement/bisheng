@@ -1,4 +1,5 @@
-import type { toast } from '@/components/bs-ui/toast/use-toast'
+import { notification } from '@bisheng/ui';
+
 import { addMetadata,getKnowledgeDetailApi,getMetaFile,saveUserMetadataApi } from '@/controllers/API'
 import type { TFunction } from 'i18next'
 import { useCallback,useEffect,useRef,useState } from 'react'
@@ -11,7 +12,7 @@ interface ParagraphMetadataProps {
     currentFile: { id: string | number; fullData?: FileInfo } | null
     canEditKb: boolean
     t: TFunction
-    notify: typeof toast
+    notify: typeof notification.open
 }
 
 export function useParagraphMetadata({ id, selectedFileId, currentFile, canEditKb, t, notify }: ParagraphMetadataProps) {
@@ -282,7 +283,7 @@ export function useParagraphMetadata({ id, selectedFileId, currentFile, canEditK
             setMetadataError('');
         } catch (error) {
             notify({
-                variant: 'error',
+                type: 'error',
                 description: error instanceof Error ? error.message : String(error),
             });
             console.error('Failed to save metadata:', error);

@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { Button, SearchInput } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
+
+
 import { Sheet,SheetContent,SheetTitle,SheetTrigger } from "@/components/bs-ui/sheet";
 import { getToolsApi } from "@/controllers/API/tools";
 import { useMcpRefrensh } from "@/pages/BuildPage/tools";
@@ -48,7 +49,7 @@ export default function ToolsSheet({ select, onSelect, children }) {
                 <div className="flex h-full" onClick={e => e.stopPropagation()}>
                     <div className="w-fit p-6">
                         <SheetTitle>{t('build.addTool')}</SheetTitle>
-                        <SearchInput placeholder={t('build.search')} className="mt-6" onChange={(e) => setKeyword(e.target.value)} />
+                        <SearchInput placeholder={t('build.search')} onChange={(e) => setKeyword(e.target.value)} className={"mt-6"} />
                         <div className="mt-4">
                             <div
                                 className={`flex items-center gap-2 px-4 py-2 rounded-md cursor-pointer hover:bg-muted-foreground/10 transition-all duration-200 ${type === 'default' && 'bg-muted-foreground/10'}`}
@@ -76,27 +77,16 @@ export default function ToolsSheet({ select, onSelect, children }) {
                     </div>
                     <div className="flex-1 bg-background-main p-5 pt-12 h-full overflow-auto scrollbar-hide">
                         <div className="mb-4">
-                            {type === 'custom' && <Button
-                                className="mt-4  text-[white]"
-                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=api")}
-                            >
+                            {type === 'custom' && <Button className="mt-4  text-[white]" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=api")}>
                                 {t('create')}{t("tools.createCustomTool")}
                             </Button>}
-                            {type === 'mcp' && <Button
-                                className="mt-4  text-[white]"
-                                onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}
-                            >
+                            {type === 'mcp' && <Button className="mt-4  text-[white]" onClick={() => window.open(__APP_ENV__.BASE_URL + "/build/tools?c=mcp")}>
                                 {t("tools.addMcpServer")}
                             </Button>}
-                            {type === 'mcp' && <Button
-                                variant="outline"
-                                disabled={loading}
-                                className="mt-4 ml-4"
-                                onClick={async () => {
+                            {type === 'mcp' && <Button variant="outlined" disabled={loading} className="mt-4 ml-4" onClick={async () => {
                                     await refresh()
                                     loadMData()
-                                }}
-                            >
+                                }} color="default">
                                 {loading && <Outlined.Loading className="animate-spin text-gray-800" />}
                                 {t("tools.refresh")}
                             </Button>}

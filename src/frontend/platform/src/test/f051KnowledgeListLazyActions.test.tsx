@@ -24,10 +24,15 @@ vi.mock("@/controllers/API/permission", () => ({
   getMyResourcePermissionsApi: permissionApi,
 }))
 
-vi.mock("@/components/bs-ui/toast/use-toast", () => ({
+vi.mock('@bisheng/ui', async () => {
+const actual = await vi.importActual<typeof import('@bisheng/ui')>('@bisheng/ui');
+const previous = await (() => ({
   toast: permissionError,
   useToast: () => ({ toast: permissionError, message: permissionError }),
-}))
+}))();
+const hooks = Reflect.get(previous, 'useToast')?.() ?? {};
+return { ...actual, notification: { ...actual.notification, open: Reflect.get(previous, 'toast') ?? Reflect.get(hooks, 'toast') ?? actual.notification.open }, toast: { ...actual.toast, show: Reflect.get(previous, 'message') ?? Reflect.get(hooks, 'message') ?? actual.toast.show } };
+})
 
 vi.mock("@/components/bs-icons/knowledge", () => ({
   BookIcon: () => <span data-testid="book-icon" />,
@@ -39,19 +44,7 @@ vi.mock("@/components/bs-icons/loading", () => ({
   LoadingIcon: () => <span data-testid="loading-icon" />,
 }))
 
-vi.mock("@/components/bs-ui/input", async () => {
-  const React = await import("react")
-  const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-    (props, ref) => <input ref={ref} {...props} />,
-  )
-  const SearchInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-    (props, ref) => <input ref={ref} {...props} />,
-  )
-  const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
-    (props, ref) => <textarea ref={ref} {...props} />,
-  )
-  return { Input, SearchInput, Textarea }
-})
+
 
 vi.mock("@/util/hook", () => ({
   useInfiniteCursorTable: () => ({

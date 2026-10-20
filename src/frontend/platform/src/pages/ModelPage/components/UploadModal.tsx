@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../../components/bs-ui/button";
+
 import { Progress } from "../../../components/bs-ui/progress";
 import { alertContext } from "../../../contexts/alertContext";
 import { generateUUID } from "../../../utils";
@@ -69,7 +70,7 @@ export default function UploadModal({
                 </div>
             </div>
             <DialogFooter>
-                <Button variant='outline' className="h-8" onClick={onClose}>{t('cancel')}</Button>
+                <Button variant="outlined" className="h-8" onClick={onClose} color="default">{t('cancel')}</Button>
                 <Button type="submit" className="h-8" disabled={loading || !end} onClick={() => !loading && onSubmit(getResult())}>
                     {loading && <span className="loading loading-spinner loading-xs"></span>}
                     {t('create')}

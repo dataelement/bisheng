@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { Button } from "@bisheng/ui"
@@ -8,7 +9,7 @@ import { useContext, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 // import { transformModule, transformEvent, transformObjectType } from "../LogPage/utils"
 
-import { useToast } from "@/components/bs-ui/toast/use-toast"
+
 import { changeLLmServerStatus, getAssistantModelList, getModelListApi, verifyLLmModelStatus } from "@/controllers/API/finetune"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useQuery } from "react-query"
@@ -95,7 +96,7 @@ export default function Management() {
         })
         return `${name}${nameIndex}`
     }
-    const { message } = useToast()
+
 
     // off & online
     const handleCheck = async (serverId: number, modelId: number, online: boolean) => {
@@ -115,7 +116,7 @@ export default function Management() {
         const result = await captureAndAlertRequestErrorHoc(verifyLLmModelStatus(modelId))
         if (result?.id) {
             handleVerified(serverId, result)
-            message({ description: t('model.statusUpdated'), variant: 'success' })
+            toast.show({ type: 'success', message: String(t('model.statusUpdated') ?? '') })
         }
     }
 
@@ -140,7 +141,7 @@ export default function Management() {
         onReload={reload}
         onBerforSave={(id, name) => data.some(el => el.name === name && el.id !== id)}
         onAfterSave={(msg) => {
-            message({ variant: 'success', description: msg })
+            toast.show({ type: 'success', message: String(msg ?? '') })
             reload()
             setProbeUntil(Date.now() + PROBE_WINDOW_MS)
         }}
@@ -168,8 +169,8 @@ export default function Management() {
                     {appConfig.multiTenantEnabled && <ScopeBar user={user} onScopeChange={reload} />}
                 </div>
                 <div className="flex gap-4">
-                    {canManage && <Button onClick={() => setSystemModel(true)} variant="secondary"
-                        className="gap-1 text-danger hover:text-danger">
+                    {canManage && <Button onClick={() => setSystemModel(true)} variant="filled"
+                        className="gap-1 text-danger hover:text-danger" color="default">
                         <Outlined.Setting className="text-danger" />
                         {t('model.systemModelSettings')}
                     </Button>}

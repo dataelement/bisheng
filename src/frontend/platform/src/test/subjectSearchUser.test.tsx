@@ -15,11 +15,7 @@ vi.mock("@/controllers/API/permission", () => ({
   getGrantSubjectUsersApi: vi.fn(),
 }));
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: ({ value, onChange, placeholder }: any) => (
-    <input value={value} onChange={onChange} placeholder={placeholder} />
-  ),
-}));
+
 
 vi.mock("@/components/bs-ui/checkBox", () => ({
   Checkbox: ({ checked }: any) => <input type="checkbox" readOnly checked={checked} />,

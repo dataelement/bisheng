@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button, SearchInput, notification, toast } from '@bisheng/ui';
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Outlined } from "bisheng-icons";
 
@@ -6,9 +7,9 @@ import { Outlined } from "bisheng-icons";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { hasResourceAction,useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
+
 import { userContext } from "@/contexts/userContext";
 import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
@@ -117,11 +118,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
         <div className="flex h-full relative" onClick={(e) => e.stopPropagation()}>
             <div className="relative w-full flex h-full overflow-y-scroll scrollbar-hide bg-background-main border-t">
                 <div className="relative w-fit p-6">
-                    <SearchInput
-                        placeholder={t("tools.search")}
-                        className="mt-6"
-                        onChange={(e) => setKeyword(e.target.value)}
-                    />
+                    <SearchInput placeholder={t("tools.search")} onChange={(e) => setKeyword(e.target.value)} className={"mt-6"} />
                     <div className="mt-4">
                         <div
                             className={`flex cursor-pointer items-center gap-2 rounded-md px-4 py-2 transition-all duration-200 hover:bg-muted-foreground/10 ${type === "" && "bg-muted-foreground/10"
@@ -164,29 +161,16 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                         </div>
                     }
                     <div className="mb-4">
-                        {type === 'edit' && <Button
-                            id="create-apitool"
-                            className="mt-4  text-[white]"
-                            onClick={() => editRef.current.open()}
-                        >
+                        {type === 'edit' && <Button id="create-apitool" className="mt-4  text-[white]" onClick={() => editRef.current.open()}>
                             {t('create')}{t("tools.createCustomTool")}
                         </Button>}
-                        {type === 'mcp' && <Button
-                            id="create-mcptool"
-                            className="mt-4  text-[white]"
-                            onClick={() => mcpDialogRef.current.open()}
-                        >
+                        {type === 'mcp' && <Button id="create-mcptool" className="mt-4  text-[white]" onClick={() => mcpDialogRef.current.open()}>
                             {t("tools.addMcpServer")}
                         </Button>}
-                        {type === 'mcp' && <Button
-                            variant="outline"
-                            disabled={btnLoading}
-                            className="mt-4 ml-4"
-                            onClick={async () => {
+                        {type === 'mcp' && <Button variant="outlined" disabled={btnLoading} className="mt-4 ml-4" onClick={async () => {
                                 await refresh()
                                 loadMcpData()
-                            }}
-                        >
+                            }} color="default">
                             {btnLoading && <Outlined.Loading className="animate-spin text-gray-800" />}
                             {t("tools.refresh")}
                         </Button>}
@@ -255,7 +239,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
 
 export const useMcpRefrensh = () => {
     const [loading, setLoading] = useState(false);
-    const { message, toast } = useToast()
+
     const { t } = useTranslation('tool')
 
     return {
@@ -265,15 +249,9 @@ export const useMcpRefrensh = () => {
             const res = await captureAndAlertRequestErrorHoc(refreshMcpApi())
             if (res.length) {
                 setLoading(false);
-                return toast({
-                    variant: "error",
-                    description: res.map(e => `${e} ${t("toolFetchFailed")}`)
-                })
+                return notification.open({ type: "error", description: (res.map(e => `${e} ${t("toolFetchFailed")}`)).filter(Boolean).join('\n') })
             }
-            message({
-                variant: "success",
-                description: t("refreshSuccess")
-            })
+            toast.show({ type: "success", message: String(t("refreshSuccess") ?? '') })
             setLoading(false);
         }
     }

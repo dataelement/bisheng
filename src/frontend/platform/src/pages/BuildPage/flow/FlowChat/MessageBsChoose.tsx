@@ -1,17 +1,19 @@
 // @ts-strict-ignore
+import { Button, Textarea } from '@bisheng/ui';
 import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { WordIcon } from "@/components/bs-icons";
-import { AvatarIcon } from "@/components/bs-icons/avatar";
-import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
+import { Outlined } from "bisheng-icons";
+
+
+
+
 import { WorkflowMessage } from "@/types/flow";
 import { downloadFile } from "@/util/utils";
-import { CheckCircle } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+
+import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
+import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
+import { useMemo,useRef,useState } from "react";
 import { useTranslation } from "react-i18next";
 import MessageMarkDown from "./MessageMarkDown";
-import { useLinsightConfig } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { AudioPlayComponent } from "@/components/voiceFunction/audioPlayButton";
 
 export default function MessageBsChoose({ type = 'choose', logo, data }: { type?: string, logo: string, data: WorkflowMessage }) {
     const { t } = useTranslation()
@@ -84,7 +86,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                 className="flex gap-2 w-52 border border-gray-200 shadow-sm bg-gray-50 dark:bg-gray-600 px-4 py-2 rounded-sm cursor-pointer"
                                 onClick={() => handleDownloadFile(file)}
                             >
-                                <div className="flex items-center"><WordIcon /></div>
+                                <div className="flex items-center"><Outlined.FileWord size={16} /></div>
                                 <div>
                                     <h1 className="text-sm font-bold">{file.name}</h1>
                                     <p className="text-xs text-gray-400 mt-1">{t('chat.clickDownload')}</p>
@@ -96,18 +98,9 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                         <div className="mt-2">
                             {type === 'input' ?
                                 <div>
-                                    <Textarea
-                                        className="w-full"
-                                        ref={textRef}
-                                        disabled={inputSended}
-                                        defaultValue={data.message.input_msg || data.message.hisValue}
-                                    />
+                                    <Textarea ref={textRef} disabled={inputSended} defaultValue={data.message.input_msg || data.message.hisValue} textareaClassName={"w-full"} />
                                     <div className="flex justify-end mt-2">
-                                        <Button
-                                            className="h-8"
-                                            disabled={inputSended}
-                                            onClick={handleSend}
-                                        >{inputSended ? t('chat.confirmed') : t('chat.confirm')}</Button>
+                                        <Button className="h-8" disabled={inputSended} onClick={handleSend}>{inputSended ? t('chat.confirmed') : t('chat.confirm')}</Button>
                                     </div>
                                 </div>
                                 : <div>
@@ -117,7 +110,7 @@ export default function MessageBsChoose({ type = 'choose', logo, data }: { type?
                                         onClick={() => handleSelect(opt)}
                                     >
                                         {opt.label}
-                                        {selected === opt.id && <CheckCircle size={20} className="min-w-5" />}
+                                        {selected === opt.id && <Outlined.CheckCircle size={20} className="min-w-5" />}
                                     </div>)
                                     }
                                 </div>

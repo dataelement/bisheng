@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast } from '@bisheng/ui';
+
 import MessageMarkDown from "@/pages/BuildPage/flow/FlowChat/MessageMarkDown";
 import { copyText } from "@/utils";
 import { Outlined } from "bisheng-icons";
@@ -8,17 +9,13 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function MessageSystem({ data }) {
-    const { message } = useToast()
+
     const { t } = useTranslation()
 
     const handleCopy = (dom) => {
         copyText(dom)
 
-        message({
-            variant: 'success',
-            title: t('prompt'),
-            description: t('chat.copyTip')
-        })
+        toast.show({ type: 'success', message: [String(t('prompt') ?? ''), String(t('chat.copyTip') ?? '')].filter(Boolean).join('\n') })
     }
 
     // 日志markdown

@@ -599,5 +599,6 @@
         "label": "Output Variable"
       }
     }
-  }
+  },
+  "rerunWorkflow": "Run again"
 }

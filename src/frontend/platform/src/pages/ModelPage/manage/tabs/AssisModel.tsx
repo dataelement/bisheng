@@ -1,11 +1,13 @@
 // @ts-strict-ignore
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+
+
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { ModelFieldHint } from "../ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { RadioGroup, Radio as RadioGroupItem } from "@bisheng/ui";
@@ -61,13 +63,7 @@ const ModelRow = ({ item, index, llmOptions, updateField, deleteRow }) => {
             </Select>
         </div>
         <div className="pr-2">
-            <Input
-                type="number"
-                value={item.knowledge_max_content}
-                onChange={(e) => updateField(index, 'knowledge_max_content', Math.min(parseInt(e.target.value), 15000))}
-                min={1}
-                max={15000}
-            />
+            <Input type="number" value={item.knowledge_max_content} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1, max: 15000 })) return; return updateField(index, 'knowledge_max_content', Math.min(parseInt(e.target.value), 15000)); }} min={1} max={15000} />
         </div>
         <div className="pr-2">
             <Select value={item.knowledge_sort_index ? "1" : "0"} onValueChange={(val) => updateField(index, 'knowledge_sort_index', val === "1")}>
@@ -177,22 +173,22 @@ export default function AssisModel({ llmOptions, onBack }) {
         setForm({ ...form, llm_list: updatedList });
     };
 
-    const { message } = useToast()
+
     const handleSave = () => {
         console.log('Form data to save:', form);
         if (form.llm_list.some(el => el.model_id === null)) {
-            return message({ variant: 'error', description: t('model.assistantInferenceModel') + t('bs:required') })
+            return toast.show({ type: 'error', message: String(t('model.assistantInferenceModel') + t('bs:required')) })
         }
         if (form.auto_llm.model_id === null) {
-            return message({ variant: 'error', description: t('model.assistantAutoOptimizationModel') + t('bs:required') })
+            return toast.show({ type: 'error', message: String(t('model.assistantAutoOptimizationModel') + t('bs:required')) })
         }
         const uniqueList = uniqBy(form.llm_list, 'model_id');
         if (uniqueList.length !== form.llm_list.length) {
-            return message({ variant: 'error', description: t('model.assistantInferenceModelRepetition') })
+            return toast.show({ type: 'error', message: String(t('model.assistantInferenceModelRepetition') ?? '') })
         }
 
         captureAndAlertRequestErrorHoc(updateAssistantModelConfig(form).then(res => {
-            message({ variant: 'success', description: t('model.saveSuccess') })
+            toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') })
             // The root QueryClient sets refetchOnMount: false globally, so
             // invalidateQueries only marks the entry stale and the workbench
             // dropdown still serves cached data on next mount. removeQueries
@@ -242,7 +238,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                             deleteRow={deleteRow}
                         />
                     ))}
-                    <Button variant="outline" size="icon" onClick={addNewRow}>
+                    <Button variant="outlined" size="medium" onClick={addNewRow} color="default" iconOnly>
                         <Outlined.Plus className="size-5" />
                     </Button>
                 </div>
@@ -276,7 +272,7 @@ export default function AssisModel({ llmOptions, onBack }) {
                 </div>
             </div>
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
+                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
                 <Button className="px-10" onClick={handleSave}>{t('model.save')}</Button>
             </div>
         </div>

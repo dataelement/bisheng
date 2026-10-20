@@ -1,3 +1,4 @@
+import { Button } from '@bisheng/ui';
 import { DialogTitle } from "@radix-ui/react-dialog";
 import "ace-builds/src-noconflict/ace";
 import "ace-builds/src-noconflict/ext-language_tools";
@@ -8,7 +9,7 @@ import { TerminalSquare } from "lucide-react";
 import { useContext, useState } from "react";
 import AceEditor from "react-ace";
 import { useTranslation } from "react-i18next";
-import { Button } from "../../components/bs-ui/button";
+
 import { alertContext } from "../../contexts/alertContext";
 import { darkContext } from "../../contexts/darkContext";
 import { PopUpContext } from "../../contexts/popUpContext";

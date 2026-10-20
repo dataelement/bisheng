@@ -1,4 +1,5 @@
-import { toast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import { cname } from "@/components/bs-ui/utils";
 import { getCitationDetail,resolveCitationDetails,type ChatCitation } from "@/controllers/API";
 import { Outlined } from "bisheng-icons";
@@ -404,7 +405,7 @@ export default function CitationReferencesDrawer({
     }
     const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
     if (!fileUrl) {
-      toast({ variant: "error", description: t("citation.noDownloadUrl") });
+      notification.open({ type: "error", description: String(t("citation.noDownloadUrl") ?? '') });
       return;
     }
     const link = document.createElement("a");

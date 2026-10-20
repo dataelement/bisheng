@@ -1,4 +1,5 @@
-import { Button } from "@/components/bs-ui/button";
+import { Button } from '@bisheng/ui';
+
 import {
 DropdownMenu,
 DropdownMenuContent,

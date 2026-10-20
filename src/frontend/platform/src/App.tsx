@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Toaster, Notifier, notification } from '@bisheng/ui';
 import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
@@ -11,13 +12,13 @@ import { useTranslation } from "react-i18next";
 import ErrorAlert from "./alerts/error";
 import NoticeAlert from "./alerts/notice";
 import SuccessAlert from "./alerts/success";
-import { Toaster } from "./components/bs-ui/toast";
+
 import { alertContext } from "./contexts/alertContext";
 import { locationContext } from "./contexts/locationContext";
 import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter, resolveRoutePermissions } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
-import { useToast } from "./components/bs-ui/toast/use-toast";
+
 import { consumeLoginReturnTo } from "./utils/loginReturnTo";
 
 export default function App() {
@@ -199,13 +200,10 @@ export default function App() {
   }, [user])
 
   // url error toast
-  const { toast } = useToast()
+
   useEffect(() => {
     if (window.url_error) {
-      toast({
-        description: t(`api_errors:${window.url_error}`, { defaultValue: t('api_errors:fallback') }),
-        variant: 'error',
-      });
+      notification.open({ type: 'error', description: String(t(`api_errors:${window.url_error}`, { defaultValue: t('api_errors:fallback') }) ?? '') });
       delete window.url_error
     }
   }, [])
@@ -263,7 +261,7 @@ export default function App() {
         ))}
       </div>
       {/* 新弹窗 */}
-      <Toaster></Toaster>
+      <><Toaster closeLabel={t("close")} /><Notifier closeLabel={t("close")} expandLabel={t("sharedUi.expand")} /></>
     </div>
   );
 }

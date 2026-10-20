@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Button } from '@/components/bs-ui/button';
+import { Button } from '@bisheng/ui';
+
 import { DialogClose,DialogFooter } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { RadioGroup,Radio as RadioGroupItem } from "@bisheng/ui";
@@ -210,7 +211,7 @@ const Dalle3ToolForm = ({ formData, onSubmit }) => {
 
             <DialogFooter className="mt-4">
                 <DialogClose>
-                    <Button variant="outline" className="px-11" type="button">
+                    <Button variant="outlined" className="px-11" type="button" color="default">
                         {t('cancel', { ns: 'bs' })}
                     </Button>
                 </DialogClose>

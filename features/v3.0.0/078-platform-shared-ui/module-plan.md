@@ -4,38 +4,26 @@ User-approved cadence (2026-10-19): finish one whole module for user acceptance.
 next module while the user tests the previous one; acceptance fixes take priority. Do not pause for acceptance after individual pages.
 Use finalized shared components, preserve explicit library gaps, and replace
 business-owned icons with bisheng-icons equivalents; keep an old icon only when
-no suitable equivalent exists. Shared button/input/notice adapters remain the
-accepted foundation, not duplicate implementations.
+no suitable equivalent exists. As updated on2026-10-20, buttons/inputs/notices import @bisheng/ui directly;
+the temporary compatibility entry points have been removed. Business-specific
+field compositions remain under bs-comp/formFields.
 
 | Order | Module | Scope | Status |
 | --- | --- | --- | --- |
 | 1 | Model management | Provider list/editor, system model settings, fine-tuning and its dialogs, API-document viewer | User accepted 2026-10-19 |
 | 2 | Knowledge | Libraries, files, upload/parse, adjustments, Q&A | Functional testing: no issues found; design review pending |
 | 3 | Application building | Apps, templates, assistant editor, tools | Ready for module acceptance |
-| 4 | Workflow | Canvas, node settings, debug and results | Pending |
-| 5 | Evaluation | Evaluations, creation/results, datasets | Pending |
-| 6 | Annotation | Tasks, task apps, conversation annotation | Pending |
-| 7 | Logs | App/system logs and conversation details | Pending |
-| 8 | Dashboard | List, editor, shared viewer | Pending |
-| 9 | System administration | Organization/members, users/groups, roles, sync, API accounts/tokens, config/theme | Pending |
-| 10 | Approval | Approval tabs and flow configuration | Pending |
-| 11 | Tenants | List, creation, editing and management | Pending |
-| 12 | Desktop administration | License/seats, quotas, usage, access, plugins | Pending |
-| 13 | Other entries | Workbench configuration, reports/resources, auth/tenant selection, permissions/errors, navigation/profile | Pending |
+| 4 | Workflow | Canvas, node settings, debug and results | User testing |
+| 5 | Evaluation | Evaluations, creation/results, datasets | User testing |
+| 6 | Annotation | Tasks, task apps, conversation annotation | User testing |
+| 7 | Logs | App/system logs and conversation details | User testing |
+| 8 | Dashboard | List, editor, shared viewer | User testing |
+| 9 | System administration | Organization/members, users/groups, roles, sync, API accounts/tokens, config/theme | User testing |
+| 10 | Approval | Approval tabs and flow configuration | Ready for module acceptance |
+| 11 | Tenants | List, creation, editing and management | User testing |
+| 12 | Desktop administration | License/seats, quotas, usage, access, plugins | User testing |
+| 13 | Other entries | Workbench configuration, reports/resources, auth/tenant selection, permissions/errors, navigation/profile | Ready for module acceptance |
 
-## Module 1: acceptance scope
-
-- Provider list: expand/collapse, configuration navigation, status verification,
-  online state/pending/failure, refresh, admin scope and inherited readonly rows.
-- Provider editor: create/edit, connection inputs, provider selection, daily
-  quota/unit, child sharing, add/delete models, model types and voice fields,
-  web search, advanced JSON draft/save/cancel and provider save/delete.
-- System settings: Workbench / knowledge / assistant / evaluation / workflow
-  tabs, saved selections, inherited/shared settings, prompt dialogs and save.
-- Fine-tuning: status filtering, service filtering/search, task creation/training
-  options, dataset selection/upload/download, service configuration, task
-  details, publish/unpublish/stop/delete and GPU resource dialog.
-- API document: existing PDF viewer; no eligible controls/icons to migrate.
 
 ## Explicit retained implementations
 

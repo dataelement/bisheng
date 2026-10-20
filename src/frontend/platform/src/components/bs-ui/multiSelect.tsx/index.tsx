@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input } from '@bisheng/ui';
 
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { debounce } from "lodash-es"
@@ -7,8 +7,8 @@ import { Check, ChevronDown, Loader2, Search, X } from "lucide-react"
 import * as React from "react"
 import { useTranslation } from "react-i18next"
 import { Badge } from "../badge"
-import { Button } from "../button"
-import { Input } from "../input"
+
+
 import { cname } from "../utils"
 
 // Types
@@ -336,16 +336,11 @@ const SelectedValues = React.memo<{
                             )}
                         </span>
                         {!isLocked && !option.loading && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto p-0 text-primary"
-                                onClick={(e) => {
+                            <Button variant="text" size="small" className="h-auto p-0 text-primary" onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
                                     onRemove(option.value)
-                                }}
-                            >
+                                }} color="default">
                                 <X className="h-3 w-3" />
                             </Button>
                         )}
@@ -504,16 +499,11 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
                     <div className="flex items-center gap-1">
                         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                         {canClear && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-auto p-1 text-muted-foreground hover:text-foreground"
-                                onClick={(e) => {
+                            <Button variant="text" size="small" className="h-auto p-1 text-muted-foreground hover:text-foreground" onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
                                     clearAll()
-                                }}
-                            >
+                                }} color="default">
                                 <X className="h-3 w-3" />
                                 <span className="sr-only">Clear selection</span>
                             </Button>
@@ -540,13 +530,7 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
                             <div className="border-b p-2">
                                 <div className="relative">
                                     <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-gray-950 dark:text-gray-500  z-10" />
-                                    <Input
-                                        ref={searchInputRef}
-                                        placeholder={searchPlaceholder}
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="pl-8 bg-search-input h-8"
-                                    />
+                                    <Input ref={searchInputRef} placeholder={searchPlaceholder} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={"pl-8 bg-search-input h-8"} />
                                 </div>
                             </div>
                         )}
@@ -577,7 +561,7 @@ export const MultiSelect = React.forwardRef<React.ElementRef<typeof PopoverPrimi
 
                             {hasMore && onLoadMore && (
                                 <div className="p-2">
-                                    <Button variant="ghost" size="sm" className="w-full" disabled={loading}>
+                                    <Button variant="text" size="small" className="w-full" disabled={loading} color="default">
                                         {loading ? (
                                             <>
                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

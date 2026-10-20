@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Tag } from "@bisheng/ui";
-import { Button } from "../../../components/bs-ui/button";
+
 import EditLabel from "../../../components/bs-ui/editLabel";
 import { alertContext } from "../../../contexts/alertContext";
 import { getModelInfoApi } from "../../../controllers/API";
@@ -93,19 +94,19 @@ const HeadButtonView = ({ name, status, online, onPublish, onUnPublish, onDelete
 
     return <div className="absolute right-4 flex gap-2">
         {status === TaskStatus.PUBLISH_SUCCESS ?
-            <Button size="sm" disabled={loading} onClick={cancelPublish}>
+            <Button size="small" disabled={loading} onClick={cancelPublish}>
                 {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                 {t('finetune.cancelPublish')}
             </Button> :
             status === TaskStatus.TRAIN_SUCCESS ?
-                <Button size="sm" disabled={loading} onClick={handlePublish}>
+                <Button size="small" disabled={loading} onClick={handlePublish}>
                     {loading && <Outlined.Loading className="animate-spin animate-spin mr-2" size={14} />}
                     {t('finetune.publish')}
                 </Button> : null
         }
         {status === TaskStatus.TRAINING_IN_PROGRESS ?
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
-            <Button size="sm" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
+            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={stopClick}>{t('finetune.stop')}</Button> :
+            <Button size="small" className="bg-red-400 hover:bg-red-500" onClick={deleteClick}>{t('bs:delete')}</Button>
         }
     </div>
 }

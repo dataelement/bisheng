@@ -56,15 +56,15 @@ export default function ConfigInheritanceBanner({ meta }: { meta?: ConfigEnvelop
                 inherited
                     ? "mb-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700"
                     : hasOverride
-                        ? "mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
-                        : "mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700"
+                      ? "mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
+                      : "mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700"
             }
         >
             {inherited
-                ? t("tenant.inheritedFromRoot", { defaultValue: "当前使用根租户配置" })
+                ? t("tenant.inheritedFromRoot")
                 : hasOverride
-                    ? t("tenant.currentOverride", { defaultValue: "当前租户已独立配置" })
-                    : t("tenant.noOverrideYet", { defaultValue: "当前尚未保存独立配置" })}
+                  ? t("tenant.currentOverride")
+                  : t("tenant.noOverrideYet")}
         </div>
     );
 }

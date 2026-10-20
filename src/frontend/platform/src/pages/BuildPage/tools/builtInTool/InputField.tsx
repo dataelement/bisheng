@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { Input } from "@/components/bs-ui/input";
+import { Input } from '@bisheng/ui';
+
 import {
 Select,
 SelectContent,
@@ -34,18 +35,7 @@ export const InputField = ({
                 {required && <span className="bisheng-tip">*</span>}
             </label>
 
-            <Input
-                type={type}
-                id={id}
-                name={name}
-                placeholder={placeholder}
-                className="mt-2"
-                value={value}
-                autoComplete="off"
-                onChange={onChange}
-                min="0"
-                {...prop}
-            />
+            <Input type={type} id={id} name={name} placeholder={placeholder} value={value} autoComplete="off" onChange={onChange} min="0" {...prop} className={"mt-2"} />
             {error && (
                 <p className="bisheng-tip mt-1">
                     {typeof error === "string"

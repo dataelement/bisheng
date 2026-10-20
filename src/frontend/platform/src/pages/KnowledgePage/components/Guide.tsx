@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { AlertDialog,AlertDialogCancel,AlertDialogContent,AlertDialogDescription,AlertDialogFooter,AlertDialogHeader } from "@/components/bs-ui/alertDialog";
-import { Button } from "@/components/bs-ui/button";
+
 import { useEffect,useState } from "react";
 import { useTranslation } from "react-i18next";
 

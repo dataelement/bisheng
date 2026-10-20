@@ -1,13 +1,15 @@
 // @ts-strict-ignore
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, toast } from '@bisheng/ui';
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button, LoadButton } from "@/components/bs-ui/button";
-import { Input } from "@/components/bs-ui/input";
+
+
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { Button as SharedButton, Switch, Tooltip as SharedTooltip } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { ModelFieldHint } from "./ModelFieldHint";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
@@ -106,6 +108,8 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
     }
 
     const handleAddModel = () => {
+        if (formData.limit_flag && (String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) return;
+
         const maxIndex = formData.models.reduce((max, el, i) => el.name.match(/model (\d+)/) ? Math.max(max, +el.name.match(/model (\d+)/)[1]) : max, 0)
 
         const model = {
@@ -144,31 +148,24 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
         setFormData({ ...formData, models })
     }
 
-    const { message } = useToast()
+
     const formRef = useRef(null)
     const [isLoading, setIsLoading] = useState(false);
     const handleSave = async () => {
+        if (formData.limit_flag && (String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) return;
+
         setIsLoading(true)
         try {
             const exists = onBerforSave(formData.id, formData.name)
             if (exists) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderName')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.duplicateServiceProviderName') ?? '') })
             }
             if (!formData.name || formData.name.length > 100) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.duplicateServiceProviderNameValidation')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.duplicateServiceProviderNameValidation') ?? '') })
             }
             const [config, errorKey] = formRef.current.getData();
             if (errorKey) {
-                return message({
-                    variant: 'warning',
-                    description: `${errorKey} ${t('model.notBeEmpty')}`
-                })
+                return toast.show({ type: 'warning', message: String(`${errorKey} ${t('model.notBeEmpty')}`) })
             }
 
             const trimmedModels = trimModelNames(formData.models)
@@ -181,22 +178,13 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                 }
             }
             if (hasInvalidModelName(trimmedModels)) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelNameValidation')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.modelNameValidation') ?? '') })
             }
             if (hasDuplicateModelName(trimmedModels)) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.modelDuplicate')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.modelDuplicate') ?? '') })
             }
             if (hasTTSVoiceError) {
-                return message({
-                    variant: 'warning',
-                    description: t('model.voiceTypeRequired')
-                })
+                return toast.show({ type: 'warning', message: String(t('model.voiceTypeRequired') ?? '') })
             }
 
             const saveData = {
@@ -312,10 +300,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                         {formData.limit_flag && (
                             <div className="flex flex-nowrap items-center gap-2 text-sm text-text-3">
                                 <div className="w-28 shrink-0">
-                                    <Input type="number" size="medium" min={1} value={formData.limit}
-                                        aria-label={t('model.dailyCallLimit')}
-                                        onChange={(e) => setFormData({ ...formData, limit: Number(e.target.value) })}
-                                    ></Input>
+                                    <Input type="number" size="medium" min={1} value={formData.limit} aria-label={t('model.dailyCallLimit')} onChange={(e) => { if (!isNumberDraftWithinBounds(e.currentTarget.value, { min: 1 })) return; return setFormData({ ...formData, limit: Number(e.target.value) }); }}></Input>
                                 </div>
                                 <span className="shrink-0 whitespace-nowrap">{t('model.timesPerDay')}</span>
                             </div>
@@ -354,7 +339,7 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
                                 />
                             ))
                         }
-                        <Button className="w-full border-dashed border-border" variant="outline" onClick={handleAddModel}>
+                        <Button className="w-full border-dashed border-border" variant="outlined" onClick={handleAddModel} disabled={(String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))} color="default">
                             <Outlined.Plus />
                             <span>{t('model.addModel')}</span>
                         </Button>
@@ -363,16 +348,11 @@ export default function ModelConfig({ id, onGetName, onBack, onReload, onBerforS
             </div>
         </div>
         <div className="absolute right-0 bottom-0 p-4 flex gap-4">
-            {id !== -1 && <Button className="px-8" variant="destructive" onClick={handleModelDel}>{t('model.delete')}</Button>}
-            <Button className="px-8" variant="outline" onClick={() => onBack()}>{t('model.cancel')}</Button>
-            <LoadButton
-                className="px-16"
-                disabled={!formData.type}
-                loading={isLoading}
-                onClick={handleSave}
-            >
+            {id !== -1 && <Button className="px-8" variant="solid" onClick={handleModelDel} color="danger">{t('model.delete')}</Button>}
+            <Button className="px-8" variant="outlined" onClick={() => onBack()} color="default">{t('model.cancel')}</Button>
+            <Button className="px-16" loading={isLoading} onClick={handleSave} disabled={((String((formData.limit) ?? '') !== '' && (!Number.isFinite(Number(formData.limit)) || Number(formData.limit) < 1))) || (Boolean(isLoading) || (!formData.type))}>
                 {t('model.save')}
-            </LoadButton>
+            </Button>
         </div>
     </div>
 }

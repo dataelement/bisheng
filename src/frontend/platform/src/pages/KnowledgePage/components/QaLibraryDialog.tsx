@@ -1,8 +1,9 @@
+import { Button, Input, Textarea, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
 import { createFileLib, updateKnowledge } from "@/controllers/API";
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -22,7 +23,7 @@ interface LibraryDialogProps {
 
 export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode = 'create', currentLib = null }: LibraryDialogProps) {
     const { t } = useTranslation('knowledge')
-    const { toast } = useToast();
+
     const navigate = useNavigate()
     const nameRef = useRef<HTMLInputElement>(null)
     const descRef = useRef<HTMLTextAreaElement>(null)
@@ -54,12 +55,12 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                 }
             } catch (error) {
                 console.error('Failed to load model data:', error);
-                toast({ variant: "error", description: t('loadModelError') });
+                notification.open({ type: "error", description: String(t('loadModelError') ?? '') });
             }
         };
 
         fetchModelData();
-    }, [open, mode, currentLib, t, toast]);
+    }, [open, mode, currentLib, t]);
 
     useEffect(() => {
         if (!open) {
@@ -86,21 +87,21 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
         }
 
         if (!name) {
-            toast({ variant: 'error', description: t('lib.enterLibraryName', { ns: 'bs' }) });
+            notification.open({ type: 'error', description: String(t('lib.enterLibraryName', { ns: 'bs' }) ?? '') });
             return;
         }
         if (name.length > 200) {
-            toast({ variant: 'error', description: t('nameExceedsLimit') });
+            notification.open({ type: 'error', description: String(t('nameExceedsLimit') ?? '') });
             return;
         }
         const isEditMode = mode === 'edit' && currentLib;
         const nameUnchanged = isEditMode && name === currentLib.name;
         if (!nameUnchanged && datalist.find(data => data.name === name && (!currentLib || data.id !== currentLib.id))) {
-            toast({ variant: 'error', description: t('lib.nameExists') });
+            notification.open({ type: 'error', description: String(t('lib.nameExists') ?? '') });
             return;
         }
         if (descRef.current!.value && desc.length > 200) {
-            toast({ variant: 'error', description: t('lib.descriptionLimit', { ns: 'bs' }) });
+            notification.open({ type: 'error', description: String(t('lib.descriptionLimit', { ns: 'bs' }) ?? '') });
             return;
         }
 
@@ -129,15 +130,15 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                     knowledge_name: name,
                     description: desc
                 });
-                toast({ variant: "success", description: t('updateSuccess') });
+                notification.open({ type: "success", description: String(t('updateSuccess') ?? '') });
                 onOpenChange(false);
                 onLoadEnd();
             }
         } catch (error) {
             if (error) {
-                toast({ variant: "error", description: String(error || t('operationFailed')) });
+                notification.open({ type: "error", description: String(error || t('operationFailed')) });
             } else {
-                toast({ variant: "error", description: mode === 'create' ? t('createFailed') : t('updateFailed') });
+                notification.open({ type: "error", description: String(mode === 'create' ? t('createFailed') : t('updateFailed') ?? '') });
             }
         } finally {
             setIsSubmitting(false);
@@ -166,22 +167,11 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                     <div className="">
                         <label htmlFor="name" className="bisheng-label">{t('system.libraryName', { ns: 'bs' })}</label>
                         <span className="text-red-500">*</span>
-                        <Input
-                            name="name"
-                            ref={nameRef}
-                            placeholder={t('lib.enterLibraryName', { ns: 'bs' })}
-                            className="col-span-3"
-                        />
+                        <Input name="name" ref={nameRef} placeholder={t('lib.enterLibraryName', { ns: 'bs' })} className={"col-span-3"} />
                     </div>
                     <div className="">
                         <label htmlFor="desc" className="bisheng-label">{t('knowledgeDesc')}</label>
-                        <Textarea
-                            id="desc"
-                            ref={descRef}
-                            placeholder={t('pleaseEnterDesc')}
-                            rows={8}
-                            className="col-span-3"
-                        />
+                        <Textarea id="desc" ref={descRef} placeholder={t('pleaseEnterDesc')} rows={8} textareaClassName={"col-span-3"} />
                     </div>
                     <div className="">
                         <label htmlFor="model" className="bisheng-label">{t('embeddingModel')}</label>
@@ -217,16 +207,11 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11">{t('cancel')}</Button>
+                        <Button variant="outlined" className="px-11" color="default">{t('cancel')}</Button>
                     </DialogClose>
                     {mode === 'create' ? (
                         <>
-                            <Button
-                                type="submit"
-                                className="px-11 flex"
-                                onClick={() => handleCreate(false)}
-                                disabled={isSubmitting}
-                            >
+                            <Button type="submit" className="px-11 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                                 {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                                 {t('completeCreation')}
                             </Button>
@@ -241,12 +226,7 @@ export function QaLibraryDialog({ datalist, open, onOpenChange, onLoadEnd, mode 
                             </Button> */}
                         </>
                     ) : (
-                        <Button
-                            type="submit"
-                            className="px-8 h-8 flex"
-                            onClick={() => handleCreate(false)}
-                            disabled={isSubmitting}
-                        >
+                        <Button type="submit" className="px-8 h-8 flex" onClick={() => handleCreate(false)} disabled={isSubmitting}>
                             {isSubmitting && <Outlined.Loading className="animate-spin mr-1" />}
                             {t('confirm')}
                         </Button>

@@ -1,10 +1,10 @@
+import { locationContext } from "@/contexts/locationContext";
 import {
     getCommercialLicenseStatus,
     getLicenseStatus,
     reportGatewayLicense,
     type CommercialLicenseItem,
 } from "@/controllers/API/license";
-import { locationContext } from "@/contexts/locationContext";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 

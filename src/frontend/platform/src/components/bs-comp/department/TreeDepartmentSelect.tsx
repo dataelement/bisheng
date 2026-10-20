@@ -1,3 +1,5 @@
+import { Button } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 /**
  * 树状部门选择器（TreeDepartmentSelect）
  *
@@ -5,18 +7,18 @@
  * F038：数据不再由父组件传整树，而是组件内部经 `useLazyDepartmentTree` 懒加载
  * （`GET /api/v1/departments/{children,search,{id}/path-tree}`），大组织下秒开。
  */
-import { Button } from "@/components/bs-ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { getDepartmentPathTreeApi } from "@/controllers/API/department"
-import { DepartmentSearchResult, DepartmentTreeNode } from "@/types/api/department"
-import { cn } from "@/utils"
-import { ChevronDown } from "lucide-react"
-import type { ReactNode } from "react"
-import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { LazyDepartmentTree } from "./LazyDepartmentTree"
-import { useLazyDepartmentTree, type UseLazyDepartmentTreeOptions } from "./useLazyDepartmentTree"
+
+import { Popover,PopoverContent,PopoverTrigger } from "@/components/bs-ui/popover";
+import { getDepartmentPathTreeApi } from "@/controllers/API/department";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { DepartmentSearchResult,DepartmentTreeNode } from "@/types/api/department";
+import { cn } from "@/utils";
+
+import type { ReactNode } from "react";
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { LazyDepartmentTree } from "./LazyDepartmentTree";
+import { useLazyDepartmentTree,type UseLazyDepartmentTreeOptions } from "./useLazyDepartmentTree";
 
 export type TreeDepartmentSelectValue = number | null
 
@@ -172,25 +174,18 @@ export function TreeDepartmentSelect({
     <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <div className={cn("w-full", className)}>
         <PopoverTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            className={cn(
+          <Button type="button" variant="outlined" disabled={disabled} className={cn(
               "h-9 w-full justify-between px-3 font-normal text-foreground hover:bg-background",
               !value && !allowNone && "text-muted-foreground",
               triggerClassName
-            )}
-            aria-expanded={open}
-            aria-haspopup="listbox"
-          >
+            )} aria-expanded={open} aria-haspopup="listbox" color="default">
             <span
               className="min-w-0 flex-1 truncate text-left"
               title={value != null ? displayLabel : undefined}
             >
               {displayLabel}
             </span>
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
+            <Outlined.Down className="ml-2 h-4 w-4 shrink-0 opacity-60" />
           </Button>
         </PopoverTrigger>
       </div>

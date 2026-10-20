@@ -1,4 +1,5 @@
-import { Button } from '@/components/bs-ui/button'
+import { Button } from '@bisheng/ui';
+
 import {
     Select,
     SelectContent,
@@ -59,12 +60,12 @@ export function DshPager({
     return (
         <div className={`flex gap-2 ${className}`}>
             {(!hideUnavailable || previous) && (
-                <Button variant="outline" disabled={!previous || loading} onClick={onPrevious}>
+                <Button variant="outlined" disabled={!previous || loading} onClick={onPrevious} color="default">
                     {t('dsh.previous')}
                 </Button>
             )}
             {(!hideUnavailable || next) && (
-                <Button variant="outline" disabled={!next || loading} onClick={onNext}>
+                <Button variant="outlined" disabled={!next || loading} onClick={onNext} color="default">
                     {t('dsh.next')}
                 </Button>
             )}

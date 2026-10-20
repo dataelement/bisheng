@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 import { ModelFieldHint } from "../ModelFieldHint";
 import { getLinsightModelEnvelope, updateLinsightModelConfig } from "@/controllers/API/finetune";
 import { FallbackBlockedBanner, InheritedBadge } from "../SystemConfigBanners";
@@ -59,7 +60,7 @@ export const ModelSelect = ({ required = false, close = false, label, tooltipTex
 export default function WorkbenchModel({ onBack }) {
     const { llmOptions, embeddings, asrModel, ttsModel } = useModel();
     const { t } = useTranslation('model')
-    const { message } = useToast()
+
     const modelRefs = useRef<(HTMLDivElement | null)[]>([])
 
     const [form, setForm] = useState<any>({
@@ -139,10 +140,10 @@ export default function WorkbenchModel({ onBack }) {
                 models: newConfig?.models || [],
             };
             if (response !== false) {
-                message({ variant: 'success', description: t('model.saveSuccess') });
+                toast.show({ type: 'success', message: String(t('model.saveSuccess') ?? '') });
             }
         } catch (err) {
-            message({ variant: 'error', description: t('model.saveFailed') });
+            toast.show({ type: 'error', message: String(t('model.saveFailed') ?? '') });
         } finally {
             setSaveLoad(false);
         }
@@ -156,6 +157,7 @@ export default function WorkbenchModel({ onBack }) {
     };
 
     const handleSave = () => {
+        if (form.models.some(model => String(model.description ?? "").length > 50)) return;
         const errors = [];
         if (!form.models.length) {
             errors.push('请至少配置一个对话模型');
@@ -171,7 +173,7 @@ export default function WorkbenchModel({ onBack }) {
             errors.push(t('model.workVectorModel') + t('bs:required'));
         }
         if (errors.length) {
-            message({ variant: 'error', description: errors });
+            toast.show({ type: 'error', message: errors.filter(Boolean).join('\n') });
             return;
         }
 
@@ -194,7 +196,7 @@ export default function WorkbenchModel({ onBack }) {
 
     useEffect(() => {
         if (error) {
-            message({ variant: 'error', description: t('model.fetchConfigFailed') });
+            toast.show({ type: 'error', message: String(t('model.fetchConfigFailed') ?? '') });
             return;
         }
 
@@ -223,7 +225,7 @@ export default function WorkbenchModel({ onBack }) {
                 models: linsightConfig.models || [],
             };
         }
-    }, [linsightConfig, error, message, defalutPrompt, t]);
+    }, [linsightConfig, error, defalutPrompt, t]);
 
     if (loading) return (
         <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
@@ -328,12 +330,8 @@ export default function WorkbenchModel({ onBack }) {
                 onChange={(val) => setForm({ ...form, chatTitleLlmId: val })}
             />
             <div className="mt-10 text-center space-x-6">
-                <Button className="px-6" variant="outline" onClick={onBack}>{t('model.cancel')}</Button>
-                <Button
-                    className="px-10"
-                    disabled={saveload}
-                    onClick={handleSave}
-                >
+                <Button className="px-6" variant="outlined" onClick={onBack} color="default">{t('model.cancel')}</Button>
+                <Button className="px-10" disabled={saveload} onClick={handleSave}>
                     {saveload && <Outlined.Loading className="animate-spin mr-2" />}
                     {t('model.save')}
                 </Button>

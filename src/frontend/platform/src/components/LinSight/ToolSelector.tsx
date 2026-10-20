@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { SearchInput } from '@bisheng/ui';
 // components/ToolSelector.tsx
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlignJustify, Check, CpuIcon, Minus, Plus, Star, User, X } from 'lucide-react';
@@ -6,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DragDropContext, Draggable, Droppable } from 'react-beautiful-dnd';
 import { useTranslation } from 'react-i18next';
 import { LoadIcon } from '../bs-icons/loading';
-import { SearchInput } from '../bs-ui/input';
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../bs-ui/tooltip';
 type CheckboxState = 'checked' | 'unchecked' | 'indeterminate';
 
@@ -218,7 +219,7 @@ const ToolSelector = ({
   const CustomCheckbox = ({ state, onChange }) => (
     <button
       type="button"
-      className={`w-4 h-4 border rounded flex items-center justify-center 
+      className={`w-4 h-4 border rounded flex items-center justify-center
         ${state !== 'unchecked' ? 'bg-primary border-primary' : 'border-gray-300'}`}
       style={{ color: 'white' }}
       onClick={() => onChange(state !== 'checked')}
@@ -343,13 +344,7 @@ const ToolSelector = ({
               <h3 className="font-medium">{t('toolSelector.allTools')}</h3>
             </div>
             <div className="relative p-2 border-b">
-              <SearchInput
-                placeholder={t('toolSelector.searchPlaceholder')}
-                value={toolSearchTerm}
-                onChange={(e) => setToolSearchTerm(e.target.value)}
-                onClear={() => setToolSearchTerm('')}
-
-              />
+              <SearchInput placeholder={t('toolSelector.searchPlaceholder')} value={toolSearchTerm} onChange={(e) => setToolSearchTerm(e.target.value)} onClear={() => setToolSearchTerm('')} />
             </div>
 
             <div className="flex-1 overflow-y-auto p-2">
@@ -455,7 +450,7 @@ const ToolSelector = ({
                           className="flex items-center gap-2 ml-10 p-2 hover:bg-gray-50 cursor-pointer"
                           onClick={() => toggleTool(tool, child)}
                         >
-                          <div className={`w-4 h-4 border rounded flex items-center justify-center 
+                          <div className={`w-4 h-4 border rounded flex items-center justify-center
                             ${isToolSelected(tool.id, child.id) ? 'bg-primary border-primary' : 'border-gray-300'}`}>
                             {isToolSelected(tool.id, child.id) && <Check className="w-3 h-3" style={{ color: 'white' }} />}
                           </div>

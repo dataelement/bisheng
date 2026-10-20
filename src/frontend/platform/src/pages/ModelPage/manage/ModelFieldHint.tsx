@@ -9,7 +9,7 @@ interface ModelFieldHintProps {
 export function ModelFieldHint({ content, className }: ModelFieldHintProps) {
     return <Tooltip content={content}>
         <Button type="button" variant="ghost" size="icon" aria-label={content} className={className}>
-            <Outlined.Question />
+            <Outlined.Question className="text-text-3" />
         </Button>
     </Tooltip>
 }

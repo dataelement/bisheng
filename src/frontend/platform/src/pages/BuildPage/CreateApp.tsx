@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button, Input, Textarea } from '@bisheng/ui';
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
 import { Outlined } from "bisheng-icons";
 
 import { Accordion } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
-import { Input,Textarea } from "@/components/bs-ui/input";
+
 import Avator from "@/components/bs-ui/input/avator";
 import { generateUUID } from "@/components/bs-ui/utils";
 import AssistantSetting from "@/components/Pro/security/AssistantSetting";
@@ -131,6 +132,8 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
         // Handle form submission
         const navigate = useNavigate()
         const handleSubmit = async (e: React.FormEvent) => {
+        if ((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) return;
+
             e.preventDefault();
             const isValid = validateForm();
             if (!isValid) return;
@@ -186,7 +189,7 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     const res = await captureAndAlertRequestErrorHoc(createAssistantsApi(formData.name, formData.desc, formData.url));
                     if (res) {
                         //@ts-ignore
-                        window.assistantCreate = true // Mark the created assistant 
+                        window.assistantCreate = true // Mark the created assistant
                         navigate('/assistant/' + res.id)
                     }
                 } else {
@@ -235,31 +238,14 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                                 {appType === AppType.ASSISTANT ? t('build_assistantName') : t('name')}
                                 <span className="bisheng-tip">*</span>
                             </label>
-                            <Input
-                                id="name"
-                                name="name"
-                                maxLength={50}
-                                showCount
-                                placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')}
-                                className="mt-3"
-                                value={formData.name}
-                                onChange={handleChange}
-                            />
+                            <Input id="name" name="name" maxLength={50} showCount placeholder={appType === AppType.ASSISTANT ? t('giveAssistantAName') : t('giveWorkflowAName')} value={formData.name} onChange={handleChange} className={"mt-3"} />
                             {errors.name && <p className="bisheng-tip mt-1">{errors.name}</p>}
                         </div>
                         <div className="mb-6">
                             <label htmlFor="desc" className="bisheng-label">
                                 {appType === AppType.ASSISTANT ? t('build_roleAndTasks') : t('description')}
                             </label>
-                            <Textarea
-                                id="desc"
-                                name="desc"
-                                placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')}
-                                maxLength={1000}
-                                className="mt-3 min-h-32 pt-3"
-                                value={formData.desc}
-                                onChange={handleChange}
-                            />
+                            <Textarea id="desc" name="desc" placeholder={appType === AppType.ASSISTANT ? assistantRoleExample() : t('enterWorkflowDescription')} maxLength={1000} value={formData.desc} onChange={handleChange} textareaClassName={"mt-3 min-h-32 pt-3"} showCount />
                             {errors.desc && <p className="bisheng-tip mt-1">{errors.desc}</p>}
                         </div>
                     </div>
@@ -271,11 +257,11 @@ const CreateApp = forwardRef<ModalRef, ModalProps & { loca?: any }>(
                     </div>
                     <DialogFooter>
                         <DialogClose>
-                            <Button variant="outline" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })}>
+                            <Button variant="outlined" className="px-11" type="button" onClick={() => setFormData({ name: '', desc: '', url: '' })} color="default">
                                 {t('cancel')}
                             </Button>
                         </DialogClose>
-                        <Button disabled={!formData.name || loading} type="submit" className="px-11" onClick={handleSubmit}>
+                        <Button disabled={((String((formData.name) ?? '').length > 50) || (String((formData.desc) ?? '').length > 1000)) || (!formData.name || loading)} type="submit" className="px-11" onClick={handleSubmit}>
                             {loading && <Outlined.Loading className="animate-spin mr-2" />}
                             {t(isEditMode ? 'save' : 'create')}
                         </Button>

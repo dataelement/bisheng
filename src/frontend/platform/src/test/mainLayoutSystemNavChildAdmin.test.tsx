@@ -237,7 +237,7 @@ describe("MainLayout identity-specific navigation", () => {
     expect(link).toHaveAttribute("href", "/dsh");
     expect(link).toHaveClass("inline-flex", "items-center", "px-6", "w-full", "h-12");
     expect(modelLink).toHaveClass("inline-flex", "px-6", "w-full", "h-12");
-    expect(link.querySelector("svg")).toHaveClass("h-6", "w-6", "shrink-0");
+    expect(link.querySelector("svg")).toHaveClass("h-4", "w-4", "mr-2", "shrink-0");
     const label = link.querySelector("span[aria-hidden='true']");
     expect(label).toHaveClass("mx-[14px]", "inline-flex", "w-[3em]", "justify-between", "text-sm");
     expect(screen.getByText("menu.models")).toHaveClass("mx-[14px]");

@@ -1,10 +1,11 @@
 // @ts-strict-ignore
+import { Button, toast } from '@bisheng/ui';
 import { checkSassUrl } from "@/components/bs-comp/FileView";
-import { Button,LoadButton } from "@/components/bs-ui/button";
+
 import { Dialog,DialogClose,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
 import { Label } from "@/components/bs-ui/label";
 import { Table,TableBody,TableCell,TableHead,TableRow } from "@/components/bs-ui/table";
-import { message } from "@/components/bs-ui/toast/use-toast";
+
 import SimpleUpload from "@/components/bs-ui/upload/simple";
 import { getQaFile,getQaFilePreview,postImportQaFile } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
@@ -58,9 +59,9 @@ const SimilarityProblemModal = forwardRef(function ({ questions }, ref) {
                 </div>
                 <DialogFooter>
                     <DialogClose>
-                        <LoadButton type="submit" className="px-11">
+                        <Button type="submit" className="px-11">
                             {t('confirm')}
-                        </LoadButton>
+                        </Button>
                     </DialogClose>
                 </DialogFooter>
             </DialogContent>
@@ -97,10 +98,7 @@ function QaTable({ dataList }) {
                                 <TableCell className="font-medium cursor-pointer text-primary">
                                     <Button variant="link" className="px-1" onClick={() => {
                                         if (!questions.length) {
-                                            return message({
-                                                variant: 'warning',
-                                                description: t('noSimilarQuestions')
-                                            });
+                                            return toast.show({ type: 'warning', message: String(t('noSimilarQuestions') ?? '') });
                                         }
                                         setQuestions(questions);
                                         //打开相似问题预览窗口
@@ -212,10 +210,7 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
 
         if (isDataListEmpty) errors.push(t('emptyUploadData'));
         if (errors.length > 0) {
-            return message({
-                variant: 'warning',
-                description: errors
-            });
+            return toast.show({ type: 'warning', message: errors.filter(Boolean).join('\n') });
         }
         const res = await captureAndAlertRequestErrorHoc(postImportQaFile(id, {
             url: form.fileUrl
@@ -223,9 +218,9 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
         const errorLines = res.errors[0];
         console.log('errors', errorLines);
         if (errorLines.length) {
-            message({ variant: 'warning', description: t('errorMsg', { value: errorLines.length }) });
+            toast.show({ type: 'warning', message: String(t('errorMsg', { value: errorLines.length }) ?? '') });
         } else {
-            message({ variant: 'success', description: t('successMsg') });
+            toast.show({ type: 'success', message: String(t('successMsg') ?? '') });
         }
         close();
         onChange();
@@ -289,13 +284,13 @@ export const ImportQa = forwardRef(function ({ knowlageId, onChange }: any, ref)
                 </div>}
                 <DialogFooter>
                     <DialogClose>
-                        <Button variant="outline" className="px-11" type="button" onClick={close}>
+                        <Button variant="outlined" className="px-11" type="button" onClick={close} color="default">
                             {t('cancel')}
                         </Button>
                     </DialogClose>
-                    <LoadButton loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit}>
+                    <Button loading={saveLoad} type="submit" className="px-11" onClick={handleSubmit} disabled={Boolean(saveLoad)}>
                         {t('submit')}
-                    </LoadButton>
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

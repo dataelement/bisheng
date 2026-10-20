@@ -1,3 +1,4 @@
+import { notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 // Page-level admin-scope switcher for LLM management.
 //
@@ -22,7 +23,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/bs-ui/dropdownMenu"
-import { toast } from "@/components/bs-ui/toast/use-toast"
+
 import { getTenantsApi } from "@/controllers/API/tenant"
 import { useAdminScope } from "@/hooks/useAdminScope"
 import { Tenant } from "@/types/api/tenant"
@@ -110,14 +111,11 @@ function SuperAdminScopeSwitcher({
             // -aware data (e.g. ModelSelect dropdowns).
             await queryClient.invalidateQueries()
             await onScopeChange?.()
-            toast({
-                variant: "success",
-                description: next === null
+            notification.open({ type: "success", description: String(next === null
                     ? t("tenant.adminScope.cleared")
                     : t("tenant.adminScope.switched", {
                         name: tenants.find((r) => r.id === next)?.tenant_name || "",
-                    }),
-            })
+                    }) ?? '') })
         } catch {
             // request interceptor will surface the error toast
         }
@@ -130,9 +128,9 @@ function SuperAdminScopeSwitcher({
             <DropdownMenuTrigger asChild>
                 <Button
                     type="button"
-                    variant="secondary"
+                    variant="filled"
                     title={t("tenant.adminScope.label") + ": " + currentLabel}
-                    disabled={scopeLoading}
+                    disabled={scopeLoading} color="default"
                 >
                     <span className="text-xs text-muted-foreground mr-1">
                         {t("tenant.adminScope.label")}{": "}

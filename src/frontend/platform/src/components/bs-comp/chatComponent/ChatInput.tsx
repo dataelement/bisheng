@@ -1,11 +1,12 @@
 // @ts-strict-ignore
+import { Button, Textarea, notification } from '@bisheng/ui';
 import { Outlined } from "bisheng-icons";
 
 
 
-import { Button } from "@/components/bs-ui/button";
-import { Textarea } from "@/components/bs-ui/input";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
+
 import { useAudioStore } from "@/components/voiceFunction/audioPlayerStore";
 import SpeechToTextComponent from "@/components/voiceFunction/speechToText";
 import { locationContext } from "@/contexts/locationContext";
@@ -19,7 +20,7 @@ import { isBlockingChatError,resolveChatErrorMessage } from "./chatErrorMessage"
 import { useMessageStore } from "./messageStore";
 
 export default function ChatInput({ clear, form, questions, inputForm, wsUrl, onBeforSend, onClickClear }) {
-    const { toast } = useToast()
+
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
 
@@ -113,11 +114,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
             wsRef.current.send(JSON.stringify(msg))
         } catch (error) {
-            toast({
-                title: 'There was an error sending the message',
-                variant: 'error',
-                description: error.message
-            });
+            notification.open({ type: 'error', title: String('There was an error sending the message'), description: String(error.message ?? '') });
         }
     }
 
@@ -151,10 +148,7 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
                     if (data.category === 'error') {
                         const errorMsg = resolveChatErrorMessage(data.message, t)
-                        toast({
-                            variant: 'error',
-                            description: errorMsg
-                        })
+                        notification.open({ type: 'error', description: String(errorMsg ?? '') })
                         updateCurrentMessage({
                             type: 'end_cover',
                             category: 'tool',
@@ -366,32 +360,20 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
             </div>
             {/* stop autogen等待输入时专用*/}
             <div className="absolute w-full flex justify-center bottom-32">
-                {autogenStop && <Button
-                    className="rounded-full"
-                    variant="outline" onClick={() => {
+                {autogenStop && <Button className="rounded-full" variant="outlined" onClick={() => {
                         if (stop.disable) return
                         setStop({ show: true, disable: true });
                         setAutogenStop(false)
                         sendWsMsg({ "action": "stop" });
-                    }}><Outlined.PlayerPause className="mr-2" />Stop</Button>}
+                    }} color="default"><Outlined.PlayerPause className="mr-2" />Stop</Button>}
             </div>
             {/* question */}
-            <Textarea
-                id="bs-send-input"
-                ref={inputRef}
-                rows={1}
-                style={{ height: 56 }}
-                disabled={inputLock.locked}
-                onInput={handleTextAreaHeight}
-                placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')}
-                className={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}
-                onKeyDown={(event) => {
+            <Textarea id="bs-send-input" ref={inputRef} rows={1} style={{ height: 56 }} disabled={inputLock.locked} onInput={handleTextAreaHeight} placeholder={inputLock.locked ? inputLock.reason : t('chat.inputPlaceholder')} onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
                         !inputLock.locked && handleSendClick()
                     }
-                }}
-            ></Textarea>
+                }} textareaClassName={"resize-none py-4 pr-10 text-md min-h-6 max-h-[200px] scrollbar-hide dark:bg-[#2A2B2E] text-gray-800" + (form && ' pl-10')}></Textarea>
         </div>
         <p className="text-center text-sm pt-2 pb-4 text-gray-400">{appConfig.dialogTips}</p>
     </div>

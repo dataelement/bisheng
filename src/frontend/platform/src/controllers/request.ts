@@ -1,5 +1,6 @@
 // @ts-strict-ignore
-import { toast } from "@/components/bs-ui/toast/use-toast";
+import { notification } from '@bisheng/ui';
+
 import axios from "axios";
 import i18next from "i18next";
 axios.defaults.withCredentials = true;
@@ -196,11 +197,7 @@ customAxios.interceptors.response.use(function (response) {
     // reject(null) so the HoC doesn't double-toast. See feature 037.
     if (statusCode === 11001) {
         if (shouldToastLicenseExpired()) {
-            toast({
-                title: `${i18next.t('prompt')}`,
-                variant: 'error',
-                description: coerceErrorMessage(response.data?.status_message) || i18next.t('license.businessExpired.gateway'),
-            })
+            notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(response.data?.status_message) || i18next.t('license.businessExpired.gateway')) })
         }
         return Promise.reject(null);
     }
@@ -276,19 +273,11 @@ customAxios.interceptors.response.use(function (response) {
     const envelope = error.response?.data
     if (isEnvelope(envelope)) {
         const errorMessage = decodeEnvelopeMessage(envelope)
-        toast({
-            title: `${i18next.t('prompt')}`,
-            variant: 'error',
-            description: coerceErrorMessage(errorMessage),
-        })
+        notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(errorMessage) ?? '') })
         return Promise.reject(error.config?.preserveError ? error : null);
     }
     // app 弹窗
-    toast({
-        title: `${i18next.t('prompt')}`,
-        variant: 'error',
-        description: coerceErrorMessage(error?.message || error)
-    })
+    notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(error?.message || error) ?? '') })
     // Preserve opt-in transport evidence after the shared error handling.
     return Promise.reject(error.config?.preserveError ? error : null);
 })
@@ -308,11 +297,7 @@ export function captureAndAlertRequestErrorHoc(apiFunc, iocFunc?) {
         if (handled) return false
 
         // 弹窗
-        toast({
-            title: `${i18next.t('prompt')}`,
-            variant: 'error',
-            description: coerceErrorMessage(error)
-        })
+        notification.open({ type: 'error', title: String(`${i18next.t('prompt')}`), description: String(coerceErrorMessage(error) ?? '') })
         console.error('逻辑异常 :>> ', error);
         return false
     })

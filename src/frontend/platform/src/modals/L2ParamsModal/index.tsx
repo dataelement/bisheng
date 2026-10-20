@@ -1,8 +1,9 @@
+import { Button } from '@bisheng/ui';
 import { PenLine } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
-import { Button } from "../../components/bs-ui/button";
+
 import {
     Dialog,
     DialogContent,
@@ -171,7 +172,7 @@ export default function L2ParamsModal({ data: flow, open, setOpen, onSave }: { d
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button className="mt-3 rounded-full" onClick={() => { setOpen(false); onSave() }} type="submit" >{t('flow.saveConfig')}</Button>
+                    <Button className="mt-3 rounded-full" onClick={() => { setOpen(false); onSave() }} type="submit">{t('flow.saveConfig')}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

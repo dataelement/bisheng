@@ -1,9 +1,10 @@
 // @ts-strict-ignore
-"use client";
+import { Button, notification } from '@bisheng/ui';
+
 import { Outlined } from "bisheng-icons";
 
-import { Button } from "@/components/bs-ui/button";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
+
 import { cn } from "@/util/utils";
 import { Tabs } from "@bisheng/ui";
 import { SearchCheck } from "lucide-react";
@@ -140,31 +141,31 @@ const FileUploadStep2 = forwardRef(({
         if (applyEachCell
             ? rules.fileList.some(file => file.excelRule.append_header && Number(file.excelRule.header_start_row) > Number(file.excelRule.header_end_row))
             : cellGeneralConfig.append_header && Number(cellGeneralConfig.header_start_row) > Number(cellGeneralConfig.header_end_row)) {
-            toast({ variant: 'warning', description: t('minRowGreaterThanMaxRow') });
+            notification.open({ type: 'warning', description: String(t('minRowGreaterThanMaxRow') ?? '') });
             return true;
         }
 
         const chunkSizeNum = Number((rules as any)?.chunkSize ?? (rules as any)?.chunk_size ?? 0);
         const chunkOverlapNum = Number((rules as any)?.chunkOverlap ?? (rules as any)?.chunk_overlap ?? 0);
         if (!Number.isNaN(chunkSizeNum) && !Number.isNaN(chunkOverlapNum) && chunkOverlapNum > chunkSizeNum) {
-            toast({ variant: 'warning', description: t('overlapGreaterThanChunkSize') });
+            notification.open({ type: 'warning', description: String(t('overlapGreaterThanChunkSize') ?? '') });
             return true;
         }
 
         return false;
     };
 
-    const { toast } = useToast();
+
 
     const internalHandleNext = () => {
         if (vildateCell()) return;
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
-            toast({ variant: 'warning', description: t('customRuleNotEmpty') });
+            notification.open({ type: 'warning', description: String(t('customRuleNotEmpty') ?? '') });
             return;
         }
         if (!rules.separator || rules.separator.length === 0) {
-            toast({ variant: 'warning', description: t('addAtLeastOneSplitRule') });
+            notification.open({ type: 'warning', description: String(t('addAtLeastOneSplitRule') ?? '') });
             return;
         }
 
@@ -211,11 +212,11 @@ const FileUploadStep2 = forwardRef(({
         if (vildateCell()) return;
         const hasEmptyCustomRule = (strategies || []).some(s => String(s?.regex ?? '') === '');
         if (hasEmptyCustomRule) {
-            toast({ variant: 'warning', description: t('customRuleNotEmpty') });
+            notification.open({ type: 'warning', description: String(t('customRuleNotEmpty') ?? '') });
             return;
         }
         if (!rules.separator || rules.separator.length === 0) {
-            toast({ variant: 'warning', description: t('addAtLeastOneSplitRule') });
+            notification.open({ type: 'warning', description: String(t('addAtLeastOneSplitRule') ?? '') });
             return;
         }
 
@@ -240,12 +241,7 @@ const FileUploadStep2 = forwardRef(({
                     ) : <div className="h-9" />}
 
                     {displayStep === 2 && (
-                        <Button
-                            variant="outline"
-                            className="h-9 rounded-md border-[#e4e8ee] bg-white px-4 shadow-sm hover:bg-accent"
-                            onClick={handlePreview}
-                            disabled={strategies.length === 0}
-                        >
+                        <Button variant="outlined" className="h-9 rounded-md border-[#e4e8ee] bg-white px-4 shadow-sm hover:bg-accent" onClick={handlePreview} disabled={strategies.length === 0} color="default">
                             <SearchCheck size={16} />
                             {showPreview ? t('repreviewSegmentation') : t('previewResults')}
                         </Button>
@@ -305,21 +301,13 @@ const FileUploadStep2 = forwardRef(({
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
-                <Button
-                    variant="outline"
-                    className="min-w-[88px]"
-                    onClick={() => {
+                <Button variant="outlined" className="min-w-[88px]" onClick={() => {
                         onPrev()
                         step === 2 && setShowPreview(false)
-                    }}
-                >
+                    }} color="default">
                     {t('previousStep')}
                 </Button>
-                <Button
-                    disabled={previewFailed || isSubmitting || strategies.length === 0}
-                    className="min-w-[88px]"
-                    onClick={internalHandleNext}
-                >
+                <Button disabled={previewFailed || isSubmitting || strategies.length === 0} className="min-w-[88px]" onClick={internalHandleNext}>
                     {isSubmitting ? (
                         <Outlined.Loading className="animate-spin h-12 w-12" />
                     ) : (

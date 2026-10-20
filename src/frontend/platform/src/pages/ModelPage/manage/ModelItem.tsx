@@ -1,9 +1,11 @@
+import { isNumberDraftWithinBounds } from '@/utils/fieldValidation';
+import { Button, Input, Textarea } from '@bisheng/ui';
 import { Switch, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
-import { Input, Textarea } from "@/components/bs-ui/input";
+
 import { Label } from "@/components/bs-ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import { ModelFieldHint } from "./ModelFieldHint";
@@ -150,6 +152,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
     };
 
     const handleSaveParams = () => {
+        if ((String(config.max_tokens ?? '') !== '' && (!Number.isFinite(Number(config.max_tokens ?? '')) || Number(config.max_tokens ?? '') < 0))) return;
+
         const value = draftParams.trim();
         if (value && parseParamsObject(value) === null) {
             setJsonError(true);
@@ -170,13 +174,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     </span>
                     <Tag size="small" className="shrink-0">{MODEL_TYPE_LABELS[modelType] ?? modelType}</Tag>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 shrink-0 text-muted-foreground"
-                    aria-label={t('model.deleteModel')}
-                    onClick={handleDeleteClick}
-                >
+                <Button variant="text" size="medium" className="size-8 shrink-0 text-muted-foreground" aria-label={t('model.deleteModel')} onClick={handleDeleteClick} color="default" iconOnly>
                     <Outlined.Delete />
                 </Button>
             </div>
@@ -187,7 +185,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         <span>{t('model.modelName')}</span>
                         <ModelFieldHint className="ml-1" content={t('model.modelNameTooltip')} />
                     </Label>
-                    <Input aria-label={t('model.modelName')} value={data.model_name} onChange={handleNameChange} className="h-8" />
+                    <Input aria-label={t('model.modelName')} value={data.model_name} onChange={handleNameChange} className={"h-8"} />
                     {nameError && <span className="text-xs text-red-500">{nameError}</span>}
                 </div>
                 <div className="space-y-2">
@@ -220,12 +218,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         <span className="text-red-500">*</span>
                         <ModelFieldHint className="ml-1" content={t('model.voiceTypeTooltip')} />
                     </Label>
-                    <Input
-                        aria-label={t('model.voiceType')}
-                        value={config.voice ?? data.voice ?? ''}
-                        onChange={(e) => applyConfig({ voice: e.target.value })}
-                        className="h-8"
-                    />
+                    <Input aria-label={t('model.voiceType')} value={config.voice ?? data.voice ?? ''} onChange={(e) => applyConfig({ voice: e.target.value })} className={"h-8"} />
                 </div>
             )}
 
@@ -238,14 +231,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                             content={t('model.maxTokensTip', { param: paramName })}
                         />
                     </Label>
-                    <Input
-                        type="number"
-                        aria-label={paramName}
-                        value={config.max_tokens ?? ''}
-                        onChange={handleMaxTokensChange}
-                        placeholder={t('model.maxTokensPlaceholder')}
-                        className="h-8"
-                    />
+                    <Input type="number" aria-label={paramName} value={config.max_tokens ?? ''} onChange={(event) => { if (!isNumberDraftWithinBounds(event.currentTarget.value, {  })) return; handleMaxTokensChange(event); }} placeholder={t('model.maxTokensPlaceholder')} className={"h-8"} />
                 </div>
             )}
 
@@ -273,7 +259,7 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                                 : t('model.advancedParamsNone')}
                         </span>
                     </div>
-                    <Button variant="link" size="sm" className="h-auto shrink-0 px-0" onClick={handleOpenParams}>
+                    <Button variant="link" size="small" className="h-auto shrink-0 px-0" onClick={handleOpenParams}>
                         {t('model.edit')}
                     </Button>
                 </div>
@@ -287,23 +273,11 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                     <div className="mt-4 text-gray-500">
                         <div className="flex items-center justify-between gap-4">
                             <Label>{t('model.pasteAdvancedParamsHere')}</Label>
-                            <Button
-                                variant="link"
-                                size="sm"
-                                className="h-auto shrink-0 px-0"
-                                onClick={() => handleDraftChange(paramsTemplate)}
-                            >
+                            <Button variant="link" size="small" className="h-auto shrink-0 px-0" onClick={() => handleDraftChange(paramsTemplate)}>
                                 {t('model.insertParamsExample')}
                             </Button>
                         </div>
-                        <Textarea
-                            aria-label={t('model.pasteAdvancedParamsHere')}
-                            value={draftParams}
-                            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)}
-                            className={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                            rows={10}
-                            placeholder={paramsTemplate}
-                        />
+                        <Textarea aria-label={t('model.pasteAdvancedParamsHere')} value={draftParams} onChange={(e: ChangeEvent<HTMLTextAreaElement>) => handleDraftChange(e.target.value)} rows={10} placeholder={paramsTemplate} textareaClassName={`mt-1 font-mono text-sm ${jsonError ? 'border-red-500 focus-visible:ring-red-500' : ''}`} />
                         {jsonError && (
                             <span className="mt-1 inline-block text-xs text-red-500">
                                 {t('model.errorInvalidJsonFormat')}
@@ -311,8 +285,8 @@ export function ModelItem({ data, type, onDelete, onInput, onConfig }: ModelItem
                         )}
                     </div>
                     <DialogFooter className="mt-4">
-                        <Button variant="outline" onClick={() => setDialogOpen(false)}>{t('model.cancel')}</Button>
-                        <Button onClick={handleSaveParams}>{t('model.save')}</Button>
+                        <Button variant="outlined" onClick={() => setDialogOpen(false)} color="default">{t('model.cancel')}</Button>
+                        <Button onClick={handleSaveParams} disabled={(String(config.max_tokens ?? '') !== '' && (!Number.isFinite(Number(config.max_tokens ?? '')) || Number(config.max_tokens ?? '') < 0))}>{t('model.save')}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

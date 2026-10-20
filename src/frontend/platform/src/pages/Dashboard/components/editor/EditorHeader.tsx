@@ -1,25 +1,26 @@
 // @ts-strict-ignore
-"use client"
+import { Button, Input, notification } from '@bisheng/ui';
+import { Outlined } from "bisheng-icons";
 
-import type React from "react"
+import type React from "react";
 
-import { FilterIcon, GridAddIcon } from "@/components/bs-icons/dashboard"
-import { Badge } from "@/components/bs-ui/badge"
-import { Button } from "@/components/bs-ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { Input } from "@/components/bs-ui/input"
-import { Separator } from "@/components/bs-ui/separator"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { updateDashboard } from "@/controllers/API/dashboard"
-import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
-import { ArrowLeft } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { useMutation, useQueryClient } from "react-query"
-import { useNavigate } from "react-router-dom"
-import { DashboardQueryKey, DashboardsQueryKey, usePublishDashboard } from "../../hook"
-import { ChartType, Dashboard } from "../../types/dataConfig"
-import ComponentPicker from "./ComponentPicker"
+import { Tooltip } from "@bisheng/ui";
+
+import { Dialog,DialogContent,DialogDescription,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { Separator } from "@/components/bs-ui/separator";
+
+import { updateDashboard } from "@/controllers/API/dashboard";
+import { useComponentEditorStore,useEditorDashboardStore } from "@/store/dashboardStore";
+import { Tag } from "@bisheng/ui";
+
+import { useEffect,useMemo,useRef,useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useMutation,useQueryClient } from "react-query";
+import { useNavigate } from "react-router-dom";
+import { DashboardQueryKey,DashboardsQueryKey,usePublishDashboard } from "../../hook";
+import { ChartType,Dashboard } from "../../types/dataConfig";
+import ComponentPicker from "./ComponentPicker";
 
 
 interface EditorHeaderProps {
@@ -39,7 +40,7 @@ export function EditorHeader({
     const [title, setTitle] = useState(dashboard?.title || "")
     const inputRef = useRef<HTMLInputElement>(null)
     const queryClient = useQueryClient()
-    const { toast } = useToast()
+
 
     useEffect(() => {
         if (dashboard) {
@@ -78,16 +79,10 @@ export function EditorHeader({
                 } : el));
             // queryClient.invalidateQueries({ queryKey: [DashboardsQueryKey] })
             // autosave not require toast
-            !autoSave && toast({
-                description: t('saveSuccess'),
-                variant: "success",
-            })
+            !autoSave && notification.open({ type: "success", description: String(t('saveSuccess') ?? '') })
         },
         onError: () => {
-            toast({
-                description: t('saveFailed'),
-                variant: "error",
-            })
+            notification.open({ type: "error", description: String(t('saveFailed') ?? '') })
         },
         onSettled: () => {
             setIsSaving(false)
@@ -227,19 +222,12 @@ export function EditorHeader({
         <header className="h-16 border-b bg-background flex items-center justify-between px-4 py-3.5">
             {/* Left section */}
             <div className="flex items-center gap-4">
-                <Button variant="outline" size="icon" className="min-w-9" onClick={handleExit}>
-                    <ArrowLeft className="h-4 w-4" />
-                </Button>
+                <Tooltip content={t("bs:back")}><Button aria-label={t("bs:back")} variant="outlined" size="medium" className="min-w-9" onClick={handleExit} color="default" iconOnly>
+                    <Outlined.ArrowLeft className="h-4 w-4" />
+                </Button></Tooltip>
                 <Separator orientation="vertical" className="bg-slate-300 h-4"></Separator>
                 {isEditingTitle ? (
-                    <Input
-                        ref={inputRef}
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        onBlur={handleTitleBlur}
-                        onKeyDown={handleTitleKeyDown}
-                        className="text-sm font-medium h-6 px-2 py-0 border-primary"
-                    />
+                    <Input ref={inputRef} value={title} onChange={(e) => setTitle(e.target.value)} onBlur={handleTitleBlur} onKeyDown={handleTitleKeyDown} className={"text-sm font-medium h-6 px-2 py-0 border-primary"} />
                 ) : (
                     <h1
                         className="max-w-96 font-medium truncate cursor-pointer transition-colors"
@@ -249,7 +237,7 @@ export function EditorHeader({
                         {title}
                     </h1>
                 )}
-                <Badge variant="outline" className="break-keep font-normal bg-gray-100 dark:bg-black">{getSaveStatus()}</Badge>
+                <Tag size="small" dot color={isSaving ? "brand" : hasUnsavedChanges ? "warning" : "success"} className="whitespace-nowrap">{getSaveStatus()}</Tag>
             </div>
 
             {/* Middle section */}
@@ -257,30 +245,30 @@ export function EditorHeader({
                 {/* Add Component */}
                 <ComponentPicker onSelect={addComponentToLayout}>
                     {useMemo(() => (
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                            <GridAddIcon className="size-4" />
+                        <Button variant="outlined" size="small" className="gap-1.5" color="default">
+                            <Outlined.ViewGridCard className="size-4" />
                             {t('addChart')}
                         </Button>
                     ), [t])}
                 </ComponentPicker>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => addComponentToLayout({
+                <Button variant="outlined" size="small" className="gap-1.5" onClick={() => addComponentToLayout({
                     title: t('selectDate'),
                     type: ChartType.Query
-                })}>
-                    <FilterIcon className="size-4" />
+                })} color="default">
+                    <Outlined.Filter className="size-4" />
                     {t('addQueryComponent')}
                 </Button>
             </div>
 
             {/* Right section */}
             <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => {
+                <Button variant="outlined" onClick={() => {
                     const element = document.getElementById('edit-charts-panne');
                     element.requestFullscreen();
-                }}>
+                }} color="default">
                     {t('fullScreen')}
                 </Button>
-                <Button variant="outline" disabled={isPublishing} onClick={handlePublish}>
+                <Button variant="outlined" disabled={isPublishing} onClick={handlePublish} color="default">
                     {t('saveAndPublish')}
                 </Button>
                 <Button onClick={handleSave} disabled={saveMutation.isLoading}>
@@ -298,10 +286,10 @@ export function EditorHeader({
                         <Button className="leave h-8" onClick={handleSaveAndClose}>
                             {t('saveAndLeave')}
                         </Button>
-                        <Button className="h-8" variant="destructive" onClick={() => navigator(-1)}>
+                        <Button className="h-8" variant="solid" onClick={() => navigator(-1)} color="danger">
                             {t('leaveWithoutSaving')}
                         </Button>
-                        <Button className="h-8" variant="outline" onClick={() => setLiveModalOpen(false)}>
+                        <Button className="h-8" variant="outlined" onClick={() => setLiveModalOpen(false)} color="default">
                             {t('cancel')}
                         </Button>
                     </DialogFooter>

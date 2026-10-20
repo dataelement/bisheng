@@ -1,6 +1,7 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { FlagIcon } from "@/components/bs-icons";
-import { Button } from "@/components/bs-ui/button";
+
 import { locationContext } from "@/contexts/locationContext";
 import { ChatMessageType } from "@/types/chat";
 import { formatStrTime } from "@/util/utils";

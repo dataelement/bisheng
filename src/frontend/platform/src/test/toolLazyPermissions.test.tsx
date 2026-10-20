@@ -3,7 +3,7 @@ import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
 import { getToolsApi } from "@/controllers/API/tools"
 import TabTools from "@/pages/BuildPage/tools"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react"
+import type { ReactNode } from "react"
 import { MemoryRouter } from "react-router-dom"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -50,15 +50,9 @@ vi.mock("@/components/bs-ui/accordion", () => ({
   AccordionTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
-vi.mock("@/components/bs-ui/button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" {...props}>{children}</button>
-  ),
-}))
 
-vi.mock("@/components/bs-ui/input", () => ({
-  SearchInput: (props: InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
-}))
+
+
 
 vi.mock("@/components/bs-ui/badge", () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,

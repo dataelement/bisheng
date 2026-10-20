@@ -1,14 +1,16 @@
 // @ts-strict-ignore
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
-import { useToast } from "@/components/bs-ui/toast/use-toast"
-import { generateUUID } from "@/components/bs-ui/utils"
-import { updateUserGroups, updateUserRoles } from "@/controllers/API/user"
-import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { Plus } from "lucide-react"
-import { useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
-import { Button } from "../../../components/bs-ui/button"
-import UserRoleItem from "./UserRoleItem"
+import { Button, toast } from '@bisheng/ui';
+import { Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle } from "@/components/bs-ui/dialog";
+
+import { generateUUID } from "@/components/bs-ui/utils";
+import { updateUserGroups,updateUserRoles } from "@/controllers/API/user";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { Outlined } from "bisheng-icons";
+
+import { useEffect,useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import UserRoleItem from "./UserRoleItem";
 
 export default function UserRoleModal({ user, onClose, onChange }) {
     const { t } = useTranslation()
@@ -37,7 +39,7 @@ export default function UserRoleModal({ user, onClose, onChange }) {
         }))
     }
 
-    const { message } = useToast()
+
     const handleSave = async () => {
         const groupIdsSet = new Set();
         const rolesSet = new Set();
@@ -57,8 +59,8 @@ export default function UserRoleModal({ user, onClose, onChange }) {
         });
         const groupIds = Array.from(groupIdsSet);
         const roles = Array.from(rolesSet);
-        if (roles.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectRole') })
-        if (groupIds.length === 0) return message({ title: t('prompt'), variant: 'warning', description: t('system.selectGroup') })
+        if (roles.length === 0) return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('system.selectRole') ?? '')].filter(Boolean).join('\n') })
+        if (groupIds.length === 0) return toast.show({ type: 'warning', message: [String(t('prompt') ?? ''), String(t('system.selectGroup') ?? '')].filter(Boolean).join('\n') })
         captureAndAlertRequestErrorHoc(updateUserRoles(user.user_id, roles))
         captureAndAlertRequestErrorHoc(updateUserGroups(user.user_id, groupIds))
         onChange()
@@ -80,11 +82,11 @@ export default function UserRoleModal({ user, onClose, onChange }) {
                     />)
                 }
             </div>
-            <Button variant="outline" size="icon" onClick={() =>
+            <Button variant="outlined" size="medium" onClick={() =>
                 setRoleItems(items => [...items, { key: Date.now(), groupId: '', roles: [] }])
-            }><Plus className="size-5" /> </Button>
+            } color="default" iconOnly><Outlined.Plus className="size-5" /> </Button>
             <DialogFooter>
-                <Button variant="outline" className="h-10 w-[120px] px-16" onClick={onClose}>{t('cancel')}</Button>
+                <Button variant="outlined" className="h-10 w-[120px] px-16" onClick={onClose} color="default">{t('cancel')}</Button>
                 <Button className="px-16 h-10 w-[120px]" onClick={handleSave}>{t('save')}</Button>
             </DialogFooter>
         </DialogContent>

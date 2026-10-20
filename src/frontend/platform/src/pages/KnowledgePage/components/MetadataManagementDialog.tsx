@@ -1,11 +1,12 @@
 // @ts-strict-ignore
-"use client";
+import { Button, Input } from '@bisheng/ui';
+
 import { Outlined } from "bisheng-icons";
 import { KnowledgeHint,KnowledgeTooltip } from "./KnowledgeTooltip";
 
-import { Button } from "@/components/bs-ui/button";
+
 import { Dialog,DialogContent,DialogDescription,DialogHeader,DialogPortal,DialogTitle } from "@/components/bs-ui/dialog";
-import { Input } from "@/components/bs-ui/input";
+
 import { cname } from "@/components/bs-ui/utils";
 import { addMetadata,deleteMetadataFields,updateMetadataFields } from "@/controllers/API";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -328,22 +329,13 @@ export function MetadataManagementDialog({
                         </div>
 
                         <div className="flex justify-end gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setIsOpen(false)}
-                                className="px-2 py-1 h-7 min-h-7 text-xs"
-                            >
+                            <Button variant="outlined" size="small" onClick={() => setIsOpen(false)} className="px-2 py-1 h-7 min-h-7 text-xs" color="default">
                                 {t('cancel')}
                             </Button>
-                            <Button
-                                size="sm"
-                                onClick={() => {
+                            <Button size="small" onClick={() => {
                                     onConfirm();
                                     setIsOpen(false);
-                                }}
-                                className="px-2 py-1 h-7 min-h-7 text-xs"
-                            >
+                                }} className="px-2 py-1 h-7 min-h-7 text-xs">
                                 {t('confirm')}
                             </Button>
                         </div>
@@ -498,11 +490,7 @@ export function MetadataManagementDialog({
                                 <TypeSelector newType={newType} setNewType={setNewType} isSmallScreen={isSmallScreen} />
                                 <div className="space-y-1.5">
                                     <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('metadatainfor.name')}</label>
-                                    <Input
-                                        id="create-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }}
-                                        placeholder={t('pleaseEnter')} autoComplete="off" autoFocus
-                                        className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")}
-                                    />
+                                    <Input id="create-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }} placeholder={t('pleaseEnter')} autoComplete="off" autoFocus className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")} />
                                     {error && (
                                         <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
                                             <span>{error}</span>
@@ -510,7 +498,7 @@ export function MetadataManagementDialog({
                                     )}
                                 </div>
                                 <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>{t('cancel')}</Button>
+                                    <Button variant="outlined" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""} color="default">{t('cancel')}</Button>
                                     <Button onClick={handleCreateSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
                                         {isLoading ? t('saving') : t('save')}
                                     </Button>
@@ -527,11 +515,7 @@ export function MetadataManagementDialog({
                             <div className="space-y-3">
                                 <div className="space-y-1.5">
                                     <label className={cname("block font-medium", isSmallScreen ? "text-xs" : "")}>{t('name')}</label>
-                                    <Input
-                                        id="rename-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }}
-                                        placeholder={t('pleaseEnter')} autoComplete="off" autoFocus
-                                        className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")}
-                                    />
+                                    <Input id="rename-metadata-name" value={newName} onChange={(e) => { setNewName(e.target.value); if (error) setError(""); }} placeholder={t('pleaseEnter')} autoComplete="off" autoFocus className={cname(error ? "border-red-500 border-2" : "", isSmallScreen ? "text-sm h-8" : "")} />
                                     {error && (
                                         <div className={cname("flex items-center gap-1.5 text-red-500", isSmallScreen ? "text-xs" : "text-sm")}>
                                             <span>{error}</span>
@@ -539,7 +523,7 @@ export function MetadataManagementDialog({
                                     )}
                                 </div>
                                 <div className={cname("flex justify-end gap-2 pt-2", isSmallScreen ? "" : "pt-4 gap-3")}>
-                                    <Button variant="outline" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""}>{t('cancel')}</Button>
+                                    <Button variant="outlined" onClick={closeSideDialog} className={isSmallScreen ? "px-3 py-1 text-xs" : ""} color="default">{t('cancel')}</Button>
                                     <Button onClick={handleRenameSave} disabled={isLoading} className={cname("bg-blue-600 hover:bg-blue-700", isSmallScreen ? "px-3 py-1 text-xs" : "")}>
                                         {isLoading ? t('saving') : t('save')}
                                     </Button>

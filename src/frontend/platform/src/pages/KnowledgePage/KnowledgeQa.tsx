@@ -1,3 +1,4 @@
+import { Button, SearchInput, notification } from '@bisheng/ui';
 import { QaLibraryDialog } from "./components/QaLibraryDialog";
 // @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
@@ -9,11 +10,11 @@ import LoadMore from "@/components/bs-comp/loadMore";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
-import { Button } from "@/components/bs-ui/button";
-import { SearchInput } from "@/components/bs-ui/input";
+
+
 import { Select,SelectContent,SelectItem,SelectTrigger } from "@/components/bs-ui/select";
 import { Table,TableBody,TableCell,TableHead,TableHeader,TableRow } from "@/components/bs-ui/table";
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+
 
 import { userContext } from "@/contexts/userContext";
 import { copyQaDatabase,deleteFileLib,readFileLibDatabase } from "@/controllers/API";
@@ -50,7 +51,7 @@ const doing = {};
 export default function KnowledgeQa(params) {
     const [open, setOpen] = useState(false);
     const { user } = useContext(userContext);
-    const { toast } = useToast();
+
     const navigate = useNavigate();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [currentSettingLib, setCurrentSettingLib] = useState(null);
@@ -100,7 +101,7 @@ export default function KnowledgeQa(params) {
         const todos = datalist.filter(lib => lib.state === KnowledgeBaseStatus.Copying);
         todos.forEach(lib => {
             if (doing[lib.id] && datalist.find(item => item.id === lib.id && item.state !== KnowledgeBaseStatus.Copying)) {
-                toast({ variant: 'success', description: t('copyCompleted', { name: lib.name }) });
+                notification.open({ type: 'success', description: String(t('copyCompleted', { name: lib.name }) ?? '') });
                 delete doing[lib.id];
             }
         });
@@ -161,17 +162,14 @@ export default function KnowledgeQa(params) {
         const result = await loadRowActions(resourceId);
         if (result.hasError) {
             setSelectOpenId((current) => current === resourceId ? null : current);
-            toast({
-                variant: 'error',
-                description: t('error.checkFailed', { ns: 'permission' }),
-            });
+            notification.open({ type: 'error', description: String(t('error.checkFailed', { ns: 'permission' }) ?? '') });
         }
     };
 
     const handleCopy = async (elem) => {
         const newName = `${elem.name}${t('copySuffix')}`;
         if (newName.length > 200) {
-            toast({ variant: 'error', description: t('copyNameExceedsLimit') });
+            notification.open({ type: 'error', description: String(t('copyNameExceedsLimit') ?? '') });
             setSelectOpenId(null);
             return;
         }
@@ -183,7 +181,7 @@ export default function KnowledgeQa(params) {
             await captureAndAlertRequestErrorHoc(copyQaDatabase(elem.id, newName));
             reload();
         } catch (error) {
-            toast({ variant: 'error', description: t('copyFailed') });
+            notification.open({ type: 'error', description: String(t('copyFailed') ?? '') });
         } finally {
             setCopyLoadingId(null);
             setSelectOpenId(null);
@@ -198,7 +196,7 @@ export default function KnowledgeQa(params) {
                 </div>
             )}
             <div className="h-[calc(100vh-128px-var(--license-banner-h,0px))] overflow-y-auto pb-20">
-                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-44px]">
+                <div className="flex justify-end gap-4 items-center absolute right-0 top-[-40px]">
                     <SearchInput placeholder={t('lib.searchPlaceholder', { ns: 'bs' })} onChange={(e) => search(e.target.value)} />
                     {canCreateLibrary && <Button className="px-8 text-[#FFFFFF]" onClick={() => setOpen(true)}>{t('create', { ns: 'bs' })}</Button>}
                 </div>
@@ -227,8 +225,8 @@ export default function KnowledgeQa(params) {
                             >
                                 <TableCell className="font-medium max-w-[280px]">
                                     <div className="flex items-center gap-2">
-                                            <div className="flex items-center justify-center size-12 text-white rounded-[4px] w-[40px] h-[40px]">
-                                                <Outlined.FileQuestion className="text-primary size-10" />
+                                            <div className="flex size-8 shrink-0 items-center justify-center rounded-[8px] bg-fill-2 group-odd:bg-white dark:group-odd:bg-fill-2 text-text-2">
+                                                <Outlined.Books size={16} className="shrink-0" />
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="flex w-[264px] max-w-full items-center gap-1 pt-2 text-[14px] font-medium">

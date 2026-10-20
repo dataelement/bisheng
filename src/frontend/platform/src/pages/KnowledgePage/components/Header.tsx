@@ -1,4 +1,5 @@
-import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { toast } from '@bisheng/ui';
+
 import { updateKnowledgeApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Outlined } from "bisheng-icons";
@@ -49,7 +50,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
     // 使用传入的回调或默认回调
     const handleBackClick = onBack || handleBackDefault;
 
-    const { message } = useToast()
+
     const handleSave = (form) => {
         captureAndAlertRequestErrorHoc(updateKnowledgeApi({
             knowledge_id: Number(id),
@@ -60,7 +61,7 @@ export default function Header({ fileTitle, onBack, showBackButton = true }: Hea
             // api
             setLibInfo(form)
             setOpen(false)
-            message({ variant: 'success', description: t('saved') })
+            toast.show({ type: 'success', message: String(t('saved') ?? '') })
             localStorage.setItem('libname', form.name)
             localStorage.setItem('libdesc', form.desc)
         })

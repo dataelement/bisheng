@@ -32,7 +32,7 @@ export function KnowledgeHint({ content, className, error }: KnowledgeHintProps)
     return <Tooltip content={content}>
         <Button type="button" variant="ghost" size="small" iconOnly aria-label={hintText(content)}
             className={className} color={error ? 'danger' : 'default'}>
-            <Outlined.Question />
+            <Outlined.Question className={error ? undefined : "text-text-3"} />
         </Button>
     </Tooltip>
 }

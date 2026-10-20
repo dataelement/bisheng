@@ -1,4 +1,5 @@
 // @ts-strict-ignore
+import { Button } from '@bisheng/ui';
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import { Outlined } from "bisheng-icons";
 
@@ -8,7 +9,7 @@ AccordionContent,
 AccordionItem,
 AccordionTrigger,
 } from "@/components/bs-ui/accordion";
-import { Button } from "@/components/bs-ui/button";
+
 import { Tag,Tooltip } from "@bisheng/ui";
 import { Shield } from "lucide-react";
 import { useMemo } from "react";
@@ -57,13 +58,13 @@ export default function ToolItem({
                             ['edit', 'mcp'].includes(type) && data.write && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={(e) => onEdit(data.id)}
-                            ><Outlined.Setting aria-label={t("edit", { ns: "bs" })} /></div>
+                            ><Outlined.Setting size={16} className="shrink-0" aria-label={t("edit", { ns: "bs" })} /></div>
                         }
                         {
                             onSetClick && data.write && !['mcp'].includes(type) && <div
                                 className="group-hover:opacity-100 opacity-0 hover:bg-[#EAEDF3] rounded cursor-pointer"
                                 onClick={onSetClick}
-                            ><Outlined.Setting aria-label={t("edit", { ns: "bs" })} /></div>
+                            ><Outlined.Setting size={16} className="shrink-0" aria-label={t("edit", { ns: "bs" })} /></div>
                         }
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">{type ? data.description : t(`categories.${data.name}.desc`)}</p>
@@ -108,8 +109,8 @@ export default function ToolItem({
                         }
                         {
                             select && (select.some(_ => _.id === api.id) ?
-                                <Button size="sm" className="absolute right-4 bottom-2 h-6" disabled>{t("build.added", { ns: 'bs' })}</Button>
-                                : <Button size="sm" className="absolute right-4 bottom-2 h-6" onClick={() => onSelect(api)}>{t("build.add", { ns: 'bs' })}</Button>)
+                                <Button size="small" className="absolute right-4 bottom-2 h-6" disabled>{t("build.added", { ns: 'bs' })}</Button>
+                                : <Button size="small" className="absolute right-4 bottom-2 h-6" onClick={() => onSelect(api)}>{t("build.add", { ns: 'bs' })}</Button>)
                         }
                     </div>
                 ))}

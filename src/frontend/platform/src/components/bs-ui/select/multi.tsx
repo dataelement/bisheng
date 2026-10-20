@@ -1,9 +1,10 @@
 // @ts-strict-ignore
+import { SearchInput } from '@bisheng/ui';
 import { Check, X } from "lucide-react"
 import React, { useEffect, useRef, useState } from "react"
 import { Select, SelectContent, SelectTrigger } from "."
 import { Badge } from "../badge"
-import { SearchInput } from "../input"
+
 import { cname, useDebounce } from "../utils"
 
 const MultiItem: React.FC<
@@ -12,7 +13,7 @@ const MultiItem: React.FC<
 
     return <div
         key={value}
-        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all 
+        className={`relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 mb-1 text-sm outline-none hover:bg-[#EBF0FF] dark:hover:bg-gray-700 hover:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 break-all
     ${active && 'bg-[#EBF0FF] dark:bg-gray-700'}`}
         onClick={() => { onClick(value, children as string) }}
     >
@@ -108,7 +109,7 @@ const MultiSelect = ({
         // }
     }, [options]);
 
-    // delete 
+    // delete
     const handleDelete = (value: string) => {
         const newValues = (values as any[]).filter((item) => {
             const _value = onScrollLoad ? (item as Option).value : item;
@@ -260,7 +261,7 @@ const MultiSelect = ({
             headNode={
                 <div className="p-2">
                     {tabs}
-                    {!hideSearch && <SearchInput id={id} ref={inputRef} inputClassName="h-8 dark:border-gray-700" placeholder={searchPlaceholder} onChange={handleSearch} iconClassName="w-4 h-4" {...searchInputProps} />}
+                    {!hideSearch && <SearchInput id={id} ref={inputRef} placeholder={searchPlaceholder} onChange={handleSearch} {...searchInputProps} className={"h-8 dark:border-gray-700"} />}
                 </div>
             }
             footerNode={children}
