@@ -3,8 +3,10 @@
 - 基线核验：毕昇共享分支 feat/bisheng-work-120@24f9793a9，桌面 V1.2.0@887bc82；工作目录分别为 bisheng-desktop-navigation 与 bisheng-work-chat-work，已安装 Harness / 原生 attachment / conversation UI 为 0.2.0-rc.2。v0.9.0 整合工作树干净，远端版本分支查询未返回该引用；本次沿用当前企业整合版本，只修改 Chat 展示。
 - 输入区按资源语义拆分：技能使用 /名称、知识空间使用 @名称的品牌色文字引用；文件采用原生 240×64 卡片、16px 圆角、14px/500 名称与 12px 元信息，图片采用 64×64 / 20px 圆角缩略图。附件轨道、悬浮移除按钮与发送后的文件卡沿用相同几何与主题色。
 - 引用选择、移除和重新聚焦保留现有 Chat 技能 ID、知识空间 ID、文件上传和平台执行链路。引用键盘 Delete / Backspace 和点击移除使用同一回调；原生 Work 保持当前实现。
-- 已验证：3 套件 / 7 项组件行为回归、定向 ESLint、生产构建、diff-check。ESLint 自动收缩 AttachmentBar 已消除的 any 抑制计数。3006 部署及真实桌面验收正在进行；本轮模型执行未验收。
-- 证据：主工作区 outputs/native-context-style-20261020。
+- 已验证：3 套件 / 7 项组件行为回归、定向 ESLint、生产构建、diff-check。ESLint 自动收缩 AttachmentBar 已消除的 any 抑制计数。3006 最终发布 1791e6b0b（native-context-style-20261020-r3），462 个构建文件哈希校验、前端/接口健康检查及其他容器保持通过。本轮模型执行未验收。
+- 真实验收：网页既有会话与桌面首页均可同时显示 TXT 文件卡和 /技能引用；引用与正文接在同一行，长文本自然换行，滚动时引用随正文移出可视区。网页移除技能保留输入正文。桌面 Chat / Work 双向切换保留 Work 的原有 /lark-calendar 草稿；验收文件和正文已从输入区移除，恢复原有 Word 文档处理选择。当前 qwen 应用拒绝图片上传，图片缩略图实际验收仍受该能力限制。
+- 原生 Work 使用已安装 DSH 组件，Chat 使用相同尺寸、文字层级与主题变量。两边的编辑器、上传方式和执行位置分别沿用原有实现。
+- 证据：主工作区 outputs/native-context-style-20261020/result-preview.png、scrolled-preview.png 与 r3/deploy.log。
 
 ## 2026-10-20 — 会话内技能选择与旧菜单统一
 
