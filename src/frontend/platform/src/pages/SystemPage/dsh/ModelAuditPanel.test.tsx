@@ -365,7 +365,7 @@ describe("request-card audit UI", () => {
     await screen.findByText("dsh.modelAuditView.missing.MODE_UNKNOWN");
     expect(api.body).not.toHaveBeenCalled();
   });
-  it("clears the exact-request filter when opening the full user conversation", async () => {
+  it("retains exact-request filtering without redundant user conversation navigation", async () => {
     render(<ModelAuditRequests tenantId={2} initialView="requests" />);
     if (!screen.queryByText("Synthetic"))
       fireEvent.click(
@@ -393,16 +393,13 @@ describe("request-card audit UI", () => {
         }),
       );
     await screen.findByText("Synthetic");
-    fireEvent.click(
-      screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
-    );
+    expect(screen.queryByRole("button", { name: "dsh.modelAuditView.timeline" })).toBeNull();
     await waitFor(() =>
       expect(api.page).toHaveBeenLastCalledWith(
         {
           tenant_id: 2,
           limit: 20,
-          user_id: 20,
-          conversation_id: "conversation",
+          request_id: "one",
         },
         expect.any(AbortSignal),
       ),

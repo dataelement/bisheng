@@ -36,7 +36,7 @@ export function ModelAuditGroup({
         >
           {expanded ? "▾ " : "▸ "}
           {group.user_name || t("dsh.modelAuditView.user_unavailable")} ·{" "}
-          {group.conversation_id}
+          <span title={group.conversation_id}>{group.conversation_title || group.conversation_id}</span>
         </Button>
         <span>
           {t("dsh.modelAuditView.group_last")}: {dshTime(group.last_request_at)}

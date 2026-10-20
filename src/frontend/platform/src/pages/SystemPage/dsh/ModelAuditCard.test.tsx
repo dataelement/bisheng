@@ -120,10 +120,9 @@ it("places the original between the request header and the independently colored
   expect(
     screen.getByText("dsh.modelAuditView.states.INTERRUPTED"),
   ).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
-  );
-  expect(navigate).toHaveBeenCalledWith(20, "synthetic-conversation");
+  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.timeline" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" })).toBeNull();
+  expect(navigate).not.toHaveBeenCalled();
   fireEvent.keyDown(body, { key: "Escape" });
   expect(toggle).toHaveBeenCalledOnce();
   expect(

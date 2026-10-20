@@ -4,7 +4,6 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { dshTime } from "./common";
 import { ModelAuditBody } from "./ModelAuditBody";
-import { ModelAuditParent } from "./ModelAuditParent";
 
 interface ModelAuditCardProps {
   row: ModelAuditRecord;
@@ -38,7 +37,6 @@ export function ModelAuditCard({
   tenantId,
   expanded,
   onToggle,
-  onNavigate,
 }: ModelAuditCardProps) {
   const { t } = useTranslation();
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -67,23 +65,9 @@ export function ModelAuditCard({
         <span className="whitespace-nowrap font-medium text-primary dark:text-foreground">
           {t("dsh.modelAuditView.kinds." + (row.request_kind || "unknown"))}
         </span>
-        <ModelAuditParent
-          row={row}
-          tenantId={tenantId}
-          onNavigate={onNavigate}
-        />
-        {row.conversation_id && (
-          <Button
-            variant="link"
-            className="h-7 p-0 text-xs dark:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"
-            onClick={() => {
-              if (row.conversation_id)
-                onNavigate(row.user_id, row.conversation_id);
-            }}
-          >
-            {t("dsh.modelAuditView.timeline")}
-          </Button>
-        )}
+        <span className="whitespace-nowrap">
+          {t("dsh.modelAuditView.sources.origin." + (row.session_origin || "unknown"))}
+        </span>
         <Button
           variant="link"
           className="h-7 p-0 text-xs dark:text-foreground [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:text-sm"

@@ -118,25 +118,14 @@ it("AC-QC-08: groups by default, expands metadata and reads only the explicitly 
   );
   expect(screen.queryByText("Saved body")).toBeNull();
 });
-it("AC-QC-07: request-level conversation navigation can still return to the saved group view", async () => {
+it("request cards do not offer redundant user or parent conversation navigation", async () => {
   render(<ModelAuditRequests tenantId={2} />);
   await screen.findByText(/session-main/);
   fireEvent.click(screen.getByRole("button", { name: /session-main/ }));
   await screen.findByText("Provider / A");
-  fireEvent.click(
-    screen.getByRole("button", { name: "dsh.modelAuditView.timeline" }),
-  );
-  await waitFor(() =>
-    expect(api.requests).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 20, conversation_id: "session-main" }),
-      expect.any(AbortSignal),
-    ),
-  );
-  expect(screen.getByText("dsh.modelAuditView.all_scope")).toBeVisible();
-  fireEvent.click(
-    screen.getByRole("button", { name: "dsh.modelAuditView.return_results" }),
-  );
-  await screen.findByText(/session-main/);
+  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.timeline" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "dsh.modelAuditView.sources.parent" })).toBeNull();
+  expect(api.requests).not.toHaveBeenCalled();
   expect(
     screen.getByRole("button", { name: "dsh.modelAuditView.views.groups" }),
   ).toHaveAttribute("aria-pressed", "true");

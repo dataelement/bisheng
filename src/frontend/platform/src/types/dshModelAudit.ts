@@ -99,6 +99,8 @@ export type AuditQueryReadiness = {
   refresh_required?: boolean;
 };
 export type AuditConversation = {
+  conversation_title?: string | null;
+  title_event_seq?: number | null;
   user_name?: string | null;
   conversation_key: string;
   user_id: number;

@@ -12,6 +12,7 @@ from sqlmodel import select
 from bisheng.dsh.domain.models.model_audit_conversation import DshModelAuditConversation as Group
 from bisheng.dsh.domain.models.model_audit_request import DshModelAuditRequest as Request
 from bisheng.dsh.domain.repositories.admin_operation import require_tenant
+from bisheng.dsh.domain.repositories.model_audit_title import AuditTitleQueryRepository
 from bisheng.dsh.infrastructure.model_audit_codec import conversation_key
 
 
@@ -28,7 +29,7 @@ def group_binding(row, tenant):
         raise ValueError("Invalid audit group binding")
 
 
-class AuditConversationRepository:
+class AuditConversationRepository(AuditTitleQueryRepository):
     def user_names(self, user_ids):
         """Resolve only identities already present on an authorized bounded page."""
         from bisheng.user.domain.models.user import User
@@ -233,7 +234,7 @@ class AuditConversationRepository:
             ).decode()
         names = self.user_names(item["user_id"] for item in items)
         return {
-            "items": [{**item, "user_name": names.get(item["user_id"])} for item in items],
+            "items": self.with_titles([{**item, "user_name": names.get(item["user_id"])} for item in items]),
             "next_cursor": next_cursor,
             "scan_limited": bool(next_cursor and len(items) < limit),
             "progress": {**ready, "coverage": "OBSERVABLE_ESTIMATE"},

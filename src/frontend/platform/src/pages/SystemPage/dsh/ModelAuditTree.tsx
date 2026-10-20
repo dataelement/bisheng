@@ -55,7 +55,7 @@ export function ModelAuditTree({
             />
           )}
           {node.user_name || t("dsh.modelAuditView.user_unavailable")} ·{" "}
-          {node.conversation_id}
+          <span title={node.conversation_id}>{node.conversation_title || node.conversation_id}</span>
         </Button>
         {depth > 0 && (
           <span>{t(prefix + "child_level", { level: depth })}</span>

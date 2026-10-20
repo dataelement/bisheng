@@ -2,6 +2,40 @@
 
 版本：1.2　日期：2026-10-19　服务端工作树：`feat/3.0.0-dsh-audit`
 
+## 2026-10-20 会话标题同步：恢复实施
+
+用户最新指令恢复标题上报，开发后分别提交推送双端、核对CI再部署109并使用实际客户端E2E。Gateway不改，沿用Nginx→Gateway→毕昇及既有DSH认证。移除“查看本用户会话”“查看父会话”；本节优先于历史状态，证据见audit-title-validation.md。
+
+本节仅更新标题增量，不改历史执行记录。标题已接入双端源码；提交、CI、109及实际客户端验收分别记录，不将实现或单测等同于部署。
+
+| 文档/交付 | 状态 | 说明 |
+|---|---|---|
+| spec.md 0.24 | ✅ 用户已确认 | AC-T01 至 AC-T09及D-10；METADATA、CONTENT保存标题，OFF不更新 |
+| design.md 0.14 | ✅ 用户恢复并要求实施 | §4.7独立事实、事件序号、broker epoch及批量读取；Gateway无需改动 |
+| client-api-audit-extension.md 0.5 | ✅ 实施契约 | 独立可选标题能力，不改五字段或根协议0.5.0 |
+| 标题任务拆解/业务代码 | 已接入并进行验证 | 下表分开记录本机检查及环境验收 |
+
+标题设计增量自审见[audit-title-design-review.md](./audit-title-design-review.md)。修正原候选Gateway假设：通用转发已覆盖，旧模型过滤规则不命中新路径，不新增分类名单或修改其他发布线。
+
+### 标题执行清单
+
+| 任务 | 文件及职责 | 依赖/覆盖 |
+|---|---|---|
+| [x] TT01 基础设施 | model_audit_title模型、tenant_filter及audit fixture：独立事实表和租户注册；回滚保留表 | 无；整表发现，无既有表DDL/数据迁移 |
+| [x] TT02 后端测试 | test_model_audit_title.py：真实HTTP/SQL隔离、早到/幂等/模式/权限/批查 | 覆盖 AC: AC-T01, AC-T02, AC-T03, AC-T04, AC-T05, AC-T06, AC-T08, AC-T09 |
+| [x] TT03 后端Domain | schemas/repositories的model_audit_title.py：严格DTO、模式锁、本人请求绑定及有序写入 | TT01、TT02 |
+| [x] TT04 服务/API | services/model_audit_title.py、endpoints/model_audit_title.py：有界池、5秒及流式4096字节 | TT03；router/identity/contracts及契约测试为机械接线 |
+| [x] TT05 批量查询 | model_audit_conversations.py、model_audit_tree_queries.py：授权页一次标题主键IN查询 | TT03、TT02 |
+| [x] TT06 Desktop测试 | enterprise-audit-title.test.mjs：合并、退避、在途替换、容量、身份清理及输入 | 覆盖 AC: AC-T01, AC-T02, AC-T03, AC-T04, AC-T06, AC-T07, AC-T09 |
+| [x] TT07 Desktop插件 | audit-title.js、index.js：公开标题事实及独立后台同步；同包d.ts/contract声明配套 | TT06；不改Harness核心 |
+| [x] TT08 Desktop测试 | enterprise-service.test.ts、enterprise-credential-broker.test.ts：epoch、401刷新、窄路由及限额 | 覆盖 AC: AC-T05, AC-T07, AC-T09 |
+| [x] TT09 Desktop主进程 | enterprise-service.ts、credential-broker.ts：冻结base/token、复核、单并发及取消 | TT08 |
+| [x] TT10 Platform测试 | ModelAuditCard/Group/Panel/Tree.test.tsx：标题纯文本、编号回退、去导航、不预取 | 覆盖 AC: AC-T08, AC-T09；同职责增量跨文件例外 |
+| [x] TT11 Platform | ModelAuditCard/Group/Tree.tsx及dshModelAudit.ts：去两导航、标题回退；删仅用于父导航的ModelAuditParent及测试 | TT10；不改筛选/分页/统计/正文授权 |
+| [ ] TT12 发布验收 | 双端提交推送、精确提交CI、109部署及实际客户端标题/末次调用后改名 | TT01至TT11；覆盖 AC: AC-T01, AC-T02, AC-T08；见audit-title-validation.md |
+
+拆解及L1自审：无剩余high/medium。测试和对应实现配对列明，底层基础设施优先；少量机械接线、声明和旧死代码删除为同职责粒度例外。无新增Worker，不改Gateway或历史审计。
+
 ## 2026-10-19 父子会话嵌套展示：实施阶段
 
 本节优先于下文既有交付状态。用户已确认设计0.13，按下表实施；功能和验证完成后才提交推送，不单独提交文档，不部署109。所有新文件均在bisheng本分支，客户端不变。

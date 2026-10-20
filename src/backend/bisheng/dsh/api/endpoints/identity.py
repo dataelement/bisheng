@@ -49,6 +49,7 @@ async def config(settings: DshSettings = Depends(get_settings)):
         "client_id": settings.client_id,
         "contract_version": settings.contract_version,
         "audit_context": {"fields": list(AUDIT_FIELDS)},
+        "audit_conversation_title": {"version": 1},
     }
 
 

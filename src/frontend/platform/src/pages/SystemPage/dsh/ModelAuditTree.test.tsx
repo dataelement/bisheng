@@ -71,6 +71,16 @@ function page(
   };
 }
 const query = { tenant_id: 2, limit: 20 };
+it("AC-T08/AC-T09: titles render literally, preserve the ID, and fall back without fetching originals", () => {
+  const value = node("a", { conversation_title: "<script>e2e-title</script>", title_event_seq: 12 });
+  const view = render(tree(value, false));
+  const label = screen.getByText("<script>e2e-title</script>");
+  expect(label).toHaveAttribute("title", value.conversation_id);
+  expect(view.container.querySelector("script")).toBeNull();
+  expect(api.body).not.toHaveBeenCalled();
+  view.rerender(tree({ ...value, conversation_title: null }, false));
+  expect(screen.getByText(value.conversation_id)).toBeVisible();
+});
 const navigate = vi.fn(),
   refresh = vi.fn();
 function tree(value: AuditTreeNode, expanded = true) {

@@ -120,3 +120,4 @@ class DshEnabledConfig(DshContract):
     client_id: Literal["dsh-desktop"] = "dsh-desktop"
     contract_version: Literal["0.5.0"] = "0.5.0"
     audit_context: DshAuditContextCapability | None = None
+    audit_conversation_title: dict[Literal["version"], Literal[1]] | None = None
