@@ -1,6 +1,6 @@
 # 验证记录
 
-日期：2026-10-20。本文记录本地验证结果；用户已后续授权提交并推送功能分支，尚未部署。
+日期：2026-10-20。本文保留首次本地验证结果；后续已按用户授权部署并完成 109:13001 无 Gateway 联调，结果见 [真实环境报告](./e2e-109-20261020.md)。
 
 ## 基线
 
@@ -24,7 +24,7 @@
 | 多语言 | pnpm check-i18n 通过，无新增 drift |
 | 后端 lint | 改动的 52 个现存 Python 文件 Ruff 通过；DSH 模块整体 Ruff 通过 |
 | 架构守卫 | 对 72 个现存修改源码/测试文件逐个运行；无 VIOLATION，仅原 test_profile_outbox.py 合成密码 fixture 的 RULE-7 WARNING |
-| Alembic | heads 唯一为 work110_dsh_local_sessions，test_alembic_single_head.py 1 passed；未执行生产 upgrade |
+| Alembic | 首次本地 head 为 work110_dsh_local_sessions；109 联调补齐历史迁移后 head 为 work110_merge_legacy_audit，已在目标 MySQL 执行升级，见真实环境报告 |
 | Desktop 安装 | npm ci 成功，postinstall 的 patch-package、品牌资源与 Electron 安装步骤完整成功 |
 | Desktop 类型 / 构建 | npm run typecheck、npm run build 通过 |
 | Desktop 完整测试 | 225 files passed / 1 skipped；1931 passed / 2 skipped。覆盖企业连接、审计元数据和既有 Harness 子进程测试；不等同于原生 UI 联调 |
@@ -86,13 +86,13 @@ raise SystemExit(pytest.main([
 | AC-10 | 商业 UI/API和后台资料任务退出；模型审计入口与 worker 保留 | 检查部署代理和手工 Beat 配置，无远程重试 |
 | AC-11 | /api/dsh 与 /api/v1/dsh 共享行为；Desktop 新路径 mock HTTP 回归 | 旧安装包经兼容别名重新登录 |
 
-## 原生 UI / 发布检查清单（尚未执行）
+## 原生 UI / 发布检查清单（按实际覆盖更新）
 
-- [ ] 完全停止 Gateway，移除 Gateway HMAC，代理认证路径到 Python；从平台原生登录开始完成 DSH 登录。
+- [x] 完全停止 Gateway，移除 Gateway HMAC，代理认证路径到 Python；从平台原生登录开始完成 DSH 登录。
 - [ ] 新旧客户端登录、刷新、退出及本人设备撤销；两个设备互不影响；跨副本重启凭证仍可验证。
-- [ ] 部门与个人额度配置、个人零额度和恢复继承；两个成员实际调用模型并核对各自余额。
+- [x] 部门与个人额度配置、个人零额度和恢复继承；两个成员实际调用模型并核对各自余额。
 - [ ] 当月用尽、降低额度、UNKNOWN 与 SSE 中断，核对实际结算及历史记录未归零。
 - [ ] 查看模型审计正文、message_sources、父子会话和标题；插件市场及工作台使用同一本地身份。
 - [ ] MySQL/DM 升级预演、行锁并发、ROLE 运维迁移和回退数据兼容。
 
-发布步骤见 [deployment.md](./deployment.md)。当前状态是代码实现和本地验证完成，真实环境验收及全仓原有前端门禁问题尚未关闭。
+发布步骤见 [deployment.md](./deployment.md)。当前状态是代码实现、本地验证及本次要求的 109 真实链路验证完成；其余发布清单及全仓原有前端门禁问题仍保留。

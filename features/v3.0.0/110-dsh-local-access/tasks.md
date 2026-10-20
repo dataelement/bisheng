@@ -22,4 +22,6 @@ spec 与 design 依据用户已确认技术方案及本轮实施指令整理。�
 | T004 | DshPage、SystemPage/dsh、DepartmentAccessTree、API/dsh；Desktop contract/client/error-copy | 管理端 300 项；Desktop 1931 项；两端构建与平台/客户端类型检查 |
 | T005 | test/dsh、相关前端测试、deployment / validation / review | 本地验证完成；全仓原有门禁及真实环境检查未完成，故本任务保持未勾选 |
 
+109:13001 已完成本次指定链路的真实联调，见 [环境报告](./e2e-109-20261020.md)；T005 的其他发布检查保持未完成。
+
 详细结果见 [validation.md](./validation.md)，任务和特性自审见 [review.md](./review.md)。本次未进行生产操作。

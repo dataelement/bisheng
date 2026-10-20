@@ -1,4 +1,4 @@
-"""The focused audit port extends work-110 without importing release-line DDL."""
+"""The focused audit port keeps its ancestry while admitting deployed audit upgrades."""
 
 from datetime import datetime
 from pathlib import Path
@@ -56,8 +56,11 @@ def test_audit_port_preserves_target_ancestry_and_uses_new_revision_ids():
     assert (
         directory.get_revision("f065_dsh_install_policy_default_off").down_revision == "linsight_skill_default_checked"
     )
-    ancestors = {revision.revision for revision in directory.walk_revisions()}
-    assert not {"f065_merge_dsh_audit_heads", "merge_dsh_heads", "dsh_audit_groups", "f062_dsh_audit_tree"} & ancestors
+    assert directory.get_heads() == ["work110_merge_legacy_audit"]
+    assert directory.get_revision("work110_merge_legacy_audit").down_revision == (
+        "work110_dsh_local_sessions",
+        "f062_dsh_audit_tree",
+    )
 
 
 @pytest.mark.parametrize("fresh", [False, True])
