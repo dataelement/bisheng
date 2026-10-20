@@ -71,6 +71,8 @@ def test_inputs_override_child_variables_by_name(store):
         {"key": "city", "type": "input", "value": 123},
         {"key": "days", "type": "ref", "value": "start_p.custom_variables#pk"},
         {"key": "not_in_child", "type": "input", "value": "ignored"},
+        # Left empty in the editor: the child keeps its own value.
+        {"key": "keep", "type": "input", "value": ""},
     ]
     parent = _parent(
         subflow_node("subflow_1", "child", inputs),

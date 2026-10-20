@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { useUpdateVariableState } from "../flowNodeStore";
 import SelectVar from "./SelectVar";
 
-const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem }) => {
+const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteItem, refOnly = false, fixedKeys = false }) => {
     const { t } = useTranslation('flow');
 
     const handleTypeChange = (newType) => {
@@ -39,10 +39,10 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
     return (
         <div className="flex gap-1 items-center mb-1">
             {/* key */}
-            <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} className={`${(error || sameKey === item.key) && 'border-red-500'} h-8`} />
+            <Input value={item.key} placeholder={t('parameterName')} onChange={handleKeyChange} readOnly={fixedKeys} className={`${!fixedKeys && (error || sameKey === item.key) && 'border-red-500'} h-8`} />
             {/* type */}
 
-            <Select value={item.type} onValueChange={handleTypeChange}>
+            {!refOnly && <Select value={item.type} onValueChange={handleTypeChange}>
                 <SelectTrigger className="max-w-32 w-24 h-8">
                     <SelectValue placeholder={t('type')} />
                 </SelectTrigger>
@@ -52,7 +52,7 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
                         <SelectItem value="input">{t('input')}</SelectItem>
                     </SelectGroup>
                 </SelectContent>
-            </Select>
+            </Select>}
             {/* value */}
             {item.type === 'ref' ? <SelectVar nodeId={nodeId} itemKey={''} onSelect={(E, v) => {
                 onUpdateItem(index, { ...item, label: `${E.name}/${v.label}`, value: `${E.id}.${v.value}` })
@@ -66,19 +66,35 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
                     </div>
                 </Tip>
             </SelectVar> : <Input value={item.value} placeholder={t('value')} onChange={handleValueChange} className="h-8" />}
-            <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />
+            {!fixedKeys && <Trash2 onClick={() => onDeleteItem(index)} className="min-w-5 hover:text-red-600 cursor-pointer" />}
         </div>
     );
 };
 
 
-export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange, i18nPrefix }) {
+interface CodeInputItemProps {
+    nodeId: string
+    data: any // eslint-disable-line @typescript-eslint/no-explicit-any -- node param shape is untyped
+    onValidate: (validate: () => string | false) => void
+    onChange: (items: CodeInputValue[]) => void
+    i18nPrefix: string
+    /** Only "reference" values: hides the reference/input switch. */
+    refOnly?: boolean
+    /** Extra check per name; returns an error message or false. */
+    validateName?: (name: string) => string | false
+    /** Names come from elsewhere: no add, delete or rename. */
+    fixedKeys?: boolean
+}
+
+type CodeInputValue = { key: string, type: string, label: string, value: string }
+
+export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onChange, refOnly = false, validateName, fixedKeys = false }: CodeInputItemProps) {
     const { t } = useTranslation('flow');
     const [items, setItems] = useState(paramItem.value);
 
     const handleAddItem = () => {
         setError(false)
-        const newItems = [...items, { key: '', type: 'ref', label: '', value: '' }];
+        const newItems: CodeInputValue[] = [...items, { key: '', type: 'ref', label: '', value: '' }];
         setItems(newItems);
         onChange(newItems);
     };
@@ -107,6 +123,8 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
             let msg = ''
             const map = {}
             items.some(item => {
+                if (fixedKeys) return false
+                const extraError = validateName?.(item.key)
                 if (item.key === '') {
                     msg = t('variableNameCannotBeEmpty')
                     return true
@@ -118,6 +136,10 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
                     return true
                 } else if (map[item.key]) {
                     msg = t('variableNameDuplicate')
+                    setSameKey(item.key)
+                    return true
+                } else if (extraError) {
+                    msg = extraError
                     setSameKey(item.key)
                     return true
                 } else {
@@ -162,11 +184,13 @@ export default function CodeInputItem({ nodeId, data: paramItem, onValidate, onC
                     index={index}
                     onUpdateItem={handleUpdateItem}
                     onDeleteItem={handleDeleteItem}
+                    refOnly={refOnly}
+                    fixedKeys={fixedKeys}
                 />
             ))}
-            <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
+            {!fixedKeys && <Button onClick={handleAddItem} variant="outline" className="border-primary text-primary mt-2 h-8">
                 {t('addNewParameter')}
-            </Button>
+            </Button>}
         </div>
     );
 }

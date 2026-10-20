@@ -610,13 +610,51 @@
     },
     "end": {
       "name": "结束",
-      "description": "工作流运行到此结束。"
+      "description": "工作流运行到此结束。",
+      "return": "返回结果",
+      "return_results": {
+        "label": "返回结果",
+        "help": "打开后，本工作流作为子工作流被调用时，把这里列出的值返回给调用它的工作流。单独运行本工作流时不受影响。",
+        "reservedName": "返回结果名称不能使用 {{name}}"
+      }
     },
     "tool": {
       "工具参数": "工具参数",
       "输出": "输出",
       "output": {
         "label": "输出变量"
+      }
+    },
+    "subflow": {
+      "name": "子工作流",
+      "description": "把另一个工作流作为一个节点运行：传入参数，使用它返回的结果。",
+      "subflow_id": {
+        "label": "工作流",
+        "help": "只列出你能编辑、且不含【输入】节点、需要用户操作的【输出】节点和【子工作流】节点的工作流。运行时使用该工作流已保存的当前版本。",
+        "placeholder": "选择工作流",
+        "search": "搜索工作流名称",
+        "ineligible": "该工作流现在不能作为子工作流：{{reasons}}。运行到本节点时会失败。",
+        "notFound": "该工作流不存在或已被删除。运行到本节点时会失败。",
+        "separator": "、",
+        "reasons": {
+          "input_node": "含有【输入】节点",
+          "interactive_output_node": "含有需要用户操作的【输出】节点",
+          "subflow_node": "含有【子工作流】节点",
+          "invalid_output_name": "返回结果使用了保留名称 chat_history"
+        }
+      },
+      "subflow_inputs": {
+        "label": "输入参数",
+        "help": "参数来自该工作流开始节点的自定义全局变量。不填写时，使用该工作流中变量自身的值。",
+        "empty": "该工作流没有输入参数"
+      },
+      "subflow_outputs": {
+        "label": "输出结果",
+        "help": "该工作流【结束】节点返回的结果，后面的节点可以引用。",
+        "empty": "该工作流没有返回结果"
+      },
+      "subflow_logs": {
+        "label": "子工作流运行日志"
       }
     }
   },
@@ -635,5 +673,21 @@
       "grep": "搜索文件内容",
       "bisheng_code_interpreter": "代码执行"
     }
+  },
+  "subflowWarning": {
+    "title": "这个工作流正被其他工作流使用",
+    "referencedBy": "以下工作流把它作为子工作流使用：{{names}}。",
+    "forbiddenNodes": "它现在含有不能在子工作流中运行的节点：{{names}}。上述工作流运行到子工作流节点时会失败，请移除这些节点。",
+    "inputs_added": "新增输入参数：{{names}}。上述工作流不传值时，使用这里设置的值。",
+    "inputs_removed": "删除输入参数：{{names}}。上述工作流传入的这些参数会被忽略。",
+    "outputs_added": "新增返回结果：{{names}}。",
+    "outputs_removed": "删除返回结果：{{names}}。引用了这些结果的工作流运行时会失败。",
+    "ok": "知道了",
+    "separator": "、"
+  },
+  "subflowLog": {
+    "reason": "失败原因",
+    "input": "输入",
+    "empty": "子工作流没有运行任何节点"
   }
 }

@@ -179,6 +179,64 @@ export const copyReportTemplate = async (nodeData): Promise<any> => {
     return Promise.resolve('ok')
 }
 
+export interface SubflowCandidate {
+    id: string
+    name: string
+    description: string
+    logo: string
+}
+
+/**
+ * F086: workflows the current user can edit and use as a subflow.
+ */
+export async function getSubflowCandidatesApi(params: { name?: string, cursor?: string | null, page_size?: number, exclude_flow_id?: string }): Promise<{ data: SubflowCandidate[], cursor: string | null }> {
+    return await axios.get(`/api/v1/workflow/subflow/candidates`, { params });
+}
+
+export interface SubflowInterface {
+    id: string
+    name: string
+    inputs: { name: string, value: unknown }[]
+    outputs: string[]
+    eligible: boolean
+    ineligible_reasons: string[]
+}
+
+/**
+ * F086: input parameters and return names of a workflow.
+ * Silent: a 403/404 here must not redirect the builder; the caller falls back to
+ * the snapshot saved in the node and reads `status_code` from the rejection.
+ */
+export async function getSubflowInterfaceApi(flowId: string): Promise<SubflowInterface> {
+    const config = { silent: true } as Parameters<typeof axios.get>[1]
+    return await axios.get(`/api/v1/workflow/subflow/${flowId}/interface`, config);
+}
+
+/**
+ * F086: the End node's "return results" group; added to v1 End nodes by flowCompatible.
+ */
+export function endReturnGroup() {
+    return {
+        "name": "return",
+        "params": [
+            {
+                "key": "return_enabled",
+                "type": "switch",
+                "hidden": true,
+                "value": false
+            },
+            {
+                "key": "return_results",
+                "label": "true",
+                "type": "end_return",
+                "required": true,
+                "help": "true",
+                "value": []
+            }
+        ]
+    }
+}
+
 /**
  * 工作流节点模板
  */
@@ -1099,11 +1157,46 @@ const workflowTemplate = [
         ]
     },
     {
+        "id": "subflow_xxx",
+        "name": "true",
+        "description": "true",
+        "type": "subflow",
+        "v": "1",
+        "group_params": [
+            {
+                "params": [
+                    {
+                        "key": "subflow_id",
+                        "label": "true",
+                        "type": "subflow_select",
+                        "required": true,
+                        "help": "true",
+                        "placeholder": "true",
+                        "value": {}
+                    },
+                    {
+                        "key": "subflow_inputs",
+                        "type": "subflow_input",
+                        "hidden": true,
+                        "value": []
+                    },
+                    {
+                        "key": "subflow_outputs",
+                        "type": "subflow_output",
+                        "hidden": true,
+                        "global": "code:value.map(el => ({ label: el.key, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
         "id": "end_xxx",
         "name": "true",
         "description": "true",
         "type": "end",
-        "v": "1",
-        "group_params": []
+        "v": "2",
+        "group_params": [endReturnGroup()]
     },
 ]

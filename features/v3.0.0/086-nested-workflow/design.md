@@ -214,9 +214,9 @@
 | `B/worker/workflow/redis_callback.py` | `parse_workflow_failed` 识别子工作流标记 | — |
 | `P/controllers/API/workflow.ts` `workflowTemplate` | `subflow` 节点模板；`end` 节点模板 v2 | — |
 | `P/util/flowCompatible.ts` | `end` v1→v2：补「返回结果」分组，开关默认关闭 | — |
-| `P/pages/BuildPage/flow/FlowNode/component/` | 新组件：子工作流选择、输入参数表；【结束】节点返回结果表复用 `CodeInputItem`，为它新增可选 prop「只允许引用」和「额外名称校验」，不传时代码节点的行为不变 | 不改现有组件样式 |
-| `P/pages/BuildPage/flow/SubflowWarningDialog.tsx`（新） | 保存与切换版本后的 `subflow_warning` 弹窗，供 `Header.tsx` 与 `CardSelectVersion.tsx` 调用 | `Header.tsx` 已有 862 行，超过 600 行上限，弹窗不放进去 |
-| `P/pages/BuildPage/flow/FlowNode/RunLog.tsx` | 渲染 `subflow_logs` 可展开列表 | — |
+| `P/pages/BuildPage/flow/FlowNode/component/` | `SubflowSelectItem`：选择子工作流，并渲染输入参数表与返回名称（写入隐藏参数 `subflow_inputs`、`subflow_outputs`）；`EndReturnItem`：【结束】节点开关与返回结果表；`subflowParams.ts`：按接口重建节点参数的纯函数。`CodeInputItem` 新增可选 prop `refOnly`、`validateName`、`fixedKeys`，不传时代码节点的行为不变 | 不改现有组件样式 |
+| `P/pages/BuildPage/flow/SubflowWarningDialog.tsx`（新） | 保存与切换版本后的 `subflow_warning` 弹窗，供 `Header.tsx`（保存）与 `CardSelectVersion.tsx`（切换当前版本）调用；编辑页的「切换版本」只在本地加载数据、不改当前版本，不弹 | `Header.tsx` 已有 862 行，超过 600 行上限，弹窗不放进去 |
+| `P/pages/BuildPage/flow/FlowNode/RunLog.tsx`、`SubflowRunLog.tsx`（新） | `RunLog` 把 `subflow_logs` 项交给 `SubflowRunLog` 渲染为可展开列表；【结束】节点有返回结果时显示日志 | — |
 
 **`Flow.data` 写入口与引用同步**（2026-10-19 已逐一核实为完整清单）：
 
@@ -249,6 +249,7 @@
 | 11 | 父工作流调试时运行的是前端画布数据，子工作流读的是 `Flow.data` | 编辑子工作流后未保存，父工作流调试仍跑旧内容 | 符合 R-4.1；节点帮助文案说明「运行时使用子工作流已保存的当前版本」 |
 | 12 | 子引擎沿用父工作流的 `workflow_id`（决策 12），而临时向量分区、F078 工作区等按 `workflow_id`/`chat_id` 加节点 id 区分 | 父子工作流是复制关系、节点 id 相同时，这些资源会串用 | 现状接受；出现串扰时给子引擎的节点 id 加前缀 |
 | 13 | 返回名称 `chat_history` 会被 `GraphState.get_variable` 特判为聊天记录 | 下游拿到的是聊天记录而不是返回值 | 决策 4，前端与 `inspect_flow_data` 都禁止该名称 |
+| 14 | platform 请求拦截器把返回 403/404 的 GET 直接跳转到 403/404 页面（`P/controllers/request.ts`） | 编排者失去子工作流编辑权限后打开父工作流的节点，整个编辑页被带走，违反 AC-10 | 接口查询请求带 `silent`，失败时沿用节点快照 |
 
 ---
 
@@ -330,3 +331,4 @@
 | 2026-10-19 | Wave 0 实现：引用表补 `update_time` 列（task-review 数据库约定）；Repository 只返回父工作流 id，名称由服务补齐 | T03、T04 实现 |
 | 2026-10-19 | Wave 1–2 实现：标记识别改为最先进行（决策 10）；`start_node_id` 由引擎预扫得出；`inspect_flow_data` 补 `subflow_ids` 与原因代码；记录 `subflow` 节点日志格式 | T07、T13、T16、T18 实现 |
 | 2026-10-19 | Wave 3 实现：10564、10565 的名称字段改为字符串并附机器可读字段；上线时子工作流不存在抛 10561；记录 `subflow_warning` 的响应形态 | T20–T24 实现 |
+| 2026-10-19 | Wave 4 实现：子工作流节点改为单分组＋隐藏参数；`CodeInputItem` 加 `fixedKeys`；接口查询静默失败（坑 14）；留空的输入参数沿用子工作流自身的值；保存提醒只接保存与版本卡片 | T25–T32 实现 |

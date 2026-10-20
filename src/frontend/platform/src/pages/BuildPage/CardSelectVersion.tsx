@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { changeCurrentVersion } from "@/controllers/API/flow";
 import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showSubflowWarning } from "./flow/SubflowWarningDialog";
 import { AppNumType } from "@/types/app";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,6 +28,7 @@ const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps
             ? changeWorkflowCurrentVersion
             : changeCurrentVersion
         captureAndAlertRequestErrorHoc(request({ flow_id: data.id, version_id: Number(id) }))
+            .then(res => showSubflowWarning(res?.subflow_warning))
         onChange?.(id)
     }
 

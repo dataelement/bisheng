@@ -1,4 +1,5 @@
 import { generateUUID } from "@/components/bs-ui/utils";
+import { endReturnGroup } from "@/controllers/API/workflow";
 
 // 历史版本工作流转换脚本
 export const flowVersionCompatible = (flow) => {
@@ -12,10 +13,19 @@ export const flowVersionCompatible = (flow) => {
             case 'llm': comptibleLLM(node.data); break;
             case 'rag': comptibleRag(node.data); break;
             case 'knowledge_retriever': comptibleKnowledgeRetriever(node.data); break;
+            case 'end': comptibleEnd(node.data); break;
         }
     })
     return flow
 }
+// F086: v2 adds the "return results" group; switched off it behaves as v1.
+const comptibleEnd = (node) => {
+    if (!node.v || node.v == 1) {
+        node.group_params = [...(node.group_params || []), endReturnGroup()]
+        node.v = 2
+    }
+}
+
 const comptibleRag = (node) => {
     if (!node.v) {
         node.v = 1

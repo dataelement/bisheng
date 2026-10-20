@@ -610,13 +610,51 @@
     },
     "end": {
       "name": "End",
-      "description": "Workflow ends here."
+      "description": "Workflow ends here.",
+      "return": "Return results",
+      "return_results": {
+        "label": "Return results",
+        "help": "When on, and this workflow runs as a subflow, the values listed here are returned to the workflow that called it. Running this workflow on its own is not affected.",
+        "reservedName": "A return result cannot be named {{name}}"
+      }
     },
     "tool": {
       "工具参数": "Tool Parameters",
       "输出": "Output",
       "output": {
         "label": "Output Variable"
+      }
+    },
+    "subflow": {
+      "name": "Subflow",
+      "description": "Run another workflow as one node: pass in parameters and use the results it returns.",
+      "subflow_id": {
+        "label": "Workflow",
+        "help": "Only workflows you can edit that have no Input node, no Output node that waits for the user and no Subflow node are listed. The saved current version of the workflow is what runs.",
+        "placeholder": "Select a workflow",
+        "search": "Search workflow names",
+        "ineligible": "This workflow can no longer be used as a subflow: {{reasons}}. The run will fail at this node.",
+        "notFound": "This workflow does not exist or has been deleted. The run will fail at this node.",
+        "separator": ", ",
+        "reasons": {
+          "input_node": "it has an Input node",
+          "interactive_output_node": "it has an Output node that waits for the user",
+          "subflow_node": "it has a Subflow node",
+          "invalid_output_name": "a return result uses the reserved name chat_history"
+        }
+      },
+      "subflow_inputs": {
+        "label": "Input parameters",
+        "help": "The parameters are the custom global variables of the workflow's Start node. Leave one empty to use the value set in that workflow.",
+        "empty": "This workflow has no input parameters"
+      },
+      "subflow_outputs": {
+        "label": "Output results",
+        "help": "The results returned by the workflow's End node. Later nodes can reference them.",
+        "empty": "This workflow returns no results"
+      },
+      "subflow_logs": {
+        "label": "Subflow run log"
       }
     }
   },
@@ -635,5 +673,21 @@
       "grep": "Search file content",
       "bisheng_code_interpreter": "Run code"
     }
+  },
+  "subflowWarning": {
+    "title": "Other workflows use this workflow",
+    "referencedBy": "These workflows use it as a subflow: {{names}}.",
+    "forbiddenNodes": "It now has nodes that cannot run in a subflow: {{names}}. Those workflows will fail when they reach the subflow node. Remove these nodes.",
+    "inputs_added": "Input parameters added: {{names}}. When those workflows pass no value, the value set here is used.",
+    "inputs_removed": "Input parameters removed: {{names}}. Values those workflows pass for them are ignored.",
+    "outputs_added": "Return results added: {{names}}.",
+    "outputs_removed": "Return results removed: {{names}}. Workflows that reference them will fail when they run.",
+    "ok": "Got it",
+    "separator": ", "
+  },
+  "subflowLog": {
+    "reason": "Failure reason",
+    "input": "Input",
+    "empty": "The subflow ran no nodes"
   }
 }

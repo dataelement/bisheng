@@ -30,6 +30,8 @@ import VarSelectItem, { VarSelectSingleItem } from "./component/VarSelectItem";
 import VarTextareaItem from "./component/VarTextareaItem";
 import VarTextareaUploadItem from "./component/VarTextareaUploadItem";
 import GlobalVarItem from "./component/GlobalVarItem";
+import { EndReturnItem } from "./component/EndReturnItem";
+import { SubflowSelectItem } from "./component/SubflowSelectItem";
 
 export default function Parameter({
     node,
@@ -240,6 +242,10 @@ export default function Parameter({
         case 'search_switch':
             return <RetrievalWeightSlider data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix}
             />;
+        case 'end_return':
+            return <EndReturnItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix} />;
+        case 'subflow_select':
+            return <SubflowSelectItem nodeId={nodeId} node={node} data={item} onChange={handleOnNewValue} onValidate={bindValidate} i18nPrefix={i18nPrefix} />;
         case "metadata_filter": return (
             <MetadataFilter
                 data={item}

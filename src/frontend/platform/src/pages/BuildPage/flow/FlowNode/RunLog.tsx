@@ -10,6 +10,7 @@ import useFlowStore from "../flowStore";
 import NodeLogo from "./NodeLogo";
 import { ResultText } from "./RunTest";
 import { AGENT_SKILL_TOOL_NAMES } from "../FlowChat/agentDeliverables";
+import { SubflowRunLog } from "./SubflowRunLog";
 
 const enum Status {
     normal = 'normal',
@@ -59,6 +60,9 @@ export default function RunLog({ node, children }) {
                         label = item.key
                     } else if (item.key === 'error') {
                         label = item.key
+                    } else if (item.type === 'subflow_logs') {
+                        // F086: inner node runs of a subflow node
+                        label = t(`node.${node.type}.${item.key}.label`)
                     } else if (item.key === 'skill_notice') {
                         label = t(`node.${node.type}.${item.key}.label`)
                         return { label, type: item.type, value: t(`agentRuntime.notice.${item.value}`) }
@@ -134,9 +138,11 @@ export default function RunLog({ node, children }) {
         }
     }, [])
 
+    // F086: an End node has a log only when it returns results.
     const noLog = useMemo(() => {
-        return ['report', 'end'].includes(node.type)
-    }, [node])
+        if (node.type === 'end') return !data.some(round => round?.length)
+        return node.type === 'report'
+    }, [node, data])
 
     if (state === Status.normal) return children;
 
@@ -235,7 +241,9 @@ const Log = ({ type, name, data }) => {
                     <div className="">
                         {currentData.map((item) => item.type === 'file' ?
                             <ResultFile title={item.label} name={name} fileUrl={item.value} key={item.label + currentIndex} />
-                            : <ResultText title={item.label} value={item.value} key={item.label + currentIndex} />)}
+                            : item.type === 'subflow_logs'
+                                ? <SubflowRunLog title={item.label} logs={item.value || []} key={item.label + currentIndex} />
+                                : <ResultText title={item.label} value={item.value} key={item.label + currentIndex} />)}
                     </div>
                 </div>
             )}

@@ -17,6 +17,7 @@ import { darkContext } from "@/contexts/darkContext";
 import { TabsContext } from "@/contexts/tabsContext";
 import { copyReportTemplate, createWorkFlowVersion, deleteVersion, getVersionDetails, getWorkFlowVersions, onlineWorkflow, onlineWorkflowApi, saveWorkflow, updateVersion } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { showSubflowWarning } from "./SubflowWarningDialog";
 import { AppType } from "@/types/app";
 import { FlowVersionItem } from "@/types/flow";
 import { flowVersionCompatible } from "@/util/flowCompatible";
@@ -95,7 +96,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             })
         }
 
-        await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
+        const saved = await captureAndAlertRequestErrorHoc(saveWorkflow(version.id, {
             ...flow,
             name: version.name,
             data: {
@@ -104,6 +105,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
                 viewport: flow.viewport
             }
         }))
+        showSubflowWarning(saved?.subflow_warning)
         setFlow({ ...flow })
         // api请求
         const res = await captureAndAlertRequestErrorHoc(onlineWorkflowApi({ flow_id: flow.id, version_id: version.id, status: 2 }))
@@ -152,6 +154,7 @@ const Header = ({ flow, nodes, onTabChange, preFlow, onPreFlowChange, onImportFl
             variant: 'success',
             description: t('changesSaved')
         })
+        showSubflowWarning(res?.subflow_warning)
 
         return res
     }

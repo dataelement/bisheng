@@ -111,6 +111,9 @@ class SubflowNode(BaseNode):
         for one in self._inputs:
             if not one.get("key"):
                 continue
+            # A row left empty means "not configured": the child keeps its own value (R-1.3).
+            if one.get("value") in (None, ""):
+                continue
             if one.get("type") == "ref":
                 ret[one["key"]] = self.get_other_node_variable(one.get("value"))
             else:

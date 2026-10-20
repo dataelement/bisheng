@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 24 / 35 完成（Wave 0–3，后端完成） |
+| 实现 | 🔄 进行中 | 25 / 35 完成；Wave 4 代码与质量门已完成，T25–T31 待同事在 119 共享沙箱部署、手动验证后勾选 |
 
 ---
 
@@ -21,7 +21,7 @@
 - 任务按 Wave 组织。同一 Wave 内无依赖的任务可以并行。
 - 后端先写测试任务（红），再做配对的实现任务（绿）。测试放在 `T/workflow/`。子引擎测试用最小工作流 JSON 构造，不依赖中间件。
 - **测试降级**：API 层集成测试（T24）需要数据库，只能在 CI 运行，本地无法先红后绿，所以排在 API 接入任务之后。API 接入的核心判定逻辑在 `SubflowService` 中，已由 T19 单测先行覆盖。
-- 前端用手动验证，环境为 114：platform `http://192.168.106.114:4101/`。部署 114 前先征得用户同意。
+- 前端用手动验证，环境为 119 共享沙箱，由同事部署（2026-10-20 起改定，不在 114 部署）。
 - 设计论证指向 design.md 的决策编号，本文不重复。
 - 并发子 agent 共用工作树时，禁止仓库级 git 写操作（`git stash`、`git checkout .`、`git reset --hard`、`git clean`）。
 - 路径简写：`B/` = `src/backend/bisheng/`，`F/` = `src/frontend/`，`P/` = `src/frontend/platform/src/`，`T/` = `src/backend/test/`。
@@ -244,7 +244,7 @@
   **手动验证**: 运行含【子工作流】节点的父工作流，在节点日志中展开，看到子工作流各节点的输入、输出与耗时；让子工作流某节点失败，展开后能看到失败节点和原因。
   **依赖**: T16
 
-- [ ] **T32**：前端质量门
+- [x] **T32**：前端质量门
   **文件**: 上述前端文件
   **逻辑**: `src/frontend/` 下 `pnpm lint`、`pnpm typecheck`、`pnpm check-i18n` 通过；新文件不超过 600 行。
   **依赖**: T26、T28、T29、T30、T31
@@ -257,7 +257,7 @@
   **依赖**: T01
 
 - [ ] **T34**：E2E
-  **逻辑**: `/e2e-test features/v3.0.0/086-nested-workflow`，逐条覆盖 spec 的全部 AC。AC-07 在子工作流保存后、以及切换当前版本后各运行一次父工作流；AC-09 用对子工作流无权限的普通用户；AC-18 走开放 API；AC-08 确认未上线子工作流不出现在工作台；AC-21 确认子工作流中模型调用的记录归属父工作流。部署 114 前先征得用户同意。
+  **逻辑**: `/e2e-test features/v3.0.0/086-nested-workflow`，逐条覆盖 spec 的全部 AC。AC-07 在子工作流保存后、以及切换当前版本后各运行一次父工作流；AC-09 用对子工作流无权限的普通用户；AC-18 走开放 API；AC-08 确认未上线子工作流不出现在工作台；AC-21 确认子工作流中模型调用的记录归属父工作流。验证环境为 119 共享沙箱。
   **覆盖 AC**: AC-01、AC-02、AC-03、AC-04、AC-05、AC-06、AC-07、AC-08、AC-09、AC-10、AC-11、AC-12、AC-13、AC-14、AC-15、AC-16、AC-17、AC-18、AC-19、AC-20、AC-21
   **依赖**: T24、T32
 
@@ -280,3 +280,11 @@
 - T20：上线时子工作流已被删除抛 10561。引用表只记录当前版本，草稿版本指向的工作流可能已被删除，上线校验必须覆盖这种情况。
 - T20：新增 `clear_refs(flow_id)`，删除工作流后由 T22 调用。
 - T24：拆成两部分，都在本地运行：`test_subflow_ref_repository.py` 用 SQLite 实测 Repository；`test_subflow_api.py` 直接调用各入口函数、mock 协作方，断言调用顺序（删除拦截早于权限投影删除、两个上线入口、保存与切换版本用写入前的旧数据、新建后同步、候选凑页与 5 页上限）。真实 HTTP、MySQL 建表与非管理员权限过滤由 T34 E2E 覆盖：测试夹具是手写 SQLite DDL，不含 OpenFGA。
+- T25：`CodeInputItem` 另加第三个可选 prop `fixedKeys`（名称只读、不能增删），供【子工作流】节点的输入参数表复用；不传时代码节点行为不变。删掉了原本未使用的 `i18nPrefix` 解构，按规则 `lint:prune` 收紧了对应的冻结计数。
+- T26：开关 `return_enabled` 做成隐藏参数，由新组件 `EndReturnItem` 同时渲染开关和返回结果表，开关关闭时不校验列表；【结束】节点在有返回结果时显示运行日志（原先【结束】节点一律不显示日志）。
+- T27、T28：【子工作流】节点只用一个分组：`subflow_id` 由 `SubflowSelectItem` 渲染，`subflow_inputs`、`subflow_outputs` 是隐藏参数，由该组件写入；变量选择器读取 `global` 时不看 `hidden`，下游仍能引用返回结果。不新建 `SubflowInputItem`，输入参数表复用 `CodeInputItem`（`fixedKeys`）。原因：三个参数分属三个组件时，选定工作流后要跨组件同步状态。
+- T28：接口查询请求带 `silent`。请求拦截器把任何返回 403/404 的 GET 跳转到 403/404 页面，编排者失去子工作流编辑权限后打开节点（AC-10）会被带离编辑页；现在失败时沿用节点快照，404 时在节点上提示「不存在或已被删除」。
+- T28 连带的后端修正：「输入」方式留空的参数行视为未配置，使用子工作流中变量自身的值（R-1.3、AC-01）；此前会用空字符串覆盖。`SubflowNode._resolve_inputs` 已改，`test_subflow_node.py` 已补用例。
+- T29：编辑页的「切换版本」只在本地加载该版本数据，不调用 `change_version`、不改变当前版本，所以不需要提醒；调用 `change_version` 的只有版本卡片 `CardSelectVersion.tsx`。提醒接在编辑页保存（含上线前的保存）和版本卡片两处。
+- T30：不需要改代码。编辑页上线、应用列表上线开关和删除都已经过 `captureAndAlertRequestErrorHoc`，错误提示按错误码文案插值 `data`，失败时开关状态不变。待 119 手动确认。
+- T32：`pnpm typecheck` 的 platform 部分通过；client 与 `file-viewers` 的报错来自 worktree 软链到主检出的 `node_modules`，与本功能无关。platform `pnpm lint` 的剩余错误都在本功能未触及的文件中。platform vitest 失败的 16 个用例在改动前的基线上同样失败。
