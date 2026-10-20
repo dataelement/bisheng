@@ -1,11 +1,10 @@
-import { useState, useRef, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useSearchParams } from "react-router-dom";
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
 import { workbenchBranding } from './workbenchBranding';
-import { useWelcomeTransition } from './useWelcomeTransition';
 
 export default function Landing({ Header, isNew, hideSubtitle = false, onStarterClick }: {
   Header?: ReactNode;
@@ -22,8 +21,6 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
   const branding = workbenchBranding(bsConfig, localize('dshChat.welcome'));
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  useWelcomeTransition(titleRef);
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
 
@@ -45,7 +42,7 @@ export default function Landing({ Header, isNew, hideSubtitle = false, onStarter
               alt=""
             />
           )}
-          <h2 ref={titleRef} className="dsh-chat-headline-title">
+          <h2 className="dsh-chat-headline-title">
             {branding.welcomeMessage}
           </h2>
         </div>
