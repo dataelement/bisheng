@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Outlined } from 'bisheng-icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem } from '~/components/ui';
 import { useLocalize } from '~/hooks';
@@ -7,6 +7,35 @@ import { KnowledgeSpaceDialog } from './KnowledgeSpaceDialog';
 import { useComposerMenuAnchor } from './useComposerMenuAnchor';
 import type { KnowledgeItem } from './knowledgeTypes';
 import { useAgentToolSelection, iconForGroup, labelForGroup, type AvailableToolGroup } from './AgentToolSelector';
+
+/** Match Harness: one 16px surface fade, only while more rows remain below. */
+function ComposerMenuScroll({ children }: { children: ReactNode }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const [overflowBelow, setOverflowBelow] = useState(false);
+  useLayoutEffect(() => {
+    const element = viewport.current;
+    const body = content.current;
+    if (!element || !body) return;
+    const update = () => setOverflowBelow(
+      element.scrollHeight - element.clientHeight - element.scrollTop > 1,
+    );
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    observer.observe(body);
+    element.addEventListener('scroll', update, { passive: true });
+    update();
+    return () => {
+      observer.disconnect();
+      element.removeEventListener('scroll', update);
+    };
+  }, []);
+  return <div className="dsh-command-scroll-frame" data-overflow-below={overflowBelow || undefined}>
+    <div ref={viewport} className="dsh-command-scroll">
+      <div ref={content}>{children}</div>
+    </div>
+  </div>;
+}
 
 const EMPTY_TOOLS: AvailableToolGroup[] = [];
 
@@ -58,7 +87,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
       <DropdownMenuContent side="top" align="start" sideOffset={anchor.sideOffset} alignOffset={anchor.alignOffset} collisionPadding={12}
         style={{ width: anchor.width }}
         className="dsh-chat-menu dsh-add-menu dsh-command-panel" onCloseAutoFocus={(event) => { if (selecting) event.preventDefault(); }}>
-        <div className="dsh-command-scroll">
+        <ComposerMenuScroll>
         <ComposerMenuContext.Provider value={{ page, setPage }}>
         {!page && <>
         {showFileUpload && <DropdownMenuItem aria-label={localize('com_ui_upload_files')} disabled={fileUploadDisabled} onSelect={onFileUploadClick} className="gap-2">
@@ -91,7 +120,7 @@ export function ChatResourceMenu({ disabled, showKnowledgeSelection, showFileUpl
         </>}
         {children}
         </ComposerMenuContext.Provider>
-        </div>
+        </ComposerMenuScroll>
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="dsh-active-capabilities">

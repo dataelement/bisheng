@@ -124,8 +124,8 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 }
 .dsh-command-skills {
   --dsh-command-name-size:12px; --dsh-command-description-size:11px;
-  display:flex; flex-direction:column; min-height:0; max-height:260px;
-  padding:4px 8px; overflow-y:auto;
+  display:flex; flex-direction:column; min-height:0;
+  padding:4px 8px;
 }
 .dsh-command-name { font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh-command-skills .skill-menu-text,
@@ -144,16 +144,19 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 .dsh-command-skills .skill-menu-name { flex:0 0 auto; max-width:100%; }
 .dsh-command-skills .skill-menu-description { min-width:0; flex:1; }
 
-/* Fade scrollable menu content into the panel surface, in either theme. */
+/* Harness uses a short surface overlay only while content extends below. */
+.dsh-command-scroll-frame { position:relative; }
 .dsh-command-scroll {
   max-height:calc(min(360px, var(--radix-dropdown-menu-content-available-height)) - 8px);
   overflow-y:auto;
   overscroll-behavior:contain;
-  padding-bottom:20px;
 }
-.dsh-command-scroll,
-.dsh-command-skills {
-  -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
-  mask-image:linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+.dsh-command-scroll:has(.dsh-command-submenu) { max-height:min(300px, calc(var(--radix-dropdown-menu-content-available-height) - 8px)); }
+.dsh-command-scroll-frame[data-overflow-below]::after {
+  content:"";
+  position:absolute;
+  bottom:0; left:0; right:10px;
+  height:16px;
+  pointer-events:none;
+  background:linear-gradient(to bottom, transparent, rgb(var(--dsh-menu-bg, var(--bg-popover, var(--bg-page)))));
 }
-.dsh-command-skills { padding-bottom:20px; }
