@@ -66,7 +66,7 @@ async def _reconcile_one_tenant(tenant_id: int) -> None:
     set_current_tenant_id(tenant_id)
     async with _channel_service_session() as service:
         stats = await service.reconcile_information_subscriptions()
-        logger.info("information subscription reconcile tenant=%s stats=%s", tenant_id, stats)
+        logger.info("information subscription reconcile tenant={} stats={}", tenant_id, stats)
 
 
 async def _reconcile_all_tenants_async() -> None:
@@ -76,4 +76,4 @@ async def _reconcile_all_tenants_async() -> None:
             await _reconcile_one_tenant(tenant_id)
         except Exception:
             # Isolate per-tenant failures so one bad tenant never blocks the rest.
-            logger.exception("information subscription reconcile failed for tenant=%s", tenant_id)
+            logger.exception("information subscription reconcile failed for tenant={}", tenant_id)

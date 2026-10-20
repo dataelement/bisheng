@@ -432,13 +432,11 @@ class ChannelService:
     async def reconcile_information_subscriptions(self) -> dict:
         """Reconcile information-service subscriptions for the current tenant.
 
-        The desired subscription set is the union of every channel's ``source_list``;
-        the materialized view is the ``channel_info_source`` table. This converges the two
-        (and the external information service) on the eventual-consistency path:
-
-        - ``current - desired`` (orphans): unsubscribe at the information service + delete row.
-        - ``desired - current`` (missing): subscribe + fetch metadata + insert row
-          (heals subscribes that were missed or failed on the synchronous hot path).
+        Compare channel references with the complete remote subscription snapshot.
+        Local metadata is a separate projection: an existing row does not prove that
+        the currently configured Information service has the subscription. Preserve
+        existing rows and their article cursors when repairing remote subscriptions.
+        Keep this branch's tenant-scoped orphan cleanup and metadata lifecycle.
 
         Per-source failures are isolated (logged + counted) so one bad source never aborts
         the rest; the next run retries it. Must run inside the target tenant's context — the
@@ -450,28 +448,41 @@ class ChannelService:
         desired = await self.channel_repository.find_all_referenced_source_ids()
         current_rows = await self.channel_info_source_repository.find_all()
         current = {row.id for row in current_rows}
+        actual = {item.id for item in await bisheng_information_client.list_all_subscriptions()}
 
         to_unsub = current - desired
-        to_sub = desired - current
-        failed = 0
+        to_sub = desired - actual
+        failed_sources: set[str] = set()
 
-        for source_id in to_unsub:
+        for source_id in sorted(to_unsub):
             try:
-                await bisheng_information_client.unsubscribe_information_source([source_id])
+                if source_id in actual:
+                    await bisheng_information_client.unsubscribe_information_source([source_id])
                 await self.channel_info_source_repository.delete_by_ids([source_id])
             except Exception:
                 logger.exception("reconcile: failed to unsubscribe information source %s", source_id)
-                failed += 1
+                failed_sources.add(source_id)
 
-        for source_id in to_sub:
+        for source_id in sorted(to_sub | (desired - current)):
             try:
-                await bisheng_information_client.subscribe_information_source([source_id])
-                await self._sync_channel_info_source_metadata(bisheng_information_client, [source_id])
+                if source_id in to_sub:
+                    await bisheng_information_client.subscribe_information_source([source_id])
+                if source_id not in current:
+                    await self._sync_channel_info_source_metadata(bisheng_information_client, [source_id])
             except Exception:
-                logger.exception("reconcile: failed to subscribe information source %s", source_id)
-                failed += 1
+                logger.exception("reconcile: failed to reconcile information source %s", source_id)
+                failed_sources.add(source_id)
 
-        return {"to_sub": len(to_sub), "to_unsub": len(to_unsub), "failed": failed}
+        final_actual = {item.id for item in await bisheng_information_client.list_all_subscriptions()}
+        remaining_missing = desired - final_actual
+        if remaining_missing:
+            logger.error("reconcile: remote subscriptions still missing source_ids=%s", sorted(remaining_missing))
+            failed_sources.update(remaining_missing)
+        remaining_orphans = to_unsub & final_actual
+        if remaining_orphans:
+            logger.error("reconcile: remote orphan subscriptions remain source_ids=%s", sorted(remaining_orphans))
+            failed_sources.update(remaining_orphans)
+        return {"to_sub": len(to_sub), "to_unsub": len(to_unsub), "failed": len(failed_sources)}
 
     async def create_channel(
         self,
