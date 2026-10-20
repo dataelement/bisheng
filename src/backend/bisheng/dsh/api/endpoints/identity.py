@@ -12,6 +12,7 @@ from bisheng.dsh.api.dependencies import DshRuntime, get_runtime, get_settings
 from bisheng.dsh.api.responses import DshRoute
 from bisheng.dsh.config import DshSettings
 from bisheng.dsh.domain.schemas.contracts import DshContract, SubjectId
+from bisheng.dsh.domain.schemas.model_audit_context import AUDIT_FIELDS
 from bisheng.dsh.domain.services.identity import BrowserIdentity
 from bisheng.dsh.domain.services.settings import DshSettingsService
 
@@ -43,7 +44,13 @@ async def config(settings: DshSettings = Depends(get_settings)):
         return {"enabled": False}
     if not (await DshSettingsService().read()).enabled:
         return {"enabled": False}
-    return {"enabled": True, "client_id": settings.client_id, "contract_version": settings.contract_version}
+    return {
+        "enabled": True,
+        "client_id": settings.client_id,
+        "contract_version": settings.contract_version,
+        "audit_context": {"fields": list(AUDIT_FIELDS)},
+        "audit_conversation_title": {"version": 1},
+    }
 
 
 @router.post("/dsh/authorize")

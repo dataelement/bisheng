@@ -63,12 +63,14 @@ class DshModelService:
         usage,
         now,
         billing_timezone: str = "Asia/Shanghai",
+        audit_factory=None,
     ):
         self.policy_reader, self.model_loader, self.llm_builder = policy_reader, model_loader, llm_builder
         self.capabilities_for, self.usage, self.now = capabilities_for, usage, now
         self.billing_timezone = billing_timezone
         self.timezone = ZoneInfo(billing_timezone)
         self.adapter = DshChatAdapter()
+        self.audit_factory = audit_factory
 
     async def list_models(self, principal: DshPrincipal) -> dict:
         with principal_scope(principal):
@@ -102,8 +104,16 @@ class DshModelService:
                 )
             return {"object": "list", "data": result}
 
-    async def complete(self, principal: DshPrincipal, request: DshChatRequest):
-        request_id = str(uuid4())
+    async def complete(
+        self,
+        principal: DshPrincipal,
+        request: DshChatRequest,
+        *,
+        request_id: str | None = None,
+        audit_context=None,
+        audit_callback=None,
+    ):
+        request_id = request_id or str(uuid4())
         with principal_scope(principal), request_trace(request_id):
             policy = await self.policy_reader(int(principal.user_id))
             if policy is None or request.model_id not in policy.allowed_model_ids:
@@ -150,6 +160,17 @@ class DshModelService:
                 if error.reason == "model_not_allowed":
                     raise DshModelNotAllowedError() from error
                 raise DshQuotaUnavailableError() from error
+            if self.audit_factory is not None:
+                try:
+                    execution.capture = await self.audit_factory(
+                        principal, request, request_id, started, model, server, audit_context
+                    )
+                    execution.audit_input = request
+                    if audit_callback is not None:
+                        audit_callback(execution.capture)
+                except Exception as error:
+                    # Optional audit composition never invalidates an admitted model call.
+                    logger.warning("DSH audit capture unavailable ({})", type(error).__name__)
             if request.stream:
                 return PreparedStream(self, principal, request, execution, event)
             try:
@@ -215,9 +236,12 @@ class DshModelService:
                 current = await self.usage.get_request(event)
             except Exception:
                 logger.exception("DSH settlement could not be confirmed for request {}", event.request_id)
+                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
             if current is None or current.model_dump() != terminal.model_dump():
+                execution.audit("usage", "UNCERTAIN")
                 raise DshUsageUnavailableError() from error
+        execution.audit("usage", "SETTLED" if usage.total_tokens is not None else "USAGE_UNKNOWN")
         record_settlement(terminal)
 
     async def _stream(self, principal, request, execution, event):

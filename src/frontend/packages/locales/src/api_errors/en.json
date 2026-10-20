@@ -1,4 +1,9 @@
 {
+  "26131": "Invalid audit query. Reapply the filters.",
+  "26132": "The audit request is unavailable or outside this tenant scope.",
+  "26133": "The original is unavailable. Ask an administrator to check storage and keys.",
+  "26134": "Access logging failed. Original content cannot be provided without an audit trail.",
+  "26135": "This service has no valid audit encryption key. Ask an operator to configure it before enabling content capture.",
   "403": "No permission to perform this action",
   "404": "Resource not found",
   "429": "System is busy, please wait.",

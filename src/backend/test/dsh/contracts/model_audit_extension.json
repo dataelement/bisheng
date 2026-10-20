@@ -1,0 +1,4 @@
+{
+  "config": {"enabled": true, "client_id": "dsh-desktop", "contract_version": "0.5.0", "audit_context": {"fields": ["conversation_id", "request_kind"]}},
+  "audit_context": {"conversation_id": "session-example", "request_kind": "chat"}
+}
