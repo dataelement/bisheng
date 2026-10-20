@@ -146,24 +146,28 @@ describe("F086 nested run log", () => {
 })
 
 describe("F086 failed node log", () => {
-    it("keeps what a failed node logged after its error", () => {
+    const reason = 'Subflow S failed at node code_c: boom -- subflow error --'
+        + JSON.stringify({ status_code: 10560, status_message: "Subflow S failed", data: { subflow_name: "S", node_name: "code_c", reason: "boom" } })
+
+    it("shows the localized subflow error, then what the node logged", () => {
         const inner = [{ node_id: "code_c", reason: "boom" }]
         expect(nodeLogData({
-            reason: "Subflow S failed at node code_c: boom",
+            reason,
             log_data: [[
                 { key: "subflow_inputs", value: {}, type: "params" },
                 { key: "subflow_logs", value: inner, type: "subflow_logs" },
             ]],
-        })).toEqual([[
-            { key: "error", type: "params", value: "Subflow S failed at node code_c: boom" },
+        }, t)).toEqual([[
+            { key: "error", type: "params", value: "api_errors:10560|subflow_name=S|node_name=code_c|reason=boom" },
             { key: "subflow_inputs", value: {}, type: "params" },
             { key: "subflow_logs", value: inner, type: "subflow_logs" },
         ]])
     })
 
-    it("shows only the error when nothing was logged, and passes success logs through", () => {
-        expect(nodeLogData({ reason: "kaput", log_data: null })).toEqual([[{ key: "error", type: "params", value: "kaput" }]])
+    it("keeps other reasons as they are, and passes success logs through", () => {
+        expect(nodeLogData({ reason: "kaput", log_data: null }, t)).toEqual([[{ key: "error", type: "params", value: "kaput" }]])
+        expect(nodeLogData({ reason: "x -- subflow error --{broken", log_data: null }, t)?.[0][0].value).toBe("x")
         const rounds = [[{ key: "output", value: "a", type: "variable" }]]
-        expect(nodeLogData({ reason: null, log_data: rounds })).toBe(rounds)
+        expect(nodeLogData({ reason: null, log_data: rounds }, t)).toBe(rounds)
     })
 })

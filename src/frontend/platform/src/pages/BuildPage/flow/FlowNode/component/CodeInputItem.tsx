@@ -29,7 +29,8 @@ const Item = ({ nodeId, validate, sameKey, item, index, onUpdateItem, onDeleteIt
 
     useEffect(() => {
         if (!validate) return setError(false);
-        if (item.key === '' || !/^[a-zA-Z_][a-zA-Z0-9_]{1,50}$/.test(item.key)) {
+        // Same rule as the list check below: one to 50 characters.
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,49}$/.test(item.key)) {
             setError(true);
         } else {
             setError(false);

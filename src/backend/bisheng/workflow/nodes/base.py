@@ -135,10 +135,6 @@ class BaseNode(ABC):
         """Log data sent with the node end event when ``_run`` raised; the default is none."""
         return None
 
-    def failed_reason(self, error: Exception) -> str:
-        """Failure text sent with the node end event; the raised error itself is unchanged."""
-        return str(error)
-
     def get_other_node_variable(self, variable_key: str) -> Any:
         """Get the variable values of other nodes from the global variable"""
         value = self.graph_state.get_variable_by_str(variable_key)
@@ -247,7 +243,7 @@ class BaseNode(ABC):
                     self.graph_state.set_variable(self.id, key, value)
             self.current_step += 1
         except Exception as e:
-            reason = self.failed_reason(e)
+            reason = str(e)
             log_data = self.parse_failed_log(exec_id)
             raise e
         finally:

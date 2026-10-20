@@ -362,7 +362,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             detail: {
                 nodeId: node_id,
                 action: isError ? '' : data.type === 'start' ? 'loading' : 'success',
-                data: nodeLogData(data.message) // 缓存TODO
+                data: nodeLogData(data.message, t) // 缓存TODO
             }
         })
         window.dispatchEvent(event)
