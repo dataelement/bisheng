@@ -574,9 +574,3 @@ asyncio.run(main())
 ```json
 {"name":"search_knowledge","arguments":{"query":"设备检修前需要完成哪些检查？","knowledge_base_ids":[118],"top_k":5}}
 ```
-
-HTTP Filelib 接口属于另一套调用契约，不能直接照搬其 `external_id`、上传 URL、覆盖同步或响应外壳到 MCP。
-
-- [特性接入简表](../../features/v2.5.0-sg/078-mcp-knowledge-tools/usage.md)
-- [本地实现验证与真实环境待验收项](../../features/v2.5.0-sg/078-mcp-knowledge-tools/verification.md)
-- [Filelib HTTP 检索接口](filelib-retrieve.md)

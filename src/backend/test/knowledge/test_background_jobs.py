@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock
 
+import pytest
 from sqlalchemy import create_engine
 from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -219,6 +220,62 @@ async def test_delete_failure_keeps_objects_and_resumes_only_unfinished_stage(as
     assert vector.col.delete.call_count == 1
     assert es.delete_by_query.call_count == 2
     storage.remove_object.assert_awaited_once_with(bucket_name="files", object_name="original/file.pdf")
+
+
+@pytest.mark.parametrize("object_referenced", [False, True])
+async def test_unreadable_cleanup_retries_permissions_before_deleting_objects(async_db_engine, monkeypatch, object_referenced):
+    import importlib
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.models.knowledge import Knowledge
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    service = await build_service(monkeypatch, async_db_engine)
+    knowledge_imp = importlib.import_module("bisheng.api.services.knowledge_imp")
+    monkeypatch.setattr(knowledge_imp, "_knowledge_file_owned_object_names", lambda file: {file["object_name"]}, raising=False)
+    tuples = [{"user": "user:7", "relation": "owner", "object": "knowledge_file:70"}]
+    fga = SimpleNamespace(read_tuples=AsyncMock(return_value=tuples))
+    monkeypatch.setattr(PermissionService, "_aget_fga", AsyncMock(return_value=fga))
+    cleanup = AsyncMock(side_effect=[RuntimeError("FGA unavailable"), None])
+    monkeypatch.setattr(PermissionService, "batch_write_tuples", cleanup)
+    storage = SimpleNamespace(bucket="files", remove_object=AsyncMock())
+    minio = importlib.import_module("bisheng.core.storage.minio.minio_manager")
+    monkeypatch.setattr(minio, "get_minio_storage", AsyncMock(return_value=storage))
+    original = service.repository_call
+
+    async def repository(method, *args, **kwargs):
+        if method == "object_is_referenced":
+            return object_referenced
+        return await original(method, *args, **kwargs)
+
+    service.repository_call = repository
+    job_ids = await service.repository_call(
+        "request_delete", tenant_id=1,
+        knowledge=Knowledge(id=9, tenant_id=1, name="space", type=3, user_id=1),
+        files=[{"id": 70, "object_name": "original/protected.pdf", "remark": "encrypted"}],
+        artifacts=[], cleanup_permissions=True,
+    )
+    job_id = job_ids[0]
+    assert await service.process(job_id, 1) == "pending"
+    storage.remove_object.assert_not_awaited()
+    async with AsyncSession(async_db_engine) as session:
+        job = await session.get(Job, job_id)
+        assert job.payload["completed_stages"] == []
+        assert job.payload["file"]["remark"] == "encrypted"
+        job.next_retry_at = None
+        await session.commit()
+    assert await service.process(job_id, 1) == "done"
+    assert cleanup.await_count == 2
+    assert cleanup.await_args.kwargs == {"raise_on_failure": True, "record_failures": False}
+    assert cleanup.await_args.args[0][0].object == "knowledge_file:70"
+    if object_referenced:
+        storage.remove_object.assert_not_awaited()
+        async with AsyncSession(async_db_engine) as session:
+            assert (await session.get(Job, job_id)).payload["retained_objects"] == ["original/protected.pdf"]
+    else:
+        storage.remove_object.assert_awaited_once_with(bucket_name="files", object_name="original/protected.pdf")
+    assert await service.process(job_id, 1) == "not_due"
+    assert cleanup.await_count == 2
 
 
 async def test_published_commit_before_checkpoint_is_recovered_without_republish(async_db_engine, monkeypatch):

@@ -256,6 +256,20 @@ class KnowledgeBackgroundService:
         knowledge = Knowledge.model_validate(payload["knowledge"])
         completed = payload.setdefault("completed_stages", [])
         file_id = payload["file_id"]
+        if payload.get("cleanup_permissions") and "permissions" not in completed:
+            from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+            from bisheng.permission.domain.services.permission_service import PermissionService
+
+            fga = await PermissionService._aget_fga()
+            if fga is None:
+                raise RuntimeError("permission_cleanup_unavailable")
+            tuples = await fga.read_tuples(object=f"knowledge_file:{int(file_id)}")
+            await PermissionService.batch_write_tuples(
+                [TupleOperation(action="delete", **item) for item in tuples],
+                raise_on_failure=True, record_failures=False,
+            )
+            completed.append("permissions")
+            await self._checkpoint(job, owner, payload)
         if knowledge.type != 3:
             for stage in ("milvus", "es"):
                 if stage in completed:

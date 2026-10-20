@@ -72,6 +72,9 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             root_dir=self.tmp_dir,
             calc_sha256=False
         )
+        from bisheng.knowledge.domain.services.knowledge_source_file_validation import validate_sync_original
+
+        validate_sync_original(self.local_file_path, self.db_file)
 
     def _get_image_object_dir(self) -> str | None:
         return KnowledgeUtils.get_knowledge_file_image_dir(
