@@ -88,9 +88,10 @@ export async function revokeTenantAdminApi(
 
 export async function getTenantUsersApi(
   tenantId: number,
-  params: { page: number; page_size: number; keyword?: string }
+  params: { page: number; page_size: number; keyword?: string },
+  config: { signal?: AbortSignal } = {},
 ): Promise<{ data: any[]; total: number }> {
-  return await axios.get(`/api/v1/tenants/${tenantId}/users`, { params })
+  return await axios.get(`/api/v1/tenants/${tenantId}/users`, { params, signal: config.signal })
 }
 
 /**

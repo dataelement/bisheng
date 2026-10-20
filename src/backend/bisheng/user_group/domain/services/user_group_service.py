@@ -38,17 +38,17 @@ def purge_user_group_residual_sync(group_id: int) -> None:
 
     from bisheng.core.cache.redis_manager import get_redis_client_sync
 
-    delete_message = json.dumps({'id': group_id})
+    delete_message = json.dumps({"id": group_id})
     redis_client = get_redis_client_sync()
-    redis_client.rpush('delete_group', delete_message, expiration=86400)
-    redis_client.publish('delete_group', delete_message)
+    redis_client.rpush("delete_group", delete_message, expiration=86400)
+    redis_client.publish("delete_group", delete_message)
 
 
 def _is_admin(login_user) -> bool:
     """Check if login_user has system admin role. Temporary until F004."""
-    if bool(getattr(login_user, 'is_global_super', False)):
+    if bool(getattr(login_user, "is_global_super", False)):
         return True
-    if hasattr(login_user, 'user_role') and isinstance(login_user.user_role, list):
+    if hasattr(login_user, "user_role") and isinstance(login_user.user_role, list):
         return AdminRole in login_user.user_role
     return False
 
@@ -69,6 +69,7 @@ async def _can_open_user_group_management(login_user) -> bool:
     from bisheng.department.domain.services.department_service import (
         _is_tenant_admin,
     )
+
     return await _is_tenant_admin(login_user)
 
 
@@ -79,6 +80,7 @@ async def _can_view_all_groups(login_user) -> bool:
     from bisheng.department.domain.services.department_service import (
         _is_tenant_admin,
     )
+
     return await _is_tenant_admin(login_user)
 
 
@@ -86,7 +88,7 @@ async def _user_can_view_group(login_user, group: Group) -> bool:
     """List/detail/members visibility (align with GroupDao.aget_visible_groups)."""
     if await _can_view_all_groups(login_user):
         return True
-    if group.visibility == 'public':
+    if group.visibility == "public":
         return True
     if group.create_user == login_user.user_id:
         return True
@@ -117,7 +119,7 @@ async def _ensure_mutate_group_members(login_user, group: Group) -> None:
         return
     if group.create_user == login_user.user_id:
         return
-    if getattr(group, 'visibility', None) == 'public' and await _is_department_admin(login_user):
+    if getattr(group, "visibility", None) == "public" and await _is_department_admin(login_user):
         return
     raise UserGroupPermissionDeniedError()
 
@@ -160,37 +162,39 @@ class UserGroupService:
         out of scope). Other users: only groups they created.
         """
         if await _can_view_all_groups(login_user):
-            groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
+            groups, _ = await GroupDao.aget_all_groups(1, 2000, "")
             return groups
 
         visible_groups, _ = await GroupDao.aget_visible_groups(
-            login_user.user_id, 1, 2000, '',
+            login_user.user_id,
+            1,
+            2000,
+            "",
         )
         if await _is_department_admin(login_user):
-            return [
-                g for g in visible_groups
-                if g.visibility == 'public' or g.create_user == login_user.user_id
-            ]
+            return [g for g in visible_groups if g.visibility == "public" or g.create_user == login_user.user_id]
         return [g for g in visible_groups if g.create_user == login_user.user_id]
 
     @classmethod
     async def alist_manageable_groups(
-        cls, login_user,
+        cls,
+        login_user,
     ) -> List[Dict[str, Any]]:
         groups = await cls._list_manageable_groups(login_user)
         return [await cls._enrich_group(g) for g in groups]
 
     @classmethod
     async def alist_manageable_group_options(
-        cls, login_user,
+        cls,
+        login_user,
     ) -> List[Dict[str, Any]]:
         """Return lightweight group options for selectors."""
         groups = await cls._list_manageable_groups(login_user)
         return [
             {
-                'id': group.id,
-                'group_name': group.group_name,
-                'visibility': group.visibility,
+                "id": group.id,
+                "group_name": group.group_name,
+                "visibility": group.visibility,
             }
             for group in groups
         ]
@@ -200,25 +204,27 @@ class UserGroupService:
         """主属部门在组织树中的完整路径（用于 PRD 3.2.2 组内成员展示）。"""
         uds = await UserDepartmentDao.aget_user_departments(user_id)
         if not uds:
-            return ''
-        primary = next((x for x in uds if getattr(x, 'is_primary', 0) == 1), uds[0])
+            return ""
+        primary = next((x for x in uds if getattr(x, "is_primary", 0) == 1), uds[0])
         dept = await DepartmentDao.aget_by_id(primary.department_id)
         if not dept or not dept.path:
-            return dept.name if dept else ''
+            return dept.name if dept else ""
         ids: List[int] = []
-        for seg in dept.path.strip('/').split('/'):
+        for seg in dept.path.strip("/").split("/"):
             if seg.isdigit():
                 ids.append(int(seg))
         if not ids:
             return dept.name
         chain = await DepartmentDao.aget_by_ids(ids)
         id_to_name = {d.id: d.name for d in chain}
-        parts = [id_to_name.get(i, '') for i in ids]
-        return ' / '.join(p for p in parts if p)
+        parts = [id_to_name.get(i, "") for i in ids]
+        return " / ".join(p for p in parts if p)
 
     @classmethod
     async def acreate_group(
-        cls, data: UserGroupCreate, login_user,
+        cls,
+        data: UserGroupCreate,
+        login_user,
     ) -> Dict[str, Any]:
         await _ensure_create_group(login_user)
 
@@ -237,7 +243,9 @@ class UserGroupService:
 
         # Keep legacy user_group admin rows in sync for older auth/read paths.
         await UserGroupDao.aset_admins_batch(
-            group.id, add_ids=[login_user.user_id], remove_ids=[],
+            group.id,
+            add_ids=[login_user.user_id],
+            remove_ids=[],
         )
 
         # Emit OpenFGA tuple operations while retaining a legacy admin row for compatibility.
@@ -248,21 +256,30 @@ class UserGroupService:
 
     @classmethod
     async def alist_groups(
-        cls, page: int, limit: int, keyword: str, login_user,
+        cls,
+        page: int,
+        limit: int,
+        keyword: str,
+        login_user,
     ) -> Dict[str, Any]:
         if await _can_view_all_groups(login_user):
             groups, total = await GroupDao.aget_all_groups(page, limit, keyword)
         else:
             groups, total = await GroupDao.aget_visible_groups(
-                login_user.user_id, page, limit, keyword,
+                login_user.user_id,
+                page,
+                limit,
+                keyword,
             )
 
         items = await cls._enrich_groups(groups)
-        return {'data': items, 'total': total}
+        return {"data": items, "total": total}
 
     @classmethod
     async def aget_group(
-        cls, group_id: int, login_user,
+        cls,
+        group_id: int,
+        login_user,
     ) -> Dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
@@ -275,7 +292,10 @@ class UserGroupService:
 
     @classmethod
     async def aupdate_group(
-        cls, group_id: int, data: UserGroupUpdate, login_user,
+        cls,
+        group_id: int,
+        data: UserGroupUpdate,
+        login_user,
     ) -> Dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
@@ -285,7 +305,8 @@ class UserGroupService:
         # Check name uniqueness if name is being changed
         if data.group_name is not None and data.group_name != group.group_name:
             if await GroupDao.acheck_name_duplicate(
-                data.group_name, exclude_id=group_id,
+                data.group_name,
+                exclude_id=group_id,
             ):
                 raise UserGroupNameDuplicateError()
 
@@ -314,7 +335,7 @@ class UserGroupService:
             LegacyRBACSyncService,
         )
 
-        await OwnerService.delete_resource_tuples('user_group', str(group_id))
+        await OwnerService.delete_resource_tuples("user_group", str(group_id))
         await LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id)
         purge_user_group_residual_sync(group_id)
 
@@ -325,7 +346,11 @@ class UserGroupService:
 
     @classmethod
     async def aget_members(
-        cls, group_id: int, page: int, limit: int, keyword: str,
+        cls,
+        group_id: int,
+        page: int,
+        limit: int,
+        keyword: str,
         login_user,
     ) -> Dict[str, Any]:
         group = await GroupDao.aget_by_id(group_id)
@@ -336,15 +361,25 @@ class UserGroupService:
             raise UserGroupPermissionDeniedError()
 
         members, total = await UserGroupDao.aget_group_members(
-            group_id, page, limit, keyword,
+            group_id,
+            page,
+            limit,
+            keyword,
         )
+        from bisheng.user_group.domain.repositories.member_identity_repository import MemberIdentityRepository
+
+        external_ids = await MemberIdentityRepository.external_ids([member["user_id"] for member in members])
         for m in members:
-            m['department_path'] = await cls._department_path_label(m['user_id'])
-        return {'data': members, 'total': total}
+            m["external_id"] = external_ids.get(m["user_id"])
+            m["department_path"] = await cls._department_path_label(m["user_id"])
+        return {"data": members, "total": total}
 
     @classmethod
     async def aadd_members(
-        cls, group_id: int, user_ids: List[int], login_user,
+        cls,
+        group_id: int,
+        user_ids: List[int],
+        login_user,
     ) -> None:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
@@ -367,7 +402,10 @@ class UserGroupService:
 
     @classmethod
     async def async_plain_members(
-        cls, group_id: int, desired_user_ids: List[int], login_user,
+        cls,
+        group_id: int,
+        desired_user_ids: List[int],
+        login_user,
     ) -> None:
         """将普通成员全量同步为 desired_user_ids（与 UI 多选一致，避免前后端 diff 漂移）。"""
         group = await GroupDao.aget_by_id(group_id)
@@ -395,7 +433,10 @@ class UserGroupService:
 
     @classmethod
     async def areplace_user_memberships(
-        cls, user_id: int, desired_group_ids: List[int], login_user,
+        cls,
+        user_id: int,
+        desired_group_ids: List[int],
+        login_user,
     ) -> None:
         """Replace memberships only within the caller's manageable groups.
 
@@ -423,7 +464,10 @@ class UserGroupService:
 
     @classmethod
     async def aremove_member(
-        cls, group_id: int, user_id: int, login_user,
+        cls,
+        group_id: int,
+        user_id: int,
+        login_user,
     ) -> None:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
@@ -441,7 +485,10 @@ class UserGroupService:
 
     @classmethod
     async def aset_admins(
-        cls, group_id: int, _user_ids: List[int], login_user,
+        cls,
+        group_id: int,
+        _user_ids: List[int],
+        login_user,
     ) -> List[Dict]:
         group = await GroupDao.aget_by_id(group_id)
         if not group:
@@ -455,26 +502,22 @@ class UserGroupService:
     async def _enrich_group(cls, group: Group) -> Dict[str, Any]:
         """Attach member_count、创建者展示（不再使用 user_group 管理员多选）。"""
         member_count = await UserGroupDao.aget_group_member_count(group.id)
-        creator_name = ''
+        creator_name = ""
         if group.create_user:
             u = await UserDao.aget_user(group.create_user)
             creator_name = u.user_name if u else str(group.create_user)
-        group_admins = (
-            [{'user_id': group.create_user, 'user_name': creator_name}]
-            if group.create_user
-            else []
-        )
+        group_admins = [{"user_id": group.create_user, "user_name": creator_name}] if group.create_user else []
         return {
-            'id': group.id,
-            'group_name': group.group_name,
-            'visibility': group.visibility,
-            'remark': group.remark,
-            'member_count': member_count,
-            'create_user': group.create_user,
-            'create_user_name': creator_name or None,
-            'create_time': group.create_time,
-            'update_time': group.update_time,
-            'group_admins': group_admins,
+            "id": group.id,
+            "group_name": group.group_name,
+            "visibility": group.visibility,
+            "remark": group.remark,
+            "member_count": member_count,
+            "create_user": group.create_user,
+            "create_user_name": creator_name or None,
+            "create_time": group.create_time,
+            "update_time": group.update_time,
+            "group_admins": group_admins,
         }
 
     @classmethod
@@ -486,36 +529,31 @@ class UserGroupService:
         group_ids = [int(group.id) for group in groups if group.id is not None]
         member_counts = await UserGroupDao.aget_group_member_counts(group_ids)
 
-        creator_ids = sorted({
-            int(group.create_user) for group in groups if group.create_user
-        })
+        creator_ids = sorted({int(group.create_user) for group in groups if group.create_user})
         creator_name_map: Dict[int, str] = {}
         if creator_ids:
             creators = await UserDao.aget_user_by_ids(creator_ids)
-            creator_name_map = {
-                int(user.user_id): user.user_name
-                for user in creators
-                if user.user_id is not None
-            }
+            creator_name_map = {int(user.user_id): user.user_name for user in creators if user.user_id is not None}
 
         items: List[Dict[str, Any]] = []
         for group in groups:
-            creator_name = ''
+            creator_name = ""
             if group.create_user:
                 creator_name = creator_name_map.get(int(group.create_user), str(group.create_user))
-            items.append({
-                'id': group.id,
-                'group_name': group.group_name,
-                'visibility': group.visibility,
-                'remark': group.remark,
-                'member_count': member_counts.get(int(group.id), 0) if group.id is not None else 0,
-                'create_user': group.create_user,
-                'create_user_name': creator_name or None,
-                'create_time': group.create_time,
-                'update_time': group.update_time,
-                'group_admins': (
-                    [{'user_id': group.create_user, 'user_name': creator_name}]
-                    if group.create_user else []
-                ),
-            })
+            items.append(
+                {
+                    "id": group.id,
+                    "group_name": group.group_name,
+                    "visibility": group.visibility,
+                    "remark": group.remark,
+                    "member_count": member_counts.get(int(group.id), 0) if group.id is not None else 0,
+                    "create_user": group.create_user,
+                    "create_user_name": creator_name or None,
+                    "create_time": group.create_time,
+                    "update_time": group.update_time,
+                    "group_admins": (
+                        [{"user_id": group.create_user, "user_name": creator_name}] if group.create_user else []
+                    ),
+                }
+            )
         return items

@@ -2,9 +2,13 @@ import json
 from typing import Any
 
 from bisheng.citation.domain.services.citation_prompt_helper import (
+    FetchedPageCitationRegistry,
+    annotate_fetched_page_with_citation,
     annotate_web_results_with_citations,
     cache_citation_registry_items_sync,
     collect_web_citation_registry_items,
+    is_web_citation_tool,
+    is_web_fetch_tool,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
@@ -29,10 +33,18 @@ class ToolNode(BaseNode):
         self._tool = None
 
     def _is_web_search_tool(self) -> bool:
-        return (
-            getattr(self._tool, 'name', None) == 'web_search'
-            or getattr(self._tool_info, 'tool_name', None) == 'web_search'
-        )
+        return is_web_citation_tool(self._tool) and not is_web_fetch_tool(self._tool)
+
+    def _set_citation_items(self, citation_items: list) -> None:
+        cache_citation_registry_items_sync(citation_items)
+        self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, None)
+        self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+
+    def _annotate_web_fetch_output(self, output: Any) -> Any:
+        output, citation_items = annotate_fetched_page_with_citation(output, FetchedPageCitationRegistry())
+        if citation_items:
+            self._set_citation_items(citation_items)
+        return output
 
     def _annotate_web_search_output(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -45,10 +57,7 @@ class ToolNode(BaseNode):
             return output
 
         annotated_results = annotate_web_results_with_citations(results)
-        citation_items = collect_web_citation_registry_items(annotated_results)
-        cache_citation_registry_items_sync(citation_items)
-        self.graph_state.set_variable(self.id, WORKFLOW_SOURCE_DOCUMENTS_KEY, None)
-        self.graph_state.set_variable(self.id, WORKFLOW_CITATION_REGISTRY_ITEMS_KEY, citation_items)
+        self._set_citation_items(collect_web_citation_registry_items(annotated_results))
         return json.dumps(annotated_results, ensure_ascii=False)
 
     def _init_tool(self):
@@ -62,7 +71,9 @@ class ToolNode(BaseNode):
         self._init_tool()
         tool_input = self.parse_tool_input()
         output = self._tool.invoke(input=tool_input)
-        if self._is_web_search_tool():
+        if is_web_fetch_tool(self._tool):
+            output = self._annotate_web_fetch_output(output)
+        elif self._is_web_search_tool():
             output = self._annotate_web_search_output(output)
         return {
             "output": output

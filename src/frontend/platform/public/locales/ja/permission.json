@@ -19,9 +19,9 @@
     "remove": "削除"
   },
   "search": {
-    "user": "ユーザーを検索...",
-    "department": "部門を検索...",
-    "userGroup": "グループを検索..."
+    "user": "ユーザー名または ID で検索",
+    "department": "部署名または ID で検索",
+    "userGroup": "ユーザーグループ名または ID で検索"
   },
   "includeChildren": "サブ部門を含む",
   "list": {
@@ -29,9 +29,9 @@
   },
   "empty": {
     "permissions": "権限レコードなし",
-    "departments": "部門データなし",
-    "userGroups": "ユーザーグループなし",
-    "searchResults": "結果が見つかりません"
+    "departments": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "userGroups": "権限を付与できる対象が見つかりません。名前または ID を確認してください",
+    "searchResults": "権限を付与できる対象が見つかりません。名前または ID を確認してください"
   },
   "comingSoon": "近日公開",
   "managePermission": "権限管理",

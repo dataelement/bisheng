@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { useSubjectTable } from "@/components/bs-comp/selectComponent/useSubjectTable"
+import { SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -20,7 +22,6 @@ import {
 } from "@/controllers/API/tenant";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import type { Tenant } from "@/types/api/tenant";
-import { useTable } from "@/util/hook";
 import { displayTenantName } from "@/utils/tenantDisplayName";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -45,15 +46,15 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
     data: users,
     total,
     setPage,
-    search,
-  } = useTable(
+    subjectSearch,
+  } = useSubjectTable(
     { pageSize: 10 },
-    (param: any) =>
+    (param, signal) =>
       getTenantUsersApi(tenant.id, {
         page: param.page,
         page_size: param.pageSize,
         keyword: param.keyword,
-      })
+      }, { signal })
   );
 
   const reloadAdmins = () => {
@@ -105,11 +106,12 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
         {/* Search */}
         <div className="mb-4">
           <SearchInput
-            placeholder={t("tenant.searchUser")}
-            onChange={(e: any) => search(e.target.value)}
+            placeholder={t("subjectSearch.userPlaceholder")}
+            {...subjectSearch.inputProps}
           />
         </div>
 
+        <SubjectSearchStatus tooLong={subjectSearch.tooLong} failed={subjectSearch.failed} loading={subjectSearch.loading} empty={!users.length} onRetry={subjectSearch.retry} />
         {/* User List */}
         <div className="flex-1 overflow-y-auto">
           <Table>
@@ -150,7 +152,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {user.external_id ?? user.user_id}
+                      {user.external_id || "-"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {user.join_time
@@ -165,9 +167,7 @@ export function TenantUserDialog({ tenant, onClose }: Props) {
                               className="text-sm text-muted-foreground hover:underline"
                               onClick={() => handleRevokeAdmin(user.user_id)}
                             >
-                              {t("tenant.revokeAdmin", {
-                                defaultValue: "取消管理员",
-                              })}
+                              {t("tenant.revokeAdmin", { defaultValue: "取消管理员" })}
                             </button>
                           ) : (
                             <button

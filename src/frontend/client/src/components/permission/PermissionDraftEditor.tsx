@@ -1,3 +1,4 @@
+import { SubjectIdentity } from "./SubjectIdentity";
 import { useLocalize } from "~/hooks";
 import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import { canMutatePermissionDraftRow } from "./permissionDraftPolicy";
@@ -97,6 +98,7 @@ export function PermissionDraftEditor({
                   the name truncates, the meta keeps its width. */}
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <div className="min-w-0 truncate text-body text-text-1">{row.subjectName}</div>
+                {(row.externalId || row.departmentPath) && <SubjectIdentity type={row.subjectType} externalId={row.externalId} path={row.departmentPath} />}
                 {hasMeta && (
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-caption text-text-3">
                     {row.sourceType && (

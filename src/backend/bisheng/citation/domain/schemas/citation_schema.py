@@ -14,6 +14,13 @@ class CitationSchemaBase(BaseModel):
     )
 
 
+# A fetched web page (F085) is one WEB source with this single item id. It
+# differs from search snippets ("1", "2", ...) so short handles keep the two
+# apart, and it must stay numeric: the client renders answers with
+# remark-directive, which reads ":<letter>..." in a citation key as a directive.
+FETCHED_PAGE_ITEM_ID = "0"
+
+
 class CitationType(str, Enum):
     """Supported citation source types."""
 

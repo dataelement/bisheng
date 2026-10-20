@@ -1,4 +1,6 @@
 // @ts-strict-ignore
+import { useSubjectSearch } from "@/components/bs-comp/selectComponent/useSubjectSearch"
+import { SubjectBusinessId, SubjectSearchStatus } from "@/components/bs-comp/selectComponent/SubjectSearchStatus"
 import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
@@ -14,7 +16,7 @@ import { addDepartmentMembersApi } from "@/controllers/API/department"
 import { getUsersApi } from "@/controllers/API/user"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { Checkbox } from "@/components/bs-ui/checkBox"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 interface AddMemberDialogProps {
@@ -26,38 +28,21 @@ interface AddMemberDialogProps {
 interface UserItem {
   user_id: number
   user_name: string
+  external_id?: string | null
 }
 
 export function AddMemberDialog({ deptId, onAdded, onClose }: AddMemberDialogProps) {
   const { t } = useTranslation()
-  const [keyword, setKeyword] = useState("")
-  const [users, setUsers] = useState<UserItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [isPrimary, setIsPrimary] = useState(1)
   const [loading, setLoading] = useState(false)
 
-  // Search users
-  useEffect(() => {
-    if (!keyword) {
-      setUsers([])
-      return
-    }
-    const timer = setTimeout(() => {
-      captureAndAlertRequestErrorHoc(
-        getUsersApi({ page: 1, pageSize: 10, name: keyword })
-      ).then((res: any) => {
-        if (res?.data) {
-          setUsers(
-            res.data.map((u: any) => ({
-              user_id: u.user_id,
-              user_name: u.user_name,
-            }))
-          )
-        }
-      })
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [keyword])
+  const search = useSubjectSearch<UserItem>({
+    emptyByDefault: true,
+    fetchPage: (keyword, page, signal) => getUsersApi({ page, pageSize: 10, name: keyword }, { signal }),
+  })
+  const users = search.rows
+  const keyword = search.keyword
 
   const toggleUser = useCallback((userId: number) => {
     setSelectedIds((prev) => {
@@ -99,16 +84,16 @@ export function AddMemberDialog({ deptId, onAdded, onClose }: AddMemberDialogPro
           <div className="space-y-2">
             <Label>{t("bs:department.searchMember")}</Label>
             <SearchInput
-              placeholder={t("bs:department.searchMember")}
-              onChange={(e) => setKeyword(e.target.value)}
+              placeholder={t("bs:subjectSearch.userPlaceholder")}
+              {...search.inputProps}
             />
           </div>
 
           {/* User list */}
-          <div className="max-h-[240px] overflow-y-auto rounded-md border p-2">
-            {users.length === 0 ? (
+          <div className="max-h-[240px] overflow-y-auto rounded-md border p-2" onScroll={event => { const el = event.currentTarget; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) search.loadMore() }}>
+            {search.tooLong || search.failed || search.loading ? <SubjectSearchStatus tooLong={search.tooLong} failed={search.failed} loading={search.loading} onRetry={search.retry} /> : users.length === 0 ? (
               <div className="py-4 text-center text-sm text-muted-foreground">
-                {keyword ? t("bs:department.noMembers") : t("bs:department.searchMember")}
+                {keyword ? t("bs:subjectSearch.emptyUsers") : t("bs:department.searchMember")}
               </div>
             ) : (
               users.map((u) => (
@@ -118,11 +103,15 @@ export function AddMemberDialog({ deptId, onAdded, onClose }: AddMemberDialogPro
                   onClick={() => toggleUser(u.user_id)}
                 >
                   <Checkbox checked={selectedIds.has(u.user_id)} />
-                  <span className="text-sm">{u.user_name}</span>
+                  <span className="text-sm">{u.user_name}</span><SubjectBusinessId value={u.external_id} />
                 </div>
               ))
             )}
           </div>
+
+          {!search.loading && !search.failed && !search.tooLong && users.length < search.total && !!search.normalized && (
+            <button type="button" onClick={search.loadMore}>{t("bs:subjectSearch.loadMore")}</button>
+          )}
 
           {/* Selected count */}
           {selectedIds.size > 0 && (
