@@ -1,5 +1,6 @@
 import { DesktopShellBridge } from './DesktopShellBridge';
 let mockEntries = [{ id: 'knowledge', path: '/knowledge', to: '/knowledge', label: 'Knowledge', active: true, icon: null }];
+jest.mock('~/hooks/useVersionManagementEnabled', () => ({ usePersonalTokenEnabled: () => true }));
 const mockReport = jest.fn();
 const mockBranding = { welcomeMessage: 'Team workspace', assistantIcon: { enabled: true, image: 'https://files.example/logo.svg' } };
 jest.mock('~/hooks/queries/data-provider', () => ({ useGetBsConfig: () => ({ data: mockBranding }) }));
@@ -20,8 +21,8 @@ afterEach(() => { delete window.dshChatPresentation; });
 it('publishes only available entries and replaces them after grants change', () => {
   window.dshChatPresentation = { reportLanding: jest.fn(), reportNavigation: mockReport };
   DesktopShellBridge();
-  expect(mockReport).toHaveBeenLastCalledWith({ branding: mockBranding, homeLabel: 'Welcome', path: '/knowledge', entries: [{ id: 'knowledge', path: '/knowledge', label: 'Knowledge', active: true, primary: true }] });
+  expect(mockReport).toHaveBeenLastCalledWith({ settings: { aiAccess: true }, branding: mockBranding, homeLabel: 'Welcome', path: '/knowledge', entries: [{ id: 'knowledge', path: '/knowledge', label: 'Knowledge', active: true, primary: true }] });
   mockEntries = [];
   DesktopShellBridge();
-  expect(mockReport).toHaveBeenLastCalledWith({ branding: mockBranding, homeLabel: 'Welcome', path: '/knowledge', entries: [] });
+  expect(mockReport).toHaveBeenLastCalledWith({ settings: { aiAccess: true }, branding: mockBranding, homeLabel: 'Welcome', path: '/knowledge', entries: [] });
 });
