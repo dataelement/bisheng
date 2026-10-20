@@ -19,7 +19,6 @@ import { taskModeSkillsState } from "~/store/linsight";
 import { useDefaultCheckedSkills } from "~/components/Linsight/Input/useDefaultCheckedSkills";
 import { ChatSkillSelector } from "./Input/ChatSkillSelector";
 import { ChatResourceMenu } from "~/components/Chat/Input/ChatResourceMenu";
-import { SkillMenuEntries } from "~/components/Skills/SkillMenuEntries";
 import { skillCenterPreviewEnabled } from "~/components/Skills/types";
 import { AttachmentBar } from "~/components/Chat/Input/AttachmentBar";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
@@ -338,7 +337,9 @@ const AiChatInput = memo(
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
         const agentMode = Array.isArray(bsConfig?.tools) && bsConfig.tools.length > 0;
-        const showSkillPicker = allowConfiguration && !isLingsi && !!onSelectedOrgKbsChange && showAddSkill;
+        const showSkillPicker = allowConfiguration && !isLingsi && !!onSelectedOrgKbsChange
+            && (showAddSkill || skillCenterPreviewEnabled)
+            && (taskMode || (taskModeEntry && !!onToggleTaskMode));
         const showToolPicker = allowConfiguration && tools && (agentMode || (!!onSearchTypeChange && !!bsConfig?.webSearch?.enabled));
         const filesDisabled = !!disabled;
         const fileAccept = buildChatAccept({
@@ -502,10 +503,9 @@ const AiChatInput = memo(
 
                 <div
                     className={cn(
-                        // Figma 12669:66966 — white surface, 16px radius, hairline
-                        // border (replaces the legacy gray fill). z-[1] keeps it
-                        // painted above the attachment strip it overlaps.
-                        "dsh-chat-composer relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base bg-white p-3",
+                        // The composer owns its theme surface through dsh-composer-bg.
+                        // z-[1] keeps it above the attached resource strip.
+                        "dsh-chat-composer relative z-[1] flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-border-base p-3",
                         // Soft drop shadow on the landing page (always) and on the
                         // in-conversation input only while it has a mounted knowledge
                         // space / file; otherwise in-conversation inputs stay flat
@@ -690,9 +690,8 @@ const AiChatInput = memo(
                                                 setDailySkills(next);
                                                 if (taskMode) return;
                                                 if (onToggleTaskMode) onToggleTaskMode();
-                                                else navigate('/linsight/new');
                                             }} />
-                                        : skillCenterPreviewEnabled && <SkillMenuEntries inline />}
+                                        : null}
                                 </ChatResourceMenu>
                             )}
 

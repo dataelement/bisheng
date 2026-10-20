@@ -81,7 +81,7 @@ function SkillRow({ skill, isChecked, onToggle, layout }: SkillRowProps) {
                 repeats what is already fully visible is noise. Once it does show, it
                 carries the whole row: a name-only tooltip next to a visible
                 description reads as if the description were missing. */}
-            {showTooltip && (
+            {layout !== 'command' && showTooltip && (
                 <TooltipContent
                     side="right"
                     align="start"
