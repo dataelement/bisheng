@@ -170,25 +170,25 @@ class SkillBundleTooLargeError(BaseErrorCode):
 
 
 # ---------------------------------------------------------------------------
-# F078 skills in workflow agent nodes and assistants (11061–11063). Raised when a
-# configured skill cannot be used at run time. 11060 is skipped: the frontend
-# locale files still carry a stale key from the removed SOP code.
+# F078 skills in workflow agent nodes and assistants (11075-11077). Raised when a
+# configured skill cannot be used at run time. 11061-11074 belong to the skill
+# center on the release line; 11060 is skipped (stale frontend locale key).
 # ---------------------------------------------------------------------------
 
 
 # A configured skill exists but an administrator disabled it
 class AgentSkillDisabledError(BaseErrorCode):
-    Code: int = 11061
+    Code: int = 11075
     Msg: str = "Skill {skill_name} has been disabled by an administrator"
 
 
 # A configured skill no longer exists in the tenant skill library
 class AgentSkillDeletedError(BaseErrorCode):
-    Code: int = 11062
+    Code: int = 11076
     Msg: str = "Skill {skill_name} has been deleted by an administrator"
 
 
 # Skills are configured but the selected model runs in ReAct mode
 class AgentSkillExecutorUnsupportedError(BaseErrorCode):
-    Code: int = 11063
+    Code: int = 11077
     Msg: str = "The execution mode of the selected model does not support skills"

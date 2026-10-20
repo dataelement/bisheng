@@ -45,7 +45,7 @@
 | C2 双 DB | 合规。新列用 `JsonType`，不用 `JSON_EXTRACT` 类查询。 |
 | C3 多租户 | 合规。技能查询依赖自动注入的租户上下文；Celery 线程里由 runner 设置上下文，不手写 tenant 条件。 |
 | C4 权限 | 合规。会话归属不是 ReBAC 资源，沿用 chat_session 现有的 `SessionSubject` 归属校验；workflow 与助手的使用权限仍由既有入口校验。 |
-| C5 错误码 | 合规。使用技能管理段 11061–11063，并在 release-contract 登记。 |
+| C5 错误码 | 合规。使用 11075–11077，并在 release-contract 登记（原用 11061–11063，与发版线技能中心撞号，2026-10-20 顺延）。 |
 | C6、C7 | 不涉及新密钥；前端 store 不直接发 HTTP。 |
 | C8 本地盘 | 合规。工作区与交付文件以 MinIO 为准，本地目录每次运行新建、结束即删。 |
 
@@ -198,7 +198,7 @@
 
 1. `AgentNode.__init__` 读取 `skill_list`（`B/workflow/nodes/agent/agent.py:193` 起）。会话键来自新传入的 `chat_id`；没有 `chat_id` 时用 `hash_key`。
 2. `_init_agent` 调用 `AgentRunner.prepare(...)`。它判定技能可用性、准备工作区、构建代码执行工具，返回 middleware 列表和附加工具。没有配置技能时返回空列表，不建工作区。
-3. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11063（AC-13）。
+3. 用 `create_agent(llm, tools, system_prompt=..., middleware=...)` 构建 Agent。ReAct 分支不变；配置了技能但模型是 ReAct 时报错 11077（AC-13）。
 4. `_run_once` 照旧 `invoke`。批量模式下每个批次各自做基线和交付文件收集（AC-17）。
 5. 运行结束后，`AgentRunner.finish()` 收集交付文件、上传为会话附件，返回文件描述列表。节点把它放进 `StreamMsgOverData.files`，并写入输出变量 `{node_id}.<输出键>_deliverables`（AC-16）：单个模式是 `output_deliverables`，批量模式是每个批次的 `output_xxx_deliverables`。变量名以 `output` 开头，是为了让 platform 的变量选择器沿用「本节点 output 开头的参数即输出变量」这一现有规则。
 
@@ -278,7 +278,7 @@
 | 输出变量 `{node_id}.<输出键>_deliverables` | workflow 变量 | 下游节点 |
 | 消息 `files`、`extra.agent_notices` | 消息字段 | 两个前端、历史回放 |
 | `assistant.skill_names`、`AssistantUpdateReq.skill_names` | 表列、HTTP 字段 | platform 助手配置页 |
-| 错误码 11061（已停用）、11062（已删除）、11063（执行方式不支持） | 错误码 | 前端 `api_errors` |
+| 错误码 11075（已停用）、11076（已删除）、11077（执行方式不支持） | 错误码 | 前端 `api_errors` |
 | `AgentRunner` | 内部 Python API | workflow 节点、助手应用；以后的日常对话 |
 
 ### 6.2 我依赖别人的（Incoming）
@@ -295,7 +295,7 @@
 
 ### 6.3 错误码分配
 
-技能相关错误放在 linsight 技能管理段 11050–11069（`B/common/errcode/linsight.py:92-100`）。11060 在前端 locale 里有残留键，跳过不用。新分配 11061、11062、11063，三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
+技能相关错误放在 linsight 技能管理段 11050–11069（`B/common/errcode/linsight.py:92-100`）。11060 在前端 locale 里有残留键，跳过不用。原分配 11061–11063，2026-10-20 合并发版线时发现技能中心已占用 11061–11074，顺延为 11075、11076、11077，三种语言的文案放在 `F/packages/locales/src/api_errors/`。release-contract 的「已分配模块编码」同步登记。
 
 ---
 

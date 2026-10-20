@@ -163,13 +163,13 @@ class TestAgentNodeWithSkills:
         assert "agent_1.output_deliverables" in keys
         assert next(item["value"] for item in log if item["key"] == "skill_list") == ["docx"]
 
-    def test_react_model_with_skills_fails_with_11063(self, env):
+    def test_react_model_with_skills_fails_with_11077(self, env):
         env.executor["type"] = "ReAct"
         node, _ = _node(_params())
         with pytest.raises(AgentSkillRunError) as exc_info:
             node._run("exec-1")
         payload = parse_agent_skill_error(str(exc_info.value))
-        assert payload["status_code"] == 11063
+        assert payload["status_code"] == 11077
 
 
 class TestAgentNodeWithoutSkills:
@@ -232,7 +232,7 @@ class TestSkillSupport:
         with pytest.raises(AgentSkillRunError) as exc_info:
             self._skills().prepare("function call", [])
         payload = parse_agent_skill_error(str(exc_info.value))
-        assert payload["status_code"] == 11061
+        assert payload["status_code"] == 11075
         assert payload["data"]["skill_name"] == "docx"
 
     def test_format_deliverables(self):
@@ -249,7 +249,7 @@ class TestFailureEvent:
         callback.user_id, callback.chat_id, callback.workflow_id = 7, "c1", "flow-1"
         reason = str(AgentSkillRunError(AgentSkillDisabledError(skill_name="docx"), "助手"))
         response = callback.parse_workflow_failed({"reason": reason})
-        assert response.message["status_code"] == 11061
+        assert response.message["status_code"] == 11075
         assert response.message["data"]["skill_name"] == "docx"
 
     def test_other_failures_are_unchanged(self):
@@ -258,4 +258,4 @@ class TestFailureEvent:
         callback = RedisCallback.__new__(RedisCallback)
         callback.user_id, callback.chat_id, callback.workflow_id = 7, "c1", "flow-1"
         response = callback.parse_workflow_failed({"reason": "boom"})
-        assert response.message["status_code"] != 11061
+        assert response.message["status_code"] != 11075

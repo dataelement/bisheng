@@ -132,7 +132,7 @@ class TestNoSkills:
 
 
 class TestWithSkills:
-    async def test_react_with_skills_raises_11063(self):
+    async def test_react_with_skills_raises_11077(self):
         with pytest.raises(AgentSkillExecutorUnsupportedError):
             await _runner(_spec(executor="ReAct")).aprepare()
         assert _FakeWorkspace.instances == []
