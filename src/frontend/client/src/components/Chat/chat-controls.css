@@ -81,19 +81,21 @@ body[data-dsh-chat-theme] .dsh-add-menu [role="menuitemcheckbox"] > span:last-ch
 
 /* Harness command panel: composer-wide, 4px above its top edge. */
 .dsh-command-panel {
+  --dsh-command-name-size:13px; --dsh-command-description-size:12px;
   max-width:calc(100vw - 24px);
   max-height:min(360px, var(--radix-dropdown-menu-content-available-height));
   padding:4px; overflow-y:auto; overscroll-behavior:contain;
 }
 .dsh-command-description {
   margin-left:0; min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis;
-  white-space:nowrap; font-size:12px; font-weight:400; line-height:20px; color:rgb(var(--text-3));
+  white-space:nowrap; font-size:var(--dsh-command-description-size); font-weight:400; line-height:20px; color:rgb(var(--text-3));
 }
 .dsh-command-skills {
+  --dsh-command-name-size:12px; --dsh-command-description-size:11px;
   display:flex; flex-direction:column; min-height:0; max-height:260px;
   padding:4px 8px; overflow-y:auto;
 }
-.dsh-command-name { font-size:13px; font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dsh-command-name { font-size:var(--dsh-command-name-size); font-weight:400; line-height:20px; flex:0 0 auto; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dsh-command-skills .skill-menu-text,
 .dsh-command-skill-text { display:flex; align-items:baseline; gap:8px; }
 .dsh-command-panel .dsh-command-skill-row { align-items:center; }
