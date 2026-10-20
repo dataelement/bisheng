@@ -619,6 +619,8 @@
       }
     },
     "tool": {
+      "parameterGroup": "工具参数",
+      "outputGroup": "输出",
       "工具参数": "工具参数",
       "输出": "输出",
       "output": {

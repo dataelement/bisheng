@@ -3690,9 +3690,6 @@
     "no-console": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 4
-    },
     "no-useless-escape": {
       "count": 6
     },
