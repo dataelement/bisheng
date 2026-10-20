@@ -7,8 +7,24 @@ from bisheng.worker.approval.decision_delivery_tasks import (
     deliver_approval_decision as deliver_approval_decision,
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
-from bisheng.worker.information.article import sync_information_article
-from bisheng.worker.information.reconcile import reconcile_all_tenants
+from bisheng.worker.information.article import (
+    dispatch_information_article_poll as dispatch_information_article_poll,
+)
+from bisheng.worker.information.article import (
+    sync_information_articles as sync_information_articles,
+)
+from bisheng.worker.information.knowledge_delivery import (
+    deliver_information_articles_to_config as deliver_information_articles_to_config,
+)
+from bisheng.worker.information.knowledge_delivery import (
+    route_new_information_articles as route_new_information_articles,
+)
+from bisheng.worker.information.reconcile import (
+    dispatch_information_subscription_reconcile as dispatch_information_subscription_reconcile,
+)
+from bisheng.worker.information.reconcile import (
+    reconcile_information_subscriptions as reconcile_information_subscriptions,
+)
 from bisheng.worker.knowledge.file_change_tasks import (
     cleanup_all_file_change_residue as cleanup_all_file_change_residue,
 )

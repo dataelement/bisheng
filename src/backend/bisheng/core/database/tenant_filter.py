@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 _tenant_aware_tables: set[str] = set()
 _initialized: bool = False
 
-# Tables that have a tenant_id column but use it as a FK, not as isolation field.
-_EXCLUDED_TABLES: set[str] = {"user_tenant"}
+# Tables whose compatibility tenant_id column is not an isolation boundary.
+# Information source metadata and cursors are shared across tenants.
+_EXCLUDED_TABLES: set[str] = {"user_tenant", "channel_info_source"}
 
 # ORM modules that must be imported before _discover_tenant_aware_tables runs.
 # Without this, models that nothing in the FastAPI router chain happens to

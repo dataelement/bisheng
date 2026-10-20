@@ -156,6 +156,9 @@ linsight:
 
 information_conf:
   information_initial_article_limit: 36
+  information_sync_jitter_seconds: 600
+  information_subscription_auto_unsubscribe_enabled: true
+  information_knowledge_delivery_enabled: true
   information_business_timezone: Asia/Shanghai
   # 情报订阅服务的接口地址
   base_url: ""

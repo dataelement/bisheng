@@ -100,6 +100,24 @@ class InformationServer:
         )
 
 
+async def _run_public_poll():
+    fresh = {}
+    updated = []
+
+    async def collect(client, source_id, article_ids, detected_at):
+        fresh.setdefault(source_id, []).extend(article_ids)
+
+    async def update_display(source_id, article_service):
+        updated.append(source_id)
+
+    with (
+        patch.object(article_worker, "_dispatch_new_articles", side_effect=collect),
+        patch.object(article_worker, "_update_channel_display_time", side_effect=update_display),
+    ):
+        await article_worker._sync_information_articles_async()
+    return fresh, updated
+
+
 async def test_worker_retries_late_remote_sync_then_bootstraps_and_polls_incrementally(tmp_path):
     """AC-C1, AC-C2: late remote readiness cannot freeze today's local progress."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'articles.db'}")
@@ -121,15 +139,16 @@ async def test_worker_retries_late_remote_sync_then_bootstraps_and_polls_increme
     lock = MagicMock(acquire=MagicMock(return_value=True), refresh=MagicMock(return_value=True))
     try:
         with (
-            patch.object(article_worker, "get_async_db_session", session_factory),
+            patch("bisheng.core.database.get_async_db_session", session_factory),
+            patch("bisheng.channel.domain.services.article_es_service.ArticleEsService", return_value=store),
             patch.object(article_worker, "get_bisheng_information_client", AsyncMock(return_value=client)),
             patch.object(article_worker, "_new_source_lock", return_value=lock),
         ):
-            assert await article_worker._sync_tenant_sources_async(None, store) == ({}, [])
+            assert await _run_public_poll() == ({}, [])
             assert server.article_requests == []
 
             server.last_sync_at = server.today
-            fresh, updated = await article_worker._sync_tenant_sources_async(None, store)
+            fresh, updated = await _run_public_poll()
             assert updated == ["source-A"]
             assert len(fresh["source-A"]) == 36
             assert len(store.ids) == 36
@@ -138,12 +157,12 @@ async def test_worker_retries_late_remote_sync_then_bootstraps_and_polls_increme
                 assert state.article_cursor_create_time == 600
                 assert state.processed_article_list_updated_at == 1
 
-            assert await article_worker._sync_tenant_sources_async(None, store) == ({}, [])
+            assert await _run_public_poll() == ({}, [])
             assert len(server.article_requests) == 1
 
             server.article_list_updated_at = 2
             server.new_articles = [server.article("new-article", 601, 2001)]
-            fresh, updated = await article_worker._sync_tenant_sources_async("source-A", store)
+            fresh, updated = await _run_public_poll()
             assert fresh == {"source-A": ["new-article"]}
             assert updated == ["source-A"]
             assert len(store.ids) == 37
@@ -178,20 +197,21 @@ async def test_failed_bootstrap_keeps_null_cursor_and_retries(tmp_path):
     lock = MagicMock(acquire=MagicMock(return_value=True), refresh=MagicMock(return_value=True))
     try:
         with (
-            patch.object(article_worker, "get_async_db_session", session_factory),
+            patch("bisheng.core.database.get_async_db_session", session_factory),
+            patch("bisheng.channel.domain.services.article_es_service.ArticleEsService", return_value=store),
             patch.object(article_worker, "get_bisheng_information_client", AsyncMock(return_value=client)),
             patch.object(article_worker, "_new_source_lock", return_value=lock),
         ):
-            fresh, updated = await article_worker._sync_tenant_sources_async(None, store)
+            fresh, updated = await _run_public_poll()
             assert len(fresh["source-A"]) == 35
-            assert updated == ["source-A"]
+            assert updated == []
             async with session_factory() as session:
                 state = await session.get(ChannelInfoSource, "source-A")
                 assert state.article_cursor_create_time is None
                 assert state.processed_remote_sync_at is None
 
             store.fail_ids.clear()
-            fresh, updated = await article_worker._sync_tenant_sources_async(None, store)
+            fresh, updated = await _run_public_poll()
             assert fresh == {"source-A": ["article-0"]}
             assert updated == ["source-A"]
             async with session_factory() as session:
@@ -230,30 +250,23 @@ async def test_state_cas_rejects_progress_changed_in_another_session(tmp_path):
         await engine.dispose()
 
 
-def test_existing_task_dispatches_new_ids_to_target_knowledge_hook():
-    """AC-C4: the unchanged Celery name still reaches the existing delivery hook."""
-    indexed = {"source-A": ["new-article"]}
-    with (
-        patch.object(article_worker, "ArticleEsService", return_value=SimpleNamespace()),
-        patch.object(article_worker, "run_async_task", return_value=(indexed, ["source-A"])),
-        patch.object(article_worker, "_update_channels_by_source_id") as update_display,
-        patch.object(article_worker, "_sync_new_articles_to_knowledge_spaces") as deliver,
-    ):
-        article_worker._sync_information_article_for_tenant("source-A")
-    update_display.assert_called_once_with(["source-A"])
-    assert deliver.call_args.args == (indexed,)
-    assert deliver.call_args.kwargs["information_id"] == "source-A"
+async def test_public_worker_dispatches_new_ids_to_route_task():
+    with patch("bisheng.worker.information.knowledge_delivery.route_new_information_articles.apply_async") as dispatch:
+        await article_worker._dispatch_new_articles(
+            SimpleNamespace(conf=IntelligenceCenterConf()), "source-A", ["new-article"], 100
+        )
+    dispatch.assert_called_once_with(args=("source-A", ["new-article"], 100))
 
 
-def test_existing_task_refreshes_each_affected_sources_channels():
+async def test_public_worker_does_not_read_or_write_source_without_lock():
+    lock = MagicMock(acquire=MagicMock(return_value=False), redis_available=True)
     with (
-        patch.object(article_worker, "ArticleEsService", return_value=SimpleNamespace()),
-        patch.object(article_worker, "run_async_task", return_value=({}, ["source-A", "source-B"])),
-        patch.object(article_worker, "_update_channels_by_source_id") as update_display,
-        patch.object(article_worker, "_sync_new_articles_to_knowledge_spaces"),
+        patch.object(article_worker, "_new_source_lock", return_value=lock),
+        patch("bisheng.core.database.get_async_db_session") as session,
     ):
-        article_worker._sync_information_article_for_tenant()
-    assert [call.args[0] for call in update_display.call_args_list] == [["source-A"], ["source-B"]]
+        await article_worker._sync_one_source(SimpleNamespace(), SimpleNamespace(id="source-A"))
+    session.assert_not_called()
+    lock.release.assert_not_called()
 
 
 def test_existing_source_table_upgrade_adds_nullable_progress_and_is_idempotent():
