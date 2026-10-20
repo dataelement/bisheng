@@ -9,10 +9,14 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
+    get_knowledge_document_version_repository,
     get_knowledge_space_chat_service,
     get_knowledge_space_service,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileOrderField, SpaceFileOrderSort
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
+    KnowledgeDocumentVersionRepository,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
     BatchDownloadReq,
@@ -32,6 +36,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceUpdateReq,
     WebLinkCreateReq,
 )
+from bisheng.knowledge.domain.schemas.work_retrieval import WorkRetrievalRequest
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
@@ -47,6 +52,36 @@ router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
 
 SPACE_FILE_PREVIEW_PERMISSION_ACTION = None
 SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
+
+
+@router.post("/retrieve")
+async def retrieve_workspace_context(
+    req: WorkRetrievalRequest,
+    svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service),
+    version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+) -> Any:
+    """Return permission-filtered context to an authenticated workspace task."""
+    svc.version_repo = version_repo
+    results = await svc.aretrieve_chunks(
+        query=req.query,
+        knowledge_base_ids=list(dict.fromkeys(req.space_ids)),
+        top_k=10,
+        max_content=12000,
+    )
+    return resp_200(
+        {
+            "chunks": [
+                {
+                    "content": doc.page_content,
+                    "space_id": space_id,
+                    "document_id": doc.metadata.get("document_id"),
+                    "document_name": doc.metadata.get("document_name", ""),
+                    "chunk_index": doc.metadata.get("chunk_index"),
+                }
+                for space_id, doc in results
+            ]
+        }
+    )
 
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
