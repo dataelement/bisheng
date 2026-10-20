@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 由已确认的 PRD §3、§4 转写；2026-10-19 用户确认 |
 | design.md | ✅ 已评审 | 2026-10-19 经 `/sdd-review design` 修订后用户确认；接手时的第一入口 |
 | tasks.md | ✅ 已拆解 | 2026-10-19 经 `/sdd-review tasks` 修订 |
-| 实现 | 🔄 进行中 | 26 / 35 完成；Wave 4 代码与质量门已完成，T25–T31 待同事在 119 共享沙箱部署、手动验证后勾选；T35 的 DM8 复核已做，`/code-review` 待用户启动 |
+| 实现 | 🔄 进行中 | 30 / 35 完成；2026-10-20 在 119 A 插槽完成 API E2E（11 项全过）与浏览器验证；T28、T29、T31、T34 各剩一项待 119 重建后补验（见偏差记录）；T35 的 DM8 复核已做，`/code-review` 待用户启动 |
 
 ---
 
@@ -197,20 +197,20 @@
 
 ## Wave 4：前端 Platform（手动验证）
 
-- [ ] **T25**：`CodeInputItem` 增加可选 prop
+- [x] **T25**：`CodeInputItem` 增加可选 prop
   **文件**: `P/pages/BuildPage/flow/FlowNode/component/CodeInputItem.tsx`
   **逻辑**: 新增 `refOnly`（隐藏「输入」方式）与 `validateName`（额外名称校验）两个可选 prop；不传时代码节点的行为与样式完全不变。
   **手动验证**: 代码节点的输入参数增删改、引用与输入两种方式与改动前一致。
   **依赖**: 无
 
-- [ ] **T26**：【结束】节点 v2
+- [x] **T26**：【结束】节点 v2
   **文件**: `P/controllers/API/workflow.ts`、`P/util/flowCompatible.ts`、`P/pages/BuildPage/flow/FlowNode/Parameter.tsx`、`F/platform/public/locales/{zh-Hans,en-US,ja}/flow.json`
   **逻辑**: 模板 `v: "2"`，新增「返回结果」分组：开关 `return_enabled`（默认关）、列表 `return_results` 用 `CodeInputItem` 并传 `refOnly`，`validateName` 拒绝 `chat_history`（design 决策 4）；开关关闭时隐藏列表；不显示类型列（R-7.3）。`flowCompatible` 增加 `end` v1→v2。新增文案三语，不写硬编码中文。
   **覆盖 AC**: AC-19
   **手动验证**: 打开旧工作流，【结束】节点显示开关且为关闭；打开后添加两个返回结果并保存，重新打开内容保留；名称重复或为 `chat_history` 时提示。
   **依赖**: T09、T25
 
-- [ ] **T27**：【子工作流】节点模板与注册
+- [x] **T27**：【子工作流】节点模板与注册
   **文件**: `P/controllers/API/workflow.ts`、`P/pages/BuildPage/flow/FlowNode/NodeLogo.tsx`、`F/platform/public/locales/{zh-Hans,en-US,ja}/flow.json`
   **逻辑**: `workflowTemplate` 新增 `subflow` 模板，含 `subflow_id`、`subflow_inputs`、`subflow_outputs` 三个分组（design §4.2），`subflow_outputs` 用 `global: "code:..."` 暴露给变量选择器；`NodeLogo` 配图标与颜色；节点名称、描述、分组与帮助文案三语，帮助文案说明「运行时使用子工作流已保存的当前版本」（design 坑 11）。新增两个 API 函数：候选列表、接口查询。
   **手动验证**: 基础节点列表出现【子工作流】，拖入画布后显示三个分组。
@@ -230,7 +230,7 @@
   **手动验证**: 在编辑页保存、在编辑页切换版本、在版本卡片切换版本，三处都能弹出提醒。
   **依赖**: T21、T27
 
-- [ ] **T30**：上线与删除错误展示
+- [x] **T30**：上线与删除错误展示
   **文件**: `P/pages/BuildPage/flow/Header.tsx`、`P/pages/BuildPage/apps.tsx`
   **逻辑**: 上线 10564、删除 10565 按错误码文案展示并列出名称，沿用 `captureAndAlertRequestErrorHoc`；确认应用列表的上线开关也能展示 10564。
   **覆盖 AC**: AC-04、AC-11
@@ -290,3 +290,7 @@
 - T32：`pnpm typecheck` 的 platform 部分通过；client 与 `file-viewers` 的报错来自 worktree 软链到主检出的 `node_modules`，与本功能无关。platform `pnpm lint` 的剩余错误都在本功能未触及的文件中。platform vitest 失败的 16 个用例在改动前的基线上同样失败。
 - T33：登记完整。10561 的说明补上「上线时草稿指向的工作流已被删除」，与 T20 的偏差一致；2026-10-20 扫描远程各分支，10560–10565 只有本分支占用。
 - T35（先做的部分）：DM8 按 C2 人工复核通过。`workflow_subflow_ref` 只用 `Integer`、`String(64)`、`DateTime`，更新时间用 `UPDATE_TIME_SERVER_DEFAULT`，`CURRENT_TIMESTAMP` 默认值与仓库内 41 处既有用法一致；Repository 只用 ORM 的 select、add、delete，没有方言专属 SQL。`/code-review` 只能由用户启动，留待 E2E 之后连同 E2E 的修改一起审。
+- T34（2026-10-20，119 A 插槽，镜像含 f32c65509）：`test/e2e/test_e2e_f086_nested_workflow.py` 11 项全过，重复运行幂等、无残留数据。覆盖 AC-01、AC-03 到 AC-20；AC-02 是既有前端校验，AC-21 由单测覆盖。运行方式：`F086_E2E=1 E2E_API_BASE=http://<host>:<port>/api/v1 E2E_ADMIN_PASSWORD=<pwd>`。验证清单与结果见 `e2e-checklist.md`。
+- T34 发现的缺陷（已修，da0afc745）：子工作流节点失败时，画布节点日志显示带标记的原始错误串，且平台丢弃节点的失败日志，内部节点运行记录看不到。修法在前端：`nodeLogData` 解析标记，按 `api_errors:<code>` 本地化（与运行失败的提示一致），并在错误后保留失败日志。后端曾改为节点事件只带英文消息（244b83c5f），因无法本地化已撤回。
+- T34 顺带修正：`CodeInputItem` 行级校验要求名称至少 2 个字符，而拦截运行的列表级校验允许 1 个字符，单字母名称（如 `r`）能运行却一直标红。两者统一为 1 到 50 个字符。代码节点同受影响。
+- 待 119 重建（含 da0afc745）后补验：T31 失败场景的节点日志（本地化错误 + 内部节点列表）；T28 非管理员失去子工作流编辑权限后打开父工作流不被带离编辑页（浏览器内无法以普通用户登录，接口层已由 E2E 验证返回非 200）；T29 版本卡片切换版本后的提醒入口（编辑页保存入口已验）。
