@@ -323,8 +323,9 @@ export function Alert({
             // says hover = a light fill, and primary × text fills with
             // `bg-blue-50` — the exact surface an info alert already has, so
             // the hover would be invisible there and a blue block on the other
-            // three tints. `link` darkens and underlines instead, which is
-            // also what the landed Toast action does on the same geometry.
+            // three tints. `link` just darkens the label and lays down no
+            // fill at all, which is what the landed Toast action does on the
+            // same geometry.
             // px-0 keeps §4's gaps exact: 16px from the copy, 8px between.
             <div className={cn('ml-4 flex shrink-0 items-center gap-2', firstLine)}>
               {visibleActions.map((action, index) => (
