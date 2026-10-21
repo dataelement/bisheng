@@ -46,7 +46,35 @@ SERVICES = {
 #: process whose whole design point is that it holds none — the same argument the
 #: systemd unit makes about not giving it the docker socket.
 REQUIRED_ENV_OVERRIDE: dict[str, tuple[str, ...]] = {
-    "egress-proxy": ("RTM_DATA_ROOT", "RTM_EGRESS_LISTEN", "RTM_EGRESS_PROXY"),
+    "egress-proxy": (
+        "RTM_PROTOCOL_VERSION",
+        "RTM_PLATFORM_BASE_URL",
+        "RTM_PLATFORM_KEY_ID",
+        "RTM_PLATFORM_SECRET",
+        "RTM_EGRESS_LISTEN",
+        "RTM_EGRESS_PROXY",
+    ),
+    "runtime-manager": (
+        "RTM_PROTOCOL_VERSION",
+        "RTM_NODE_ID",
+        "RTM_PLATFORM_BASE_URL",
+        "RTM_PLATFORM_KEY_ID",
+        "RTM_PLATFORM_SECRET",
+        "RTM_INBOUND_KEY_ID",
+        "RTM_INBOUND_SECRET",
+        "RTM_DATA_ROOT",
+        "RTM_HOST_DATA_ROOT",
+        "RTM_DOCKER_HOST",
+    ),
+    "app-proxy": (
+        "APP_PROXY_HOST",
+        "APP_PROXY_PORT",
+        "APP_PROXY_BACKEND_BASE",
+        "APP_PROXY_BACKEND_SECRET",
+        "APP_PROXY_ROUTE_KEY_ID",
+        "APP_PROXY_ROUTE_SECRET",
+        "APP_PROXY_PROTOCOL_VERSION",
+    ),
 }
 
 #: The application network. ``runtime_manager.config.DEFAULT_NETWORK`` and the
@@ -171,6 +199,31 @@ def check_env_contract(report: Report, repo_root: Path, doc: dict) -> None:
 
 def check_networks(report: Report, doc: dict) -> None:
     networks = doc.get("networks") or {}
+    control = networks.get("runtime-control") or {}
+    report.check(
+        control.get("internal") is True,
+        "Engine control network is internal",
+        "Engine control network must be internal",
+    )
+    services = doc.get("services") or {}
+    proxy = services.get("docker-socket-proxy") or {}
+    if proxy:
+        attached = set((proxy.get("networks") or {}).keys())
+        report.check(
+            attached == {"runtime-control"},
+            "Socket proxy uses only the control network",
+            "Socket proxy must not join backend/application/egress networks",
+        )
+        members = {
+            name
+            for name, spec in services.items()
+            if "runtime-control" in (spec.get("networks") or {})
+        }
+        report.check(
+            members == {"runtime-manager", "docker-socket-proxy"},
+            "Only manager reaches Engine API",
+            "Unexpected Engine control-network member",
+        )
     entry = networks.get(APP_NETWORK)
     report.check(
         entry is not None,
@@ -231,7 +284,9 @@ def check_data_root_mapping(report: Report, doc: dict) -> None:
     )
 
     sources = [
-        v.get("source") for v in (spec.get("volumes") or []) if isinstance(v, dict) and v.get("target") == in_container
+        v.get("source")
+        for v in (spec.get("volumes") or [])
+        if isinstance(v, dict) and v.get("target") == in_container
     ]
     report.check(
         on_host in sources,

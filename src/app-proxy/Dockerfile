@@ -1,7 +1,5 @@
-# BiSheng app-proxy —— 托管应用入口反代（F054 T074）
-#
-# 与 runtime-manager 的关键差别：**不需要任何 docker 权限**，也不挂 socket。
-# 它只做「解析路由 → 剥归一化头 → 注入身份 → 转发」，因此以非 root 运行。
+# Public HTTP/WebSocket entry proxy; no Engine, host socket or application data access.
+# Runs as a non-root user with independently scoped backend identities.
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -13,7 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY pyproject.toml uv.lock /app/
-RUN pip install --no-cache-dir uv && uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/req.txt \
+RUN pip install --no-cache-dir uv==0.8.22 && uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/req.txt \
     && pip install --no-cache-dir -r /tmp/req.txt && rm -f /tmp/req.txt
 
 COPY app_proxy /app/app_proxy

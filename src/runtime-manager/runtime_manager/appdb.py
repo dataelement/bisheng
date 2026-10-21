@@ -44,6 +44,8 @@ Two SQLite facts shape the connection handling:
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import logging
 import os
 import re
@@ -55,6 +57,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime_manager.config import Config
+from runtime_manager.container_runner import ExecutionError
 from runtime_manager.errors import (
     DatabaseNotFoundError,
     DataBusyError,
@@ -101,7 +104,7 @@ def _quote(identifier: str) -> str:
 def _check_identifier(name: str, *, what: str) -> str:
     if not isinstance(name, str) or not _IDENTIFIER.match(name):
         raise DataInvalidError(f"{what} {name!r} is not a plain identifier")
-    if name.lower().startswith("sqlite_"):
+    if name.lower().startswith(("sqlite_", "_bisheng_")):
         raise DataInvalidError(f"{what} {name!r} is reserved by SQLite")
     return name
 
@@ -278,7 +281,7 @@ class AppDbService:
     @staticmethod
     def _table_names(conn: sqlite3.Connection) -> list[str]:
         rows = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT GLOB '_bisheng_*' ORDER BY name"
         ).fetchall()
         return [row["name"] for row in rows]
 
@@ -907,3 +910,134 @@ class AppDbSchemaService:
         if column["default"] is not None:
             parts.append(f"DEFAULT {_default_literal(column['default'])}")
         return " ".join(parts)
+
+
+def integrity(path: Path):
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
+        if conn.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+            raise ExecutionError("sqlite_integrity_failed")
+
+
+class PlatformAppDb(AppDbSchemaService):
+    def __init__(self, config, platform, operation, *, checkpoint=None):
+        super().__init__(config)
+        self.platform = platform
+        self.operation = operation
+        self.checkpoint = checkpoint or (lambda: None)
+
+    def _handoff(self, path):
+        profile = self.operation.get("payload", {}).get("resolved_delivery", {}).get("profile", {})
+        uid, gid = int(profile.get("uid", 10001)), int(profile.get("gid", 10001))
+        for item in [path.parent, path, Path(str(path) + "-wal"), Path(str(path) + "-shm")]:
+            if item.exists() and not item.is_symlink():
+                try:
+                    os.chown(item, uid, gid)
+                except PermissionError:
+                    if item.stat().st_uid != uid:
+                        raise
+
+    def db_path(self, app_id):
+        path = super().db_path(app_id)
+        root = self._config.app_data_dir(app_id).resolve()
+        sidecars = [path, *[Path(str(path) + suffix) for suffix in ("-wal", "-shm", "-journal")]]
+        if any(item.is_symlink() or not item.resolve().is_relative_to(root) for item in sidecars):
+            raise ExecutionError("database_link_refused")
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            raise ExecutionError("database_link_refused")
+        return path
+
+    def backup(self):
+        self.checkpoint()
+        path = self.db_path(self.operation["app_id"])
+        if not path.exists():
+            return None
+        root = self._config.data_root / "protected-backups" / self.operation["app_id"]
+        root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        backup = root / (self.operation["operation_id"] + ".sqlite")
+        if not backup.exists():
+            temporary = backup.with_suffix(".pending")
+            with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as source:
+                with sqlite3.connect(temporary) as target:
+                    source.backup(target)
+            integrity(temporary)
+            with temporary.open("rb") as stream:
+                os.fsync(stream.fileno())
+            temporary.replace(backup)
+        integrity(backup)
+        result = self.platform.upload(
+            self.operation["operation_id"],
+            backup,
+            kind="snapshot",
+            metadata={"format": "sqlite3", "integrity_result": "ok"},
+        )
+        if result.get("state") != "verified" or not result.get("confirmed_at"):
+            raise ExecutionError("snapshot_confirmation_required")
+        return result
+
+    def migrate_confirmed(self, plan, *, snapshot=None):
+        items = self._validate(plan)
+        if not items:
+            return {"applied": [], "skipped": []}
+        path = self.db_path(self.operation["app_id"])
+        if path.exists() and (not snapshot or not snapshot.get("confirmed_at")):
+            raise ExecutionError("snapshot_confirmation_required")
+        self.checkpoint()
+        digest = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        conn = self._connect_for_migration(self.operation["app_id"], path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS _bisheng_runtime_migrations (operation_id TEXT PRIMARY KEY, plan_digest TEXT NOT NULL)"
+            )
+            previous = conn.execute(
+                "SELECT plan_digest FROM _bisheng_runtime_migrations WHERE operation_id=?",
+                (self.operation["operation_id"],),
+            ).fetchone()
+            if previous:
+                if previous[0] != digest:
+                    raise ExecutionError("migration_plan_conflict")
+                conn.rollback()
+                return {"applied": [], "skipped": ["already_committed"]}
+            # _apply_one deliberately uses only validated declarative operations.
+            applied = []
+            for item in items:
+                applied.append(self._apply_one(conn, item))
+            conn.execute(
+                "INSERT INTO _bisheng_runtime_migrations VALUES (?,?)", (self.operation["operation_id"], digest)
+            )
+            conn.commit()
+            return {"applied": applied, "skipped": []}
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+            self._handoff(path)
+
+    def restore_confirmed(self, artifact_id):
+        self.checkpoint()
+        root = self._config.data_root / "tasks" / self.operation["operation_id"]
+        root.mkdir(parents=True, exist_ok=True)
+        candidate = root / "restore.sqlite"
+        result = self.platform.download(self.operation["operation_id"], artifact_id, candidate)
+        if result.get("kind") != "snapshot":
+            raise ExecutionError("snapshot_type_required")
+        integrity(candidate)
+        protected = self.backup()
+        if self.db_path(self.operation["app_id"]).exists() and not protected:
+            raise ExecutionError("snapshot_confirmation_required")
+        self.checkpoint()
+        target = self.db_path(self.operation["app_id"])
+        target.parent.mkdir(parents=True, exist_ok=True)
+        for suffix in ("-wal", "-shm"):
+            Path(str(target) + suffix).unlink(missing_ok=True)
+        import shutil
+
+        pending = target.with_name(".restore-" + self.operation["operation_id"] + ".sqlite")
+        shutil.copyfile(candidate, pending)
+        integrity(pending)
+        with pending.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(pending, target)
+        self._handoff(target)
+        return {"protected_snapshot": protected, "restored_snapshot_id": artifact_id}

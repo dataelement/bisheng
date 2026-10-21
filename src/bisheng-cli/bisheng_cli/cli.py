@@ -22,7 +22,7 @@ from collections.abc import Callable
 from bisheng_cli import __version__
 from bisheng_cli.errors import EXIT_USAGE, CliError
 
-SUBCOMMANDS = ("login", "deploy", "logs", "skills", "dev", "platforms")
+SUBCOMMANDS = ("init", "login", "deploy", "logs", "skills", "dev", "platforms")
 DEFERRED_COMMANDS: tuple[str, ...] = ()
 
 _EPILOG = (
@@ -92,6 +92,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", metavar="{" + ",".join(SUBCOMMANDS) + "}")
 
+    init = subparsers.add_parser("init", help="Create an application bundle project")
+    init.add_argument("path", nargs="?", default=".")
+    init.add_argument("--runtime", choices=("python3.11", "node20", "static"), default="python3.11")
+
     login = subparsers.add_parser("login", help="校验服务账号密钥并把凭据写入本地用户目录")
     login.add_argument("base_url", metavar="BASE_URL", help="目标平台地址，例如 http://bisheng.example.com")
     key_source = login.add_mutually_exclusive_group()
@@ -158,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Every leaf that can receive a flag needs the mirror, or `--json` after it
     # is "unrecognized arguments". `sync` is where `bisheng skills sync --json`
     # lands; `skills` covers `bisheng skills --json sync`.
-    for subparser in (login, deploy, logs, skills, sync, dev, platforms, platforms_list, platforms_use):
+    for subparser in (init, login, deploy, logs, skills, sync, dev, platforms, platforms_list, platforms_use):
         _add_global_flags(subparser, mirror=True)
 
     return parser

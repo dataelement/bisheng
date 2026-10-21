@@ -1385,6 +1385,7 @@
       "appMetaUpdate": "ホスト型アプリのメタ情報を更新",
       "appDataRowEdit": "ホスト型アプリのデータを編集",
       "appDataExport": "ホスト型アプリのデータをエクスポート",
+      "appDataRestore": "ホストアプリのデータスナップショットを復元",
       "appVisibilityChange": "公開範囲の変更",
       "appTierUpdate": "リソースティアの調整",
       "appReleaseSubmit": "公開申請を提出",

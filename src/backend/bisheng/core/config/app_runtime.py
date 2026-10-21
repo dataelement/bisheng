@@ -26,6 +26,9 @@ from ``!env`` or the Fernet-encrypted YAML — never a literal (C6). An empty
 secret is a **fail-closed** signal for the HMAC verifiers, not "auth off".
 """
 
+import json
+import os
+
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
@@ -69,6 +72,36 @@ class AppRuntimeConf(BaseModel):
         default=False,
         description="Whether the app factory runtime layer (runtime-manager + app-proxy) is deployed here",
     )
+
+    # Runtime v2 identities have disjoint action sets; empty keys fail closed.
+    runtime_service_keys: dict[str, dict] = Field(
+        default_factory=lambda: json.loads(os.environ.get("BISHENG_RUNTIME_SERVICE_KEYS", "{}")), repr=False
+    )
+    runtime_protocol_version: int = Field(
+        default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_PROTOCOL_VERSION", "1")), ge=1, le=2
+    )
+    runtime_payload_key: str = Field(
+        default_factory=lambda: os.environ.get("BISHENG_RUNTIME_PAYLOAD_KEY", ""), repr=False
+    )
+    runtime_control_key_id: str = Field(default_factory=lambda: os.environ.get("BISHENG_RUNTIME_CONTROL_KEY_ID", ""))
+    runtime_control_secret: str = Field(
+        default_factory=lambda: os.environ.get("BISHENG_RUNTIME_CONTROL_SECRET", ""), repr=False
+    )
+    runtime_default_node_id: str = Field(default_factory=lambda: os.environ.get("BISHENG_RUNTIME_NODE_ID", ""))
+    runtime_platform_base_url: str = Field(
+        default_factory=lambda: os.environ.get("BISHENG_RUNTIME_PLATFORM_BASE_URL", "")
+    )
+    runtime_offline: bool = Field(
+        default_factory=lambda: os.environ.get("BISHENG_RUNTIME_OFFLINE", "true").lower() not in {"0", "false", "no"}
+    )
+    artifact_max_mb: int = Field(default=2048, ge=1)
+    snapshot_max_mb: int = Field(default=10240, ge=1)
+    storage_max_file_mb: int = Field(default=20, ge=1)
+    runtime_task_timeout_seconds: int = Field(
+        default_factory=lambda: int(os.environ.get("BISHENG_RUNTIME_TASK_TIMEOUT_SECONDS", "1800")), ge=1
+    )
+    runtime_diagnostic_days: int = Field(default=7, ge=1)
+    runtime_node_max_age_seconds: int = Field(default=15, ge=1)
 
     # --- runtime-manager RPC (design D1) ---------------------------------
     manager_base_url: str = Field(

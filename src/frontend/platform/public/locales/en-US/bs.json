@@ -1402,6 +1402,7 @@
       "appMetaUpdate": "Hosted app metadata updated",
       "appDataRowEdit": "Hosted app data edited",
       "appDataExport": "Hosted app data exported",
+      "appDataRestore": "Restore hosted app data snapshot",
       "appVisibilityChange": "Visibility scope changed",
       "appTierUpdate": "Resource tier adjusted",
       "appReleaseSubmit": "Publish submitted",

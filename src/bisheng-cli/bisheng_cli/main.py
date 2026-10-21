@@ -23,6 +23,7 @@ Handler = Callable[[Any, Emitter], int]
 # Resolved lazily so that importing `main` never drags in every command module —
 # and so a command that is still being written cannot break `--help`.
 _HANDLER_PATHS = {
+    "init": "bisheng_cli.project:run_init",
     "login": "bisheng_cli.commands.login:run",
     "deploy": "bisheng_cli.commands.deploy:run",
     "logs": "bisheng_cli.commands.logs:run",

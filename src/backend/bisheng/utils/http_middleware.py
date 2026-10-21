@@ -45,6 +45,7 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # for an approval-time preview instance) is covered by this same entry — it
     # is the same kind of request for the same reason.
     "/api/v1/internal/app-proxy/authorize",
+    "/api/v1/internal/app-runtime/v2/",
     # The nginx error_page fallback: a static page served when app-proxy is down.
     # Reached by an anonymous browser, so it must not require a session.
     "/api/v1/apps/_unavailable",
@@ -430,7 +431,9 @@ class CustomMiddleware(BaseHTTPMiddleware):
             ]
 
         req_path = request.url.path
-        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS)
+        is_exempt = req_path.startswith(TENANT_CHECK_EXEMPT_PATHS) or bool(
+            re.fullmatch(r"/api/v1/apps/[A-Za-z0-9_-]+/storage(?:/.*)?", req_path)
+        )
 
         # Exempt paths run before tenant context is established (login,
         # register, SSO/LDAP callbacks, captcha, env, internal sync hooks).

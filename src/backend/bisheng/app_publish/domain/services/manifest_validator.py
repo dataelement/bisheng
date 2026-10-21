@@ -220,7 +220,7 @@ def _find_websocket_key(document: dict[str, Any]) -> str | None:
 
 def _check_manifest_version(document: dict[str, Any]) -> None:
     """The forward-compatibility gate — "upgrade the platform", not "unknown field" (D3)."""
-    declared = document.get("manifest_version", SUPPORTED_MANIFEST_VERSION)
+    declared = document.get("manifest_version", 1)
     try:
         declared_int = int(declared)
     except (TypeError, ValueError):
@@ -277,6 +277,8 @@ def _describe(item: dict[str, Any]) -> dict[str, Any]:
 
 def _check_runtime(manifest: AppManifest) -> None:
     """Local enum only — the manager's own list is re-checked in ``precheck_build`` (D4)."""
+    if manifest.delivery_mode == "image":
+        return
     if manifest.runtime in SUPPORTED_RUNTIMES:
         return
     raise AppRuntimeUnsupportedError(

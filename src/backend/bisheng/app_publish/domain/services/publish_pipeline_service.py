@@ -233,6 +233,14 @@ class PublishPipelineService:
             else:
                 app_id = await cls._create_draft(validated.manifest, owner_user_id=owner_user_id, tenant_id=tenant)
 
+            if validated.manifest.manifest_version == 2:
+                from bisheng.app_runtime.domain.repositories.runtime_delivery_repository import (
+                    RuntimeDeliveryRepository,
+                )
+                from bisheng.app_runtime.domain.services.runtime_profile_service import validate_offline_references
+
+                await validate_offline_references(RuntimeDeliveryRepository(), app_id, validated.manifest, principal)
+
             # AC-03's two gates, asked before the approval gate ever sees this.
             await cls._assert_submittable(app_id)
 
@@ -518,6 +526,19 @@ class PublishPipelineService:
     async def _stage_build(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
         tier = await cls._tier(deployment)
         context["tier"] = tier
+        from bisheng.common.services.config_service import settings
+
+        if settings.app_runtime.runtime_protocol_version == 2:
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            frozen = await RuntimeDeliveryCoordinator().prepare(deployment, context["manifest"], tier)
+            context["resolved_delivery"] = frozen.content
+            context["image_ref"] = frozen.content.get("image_ref")
+            return
+        if context["manifest"].manifest_version == 2:
+            from bisheng.common.errcode.app_publish import AppDependencyBuildFailedError
+
+            raise AppDependencyBuildFailedError(msg="新版应用交付需要启用 runtime v2")
         context["image_ref"] = await precheck_service.precheck_build(
             deployment, manifest=context["manifest"], tier=tier
         )
@@ -549,6 +570,11 @@ class PublishPipelineService:
 
     @classmethod
     async def _stage_probe(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
+        if context.get("resolved_delivery"):
+            from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+            await RuntimeDeliveryCoordinator().probe(deployment, context["manifest"], context["tier"])
+            return
         await precheck_service.precheck_probe(deployment, manifest=context["manifest"], image_ref=context["image_ref"])
 
     @classmethod

@@ -1385,6 +1385,7 @@
       "appMetaUpdate": "托管应用元信息更新",
       "appDataRowEdit": "托管应用数据编辑",
       "appDataExport": "托管应用数据导出",
+      "appDataRestore": "恢复托管应用数据快照",
       "appVisibilityChange": "可见范围变更",
       "appTierUpdate": "资源档位调整",
       "appReleaseSubmit": "提交发布",

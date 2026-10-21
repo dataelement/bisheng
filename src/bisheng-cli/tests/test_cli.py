@@ -35,7 +35,7 @@ def _all_option_strings(parser) -> set[str]:
 def test_help_lists_registered_commands() -> None:
     parser = build_parser()
     names = {name for name, _ in _subparser_actions(parser)}
-    assert names == {"login", "deploy", "logs", "skills", "dev", "platforms"} == set(SUBCOMMANDS)
+    assert names == {"login", "deploy", "logs", "skills", "dev", "platforms", "init"} == set(SUBCOMMANDS)
 
 
 def test_help_footer_declares_deferred_commands() -> None:
@@ -116,8 +116,9 @@ def test_platform_flag_is_global_and_mirrored() -> None:
     assert parser.parse_args(["skills", "sync", "--platform", "http://p.test"]).platform == "http://p.test"
 
 
-def test_no_init_subcommand() -> None:
-    assert "init" not in {name for name, _ in _subparser_actions(build_parser())}
+def test_init_subcommand_generates_versioned_bundle_projects() -> None:
+    args = build_parser().parse_args(["init", "example-app", "--runtime", "python3.11"])
+    assert args.command == "init" and args.runtime == "python3.11"
 
 
 def test_version_flag_prints_package_version(capsys: pytest.CaptureFixture[str]) -> None:

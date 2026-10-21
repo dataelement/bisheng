@@ -172,7 +172,12 @@ class PreviewInstanceService:
         row = await cls._insert_session(app=app, version_id=version_id, approver_user_id=user_id)
         payload = await cls._start_payload(app, version, row)
         try:
-            await orchestrator_client.preview_start(**payload)
+            if settings.app_runtime.runtime_protocol_version == 2:
+                from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+                await RuntimeDeliveryCoordinator().preview_start(app, version, row, payload)
+            else:
+                await orchestrator_client.preview_start(**payload)
         except (AppCapacityInsufficientError, AppProbeFailedError) as exc:
             # The orchestrator already tore the container down on both of these,
             # so the only thing left over is our own row — close it, or the
@@ -399,7 +404,7 @@ class PreviewInstanceService:
         """
         if version.terminal_state:
             return "settled"
-        if not (version.image_ref or "").strip():
+        if settings.app_runtime.runtime_protocol_version != 2 and not (version.image_ref or "").strip():
             return "no_image"
         return None
 
@@ -536,7 +541,12 @@ class PreviewInstanceService:
         # Told even when the row was already closed: a row and a container can
         # disagree after a crash, and the container is the expensive half.
         try:
-            await orchestrator_client.preview_stop(session_id=row.id)
+            if settings.app_runtime.runtime_protocol_version == 2:
+                from bisheng.app_runtime.domain.services.runtime_delivery_coordinator import RuntimeDeliveryCoordinator
+
+                await RuntimeDeliveryCoordinator().preview_stop(row.id)
+            else:
+                await orchestrator_client.preview_stop(session_id=row.id)
         except Exception:
             logger.exception(f"app_publish.preview_stop_failed session={row.id} reason={reason}")
         if closed:

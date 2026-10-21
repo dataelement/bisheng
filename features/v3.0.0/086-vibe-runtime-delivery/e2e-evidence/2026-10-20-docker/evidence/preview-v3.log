@@ -1,0 +1,5 @@
+Preview state running session 5e4db92080394ca9991da1f4f1386e82
+Preview entry HTTP 200 {"version": 3, "value": "retained"}
+Preview SDK HTTP 200 {"sdk_storage":"passed"}
+Temporary preview and scoped SDK storage verified
+Production schema unchanged while preview migration exists

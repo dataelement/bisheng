@@ -173,7 +173,13 @@ class EgressProxy:
 
     def __init__(self, config: Config, store: EgressPolicyStore | None = None) -> None:
         self._config = config
-        self._store = store if store is not None else get_policy_store(config)
+        if config.protocol_version == 2 and store is None:
+            from runtime_manager.platform_egress import PlatformPolicyStore
+
+            self._store = PlatformPolicyStore(config)
+        else:
+            self._store = store if store is not None else get_policy_store(config)
+        self._policy_task = None
         self._server: asyncio.AbstractServer | None = None
 
     @property
@@ -183,10 +189,23 @@ class EgressProxy:
     async def start(self, host: str = "", port: int = 0) -> asyncio.AbstractServer:
         if not host and not port:
             host, port = _split_listen(self._config.egress_listen)
+        if hasattr(self._store, "refresh") and self._policy_task is None:
+            self._policy_task = asyncio.create_task(self._refresh_policy())
         self._server = await asyncio.start_server(self.handle, host, port)
         return self._server
 
+    async def _refresh_policy(self):
+        while True:
+            try:
+                await asyncio.to_thread(self._store.refresh)
+            except Exception:
+                logger.exception("platform policy refresh failed; existing policy expires within five seconds")
+            await asyncio.sleep(1)
+
     async def stop(self) -> None:
+        if self._policy_task:
+            self._policy_task.cancel()
+            self._policy_task = None
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
@@ -322,7 +341,23 @@ class EgressProxy:
             up_writer.write(("\r\n".join(head) + "\r\n\r\n").encode("latin-1"))
             await up_writer.drain()
 
-        await asyncio.gather(_pump(reader, up_writer), _pump(up_reader, writer))
+        async def guard():
+            while True:
+                await asyncio.sleep(1)
+                decision, _ = authorize(self._store, request.header("proxy-authorization"), host, port)
+                if not decision.allowed:
+                    _close(up_writer)
+                    _close(writer)
+                    return
+
+        if self._config.protocol_version == 2:
+            task = asyncio.create_task(guard())
+            try:
+                await asyncio.gather(_pump(reader, up_writer), _pump(up_reader, writer))
+            finally:
+                task.cancel()
+        else:
+            await asyncio.gather(_pump(reader, up_writer), _pump(up_reader, writer))
 
 
 def _split_listen(listen: str) -> tuple[str, int]:

@@ -144,8 +144,8 @@ def test_no_ui_create_entry_in_any_state(enabled, monkeypatch):
     """No create endpoint exists in either switch state — AC-58.
 
     The only way a hosted application comes into being is the CLI's first
-    deploy. If a POST ever appears here, the "no UI creation entry" rule has
-    been broken in code, whatever the SPA renders.
+    deploy. Management POST routes operate on existing apps or global runtime catalogs;
+    any other POST route still breaks the no UI creation rule.
     """
     from bisheng.app_runtime.api.router import router
     from bisheng.common.services.config_service import settings
@@ -160,6 +160,16 @@ def test_no_ui_create_entry_in_any_state(enabled, monkeypatch):
         if "POST" in getattr(route, "methods", set())
         and "/actions/" not in route.path
         and not route.path.startswith("/internal/")
+        and route.path
+        not in {
+            "/runtime/profiles",
+            "/runtime/materials/public",
+            "/apps/{app_id}/runtime/materials",
+            "/apps/{app_id}/runtime/restore",
+            "/apps/{app_id}/runtime/operations/{operation_id}/cancel",
+            "/apps/{app_id}/runtime/upgrade",
+            "/apps/{app_id}/runtime/upgrade/rebind",
+        }
     ]
     assert creating_routes == []
 
