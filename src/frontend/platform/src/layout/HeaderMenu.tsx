@@ -1,11 +1,10 @@
-import { Outlined } from "bisheng-icons";
 import { Segmented } from "@bisheng/ui";
 
 import { userContext } from "@/contexts/userContext";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 import { useContext, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export function HeaderMenu() {
     const { t } = useTranslation();
@@ -49,28 +48,16 @@ export function HeaderMenu() {
     if (["/model/management", "/model/finetune"].includes(location.pathname.replace(__APP_ENV__.BASE_URL, ""))) {
         return (
             <div className="build-tab flex justify-center h-[65px] items-center relative">
-                <div className="px-4">
-                    <NavLink
-                        to={"model/management"}
-                        className="group flex gap-2 items-center px-8 py-2 rounded-md navlink"
-                    >
-                        <Outlined.Application className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></Outlined.Application>
-                        <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">
-                            {t("model.modelManagement")}
-                        </span>
-                    </NavLink>
-                </div>
-                <div className="px-4">
-                    <NavLink
-                        to={"model/finetune"}
-                        className="group flex gap-2 items-center px-8 py-2 rounded-md navlink"
-                    >
-                        <Outlined.Application className="text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]"></Outlined.Application>
-                        <span className="text-sm font-bold text-muted-foreground group-hover:text-primary dark:group-hover:text-[#fff]">
-                            {t("model.modelFineTune")}
-                        </span>
-                    </NavLink>
-                </div>
+                <Segmented
+                    size="large"
+                    aria-label={t("menu.models")}
+                    value={location.pathname.replace(__APP_ENV__.BASE_URL, "").split("/").pop()}
+                    onChange={(value) => navigate(`/model/${value}`)}
+                    options={[
+                        { value: "management", label: t("model.modelManagement") },
+                        { value: "finetune", label: t("model.modelFineTune") },
+                    ]}
+                />
             </div>
         );
     }
